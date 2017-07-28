@@ -1,0 +1,12 @@
+hash: 40cd91a0742074ef7f69bae929f76c166c56c6e2a280ebd5fd4699651edc5b4e
+updated: 2017-07-28T14:42:34.135752133-04:00
+imports:
+- name: k8s.io/apimachinery
+  version: abe34e4f5b4413c282a83011892cbeea5b32223b
+- name: k8s.io/apiserver
+  version: ab57ed5a72c3b67058f665d660e23bae18339fc2
+- name: k8s.io/client-go
+  version: e356aa2e77ab4a5914c216c12ba14cce25a25ab0
+- name: k8s.io/kubernetes
+  version: ebb8d6e0fadfc95f3d64ccecc36c8ed2ac9224ef
+testImports: []
