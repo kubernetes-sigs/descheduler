@@ -1,2 +1,2 @@
-# rescheduler
+# Rescheduler
 Rescheduler for Kubernetes
