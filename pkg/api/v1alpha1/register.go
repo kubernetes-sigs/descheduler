@@ -28,7 +28,7 @@ var (
 )
 
 // GroupName is the group name use in this package
-const GroupName = "reschedulercomponentconfig"
+const GroupName = "rescheduler.k8s.io"
 const GroupVersion = "v1alpha1"
 
 // SchemeGroupVersion is group version used to register these objects
@@ -44,7 +44,7 @@ func init() {
 func addKnownTypes(scheme *runtime.Scheme) error {
 	// TODO this will get cleaned up with the scheme types are fixed
 	scheme.AddKnownTypes(SchemeGroupVersion,
-		&ReschedulerConfiguration{},
+		&ReschedulerPolicy{},
 	)
 	return nil
 }
