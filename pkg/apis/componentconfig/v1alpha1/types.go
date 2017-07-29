@@ -28,5 +28,5 @@ type ReschedulerConfiguration struct {
 	KubeConfigFile string `json:"kubeConfigFile"`
 
 	// PolicyConfigFile is the filepath to the rescheduler policy configuration.
-	PolicyConfigFile string `json:"policyConfigFile"`
+	PolicyConfigFile string `json:"policyConfigFile,,omitempty"`
 }
