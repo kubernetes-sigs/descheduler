@@ -8,3 +8,4 @@ import:
   version: abe34e4f5b4413c282a83011892cbeea5b32223b # kube 1.7.0
 - package: k8s.io/kubernetes
   version: ebb8d6e0fadfc95f3d64ccecc36c8ed2ac9224ef # kube 1.7.0
+- package: github.com/kubernetes/repo-infra
