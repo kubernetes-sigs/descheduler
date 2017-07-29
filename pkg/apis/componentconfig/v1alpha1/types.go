@@ -23,6 +23,10 @@ import (
 type ReschedulerConfiguration struct {
 	metav1.TypeMeta `json:",inline"`
 
+	// KubeConfigFile is path to kubeconfig file with authorization and master
+	// location information.
+	KubeConfigFile string `json:"kubeConfigFile"`
+
 	// PolicyConfigFile is the filepath to the rescheduler policy configuration.
 	PolicyConfigFile string `json:"policyConfigFile"`
 }
