@@ -1,5 +1,5 @@
-hash: 40cd91a0742074ef7f69bae929f76c166c56c6e2a280ebd5fd4699651edc5b4e
-updated: 2017-07-29T15:15:28.412069926-04:00
+hash: a8eda6a0f5bae7ff49de10f1ff62cb1449fd0cd0651609eef4040b46c3567b8a
+updated: 2017-07-29T17:09:01.11497372-04:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
@@ -28,6 +28,8 @@ imports:
   version: 44145f04b68cf362d9c4df2182967c2275eaefed
 - name: github.com/google/gofuzz
   version: 44d81051d367757e1c7c6a5a86423ece9afcf63c
+- name: github.com/kubernetes/repo-infra
+  version: f521b5d472e00e05da5394994942064510a6e8bf
 - name: github.com/mailru/easyjson
   version: d5b7844b561a7bc640052f1b935f7b800330d7e0
   subpackages:
