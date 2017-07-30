@@ -18,14 +18,14 @@ limitations under the License.
 package options
 
 import (
-	"fmt"
+	//"fmt"
 
 	//"k8s.io/kubernetes/pkg/api"
 
 	// install the componentconfig api so we get its defaulting and conversion functions
 	//_ "github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig/install"
 
-	"github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig/"
+	"github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig"
 
 	"github.com/spf13/pflag"
 )
