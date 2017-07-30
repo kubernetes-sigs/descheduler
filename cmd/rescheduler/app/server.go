@@ -49,6 +49,11 @@ func NewReschedulerCommand() *cobra.Command {
 }
 
 func Run(rs *options.ReschedulerServer) error {
-	rs.Client = client.CreateClient(rs.KubeconfigFile)
+	rsclient, err := client.CreateClient(rs.KubeconfigFile)
+
+	if err != nil {
+		return err
+	}
+	rs.Client = rsclient
 	return nil
 }
