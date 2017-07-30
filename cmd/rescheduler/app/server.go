@@ -21,7 +21,7 @@ import (
 	"fmt"
 
 	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/options"
-	"github.com/aveshagarwal/rescheduler/pkg/client"
+	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/client"
 
 	//"github.com/golang/glog"
 	"github.com/spf13/cobra"
