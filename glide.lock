@@ -1,5 +1,5 @@
 hash: a8eda6a0f5bae7ff49de10f1ff62cb1449fd0cd0651609eef4040b46c3567b8a
-updated: 2017-07-29T17:09:01.11497372-04:00
+updated: 2017-07-30T11:55:42.853291331-04:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
@@ -28,6 +28,8 @@ imports:
   version: 44145f04b68cf362d9c4df2182967c2275eaefed
 - name: github.com/google/gofuzz
   version: 44d81051d367757e1c7c6a5a86423ece9afcf63c
+- name: github.com/inconshreveable/mousetrap
+  version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/kubernetes/repo-infra
   version: f521b5d472e00e05da5394994942064510a6e8bf
 - name: github.com/mailru/easyjson
@@ -40,6 +42,8 @@ imports:
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
   version: 5bd2802263f21d8788851d5305584c82a5c75d7e
+- name: github.com/spf13/cobra
+  version: d7ba19510d17ff09130f842c8c2eb48f4196b6ee
 - name: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - name: github.com/ugorji/go
