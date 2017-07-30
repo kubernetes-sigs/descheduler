@@ -25,6 +25,9 @@ import (
 	// install the componentconfig api so we get its defaulting and conversion functions
 	//_ "github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig/install"
 
+	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
+
+	// rescheduler packages
 	"github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig"
 
 	"github.com/spf13/pflag"
@@ -33,6 +36,7 @@ import (
 // ReschedulerServer configuration
 type ReschedulerServer struct {
 	componentconfig.ReschedulerConfiguration
+	Client clientset.Interface
 }
 
 // NewReschedulerServer creates a new ReschedulerServer with default parameters
@@ -45,7 +49,7 @@ func NewReschedulerServer() *ReschedulerServer {
 }
 
 // AddFlags adds flags for a specific SchedulerServer to the specified FlagSet
-func (s *ReschedulerServer) AddFlags(fs *pflag.FlagSet) {
-	fs.StringVar(&s.KubeConfigFile, "kube-config-file", s.KubeConfigFile, "File with  kube configuration.")
-	fs.StringVar(&s.PolicyConfigFile, "policy-config-file", s.PolicyConfigFile, "File with rescheduler policy configuration.")
+func (rs *ReschedulerServer) AddFlags(fs *pflag.FlagSet) {
+	fs.StringVar(&rs.KubeconfigFile, "kubeconfig-file", s.KubeconfigFile, "File with  kube configuration.")
+	fs.StringVar(&rs.PolicyConfigFile, "policy-config-file", s.PolicyConfigFile, "File with rescheduler policy configuration.")
 }
