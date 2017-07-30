@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/options"
+	"github.com/aveshagarwal/rescheduler/pkg/client"
 
 	//"github.com/golang/glog"
 	"github.com/spf13/cobra"
@@ -47,6 +48,7 @@ func NewReschedulerCommand() *cobra.Command {
 	return cmd
 }
 
-func Run(opt *options.ReschedulerServer) error {
+func Run(rs *options.ReschedulerServer) error {
+	rs.Client = client.CreateClient(rs.KubeconfigFile)
 	return nil
 }
