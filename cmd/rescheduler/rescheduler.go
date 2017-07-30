@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/"
+	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app"
 )
 
 func main() {
