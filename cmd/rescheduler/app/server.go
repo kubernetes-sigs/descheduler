@@ -30,7 +30,7 @@ import (
 // NewReschedulerCommand creates a *cobra.Command object with default parameters
 func NewReschedulerCommand() *cobra.Command {
 	s := options.NewReschedulerServer()
-	//s.AddFlags(pflag.CommandLine)
+	s.AddFlags(pflag.CommandLine)
 	cmd := &cobra.Command{
 		Use:   "rescheduler",
 		Short: "reschdeduler",
