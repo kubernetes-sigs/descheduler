@@ -14,11 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package rescheduler
+package client
 
 import (
 	"fmt"
-	"os"
 
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -41,9 +40,10 @@ func CreateClient(kubeconfig string) (clientset.Interface, error) {
 		}
 
 	} else {
+		var err error
 		cfg, err = rest.InClusterConfig()
 		if err != nil {
-			return fmt.Errorf("Unable to build in cluster config: %v", err)
+			return nil, fmt.Errorf("Unable to build in cluster config: %v", err)
 		}
 	}
 

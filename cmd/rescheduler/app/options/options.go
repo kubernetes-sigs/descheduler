@@ -50,6 +50,6 @@ func NewReschedulerServer() *ReschedulerServer {
 
 // AddFlags adds flags for a specific SchedulerServer to the specified FlagSet
 func (rs *ReschedulerServer) AddFlags(fs *pflag.FlagSet) {
-	fs.StringVar(&rs.KubeconfigFile, "kubeconfig-file", s.KubeconfigFile, "File with  kube configuration.")
-	fs.StringVar(&rs.PolicyConfigFile, "policy-config-file", s.PolicyConfigFile, "File with rescheduler policy configuration.")
+	fs.StringVar(&rs.KubeconfigFile, "kubeconfig-file", rs.KubeconfigFile, "File with  kube configuration.")
+	fs.StringVar(&rs.PolicyConfigFile, "policy-config-file", rs.PolicyConfigFile, "File with rescheduler policy configuration.")
 }
