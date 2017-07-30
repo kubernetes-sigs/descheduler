@@ -9,3 +9,5 @@ import:
 - package: k8s.io/kubernetes
   version: ebb8d6e0fadfc95f3d64ccecc36c8ed2ac9224ef # kube 1.7.0
 - package: github.com/kubernetes/repo-infra
+- package: github.com/spf13/cobra
+  version: f62e98d28ab7ad31d707ba837a966378465c7b57
