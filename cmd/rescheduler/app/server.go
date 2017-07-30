@@ -22,16 +22,19 @@ import (
 
 	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/options"
 
-	"github.com/golang/glog"
+	//"github.com/golang/glog"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // NewReschedulerCommand creates a *cobra.Command object with default parameters
 func NewReschedulerCommand() *cobra.Command {
 	s := options.NewReschedulerServer()
+	//s.AddFlags(pflag.CommandLine)
 	cmd := &cobra.Command{
-		Use:  "rescheduler",
-		Long: `The rescheduler evicts pods which may be bound to less desired nodes`,
+		Use:   "rescheduler",
+		Short: "reschdeduler",
+		Long:  `The rescheduler evicts pods which may be bound to less desired nodes`,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := Run(s)
 			if err != nil {
@@ -41,9 +44,9 @@ func NewReschedulerCommand() *cobra.Command {
 		},
 	}
 
-	s.AddFlags(cmd.Flags())
 	return cmd
 }
 
 func Run(opt *options.ReschedulerServer) error {
+	return nil
 }
