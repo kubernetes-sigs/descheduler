@@ -22,14 +22,12 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
-
-	"github.com/aveshagarwal/rescheduler/pkg/utils"
 )
 
 func CreateClient(kubeconfig string) (clientset.Interface, error) {
 	var cfg *rest.Config
 	if len(kubeconfig) != 0 {
-		master, err := utils.GetMasterFromKubeconfig(kubeconfig)
+		master, err := GetMasterFromKubeconfig(kubeconfig)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to parse kubeconfig file: %v ", err)
 		}
@@ -48,4 +46,21 @@ func CreateClient(kubeconfig string) (clientset.Interface, error) {
 	}
 
 	return clientset.NewForConfig(cfg)
+}
+
+func GetMasterFromKubeconfig(filename string) (string, error) {
+	config, err := clientcmd.LoadFromFile(filename)
+	if err != nil {
+		return "", err
+	}
+
+	context, ok := config.Contexts[config.CurrentContext]
+	if !ok {
+		return "", fmt.Errorf("Failed to get master address from kubeconfig")
+	}
+
+	if val, ok := config.Clusters[context.Cluster]; ok {
+		return val.Server, nil
+	}
+	return "", fmt.Errorf("Failed to get master address from kubeconfig")
 }

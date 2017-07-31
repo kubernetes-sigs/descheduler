@@ -15,26 +15,3 @@ limitations under the License.
 */
 
 package utils
-
-import (
-	"fmt"
-
-	"k8s.io/client-go/tools/clientcmd"
-)
-
-func GetMasterFromKubeconfig(filename string) (string, error) {
-	config, err := clientcmd.LoadFromFile(filename)
-	if err != nil {
-		return "", err
-	}
-
-	context, ok := config.Contexts[config.CurrentContext]
-	if !ok {
-		return "", fmt.Errorf("Failed to get master address from kubeconfig")
-	}
-
-	if val, ok := config.Clusters[context.Cluster]; ok {
-		return val.Server, nil
-	}
-	return "", fmt.Errorf("Failed to get master address from kubeconfig")
-}
