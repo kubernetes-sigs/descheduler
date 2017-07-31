@@ -22,6 +22,7 @@ import (
 
 	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/options"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/client"
+	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
 
 	//"github.com/golang/glog"
 	"github.com/spf13/cobra"
@@ -50,10 +51,14 @@ func NewReschedulerCommand() *cobra.Command {
 
 func Run(rs *options.ReschedulerServer) error {
 	rsclient, err := client.CreateClient(rs.KubeconfigFile)
-
 	if err != nil {
 		return err
 	}
 	rs.Client = rsclient
+	stopChannel := make(chan struct{})
+	nodes, err := ReadyNodes(rs.Client, stopChannel)
+	if err != nil {
+		return err
+	}
 	return nil
 }
