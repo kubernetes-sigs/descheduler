@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/cache"
@@ -30,26 +31,37 @@ import (
 
 // ReadyNodes returns ready nodes irrespective of whether they are
 // schedulable or not.
-func ReadyNodes(client clientset.Interface, stopChannel <-chan struct{}) ([]*v1.Node, error) {
-	nodes, err := nodeLister(client, stopChannel).List(labels.Everything())
+func ReadyNodes(client clientset.Interface, stopChannel <-chan struct{}) ([]v1.Node, error) {
+	nl := getNodeLister(client, stopChannel)
+	nodes, err := nl.List(labels.Everything())
 	if err != nil {
-		return []*v1.Node{}, err
+		return []v1.Node{}, err
 	}
-	readyNodes := make([]*v1.Node, 0, len(nodes))
+
+	if len(nodes) == 0 {
+		var err error
+		nItems, err := client.Core().Nodes().List(metav1.ListOptions{})
+		if err != nil {
+			return []v1.Node{}, err
+		}
+		return nItems.Items, nil
+	}
+	readyNodes := make([]v1.Node, 0, len(nodes))
 	for _, node := range nodes {
 		if IsReady(node) {
-			readyNodes = append(readyNodes, node)
+			readyNodes = append(readyNodes, *node)
 		}
 	}
 	return readyNodes, nil
 }
 
-func nodeLister(client clientset.Interface, stopChannel <-chan struct{}) corelisters.NodeLister {
-	listWatcher := cache.NewListWatchFromClient(client.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
+func getNodeLister(client clientset.Interface, stopChannel <-chan struct{}) corelisters.NodeLister {
+	listWatcher := cache.NewListWatchFromClient(client.Core().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
 	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	nodeLister := corelisters.NewNodeLister(store)
 	reflector := cache.NewReflector(listWatcher, &v1.Node{}, store, time.Hour)
 	reflector.RunUntil(stopChannel)
+
 	return nodeLister
 }
 
