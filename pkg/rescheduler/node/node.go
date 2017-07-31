@@ -19,10 +19,10 @@ package node
 import (
 	"time"
 
-	"k8s.io/api/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/kubernetes/api/v1"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 )
 
