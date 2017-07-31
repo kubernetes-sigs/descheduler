@@ -1,5 +1,5 @@
 hash: 0d6e06bdd8a8ed158cd43e68bd643a18b098ca89fcdb42421a8cc652bd3b6eb5
-updated: 2017-07-31T01:24:28.72980751-04:00
+updated: 2017-07-31T01:33:05.030981067-04:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
@@ -206,7 +206,6 @@ imports:
   subpackages:
   - discovery
   - kubernetes/scheme
-  - listers/core/v1
   - pkg/api
   - pkg/api/v1
   - pkg/apis/admissionregistration
@@ -330,6 +329,7 @@ imports:
   - pkg/client/clientset_generated/clientset/typed/settings/v1alpha1
   - pkg/client/clientset_generated/clientset/typed/storage/v1
   - pkg/client/clientset_generated/clientset/typed/storage/v1beta1
+  - pkg/client/listers/core/v1
   - pkg/util
   - pkg/util/parsers
 testImports: []
