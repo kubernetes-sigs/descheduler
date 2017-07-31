@@ -56,9 +56,10 @@ func Run(rs *options.ReschedulerServer) error {
 	}
 	rs.Client = rsclient
 	stopChannel := make(chan struct{})
-	nodes, err := ReadyNodes(rs.Client, stopChannel)
+	nodes, err := node.ReadyNodes(rs.Client, stopChannel)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("nodes = %#v", nodes)
 	return nil
 }
