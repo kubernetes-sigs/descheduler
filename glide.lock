@@ -1,5 +1,5 @@
 hash: 0d6e06bdd8a8ed158cd43e68bd643a18b098ca89fcdb42421a8cc652bd3b6eb5
-updated: 2017-07-30T18:47:41.630496669-04:00
+updated: 2017-07-31T01:24:28.72980751-04:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
@@ -62,6 +62,10 @@ imports:
   version: 44145f04b68cf362d9c4df2182967c2275eaefed
 - name: github.com/google/gofuzz
   version: 44d81051d367757e1c7c6a5a86423ece9afcf63c
+- name: github.com/hashicorp/golang-lru
+  version: a0d98a5f288019575c6d1f4bb1573fef2d1fcdc4
+  subpackages:
+  - simplelru
 - name: github.com/howeyc/gopass
   version: bf9dde6d0d2c004a008c27aaee91170c786f6db8
 - name: github.com/imdario/mergo
@@ -177,6 +181,7 @@ imports:
   - pkg/runtime/serializer/versioning
   - pkg/selection
   - pkg/types
+  - pkg/util/cache
   - pkg/util/clock
   - pkg/util/diff
   - pkg/util/errors
@@ -201,6 +206,7 @@ imports:
   subpackages:
   - discovery
   - kubernetes/scheme
+  - listers/core/v1
   - pkg/api
   - pkg/api/v1
   - pkg/apis/admissionregistration
@@ -241,6 +247,7 @@ imports:
   - rest
   - rest/watch
   - tools/auth
+  - tools/cache
   - tools/clientcmd
   - tools/clientcmd/api
   - tools/clientcmd/api/latest
