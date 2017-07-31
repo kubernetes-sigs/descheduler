@@ -24,7 +24,6 @@ import (
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/client"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
 
-	//"github.com/golang/glog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -60,6 +59,7 @@ func Run(rs *options.ReschedulerServer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("nodes = %#v", nodes)
+
+	fmt.Printf("\nnodes = %#v\n", nodes)
 	return nil
 }
