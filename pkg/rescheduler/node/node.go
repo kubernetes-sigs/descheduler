@@ -59,6 +59,10 @@ func ReadyNodes(client clientset.Interface, stopChannel <-chan struct{}) ([]*v1.
 	return readyNodes, nil
 }
 
+func IsNodeWithLowResourceUtilization() {
+	// no op
+}
+
 func GetNodeLister(client clientset.Interface, stopChannel <-chan struct{}) corelisters.NodeLister {
 	listWatcher := cache.NewListWatchFromClient(client.Core().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
 	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
