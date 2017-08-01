@@ -22,10 +22,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/api/v1/helper/qos"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
-)
-
-const (
-	criticalPodAnnotation = "scheduler.alpha.kubernetes.io/critical-pod"
+	"k8s.io/kubernetes/pkg/kubelet/types"
 )
 
 func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, error) {
@@ -44,8 +41,7 @@ func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, erro
 }
 
 func IsCriticalPod(pod *v1.Pod) bool {
-	_, found := pod.ObjectMeta.Annotations[criticalPodAnnotation]
-	return found
+	return types.IsCriticalPod(pod * v1.Pod)
 }
 
 func IsBestEffortPod(pod *v1.Pod) bool {
@@ -58,4 +54,13 @@ func IsBurstablePod(pod *v1.Pod) bool {
 
 func IsGuaranteedPod(pod *v1.Pod) bool {
 	return qos.GetPodQOS(pod) == v1.PodQOSGuaranteed
+}
+
+func IsDaemonsetPod(pod *v1.Pod) bool {
+}
+
+// IsMirrorPod checks whether the pod is a mirror pod.
+func IsMirrorPod(pod *apiv1.Pod) bool {
+	_, found := pod.ObjectMeta.Annotations[types.ConfigMirrorAnnotationKey]
+	return found
 }
