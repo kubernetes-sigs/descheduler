@@ -32,7 +32,7 @@ import (
 // ReadyNodes returns ready nodes irrespective of whether they are
 // schedulable or not.
 func ReadyNodes(client clientset.Interface, stopChannel <-chan struct{}) ([]*v1.Node, error) {
-	nl := getNodeLister(client, stopChannel)
+	nl := GetNodeLister(client, stopChannel)
 	nodes, err := nl.List(labels.Everything())
 	if err != nil {
 		return []*v1.Node{}, err
@@ -59,7 +59,7 @@ func ReadyNodes(client clientset.Interface, stopChannel <-chan struct{}) ([]*v1.
 	return readyNodes, nil
 }
 
-func getNodeLister(client clientset.Interface, stopChannel <-chan struct{}) corelisters.NodeLister {
+func GetNodeLister(client clientset.Interface, stopChannel <-chan struct{}) corelisters.NodeLister {
 	listWatcher := cache.NewListWatchFromClient(client.Core().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
 	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	nodeLister := corelisters.NewNodeLister(store)
