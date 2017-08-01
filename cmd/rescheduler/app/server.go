@@ -23,6 +23,7 @@ import (
 	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/options"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/client"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
+	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -60,6 +61,19 @@ func Run(rs *options.ReschedulerServer) error {
 		return err
 	}
 
-	fmt.Printf("\nnodes = %#v\n", nodes)
+	for _, n := range nodes {
+		fmt.Printf("\nnode = %#v\n", n)
+	}
+
+	for _, node := range nodes {
+		pods, err := pod.ListPodsOnANode(rs.Client, node)
+		if err != nil {
+			return err
+		}
+
+		for _, p := range pods {
+			fmt.Printf("\npod = %#v\n", p)
+		}
+	}
 	return nil
 }
