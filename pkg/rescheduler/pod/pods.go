@@ -20,7 +20,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/kubernetes/pkg/api/v1"
+	"k8s.io/kubernetes/pkg/api/v1/helper/qos"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
+)
+
+const (
+	criticalPodAnnotation = "scheduler.alpha.kubernetes.io/critical-pod"
 )
 
 func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, error) {
@@ -36,4 +41,21 @@ func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, erro
 	}
 
 	return pods, nil
+}
+
+func IsCriticalPod(pod *v1.Pod) bool {
+	_, found := pod.ObjectMeta.Annotations[criticalPodAnnotation]
+	return found
+}
+
+func IsBestEffortPod(pod *v1.Pod) bool {
+	return qos.GetPodQOS(pod) == v1.PodQOSBestEffort
+}
+
+func IsBurstablePod(pod *v1.Pod) bool {
+	return qos.GetPodQOS(pod) == v1.PodQOSBurstable
+}
+
+func IsGuaranteedPod(pod *v1.Pod) bool {
+	return qos.GetPodQOS(pod) == v1.PodQOSGuaranteed
 }
