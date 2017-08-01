@@ -41,7 +41,7 @@ func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, erro
 }
 
 func IsCriticalPod(pod *v1.Pod) bool {
-	return types.IsCriticalPod(pod * v1.Pod)
+	return types.IsCriticalPod(pod)
 }
 
 func IsBestEffortPod(pod *v1.Pod) bool {
@@ -57,10 +57,21 @@ func IsGuaranteedPod(pod *v1.Pod) bool {
 }
 
 func IsDaemonsetPod(pod *v1.Pod) bool {
+	return false
 }
 
 // IsMirrorPod checks whether the pod is a mirror pod.
-func IsMirrorPod(pod *apiv1.Pod) bool {
+func IsMirrorPod(pod *v1.Pod) bool {
 	_, found := pod.ObjectMeta.Annotations[types.ConfigMirrorAnnotationKey]
 	return found
+}
+
+func IsPodWithLocalStorage(pod *v1.Pod) bool {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.EmptyDir != nil {
+			return true
+		}
+	}
+
+	return false
 }
