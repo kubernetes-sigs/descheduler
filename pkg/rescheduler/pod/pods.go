@@ -19,6 +19,8 @@ package pod
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/api/v1/helper/qos"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
@@ -56,7 +58,10 @@ func IsGuaranteedPod(pod *v1.Pod) bool {
 	return qos.GetPodQOS(pod) == v1.PodQOSGuaranteed
 }
 
-func IsDaemonsetPod(pod *v1.Pod) bool {
+func IsDaemonsetPod(sr *v1.SerializedReference) bool {
+	if sr != nil {
+		return sr.Reference.Kind == "DaemonSet"
+	}
 	return false
 }
 
@@ -68,10 +73,23 @@ func IsMirrorPod(pod *v1.Pod) bool {
 
 func IsPodWithLocalStorage(pod *v1.Pod) bool {
 	for _, volume := range pod.Spec.Volumes {
-		if volume.EmptyDir != nil {
+		if volume.HostPath != nil || volume.EmptyDir != nil {
 			return true
 		}
 	}
 
 	return false
+}
+
+// CreatorRef returns the kind of the creator reference of the pod.
+func CreatorRef(pod *v1.Pod) (*v1.SerializedReference, error) {
+	creatorRef, found := pod.ObjectMeta.Annotations[v1.CreatedByAnnotation]
+	if !found {
+		return nil, nil
+	}
+	var sr v1.SerializedReference
+	if err := runtime.DecodeInto(api.Codecs.UniversalDecoder(), []byte(creatorRef), &sr); err != nil {
+		return nil, err
+	}
+	return &sr, nil
 }
