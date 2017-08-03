@@ -22,8 +22,9 @@ import (
 
 	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/options"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/client"
-	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
-	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
+	//"github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
+	//"github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
+	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/strategies"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -55,7 +56,8 @@ func Run(rs *options.ReschedulerServer) error {
 		return err
 	}
 	rs.Client = rsclient
-	stopChannel := make(chan struct{})
+	strategies.RemoveDuplicatePods(rs.Client)
+	/*stopChannel := make(chan struct{})
 	nodes, err := node.ReadyNodes(rs.Client, stopChannel)
 	if err != nil {
 		return err
@@ -74,6 +76,6 @@ func Run(rs *options.ReschedulerServer) error {
 		for _, p := range pods {
 			fmt.Printf("\npod = %#v\n", p)
 		}
-	}
+	}*/
 	return nil
 }
