@@ -24,7 +24,7 @@ import (
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
-	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
+	podutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
 )
 
 //type creator string
@@ -46,10 +46,14 @@ func RemoveDuplicatePods(client clientset.Interface) error {
 			}
 		}
 	}
+	return nil
 }
 
 func RemoveDuplicatePodsOnANode(client clientset.Interface, node *v1.Node) DuplicatePodsMap {
-	pods := pod.ListPodsOnANode(client, node)
+	pods, err := podutil.ListPodsOnANode(client, node)
+	if err != nil {
+		return nil
+	}
 	return FindDuplicatePods(pods)
 }
 
@@ -57,15 +61,15 @@ func FindDuplicatePods(pods []*v1.Pod) DuplicatePodsMap {
 	dpm := DuplicatePodsMap{}
 
 	for _, pod := range pods {
-		sr, err := pod.CreatorRef(pod)
+		sr, err := podutil.CreatorRef(pod)
 		if err != nil || sr == nil {
 			continue
 		}
-		if pod.IsMirrorPod(pod) || IsDaemonsetPod(sr) || IsPodWithLocalStorage(pod) {
+		if podutil.IsMirrorPod(pod) || podutil.IsDaemonsetPod(sr) || podutil.IsPodWithLocalStorage(pod) {
 			continue
 		}
 		s := strings.Join([]string{sr.Reference.Kind, sr.Reference.Namespace, sr.Reference.Name}, "/")
-		append(dpm[s], pod)
+		dpm[s] = append(dpm[s], pod)
 	}
 	return dpm
 }
