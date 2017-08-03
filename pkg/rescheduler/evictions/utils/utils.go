@@ -27,8 +27,8 @@ const (
 
 // SupportEviction uses Discovery API to find out if the server support eviction subresource
 // If support, it will return its groupVersion; Otherwise, it will return ""
-func SupportEviction(clientset clientset.Interface) (string, error) {
-	discoveryClient := clientset.Discovery()
+func SupportEviction(client clientset.Interface) (string, error) {
+	discoveryClient := client.Discovery()
 	groupList, err := discoveryClient.ServerGroups()
 	if err != nil {
 		return "", err

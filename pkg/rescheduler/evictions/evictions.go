@@ -17,10 +17,12 @@ limitations under the License.
 package evictions
 
 import (
+	"fmt"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/pkg/api/v1"
-	"k8s.io/kubernetes/pkg/apis/policy"
+	policy "k8s.io/kubernetes/pkg/apis/policy/v1beta1"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
 	eutils "github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions/utils"
@@ -45,9 +47,9 @@ func EvictPod(client clientset.Interface, pod *v1.Pod, policyGroupVersion string
 	if err == nil {
 		return true, nil
 	} else if apierrors.IsTooManyRequests(err) {
-		return false, fmt.Errorf("error when evicting pod %q: %v", pod.Name, err)
-	} else if !apierrors.IsNotFound(err) {
-		return true, fmt.Errorf("error when evicting pod %q: %v", pod.Name, err)
+		return false, fmt.Errorf("error when evicting pod (ignoring) %q: %v", pod.Name, err)
+	} else if apierrors.IsNotFound(err) {
+		return true, fmt.Errorf("pod not found when evicting %q: %v", pod.Name, err)
 	} else {
 		return false, err
 	}

@@ -24,6 +24,7 @@ import (
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/client"
 	//"github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
 	//"github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
+	eutils "github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions/utils"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/strategies"
 
 	"github.com/spf13/cobra"
@@ -56,7 +57,13 @@ func Run(rs *options.ReschedulerServer) error {
 		return err
 	}
 	rs.Client = rsclient
-	strategies.RemoveDuplicatePods(rs.Client)
+
+	policyGroupVersion, err := eutils.SupportEviction(rs.Client)
+	if err != nil || len(policyGroupVersion) == 0 {
+		return err
+	}
+
+	strategies.RemoveDuplicatePods(rs.Client, policyGroupVersion)
 	/*stopChannel := make(chan struct{})
 	nodes, err := node.ReadyNodes(rs.Client, stopChannel)
 	if err != nil {

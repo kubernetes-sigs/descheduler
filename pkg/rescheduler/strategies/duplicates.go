@@ -23,6 +23,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
+	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
 	podutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
 )
@@ -30,7 +31,7 @@ import (
 //type creator string
 type DuplicatePodsMap map[string][]*v1.Pod
 
-func RemoveDuplicatePods(client clientset.Interface) error {
+func RemoveDuplicatePods(client clientset.Interface, policyGroupVersion string) error {
 	stopChannel := make(chan struct{})
 	nodes, err := node.ReadyNodes(client, stopChannel)
 	if err != nil {
@@ -39,10 +40,19 @@ func RemoveDuplicatePods(client clientset.Interface) error {
 	for _, node := range nodes {
 		fmt.Printf("\nProcessing node: %#v\n", node.Name)
 		dpm := RemoveDuplicatePodsOnANode(client, node)
-		for i, j := range dpm {
-			fmt.Printf("%#v\n", i)
-			for _, k := range j {
-				fmt.Printf("Duplicate pod %#v\n", k.Name)
+		for creator, pods := range dpm {
+			if len(pods) > 1 {
+				fmt.Printf("%#v\n", creator)
+				// i = 0 does not evict the first pod
+				for i := 1; i < len(pods); i++ {
+					//fmt.Printf("Removing duplicate pod %#v\n", k.Name)
+					success, err := evictions.EvictPod(client, pods[i], policyGroupVersion)
+					if !success {
+						fmt.Printf("Error when evicting pod: %#v (%#v)\n", pods[i].Name, err)
+					} else {
+						fmt.Printf("Evicted pod: %#v (%#v)\n", pods[i].Name, err)
+					}
+				}
 			}
 		}
 	}
