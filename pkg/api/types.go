@@ -20,7 +20,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/api/v1"
 )
 
 type ReschedulerPolicy struct {
@@ -53,9 +53,10 @@ type StrategyParameters struct {
 }
 
 type Percentage int
-type ResourceThresholds map[api.ResourceName]Percentage
+type ResourceThresholds map[v1.ResourceName]Percentage
 
 type NodeResourceUtilizationThresholds struct {
 	Thresholds       ResourceThresholds
 	TargetThresholds ResourceThresholds
+	NumberOfNodes    int
 }

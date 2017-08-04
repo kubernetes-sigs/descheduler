@@ -58,4 +58,5 @@ type ResourceThresholds map[v1.ResourceName]Percentage
 type NodeResourceUtilizationThresholds struct {
 	Thresholds       ResourceThresholds `json:"thresholds,omitempty"`
 	TargetThresholds ResourceThresholds `json:"targetThresholds,omitempty"`
+	NumberOfNodes    int                `json:"numberOfNodes,omitempty"`
 }
