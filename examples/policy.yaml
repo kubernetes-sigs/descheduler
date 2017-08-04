@@ -1,0 +1,16 @@
+apiVersion: "v1alpha1"
+kind: "ReschedulerPolicy"
+strategies:
+  "LowNodeUtilization":
+     enabled: true
+     weight: 1
+     params:
+       nodeResourceUtilizationThresholds:
+         thresholds:
+           "cpu" : 10
+           "memory": 50
+           "pods": 50
+         targetThresholds:
+           "cpu" : 10
+           "memory": 50
+           "pods": 50
