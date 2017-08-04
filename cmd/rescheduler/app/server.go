@@ -21,11 +21,7 @@ import (
 	"fmt"
 
 	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/options"
-	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/client"
-	//"github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
-	//"github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
-	eutils "github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions/utils"
-	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/strategies"
+	"github.com/aveshagarwal/rescheduler/pkg/rescheduler"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -52,37 +48,5 @@ func NewReschedulerCommand() *cobra.Command {
 }
 
 func Run(rs *options.ReschedulerServer) error {
-	rsclient, err := client.CreateClient(rs.KubeconfigFile)
-	if err != nil {
-		return err
-	}
-	rs.Client = rsclient
-
-	policyGroupVersion, err := eutils.SupportEviction(rs.Client)
-	if err != nil || len(policyGroupVersion) == 0 {
-		return err
-	}
-
-	strategies.RemoveDuplicatePods(rs.Client, policyGroupVersion)
-	/*stopChannel := make(chan struct{})
-	nodes, err := node.ReadyNodes(rs.Client, stopChannel)
-	if err != nil {
-		return err
-	}
-
-	for _, n := range nodes {
-		fmt.Printf("\nnode = %#v\n", n)
-	}
-
-	for _, node := range nodes {
-		pods, err := pod.ListPodsOnANode(rs.Client, node)
-		if err != nil {
-			return err
-		}
-
-		for _, p := range pods {
-			fmt.Printf("\npod = %#v\n", p)
-		}
-	}*/
-	return nil
+	return rescheduler.Run(rs)
 }
