@@ -52,7 +52,7 @@ type StrategyParameters struct {
 	NodeResourceUtilizationThresholds NodeResourceUtilizationThresholds `json:"nodeResourceUtilizationThresholds,omitempty"`
 }
 
-type Percentage int
+type Percentage float64
 type ResourceThresholds map[v1.ResourceName]Percentage
 
 type NodeResourceUtilizationThresholds struct {
