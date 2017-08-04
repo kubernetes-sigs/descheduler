@@ -24,7 +24,6 @@ import (
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions"
-	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
 	podutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
 )
 
