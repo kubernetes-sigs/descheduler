@@ -31,12 +31,7 @@ import (
 //type creator string
 type DuplicatePodsMap map[string][]*v1.Pod
 
-func RemoveDuplicatePods(client clientset.Interface, policyGroupVersion string) error {
-	stopChannel := make(chan struct{})
-	nodes, err := node.ReadyNodes(client, stopChannel)
-	if err != nil {
-		return err
-	}
+func RemoveDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node) error {
 	for _, node := range nodes {
 		fmt.Printf("\nProcessing node: %#v\n", node.Name)
 		dpm := RemoveDuplicatePodsOnANode(client, node)
