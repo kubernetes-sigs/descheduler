@@ -17,7 +17,10 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/kubernetes/pkg/api/v1"
 )
 
 type ReschedulerPolicy struct {
@@ -25,4 +28,34 @@ type ReschedulerPolicy struct {
 
 	// Time interval for rescheduler to run
 	ReschedulingInterval time.Duration `json:"reschedulingInterval,omitempty"`
+
+	// Strategies
+	Strategies StrategyList `json:"strategies,omitempty"`
+}
+
+type StrategyName string
+type StrategyList map[StrategyName]ReschedulerStrategy
+
+type ReschedulerStrategy struct {
+	// Enabled or disabled
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Weight
+	Weight int `json:"weight,omitempty"`
+
+	// Strategy parameters
+	Params StrategyParameters `json:"params,omitempty"`
+}
+
+// Only one of its members may be specified
+type StrategyParameters struct {
+	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds `json:"nodeResourceUtilizationThresholds,omitempty"`
+}
+
+type Percentage int
+type ResourceThresholds map[v1.ResourceName]Percentage
+
+type NodeResourceUtilizationThresholds struct {
+	Thresholds       ResourceThresholds `json:"thresholds,omitempty"`
+	TargetThresholds ResourceThresholds `json:"targetThresholds,omitempty"`
 }
