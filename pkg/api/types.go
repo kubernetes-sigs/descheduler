@@ -49,7 +49,7 @@ type ReschedulerStrategy struct {
 
 // Only one of its members may be specified
 type StrategyParameters struct {
-	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds
+	NodeResourceUtilizationThresholds NodeResourceUtilizationThresholds
 }
 
 type Percentage int

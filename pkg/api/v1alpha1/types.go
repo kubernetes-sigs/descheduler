@@ -49,7 +49,7 @@ type ReschedulerStrategy struct {
 
 // Only one of its members may be specified
 type StrategyParameters struct {
-	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds `json:"nodeResourceUtilizationThresholds,omitempty"`
+	NodeResourceUtilizationThresholds NodeResourceUtilizationThresholds `json:"nodeResourceUtilizationThresholds,omitempty"`
 }
 
 type Percentage int

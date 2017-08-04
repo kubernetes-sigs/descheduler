@@ -17,10 +17,11 @@ limitations under the License.
 package rescheduler
 
 import (
-	"encoding/json"
-	//"fmt"
-	"io/ioutil"
-	//"os"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"k8s.io/apimachinery/pkg/util/yaml"
 
 	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/options"
 	"github.com/aveshagarwal/rescheduler/pkg/api/v1alpha1"
@@ -38,15 +39,21 @@ func Run(rs *options.ReschedulerServer) error {
 
 	reschedulerPolicy := v1alpha1.ReschedulerPolicy{}
 	if len(rs.PolicyConfigFile) > 0 {
-		data, err := ioutil.ReadFile(rs.PolicyConfigFile)
+		filename, err := filepath.Abs(rs.PolicyConfigFile)
 		if err != nil {
 			return err
 		}
-		if err := json.Unmarshal(data, &reschedulerPolicy); err != nil {
+		fd, err := os.Open(filename)
+		if err != nil {
 			return err
 		}
-	}
 
+		if err := yaml.NewYAMLOrJSONDecoder(fd, 4096).Decode(&reschedulerPolicy); err != nil {
+			return err
+		}
+
+	}
+	fmt.Printf("\nreschedulerPolicy: %#v\n", reschedulerPolicy)
 	policyGroupVersion, err := eutils.SupportEviction(rs.Client)
 	if err != nil || len(policyGroupVersion) == 0 {
 		return err
