@@ -27,6 +27,7 @@ import (
 	"github.com/aveshagarwal/rescheduler/pkg/api/v1alpha1"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/client"
 	eutils "github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions/utils"
+	nodeutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/strategies"
 )
 
@@ -61,7 +62,7 @@ func Run(rs *options.ReschedulerServer) error {
 	}
 
 	stopChannel := make(chan struct{})
-	nodes, err := nodeutil.ReadyNodes(client, stopChannel)
+	nodes, err := nodeutil.ReadyNodes(rs.Client, stopChannel)
 	if err != nil {
 		return err
 	}

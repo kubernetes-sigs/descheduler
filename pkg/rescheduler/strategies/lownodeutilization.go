@@ -17,9 +17,12 @@ limitations under the License.
 package strategies
 
 import (
+	"fmt"
+
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/kubernetes/pkg/api/v1"
-	"k8s.io/kubernetes/pkg/api/v1/resource"
+	helper "k8s.io/kubernetes/pkg/api/v1/resource"
+
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
 	"github.com/aveshagarwal/rescheduler/pkg/api"
@@ -39,11 +42,11 @@ func NodeUtilization(client clientset.Interface, node *v1.Node) api.ResourceThre
 	}
 
 	totalReqs := map[v1.ResourceName]resource.Quantity{}
-	for pod := range pods {
+	for _, pod := range pods {
 		if podutil.IsBestEffortPod(pod) {
 			continue
 		}
-		req, _, err := resource.PodRequestsAndLimits(pod)
+		req, _, err := helper.PodRequestsAndLimits(pod)
 		if err != nil {
 			fmt.Printf("Error computing resource usage of pod, ignoring: %#v\n", pod.Name)
 			continue
@@ -66,11 +69,11 @@ func NodeUtilization(client clientset.Interface, node *v1.Node) api.ResourceThre
 	}
 
 	rt := api.ResourceThresholds{}
-	totalCPUReq := totalReq[v1.ResourceCPU]
-	totalMemReq := totalReq[v1.ResourceMemory]
+	totalCPUReq := totalReqs[v1.ResourceCPU]
+	totalMemReq := totalReqs[v1.ResourceMemory]
 	totalPods := len(pods)
-	rt[v1.ResourceCPU] = (float64(totalCPUReq.MilliValue()) * 100) / float64(allocatable.Cpu().MilliValue())
-	rt[v1.ResourceMmeory] = float64(totalMemReq.Value()) / float64(allocatable.Memory().Value()) * 100
-	rt[v1.ResourcePods] = (float64(totalPods) * 100) / float64(allocatable.Pods().Value())
+	rt[v1.ResourceCPU] = api.Percentage((float64(totalCPUReq.MilliValue()) * 100) / float64(allocatable.Cpu().MilliValue()))
+	rt[v1.ResourceMemory] = api.Percentage(float64(totalMemReq.Value()) / float64(allocatable.Memory().Value()) * 100)
+	rt[v1.ResourcePods] = api.Percentage((float64(totalPods) * 100) / float64(allocatable.Pods().Value()))
 	return rt
 }
