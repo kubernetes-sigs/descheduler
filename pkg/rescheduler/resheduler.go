@@ -17,9 +17,13 @@ limitations under the License.
 package rescheduler
 
 import (
-	"fmt"
+	"encoding/json"
+	//"fmt"
+	"io/ioutil"
+	//"os"
 
 	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/options"
+	"github.com/aveshagarwal/rescheduler/pkg/api/v1alpha1"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/client"
 	eutils "github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions/utils"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/strategies"
@@ -31,6 +35,17 @@ func Run(rs *options.ReschedulerServer) error {
 		return err
 	}
 	rs.Client = rsclient
+
+	reschedulerPolicy := v1alpha1.ReschedulerPolicy{}
+	if len(rs.PolicyConfigFile) > 0 {
+		data, err := ioutil.ReadFile(rs.PolicyConfigFile)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(data, &reschedulerPolicy); err != nil {
+			return err
+		}
+	}
 
 	policyGroupVersion, err := eutils.SupportEviction(rs.Client)
 	if err != nil || len(policyGroupVersion) == 0 {
