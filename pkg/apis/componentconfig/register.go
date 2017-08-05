@@ -26,7 +26,7 @@ var (
 	AddToScheme   = SchemeBuilder.AddToScheme
 )
 
-// GroupName is the group name use in this package
+// GroupName is the group name used in this package
 const GroupName = "reschedulercomponentconfig"
 
 // SchemeGroupVersion is group version used to register these objects
