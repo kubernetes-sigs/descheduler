@@ -19,5 +19,5 @@ package v1alpha1
 import "k8s.io/apimachinery/pkg/runtime"
 
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
-	return nil //RegisterDefaults(scheme)
+	return RegisterDefaults(scheme)
 }
