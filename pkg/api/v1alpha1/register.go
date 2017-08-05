@@ -28,7 +28,7 @@ var (
 )
 
 // GroupName is the group name use in this package
-const GroupName = "rescheduler.k8s.io"
+const GroupName = "rescheduler"
 const GroupVersion = "v1alpha1"
 
 // SchemeGroupVersion is group version used to register these objects

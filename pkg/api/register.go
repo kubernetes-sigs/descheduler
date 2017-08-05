@@ -27,7 +27,7 @@ var (
 )
 
 // GroupName is the group name use in this package
-const GroupName = "rescheduler.k8s.io"
+const GroupName = "rescheduler"
 
 // SchemeGroupVersion is group version used to register these objects
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
