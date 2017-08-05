@@ -1,5 +1,5 @@
-hash: 0d6e06bdd8a8ed158cd43e68bd643a18b098ca89fcdb42421a8cc652bd3b6eb5
-updated: 2017-07-31T01:33:05.030981067-04:00
+hash: bf18ba8a038a73e8f11f808c8babdd34734279b050e0223f704eaabbd13830fd
+updated: 2017-08-05T10:03:09.300557448-04:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
@@ -257,13 +257,17 @@ imports:
   - util/flowcontrol
   - util/homedir
   - util/integer
+- name: k8s.io/gengo
+  version: c79c13d131b0a8f42d05faa6491c12e94ccc6f30
 - name: k8s.io/kubernetes
   version: ebb8d6e0fadfc95f3d64ccecc36c8ed2ac9224ef
   subpackages:
   - pkg/api
   - pkg/api/install
   - pkg/api/v1
+  - pkg/api/v1/helper/qos
   - pkg/api/v1/ref
+  - pkg/api/v1/resource
   - pkg/apis/admissionregistration
   - pkg/apis/admissionregistration/v1alpha1
   - pkg/apis/apps
@@ -330,6 +334,7 @@ imports:
   - pkg/client/clientset_generated/clientset/typed/storage/v1
   - pkg/client/clientset_generated/clientset/typed/storage/v1beta1
   - pkg/client/listers/core/v1
+  - pkg/kubelet/types
   - pkg/util
   - pkg/util/parsers
 testImports: []
