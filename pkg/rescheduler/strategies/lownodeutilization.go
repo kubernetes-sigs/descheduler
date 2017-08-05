@@ -29,10 +29,17 @@ import (
 	podutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
 )
 
+type NodeUsageMap map[*v1.Node]api.ResourceThresholds
+
 func LowNodeUtilization(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node) {
+	nodeUsageMap := NodeUsageMap{}
 	for _, node := range nodes {
-		fmt.Printf("Node %#v usage: %#v\n", node.Name, NodeUtilization(client, node))
+		nodeUsageMap[node] = NodeUtilization(client, node)
+		fmt.Printf("Node %#v usage: %#v\n", node.Name, nodeUsageMap[node])
 	}
+}
+
+func FindNodesWithLowUtilization() {
 }
 
 func NodeUtilization(client clientset.Interface, node *v1.Node) api.ResourceThresholds {
