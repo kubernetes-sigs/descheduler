@@ -24,7 +24,6 @@ import (
 	api "github.com/aveshagarwal/rescheduler/pkg/api"
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
-	time "time"
 	unsafe "unsafe"
 )
 
@@ -72,7 +71,6 @@ func Convert_api_NodeResourceUtilizationThresholds_To_v1alpha1_NodeResourceUtili
 }
 
 func autoConvert_v1alpha1_ReschedulerPolicy_To_api_ReschedulerPolicy(in *ReschedulerPolicy, out *api.ReschedulerPolicy, s conversion.Scope) error {
-	out.ReschedulingInterval = time.Duration(in.ReschedulingInterval)
 	out.Strategies = *(*api.StrategyList)(unsafe.Pointer(&in.Strategies))
 	return nil
 }
@@ -83,7 +81,6 @@ func Convert_v1alpha1_ReschedulerPolicy_To_api_ReschedulerPolicy(in *Rescheduler
 }
 
 func autoConvert_api_ReschedulerPolicy_To_v1alpha1_ReschedulerPolicy(in *api.ReschedulerPolicy, out *ReschedulerPolicy, s conversion.Scope) error {
-	out.ReschedulingInterval = time.Duration(in.ReschedulingInterval)
 	out.Strategies = *(*StrategyList)(unsafe.Pointer(&in.Strategies))
 	return nil
 }
