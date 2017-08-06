@@ -24,6 +24,7 @@ import (
 	componentconfig "github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig"
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
+	time "time"
 )
 
 func init() {
@@ -40,6 +41,7 @@ func RegisterConversions(scheme *runtime.Scheme) error {
 }
 
 func autoConvert_v1alpha1_ReschedulerConfiguration_To_componentconfig_ReschedulerConfiguration(in *ReschedulerConfiguration, out *componentconfig.ReschedulerConfiguration, s conversion.Scope) error {
+	out.ReschedulingInterval = time.Duration(in.ReschedulingInterval)
 	out.KubeconfigFile = in.KubeconfigFile
 	out.PolicyConfigFile = in.PolicyConfigFile
 	return nil
@@ -51,6 +53,7 @@ func Convert_v1alpha1_ReschedulerConfiguration_To_componentconfig_ReschedulerCon
 }
 
 func autoConvert_componentconfig_ReschedulerConfiguration_To_v1alpha1_ReschedulerConfiguration(in *componentconfig.ReschedulerConfiguration, out *ReschedulerConfiguration, s conversion.Scope) error {
+	out.ReschedulingInterval = time.Duration(in.ReschedulingInterval)
 	out.KubeconfigFile = in.KubeconfigFile
 	out.PolicyConfigFile = in.PolicyConfigFile
 	return nil
