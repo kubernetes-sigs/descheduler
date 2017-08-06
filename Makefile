@@ -14,7 +14,7 @@
 
 
 build:
-	go build -o _output/bin/resheduler github.com/aveshagarwal/rescheduler/cmd/rescheduler
+	go build -o _output/bin/rescheduler github.com/aveshagarwal/rescheduler/cmd/rescheduler
 
 clean:
 	rm -rf _output
