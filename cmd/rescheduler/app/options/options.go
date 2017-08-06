@@ -20,15 +20,13 @@ package options
 import (
 	//"fmt"
 
-	//"k8s.io/kubernetes/pkg/api"
-
-	// install the componentconfig api so we get its defaulting and conversion functions
-	//_ "github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig/install"
-
+	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
-	// rescheduler packages
+	// install the componentconfig api so we get its defaulting and conversion functions
 	"github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig"
+	_ "github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig/install"
+	"github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig/v1alpha1"
 
 	"github.com/spf13/pflag"
 )
@@ -41,7 +39,10 @@ type ReschedulerServer struct {
 
 // NewReschedulerServer creates a new ReschedulerServer with default parameters
 func NewReschedulerServer() *ReschedulerServer {
+	versioned := v1alpha1.ReschedulerConfiguration{}
+	api.Scheme.Default(&versioned)
 	cfg := componentconfig.ReschedulerConfiguration{}
+	api.Scheme.Convert(versioned, &cfg, nil)
 	s := ReschedulerServer{
 		ReschedulerConfiguration: cfg,
 	}
