@@ -26,9 +26,6 @@ import (
 type ReschedulerPolicy struct {
 	metav1.TypeMeta
 
-	// Time interval for rescheduler to run
-	ReschedulingInterval time.Duration
-
 	// Strategies
 	Strategies StrategyList
 }
