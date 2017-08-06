@@ -26,9 +26,6 @@ import (
 type ReschedulerPolicy struct {
 	metav1.TypeMeta `json:",inline"`
 
-	// Time interval for rescheduler to run
-	ReschedulingInterval time.Duration `json:"reschedulingInterval,omitempty"`
-
 	// Strategies
 	Strategies StrategyList `json:"strategies,omitempty"`
 }

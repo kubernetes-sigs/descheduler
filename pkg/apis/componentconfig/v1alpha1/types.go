@@ -23,6 +23,9 @@ import (
 type ReschedulerConfiguration struct {
 	metav1.TypeMeta `json:",inline"`
 
+	// Time interval for rescheduler to run
+	ReschedulingInterval time.Duration `json:"reschedulingInterval,omitempty"`
+
 	// KubeconfigFile is path to kubeconfig file with authorization and master
 	// location information.
 	KubeconfigFile string `json:"kubeconfigFile"`
