@@ -17,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	//metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -58,8 +58,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ReschedulerPolicy{},
 	)
 
-	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
-	scheme.AddKnownTypes(schema.GroupVersion{Version: "v1"}, &metav1.Status{})
+	//metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
+	//scheme.AddKnownTypes(schema.GroupVersion{Version: "v1"}, &metav1.Status{})
 
 	return nil
 }
