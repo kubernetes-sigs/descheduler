@@ -21,14 +21,14 @@ import (
 	"k8s.io/apimachinery/pkg/apimachinery/announced"
 	"k8s.io/apimachinery/pkg/apimachinery/registered"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/kubernetes/pkg/api"
 
 	reschedulerapi "github.com/aveshagarwal/rescheduler/pkg/api"
 	"github.com/aveshagarwal/rescheduler/pkg/api/v1alpha1"
+	reschedulerscheme "github.com/aveshagarwal/rescheduler/pkg/rescheduler/scheme"
 )
 
 func init() {
-	Install(api.GroupFactoryRegistry, api.Registry, api.Scheme)
+	Install(reschedulerscheme.GroupFactoryRegistry, reschedulerscheme.Registry, reschedulerscheme.Scheme)
 }
 
 // Install registers the API group and adds types to a scheme
