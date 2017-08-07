@@ -18,15 +18,13 @@ limitations under the License.
 package options
 
 import (
-	//"fmt"
-
-	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
 	// install the componentconfig api so we get its defaulting and conversion functions
 	"github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig"
 	_ "github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig/install"
 	"github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig/v1alpha1"
+	reschedulerscheme "github.com/aveshagarwal/rescheduler/pkg/rescheduler/scheme"
 
 	"github.com/spf13/pflag"
 )
@@ -40,9 +38,9 @@ type ReschedulerServer struct {
 // NewReschedulerServer creates a new ReschedulerServer with default parameters
 func NewReschedulerServer() *ReschedulerServer {
 	versioned := v1alpha1.ReschedulerConfiguration{}
-	api.Scheme.Default(&versioned)
+	reschedulerscheme.Scheme.Default(&versioned)
 	cfg := componentconfig.ReschedulerConfiguration{}
-	api.Scheme.Convert(versioned, &cfg, nil)
+	reschedulerscheme.Scheme.Convert(versioned, &cfg, nil)
 	s := ReschedulerServer{
 		ReschedulerConfiguration: cfg,
 	}
