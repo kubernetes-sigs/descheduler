@@ -31,7 +31,7 @@ import (
 
 type NodeUsageMap map[*v1.Node]api.ResourceThresholds
 
-func LowNodeUtilization(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node) {
+func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node) {
 	nodeUsageMap := NodeUsageMap{}
 	for _, node := range nodes {
 		nodeUsageMap[node] = NodeUtilization(client, node)
