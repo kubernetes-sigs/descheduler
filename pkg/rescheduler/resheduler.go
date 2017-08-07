@@ -18,13 +18,13 @@ package rescheduler
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
+	//"os"
+	//"path/filepath"
 
-	"k8s.io/apimachinery/pkg/util/yaml"
+	//"k8s.io/apimachinery/pkg/util/yaml"
 
 	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/options"
-	"github.com/aveshagarwal/rescheduler/pkg/api/v1alpha1"
+	//"github.com/aveshagarwal/rescheduler/pkg/api/v1alpha1"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/client"
 	eutils "github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions/utils"
 	nodeutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
@@ -34,7 +34,7 @@ import (
 
 func Run(rs *options.ReschedulerServer) error {
 
-	fmt.Printf("all known types=%#v\n", reschedulerscheme.Scheme.AllKnownTypes())
+	fmt.Printf("\n\nrescheduler: all known types=%#v\n\n", reschedulerscheme.Scheme.AllKnownTypes())
 
 	rsclient, err := client.CreateClient(rs.KubeconfigFile)
 	if err != nil {
@@ -42,8 +42,9 @@ func Run(rs *options.ReschedulerServer) error {
 	}
 	rs.Client = rsclient
 
-	reschedulerPolicy := v1alpha1.ReschedulerPolicy{}
-	if len(rs.PolicyConfigFile) > 0 {
+	//reschedulerPolicy := v1alpha1.ReschedulerPolicy{}
+	//var reschedulerPolicy *api.ReschedulerPolicy
+	/*if len(rs.PolicyConfigFile) > 0 {
 		filename, err := filepath.Abs(rs.PolicyConfigFile)
 		if err != nil {
 			return err
@@ -57,9 +58,18 @@ func Run(rs *options.ReschedulerServer) error {
 			return err
 		}
 
-	}
-	fmt.Printf("\nreschedulerPolicy: %#v\n", reschedulerPolicy)
+	}*/
 
+	reschedulerPolicy, err := LoadPolicyConfig(rs.PolicyConfigFile)
+	if err != nil {
+		return err
+	}
+	if reschedulerPolicy != nil {
+		fmt.Printf("\nreschedulerPolicy: %#v\n", reschedulerPolicy)
+	} else {
+		fmt.Printf("\nreschedulerPolicy is nil\n")
+
+	}
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(rs.Client)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		return err
