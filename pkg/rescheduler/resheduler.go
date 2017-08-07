@@ -67,7 +67,7 @@ func Run(rs *options.ReschedulerServer) error {
 	if reschedulerPolicy != nil {
 		fmt.Printf("\nreschedulerPolicy: %#v\n", reschedulerPolicy)
 	} else {
-		fmt.Printf("\nreschedulerPolicy is nil\n")
+		return fmt.Errorf("\nreschedulerPolicy is nil\n")
 
 	}
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(rs.Client)
@@ -82,7 +82,7 @@ func Run(rs *options.ReschedulerServer) error {
 	}
 
 	strategies.RemoveDuplicatePods(rs.Client, evictionPolicyGroupVersion, nodes)
-	strategies.LowNodeUtilization(rs.Client, evictionPolicyGroupVersion, nodes)
+	strategies.LowNodeUtilization(rs.Client, reschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes)
 
 	return nil
 }
