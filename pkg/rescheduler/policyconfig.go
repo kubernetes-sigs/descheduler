@@ -21,8 +21,6 @@ import (
 	"io/ioutil"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	//"k8s.io/apimachinery/pkg/runtime/serializer"
-	//kapi "k8s.io/kubernetes/pkg/api"
 
 	"github.com/aveshagarwal/rescheduler/pkg/api"
 	_ "github.com/aveshagarwal/rescheduler/pkg/api/install"
@@ -43,26 +41,12 @@ func LoadPolicyConfig(policyConfigFile string) (*api.ReschedulerPolicy, error) {
 
 	versionedPolicy := &v1alpha1.ReschedulerPolicy{}
 
-	//decoder := kapi.Codecs.UniversalDecoder(v1alpha1.SchemeGroupVersion)
 	decoder := scheme.Codecs.UniversalDecoder(v1alpha1.SchemeGroupVersion)
 	if err := runtime.DecodeInto(decoder, policy, versionedPolicy); err != nil {
 		return nil, fmt.Errorf("failed decoding rescheduler's policy config %q: %v", policyConfigFile, err)
 	}
 
-	//codecs := serializer.NewCodecFactory(scheme.Scheme)
-	//decoder := scheme.Codecs.UniversalDecoder()
-	/*decoder := kapi.Codecs.UniversalDecoder()
-	decodedObj, err := runtime.Decode(decoder, policy)
-	if err != nil {
-		return nil, err
-	}
-	internalPolicy, ok := decodedObj.(*api.ReschedulerPolicy)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type: %T", decodedObj)
-	}*/
-
 	internalPolicy := &api.ReschedulerPolicy{}
-	//if err := kapi.Scheme.Convert(versionedPolicy, internalPolicy, nil); err != nil {
 	if err := scheme.Scheme.Convert(versionedPolicy, internalPolicy, nil); err != nil {
 		return nil, fmt.Errorf("failed converting versioned policy to internal policy version: %v", err)
 	}
