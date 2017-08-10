@@ -18,13 +18,8 @@ package rescheduler
 
 import (
 	"fmt"
-	//"os"
-	//"path/filepath"
-
-	//"k8s.io/apimachinery/pkg/util/yaml"
 
 	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/options"
-	//"github.com/aveshagarwal/rescheduler/pkg/api/v1alpha1"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/client"
 	eutils "github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions/utils"
 	nodeutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
@@ -41,24 +36,6 @@ func Run(rs *options.ReschedulerServer) error {
 		return err
 	}
 	rs.Client = rsclient
-
-	//reschedulerPolicy := v1alpha1.ReschedulerPolicy{}
-	//var reschedulerPolicy *api.ReschedulerPolicy
-	/*if len(rs.PolicyConfigFile) > 0 {
-		filename, err := filepath.Abs(rs.PolicyConfigFile)
-		if err != nil {
-			return err
-		}
-		fd, err := os.Open(filename)
-		if err != nil {
-			return err
-		}
-
-		if err := yaml.NewYAMLOrJSONDecoder(fd, 4096).Decode(&reschedulerPolicy); err != nil {
-			return err
-		}
-
-	}*/
 
 	reschedulerPolicy, err := LoadPolicyConfig(rs.PolicyConfigFile)
 	if err != nil {
