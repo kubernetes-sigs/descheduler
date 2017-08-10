@@ -1,4 +1,4 @@
-apiVersion: "v1alpha1"
+apiVersion: "rescheduler/v1alpha1"
 kind: "ReschedulerPolicy"
 strategies:
   "LowNodeUtilization":
