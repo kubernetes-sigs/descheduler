@@ -23,7 +23,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/aveshagarwal/rescheduler/pkg/api"
-	_ "github.com/aveshagarwal/rescheduler/pkg/api/install"
 	"github.com/aveshagarwal/rescheduler/pkg/api/v1alpha1"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/scheme"
 )
