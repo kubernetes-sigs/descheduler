@@ -17,15 +17,14 @@ limitations under the License.
 package v1alpha1
 
 import (
-	//metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 var (
-	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
-	//localSchemeBuilder = &SchemeBuilder
-	AddToScheme = SchemeBuilder.AddToScheme
+	SchemeBuilder      = runtime.NewSchemeBuilder(addKnownTypes)
+	localSchemeBuilder = &SchemeBuilder
+	AddToScheme        = SchemeBuilder.AddToScheme
 )
 
 // GroupName is the group name used in this package
@@ -45,21 +44,18 @@ func Resource(resource string) schema.GroupResource {
 	return SchemeGroupVersion.WithResource(resource).GroupResource()
 }
 
-/*func init() {
+func init() {
 	// We only register manually written functions here. The registration of the
 	// generated functions takes place in the generated files. The separation
 	// makes the code compile even when the generated files are missing.
 	localSchemeBuilder.Register(addKnownTypes, addDefaultingFuncs)
-}*/
+}
 
 func addKnownTypes(scheme *runtime.Scheme) error {
 	// TODO this will get cleaned up with the scheme types are fixed
 	scheme.AddKnownTypes(SchemeGroupVersion,
 		&ReschedulerPolicy{},
 	)
-
-	//metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
-	//scheme.AddKnownTypes(schema.GroupVersion{Version: "v1"}, &metav1.Status{})
 
 	return nil
 }
