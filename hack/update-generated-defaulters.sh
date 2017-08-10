@@ -5,6 +5,6 @@ go build -o "${OS_OUTPUT_BINPATH}/defaulter-gen" "${PRJ_PREFIX}/vendor/k8s.io/ku
 
 ${OS_OUTPUT_BINPATH}/defaulter-gen \
                 --go-header-file "hack/boilerplate/boilerplate.go.txt" \
-                --input-dirs "${PRJ_PREFIX}/pkg/apis/componentconfig,${PRJ_PREFIX}/pkg/apis/componentconfig/v1alpha1,${PRJ_PREFIX}/pkg/api,${PRJ_PREFIX}/pkg/api/v1alpha1" \
-		--extra-peer-dirs "${PRJ_PREFIX}/pkg/apis/componentconfig,${PRJ_PREFIX}/pkg/apis/componentconfig/v1alpha1,${PRJ_PREFIX}/pkg/api,${PRJ_PREFIX}/pkg/api/v1alpha1" \
+                --input-dirs "${PRJ_PREFIX}/pkg/apis/componentconfig,${PRJ_PREFIX}/pkg/apis/componentconfig/v1alpha1,${PRJ_PREFIX}/pkg/api/v1alpha1" \
+		--extra-peer-dirs "${PRJ_PREFIX}/pkg/apis/componentconfig,${PRJ_PREFIX}/pkg/apis/componentconfig/v1alpha1,${PRJ_PREFIX}/pkg/api/v1alpha1" \
                 --output-file-base zz_generated.defaults
