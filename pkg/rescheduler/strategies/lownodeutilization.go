@@ -38,6 +38,7 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 
 	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
 	if thresholds != nil {
+		fmt.Printf("no resource threshold is configured\n")
 		return
 	}
 
@@ -55,6 +56,7 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 	}
 
 	if len(lowNodes) == 0 || len(lowNodes) < strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
+		fmt.Printf("No node is underutilized or number of nodes underutilized is less than NumberOfNodes\n")
 		return
 	}
 
@@ -88,7 +90,6 @@ func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds 
 }
 
 func NodeUtilization(node *v1.Node, pods []*v1.Pod) api.ResourceThresholds {
-
 	totalReqs := map[v1.ResourceName]resource.Quantity{}
 	for _, pod := range pods {
 		if podutil.IsBestEffortPod(pod) {
