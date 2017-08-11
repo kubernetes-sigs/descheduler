@@ -22,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/kubernetes/pkg/api/v1"
 	helper "k8s.io/kubernetes/pkg/api/v1/resource"
-
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
 	"github.com/aveshagarwal/rescheduler/pkg/api"
@@ -32,14 +31,38 @@ import (
 type NodeUsageMap map[*v1.Node]api.ResourceThresholds
 
 func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node) {
-	nodeUsageMap := NodeUsageMap{}
-	for _, node := range nodes {
-		nodeUsageMap[node] = NodeUtilization(client, node)
-		fmt.Printf("Node %#v usage: %#v\n", node.Name, nodeUsageMap[node])
+	lowNodes, otherNodes := []*v1.Node{}, []*v1.Node{}
+
+	if strategy.Enabled {
+		thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
+		if thresholds != nil {
+			nodeUsageMap := NodeUsageMap{}
+			for _, node := range nodes {
+				nodeUsageMap[node] = NodeUtilization(client, node)
+				fmt.Printf("Node %#v usage: %#v\n", node.Name, nodeUsageMap[node])
+
+				if IsNodeWithLowUtilization(nodeUsageMap[node], thresholds) {
+					lowNodes = append(lowNodes, node)
+				} else {
+					otherNodes = append(otherNodes, node)
+				}
+			}
+		}
 	}
 }
 
-func FindNodesWithLowUtilization() {
+func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds api.ResourceThresholds) bool {
+	found := true
+	for name, nodeValue := range nodeThresholds {
+		if name == v1.ResourceCPU || name == v1.ResourceMemory || name == v1.ResourcePods {
+			if value, ok := thresholds[name]; !ok {
+				continue
+			} else if nodeValue > value {
+				found = false
+			}
+		}
+	}
+	return found
 }
 
 func NodeUtilization(client clientset.Interface, node *v1.Node) api.ResourceThresholds {
