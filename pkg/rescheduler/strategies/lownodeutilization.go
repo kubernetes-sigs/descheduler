@@ -31,24 +31,27 @@ import (
 type NodeUsageMap map[*v1.Node]api.ResourceThresholds
 
 func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node) {
+	if !strategy.Enabled {
+		return
+	}
+
 	lowNodes, otherNodes := []*v1.Node{}, []*v1.Node{}
-	if strategy.Enabled {
-		thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
-		if thresholds != nil {
-			nodeUsageMap := NodeUsageMap{}
-			for _, node := range nodes {
-				nodeUsageMap[node] = NodeUtilization(client, node)
-				fmt.Printf("Node %#v usage: %#v\n", node.Name, nodeUsageMap[node])
-				if IsNodeWithLowUtilization(nodeUsageMap[node], thresholds) {
-					lowNodes = append(lowNodes, node)
-				} else {
-					otherNodes = append(otherNodes, node)
-				}
+	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
+	if thresholds != nil {
+		nodeUsageMap := NodeUsageMap{}
+		for _, node := range nodes {
+			nodeUsageMap[node] = NodeUtilization(client, node)
+			fmt.Printf("Node %#v usage: %#v\n", node.Name, nodeUsageMap[node])
+			if IsNodeWithLowUtilization(nodeUsageMap[node], thresholds) {
+				lowNodes = append(lowNodes, node)
+			} else {
+				otherNodes = append(otherNodes, node)
 			}
 		}
-		if len(lowNodes) < strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
-			return
-		}
+	}
+
+	if len(lowNodes) < strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
+		return
 	}
 }
 
