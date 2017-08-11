@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"fmt"
+	"sort"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/kubernetes/pkg/api/v1"
@@ -81,6 +82,22 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 		return
 	}
 
+	SortNodesByUsage(targetNodes)
+
+}
+
+func SortNodesByUsage(nodes []NodeUsageMap) {
+	sort.Slice(nodes, func(i, j int) bool {
+		var ti, tj api.Percentage
+		for _, vi := range nodes[i].usage {
+			ti += vi
+		}
+		for _, vj := range nodes[j].usage {
+			tj += vj
+		}
+		// To return sorted in descending order
+		return ti > tj
+	})
 }
 
 func CreateNodePodsMap(client clientset.Interface, nodes []*v1.Node) NodePodsMap {
