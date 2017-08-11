@@ -36,19 +36,21 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 		return
 	}
 
-	npm := CreateNodePodsMap(client, nodes)
-	lowNodes, otherNodes := []*v1.Node{}, []*v1.Node{}
 	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
 	if thresholds != nil {
-		nodeUsageMap := NodeUsageMap{}
-		for node, pods := range npm {
-			nodeUsageMap[node] = NodeUtilization(node, pods)
-			fmt.Printf("Node %#v usage: %#v\n", node.Name, nodeUsageMap[node])
-			if IsNodeWithLowUtilization(nodeUsageMap[node], thresholds) {
-				lowNodes = append(lowNodes, node)
-			} else {
-				otherNodes = append(otherNodes, node)
-			}
+		return
+	}
+
+	npm := CreateNodePodsMap(client, nodes)
+	lowNodes, otherNodes := []*v1.Node{}, []*v1.Node{}
+	nodeUsageMap := NodeUsageMap{}
+	for node, pods := range npm {
+		nodeUsageMap[node] = NodeUtilization(node, pods)
+		fmt.Printf("Node %#v usage: %#v\n", node.Name, nodeUsageMap[node])
+		if IsNodeWithLowUtilization(nodeUsageMap[node], thresholds) {
+			lowNodes = append(lowNodes, node)
+		} else {
+			otherNodes = append(otherNodes, node)
 		}
 	}
 
