@@ -28,7 +28,10 @@ import (
 	podutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
 )
 
-type NodeUsageMap map[*v1.Node]api.ResourceThresholds
+type NodeUsageMap struct {
+	node  *v1.Node
+	usage api.ResourceThresholds
+}
 type NodePodsMap map[*v1.Node][]*v1.Pod
 
 func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node) {
@@ -50,22 +53,31 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 	}
 
 	npm := CreateNodePodsMap(client, nodes)
-	lowNodes, targetNodes, otherNodes := []*v1.Node{}, []*v1.Node{}, []*v1.Node{}
-	nodeUsageMap := NodeUsageMap{}
+	lowNodes, targetNodes, otherNodes := []NodeUsageMap{}, []NodeUsageMap{}, []NodeUsageMap{}
 	for node, pods := range npm {
-		nodeUsageMap[node] = NodeUtilization(node, pods)
-		fmt.Printf("Node %#v usage: %#v\n", node.Name, nodeUsageMap[node])
-		if IsNodeWithLowUtilization(nodeUsageMap[node], thresholds) {
-			lowNodes = append(lowNodes, node)
-		} else if IsNodeAboveTargetUtilization(nodeUsageMap[node], targetThresholds) {
-			targetNodes = append(targetNodes, node)
+		usage := NodeUtilization(node, pods)
+		nuMap := NodeUsageMap{node, usage}
+		fmt.Printf("Node %#v usage: %#v\n", node.Name, usage)
+		if IsNodeWithLowUtilization(usage, thresholds) {
+			lowNodes = append(lowNodes, nuMap)
+		} else if IsNodeAboveTargetUtilization(usage, targetThresholds) {
+			targetNodes = append(targetNodes, nuMap)
 		} else {
-			otherNodes = append(otherNodes, node)
+			otherNodes = append(otherNodes, nuMap)
 		}
 	}
 
-	if len(lowNodes) == 0 || len(lowNodes) < strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
-		fmt.Printf("No node is underutilized or number of nodes underutilized is less than NumberOfNodes\n")
+	if len(lowNodes) == 0 {
+		fmt.Printf("No node is underutilized\n")
+		return
+	} else if len(lowNodes) < strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
+		fmt.Printf("number of nodes underutilized is less than NumberOfNodes\n")
+		return
+	} else if len(lowNodes) == len(nodes) {
+		fmt.Printf("all nodes are underutilized\n")
+		return
+	} else if len(targetNodes) == 0 {
+		fmt.Printf("no node is above target utilization\n")
 		return
 	}
 
