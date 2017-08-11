@@ -37,19 +37,28 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 	}
 
 	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
-	if thresholds != nil {
+	if thresholds == nil {
 		fmt.Printf("no resource threshold is configured\n")
 		return
 	}
 
+	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
+
+	if targetThresholds == nil {
+		fmt.Printf("no target resource threshold is configured\n")
+		return
+	}
+
 	npm := CreateNodePodsMap(client, nodes)
-	lowNodes, otherNodes := []*v1.Node{}, []*v1.Node{}
+	lowNodes, targetNodes, otherNodes := []*v1.Node{}, []*v1.Node{}, []*v1.Node{}
 	nodeUsageMap := NodeUsageMap{}
 	for node, pods := range npm {
 		nodeUsageMap[node] = NodeUtilization(node, pods)
 		fmt.Printf("Node %#v usage: %#v\n", node.Name, nodeUsageMap[node])
 		if IsNodeWithLowUtilization(nodeUsageMap[node], thresholds) {
 			lowNodes = append(lowNodes, node)
+		} else if IsNodeAboveTargetUtilization(nodeUsageMap[node], targetThresholds) {
+			targetNodes = append(targetNodes, node)
 		} else {
 			otherNodes = append(otherNodes, node)
 		}
@@ -73,6 +82,19 @@ func CreateNodePodsMap(client clientset.Interface, nodes []*v1.Node) NodePodsMap
 		}
 	}
 	return npm
+}
+
+func IsNodeAboveTargetUtilization(nodeThresholds api.ResourceThresholds, thresholds api.ResourceThresholds) bool {
+	for name, nodeValue := range nodeThresholds {
+		if name == v1.ResourceCPU || name == v1.ResourceMemory || name == v1.ResourcePods {
+			if value, ok := thresholds[name]; !ok {
+				continue
+			} else if nodeValue > value {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds api.ResourceThresholds) bool {
