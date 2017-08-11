@@ -29,18 +29,20 @@ import (
 )
 
 type NodeUsageMap map[*v1.Node]api.ResourceThresholds
+type NodePodsMap map[*v1.Node][]*v1.Pod
 
 func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node) {
 	if !strategy.Enabled {
 		return
 	}
 
+	npm := CreateNodePodsMap(client, nodes)
 	lowNodes, otherNodes := []*v1.Node{}, []*v1.Node{}
 	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
 	if thresholds != nil {
 		nodeUsageMap := NodeUsageMap{}
-		for _, node := range nodes {
-			nodeUsageMap[node] = NodeUtilization(client, node)
+		for node, pods := range npm {
+			nodeUsageMap[node] = NodeUtilization(node, pods)
 			fmt.Printf("Node %#v usage: %#v\n", node.Name, nodeUsageMap[node])
 			if IsNodeWithLowUtilization(nodeUsageMap[node], thresholds) {
 				lowNodes = append(lowNodes, node)
@@ -50,9 +52,23 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 		}
 	}
 
-	if len(lowNodes) < strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
+	if len(lowNodes) == 0 || len(lowNodes) < strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
 		return
 	}
+
+}
+
+func CreateNodePodsMap(client clientset.Interface, nodes []*v1.Node) NodePodsMap {
+	npm := NodePodsMap{}
+	for _, node := range nodes {
+		pods, err := podutil.ListPodsOnANode(client, node)
+		if err != nil {
+			fmt.Printf("node %s will not be processed, error in accessing its pods (%#v)\n", node.Name, err)
+		} else {
+			npm[node] = pods
+		}
+	}
+	return npm
 }
 
 func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds api.ResourceThresholds) bool {
@@ -69,11 +85,7 @@ func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds 
 	return found
 }
 
-func NodeUtilization(client clientset.Interface, node *v1.Node) api.ResourceThresholds {
-	pods, err := podutil.ListPodsOnANode(client, node)
-	if err != nil {
-		return nil
-	}
+func NodeUtilization(node *v1.Node, pods []*v1.Pod) api.ResourceThresholds {
 
 	totalReqs := map[v1.ResourceName]resource.Quantity{}
 	for _, pod := range pods {
