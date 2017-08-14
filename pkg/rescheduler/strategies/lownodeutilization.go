@@ -30,8 +30,11 @@ import (
 )
 
 type NodeUsageMap struct {
-	node  *v1.Node
-	usage api.ResourceThresholds
+	node             *v1.Node
+	usage            api.ResourceThresholds
+	bePods           []*v1.Pod
+	nonRemovablePods []*v1.Pod
+	otherPods        []*v1.Pod
 }
 type NodePodsMap map[*v1.Node][]*v1.Pod
 
@@ -56,8 +59,8 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 	npm := CreateNodePodsMap(client, nodes)
 	lowNodes, targetNodes, otherNodes := []NodeUsageMap{}, []NodeUsageMap{}, []NodeUsageMap{}
 	for node, pods := range npm {
-		usage := NodeUtilization(node, pods)
-		nuMap := NodeUsageMap{node, usage}
+		usage, bePods, nonRemovablePods, otherPods := NodeUtilization(node, pods)
+		nuMap := NodeUsageMap{node, usage, bePods, nonRemovablePods, otherPods}
 		fmt.Printf("Node %#v usage: %#v\n", node.Name, usage)
 		if IsNodeWithLowUtilization(usage, thresholds) {
 			lowNodes = append(lowNodes, nuMap)
@@ -81,9 +84,7 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 		fmt.Printf("no node is above target utilization\n")
 		return
 	}
-
 	SortNodesByUsage(targetNodes)
-
 }
 
 func SortNodesByUsage(nodes []NodeUsageMap) {
@@ -140,12 +141,29 @@ func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds 
 	return found
 }
 
-func NodeUtilization(node *v1.Node, pods []*v1.Pod) api.ResourceThresholds {
+func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*v1.Pod, []*v1.Pod, []*v1.Pod) {
+	bePods := []*v1.Pod{}
+	nonRemovablePods := []*v1.Pod{}
+	otherPods := []*v1.Pod{}
+
 	totalReqs := map[v1.ResourceName]resource.Quantity{}
 	for _, pod := range pods {
 		if podutil.IsBestEffortPod(pod) {
+			bePods = append(bePods, pod)
 			continue
 		}
+
+		sr, err := podutil.CreatorRef(pod)
+		if err != nil {
+			sr = nil
+		}
+
+		if podutil.IsMirrorPod(pod) || podutil.IsPodWithLocalStorage(pod) || sr == nil || podutil.IsDaemonsetPod(sr) {
+			nonRemovablePods = append(nonRemovablePods, pod)
+		} else {
+			otherPods = append(otherPods, pod)
+		}
+
 		req, _, err := helper.PodRequestsAndLimits(pod)
 		if err != nil {
 			fmt.Printf("Error computing resource usage of pod, ignoring: %#v\n", pod.Name)
@@ -163,17 +181,17 @@ func NodeUtilization(node *v1.Node, pods []*v1.Pod) api.ResourceThresholds {
 		}
 	}
 
-	allocatable := node.Status.Capacity
+	nodeCapcity := node.Status.Capacity
 	if len(node.Status.Allocatable) > 0 {
-		allocatable = node.Status.Allocatable
+		nodeCapcity = node.Status.Allocatable
 	}
 
 	rt := api.ResourceThresholds{}
 	totalCPUReq := totalReqs[v1.ResourceCPU]
 	totalMemReq := totalReqs[v1.ResourceMemory]
 	totalPods := len(pods)
-	rt[v1.ResourceCPU] = api.Percentage((float64(totalCPUReq.MilliValue()) * 100) / float64(allocatable.Cpu().MilliValue()))
-	rt[v1.ResourceMemory] = api.Percentage(float64(totalMemReq.Value()) / float64(allocatable.Memory().Value()) * 100)
-	rt[v1.ResourcePods] = api.Percentage((float64(totalPods) * 100) / float64(allocatable.Pods().Value()))
-	return rt
+	rt[v1.ResourceCPU] = api.Percentage((float64(totalCPUReq.MilliValue()) * 100) / float64(nodeCapcity.Cpu().MilliValue()))
+	rt[v1.ResourceMemory] = api.Percentage(float64(totalMemReq.Value()) / float64(nodeCapcity.Memory().Value()) * 100)
+	rt[v1.ResourcePods] = api.Percentage((float64(totalPods) * 100) / float64(nodeCapcity.Pods().Value()))
+	return rt, bePods, nonRemovablePods, otherPods
 }
