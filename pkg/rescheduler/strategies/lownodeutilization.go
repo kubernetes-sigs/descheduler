@@ -196,11 +196,6 @@ func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*
 
 	totalReqs := map[v1.ResourceName]resource.Quantity{}
 	for _, pod := range pods {
-		if podutil.IsBestEffortPod(pod) {
-			bePods = append(bePods, pod)
-			continue
-		}
-
 		sr, err := podutil.CreatorRef(pod)
 		if err != nil {
 			sr = nil
@@ -208,7 +203,14 @@ func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*
 
 		if podutil.IsMirrorPod(pod) || podutil.IsPodWithLocalStorage(pod) || sr == nil || podutil.IsDaemonsetPod(sr) {
 			nonRemovablePods = append(nonRemovablePods, pod)
+			if podutil.IsBestEffortPod(pod) {
+				continue
+			}
+		} else if podutil.IsBestEffortPod(pod) {
+			bePods = append(bePods, pod)
+			continue
 		} else {
+			// todo: differentiate between burstable and guranteed pods
 			otherPods = append(otherPods, pod)
 		}
 
