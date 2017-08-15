@@ -1,4 +1,16 @@
 apiVersion: "rescheduler/v1alpha1"
 kind: "ReschedulerPolicy"
 strategies:
-  "test":
+  "LowNodeUtilization":
+     enabled: true
+     weight: 1
+     params:
+       nodeResourceUtilizationThresholds:
+         thresholds:
+           "cpu" : 20
+           "memory": 20
+           "pods": 20
+         targetThresholds:
+           "cpu" : 50
+           "memory": 50
+           "pods": 50
