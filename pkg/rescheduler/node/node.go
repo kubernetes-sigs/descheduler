@@ -45,7 +45,8 @@ func ReadyNodes(client clientset.Interface, stopChannel <-chan struct{}) ([]*v1.
 			return []*v1.Node{}, err
 		}
 
-		for _, node := range nItems.Items {
+		for i, _ := range nItems.Items {
+			node := nItems.Items[i]
 			nodes = append(nodes, &node)
 		}
 	}
