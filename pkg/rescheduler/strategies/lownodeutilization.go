@@ -26,6 +26,7 @@ import (
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
 	"github.com/aveshagarwal/rescheduler/pkg/api"
+	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions"
 	podutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
 )
 
@@ -85,6 +86,53 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 		return
 	}
 	SortNodesByUsage(targetNodes)
+
+	// total number of pods to be moved
+	var totalPods float64
+	for _, node := range lowNodes {
+		podsPercentage := targetThresholds[v1.ResourcePods] - node.usage[v1.ResourcePods]
+		nodeCapcity := node.node.Status.Capacity
+		if len(node.node.Status.Allocatable) > 0 {
+			nodeCapcity = node.node.Status.Allocatable
+		}
+
+		totalPods += ((float64(podsPercentage) * float64(nodeCapcity.Pods().Value())) / 100)
+	}
+
+	perTargetNodePods := totalPods / float64(len(targetNodes))
+
+	for _, node := range targetNodes {
+		n := perTargetNodePods
+		// evict best efforst pods first
+		for _, pod := range node.bePods {
+			success, err := evictions.EvictPod(client, pod, evictionPolicyGroupVersion)
+			if !success {
+				fmt.Printf("Error when evicting pod: %#v (%#v)\n", pod.Name, err)
+			} else {
+				fmt.Printf("Evicted pod: %#v (%#v)\n", pod.Name, err)
+				n--
+				if n < 0 {
+					continue
+				}
+			}
+
+		}
+
+		if n > 1 {
+			for _, pod := range node.otherPods {
+				success, err := evictions.EvictPod(client, pod, evictionPolicyGroupVersion)
+				if !success {
+					fmt.Printf("Error when evicting pod: %#v (%#v)\n", pod.Name, err)
+				} else {
+					fmt.Printf("Evicted pod: %#v (%#v)\n", pod.Name, err)
+					n--
+					if n < 0 {
+						continue
+					}
+				}
+			}
+		}
+	}
 }
 
 func SortNodesByUsage(nodes []NodeUsageMap) {
