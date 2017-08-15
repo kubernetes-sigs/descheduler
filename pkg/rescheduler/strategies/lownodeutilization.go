@@ -114,32 +114,38 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 		totalPods += ((float64(podsPercentage) * float64(nodeCapcity.Pods().Value())) / 100)
 	}
 
-	podsPerTargetNode := totalPods / float64(len(targetNodes))
-	if podsPerTargetNode > 0 {
-		for _, node := range targetNodes {
-			n := podsPerTargetNode
-			// evict best effort pods first
+	for _, node := range targetNodes {
+		nodePodsUsage := node.usage[v1.ResourcePods]
+		nodeCapcity := node.node.Status.Capacity
+		if len(node.node.Status.Allocatable) > 0 {
+			nodeCapcity = node.node.Status.Allocatable
+		}
+		onePodPercentage := api.Percentage((float64(1) * 100) / float64(nodeCapcity.Pods().Value()))
+		if nodePodsUsage > targetThresholds[v1.ResourcePods] && totalPods > 0 {
 			for _, pod := range node.bePods {
 				success, err := evictions.EvictPod(client, pod, evictionPolicyGroupVersion)
 				if !success {
 					fmt.Printf("Error when evicting pod: %#v (%#v)\n", pod.Name, err)
 				} else {
 					fmt.Printf("Evicted pod: %#v (%#v)\n", pod.Name, err)
-					n--
-					if n < 0 {
+					nodePodsUsage = nodePodsUsage - onePodPercentage
+					totalPods--
+					if nodePodsUsage <= targetThresholds[v1.ResourcePods] || totalPods <= 0 {
 						break
 					}
+
 				}
 			}
-			if n > 0 {
+			if nodePodsUsage > targetThresholds[v1.ResourcePods] && totalPods > 0 {
 				for _, pod := range node.otherPods {
 					success, err := evictions.EvictPod(client, pod, evictionPolicyGroupVersion)
 					if !success {
 						fmt.Printf("Error when evicting pod: %#v (%#v)\n", pod.Name, err)
 					} else {
 						fmt.Printf("Evicted pod: %#v (%#v)\n", pod.Name, err)
-						n--
-						if n < 0 {
+						nodePodsUsage = nodePodsUsage - onePodPercentage
+						totalPods--
+						if nodePodsUsage <= targetThresholds[v1.ResourcePods] || totalPods <= 0 {
 							break
 						}
 					}
