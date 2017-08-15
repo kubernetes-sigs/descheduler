@@ -112,7 +112,7 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 				fmt.Printf("Evicted pod: %#v (%#v)\n", pod.Name, err)
 				n--
 				if n < 0 {
-					continue
+					break
 				}
 			}
 
@@ -127,7 +127,7 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 					fmt.Printf("Evicted pod: %#v (%#v)\n", pod.Name, err)
 					n--
 					if n < 0 {
-						continue
+						break
 					}
 				}
 			}
