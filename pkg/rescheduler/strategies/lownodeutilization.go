@@ -44,10 +44,23 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 		return
 	}
 
+	// todo: move to config validation?
 	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
 	if thresholds == nil {
 		fmt.Printf("no resource threshold is configured\n")
 		return
+	} else {
+		found := false
+		for name, _ := range thresholds {
+			if name == v1.ResourceCPU || name == v1.ResourceMemory || name == v1.ResourcePods {
+				found = true
+				break
+			}
+		}
+		if !found {
+			fmt.Printf("one of cpu, memory, or pods resource threshold must be configured\n")
+			return
+		}
 	}
 
 	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
@@ -181,19 +194,16 @@ func IsNodeAboveTargetUtilization(nodeThresholds api.ResourceThresholds, thresho
 }
 
 func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds api.ResourceThresholds) bool {
-	found := false
 	for name, nodeValue := range nodeThresholds {
 		if name == v1.ResourceCPU || name == v1.ResourceMemory || name == v1.ResourcePods {
 			if value, ok := thresholds[name]; !ok {
 				continue
 			} else if nodeValue > value {
-				found = found && false
-			} else {
-				found = found && true
+				return false
 			}
 		}
 	}
-	return found
+	return true
 }
 
 func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*v1.Pod, []*v1.Pod, []*v1.Pod) {
