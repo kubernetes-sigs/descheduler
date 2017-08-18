@@ -23,13 +23,10 @@ import (
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/client"
 	eutils "github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions/utils"
 	nodeutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
-	reschedulerscheme "github.com/aveshagarwal/rescheduler/pkg/rescheduler/scheme"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/strategies"
 )
 
 func Run(rs *options.ReschedulerServer) error {
-
-	fmt.Printf("\n\nrescheduler: all known types=%#v\n\n", reschedulerscheme.Scheme.AllKnownTypes())
 
 	rsclient, err := client.CreateClient(rs.KubeconfigFile)
 	if err != nil {
@@ -41,9 +38,7 @@ func Run(rs *options.ReschedulerServer) error {
 	if err != nil {
 		return err
 	}
-	if reschedulerPolicy != nil {
-		fmt.Printf("\nreschedulerPolicy: %#v\n", reschedulerPolicy)
-	} else {
+	if reschedulerPolicy == nil {
 		return fmt.Errorf("\nreschedulerPolicy is nil\n")
 
 	}
