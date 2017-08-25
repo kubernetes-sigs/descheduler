@@ -15,7 +15,7 @@ $ make build
 and run rescheduler:
 
 ```sh
-$ ./_output/bin/rescheduler --kubeconfig <path to kubeconfig> --policy-config-file examples/policy.yaml
+$ ./_output/bin/rescheduler --kubeconfig <path to kubeconfig> --policy-config-file <path-to-policy-file>
 ```
 
 For more information about available options run:
@@ -23,3 +23,16 @@ For more information about available options run:
 $ ./_output/bin/rescheduler --help
 ```
 
+## Roadmap
+
+This roadmap is not in any particular order.
+
+* Addition of test cases (unit and end-to-end)
+* Ability to run inside a pod as a job
+* Strategy to consider taints and tolerations
+* Consideration of pod affinity and anti-affinity
+* Strategy to consider pod life time
+* Strategy to consider number of pending pods
+* Integration with cluster autoscaler
+* Integration with metrics providers for obtaining real load metrics
+* Consideration of Kubernetes's scheduler's predicates
