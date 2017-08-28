@@ -47,8 +47,8 @@ Replication Controller (RC), Deployment, or Job running on same node. If there a
 those duplicate pods are evicted for better spreading of pods in a cluster. This issue could happen
 if some nodes went down due to whatever reasons, and pods on them were moved to other nodes leading to
 more than one pod associated with RS or RC, for example, running on same node. Once the failed nodes
-are ready again, this strategy could be enabled to evict those duplicate pods. To disable this strategy,
-the policy would look like:
+are ready again, this strategy could be enabled to evict those duplicate pods. Currently, there are no
+parameters associated with this strategy. To disable this strategy, the policy would look like:
 
 ```
 apiVersion: "rescheduler/v1alpha1"
@@ -59,6 +59,41 @@ strategies:
 ```
 
 ### LowNodeUtilization
+
+This strategy finds nodes that are under utilized and evicts pods, if possible, from other nodes
+in the hope that recreation of evicted pods will be scheduled on these underutilized nodes. The
+parameters of this strategy are configured under `nodeResourceUtilizationThresholds`.
+
+The under utilization of nodes is determined by a configurable threshold, `thresholds`. The threshold
+`thresholds` can be configured for cpu, memory, and number of pods in terms of percentage. If a node's
+usage is below threshold for all (cpu, memory, and number of pods), the node is considered underutilized.
+Currently, pods' request resource requirements are considered for computing node resource utilization.
+
+There is another configurable threshold, `targetThresholds`, that is used to compute those potential nodes
+from where pods could be evicted. Any node, between the thresholds, `thresholds` and `targetThresholds` is
+considered appropriately utilized and is not considered for eviction. The threshold, `targetThresholds`,
+can be configured for cpu, memory, and number of pods too in terms of percentage.
+
+These thresholds, `thresholds` and `targetThresholds`, could be tuned as per your cluster requirements.
+An example of the policy for this strategy would look like:
+
+```
+apiVersion: "rescheduler/v1alpha1"
+kind: "ReschedulerPolicy"
+strategies:
+  "LowNodeUtilization":
+     enabled: true
+     params:
+       nodeResourceUtilizationThresholds:
+         thresholds:
+           "cpu" : 20
+           "memory": 20
+           "pods": 20
+         targetThresholds:
+           "cpu" : 50
+           "memory": 50
+           "pods": 50
+```
 
 ## Roadmap
 
