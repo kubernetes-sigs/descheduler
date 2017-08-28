@@ -17,7 +17,9 @@ or removed from nodes, pod/node affinity requirements are not satisfied any more
 * New nodes are added to clusters.
 
 Consequently, there might be several pods scheduled on less desired nodes in a cluster.
-Rescheduler, based on its policy, finds pods that can be moved and evicts them.
+Rescheduler, based on its policy, finds pods that can be moved and evicts them. Please
+note, in current implementation, rescheduler does not schedule replacement of evicted pods
+but relies on the default scheduler for that.
 
 ## Build and Run
 
