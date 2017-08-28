@@ -108,3 +108,10 @@ This roadmap is not in any particular order.
 * Integration with cluster autoscaler
 * Integration with metrics providers for obtaining real load metrics
 * Consideration of Kubernetes's scheduler's predicates
+
+
+## Note
+
+This project is under active development, and is not intended for production use.
+Any api could be changed any time with out any notice. That said, your feedback is
+very important and appreciated to make this project more stable and useful.
