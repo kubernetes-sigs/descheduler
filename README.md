@@ -17,10 +17,7 @@ or removed from nodes, pod/node affinity requirements are not satisfied any more
 * New nodes are added to clusters.
 
 Consequently, there might be several pods scheduled on less desired nodes in a cluster.
-Due to this, It becomes important to continuously revisit original scheduling decisions. This
-process of revisiting scheduling decisions and helping some pods reschedule on other nodes is defined
-as rescheduling, and its implementation here as rescheduler. Rescheduler, based on its policy, finds
-pods that are good candidate for replacement and evicts them.
+Rescheduler, based on its policy, finds pods that can be moved and evicts them.
 
 ## Build and Run
 
