@@ -100,6 +100,21 @@ This parameter can be configured to activate the strategy only when number of un
 are above the configured value. This could be helpful in large clusters where a few nodes could go
 under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero.
 
+## Pod Evictions
+
+When the rescheduler decides to evict pods from a node, it employs following general mechanism:
+
+* Critical pods (with annotations scheduler.alpha.kubernetes.io/critical-pod) are never evicted. 
+* Pods (static or mirrored pods or stand alone pods) not part of an RC, RS, Deployment or Jobs are
+never evicted because these pods won't be recreated.
+* Pods associated with DaemonSets are never evicted.
+* Pods with local storage are never evicted.
+* Best efforts pods are evicted before Burstable and Guaranteed pods. 
+
+### Pod disruption Budget (PDB)
+Pods subject to Pod Disruption Budget (PDB) are not evicted if rescheduling violates its pod
+disruption budget (PDB). The pods are evicted by using eviction subresource to handle PDB.
+
 ## Roadmap
 
 This roadmap is not in any particular order.
