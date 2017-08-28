@@ -19,7 +19,7 @@ some pods reschedule on other nodes is defined as rescheduling, and its implemen
 Build rescheduler:
 
 ```sh
-$ make build
+$ make
 ```
 
 and run rescheduler:
@@ -33,7 +33,7 @@ For more information about available options run:
 $ ./_output/bin/rescheduler --help
 ```
 
-## Policy And Strategies
+## Policy and Strategies
  
 Rescheduler's policy is configurable and includes strategies to be enabled or disabled.
 Two strategies, `RemoveDuplicates` and `LowNodeUtilization` are currently implemented.
