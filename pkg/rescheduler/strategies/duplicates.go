@@ -23,6 +23,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
+	"github.com/aveshagarwal/rescheduler/pkg/api"
 	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions"
 	podutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
 )
@@ -30,7 +31,11 @@ import (
 //type creator string
 type DuplicatePodsMap map[string][]*v1.Pod
 
-func RemoveDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node) error {
+func RemoveDuplicatePods(client clientset.Interface, strategy api.ReschedulerStrategy, policyGroupVersion string, nodes []*v1.Node) {
+	if !strategy.Enabled {
+		return
+	}
+
 	for _, node := range nodes {
 		fmt.Printf("\nProcessing node: %#v\n", node.Name)
 		dpm := RemoveDuplicatePodsOnANode(client, node)
@@ -50,7 +55,6 @@ func RemoveDuplicatePods(client clientset.Interface, policyGroupVersion string, 
 			}
 		}
 	}
-	return nil
 }
 
 func RemoveDuplicatePodsOnANode(client clientset.Interface, node *v1.Node) DuplicatePodsMap {
