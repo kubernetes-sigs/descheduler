@@ -3,7 +3,6 @@ kind: "ReschedulerPolicy"
 strategies:
   "LowNodeUtilization":
      enabled: true
-     weight: 1
      params:
        nodeResourceUtilizationThresholds:
          thresholds:
