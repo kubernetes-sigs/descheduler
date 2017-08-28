@@ -95,6 +95,11 @@ strategies:
            "pods": 50
 ```
 
+There is another parameter associated with `LowNodeUtilization` strategy, called `numberOfNodes`.
+This parameter can be configured to activate the strategy only when number of under utilized nodes
+are above the configured value. This could be helpful in large clusters where a few nodes could go
+under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero.
+
 ## Roadmap
 
 This roadmap is not in any particular order.
