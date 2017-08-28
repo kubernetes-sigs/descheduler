@@ -7,9 +7,16 @@ a component of Kubernetes called kube-scheduler. The scheduler's decisions, whet
 pod can or can not be scheduled, are guided by its configurable policy which comprises of set of
 rules, called predicates and priorities. The scheduler's decisions are influenced by its view of
 a Kubernetes cluster at that point of time when a new pod appears first time for scheduling.
-As a Kubernetes cluster is very dynamic and its state changes over time, the original scheduling
-decisions might turn out to be a sub-optimal one later with respect to the cluster's ever changing
-state. Consequently, there might be several pods scheduled on less desired nodes in a cluster.
+As Kubernetes clusters are very dynamic and their state change over time, there may be desired
+to move already running pods to some other nodes for various reasons:
+
+* Some nodes are under or over utilized.
+* The original scheduling decision does not hold true any more, as taints or labels are added to
+or removed from nodes, pod/node affinity requirements are not satisfied any more.
+* Some nodes failed and their pods moved to other nodes.
+* New nodes are added to clusters.
+
+Consequently, there might be several pods scheduled on less desired nodes in a cluster.
 Due to this, It becomes important to continuously revisit original scheduling decisions. This
 process of revisiting scheduling decisions and helping some pods reschedule on other nodes is defined
 as rescheduling, and its implementation here as rescheduler. Rescheduler, based on its policy, finds
