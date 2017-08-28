@@ -8,14 +8,12 @@ pod can or can not be scheduled, are guided by its configurable policy which com
 rules, called predicates and priorities. The scheduler's decisions are influenced by its view of
 a Kubernetes cluster at that point of time when a new pod appears first time for scheduling.
 As a Kubernetes cluster is very dynamic and its state changes over time, the original scheduling
-decisions might turn out to be a sub-optimal one with respect to the cluster's ever changing state.
-Consequently, increasing population of pods scheduled on less desired nodes may lead to issues in
-clusters for example performance degradation. Due to this, it becomes important to continuously
-revisit initial scheduling decisions. This process of revisiting scheduling decisions and helping
-some pods reschedule on other nodes is defined as rescheduling, and its implementation here as
-rescheduler. Rescheduler, based on its policy, finds pods that are good candidate for replacement
-and evicts them.
-
+decisions might turn out to be a sub-optimal one later with respect to the cluster's ever changing
+state. Consequently, there might be several pods scheduled on less desired nodes in a cluster.
+Due to this, It becomes important to continuously revisit original scheduling decisions. This
+process of revisiting scheduling decisions and helping some pods reschedule on other nodes is defined
+as rescheduling, and its implementation here as rescheduler. Rescheduler, based on its policy, finds
+pods that are good candidate for replacement and evicts them.
 
 ## Build and Run
 
