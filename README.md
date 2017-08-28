@@ -13,7 +13,8 @@ Consequently, increasing population of pods scheduled on less desired nodes may 
 clusters for example performance degradation. Due to this, it becomes important to continuously
 revisit initial scheduling decisions. This process of revisiting scheduling decisions and helping
 some pods reschedule on other nodes is defined as rescheduling, and its implementation here as
-rescheduler. Rescheduler finds potential pods that are good candidate for replacement and evicts them.
+rescheduler. Rescheduler, based on its policy, finds pods that are good candidate for replacement
+and evicts them.
 
 
 ## Build and Run
