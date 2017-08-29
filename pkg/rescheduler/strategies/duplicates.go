@@ -73,7 +73,7 @@ func FindDuplicatePods(pods []*v1.Pod) DuplicatePodsMap {
 		if err != nil || sr == nil {
 			continue
 		}
-		if podutil.IsMirrorPod(pod) || podutil.IsDaemonsetPod(sr) || podutil.IsPodWithLocalStorage(pod) {
+		if podutil.IsMirrorPod(pod) || podutil.IsDaemonsetPod(sr) || podutil.IsPodWithLocalStorage(pod) || podutil.IsCriticalPod(pod) {
 			continue
 		}
 		s := strings.Join([]string{sr.Reference.Kind, sr.Reference.Namespace, sr.Reference.Name}, "/")
