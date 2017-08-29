@@ -224,7 +224,7 @@ func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*
 			sr = nil
 		}
 
-		if podutil.IsMirrorPod(pod) || podutil.IsPodWithLocalStorage(pod) || sr == nil || podutil.IsDaemonsetPod(sr) {
+		if podutil.IsMirrorPod(pod) || podutil.IsPodWithLocalStorage(pod) || sr == nil || podutil.IsDaemonsetPod(sr) || podutil.IsCriticalPod(pod) {
 			nonRemovablePods = append(nonRemovablePods, pod)
 			if podutil.IsBestEffortPod(pod) {
 				continue
