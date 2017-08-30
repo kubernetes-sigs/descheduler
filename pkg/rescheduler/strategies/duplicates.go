@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"k8s.io/kubernetes/pkg/api/v1"
+	//TODO: Change to client-go instead of generated clientset.
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
 	"github.com/aveshagarwal/rescheduler/pkg/api"
@@ -31,14 +32,22 @@ import (
 //type creator string
 type DuplicatePodsMap map[string][]*v1.Pod
 
+// RemoveDuplicatePods removes the duplicate pods on node. This strategy evicts all duplicate pods on node.
+// A pod is said to be a duplicate of other if both of them are from same creator, kind and are within the same
+// namespace. As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
 func RemoveDuplicatePods(client clientset.Interface, strategy api.ReschedulerStrategy, policyGroupVersion string, nodes []*v1.Node) {
 	if !strategy.Enabled {
 		return
 	}
+	deleteDuplicatePods(client, policyGroupVersion, nodes)
+}
 
+// deleteDuplicatePods evicts the pod from node and returns the count of evicted pods.
+func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node) int {
+	podsEvicted := 0
 	for _, node := range nodes {
 		fmt.Printf("\nProcessing node: %#v\n", node.Name)
-		dpm := RemoveDuplicatePodsOnANode(client, node)
+		dpm := ListDuplicatePodsOnANode(client, node)
 		for creator, pods := range dpm {
 			if len(pods) > 1 {
 				fmt.Printf("%#v\n", creator)
@@ -47,17 +56,21 @@ func RemoveDuplicatePods(client clientset.Interface, strategy api.ReschedulerStr
 					//fmt.Printf("Removing duplicate pod %#v\n", k.Name)
 					success, err := evictions.EvictPod(client, pods[i], policyGroupVersion)
 					if !success {
+						//TODO: change fmt.Printf as glogs.
 						fmt.Printf("Error when evicting pod: %#v (%#v)\n", pods[i].Name, err)
 					} else {
+						podsEvicted++
 						fmt.Printf("Evicted pod: %#v (%#v)\n", pods[i].Name, err)
 					}
 				}
 			}
 		}
 	}
+	return podsEvicted
 }
 
-func RemoveDuplicatePodsOnANode(client clientset.Interface, node *v1.Node) DuplicatePodsMap {
+// ListDuplicatePodsOnANode lists duplicate pods on a given node.
+func ListDuplicatePodsOnANode(client clientset.Interface, node *v1.Node) DuplicatePodsMap {
 	pods, err := podutil.ListPodsOnANode(client, node)
 	if err != nil {
 		return nil
@@ -65,9 +78,9 @@ func RemoveDuplicatePodsOnANode(client clientset.Interface, node *v1.Node) Dupli
 	return FindDuplicatePods(pods)
 }
 
+// FindDuplicatePods takes a list of pods and returns a duplicatePodsMap.
 func FindDuplicatePods(pods []*v1.Pod) DuplicatePodsMap {
 	dpm := DuplicatePodsMap{}
-
 	for _, pod := range pods {
 		sr, err := podutil.CreatorRef(pod)
 		if err != nil || sr == nil {
