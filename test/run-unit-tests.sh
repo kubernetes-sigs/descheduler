@@ -14,8 +14,6 @@
 
 #!/bin/bash
 
-source "$(dirname "${BASH_SOURCE}")/../hack/lib/init.sh"
-
 # run unit tests
-go test $(go list ${PRJ_PREFIX}/... | grep -v ${PRJ_PREFIX}/vendor/)
+go test $(go list github.com/aveshagarwal/rescheduler/... | grep -v github.com/aveshagarwal/rescheduler/vendor/)
 
