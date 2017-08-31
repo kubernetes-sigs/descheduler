@@ -18,3 +18,6 @@ build:
 
 clean:
 	rm -rf _output
+
+test:
+	./test/run-unit-tests.sh
