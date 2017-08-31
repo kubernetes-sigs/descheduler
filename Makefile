@@ -19,5 +19,6 @@ build:
 clean:
 	rm -rf _output
 
+.PHONY: test
 test:
 	./test/run-unit-tests.sh
