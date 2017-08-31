@@ -14,5 +14,8 @@
 
 #!/bin/sh
 
-tests=$(for file in $(find . -iname "*_test.go" | grep -v "./vendor" | sed "s/\.//"); do test=$(dirname $file | sed "s/\.//"); echo "github.com/aveshagarwal/rescheduler$test"; done)
-go test $tests
+source "$(dirname "${BASH_SOURCE}")/lib/init.sh"
+
+# run unit tests
+go test $(go list ${PRJ_PREFIX}/... | grep -v ${PRJ_PREFIX}/vendor/)
+
