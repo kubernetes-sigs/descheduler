@@ -43,50 +43,20 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 	if !strategy.Enabled {
 		return
 	}
-
 	// todo: move to config validation?
+	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
+
 	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
-	if thresholds == nil {
-		fmt.Printf("no resource threshold is configured\n")
+	if !validateThresholds(thresholds) {
 		return
-	} else {
-		found := false
-		for name, _ := range thresholds {
-			if name == v1.ResourceCPU || name == v1.ResourceMemory || name == v1.ResourcePods {
-				found = true
-				break
-			}
-		}
-		if !found {
-			fmt.Printf("one of cpu, memory, or pods resource threshold must be configured\n")
-			return
-		}
 	}
-
 	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
-
-	if targetThresholds == nil {
-		fmt.Printf("no target resource threshold is configured\n")
-		return
-	} else if _, ok := targetThresholds[v1.ResourcePods]; !ok {
-		fmt.Printf("no target resource threshold for pods is configured\n")
+	if !validateTargetThresholds(targetThresholds) {
 		return
 	}
 
 	npm := CreateNodePodsMap(client, nodes)
-	lowNodes, targetNodes, otherNodes := []NodeUsageMap{}, []NodeUsageMap{}, []NodeUsageMap{}
-	for node, pods := range npm {
-		usage, bePods, nonRemovablePods, otherPods := NodeUtilization(node, pods)
-		nuMap := NodeUsageMap{node, usage, bePods, nonRemovablePods, otherPods}
-		fmt.Printf("Node %#v usage: %#v\n", node.Name, usage)
-		if IsNodeWithLowUtilization(usage, thresholds) {
-			lowNodes = append(lowNodes, nuMap)
-		} else if IsNodeAboveTargetUtilization(usage, targetThresholds) {
-			targetNodes = append(targetNodes, nuMap)
-		} else {
-			otherNodes = append(otherNodes, nuMap)
-		}
-	}
+	lowNodes, targetNodes, _ := classifyNodes(npm, thresholds, targetThresholds)
 
 	if len(lowNodes) == 0 {
 		fmt.Printf("No node is underutilized\n")
@@ -101,6 +71,61 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 		fmt.Printf("no node is above target utilization\n")
 		return
 	}
+	evictPodsFromTargetNodes(client, evictionPolicyGroupVersion, targetNodes, lowNodes, targetThresholds)
+}
+
+func validateThresholds(thresholds api.ResourceThresholds) bool {
+	if thresholds == nil {
+		fmt.Printf("no resource threshold is configured\n")
+		return false
+	}
+	found := false
+	for name, _ := range thresholds {
+		if name == v1.ResourceCPU || name == v1.ResourceMemory || name == v1.ResourcePods {
+			found = true
+			break
+		}
+	}
+	if !found {
+		fmt.Printf("one of cpu, memory, or pods resource threshold must be configured\n")
+		return false
+	}
+	return found
+}
+
+//This function could be merged into above once we are clear.
+func validateTargetThresholds(targetThresholds api.ResourceThresholds) bool {
+	if targetThresholds == nil {
+		fmt.Printf("no target resource threshold is configured\n")
+		return false
+	} else if _, ok := targetThresholds[v1.ResourcePods]; !ok {
+		fmt.Printf("no target resource threshold for pods is configured\n")
+		return false
+	}
+	return true
+}
+
+func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThresholds api.ResourceThresholds) ([]NodeUsageMap, []NodeUsageMap, []NodeUsageMap) {
+	lowNodes, targetNodes, otherNodes := []NodeUsageMap{}, []NodeUsageMap{}, []NodeUsageMap{}
+	for node, pods := range npm {
+		usage, bePods, nonRemovablePods, otherPods := NodeUtilization(node, pods)
+		nuMap := NodeUsageMap{node, usage, bePods, nonRemovablePods, otherPods}
+		fmt.Printf("Node %#v usage: %#v\n", node.Name, usage)
+		if IsNodeWithLowUtilization(usage, thresholds) {
+			lowNodes = append(lowNodes, nuMap)
+		} else if IsNodeAboveTargetUtilization(usage, targetThresholds) {
+			targetNodes = append(targetNodes, nuMap)
+		} else {
+			// Seems we don't need to collect them?
+			otherNodes = append(otherNodes, nuMap)
+		}
+	}
+	return lowNodes, targetNodes, otherNodes
+}
+
+func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVersion string, targetNodes []NodeUsageMap, lowNodes []NodeUsageMap, targetThresholds api.ResourceThresholds) int {
+	podsEvicted := 0
+
 	SortNodesByUsage(targetNodes)
 
 	// total number of pods to be moved
@@ -116,6 +141,7 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 
 	for _, node := range targetNodes {
 		nodePodsUsage := node.usage[v1.ResourcePods]
+
 		nodeCapcity := node.node.Status.Capacity
 		if len(node.node.Status.Allocatable) > 0 {
 			nodeCapcity = node.node.Status.Allocatable
@@ -143,6 +169,7 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 						fmt.Printf("Error when evicting pod: %#v (%#v)\n", pod.Name, err)
 					} else {
 						fmt.Printf("Evicted pod: %#v (%#v)\n", pod.Name, err)
+						podsEvicted++
 						nodePodsUsage = nodePodsUsage - onePodPercentage
 						totalPods--
 						if nodePodsUsage <= targetThresholds[v1.ResourcePods] || totalPods <= 0 {
@@ -153,6 +180,7 @@ func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStra
 			}
 		}
 	}
+	return podsEvicted
 }
 
 func SortNodesByUsage(nodes []NodeUsageMap) {
@@ -216,7 +244,6 @@ func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*
 	bePods := []*v1.Pod{}
 	nonRemovablePods := []*v1.Pod{}
 	otherPods := []*v1.Pod{}
-
 	totalReqs := map[v1.ResourceName]resource.Quantity{}
 	for _, pod := range pods {
 		sr, err := podutil.CreatorRef(pod)
