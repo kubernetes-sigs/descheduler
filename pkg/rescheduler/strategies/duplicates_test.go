@@ -60,7 +60,7 @@ func buildTestPod(name string, cpu int64, memory int64, nodeName string) *v1.Pod
 }
 
 // buildTestNode creates a node with specified capacity.
-func buildTestNode(name string, millicpu int64, mem int64) *v1.Node {
+func buildTestNode(name string, millicpu int64, mem int64, pods int64) *v1.Node {
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:     name,
@@ -69,12 +69,12 @@ func buildTestNode(name string, millicpu int64, mem int64) *v1.Node {
 		},
 		Status: v1.NodeStatus{
 			Capacity: v1.ResourceList{
-				v1.ResourcePods:   *resource.NewQuantity(100, resource.DecimalSI),
+				v1.ResourcePods:   *resource.NewQuantity(pods, resource.DecimalSI),
 				v1.ResourceCPU:    *resource.NewMilliQuantity(millicpu, resource.DecimalSI),
 				v1.ResourceMemory: *resource.NewQuantity(mem, resource.DecimalSI),
 			},
 			Allocatable: v1.ResourceList{
-				v1.ResourcePods:   *resource.NewQuantity(100, resource.DecimalSI),
+				v1.ResourcePods:   *resource.NewQuantity(pods, resource.DecimalSI),
 				v1.ResourceCPU:    *resource.NewMilliQuantity(millicpu, resource.DecimalSI),
 				v1.ResourceMemory: *resource.NewQuantity(mem, resource.DecimalSI),
 			},
@@ -96,7 +96,7 @@ func getMirrorPodAnnotation() map[string]string {
 	}
 }
 
-// getNormalPodAnnotation returns the annotation needed for a normal pod. A normal pod is one without any references to
+// getNormalPodAnnotation returns the annotation needed for a pod.
 func getNormalPodAnnotation() map[string]string {
 	return map[string]string{
 		"kubernetes.io/created-by": "{\"kind\":\"SerializedReference\",\"apiVersion\":\"v1\",\"reference\":{\"kind\":\"Pod\"}}",
@@ -117,7 +117,7 @@ func getDaemonSetAnnotation() map[string]string {
 	}
 }
 
-// getCriticalPodAnnotation returns the annotation needed for daemonset pod.
+// getCriticalPodAnnotation returns the annotation needed for critical pod.
 func getCriticalPodAnnotation() map[string]string {
 	return map[string]string{
 		"kubernetes.io/created-by":                   "{\"kind\":\"SerializedReference\",\"apiVersion\":\"v1\",\"reference\":{\"kind\":\"Pod\"}}",
@@ -127,7 +127,7 @@ func getCriticalPodAnnotation() map[string]string {
 
 //TODO:@ravisantoshgudimetla This could be made table driven.
 func TestFindDuplicatePods(t *testing.T) {
-	node := buildTestNode("n1", 2000, 3000)
+	node := buildTestNode("n1", 2000, 3000, 10)
 	p1 := buildTestPod("p1", 100, 0, node.Name)
 	p2 := buildTestPod("p2", 100, 0, node.Name)
 	p3 := buildTestPod("p3", 100, 0, node.Name)
