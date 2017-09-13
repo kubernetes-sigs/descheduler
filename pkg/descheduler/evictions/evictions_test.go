@@ -17,7 +17,7 @@ limitations under the License.
 package evictions
 
 import (
-	"github.com/aveshagarwal/rescheduler/test"
+	"github.com/kubernetes-incubator/descheduler/test"
 	"k8s.io/apimachinery/pkg/runtime"
 	core "k8s.io/client-go/testing"
 	"k8s.io/kubernetes/pkg/api/v1"

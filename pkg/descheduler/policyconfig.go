@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package rescheduler
+package descheduler
 
 import (
 	"fmt"
@@ -22,13 +22,13 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/aveshagarwal/rescheduler/pkg/api"
-	_ "github.com/aveshagarwal/rescheduler/pkg/api/install"
-	"github.com/aveshagarwal/rescheduler/pkg/api/v1alpha1"
-	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/scheme"
+	"github.com/kubernetes-incubator/descheduler/pkg/api"
+	_ "github.com/kubernetes-incubator/descheduler/pkg/api/install"
+	"github.com/kubernetes-incubator/descheduler/pkg/api/v1alpha1"
+	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/scheme"
 )
 
-func LoadPolicyConfig(policyConfigFile string) (*api.ReschedulerPolicy, error) {
+func LoadPolicyConfig(policyConfigFile string) (*api.DeschedulerPolicy, error) {
 	if policyConfigFile == "" {
 		fmt.Printf("policy config file not specified")
 		return nil, nil
@@ -39,14 +39,14 @@ func LoadPolicyConfig(policyConfigFile string) (*api.ReschedulerPolicy, error) {
 		return nil, fmt.Errorf("failed to read policy config file %q: %+v", policyConfigFile, err)
 	}
 
-	versionedPolicy := &v1alpha1.ReschedulerPolicy{}
+	versionedPolicy := &v1alpha1.DeschedulerPolicy{}
 
 	decoder := scheme.Codecs.UniversalDecoder(v1alpha1.SchemeGroupVersion)
 	if err := runtime.DecodeInto(decoder, policy, versionedPolicy); err != nil {
-		return nil, fmt.Errorf("failed decoding rescheduler's policy config %q: %v", policyConfigFile, err)
+		return nil, fmt.Errorf("failed decoding descheduler's policy config %q: %v", policyConfigFile, err)
 	}
 
-	internalPolicy := &api.ReschedulerPolicy{}
+	internalPolicy := &api.DeschedulerPolicy{}
 	if err := scheme.Scheme.Convert(versionedPolicy, internalPolicy, nil); err != nil {
 		return nil, fmt.Errorf("failed converting versioned policy to internal policy version: %v", err)
 	}

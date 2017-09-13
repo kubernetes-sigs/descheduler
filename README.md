@@ -1,4 +1,4 @@
-# Rescheduler for Kubernetes
+# Descheduler for Kubernetes
 
 ## Introduction
 
@@ -17,32 +17,32 @@ or removed from nodes, pod/node affinity requirements are not satisfied any more
 * New nodes are added to clusters.
 
 Consequently, there might be several pods scheduled on less desired nodes in a cluster.
-Rescheduler, based on its policy, finds pods that can be moved and evicts them. Please
-note, in current implementation, rescheduler does not schedule replacement of evicted pods
+Descheduler, based on its policy, finds pods that can be moved and evicts them. Please
+note, in current implementation, descheduler does not schedule replacement of evicted pods
 but relies on the default scheduler for that.
 
 ## Build and Run
 
-Build rescheduler:
+Build descheduler:
 
 ```sh
 $ make
 ```
 
-and run rescheduler:
+and run descheduler:
 
 ```sh
-$ ./_output/bin/rescheduler --kubeconfig <path to kubeconfig> --policy-config-file <path-to-policy-file>
+$ ./_output/bin/descheduler --kubeconfig <path to kubeconfig> --policy-config-file <path-to-policy-file>
 ```
 
 For more information about available options run:
 ```
-$ ./_output/bin/rescheduler --help
+$ ./_output/bin/descheduler --help
 ```
 
 ## Policy and Strategies
  
-Rescheduler's policy is configurable and includes strategies to be enabled or disabled.
+Descheduler's policy is configurable and includes strategies to be enabled or disabled.
 Two strategies, `RemoveDuplicates` and `LowNodeUtilization` are currently implemented.
 As part of the policy, the parameters associated with the strategies can be configured too.
 By default, all strategies are enabled.
@@ -58,8 +58,8 @@ are ready again, this strategy could be enabled to evict those duplicate pods. C
 parameters associated with this strategy. To disable this strategy, the policy would look like:
 
 ```
-apiVersion: "rescheduler/v1alpha1"
-kind: "ReschedulerPolicy"
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
 strategies:
   "RemoveDuplicates":
      enabled: false
@@ -85,8 +85,8 @@ These thresholds, `thresholds` and `targetThresholds`, could be tuned as per you
 An example of the policy for this strategy would look like:
 
 ```
-apiVersion: "rescheduler/v1alpha1"
-kind: "ReschedulerPolicy"
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
 strategies:
   "LowNodeUtilization":
      enabled: true
@@ -109,7 +109,7 @@ under utilized frequently or for a short period of time. By default, `numberOfNo
 
 ## Pod Evictions
 
-When the rescheduler decides to evict pods from a node, it employs following general mechanism:
+When the descheduler decides to evict pods from a node, it employs following general mechanism:
 
 * Critical pods (with annotations scheduler.alpha.kubernetes.io/critical-pod) are never evicted. 
 * Pods (static or mirrored pods or stand alone pods) not part of an RC, RS, Deployment or Jobs are
@@ -119,7 +119,7 @@ never evicted because these pods won't be recreated.
 * Best efforts pods are evicted before Burstable and Guaranteed pods. 
 
 ### Pod disruption Budget (PDB)
-Pods subject to Pod Disruption Budget (PDB) are not evicted if rescheduling violates its pod
+Pods subject to Pod Disruption Budget (PDB) are not evicted if descheduling violates its pod
 disruption budget (PDB). The pods are evicted by using eviction subresource to handle PDB.
 
 ## Roadmap

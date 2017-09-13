@@ -1,4 +1,4 @@
-package: github.com/aveshagarwal/rescheduler
+package: github.com/kubernetes-incubator/descheduler
 import:
 - package: k8s.io/client-go
   version: e356aa2e77ab4a5914c216c12ba14cce25a25ab0 # kube 1.7.0

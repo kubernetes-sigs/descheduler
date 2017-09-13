@@ -1,0 +1,55 @@
+/*
+Copyright 2017 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+// Package options provides the descheduler flags
+package options
+
+import (
+	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
+
+	// install the componentconfig api so we get its defaulting and conversion functions
+	"github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig"
+	_ "github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig/install"
+	"github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig/v1alpha1"
+	deschedulerscheme "github.com/kubernetes-incubator/descheduler/pkg/descheduler/scheme"
+
+	"github.com/spf13/pflag"
+)
+
+// DeschedulerServer configuration
+type DeschedulerServer struct {
+	componentconfig.DeschedulerConfiguration
+	Client clientset.Interface
+}
+
+// NewDeschedulerServer creates a new DeschedulerServer with default parameters
+func NewDeschedulerServer() *DeschedulerServer {
+	versioned := v1alpha1.DeschedulerConfiguration{}
+	deschedulerscheme.Scheme.Default(&versioned)
+	cfg := componentconfig.DeschedulerConfiguration{}
+	deschedulerscheme.Scheme.Convert(versioned, &cfg, nil)
+	s := DeschedulerServer{
+		DeschedulerConfiguration: cfg,
+	}
+	return &s
+}
+
+// AddFlags adds flags for a specific SchedulerServer to the specified FlagSet
+func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
+	fs.DurationVar(&rs.DeschedulingInterval, "descheduling-interval", rs.DeschedulingInterval, "time interval between two consecutive descheduler executions")
+	fs.StringVar(&rs.KubeconfigFile, "kubeconfig-file", rs.KubeconfigFile, "File with  kube configuration.")
+	fs.StringVar(&rs.PolicyConfigFile, "policy-config-file", rs.PolicyConfigFile, "File with descheduler policy configuration.")
+}
