@@ -27,7 +27,7 @@ var (
 )
 
 // GroupName is the group name use in this package
-const GroupName = "rescheduler"
+const GroupName = "descheduler"
 
 // SchemeGroupVersion is group version used to register these objects
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
@@ -44,7 +44,7 @@ func Resource(resource string) schema.GroupResource {
 
 func addKnownTypes(scheme *runtime.Scheme) error {
 	scheme.AddKnownTypes(SchemeGroupVersion,
-		&ReschedulerPolicy{},
+		&DeschedulerPolicy{},
 	)
 	return nil
 }

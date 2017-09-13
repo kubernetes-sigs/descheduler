@@ -15,5 +15,5 @@
 #!/bin/bash
 
 # run unit tests
-go test $(go list github.com/aveshagarwal/rescheduler/... | grep -v github.com/aveshagarwal/rescheduler/vendor/)
+go test $(go list github.com/kubernetes-incubator/descheduler/... | grep -v github.com/kubernetes-incubator/descheduler/vendor/)
 

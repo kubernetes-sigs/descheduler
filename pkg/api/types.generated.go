@@ -67,7 +67,7 @@ func init() {
 	}
 }
 
-func (x *ReschedulerPolicy) CodecEncodeSelf(e *codec1978.Encoder) {
+func (x *DeschedulerPolicy) CodecEncodeSelf(e *codec1978.Encoder) {
 	var h codecSelfer1234
 	z, r := codec1978.GenHelperEncoder(e)
 	_, _, _ = h, z, r
@@ -175,7 +175,7 @@ func (x *ReschedulerPolicy) CodecEncodeSelf(e *codec1978.Encoder) {
 	}
 }
 
-func (x *ReschedulerPolicy) CodecDecodeSelf(d *codec1978.Decoder) {
+func (x *DeschedulerPolicy) CodecDecodeSelf(d *codec1978.Decoder) {
 	var h codecSelfer1234
 	z, r := codec1978.GenHelperDecoder(d)
 	_, _, _ = h, z, r
@@ -205,7 +205,7 @@ func (x *ReschedulerPolicy) CodecDecodeSelf(d *codec1978.Decoder) {
 	}
 }
 
-func (x *ReschedulerPolicy) codecDecodeSelfFromMap(l int, d *codec1978.Decoder) {
+func (x *DeschedulerPolicy) codecDecodeSelfFromMap(l int, d *codec1978.Decoder) {
 	var h codecSelfer1234
 	z, r := codec1978.GenHelperDecoder(d)
 	_, _, _ = h, z, r
@@ -265,7 +265,7 @@ func (x *ReschedulerPolicy) codecDecodeSelfFromMap(l int, d *codec1978.Decoder) 
 	z.DecSendContainerState(codecSelfer_containerMapEnd1234)
 }
 
-func (x *ReschedulerPolicy) codecDecodeSelfFromArray(l int, d *codec1978.Decoder) {
+func (x *DeschedulerPolicy) codecDecodeSelfFromArray(l int, d *codec1978.Decoder) {
 	var h codecSelfer1234
 	z, r := codec1978.GenHelperDecoder(d)
 	_, _, _ = h, z, r
@@ -405,7 +405,7 @@ func (x *StrategyList) CodecDecodeSelf(d *codec1978.Decoder) {
 	}
 }
 
-func (x *ReschedulerStrategy) CodecEncodeSelf(e *codec1978.Encoder) {
+func (x *DeschedulerStrategy) CodecEncodeSelf(e *codec1978.Encoder) {
 	var h codecSelfer1234
 	z, r := codec1978.GenHelperEncoder(e)
 	_, _, _ = h, z, r
@@ -493,7 +493,7 @@ func (x *ReschedulerStrategy) CodecEncodeSelf(e *codec1978.Encoder) {
 	}
 }
 
-func (x *ReschedulerStrategy) CodecDecodeSelf(d *codec1978.Decoder) {
+func (x *DeschedulerStrategy) CodecDecodeSelf(d *codec1978.Decoder) {
 	var h codecSelfer1234
 	z, r := codec1978.GenHelperDecoder(d)
 	_, _, _ = h, z, r
@@ -523,7 +523,7 @@ func (x *ReschedulerStrategy) CodecDecodeSelf(d *codec1978.Decoder) {
 	}
 }
 
-func (x *ReschedulerStrategy) codecDecodeSelfFromMap(l int, d *codec1978.Decoder) {
+func (x *DeschedulerStrategy) codecDecodeSelfFromMap(l int, d *codec1978.Decoder) {
 	var h codecSelfer1234
 	z, r := codec1978.GenHelperDecoder(d)
 	_, _, _ = h, z, r
@@ -583,7 +583,7 @@ func (x *ReschedulerStrategy) codecDecodeSelfFromMap(l int, d *codec1978.Decoder
 	z.DecSendContainerState(codecSelfer_containerMapEnd1234)
 }
 
-func (x *ReschedulerStrategy) codecDecodeSelfFromArray(l int, d *codec1978.Decoder) {
+func (x *DeschedulerStrategy) codecDecodeSelfFromArray(l int, d *codec1978.Decoder) {
 	var h codecSelfer1234
 	z, r := codec1978.GenHelperDecoder(d)
 	_, _, _ = h, z, r
@@ -1160,11 +1160,11 @@ func (x codecSelfer1234) decStrategyList(v *StrategyList, d *codec1978.Decoder) 
 	yybh1 := z.DecBasicHandle()
 	if yyv1 == nil {
 		yyrl1, _ := z.DecInferLen(yyl1, yybh1.MaxInitLen, 56)
-		yyv1 = make(map[StrategyName]ReschedulerStrategy, yyrl1)
+		yyv1 = make(map[StrategyName]DeschedulerStrategy, yyrl1)
 		*v = yyv1
 	}
 	var yymk1 StrategyName
-	var yymv1 ReschedulerStrategy
+	var yymv1 DeschedulerStrategy
 	var yymg1 bool
 	if yybh1.MapValueReset {
 		yymg1 = true
@@ -1182,11 +1182,11 @@ func (x codecSelfer1234) decStrategyList(v *StrategyList, d *codec1978.Decoder) 
 			if yymg1 {
 				yymv1 = yyv1[yymk1]
 			} else {
-				yymv1 = ReschedulerStrategy{}
+				yymv1 = DeschedulerStrategy{}
 			}
 			z.DecSendContainerState(codecSelfer_containerMapValue1234)
 			if r.TryDecodeAsNil() {
-				yymv1 = ReschedulerStrategy{}
+				yymv1 = DeschedulerStrategy{}
 			} else {
 				yyv3 := &yymv1
 				yyv3.CodecDecodeSelf(d)
@@ -1209,11 +1209,11 @@ func (x codecSelfer1234) decStrategyList(v *StrategyList, d *codec1978.Decoder) 
 			if yymg1 {
 				yymv1 = yyv1[yymk1]
 			} else {
-				yymv1 = ReschedulerStrategy{}
+				yymv1 = DeschedulerStrategy{}
 			}
 			z.DecSendContainerState(codecSelfer_containerMapValue1234)
 			if r.TryDecodeAsNil() {
-				yymv1 = ReschedulerStrategy{}
+				yymv1 = DeschedulerStrategy{}
 			} else {
 				yyv5 := &yymv1
 				yyv5.CodecDecodeSelf(d)
