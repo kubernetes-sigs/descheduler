@@ -18,14 +18,15 @@ package strategies
 
 import (
 	"fmt"
+	"strings"
+	"testing"
+	"github.com/aveshagarwal/rescheduler/test"
 	"github.com/aveshagarwal/rescheduler/pkg/api"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	core "k8s.io/client-go/testing"
 	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset/fake"
-	"strings"
-	"testing"
 )
 
 // TODO: Make this table driven.
@@ -37,29 +38,29 @@ func TestLowNodeUtilization(t *testing.T) {
 	targetThresholds[v1.ResourceCPU] = 50
 	targetThresholds[v1.ResourcePods] = 50
 
-	n1 := buildTestNode("n1", 4000, 3000, 9)
-	n2 := buildTestNode("n2", 4000, 3000, 10)
-	p1 := buildTestPod("p1", 400, 0, n1.Name)
-	p2 := buildTestPod("p2", 400, 0, n1.Name)
-	p3 := buildTestPod("p3", 400, 0, n1.Name)
-	p4 := buildTestPod("p4", 400, 0, n1.Name)
-	p5 := buildTestPod("p5", 400, 0, n1.Name)
+	n1 := test.BuildTestNode("n1", 4000, 3000, 9)
+	n2 := test.BuildTestNode("n2", 4000, 3000, 10)
+	p1 := test.BuildTestPod("p1", 400, 0, n1.Name)
+	p2 := test.BuildTestPod("p2", 400, 0, n1.Name)
+	p3 := test.BuildTestPod("p3", 400, 0, n1.Name)
+	p4 := test.BuildTestPod("p4", 400, 0, n1.Name)
+	p5 := test.BuildTestPod("p5", 400, 0, n1.Name)
 
 	// These won't be evicted.
-	p6 := buildTestPod("p6", 400, 0, n1.Name)
-	p7 := buildTestPod("p7", 400, 0, n1.Name)
-	p8 := buildTestPod("p8", 400, 0, n1.Name)
+	p6 := test.BuildTestPod("p6", 400, 0, n1.Name)
+	p7 := test.BuildTestPod("p7", 400, 0, n1.Name)
+	p8 := test.BuildTestPod("p8", 400, 0, n1.Name)
 
-	p1.Annotations = getReplicaSetAnnotation()
-	p2.Annotations = getReplicaSetAnnotation()
-	p3.Annotations = getReplicaSetAnnotation()
-	p4.Annotations = getReplicaSetAnnotation()
-	p5.Annotations = getReplicaSetAnnotation()
+	p1.Annotations = test.GetReplicaSetAnnotation()
+	p2.Annotations = test.GetReplicaSetAnnotation()
+	p3.Annotations = test.GetReplicaSetAnnotation()
+	p4.Annotations = test.GetReplicaSetAnnotation()
+	p5.Annotations = test.GetReplicaSetAnnotation()
 	// The following 4 pods won't get evicted.
 	// A daemonset.
-	p6.Annotations = getDaemonSetAnnotation()
+	p6.Annotations = test.GetDaemonSetAnnotation()
 	// A pod with local storage.
-	p7.Annotations = getNormalPodAnnotation()
+	p7.Annotations = test.GetNormalPodAnnotation()
 	p7.Spec.Volumes = []v1.Volume{
 		{
 			Name: "sample",
@@ -71,12 +72,12 @@ func TestLowNodeUtilization(t *testing.T) {
 		},
 	}
 	// A Mirror Pod.
-	p7.Annotations = getMirrorPodAnnotation()
+	p7.Annotations = test.GetMirrorPodAnnotation()
 	// A Critical Pod.
 	p8.Namespace = "kube-system"
-	p8.Annotations = getCriticalPodAnnotation()
-	p9 := buildTestPod("p9", 400, 0, n1.Name)
-	p9.Annotations = getReplicaSetAnnotation()
+	p8.Annotations = test.GetCriticalPodAnnotation()
+	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
+	p9.Annotations = test.GetReplicaSetAnnotation()
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 		list := action.(core.ListAction)
@@ -103,7 +104,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	npm := CreateNodePodsMap(fakeClient, []*v1.Node{n1, n2})
 	lowNodes, targetNodes, _ := classifyNodes(npm, thresholds, targetThresholds)
 	podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, targetThresholds)
-	if expectedPodsEvicted != podsEvicted {
+	if expectedPodsEvicted != podsEvicted  {
 		t.Errorf("Expected %#v pods to be evicted but %#v got evicted", expectedPodsEvicted)
 	}
 
