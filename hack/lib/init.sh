@@ -43,5 +43,5 @@ OS_ROOT="$( os::util::absolute_path "${init_source}" )"
 export OS_ROOT
 cd "${OS_ROOT}"
 
-PRJ_PREFIX="github.com/aveshagarwal/rescheduler"
+PRJ_PREFIX="github.com/kubernetes-incubator/descheduler"
 OS_OUTPUT_BINPATH="${OS_ROOT}/_output/bin"

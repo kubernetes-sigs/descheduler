@@ -25,7 +25,7 @@ import (
 	policy "k8s.io/kubernetes/pkg/apis/policy/v1beta1"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
-	eutils "github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions/utils"
+	eutils "github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions/utils"
 )
 
 func EvictPod(client clientset.Interface, pod *v1.Pod, policyGroupVersion string) (bool, error) {

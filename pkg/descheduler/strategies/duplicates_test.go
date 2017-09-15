@@ -19,7 +19,7 @@ package strategies
 import (
 	"testing"
 
-	"github.com/aveshagarwal/rescheduler/test"
+	"github.com/kubernetes-incubator/descheduler/test"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	core "k8s.io/client-go/testing"

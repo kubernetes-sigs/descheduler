@@ -14,27 +14,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package app implements a Server object for running the rescheduler.
+// Package app implements a Server object for running the descheduler.
 package app
 
 import (
 	"fmt"
 
-	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/options"
-	"github.com/aveshagarwal/rescheduler/pkg/rescheduler"
+	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
+	"github.com/kubernetes-incubator/descheduler/pkg/descheduler"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-// NewReschedulerCommand creates a *cobra.Command object with default parameters
-func NewReschedulerCommand() *cobra.Command {
-	s := options.NewReschedulerServer()
+// NewDeschedulerCommand creates a *cobra.Command object with default parameters
+func NewDeschedulerCommand() *cobra.Command {
+	s := options.NewDeschedulerServer()
 	s.AddFlags(pflag.CommandLine)
 	cmd := &cobra.Command{
-		Use:   "rescheduler",
-		Short: "reschdeduler",
-		Long:  `The rescheduler evicts pods which may be bound to less desired nodes`,
+		Use:   "descheduler",
+		Short: "descheduler",
+		Long:  `The descheduler evicts pods which may be bound to less desired nodes`,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := Run(s)
 			if err != nil {
@@ -47,6 +47,6 @@ func NewReschedulerCommand() *cobra.Command {
 	return cmd
 }
 
-func Run(rs *options.ReschedulerServer) error {
-	return rescheduler.Run(rs)
+func Run(rs *options.DeschedulerServer) error {
+	return descheduler.Run(rs)
 }

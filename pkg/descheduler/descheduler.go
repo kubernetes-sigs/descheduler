@@ -14,19 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package rescheduler
+package descheduler
 
 import (
 	"fmt"
 
-	"github.com/aveshagarwal/rescheduler/cmd/rescheduler/app/options"
-	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/client"
-	eutils "github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions/utils"
-	nodeutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/node"
-	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/strategies"
+	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
+	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/client"
+	eutils "github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions/utils"
+	nodeutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/node"
+	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/strategies"
 )
 
-func Run(rs *options.ReschedulerServer) error {
+func Run(rs *options.DeschedulerServer) error {
 
 	rsclient, err := client.CreateClient(rs.KubeconfigFile)
 	if err != nil {
@@ -34,12 +34,12 @@ func Run(rs *options.ReschedulerServer) error {
 	}
 	rs.Client = rsclient
 
-	reschedulerPolicy, err := LoadPolicyConfig(rs.PolicyConfigFile)
+	deschedulerPolicy, err := LoadPolicyConfig(rs.PolicyConfigFile)
 	if err != nil {
 		return err
 	}
-	if reschedulerPolicy == nil {
-		return fmt.Errorf("\nreschedulerPolicy is nil\n")
+	if deschedulerPolicy == nil {
+		return fmt.Errorf("\ndeschedulerPolicy is nil\n")
 
 	}
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(rs.Client)
@@ -53,8 +53,8 @@ func Run(rs *options.ReschedulerServer) error {
 		return err
 	}
 
-	strategies.RemoveDuplicatePods(rs.Client, reschedulerPolicy.Strategies["RemoveDuplicates"], evictionPolicyGroupVersion, nodes)
-	strategies.LowNodeUtilization(rs.Client, reschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes)
+	strategies.RemoveDuplicatePods(rs.Client, deschedulerPolicy.Strategies["RemoveDuplicates"], evictionPolicyGroupVersion, nodes)
+	strategies.LowNodeUtilization(rs.Client, deschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes)
 
 	return nil
 }

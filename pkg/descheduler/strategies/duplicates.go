@@ -24,9 +24,9 @@ import (
 	//TODO: Change to client-go instead of generated clientset.
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
-	"github.com/aveshagarwal/rescheduler/pkg/api"
-	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions"
-	podutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
+	"github.com/kubernetes-incubator/descheduler/pkg/api"
+	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions"
+	podutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/pod"
 )
 
 //type creator string
@@ -35,7 +35,7 @@ type DuplicatePodsMap map[string][]*v1.Pod
 // RemoveDuplicatePods removes the duplicate pods on node. This strategy evicts all duplicate pods on node.
 // A pod is said to be a duplicate of other if both of them are from same creator, kind and are within the same
 // namespace. As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
-func RemoveDuplicatePods(client clientset.Interface, strategy api.ReschedulerStrategy, policyGroupVersion string, nodes []*v1.Node) {
+func RemoveDuplicatePods(client clientset.Interface, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node) {
 	if !strategy.Enabled {
 		return
 	}

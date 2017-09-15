@@ -21,7 +21,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/v1"
 )
 
-type ReschedulerPolicy struct {
+type DeschedulerPolicy struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// Strategies
@@ -29,9 +29,9 @@ type ReschedulerPolicy struct {
 }
 
 type StrategyName string
-type StrategyList map[StrategyName]ReschedulerStrategy
+type StrategyList map[StrategyName]DeschedulerStrategy
 
-type ReschedulerStrategy struct {
+type DeschedulerStrategy struct {
 	// Enabled or disabled
 	Enabled bool `json:"enabled,omitempty"`
 

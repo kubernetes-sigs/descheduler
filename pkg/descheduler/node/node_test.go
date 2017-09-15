@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/aveshagarwal/rescheduler/test"
+	"github.com/kubernetes-incubator/descheduler/test"
 	"k8s.io/apimachinery/pkg/runtime"
 	core "k8s.io/client-go/testing"
 	"k8s.io/kubernetes/pkg/api/v1"
