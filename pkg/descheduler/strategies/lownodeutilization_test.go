@@ -18,15 +18,15 @@ package strategies
 
 import (
 	"fmt"
-	"strings"
-	"testing"
-	"github.com/aveshagarwal/rescheduler/test"
-	"github.com/aveshagarwal/rescheduler/pkg/api"
+	"github.com/kubernetes-incubator/descheduler/pkg/api"
+	"github.com/kubernetes-incubator/descheduler/test"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	core "k8s.io/client-go/testing"
 	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset/fake"
+	"strings"
+	"testing"
 )
 
 // TODO: Make this table driven.
@@ -104,7 +104,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	npm := CreateNodePodsMap(fakeClient, []*v1.Node{n1, n2})
 	lowNodes, targetNodes, _ := classifyNodes(npm, thresholds, targetThresholds)
 	podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, targetThresholds)
-	if expectedPodsEvicted != podsEvicted  {
+	if expectedPodsEvicted != podsEvicted {
 		t.Errorf("Expected %#v pods to be evicted but %#v got evicted", expectedPodsEvicted)
 	}
 

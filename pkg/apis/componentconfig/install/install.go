@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package install installs the rescheduler's componentconfig API group.
+// Package install installs the descheduler's componentconfig API group.
 package install
 
 import (
@@ -22,13 +22,13 @@ import (
 	"k8s.io/apimachinery/pkg/apimachinery/registered"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig"
-	"github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig/v1alpha1"
-	reschedulerscheme "github.com/aveshagarwal/rescheduler/pkg/rescheduler/scheme"
+	"github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig"
+	"github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig/v1alpha1"
+	deschedulerscheme "github.com/kubernetes-incubator/descheduler/pkg/descheduler/scheme"
 )
 
 func init() {
-	Install(reschedulerscheme.GroupFactoryRegistry, reschedulerscheme.Registry, reschedulerscheme.Scheme)
+	Install(deschedulerscheme.GroupFactoryRegistry, deschedulerscheme.Registry, deschedulerscheme.Scheme)
 }
 
 // Install registers the API group and adds types to a scheme
@@ -37,7 +37,7 @@ func Install(groupFactoryRegistry announced.APIGroupFactoryRegistry, registry *r
 		&announced.GroupMetaFactoryArgs{
 			GroupName:                  componentconfig.GroupName,
 			VersionPreferenceOrder:     []string{v1alpha1.SchemeGroupVersion.Version},
-			ImportPrefix:               "github.com/aveshagarwal/rescheduler/pkg/apis/componentconfig",
+			ImportPrefix:               "github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig",
 			AddInternalObjectsToScheme: componentconfig.AddToScheme,
 		},
 		announced.VersionToSchemeFunc{

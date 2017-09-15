@@ -22,16 +22,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type ReschedulerConfiguration struct {
+type DeschedulerConfiguration struct {
 	metav1.TypeMeta
 
-	// Time interval for rescheduler to run
-	ReschedulingInterval time.Duration
+	// Time interval for descheduler to run
+	DeschedulingInterval time.Duration
 
 	// KubeconfigFile is path to kubeconfig file with authorization and master
 	// location information.
 	KubeconfigFile string
 
-	// PolicyConfigFile is the filepath to the rescheduler policy configuration.
+	// PolicyConfigFile is the filepath to the descheduler policy configuration.
 	PolicyConfigFile string
 }

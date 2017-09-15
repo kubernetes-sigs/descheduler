@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package install installs the rescheduler's policy API group.
+// Package install installs the descheduler's policy API group.
 package install
 
 import (
@@ -22,23 +22,23 @@ import (
 	"k8s.io/apimachinery/pkg/apimachinery/registered"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	reschedulerapi "github.com/aveshagarwal/rescheduler/pkg/api"
-	"github.com/aveshagarwal/rescheduler/pkg/api/v1alpha1"
-	reschedulerscheme "github.com/aveshagarwal/rescheduler/pkg/rescheduler/scheme"
+	deschedulerapi "github.com/kubernetes-incubator/descheduler/pkg/api"
+	"github.com/kubernetes-incubator/descheduler/pkg/api/v1alpha1"
+	deschedulerscheme "github.com/kubernetes-incubator/descheduler/pkg/descheduler/scheme"
 )
 
 func init() {
-	Install(reschedulerscheme.GroupFactoryRegistry, reschedulerscheme.Registry, reschedulerscheme.Scheme)
+	Install(deschedulerscheme.GroupFactoryRegistry, deschedulerscheme.Registry, deschedulerscheme.Scheme)
 }
 
 // Install registers the API group and adds types to a scheme
 func Install(groupFactoryRegistry announced.APIGroupFactoryRegistry, registry *registered.APIRegistrationManager, scheme *runtime.Scheme) {
 	if err := announced.NewGroupMetaFactory(
 		&announced.GroupMetaFactoryArgs{
-			GroupName:                  reschedulerapi.GroupName,
+			GroupName:                  deschedulerapi.GroupName,
 			VersionPreferenceOrder:     []string{v1alpha1.SchemeGroupVersion.Version},
-			ImportPrefix:               "github.com/aveshagarwal/rescheduler/pkg/api",
-			AddInternalObjectsToScheme: reschedulerapi.AddToScheme,
+			ImportPrefix:               "github.com/kubernetes-incubator/descheduler/pkg/api",
+			AddInternalObjectsToScheme: deschedulerapi.AddToScheme,
 		},
 		announced.VersionToSchemeFunc{
 			v1alpha1.SchemeGroupVersion.Version: v1alpha1.AddToScheme,

@@ -14,20 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scheme
+package main
 
 import (
+	"fmt"
 	"os"
 
-	"k8s.io/apimachinery/pkg/apimachinery/announced"
-	"k8s.io/apimachinery/pkg/apimachinery/registered"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app"
 )
 
-var (
-	GroupFactoryRegistry = make(announced.APIGroupFactoryRegistry)
-	Registry             = registered.NewOrDie(os.Getenv("RESCHEDULER_API_VERSIONS"))
-	Scheme               = runtime.NewScheme()
-	Codecs               = serializer.NewCodecFactory(Scheme)
-)
+func main() {
+	cmd := app.NewDeschedulerCommand()
+	if err := cmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}

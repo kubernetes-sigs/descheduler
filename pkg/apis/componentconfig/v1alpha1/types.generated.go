@@ -67,7 +67,7 @@ func init() {
 	}
 }
 
-func (x *ReschedulerConfiguration) CodecEncodeSelf(e *codec1978.Encoder) {
+func (x *DeschedulerConfiguration) CodecEncodeSelf(e *codec1978.Encoder) {
 	var h codecSelfer1234
 	z, r := codec1978.GenHelperEncoder(e)
 	_, _, _ = h, z, r
@@ -86,7 +86,7 @@ func (x *ReschedulerConfiguration) CodecEncodeSelf(e *codec1978.Encoder) {
 			const yyr2 bool = false
 			yyq2[0] = x.Kind != ""
 			yyq2[1] = x.APIVersion != ""
-			yyq2[2] = x.ReschedulingInterval != 0
+			yyq2[2] = x.DeschedulingInterval != 0
 			yyq2[4] = x.PolicyConfigFile != ""
 			var yynn2 int
 			if yyr2 || yy2arr2 {
@@ -157,9 +157,9 @@ func (x *ReschedulerConfiguration) CodecEncodeSelf(e *codec1978.Encoder) {
 					yym10 := z.EncBinary()
 					_ = yym10
 					if false {
-					} else if z.HasExtensions() && z.EncExt(x.ReschedulingInterval) {
+					} else if z.HasExtensions() && z.EncExt(x.DeschedulingInterval) {
 					} else {
-						r.EncodeInt(int64(x.ReschedulingInterval))
+						r.EncodeInt(int64(x.DeschedulingInterval))
 					}
 				} else {
 					r.EncodeInt(0)
@@ -167,14 +167,14 @@ func (x *ReschedulerConfiguration) CodecEncodeSelf(e *codec1978.Encoder) {
 			} else {
 				if yyq2[2] {
 					z.EncSendContainerState(codecSelfer_containerMapKey1234)
-					r.EncodeString(codecSelferC_UTF81234, string("reschedulingInterval"))
+					r.EncodeString(codecSelferC_UTF81234, string("deschedulingInterval"))
 					z.EncSendContainerState(codecSelfer_containerMapValue1234)
 					yym11 := z.EncBinary()
 					_ = yym11
 					if false {
-					} else if z.HasExtensions() && z.EncExt(x.ReschedulingInterval) {
+					} else if z.HasExtensions() && z.EncExt(x.DeschedulingInterval) {
 					} else {
-						r.EncodeInt(int64(x.ReschedulingInterval))
+						r.EncodeInt(int64(x.DeschedulingInterval))
 					}
 				}
 			}
@@ -231,7 +231,7 @@ func (x *ReschedulerConfiguration) CodecEncodeSelf(e *codec1978.Encoder) {
 	}
 }
 
-func (x *ReschedulerConfiguration) CodecDecodeSelf(d *codec1978.Decoder) {
+func (x *DeschedulerConfiguration) CodecDecodeSelf(d *codec1978.Decoder) {
 	var h codecSelfer1234
 	z, r := codec1978.GenHelperDecoder(d)
 	_, _, _ = h, z, r
@@ -261,7 +261,7 @@ func (x *ReschedulerConfiguration) CodecDecodeSelf(d *codec1978.Decoder) {
 	}
 }
 
-func (x *ReschedulerConfiguration) codecDecodeSelfFromMap(l int, d *codec1978.Decoder) {
+func (x *DeschedulerConfiguration) codecDecodeSelfFromMap(l int, d *codec1978.Decoder) {
 	var h codecSelfer1234
 	z, r := codec1978.GenHelperDecoder(d)
 	_, _, _ = h, z, r
@@ -307,11 +307,11 @@ func (x *ReschedulerConfiguration) codecDecodeSelfFromMap(l int, d *codec1978.De
 					*((*string)(yyv6)) = r.DecodeString()
 				}
 			}
-		case "reschedulingInterval":
+		case "deschedulingInterval":
 			if r.TryDecodeAsNil() {
-				x.ReschedulingInterval = 0
+				x.DeschedulingInterval = 0
 			} else {
-				yyv8 := &x.ReschedulingInterval
+				yyv8 := &x.DeschedulingInterval
 				yym9 := z.DecBinary()
 				_ = yym9
 				if false {
@@ -351,7 +351,7 @@ func (x *ReschedulerConfiguration) codecDecodeSelfFromMap(l int, d *codec1978.De
 	z.DecSendContainerState(codecSelfer_containerMapEnd1234)
 }
 
-func (x *ReschedulerConfiguration) codecDecodeSelfFromArray(l int, d *codec1978.Decoder) {
+func (x *DeschedulerConfiguration) codecDecodeSelfFromArray(l int, d *codec1978.Decoder) {
 	var h codecSelfer1234
 	z, r := codec1978.GenHelperDecoder(d)
 	_, _, _ = h, z, r
@@ -414,9 +414,9 @@ func (x *ReschedulerConfiguration) codecDecodeSelfFromArray(l int, d *codec1978.
 	}
 	z.DecSendContainerState(codecSelfer_containerArrayElem1234)
 	if r.TryDecodeAsNil() {
-		x.ReschedulingInterval = 0
+		x.DeschedulingInterval = 0
 	} else {
-		yyv19 := &x.ReschedulingInterval
+		yyv19 := &x.DeschedulingInterval
 		yym20 := z.DecBinary()
 		_ = yym20
 		if false {

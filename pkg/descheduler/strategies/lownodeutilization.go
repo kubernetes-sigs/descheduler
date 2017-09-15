@@ -25,9 +25,9 @@ import (
 	helper "k8s.io/kubernetes/pkg/api/v1/resource"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
-	"github.com/aveshagarwal/rescheduler/pkg/api"
-	"github.com/aveshagarwal/rescheduler/pkg/rescheduler/evictions"
-	podutil "github.com/aveshagarwal/rescheduler/pkg/rescheduler/pod"
+	"github.com/kubernetes-incubator/descheduler/pkg/api"
+	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions"
+	podutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/pod"
 )
 
 type NodeUsageMap struct {
@@ -39,7 +39,7 @@ type NodeUsageMap struct {
 }
 type NodePodsMap map[*v1.Node][]*v1.Pod
 
-func LowNodeUtilization(client clientset.Interface, strategy api.ReschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node) {
+func LowNodeUtilization(client clientset.Interface, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node) {
 	if !strategy.Enabled {
 		return
 	}

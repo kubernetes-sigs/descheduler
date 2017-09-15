@@ -19,8 +19,8 @@ package pod
 import (
 	"testing"
 
+	"github.com/kubernetes-incubator/descheduler/test"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"github.com/aveshagarwal/rescheduler/test"
 	"k8s.io/kubernetes/pkg/api/v1"
 )
 
