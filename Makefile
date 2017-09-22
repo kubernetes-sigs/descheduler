@@ -12,13 +12,24 @@
 # # See the License for the specific language governing permissions and
 # # limitations under the License.
 
+.PHONY: test
+
+# VERSION is currently based on the last commit
+VERSION:=$(shell git rev-parse --short HEAD)
+
+# IMAGE is the image name of descheduler
+IMAGE:=descheduler:$(VERSION)
+
+all: build
 
 build:
 	go build -o _output/bin/descheduler github.com/kubernetes-incubator/descheduler/cmd/descheduler
 
+image: build
+	docker build -t $(IMAGE) .
+
 clean:
 	rm -rf _output
 
-.PHONY: test
 test:
 	./test/run-unit-tests.sh
