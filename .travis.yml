@@ -1,13 +1,6 @@
-sudo: required
-
-services:
-  - docker
-
 language: go
-
 go:
   - 1.8.3
-
 script:
 - make build
 - make test
