@@ -8,18 +8,6 @@ language: go
 go:
   - 1.8.3
 
-before_install:
-  - sudo apt-get install libseccomp-dev -qq
-
-before_script:
-  - mkdir -p $HOME/gopath/src/github.com/kubernetes-incubator
-  - mv $TRAVIS_BUILD_DIR $HOME/gopath/src/github.com/kubernetes-incubator/descheduler
-  - export PATH=$GOPATH/bin:$PATH
-  - go version
-
-install: true
-
-jobs:
-  include:
-    - stage: Tests
-      script: test/run-unit-tests.sh 
+script:
+- make build
+- make test
