@@ -34,4 +34,7 @@ type DeschedulerConfiguration struct {
 
 	// PolicyConfigFile is the filepath to the descheduler policy configuration.
 	PolicyConfigFile string
+
+	// Dry run
+	DryRun bool
 }

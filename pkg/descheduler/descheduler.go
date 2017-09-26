@@ -53,8 +53,8 @@ func Run(rs *options.DeschedulerServer) error {
 		return err
 	}
 
-	strategies.RemoveDuplicatePods(rs.Client, deschedulerPolicy.Strategies["RemoveDuplicates"], evictionPolicyGroupVersion, nodes)
-	strategies.LowNodeUtilization(rs.Client, deschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes)
+	strategies.RemoveDuplicatePods(rs, deschedulerPolicy.Strategies["RemoveDuplicates"], evictionPolicyGroupVersion, nodes)
+	strategies.LowNodeUtilization(rs, deschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes)
 
 	return nil
 }
