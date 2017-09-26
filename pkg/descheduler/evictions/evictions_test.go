@@ -32,7 +32,7 @@ func TestEvictPod(t *testing.T) {
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 		return true, &v1.PodList{Items: []v1.Pod{*p1}}, nil
 	})
-	evicted, _ := EvictPod(fakeClient, p1, "v1")
+	evicted, _ := EvictPod(fakeClient, p1, "v1", false)
 	if !evicted {
 		t.Errorf("Expected %v pod to be evicted", p1.Name)
 	}

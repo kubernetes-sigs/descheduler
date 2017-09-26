@@ -25,6 +25,7 @@ import (
 	helper "k8s.io/kubernetes/pkg/api/v1/resource"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
+	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
 	"github.com/kubernetes-incubator/descheduler/pkg/api"
 	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions"
 	podutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/pod"
@@ -39,7 +40,7 @@ type NodeUsageMap struct {
 }
 type NodePodsMap map[*v1.Node][]*v1.Pod
 
-func LowNodeUtilization(client clientset.Interface, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node) {
+func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node) {
 	if !strategy.Enabled {
 		return
 	}
@@ -55,7 +56,7 @@ func LowNodeUtilization(client clientset.Interface, strategy api.DeschedulerStra
 		return
 	}
 
-	npm := CreateNodePodsMap(client, nodes)
+	npm := CreateNodePodsMap(ds.Client, nodes)
 	lowNodes, targetNodes, _ := classifyNodes(npm, thresholds, targetThresholds)
 
 	if len(lowNodes) == 0 {
@@ -71,7 +72,7 @@ func LowNodeUtilization(client clientset.Interface, strategy api.DeschedulerStra
 		fmt.Printf("no node is above target utilization\n")
 		return
 	}
-	evictPodsFromTargetNodes(client, evictionPolicyGroupVersion, targetNodes, lowNodes, targetThresholds)
+	evictPodsFromTargetNodes(ds.Client, evictionPolicyGroupVersion, targetNodes, lowNodes, targetThresholds, ds.DryRun)
 }
 
 func validateThresholds(thresholds api.ResourceThresholds) bool {
@@ -123,7 +124,7 @@ func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThr
 	return lowNodes, targetNodes, otherNodes
 }
 
-func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVersion string, targetNodes []NodeUsageMap, lowNodes []NodeUsageMap, targetThresholds api.ResourceThresholds) int {
+func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVersion string, targetNodes []NodeUsageMap, lowNodes []NodeUsageMap, targetThresholds api.ResourceThresholds, dryRun bool) int {
 	podsEvicted := 0
 
 	SortNodesByUsage(targetNodes)
@@ -149,7 +150,7 @@ func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVer
 		onePodPercentage := api.Percentage((float64(1) * 100) / float64(nodeCapcity.Pods().Value()))
 		if nodePodsUsage > targetThresholds[v1.ResourcePods] && totalPods > 0 {
 			for _, pod := range node.bePods {
-				success, err := evictions.EvictPod(client, pod, evictionPolicyGroupVersion)
+				success, err := evictions.EvictPod(client, pod, evictionPolicyGroupVersion, dryRun)
 				if !success {
 					fmt.Printf("Error when evicting pod: %#v (%#v)\n", pod.Name, err)
 				} else {
@@ -164,7 +165,7 @@ func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVer
 			}
 			if nodePodsUsage > targetThresholds[v1.ResourcePods] && totalPods > 0 {
 				for _, pod := range node.otherPods {
-					success, err := evictions.EvictPod(client, pod, evictionPolicyGroupVersion)
+					success, err := evictions.EvictPod(client, pod, evictionPolicyGroupVersion, dryRun)
 					if !success {
 						fmt.Printf("Error when evicting pod: %#v (%#v)\n", pod.Name, err)
 					} else {

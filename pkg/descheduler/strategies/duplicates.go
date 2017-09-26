@@ -24,6 +24,7 @@ import (
 	//TODO: Change to client-go instead of generated clientset.
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
+	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
 	"github.com/kubernetes-incubator/descheduler/pkg/api"
 	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions"
 	podutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/pod"
@@ -35,15 +36,15 @@ type DuplicatePodsMap map[string][]*v1.Pod
 // RemoveDuplicatePods removes the duplicate pods on node. This strategy evicts all duplicate pods on node.
 // A pod is said to be a duplicate of other if both of them are from same creator, kind and are within the same
 // namespace. As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
-func RemoveDuplicatePods(client clientset.Interface, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node) {
+func RemoveDuplicatePods(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node) {
 	if !strategy.Enabled {
 		return
 	}
-	deleteDuplicatePods(client, policyGroupVersion, nodes)
+	deleteDuplicatePods(ds.Client, policyGroupVersion, nodes, ds.DryRun)
 }
 
 // deleteDuplicatePods evicts the pod from node and returns the count of evicted pods.
-func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node) int {
+func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool) int {
 	podsEvicted := 0
 	for _, node := range nodes {
 		fmt.Printf("\nProcessing node: %#v\n", node.Name)
@@ -54,7 +55,7 @@ func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, 
 				// i = 0 does not evict the first pod
 				for i := 1; i < len(pods); i++ {
 					//fmt.Printf("Removing duplicate pod %#v\n", k.Name)
-					success, err := evictions.EvictPod(client, pods[i], policyGroupVersion)
+					success, err := evictions.EvictPod(client, pods[i], policyGroupVersion, dryRun)
 					if !success {
 						//TODO: change fmt.Printf as glogs.
 						fmt.Printf("Error when evicting pod: %#v (%#v)\n", pods[i].Name, err)
