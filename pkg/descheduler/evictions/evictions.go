@@ -28,7 +28,10 @@ import (
 	eutils "github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions/utils"
 )
 
-func EvictPod(client clientset.Interface, pod *v1.Pod, policyGroupVersion string) (bool, error) {
+func EvictPod(client clientset.Interface, pod *v1.Pod, policyGroupVersion string, dryRun bool) (bool, error) {
+	if dryRun {
+		return true, nil
+	}
 	deleteOptions := &metav1.DeleteOptions{}
 	// GracePeriodSeconds ?
 	eviction := &policy.Eviction{
