@@ -44,6 +44,7 @@ func autoConvert_v1alpha1_DeschedulerConfiguration_To_componentconfig_Deschedule
 	out.DeschedulingInterval = time.Duration(in.DeschedulingInterval)
 	out.KubeconfigFile = in.KubeconfigFile
 	out.PolicyConfigFile = in.PolicyConfigFile
+	out.DryRun = in.DryRun
 	return nil
 }
 
@@ -56,6 +57,7 @@ func autoConvert_componentconfig_DeschedulerConfiguration_To_v1alpha1_Deschedule
 	out.DeschedulingInterval = time.Duration(in.DeschedulingInterval)
 	out.KubeconfigFile = in.KubeconfigFile
 	out.PolicyConfigFile = in.PolicyConfigFile
+	out.DryRun = in.DryRun
 	return nil
 }
 
