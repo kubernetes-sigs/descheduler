@@ -103,7 +103,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	expectedPodsEvicted := 4
 	npm := CreateNodePodsMap(fakeClient, []*v1.Node{n1, n2})
 	lowNodes, targetNodes, _ := classifyNodes(npm, thresholds, targetThresholds)
-	podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, targetThresholds)
+	podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, targetThresholds, false)
 	if expectedPodsEvicted != podsEvicted {
 		t.Errorf("Expected %#v pods to be evicted but %#v got evicted", expectedPodsEvicted)
 	}
