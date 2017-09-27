@@ -17,7 +17,7 @@ limitations under the License.
 package strategies
 
 import (
-	"fmt"
+	"github.com/golang/glog"
 	"strings"
 
 	"k8s.io/kubernetes/pkg/api/v1"
@@ -47,21 +47,19 @@ func RemoveDuplicatePods(ds *options.DeschedulerServer, strategy api.Descheduler
 func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool) int {
 	podsEvicted := 0
 	for _, node := range nodes {
-		fmt.Printf("\nProcessing node: %#v\n", node.Name)
+		glog.V(1).Infof("\nProcessing node: %#v\n", node.Name)
 		dpm := ListDuplicatePodsOnANode(client, node)
 		for creator, pods := range dpm {
 			if len(pods) > 1 {
-				fmt.Printf("%#v\n", creator)
+				glog.V(1).Infof("%#v\n", creator)
 				// i = 0 does not evict the first pod
 				for i := 1; i < len(pods); i++ {
-					//fmt.Printf("Removing duplicate pod %#v\n", k.Name)
 					success, err := evictions.EvictPod(client, pods[i], policyGroupVersion, dryRun)
 					if !success {
-						//TODO: change fmt.Printf as glogs.
-						fmt.Printf("Error when evicting pod: %#v (%#v)\n", pods[i].Name, err)
+						glog.Infof("Error when evicting pod: %#v (%#v)\n", pods[i].Name, err)
 					} else {
 						podsEvicted++
-						fmt.Printf("Evicted pod: %#v (%#v)\n", pods[i].Name, err)
+						glog.V(1).Infof("Evicted pod: %#v (%#v)\n", pods[i].Name, err)
 					}
 				}
 			}
