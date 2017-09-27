@@ -124,7 +124,7 @@ func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThr
 	return lowNodes, targetNodes, otherNodes
 }
 
-func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVersion string, targetNodes []NodeUsageMap, lowNodes []NodeUsageMap, targetThresholds api.ResourceThresholds, dryRun bool) int {
+func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVersion string, targetNodes, lowNodes []NodeUsageMap, targetThresholds api.ResourceThresholds, dryRun bool) int {
 	podsEvicted := 0
 
 	SortNodesByUsage(targetNodes)
@@ -155,6 +155,7 @@ func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVer
 					fmt.Printf("Error when evicting pod: %#v (%#v)\n", pod.Name, err)
 				} else {
 					fmt.Printf("Evicted pod: %#v (%#v)\n", pod.Name, err)
+					podsEvicted++
 					nodePodsUsage = nodePodsUsage - onePodPercentage
 					totalPods--
 					if nodePodsUsage <= targetThresholds[v1.ResourcePods] || totalPods <= 0 {
