@@ -130,28 +130,42 @@ func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVer
 
 	SortNodesByUsage(targetNodes)
 
-	// upper bound on total number of pods to be moved
-	var totalPods float64
+	// upper bound on total number of pods/cpu/memory to be moved
+	var totalPods, totalCpu, totalMem float64
 	for _, node := range lowNodes {
-		podsPercentage := targetThresholds[v1.ResourcePods] - node.usage[v1.ResourcePods]
-		nodeCapcity := node.node.Status.Capacity
+		nodeCapacity := node.node.Status.Capacity
 		if len(node.node.Status.Allocatable) > 0 {
-			nodeCapcity = node.node.Status.Allocatable
+			nodeCapacity = node.node.Status.Allocatable
 		}
-		totalPods += ((float64(podsPercentage) * float64(nodeCapcity.Pods().Value())) / 100)
+		// totalPods to be moved
+		podsPercentage := targetThresholds[v1.ResourcePods] - node.usage[v1.ResourcePods]
+		totalPods += ((float64(podsPercentage) * float64(nodeCapacity.Pods().Value())) / 100)
+
+		// totalCPU capacity to be moved
+		if _, ok := targetThresholds[v1.ResourceCPU]; ok {
+			cpuPercentage := targetThresholds[v1.ResourceCPU] - node.usage[v1.ResourceCPU]
+			totalCpu += ((float64(cpuPercentage) * float64(nodeCapacity.Cpu().MilliValue())) / 100)
+		}
+
+		// totalMem capacity to be moved
+		if _, ok := targetThresholds[v1.ResourceMemory]; ok {
+			memPercentage := targetThresholds[v1.ResourceMemory] - node.usage[v1.ResourceMemory]
+			totalMem += ((float64(memPercentage) * float64(nodeCapacity.Memory().Value())) / 100)
+		}
 	}
 
 	for _, node := range targetNodes {
-		nodePodsUsage := node.usage[v1.ResourcePods]
-
-		nodeCapcity := node.node.Status.Capacity
+		nodeCapacity := node.node.Status.Capacity
 		if len(node.node.Status.Allocatable) > 0 {
-			nodeCapcity = node.node.Status.Allocatable
+			nodeCapacity = node.node.Status.Allocatable
 		}
-		onePodPercentage := api.Percentage((float64(1) * 100) / float64(nodeCapcity.Pods().Value()))
-		evictPods(node.bePods, client, evictionPolicyGroupVersion, targetThresholds, onePodPercentage, dryRun, &nodePodsUsage, &totalPods, &podsEvicted)
-		evictPods(node.bPods, client, evictionPolicyGroupVersion, targetThresholds, onePodPercentage, dryRun, &nodePodsUsage, &totalPods, &podsEvicted)
-		evictPods(node.gPods, client, evictionPolicyGroupVersion, targetThresholds, onePodPercentage, dryRun, &nodePodsUsage, &totalPods, &podsEvicted)
+		fmt.Printf("evicting pods from node %#v with usage: %#v\n", node.node.Name, node.usage)
+		// evict best effort pods
+		evictPods(node.bePods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &podsEvicted, dryRun)
+		// evict burstable pods
+		evictPods(node.bPods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &podsEvicted, dryRun)
+		// evict guaranteed pods
+		evictPods(node.gPods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &podsEvicted, dryRun)
 	}
 	return podsEvicted
 }
@@ -160,25 +174,41 @@ func evictPods(inputPods []*v1.Pod,
 	client clientset.Interface,
 	evictionPolicyGroupVersion string,
 	targetThresholds api.ResourceThresholds,
-	onePodPercentage api.Percentage,
-	dryRun bool,
-	nodePodsUsage *api.Percentage,
+	nodeCapacity v1.ResourceList,
+	nodeUsage api.ResourceThresholds,
 	totalPods *float64,
-	podsEvicted *int) {
-	if *nodePodsUsage > targetThresholds[v1.ResourcePods] && *totalPods > 0 {
+	totalCpu *float64,
+	totalMem *float64,
+	podsEvicted *int,
+	dryRun bool) {
+	if IsNodeAboveTargetUtilization(nodeUsage, targetThresholds) && (*totalPods > 0 || *totalCpu > 0 || *totalMem > 0) {
+		onePodPercentage := api.Percentage((float64(1) * 100) / float64(nodeCapacity.Pods().Value()))
 		for _, pod := range inputPods {
+			cUsage := helper.GetResourceRequest(pod, v1.ResourceCPU)
+			mUsage := helper.GetResourceRequest(pod, v1.ResourceMemory)
 			success, err := evictions.EvictPod(client, pod, evictionPolicyGroupVersion, dryRun)
 			if !success {
 				fmt.Printf("Error when evicting pod: %#v (%#v)\n", pod.Name, err)
 			} else {
 				fmt.Printf("Evicted pod: %#v (%#v)\n", pod.Name, err)
+				// update remaining pods
 				*podsEvicted++
-				*nodePodsUsage = *nodePodsUsage - onePodPercentage
+				nodeUsage[v1.ResourcePods] -= onePodPercentage
 				*totalPods--
-				if *nodePodsUsage <= targetThresholds[v1.ResourcePods] || *totalPods <= 0 {
+
+				// update remaining cpu
+				*totalCpu -= float64(cUsage)
+				nodeUsage[v1.ResourceCPU] -= api.Percentage((float64(cUsage) * 100) / float64(nodeCapacity.Cpu().MilliValue()))
+
+				// update remaining memory
+				*totalMem -= float64(mUsage)
+				nodeUsage[v1.ResourceMemory] -= api.Percentage(float64(mUsage) / float64(nodeCapacity.Memory().Value()) * 100)
+
+				fmt.Printf("updated node usage: %#v\n", nodeUsage)
+				// check if node utilization drops below target threshold or required capacity (cpu, memory, pods) is moved
+				if !IsNodeAboveTargetUtilization(nodeUsage, targetThresholds) || (*totalPods <= 0 && *totalCpu <= 0 && *totalMem <= 0) {
 					break
 				}
-
 			}
 		}
 	}
@@ -284,17 +314,17 @@ func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*
 		}
 	}
 
-	nodeCapcity := node.Status.Capacity
+	nodeCapacity := node.Status.Capacity
 	if len(node.Status.Allocatable) > 0 {
-		nodeCapcity = node.Status.Allocatable
+		nodeCapacity = node.Status.Allocatable
 	}
 
 	usage := api.ResourceThresholds{}
 	totalCPUReq := totalReqs[v1.ResourceCPU]
 	totalMemReq := totalReqs[v1.ResourceMemory]
 	totalPods := len(pods)
-	usage[v1.ResourceCPU] = api.Percentage((float64(totalCPUReq.MilliValue()) * 100) / float64(nodeCapcity.Cpu().MilliValue()))
-	usage[v1.ResourceMemory] = api.Percentage(float64(totalMemReq.Value()) / float64(nodeCapcity.Memory().Value()) * 100)
-	usage[v1.ResourcePods] = api.Percentage((float64(totalPods) * 100) / float64(nodeCapcity.Pods().Value()))
+	usage[v1.ResourceCPU] = api.Percentage((float64(totalCPUReq.MilliValue()) * 100) / float64(nodeCapacity.Cpu().MilliValue()))
+	usage[v1.ResourceMemory] = api.Percentage(float64(totalMemReq.Value()) / float64(nodeCapacity.Memory().Value()) * 100)
+	usage[v1.ResourcePods] = api.Percentage((float64(totalPods) * 100) / float64(nodeCapacity.Pods().Value()))
 	return usage, nonRemovablePods, bePods, bPods, gPods
 }
