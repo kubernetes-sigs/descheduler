@@ -34,9 +34,10 @@ import (
 type NodeUsageMap struct {
 	node             *v1.Node
 	usage            api.ResourceThresholds
-	bePods           []*v1.Pod
 	nonRemovablePods []*v1.Pod
-	otherPods        []*v1.Pod
+	bePods           []*v1.Pod
+	bPods            []*v1.Pod
+	gPods            []*v1.Pod
 }
 type NodePodsMap map[*v1.Node][]*v1.Pod
 
@@ -109,8 +110,8 @@ func validateTargetThresholds(targetThresholds api.ResourceThresholds) bool {
 func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThresholds api.ResourceThresholds) ([]NodeUsageMap, []NodeUsageMap, []NodeUsageMap) {
 	lowNodes, targetNodes, otherNodes := []NodeUsageMap{}, []NodeUsageMap{}, []NodeUsageMap{}
 	for node, pods := range npm {
-		usage, bePods, nonRemovablePods, otherPods := NodeUtilization(node, pods)
-		nuMap := NodeUsageMap{node, usage, bePods, nonRemovablePods, otherPods}
+		usage, nonRemovablePods, bePods, bPods, gPods := NodeUtilization(node, pods)
+		nuMap := NodeUsageMap{node, usage, nonRemovablePods, bePods, bPods, gPods}
 		fmt.Printf("Node %#v usage: %#v\n", node.Name, usage)
 		if IsNodeWithLowUtilization(usage, thresholds) {
 			lowNodes = append(lowNodes, nuMap)
@@ -129,7 +130,7 @@ func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVer
 
 	SortNodesByUsage(targetNodes)
 
-	// total number of pods to be moved
+	// upper bound on total number of pods to be moved
 	var totalPods float64
 	for _, node := range lowNodes {
 		podsPercentage := targetThresholds[v1.ResourcePods] - node.usage[v1.ResourcePods]
@@ -148,41 +149,39 @@ func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVer
 			nodeCapcity = node.node.Status.Allocatable
 		}
 		onePodPercentage := api.Percentage((float64(1) * 100) / float64(nodeCapcity.Pods().Value()))
-		if nodePodsUsage > targetThresholds[v1.ResourcePods] && totalPods > 0 {
-			for _, pod := range node.bePods {
-				success, err := evictions.EvictPod(client, pod, evictionPolicyGroupVersion, dryRun)
-				if !success {
-					fmt.Printf("Error when evicting pod: %#v (%#v)\n", pod.Name, err)
-				} else {
-					fmt.Printf("Evicted pod: %#v (%#v)\n", pod.Name, err)
-					podsEvicted++
-					nodePodsUsage = nodePodsUsage - onePodPercentage
-					totalPods--
-					if nodePodsUsage <= targetThresholds[v1.ResourcePods] || totalPods <= 0 {
-						break
-					}
+		evictPods(node.bePods, client, evictionPolicyGroupVersion, targetThresholds, onePodPercentage, dryRun, &nodePodsUsage, &totalPods, &podsEvicted)
+		evictPods(node.bPods, client, evictionPolicyGroupVersion, targetThresholds, onePodPercentage, dryRun, &nodePodsUsage, &totalPods, &podsEvicted)
+		evictPods(node.gPods, client, evictionPolicyGroupVersion, targetThresholds, onePodPercentage, dryRun, &nodePodsUsage, &totalPods, &podsEvicted)
+	}
+	return podsEvicted
+}
 
+func evictPods(inputPods []*v1.Pod,
+	client clientset.Interface,
+	evictionPolicyGroupVersion string,
+	targetThresholds api.ResourceThresholds,
+	onePodPercentage api.Percentage,
+	dryRun bool,
+	nodePodsUsage *api.Percentage,
+	totalPods *float64,
+	podsEvicted *int) {
+	if *nodePodsUsage > targetThresholds[v1.ResourcePods] && *totalPods > 0 {
+		for _, pod := range inputPods {
+			success, err := evictions.EvictPod(client, pod, evictionPolicyGroupVersion, dryRun)
+			if !success {
+				fmt.Printf("Error when evicting pod: %#v (%#v)\n", pod.Name, err)
+			} else {
+				fmt.Printf("Evicted pod: %#v (%#v)\n", pod.Name, err)
+				*podsEvicted++
+				*nodePodsUsage = *nodePodsUsage - onePodPercentage
+				*totalPods--
+				if *nodePodsUsage <= targetThresholds[v1.ResourcePods] || *totalPods <= 0 {
+					break
 				}
-			}
-			if nodePodsUsage > targetThresholds[v1.ResourcePods] && totalPods > 0 {
-				for _, pod := range node.otherPods {
-					success, err := evictions.EvictPod(client, pod, evictionPolicyGroupVersion, dryRun)
-					if !success {
-						fmt.Printf("Error when evicting pod: %#v (%#v)\n", pod.Name, err)
-					} else {
-						fmt.Printf("Evicted pod: %#v (%#v)\n", pod.Name, err)
-						podsEvicted++
-						nodePodsUsage = nodePodsUsage - onePodPercentage
-						totalPods--
-						if nodePodsUsage <= targetThresholds[v1.ResourcePods] || totalPods <= 0 {
-							break
-						}
-					}
-				}
+
 			}
 		}
 	}
-	return podsEvicted
 }
 
 func SortNodesByUsage(nodes []NodeUsageMap) {
@@ -242,10 +241,11 @@ func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds 
 	return true
 }
 
-func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*v1.Pod, []*v1.Pod, []*v1.Pod) {
+func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod) {
 	bePods := []*v1.Pod{}
 	nonRemovablePods := []*v1.Pod{}
-	otherPods := []*v1.Pod{}
+	bPods := []*v1.Pod{}
+	gPods := []*v1.Pod{}
 	totalReqs := map[v1.ResourceName]resource.Quantity{}
 	for _, pod := range pods {
 		sr, err := podutil.CreatorRef(pod)
@@ -261,9 +261,10 @@ func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*
 		} else if podutil.IsBestEffortPod(pod) {
 			bePods = append(bePods, pod)
 			continue
+		} else if podutil.IsBurstablePod(pod) {
+			bPods = append(bPods, pod)
 		} else {
-			// todo: differentiate between burstable and guranteed pods
-			otherPods = append(otherPods, pod)
+			gPods = append(gPods, pod)
 		}
 
 		req, _, err := helper.PodRequestsAndLimits(pod)
@@ -295,5 +296,5 @@ func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*
 	usage[v1.ResourceCPU] = api.Percentage((float64(totalCPUReq.MilliValue()) * 100) / float64(nodeCapcity.Cpu().MilliValue()))
 	usage[v1.ResourceMemory] = api.Percentage(float64(totalMemReq.Value()) / float64(nodeCapcity.Memory().Value()) * 100)
 	usage[v1.ResourcePods] = api.Percentage((float64(totalPods) * 100) / float64(nodeCapcity.Pods().Value()))
-	return usage, bePods, nonRemovablePods, otherPods
+	return usage, nonRemovablePods, bePods, bPods, gPods
 }
