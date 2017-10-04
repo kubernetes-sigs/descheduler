@@ -19,12 +19,12 @@ package main
 import (
 	"fmt"
 	"os"
-
 	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app"
 )
 
 func main() {
-	cmd := app.NewDeschedulerCommand()
+	out := os.Stdout
+	cmd := app.NewDeschedulerCommand(out)
 	if err := cmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)

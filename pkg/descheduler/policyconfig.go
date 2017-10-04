@@ -26,11 +26,12 @@ import (
 	_ "github.com/kubernetes-incubator/descheduler/pkg/api/install"
 	"github.com/kubernetes-incubator/descheduler/pkg/api/v1alpha1"
 	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/scheme"
+	"github.com/golang/glog"
 )
 
 func LoadPolicyConfig(policyConfigFile string) (*api.DeschedulerPolicy, error) {
 	if policyConfigFile == "" {
-		fmt.Printf("policy config file not specified")
+		glog.V(1).Infof("policy config file not specified")
 		return nil, nil
 	}
 
