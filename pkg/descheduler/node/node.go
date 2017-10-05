@@ -19,6 +19,7 @@ package node
 import (
 	"time"
 
+	"github.com/golang/glog"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
@@ -26,7 +27,6 @@ import (
 	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 	corelisters "k8s.io/kubernetes/pkg/client/listers/core/v1"
-	"github.com/golang/glog"
 )
 
 // ReadyNodes returns ready nodes irrespective of whether they are
@@ -45,7 +45,7 @@ func ReadyNodes(client clientset.Interface, stopChannel <-chan struct{}) ([]*v1.
 			return []*v1.Node{}, err
 		}
 
-		for i, _ := range nItems.Items {
+		for i := range nItems.Items {
 			node := nItems.Items[i]
 			nodes = append(nodes, &node)
 		}
