@@ -16,7 +16,8 @@ limitations under the License.
 
 package test
 
-import ("fmt"
+import (
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -91,7 +92,6 @@ func GetCriticalPodAnnotation() map[string]string {
 		"scheduler.alpha.kubernetes.io/critical-pod": "",
 	}
 }
-
 
 // BuildTestNode creates a node with specified capacity.
 func BuildTestNode(name string, millicpu int64, mem int64, pods int64) *v1.Node {
