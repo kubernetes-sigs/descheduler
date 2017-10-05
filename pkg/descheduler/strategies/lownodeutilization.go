@@ -82,7 +82,7 @@ func validateThresholds(thresholds api.ResourceThresholds) bool {
 		return false
 	}
 	found := false
-	for name, _ := range thresholds {
+	for name := range thresholds {
 		if name == v1.ResourceCPU || name == v1.ResourceMemory || name == v1.ResourcePods {
 			found = true
 			break
@@ -170,8 +170,6 @@ func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVer
 	}
 	return podsEvicted
 }
-
-
 
 func evictPods(inputPods []*v1.Pod,
 	client clientset.Interface,

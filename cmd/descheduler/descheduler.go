@@ -18,8 +18,8 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app"
+	"os"
 )
 
 func main() {

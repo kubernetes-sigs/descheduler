@@ -18,8 +18,8 @@ limitations under the License.
 package app
 
 import (
-	"fmt"
 	"flag"
+	"fmt"
 	"io"
 
 	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
@@ -27,8 +27,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"k8s.io/apiserver/pkg/util/logs"
 	aflag "k8s.io/apiserver/pkg/util/flag"
+	"k8s.io/apiserver/pkg/util/logs"
 )
 
 // NewDeschedulerCommand creates a *cobra.Command object with default parameters
