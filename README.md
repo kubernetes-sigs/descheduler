@@ -40,6 +40,109 @@ For more information about available options run:
 $ ./_output/bin/descheduler --help
 ```
 
+## Running Descheduler as a Job Inside of a Pod
+
+Descheduler can be run as a job inside of a pod. It has the advantage of
+being able to be run multiple times without needing user intervention.
+Descheduler pod is run as a critical pod to avoid being evicted by itself,
+or by kubelet due to an eviction event. Since critical pods are created in
+`kube-system` namespace, descheduler job and its pod will also be created
+in `kube-system` namespace.
+
+###  Create a container image
+
+First we create a simple Docker image utilizing the Dockerfile found in the root directory:
+
+```
+$ make image
+```
+
+### Create a cluster role
+
+To give necessary permissions for the descheduler to work in a pod, create a cluster role:
+
+```
+$ cat << EOF| kubectl create -f -
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: descheduler-cluster-role
+rules:
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list", "delete"]
+EOF
+```
+
+### Create the service account which will be used to run the job:
+
+```
+$ kubectl create sa descheduler-sa -n kube-system
+```
+
+### Bind the cluster role to the service account:
+
+```
+$ kubectl create clusterrolebinding descheduler-cluster-role-binding \
+    --clusterrole=descheduler-cluster-role \
+    --serviceaccount=kube-system:descheduler-sa
+```
+### Create a configmap to store descheduler policy
+
+Descheduler policy is created as a ConfigMap in `kube-system` namespace
+so that it can be mounted as a volume inside pod.
+
+```
+$ kubectl create configmap descheduler-policy-configmap \
+     -n kube-system --from-file=<path-to-policy-dir/policy.yaml>
+```
+### Create the job specification (descheduler-job.yaml)
+
+```
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: descheduler-job
+  namespace: kube-system
+spec:
+  parallelism: 1
+  completions: 1
+  template:
+    metadata:
+      name: descheduler-pod
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: "true"
+    spec:
+        containers:
+        - name: descheduler
+          image: descheduler
+          volumeMounts:
+          - mountPath: /policy-dir
+            name: policy-volume
+          command:
+          - "/bin/sh"
+          - "-ec"
+          - |
+            /bin/descheduler --policy-config-file /policy-dir/policy.yaml
+        restartPolicy: "Never"
+        serviceAccountName: descheduler-sa
+        volumes:
+        - name: policy-volume
+          configMap:
+            name: descheduler-policy-configmap
+```
+
+Please note that the pod template is configured with critical pod annotation, and
+the policy `policy-file` is mounted as a volume from the config map.
+
+### Run the descheduler as a job in a pod:
+```
+$ kubectl create -f descheduler-job.yaml
+```
+
 ## Policy and Strategies
  
 Descheduler's policy is configurable and includes strategies to be enabled or disabled.
