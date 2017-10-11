@@ -1,5 +1,5 @@
-hash: bf18ba8a038a73e8f11f808c8babdd34734279b050e0223f704eaabbd13830fd
-updated: 2017-08-05T10:03:09.300557448-04:00
+hash: b1e0ebbfc1e8fee3fde364d5db559676ea94c5f9db38128c5c8b3f9ae3b232d4
+updated: 2017-09-15T16:20:32.857729978-04:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
@@ -205,6 +205,7 @@ imports:
   version: e356aa2e77ab4a5914c216c12ba14cce25a25ab0
   subpackages:
   - discovery
+  - discovery/fake
   - kubernetes/scheme
   - pkg/api
   - pkg/api/v1
@@ -245,6 +246,7 @@ imports:
   - pkg/version
   - rest
   - rest/watch
+  - testing
   - tools/auth
   - tools/cache
   - tools/clientcmd
@@ -312,29 +314,52 @@ imports:
   - pkg/apis/storage/v1
   - pkg/apis/storage/v1beta1
   - pkg/client/clientset_generated/clientset
+  - pkg/client/clientset_generated/clientset/fake
   - pkg/client/clientset_generated/clientset/scheme
   - pkg/client/clientset_generated/clientset/typed/admissionregistration/v1alpha1
+  - pkg/client/clientset_generated/clientset/typed/admissionregistration/v1alpha1/fake
   - pkg/client/clientset_generated/clientset/typed/apps/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/apps/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/authentication/v1
+  - pkg/client/clientset_generated/clientset/typed/authentication/v1/fake
   - pkg/client/clientset_generated/clientset/typed/authentication/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/authentication/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/authorization/v1
+  - pkg/client/clientset_generated/clientset/typed/authorization/v1/fake
   - pkg/client/clientset_generated/clientset/typed/authorization/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/authorization/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/autoscaling/v1
+  - pkg/client/clientset_generated/clientset/typed/autoscaling/v1/fake
   - pkg/client/clientset_generated/clientset/typed/autoscaling/v2alpha1
+  - pkg/client/clientset_generated/clientset/typed/autoscaling/v2alpha1/fake
   - pkg/client/clientset_generated/clientset/typed/batch/v1
+  - pkg/client/clientset_generated/clientset/typed/batch/v1/fake
   - pkg/client/clientset_generated/clientset/typed/batch/v2alpha1
+  - pkg/client/clientset_generated/clientset/typed/batch/v2alpha1/fake
   - pkg/client/clientset_generated/clientset/typed/certificates/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/certificates/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/core/v1
+  - pkg/client/clientset_generated/clientset/typed/core/v1/fake
   - pkg/client/clientset_generated/clientset/typed/extensions/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/extensions/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/networking/v1
+  - pkg/client/clientset_generated/clientset/typed/networking/v1/fake
   - pkg/client/clientset_generated/clientset/typed/policy/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/policy/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/rbac/v1alpha1
+  - pkg/client/clientset_generated/clientset/typed/rbac/v1alpha1/fake
   - pkg/client/clientset_generated/clientset/typed/rbac/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/rbac/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/settings/v1alpha1
+  - pkg/client/clientset_generated/clientset/typed/settings/v1alpha1/fake
   - pkg/client/clientset_generated/clientset/typed/storage/v1
+  - pkg/client/clientset_generated/clientset/typed/storage/v1/fake
   - pkg/client/clientset_generated/clientset/typed/storage/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/storage/v1beta1/fake
   - pkg/client/listers/core/v1
   - pkg/kubelet/types
   - pkg/util
   - pkg/util/parsers
+- name: k8s.io/metrics
+  version: 95c5b46f7d312a7a96deb9364d6218e6dab177b9
 testImports: []
