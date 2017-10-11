@@ -1,15 +1,20 @@
 package: github.com/kubernetes-incubator/descheduler
 import:
 - package: k8s.io/client-go
-  version: e356aa2e77ab4a5914c216c12ba14cce25a25ab0 # kube 1.7.0
+  version: e356aa2e77ab4a5914c216c12ba14cce25a25ab0
 - package: k8s.io/apiserver
   version: ab57ed5a72c3b67058f665d660e23bae18339fc2
 - package: k8s.io/apimachinery
-  version: abe34e4f5b4413c282a83011892cbeea5b32223b # kube 1.7.0
+  version: abe34e4f5b4413c282a83011892cbeea5b32223b
 - package: k8s.io/kubernetes
-  version: ebb8d6e0fadfc95f3d64ccecc36c8ed2ac9224ef # kube 1.7.0
+  version: ebb8d6e0fadfc95f3d64ccecc36c8ed2ac9224ef
 - package: github.com/kubernetes/repo-infra
 - package: github.com/spf13/cobra
   version: f62e98d28ab7ad31d707ba837a966378465c7b57
 - package: k8s.io/gengo
   version: c79c13d131b0a8f42d05faa6491c12e94ccc6f30
+- package: k8s.io/metrics
+  version: 95c5b46f7d312a7a96deb9364d6218e6dab177b9
+- package: k8s.io/kube-openapi
+  version: 76a6671bcfb1d229fc7fd543aee23ddff6b5fc7e
+  
