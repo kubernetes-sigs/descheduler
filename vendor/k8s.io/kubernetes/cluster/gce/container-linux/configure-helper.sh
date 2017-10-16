@@ -34,54 +34,6 @@ function create-dirs {
   fi
 }
 
-# Vars assumed:
-#   NUM_NODES
-function get-calico-node-cpu {
-  local suggested_calico_cpus=100m
-  if [[ "${NUM_NODES}" -gt "10" ]]; then
-    suggested_calico_cpus=250m
-  fi
-  if [[ "${NUM_NODES}" -gt "100" ]]; then
-    suggested_calico_cpus=500m
-  fi
-  if [[ "${NUM_NODES}" -gt "500" ]]; then
-    suggested_calico_cpus=1000m
-  fi
-  echo "${suggested_calico_cpus}"
-}
-
-# Vars assumed:
-#    NUM_NODES
-function get-calico-typha-replicas {
-  local typha_count=1
-  if [[ "${NUM_NODES}" -gt "10" ]]; then
-    typha_count=2
-  fi
-  if [[ "${NUM_NODES}" -gt "100" ]]; then
-    typha_count=3
-  fi
-  if [[ "${NUM_NODES}" -gt "250" ]]; then
-    typha_count=4
-  fi
-  if [[ "${NUM_NODES}" -gt "500" ]]; then
-    typha_count=5
-  fi
-  echo "${typha_count}"
-}
-
-# Vars assumed:
-#    NUM_NODES
-function get-calico-typha-cpu {
-  local typha_cpu=200m
-  if [[ "${NUM_NODES}" -gt "10" ]]; then
-    typha_cpu=500m
-  fi
-  if [[ "${NUM_NODES}" -gt "100" ]]; then
-    typha_cpu=1000m
-  fi
-  echo "${typha_cpu}"
-}
-
 # Create directories referenced in the kube-controller-manager manifest for
 # bindmounts. This is used under the rkt runtime to work around
 # https://github.com/kubernetes/kubernetes/issues/26816
@@ -867,6 +819,9 @@ function start-kube-apiserver {
   if [[ -n "${STORAGE_MEDIA_TYPE:-}" ]]; then
     params+=" --storage-media-type=${STORAGE_MEDIA_TYPE}"
   fi
+  if [[ -n "${KUBE_APISERVER_REQUEST_TIMEOUT_SEC:-}" ]]; then
+    params+=" --request-timeout=${KUBE_APISERVER_REQUEST_TIMEOUT_SEC}s"
+  fi
   if [[ -n "${ENABLE_GARBAGE_COLLECTOR:-}" ]]; then
     params+=" --enable-garbage-collector=${ENABLE_GARBAGE_COLLECTOR}"
   fi
@@ -1129,7 +1084,7 @@ function start-cluster-autoscaler {
     local -r src_file="${KUBE_HOME}/kube-manifests/kubernetes/gci-trusty/cluster-autoscaler.manifest"
     remove-salt-config-comments "${src_file}"
 
-    local params="${AUTOSCALER_MIG_CONFIG} ${CLOUD_CONFIG_OPT} ${AUTOSCALER_EXPANDER_CONFIG:-}"
+    local params="${AUTOSCALER_MIG_CONFIG} ${CLOUD_CONFIG_OPT} ${AUTOSCALER_EXPANDER_CONFIG:---expander=price}"
     sed -i -e "s@{{params}}@${params}@g" "${src_file}"
     sed -i -e "s@{{cloud_config_mount}}@${CLOUD_CONFIG_MOUNT}@g" "${src_file}"
     sed -i -e "s@{{cloud_config_volume}}@${CLOUD_CONFIG_VOLUME}@g" "${src_file}"
@@ -1168,6 +1123,8 @@ function setup-addon-manifests {
 }
 
 # Prepares the manifests of k8s addons, and starts the addon manager.
+# Vars assumed:
+#   CLUSTER_NAME
 function start-kube-addons {
   echo "Prepare kube-addons manifests and start kube addon manager"
   local -r src_dir="${KUBE_HOME}/kube-manifests/kubernetes/gci-trusty"
@@ -1205,6 +1162,7 @@ function start-kube-addons {
       controller_yaml="${controller_yaml}/heapster-controller.yaml"
     fi
     remove-salt-config-comments "${controller_yaml}"
+    sed -i -e "s@{{ cluster_name }}@${CLUSTER_NAME}@g" "${controller_yaml}"
     sed -i -e "s@{{ *base_metrics_memory *}}@${base_metrics_memory}@g" "${controller_yaml}"
     sed -i -e "s@{{ *base_metrics_cpu *}}@${base_metrics_cpu}@g" "${controller_yaml}"
     sed -i -e "s@{{ *base_eventer_memory *}}@${base_eventer_memory}@g" "${controller_yaml}"
@@ -1260,20 +1218,9 @@ function start-kube-addons {
   if [[ "${NETWORK_POLICY_PROVIDER:-}" == "calico" ]]; then
     setup-addon-manifests "addons" "calico-policy-controller"
 
-    # Configure Calico based on cluster size and image type. 
+    # Configure Calico CNI directory.
     local -r ds_file="${dst_dir}/calico-policy-controller/calico-node-daemonset.yaml"
-    local -r typha_dep_file="${dst_dir}/calico-policy-controller/typha-deployment.yaml"
     sed -i -e "s@__CALICO_CNI_DIR__@/opt/cni/bin@g" "${ds_file}"
-    sed -i -e "s@__CALICO_NODE_CPU__@$(get-calico-node-cpu)@g" "${ds_file}"
-    sed -i -e "s@__CALICO_TYPHA_CPU__@$(get-calico-typha-cpu)@g" "${typha_dep_file}"
-    sed -i -e "s@__CALICO_TYPHA_REPLICAS__@$(get-calico-typha-replicas)@g" "${typha_dep_file}"
-  else
-    # If not configured to use Calico, the set the typha replica count to 0, but only if the 
-    # addon is present.
-    local -r typha_dep_file="${dst_dir}/calico-policy-controller/typha-deployment.yaml"
-    if [[ -e $typha_dep_file ]]; then
-      sed -i -e "s@__CALICO_TYPHA_REPLICAS__@0@g" "${typha_dep_file}"
-    fi
   fi
   if [[ "${ENABLE_DEFAULT_STORAGE_CLASS:-}" == "true" ]]; then
     setup-addon-manifests "addons" "storage-class/gce"
