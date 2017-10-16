@@ -479,6 +479,7 @@ mesos-launch-grace-period
 mesos-master
 mesos-sandbox-overlay
 mesos-user
+metrics-bind-address
 metrics-path
 min-available
 minimum-container-ttl-duration
@@ -678,6 +679,8 @@ system-cgroups
 system-pods-startup-timeout
 system-reserved
 system-reserved-cgroup
+system-spec-file
+system-spec-name
 system-validate-mode
 target-port
 target-ram-mb

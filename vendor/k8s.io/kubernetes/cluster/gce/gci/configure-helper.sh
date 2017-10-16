@@ -32,55 +32,6 @@ function setup-os-params {
   echo "core.%e.%p.%t" > /proc/sys/kernel/core_pattern
 }
 
-# Vars assumed:
-#   NUM_NODES
-function get-calico-node-cpu {
-  local suggested_calico_cpus=100m
-  if [[ "${NUM_NODES}" -gt "10" ]]; then
-    suggested_calico_cpus=250m
-  fi
-  if [[ "${NUM_NODES}" -gt "100" ]]; then
-    suggested_calico_cpus=500m
-  fi
-  if [[ "${NUM_NODES}" -gt "500" ]]; then
-    suggested_calico_cpus=1000m
-  fi
-  echo "${suggested_calico_cpus}"
-}
-
-# Vars assumed:
-#    NUM_NODES
-function get-calico-typha-replicas {
-  local typha_count=1
-  if [[ "${NUM_NODES}" -gt "10" ]]; then
-    typha_count=2
-  fi
-  if [[ "${NUM_NODES}" -gt "100" ]]; then
-    typha_count=3
-  fi
-  if [[ "${NUM_NODES}" -gt "250" ]]; then
-    typha_count=4
-  fi
-  if [[ "${NUM_NODES}" -gt "500" ]]; then
-    typha_count=5
-  fi
-  echo "${typha_count}"
-}
-
-# Vars assumed:
-#    NUM_NODES
-function get-calico-typha-cpu {
-  local typha_cpu=200m
-  if [[ "${NUM_NODES}" -gt "10" ]]; then
-    typha_cpu=500m
-  fi
-  if [[ "${NUM_NODES}" -gt "100" ]]; then
-    typha_cpu=1000m
-  fi
-  echo "${typha_cpu}"
-}
-
-
 function config-ip-firewall {
   echo "Configuring IP firewall rules"
   # The GCI image has host firewall which drop most inbound/forwarded packets.
@@ -239,10 +190,13 @@ function append_or_replace_prefixed_line {
   local -r file="${1:-}"
   local -r prefix="${2:-}"
   local -r suffix="${3:-}"
+  local -r dirname="$(dirname ${file})"
+  local -r tmpfile="$(mktemp -t filtered.XXXX --tmpdir=${dirname})"
 
   touch "${file}"
-  awk "substr(\$0,0,length(\"${prefix}\")) != \"${prefix}\" { print }" "${file}" > "${file}.filtered"  && mv "${file}.filtered" "${file}"
-  echo "${prefix}${suffix}" >> "${file}"
+  awk "substr(\$0,0,length(\"${prefix}\")) != \"${prefix}\" { print }" "${file}" > "${tmpfile}"
+  echo "${prefix}${suffix}" >> "${tmpfile}"
+  mv "${tmpfile}" "${file}"
 }
 
 function create-node-pki {
@@ -356,7 +310,11 @@ function create-master-auth {
     fi
     append_or_replace_prefixed_line "${basic_auth_csv}" "${KUBE_PASSWORD},${KUBE_USER},"      "admin,system:masters"
   fi
+
   local -r known_tokens_csv="${auth_dir}/known_tokens.csv"
+  if [[ -e "${known_tokens_csv}" && "${METADATA_CLOBBERS_CONFIG:-false}" == "true" ]]; then
+    rm "${known_tokens_csv}"
+  fi
   if [[ -n "${KUBE_BEARER_TOKEN:-}" ]]; then
     append_or_replace_prefixed_line "${known_tokens_csv}" "${KUBE_BEARER_TOKEN},"             "admin,admin,system:masters"
   fi
@@ -788,20 +746,26 @@ function assemble-docker-flags {
     # If using a network plugin, extend the docker configuration to always remove
     # the network checkpoint to avoid corrupt checkpoints.
     # (https://github.com/docker/docker/issues/18283).
-    echo "Extend the default docker.service configuration"
+    echo "Extend the docker.service configuration to remove the network checkpiont"
     mkdir -p /etc/systemd/system/docker.service.d
     cat <<EOF >/etc/systemd/system/docker.service.d/01network.conf
 [Service]
 ExecStartPre=/bin/sh -x -c "rm -rf /var/lib/docker/network"
 EOF
+  fi
+
+  # Ensure TasksMax is sufficient for docker.
+  # (https://github.com/kubernetes/kubernetes/issues/51977)
+  echo "Extend the docker.service configuration to set a higher pids limit"
+  mkdir -p /etc/systemd/system/docker.service.d
+  cat <<EOF >/etc/systemd/system/docker.service.d/02tasksmax.conf
+[Service]
+TasksMax=infinity
+EOF
 
     systemctl daemon-reload
-
-    # If using a network plugin, we need to explicitly restart docker daemon, because
-    # kubelet will not do it.
     echo "Docker command line is updated. Restart docker to pick it up"
     systemctl restart docker
-  fi
 }
 
 # A helper function for loading a docker image. It keeps trying up to 5 times.
@@ -987,6 +951,8 @@ function start-node-problem-detector {
   flags+=" --logtostderr"
   flags+=" --system-log-monitors=${km_config},${dm_config}"
   flags+=" --apiserver-override=https://${KUBERNETES_MASTER_NAME}?inClusterConfig=false&auth=/var/lib/node-problem-detector/kubeconfig"
+  local -r npd_port=${NODE_PROBLEM_DETECTOR_PORT:-20256}
+  flags+=" --port=${npd_port}"
 
   # Write the systemd service file for node problem detector.
   cat <<EOF >/etc/systemd/system/node-problem-detector.service
@@ -1186,6 +1152,7 @@ function prepare-mounter-rootfs {
   mount --make-rshared "${CONTAINERIZED_MOUNTER_ROOTFS}/var/lib/kubelet"
   mount --bind -o ro /proc "${CONTAINERIZED_MOUNTER_ROOTFS}/proc"
   mount --bind -o ro /dev "${CONTAINERIZED_MOUNTER_ROOTFS}/dev"
+  mount --bind -o ro /etc/resolv.conf "${CONTAINERIZED_MOUNTER_ROOTFS}/etc/resolv.conf"
 }
 
 # A helper function for removing salt configuration and comments from a file.
@@ -1250,6 +1217,9 @@ function start-kube-apiserver {
   fi
   if [[ -n "${STORAGE_MEDIA_TYPE:-}" ]]; then
     params+=" --storage-media-type=${STORAGE_MEDIA_TYPE}"
+  fi
+  if [[ -n "${KUBE_APISERVER_REQUEST_TIMEOUT_SEC:-}" ]]; then
+    params+=" --request-timeout=${KUBE_APISERVER_REQUEST_TIMEOUT_SEC}s"
   fi
   if [[ -n "${ENABLE_GARBAGE_COLLECTOR:-}" ]]; then
     params+=" --enable-garbage-collector=${ENABLE_GARBAGE_COLLECTOR}"
@@ -1562,7 +1532,7 @@ function start-cluster-autoscaler {
     local -r src_file="${KUBE_HOME}/kube-manifests/kubernetes/gci-trusty/cluster-autoscaler.manifest"
     remove-salt-config-comments "${src_file}"
 
-    local params="${AUTOSCALER_MIG_CONFIG} ${CLOUD_CONFIG_OPT} ${AUTOSCALER_EXPANDER_CONFIG:-}"
+    local params="${AUTOSCALER_MIG_CONFIG} ${CLOUD_CONFIG_OPT} ${AUTOSCALER_EXPANDER_CONFIG:---expander=price}"
     sed -i -e "s@{{params}}@${params}@g" "${src_file}"
     sed -i -e "s@{{cloud_config_mount}}@${CLOUD_CONFIG_MOUNT}@g" "${src_file}"
     sed -i -e "s@{{cloud_config_volume}}@${CLOUD_CONFIG_VOLUME}@g" "${src_file}"
@@ -1600,7 +1570,29 @@ function setup-addon-manifests {
   chmod 644 "${dst_dir}"/*
 }
 
+# Fluentd manifest is modified using kubectl, which may not be available at
+# this point. Run this as a background process.
+function wait-for-apiserver-and-update-fluentd {
+  until kubectl get nodes
+  do
+    sleep 10
+  done
+  kubectl set resources --dry-run --local -f ${fluentd_gcp_yaml} \
+    --limits=memory=${FLUENTD_GCP_MEMORY_LIMIT} \
+    --requests=cpu=${FLUENTD_GCP_CPU_REQUEST},memory=${FLUENTD_GCP_MEMORY_REQUEST} \
+    --containers=fluentd-gcp -o yaml > ${fluentd_gcp_yaml}.tmp
+  mv ${fluentd_gcp_yaml}.tmp ${fluentd_gcp_yaml}
+}
+
+# Trigger background process that will ultimately update fluentd resource
+# requirements.
+function start-fluentd-resource-update {
+  wait-for-apiserver-and-update-fluentd &
+}
+
 # Prepares the manifests of k8s addons, and starts the addon manager.
+# Vars assumed:
+#   CLUSTER_NAME
 function start-kube-addons {
   echo "Prepare kube-addons manifests and start kube addon manager"
   local -r src_dir="${KUBE_HOME}/kube-manifests/kubernetes/gci-trusty"
@@ -1638,6 +1630,7 @@ function start-kube-addons {
       controller_yaml="${controller_yaml}/heapster-controller.yaml"
     fi
     remove-salt-config-comments "${controller_yaml}"
+    sed -i -e "s@{{ cluster_name }}@${CLUSTER_NAME}@g" "${controller_yaml}"
     sed -i -e "s@{{ *base_metrics_memory *}}@${base_metrics_memory}@g" "${controller_yaml}"
     sed -i -e "s@{{ *base_metrics_cpu *}}@${base_metrics_cpu}@g" "${controller_yaml}"
     sed -i -e "s@{{ *base_eventer_memory *}}@${base_eventer_memory}@g" "${controller_yaml}"
@@ -1680,6 +1673,8 @@ function start-kube-addons {
   if [[ "${ENABLE_NODE_LOGGING:-}" == "true" ]] && \
      [[ "${LOGGING_DESTINATION:-}" == "gcp" ]]; then
     setup-addon-manifests "addons" "fluentd-gcp"
+    local -r fluentd_gcp_yaml="${dst_dir}/fluentd-gcp/fluentd-gcp-ds.yaml"
+    start-fluentd-resource-update
   fi
   if [[ "${ENABLE_CLUSTER_UI:-}" == "true" ]]; then
     setup-addon-manifests "addons" "dashboard"
@@ -1697,20 +1692,9 @@ function start-kube-addons {
   if [[ "${NETWORK_POLICY_PROVIDER:-}" == "calico" ]]; then
     setup-addon-manifests "addons" "calico-policy-controller"
 
-    # Configure Calico based on cluster size and image type.
+    # Configure Calico CNI directory.
     local -r ds_file="${dst_dir}/calico-policy-controller/calico-node-daemonset.yaml"
-    local -r typha_dep_file="${dst_dir}/calico-policy-controller/typha-deployment.yaml"
     sed -i -e "s@__CALICO_CNI_DIR__@/home/kubernetes/bin@g" "${ds_file}"
-    sed -i -e "s@__CALICO_NODE_CPU__@$(get-calico-node-cpu)@g" "${ds_file}"
-    sed -i -e "s@__CALICO_TYPHA_CPU__@$(get-calico-typha-cpu)@g" "${typha_dep_file}"
-    sed -i -e "s@__CALICO_TYPHA_REPLICAS__@$(get-calico-typha-replicas)@g" "${typha_dep_file}"
-  else
-    # If not configured to use Calico, the set the typha replica count to 0, but only if the 
-    # addon is present.
-    local -r typha_dep_file="${dst_dir}/calico-policy-controller/typha-deployment.yaml"
-    if [[ -e $typha_dep_file ]]; then
-      sed -i -e "s@__CALICO_TYPHA_REPLICAS__@0@g" "${typha_dep_file}"
-    fi
   fi
   if [[ "${ENABLE_DEFAULT_STORAGE_CLASS:-}" == "true" ]]; then
     setup-addon-manifests "addons" "storage-class/gce"
