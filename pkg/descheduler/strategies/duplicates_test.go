@@ -54,7 +54,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			VolumeSource: v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: *resource.NewQuantity(int64(10), resource.BinarySI)},
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
 			},
 		},
 	}
