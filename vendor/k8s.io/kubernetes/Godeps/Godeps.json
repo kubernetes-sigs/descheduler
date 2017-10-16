@@ -30,28 +30,33 @@
 		},
 		{
 			"ImportPath": "github.com/Azure/azure-sdk-for-go/arm/compute",
-			"Comment": "v7.0.1-beta",
-			"Rev": "0984e0641ae43b89283223034574d6465be93bf4"
+			"Comment": "v10.0.4-beta-1-g786cc84",
+			"Rev": "786cc84138518bf7fd6d60e92fad1ac9d1a117ad"
 		},
 		{
 			"ImportPath": "github.com/Azure/azure-sdk-for-go/arm/containerregistry",
-			"Comment": "v7.0.1-beta",
-			"Rev": "0984e0641ae43b89283223034574d6465be93bf4"
+			"Comment": "v10.0.4-beta-1-g786cc84",
+			"Rev": "786cc84138518bf7fd6d60e92fad1ac9d1a117ad"
+		},
+		{
+			"ImportPath": "github.com/Azure/azure-sdk-for-go/arm/disk",
+			"Comment": "v10.0.4-beta-1-g786cc84",
+			"Rev": "786cc84138518bf7fd6d60e92fad1ac9d1a117ad"
 		},
 		{
 			"ImportPath": "github.com/Azure/azure-sdk-for-go/arm/network",
-			"Comment": "v7.0.1-beta",
-			"Rev": "0984e0641ae43b89283223034574d6465be93bf4"
+			"Comment": "v10.0.4-beta-1-g786cc84",
+			"Rev": "786cc84138518bf7fd6d60e92fad1ac9d1a117ad"
 		},
 		{
 			"ImportPath": "github.com/Azure/azure-sdk-for-go/arm/storage",
-			"Comment": "v7.0.1-beta",
-			"Rev": "0984e0641ae43b89283223034574d6465be93bf4"
+			"Comment": "v10.0.4-beta-1-g786cc84",
+			"Rev": "786cc84138518bf7fd6d60e92fad1ac9d1a117ad"
 		},
 		{
 			"ImportPath": "github.com/Azure/azure-sdk-for-go/storage",
-			"Comment": "v7.0.1-beta",
-			"Rev": "0984e0641ae43b89283223034574d6465be93bf4"
+			"Comment": "v10.0.4-beta-1-g786cc84",
+			"Rev": "786cc84138518bf7fd6d60e92fad1ac9d1a117ad"
 		},
 		{
 			"ImportPath": "github.com/Azure/go-ansiterm",
@@ -63,28 +68,33 @@
 		},
 		{
 			"ImportPath": "github.com/Azure/go-autorest/autorest",
-			"Comment": "v7.2.3",
-			"Rev": "d7c034a8af24eda120dd6460bfcd6d9ed14e43ca"
+			"Comment": "v8.0.0",
+			"Rev": "58f6f26e200fa5dfb40c9cd1c83f3e2c860d779d"
+		},
+		{
+			"ImportPath": "github.com/Azure/go-autorest/autorest/adal",
+			"Comment": "v8.0.0",
+			"Rev": "58f6f26e200fa5dfb40c9cd1c83f3e2c860d779d"
 		},
 		{
 			"ImportPath": "github.com/Azure/go-autorest/autorest/azure",
-			"Comment": "v7.2.3",
-			"Rev": "d7c034a8af24eda120dd6460bfcd6d9ed14e43ca"
+			"Comment": "v8.0.0",
+			"Rev": "58f6f26e200fa5dfb40c9cd1c83f3e2c860d779d"
 		},
 		{
 			"ImportPath": "github.com/Azure/go-autorest/autorest/date",
-			"Comment": "v7.2.3",
-			"Rev": "d7c034a8af24eda120dd6460bfcd6d9ed14e43ca"
+			"Comment": "v8.0.0",
+			"Rev": "58f6f26e200fa5dfb40c9cd1c83f3e2c860d779d"
 		},
 		{
 			"ImportPath": "github.com/Azure/go-autorest/autorest/to",
-			"Comment": "v7.2.3",
-			"Rev": "d7c034a8af24eda120dd6460bfcd6d9ed14e43ca"
+			"Comment": "v8.0.0",
+			"Rev": "58f6f26e200fa5dfb40c9cd1c83f3e2c860d779d"
 		},
 		{
 			"ImportPath": "github.com/Azure/go-autorest/autorest/validation",
-			"Comment": "v7.2.3",
-			"Rev": "d7c034a8af24eda120dd6460bfcd6d9ed14e43ca"
+			"Comment": "v8.0.0",
+			"Rev": "58f6f26e200fa5dfb40c9cd1c83f3e2c860d779d"
 		},
 		{
 			"ImportPath": "github.com/MakeNowJust/heredoc",
@@ -726,23 +736,23 @@
 		},
 		{
 			"ImportPath": "github.com/coreos/go-oidc/http",
-			"Rev": "be73733bb8cc830d0205609b95d125215f8e9c70"
+			"Rev": "a4973d9a4225417aecf5d450a9522f00c1f7130f"
 		},
 		{
 			"ImportPath": "github.com/coreos/go-oidc/jose",
-			"Rev": "be73733bb8cc830d0205609b95d125215f8e9c70"
+			"Rev": "a4973d9a4225417aecf5d450a9522f00c1f7130f"
 		},
 		{
 			"ImportPath": "github.com/coreos/go-oidc/key",
-			"Rev": "be73733bb8cc830d0205609b95d125215f8e9c70"
+			"Rev": "a4973d9a4225417aecf5d450a9522f00c1f7130f"
 		},
 		{
 			"ImportPath": "github.com/coreos/go-oidc/oauth2",
-			"Rev": "be73733bb8cc830d0205609b95d125215f8e9c70"
+			"Rev": "a4973d9a4225417aecf5d450a9522f00c1f7130f"
 		},
 		{
 			"ImportPath": "github.com/coreos/go-oidc/oidc",
-			"Rev": "be73733bb8cc830d0205609b95d125215f8e9c70"
+			"Rev": "a4973d9a4225417aecf5d450a9522f00c1f7130f"
 		},
 		{
 			"ImportPath": "github.com/coreos/go-semver/semver",
@@ -1482,123 +1492,123 @@
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/blockstorage/v1/apiversions",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/blockstorage/v1/volumes",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/common/extensions",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/compute/v2/flavors",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/compute/v2/images",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/compute/v2/servers",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/identity/v2/tenants",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/identity/v2/tokens",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/identity/v3/extensions/trusts",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/identity/v3/tokens",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/layer3/floatingips",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/layer3/routers",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas/members",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas/monitors",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas/pools",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas/vips",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/listeners",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/loadbalancers",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/monitors",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/lbaas_v2/pools",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/rules",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/networking/v2/ports",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/openstack/utils",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gophercloud/gophercloud/pagination",
-			"Rev": "ce1e02c3ccfdb7fab257340dc4d603ec3035fa11"
+			"Rev": "ed590d9afe113c6107cd60717b196155e6579e78"
 		},
 		{
 			"ImportPath": "github.com/gorilla/context",
@@ -2354,6 +2364,11 @@
 			"Rev": "177002e16a0061912f02377e2dd8951a8b3551bc"
 		},
 		{
+			"ImportPath": "github.com/satori/uuid",
+			"Comment": "v1.1.0-8-g5bf94b6",
+			"Rev": "5bf94b69c6b68ee1b541973bb8e1144db23a194b"
+		},
+		{
 			"ImportPath": "github.com/seccomp/libseccomp-golang",
 			"Rev": "1b506fc7c24eec5a3693cdcbed40d9c226cfc6a1"
 		},
@@ -2870,19 +2885,23 @@
 		},
 		{
 			"ImportPath": "gopkg.in/gcfg.v1",
-			"Rev": "083575c3955c85df16fe9590cceab64d03f5eb6e"
+			"Comment": "v1.2.0",
+			"Rev": "27e4946190b4a327b539185f2b5b1f7c84730728"
 		},
 		{
 			"ImportPath": "gopkg.in/gcfg.v1/scanner",
-			"Rev": "083575c3955c85df16fe9590cceab64d03f5eb6e"
+			"Comment": "v1.2.0",
+			"Rev": "27e4946190b4a327b539185f2b5b1f7c84730728"
 		},
 		{
 			"ImportPath": "gopkg.in/gcfg.v1/token",
-			"Rev": "083575c3955c85df16fe9590cceab64d03f5eb6e"
+			"Comment": "v1.2.0",
+			"Rev": "27e4946190b4a327b539185f2b5b1f7c84730728"
 		},
 		{
 			"ImportPath": "gopkg.in/gcfg.v1/types",
-			"Rev": "083575c3955c85df16fe9590cceab64d03f5eb6e"
+			"Comment": "v1.2.0",
+			"Rev": "27e4946190b4a327b539185f2b5b1f7c84730728"
 		},
 		{
 			"ImportPath": "gopkg.in/inf.v0",
@@ -2892,6 +2911,11 @@
 			"ImportPath": "gopkg.in/natefinch/lumberjack.v2",
 			"Comment": "v1.0-16-g20b71e5",
 			"Rev": "20b71e5b60d756d3d2f80def009790325acc2b23"
+		},
+		{
+			"ImportPath": "gopkg.in/warnings.v0",
+			"Comment": "v0.1.1",
+			"Rev": "8a331561fe74dadba6edfc59f3be66c22c3b065d"
 		},
 		{
 			"ImportPath": "gopkg.in/yaml.v2",
