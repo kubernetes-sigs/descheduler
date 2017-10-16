@@ -1,5 +1,5 @@
-hash: bf18ba8a038a73e8f11f808c8babdd34734279b050e0223f704eaabbd13830fd
-updated: 2017-08-05T10:03:09.300557448-04:00
+hash: 6ccf8e8213eb31f9dd31b46c3aa3c2c01929c6230fb049cfabcabd498ade9c30
+updated: 2017-10-16T14:31:20.353977552-04:00
 imports:
 - name: github.com/davecgh/go-spew
   version: 5215b55f46b2b919f50a1df0eaa5886afe4e3b3d
@@ -33,31 +33,8 @@ imports:
 - name: github.com/gogo/protobuf
   version: c0656edd0d9eab7c66d1eb0c568f9039345796f7
   subpackages:
-  - gogoproto
-  - plugin/compare
-  - plugin/defaultcheck
-  - plugin/description
-  - plugin/embedcheck
-  - plugin/enumstringer
-  - plugin/equal
-  - plugin/face
-  - plugin/gostring
-  - plugin/marshalto
-  - plugin/oneofcheck
-  - plugin/populate
-  - plugin/size
-  - plugin/stringer
-  - plugin/testgen
-  - plugin/union
-  - plugin/unmarshal
   - proto
-  - protoc-gen-gogo/descriptor
-  - protoc-gen-gogo/generator
-  - protoc-gen-gogo/grpc
-  - protoc-gen-gogo/plugin
   - sortkeys
-  - vanity
-  - vanity/command
 - name: github.com/golang/glog
   version: 44145f04b68cf362d9c4df2182967c2275eaefed
 - name: github.com/google/gofuzz
@@ -94,27 +71,19 @@ imports:
   version: ded73eae5db7e7a0ef6f55aace87a2873c5d2b74
   subpackages:
   - codec
-  - codec/codecgen
 - name: golang.org/x/crypto
   version: d172538b2cfce0c13cee31e647d0367aa8cd2486
   subpackages:
   - bcrypt
   - blowfish
-  - curve25519
-  - ed25519
-  - ed25519/internal/edwards25519
   - nacl/secretbox
-  - pkcs12
-  - pkcs12/internal/rc2
   - poly1305
   - salsa20/salsa
-  - ssh
   - ssh/terminal
 - name: golang.org/x/net
   version: f2499483f923065a842d38eb4c7f1927e6fc6e6d
   subpackages:
   - context
-  - context/ctxhttp
   - html
   - html/atom
   - http2
@@ -122,24 +91,17 @@ imports:
   - idna
   - internal/timeseries
   - lex/httplex
-  - proxy
   - trace
   - websocket
 - name: golang.org/x/sys
   version: 8f0908ab3b2457e2e15403d3697c9ef5cb4b57a9
   subpackages:
   - unix
-  - windows
 - name: golang.org/x/text
   version: 2910a502d2bf9e43193af9d68ca516529614eed3
   subpackages:
   - cases
-  - encoding
-  - encoding/internal
-  - encoding/internal/identifier
-  - encoding/unicode
   - internal/tag
-  - internal/utf8internal
   - language
   - runes
   - secure/bidirule
@@ -153,7 +115,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
 - name: k8s.io/apimachinery
-  version: abe34e4f5b4413c282a83011892cbeea5b32223b
+  version: 917740426ad66ff818da4809990480bcc0786a77
   subpackages:
   - pkg/api/equality
   - pkg/api/errors
@@ -200,11 +162,15 @@ imports:
   - pkg/watch
   - third_party/forked/golang/reflect
 - name: k8s.io/apiserver
-  version: ab57ed5a72c3b67058f665d660e23bae18339fc2
+  version: a7f02eb8e3920e446965036c9610ec52a7ede92f
+  subpackages:
+  - pkg/util/flag
+  - pkg/util/logs
 - name: k8s.io/client-go
-  version: e356aa2e77ab4a5914c216c12ba14cce25a25ab0
+  version: ec52d278b25c8fef82a965d93afdc74771ea6963
   subpackages:
   - discovery
+  - discovery/fake
   - kubernetes/scheme
   - pkg/api
   - pkg/api/v1
@@ -245,6 +211,7 @@ imports:
   - pkg/version
   - rest
   - rest/watch
+  - testing
   - tools/auth
   - tools/cache
   - tools/clientcmd
@@ -260,7 +227,7 @@ imports:
 - name: k8s.io/gengo
   version: c79c13d131b0a8f42d05faa6491c12e94ccc6f30
 - name: k8s.io/kubernetes
-  version: ebb8d6e0fadfc95f3d64ccecc36c8ed2ac9224ef
+  version: 4bc5e7f9a6c25dc4c03d4d656f2cefd21540e28c
   subpackages:
   - pkg/api
   - pkg/api/install
@@ -312,27 +279,48 @@ imports:
   - pkg/apis/storage/v1
   - pkg/apis/storage/v1beta1
   - pkg/client/clientset_generated/clientset
+  - pkg/client/clientset_generated/clientset/fake
   - pkg/client/clientset_generated/clientset/scheme
   - pkg/client/clientset_generated/clientset/typed/admissionregistration/v1alpha1
+  - pkg/client/clientset_generated/clientset/typed/admissionregistration/v1alpha1/fake
   - pkg/client/clientset_generated/clientset/typed/apps/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/apps/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/authentication/v1
+  - pkg/client/clientset_generated/clientset/typed/authentication/v1/fake
   - pkg/client/clientset_generated/clientset/typed/authentication/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/authentication/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/authorization/v1
+  - pkg/client/clientset_generated/clientset/typed/authorization/v1/fake
   - pkg/client/clientset_generated/clientset/typed/authorization/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/authorization/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/autoscaling/v1
+  - pkg/client/clientset_generated/clientset/typed/autoscaling/v1/fake
   - pkg/client/clientset_generated/clientset/typed/autoscaling/v2alpha1
+  - pkg/client/clientset_generated/clientset/typed/autoscaling/v2alpha1/fake
   - pkg/client/clientset_generated/clientset/typed/batch/v1
+  - pkg/client/clientset_generated/clientset/typed/batch/v1/fake
   - pkg/client/clientset_generated/clientset/typed/batch/v2alpha1
+  - pkg/client/clientset_generated/clientset/typed/batch/v2alpha1/fake
   - pkg/client/clientset_generated/clientset/typed/certificates/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/certificates/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/core/v1
+  - pkg/client/clientset_generated/clientset/typed/core/v1/fake
   - pkg/client/clientset_generated/clientset/typed/extensions/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/extensions/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/networking/v1
+  - pkg/client/clientset_generated/clientset/typed/networking/v1/fake
   - pkg/client/clientset_generated/clientset/typed/policy/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/policy/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/rbac/v1alpha1
+  - pkg/client/clientset_generated/clientset/typed/rbac/v1alpha1/fake
   - pkg/client/clientset_generated/clientset/typed/rbac/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/rbac/v1beta1/fake
   - pkg/client/clientset_generated/clientset/typed/settings/v1alpha1
+  - pkg/client/clientset_generated/clientset/typed/settings/v1alpha1/fake
   - pkg/client/clientset_generated/clientset/typed/storage/v1
+  - pkg/client/clientset_generated/clientset/typed/storage/v1/fake
   - pkg/client/clientset_generated/clientset/typed/storage/v1beta1
+  - pkg/client/clientset_generated/clientset/typed/storage/v1beta1/fake
   - pkg/client/listers/core/v1
   - pkg/kubelet/types
   - pkg/util
