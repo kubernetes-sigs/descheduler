@@ -25,6 +25,7 @@ import (
 func main() {
 	out := os.Stdout
 	cmd := app.NewDeschedulerCommand(out)
+	cmd.AddCommand(app.NewVersionCommand())
 	if err := cmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
