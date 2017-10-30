@@ -4,4 +4,4 @@ go:
 script:
 - hack/verify-gofmt.sh
 - make build
-- make test
+- make test-unit
