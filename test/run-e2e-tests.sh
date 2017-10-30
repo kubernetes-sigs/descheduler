@@ -14,6 +14,6 @@
 
 #!/bin/bash
 
-# This just run unit-tests. Ignoring the current directory so as to avoid running e2e tests.
-go test $(go list github.com/kubernetes-incubator/descheduler/... | grep -v github.com/kubernetes-incubator/descheduler/vendor/| grep -v github.com/kubernetes-incubator/descheduler/test/)
+# This just run e2e tests.
+go test github.com/kubernetes-incubator/descheduler/test/e2e/ -v
 
