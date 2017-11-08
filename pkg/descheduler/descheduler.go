@@ -48,7 +48,7 @@ func Run(rs *options.DeschedulerServer) error {
 	}
 
 	stopChannel := make(chan struct{})
-	nodes, err := nodeutil.ReadyNodes(rs.Client, stopChannel)
+	nodes, err := nodeutil.ReadyNodes(rs.Client, rs.NodeSelector, stopChannel)
 	if err != nil {
 		return err
 	}
