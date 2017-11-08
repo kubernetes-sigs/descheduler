@@ -83,6 +83,9 @@ func GetNodeLister(client clientset.Interface, stopChannel <-chan struct{}) core
 	reflector := cache.NewReflector(listWatcher, &v1.Node{}, store, time.Hour)
 	reflector.RunUntil(stopChannel)
 
+	// To give some time so that listing works, chosen randomly
+	time.Sleep(100 * time.Millisecond)
+
 	return nodeLister
 }
 
