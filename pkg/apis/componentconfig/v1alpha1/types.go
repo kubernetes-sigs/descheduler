@@ -37,4 +37,7 @@ type DeschedulerConfiguration struct {
 
 	// Dry run
 	DryRun bool `json:"dryRun,omitempty"`
+
+	// Node selectors
+	NodeSelector string `json:"nodeSelector,omitempty"`
 }
