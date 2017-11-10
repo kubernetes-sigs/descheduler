@@ -19,12 +19,12 @@ package app
 
 import (
 	"flag"
-	"fmt"
 	"io"
 
 	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
 	"github.com/kubernetes-incubator/descheduler/pkg/descheduler"
 
+	"github.com/golang/glog"
 	"github.com/spf13/cobra"
 
 	aflag "k8s.io/apiserver/pkg/util/flag"
@@ -43,7 +43,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 			defer logs.FlushLogs()
 			err := Run(s)
 			if err != nil {
-				fmt.Println(err)
+				glog.Errorf("%v", err)
 			}
 		},
 	}
