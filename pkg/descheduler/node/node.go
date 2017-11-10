@@ -31,16 +31,23 @@ import (
 
 // ReadyNodes returns ready nodes irrespective of whether they are
 // schedulable or not.
-func ReadyNodes(client clientset.Interface, stopChannel <-chan struct{}) ([]*v1.Node, error) {
+func ReadyNodes(client clientset.Interface, nodeSelector string, stopChannel <-chan struct{}) ([]*v1.Node, error) {
 	nl := GetNodeLister(client, stopChannel)
-	nodes, err := nl.List(labels.Everything())
+
+	ns, err := labels.Parse(nodeSelector)
+	if err != nil {
+		return []*v1.Node{}, err
+	}
+
+	nodes, err := nl.List(ns)
+
 	if err != nil {
 		return []*v1.Node{}, err
 	}
 
 	if len(nodes) == 0 {
 		var err error
-		nItems, err := client.Core().Nodes().List(metav1.ListOptions{})
+		nItems, err := client.Core().Nodes().List(metav1.ListOptions{LabelSelector: nodeSelector})
 		if err != nil {
 			return []*v1.Node{}, err
 		}
