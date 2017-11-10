@@ -17,18 +17,14 @@ limitations under the License.
 package node
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/kubernetes-incubator/descheduler/test"
-	"k8s.io/apimachinery/pkg/runtime"
-	core "k8s.io/client-go/testing"
 	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset/fake"
 )
 
 func TestReadyNodes(t *testing.T) {
-	fakeClient := &fake.Clientset{}
 	node1 := test.BuildTestNode("node1", 1000, 2000, 9)
 	node1.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeOutOfDisk, Status: v1.ConditionTrue}}
 	node2 := test.BuildTestNode("node2", 1000, 2000, 9)
@@ -40,25 +36,6 @@ func TestReadyNodes(t *testing.T) {
 	node5.Spec.Unschedulable = true
 	node6 := test.BuildTestNode("node6", 1000, 2000, 9)
 	node6.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeReady, Status: v1.ConditionFalse}}
-
-	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
-		getAction := action.(core.GetAction)
-		switch getAction.GetName() {
-		case node1.Name:
-			return true, node1, nil
-		case node2.Name:
-			return true, node2, nil
-		case node3.Name:
-			return true, node3, nil
-		case node4.Name:
-			return true, node4, nil
-		case node5.Name:
-			return true, node5, nil
-		case node6.Name:
-			return true, node6, nil
-		}
-		return true, nil, fmt.Errorf("Wrong node: %v", getAction.GetName())
-	})
 
 	if !IsReady(node1) {
 		t.Errorf("Expected %v to be ready", node1.Name)
