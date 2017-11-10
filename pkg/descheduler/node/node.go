@@ -32,24 +32,30 @@ import (
 // ReadyNodes returns ready nodes irrespective of whether they are
 // schedulable or not.
 func ReadyNodes(client clientset.Interface, nodeSelector string, stopChannel <-chan struct{}) ([]*v1.Node, error) {
-	nl := GetNodeLister(client, stopChannel)
-
 	ns, err := labels.Parse(nodeSelector)
 	if err != nil {
 		return []*v1.Node{}, err
 	}
 
-	nodes, err := nl.List(ns)
-
-	if err != nil {
-		return []*v1.Node{}, err
+	var nodes []*v1.Node
+	nl := GetNodeLister(client, stopChannel)
+	if nl != nil {
+		// err is defined above
+		if nodes, err = nl.List(ns); err != nil {
+			return []*v1.Node{}, err
+		}
 	}
 
 	if len(nodes) == 0 {
-		var err error
+		glog.V(2).Infof("node lister returned empty list, now fetch directly")
+
 		nItems, err := client.Core().Nodes().List(metav1.ListOptions{LabelSelector: nodeSelector})
 		if err != nil {
 			return []*v1.Node{}, err
+		}
+
+		if nItems == nil || len(nItems.Items) == 0 {
+			return []*v1.Node{}, nil
 		}
 
 		for i := range nItems.Items {
@@ -68,6 +74,9 @@ func ReadyNodes(client clientset.Interface, nodeSelector string, stopChannel <-c
 }
 
 func GetNodeLister(client clientset.Interface, stopChannel <-chan struct{}) corelisters.NodeLister {
+	if stopChannel == nil {
+		return nil
+	}
 	listWatcher := cache.NewListWatchFromClient(client.Core().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
 	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	nodeLister := corelisters.NewNodeLister(store)

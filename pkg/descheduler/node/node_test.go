@@ -88,10 +88,8 @@ func TestReadyNodesWithNodeSelector(t *testing.T) {
 	node2.Labels = map[string]string{"type": "infra"}
 
 	fakeClient := fake.NewSimpleClientset(node1, node2)
-
 	nodeSelector := "type=compute"
-	stopChannel := make(chan struct{})
-	nodes, _ := ReadyNodes(fakeClient, nodeSelector, stopChannel)
+	nodes, _ := ReadyNodes(fakeClient, nodeSelector, nil)
 
 	if nodes[0].Name != "node1" {
 		t.Errorf("Expected node1, got %s", nodes[0].Name)

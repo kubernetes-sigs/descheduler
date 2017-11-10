@@ -19,6 +19,8 @@ package descheduler
 import (
 	"fmt"
 
+	"github.com/golang/glog"
+
 	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
 	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/client"
 	eutils "github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions/utils"
@@ -39,9 +41,9 @@ func Run(rs *options.DeschedulerServer) error {
 		return err
 	}
 	if deschedulerPolicy == nil {
-		return fmt.Errorf("\ndeschedulerPolicy is nil\n")
-
+		return fmt.Errorf("deschedulerPolicy is nil")
 	}
+
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(rs.Client)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		return err
@@ -51,6 +53,11 @@ func Run(rs *options.DeschedulerServer) error {
 	nodes, err := nodeutil.ReadyNodes(rs.Client, rs.NodeSelector, stopChannel)
 	if err != nil {
 		return err
+	}
+
+	if len(nodes) == 0 {
+		glog.V(1).Infof("node list is empty")
+		return nil
 	}
 
 	strategies.RemoveDuplicatePods(rs, deschedulerPolicy.Strategies["RemoveDuplicates"], evictionPolicyGroupVersion, nodes)
