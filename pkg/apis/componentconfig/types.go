@@ -37,4 +37,7 @@ type DeschedulerConfiguration struct {
 
 	// Dry run
 	DryRun bool
+
+	// Node selectors
+	NodeSelector string
 }

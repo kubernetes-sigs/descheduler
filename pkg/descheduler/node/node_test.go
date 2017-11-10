@@ -80,3 +80,20 @@ func TestReadyNodes(t *testing.T) {
 	}
 
 }
+
+func TestReadyNodesWithNodeSelector(t *testing.T) {
+	node1 := test.BuildTestNode("node1", 1000, 2000, 9)
+	node1.Labels = map[string]string{"type": "compute"}
+	node2 := test.BuildTestNode("node2", 1000, 2000, 9)
+	node2.Labels = map[string]string{"type": "infra"}
+
+	fakeClient := fake.NewSimpleClientset(node1, node2)
+
+	nodeSelector := "type=compute"
+	stopChannel := make(chan struct{})
+	nodes, _ := ReadyNodes(fakeClient, nodeSelector, stopChannel)
+
+	if nodes[0].Name != "node1" {
+		t.Errorf("Expected node1, got %s", nodes[0].Name)
+	}
+}
