@@ -32,7 +32,7 @@ $ make
 and run descheduler:
 
 ```sh
-$ ./_output/bin/descheduler --kubeconfig <path to kubeconfig> --policy-config-file <path-to-policy-file>
+$ ./_output/bin/descheduler --kubeconfig-file <path to kubeconfig> --policy-config-file <path-to-policy-file>
 ```
 
 For more information about available options run:
