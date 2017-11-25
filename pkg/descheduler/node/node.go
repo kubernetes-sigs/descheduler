@@ -105,9 +105,9 @@ func IsReady(node *v1.Node) bool {
 		}*/
 	}
 	// Ignore nodes that are marked unschedulable
-	/*if node.Spec.Unschedulable {
+	if node.Spec.Unschedulable {
 		glog.V(4).Infof("Ignoring node %v since it is unschedulable", node.Name)
 		return false
-	}*/
+	}
 	return true
 }
