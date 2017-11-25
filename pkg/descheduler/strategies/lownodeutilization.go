@@ -115,8 +115,10 @@ func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThr
 		glog.V(1).Infof("Node %#v usage: %#v", node.Name, usage)
 
 		if IsNodeWithLowUtilization(usage, thresholds) {
+			glog.V(1).Infof("Identified underutilized node: %v", node.ObjectMeta.Name)
 			lowNodes = append(lowNodes, nuMap)
 		} else if IsNodeAboveTargetUtilization(usage, targetThresholds) {
+			glog.V(1).Infof("Identified target node: %v", node.ObjectMeta.Name)
 			targetNodes = append(targetNodes, nuMap)
 		} else {
 			// Seems we don't need to collect them?
