@@ -41,6 +41,9 @@ func TestLowNodeUtilization(t *testing.T) {
 
 	n1 := test.BuildTestNode("n1", 4000, 3000, 9)
 	n2 := test.BuildTestNode("n2", 4000, 3000, 10)
+	n3 := test.BuildTestNode("n3", 4000, 3000, 10)
+	// Making n3 node unschedulable so that it won't counted in lowUtilized nodes list.
+	n3.Spec.Unschedulable = true
 	p1 := test.BuildTestPod("p1", 400, 0, n1.Name)
 	p2 := test.BuildTestPod("p2", 400, 0, n1.Name)
 	p3 := test.BuildTestPod("p3", 400, 0, n1.Name)
@@ -89,6 +92,9 @@ func TestLowNodeUtilization(t *testing.T) {
 		if strings.Contains(fieldString, "n2") {
 			return true, &v1.PodList{Items: []v1.Pod{*p9}}, nil
 		}
+		if strings.Contains(fieldString, "n3") {
+			return true, &v1.PodList{Items: []v1.Pod{}}, nil
+		}
 		return true, nil, fmt.Errorf("Failed to list: %v", list)
 	})
 	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
@@ -98,12 +104,17 @@ func TestLowNodeUtilization(t *testing.T) {
 			return true, n1, nil
 		case n2.Name:
 			return true, n2, nil
+		case n3.Name:
+			return true, n3, nil
 		}
 		return true, nil, fmt.Errorf("Wrong node: %v", getAction.GetName())
 	})
 	expectedPodsEvicted := 4
-	npm := CreateNodePodsMap(fakeClient, []*v1.Node{n1, n2})
-	lowNodes, targetNodes, _ := classifyNodes(npm, thresholds, targetThresholds)
+	npm := CreateNodePodsMap(fakeClient, []*v1.Node{n1, n2, n3})
+	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds)
+	if len(lowNodes) != 1 {
+		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
+	}
 	podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, targetThresholds, false)
 	if expectedPodsEvicted != podsEvicted {
 		t.Errorf("Expected %#v pods to be evicted but %#v got evicted", expectedPodsEvicted)

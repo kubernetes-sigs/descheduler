@@ -72,3 +72,33 @@ func TestReadyNodesWithNodeSelector(t *testing.T) {
 		t.Errorf("Expected node1, got %s", nodes[0].Name)
 	}
 }
+
+func TestIsNodeUschedulable(t *testing.T) {
+	tests := []struct {
+		description     string
+		node            *v1.Node
+		IsUnSchedulable bool
+	}{
+		{
+			description: "Node is expected to be schedulable",
+			node: &v1.Node{
+				Spec: v1.NodeSpec{Unschedulable: false},
+			},
+			IsUnSchedulable: false,
+		},
+		{
+			description: "Node is not expected to be schedulable because of unschedulable field",
+			node: &v1.Node{
+				Spec: v1.NodeSpec{Unschedulable: true},
+			},
+			IsUnSchedulable: true,
+		},
+	}
+	for _, test := range tests {
+		actualUnSchedulable := IsNodeUschedulable(test.node)
+		if actualUnSchedulable != test.IsUnSchedulable {
+			t.Errorf("Test %#v failed", test.description)
+		}
+	}
+
+}
