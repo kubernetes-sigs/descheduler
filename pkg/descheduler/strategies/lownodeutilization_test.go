@@ -18,6 +18,9 @@ package strategies
 
 import (
 	"fmt"
+	"strings"
+	"testing"
+
 	"github.com/kubernetes-incubator/descheduler/pkg/api"
 	"github.com/kubernetes-incubator/descheduler/test"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -25,8 +28,6 @@ import (
 	core "k8s.io/client-go/testing"
 	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset/fake"
-	"strings"
-	"testing"
 )
 
 // TODO: Make this table driven.
@@ -108,4 +109,56 @@ func TestLowNodeUtilization(t *testing.T) {
 		t.Errorf("Expected %#v pods to be evicted but %#v got evicted", expectedPodsEvicted)
 	}
 
+}
+
+func TestValidateThresholds(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   api.ResourceThresholds
+		succeed bool
+	}{
+		{
+			name:    "passing nil map for threshold",
+			input:   nil,
+			succeed: false,
+		},
+		{
+			name:    "passing no threshold",
+			input:   api.ResourceThresholds{},
+			succeed: false,
+		},
+		{
+			name: "passing unsupported resource name",
+			input: api.ResourceThresholds{
+				v1.ResourceCPU:     40,
+				v1.ResourceStorage: 25.5,
+			},
+			succeed: false,
+		},
+		{
+			name: "passing invalid resource name",
+			input: api.ResourceThresholds{
+				v1.ResourceCPU: 40,
+				"coolResource": 42.0,
+			},
+			succeed: false,
+		},
+		{
+			name: "passing a valid threshold with cpu, memory and pods",
+			input: api.ResourceThresholds{
+				v1.ResourceCPU:    20,
+				v1.ResourceMemory: 30,
+				v1.ResourcePods:   40,
+			},
+			succeed: true,
+		},
+	}
+
+	for _, test := range tests {
+		isValid := validateThresholds(test.input)
+
+		if isValid != test.succeed {
+			t.Errorf("expected validity of threshold: %#v\nto be %v but got %v instead", test.input, test.succeed, isValid)
+		}
+	}
 }
