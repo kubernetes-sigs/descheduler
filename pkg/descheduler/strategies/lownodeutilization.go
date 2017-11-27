@@ -28,6 +28,7 @@ import (
 	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
 	"github.com/kubernetes-incubator/descheduler/pkg/api"
 	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions"
+	nodeutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/node"
 	podutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/pod"
 )
 
@@ -58,7 +59,7 @@ func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerS
 	}
 
 	npm := CreateNodePodsMap(ds.Client, nodes)
-	lowNodes, targetNodes, _ := classifyNodes(npm, thresholds, targetThresholds)
+	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds)
 
 	if len(lowNodes) == 0 {
 		glog.V(1).Infof("No node is underutilized")
@@ -109,25 +110,25 @@ func validateTargetThresholds(targetThresholds api.ResourceThresholds) bool {
 	return true
 }
 
-func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThresholds api.ResourceThresholds) ([]NodeUsageMap, []NodeUsageMap, []NodeUsageMap) {
-	lowNodes, targetNodes, otherNodes := []NodeUsageMap{}, []NodeUsageMap{}, []NodeUsageMap{}
+// classifyNodes classifies the nodes into low-utilization or high-utilization nodes. If a node lies between
+// low and high thresholds, it is simply ignored.
+func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThresholds api.ResourceThresholds) ([]NodeUsageMap, []NodeUsageMap) {
+	lowNodes, targetNodes := []NodeUsageMap{}, []NodeUsageMap{}
 	for node, pods := range npm {
 		usage, nonRemovablePods, bePods, bPods, gPods := NodeUtilization(node, pods)
 		nuMap := NodeUsageMap{node, usage, nonRemovablePods, bePods, bPods, gPods}
 		glog.V(1).Infof("Node %#v usage: %#v", node.Name, usage)
 
-		if IsNodeWithLowUtilization(usage, thresholds) {
+		// Check if node is underutilized and if we can schedule pods on it.
+		if IsNodeWithLowUtilization(usage, thresholds) && !nodeutil.IsNodeUschedulable(node) {
 			glog.V(1).Infof("Identified underutilized node: %v", node.ObjectMeta.Name)
 			lowNodes = append(lowNodes, nuMap)
 		} else if IsNodeAboveTargetUtilization(usage, targetThresholds) {
 			glog.V(1).Infof("Identified target node: %v", node.ObjectMeta.Name)
 			targetNodes = append(targetNodes, nuMap)
-		} else {
-			// Seems we don't need to collect them?
-			otherNodes = append(otherNodes, nuMap)
 		}
 	}
-	return lowNodes, targetNodes, otherNodes
+	return lowNodes, targetNodes
 }
 
 func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVersion string, targetNodes, lowNodes []NodeUsageMap, targetThresholds api.ResourceThresholds, dryRun bool) int {
