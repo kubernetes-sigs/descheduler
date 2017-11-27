@@ -86,6 +86,7 @@ func GetNodeLister(client clientset.Interface, stopChannel <-chan struct{}) core
 	return nodeLister
 }
 
+// IsReady checks if the descheduler could run against given node.
 func IsReady(node *v1.Node) bool {
 	for i := range node.Status.Conditions {
 		cond := &node.Status.Conditions[i]
@@ -110,4 +111,13 @@ func IsReady(node *v1.Node) bool {
 		return false
 	}*/
 	return true
+}
+
+// IsNodeUschedulable checks if the node is unschedulable. This is helper function to check only in case of
+// underutilized node so that they won't be accounted for.
+func IsNodeUschedulable(node *v1.Node) bool {
+	if node.Spec.Unschedulable {
+		return true
+	}
+	return false
 }
