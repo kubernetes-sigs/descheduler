@@ -33,9 +33,7 @@ func TestReadyNodes(t *testing.T) {
 	node4 := test.BuildTestNode("node4", 1000, 2000, 9)
 	node4.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeNetworkUnavailable, Status: v1.ConditionTrue}}
 	node5 := test.BuildTestNode("node5", 1000, 2000, 9)
-	node5.Spec.Unschedulable = true
-	node6 := test.BuildTestNode("node6", 1000, 2000, 9)
-	node6.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeReady, Status: v1.ConditionFalse}}
+	node5.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeReady, Status: v1.ConditionFalse}}
 
 	if !IsReady(node1) {
 		t.Errorf("Expected %v to be ready", node1.Name)
@@ -49,11 +47,8 @@ func TestReadyNodes(t *testing.T) {
 	if !IsReady(node4) {
 		t.Errorf("Expected %v to be ready", node4.Name)
 	}
-	if !IsReady(node5) {
-		t.Errorf("Expected %v to be ready", node5.Name)
-	}
-	if IsReady(node6) {
-		t.Errorf("Expected %v to be not ready", node6.Name)
+	if IsReady(node5) {
+		t.Errorf("Expected %v to be not ready", node5.Name)
 	}
 
 }
