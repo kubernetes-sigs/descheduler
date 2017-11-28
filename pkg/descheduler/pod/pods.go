@@ -27,6 +27,35 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/types"
 )
 
+// IsEvictable checks if a pod is evictable or not.
+func IsEvictable(pod *v1.Pod) bool {
+	sr, err := CreatorRef(pod)
+	if err != nil {
+		sr = nil
+	}
+	if IsMirrorPod(pod) || IsPodWithLocalStorage(pod) || sr == nil || IsDaemonsetPod(sr) || IsCriticalPod(pod) {
+		return false
+	}
+	return true
+}
+
+// ListEvictablePodsOnNode returns the list of evictable pods on node.
+func ListEvictablePodsOnNode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, error) {
+	pods, err := ListPodsOnANode(client, node)
+	if err != nil {
+		return []*v1.Pod{}, err
+	}
+	evictablePods := make([]*v1.Pod, 0)
+	for _, pod := range pods {
+		if !IsEvictable(pod) {
+			continue
+		} else {
+			evictablePods = append(evictablePods, pod)
+		}
+	}
+	return evictablePods, nil
+}
+
 func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, error) {
 	podList, err := client.CoreV1().Pods(v1.NamespaceAll).List(
 		metav1.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": node.Name}).String()})
@@ -38,7 +67,6 @@ func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, erro
 	for i := range podList.Items {
 		pods = append(pods, &podList.Items[i])
 	}
-
 	return pods, nil
 }
 

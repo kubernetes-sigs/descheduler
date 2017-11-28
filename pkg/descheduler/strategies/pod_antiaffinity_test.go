@@ -19,7 +19,6 @@ package strategies
 import (
 	"testing"
 
-	"fmt"
 	"github.com/kubernetes-incubator/descheduler/test"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,6 +33,9 @@ func TestPodAntiAffinity(t *testing.T) {
 	p2 := test.BuildTestPod("p2", 100, 0, node.Name)
 	p3 := test.BuildTestPod("p3", 100, 0, node.Name)
 	p3.Labels = map[string]string{"foo": "bar"}
+	p1.Annotations = test.GetNormalPodAnnotation()
+	p2.Annotations = test.GetNormalPodAnnotation()
+	p3.Annotations = test.GetNormalPodAnnotation()
 	p1.Spec.Affinity = &v1.Affinity{
 		PodAntiAffinity: &v1.PodAntiAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -80,7 +82,6 @@ func TestPodAntiAffinity(t *testing.T) {
 	expectedEvictedPodCount := 1
 	podsEvicted := removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false)
 	if podsEvicted != expectedEvictedPodCount {
-		fmt.Println(podsEvicted)
 		t.Errorf("Unexpected no of pods evicted")
 	}
 }

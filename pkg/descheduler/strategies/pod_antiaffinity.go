@@ -44,7 +44,7 @@ func removePodsWithAffinityRules(client clientset.Interface, policyGroupVersion 
 	podsEvicted := 0
 	for _, node := range nodes {
 		glog.V(1).Infof("Processing node: %#v\n", node.Name)
-		pods, err := podutil.ListPodsOnANode(client, node)
+		pods, err := podutil.ListEvictablePodsOnNode(client, node)
 		if err != nil {
 			return 0
 		}
