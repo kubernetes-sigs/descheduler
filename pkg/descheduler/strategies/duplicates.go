@@ -70,7 +70,7 @@ func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, 
 
 // ListDuplicatePodsOnANode lists duplicate pods on a given node.
 func ListDuplicatePodsOnANode(client clientset.Interface, node *v1.Node) DuplicatePodsMap {
-	pods, err := podutil.ListPodsOnANode(client, node)
+	pods, err := podutil.ListEvictablePodsOnNode(client, node)
 	if err != nil {
 		return nil
 	}
@@ -81,13 +81,9 @@ func ListDuplicatePodsOnANode(client clientset.Interface, node *v1.Node) Duplica
 func FindDuplicatePods(pods []*v1.Pod) DuplicatePodsMap {
 	dpm := DuplicatePodsMap{}
 	for _, pod := range pods {
-		sr, err := podutil.CreatorRef(pod)
-		if err != nil || sr == nil {
-			continue
-		}
-		if podutil.IsMirrorPod(pod) || podutil.IsDaemonsetPod(sr) || podutil.IsPodWithLocalStorage(pod) || podutil.IsCriticalPod(pod) {
-			continue
-		}
+		// Ignoring the error here as in the ListDuplicatePodsOnNode function we call ListEvictablePodsOnNode
+		// which checks for error.
+		sr, _ := podutil.CreatorRef(pod)
 		s := strings.Join([]string{sr.Reference.Kind, sr.Reference.Namespace, sr.Reference.Name}, "/")
 		dpm[s] = append(dpm[s], pod)
 	}
