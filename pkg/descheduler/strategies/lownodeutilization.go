@@ -284,12 +284,8 @@ func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*
 	gPods := []*v1.Pod{}
 	totalReqs := map[v1.ResourceName]resource.Quantity{}
 	for _, pod := range pods {
-		sr, err := podutil.CreatorRef(pod)
-		if err != nil {
-			sr = nil
-		}
-
-		if podutil.IsMirrorPod(pod) || podutil.IsPodWithLocalStorage(pod) || sr == nil || podutil.IsDaemonsetPod(sr) || podutil.IsCriticalPod(pod) {
+		// We need to compute the usage of nonRemovablePods unless it is a best effort pod. So, cannot use podutil.ListEvictablePodsOnNode
+		if !podutil.IsEvictable(pod) {
 			nonRemovablePods = append(nonRemovablePods, pod)
 			if podutil.IsBestEffortPod(pod) {
 				continue
