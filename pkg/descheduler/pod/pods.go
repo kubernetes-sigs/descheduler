@@ -57,8 +57,13 @@ func ListEvictablePodsOnNode(client clientset.Interface, node *v1.Node) ([]*v1.P
 }
 
 func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, error) {
+	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + node.Name + ",status.phase!=" + string(api.PodSucceeded) + ",status.phase!=" + string(api.PodFailed))
+	if err != nil {
+		return []*v1.Pod{}, err
+	}
+
 	podList, err := client.CoreV1().Pods(v1.NamespaceAll).List(
-		metav1.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": node.Name}).String()})
+		metav1.ListOptions{FieldSelector: fieldSelector.String()})
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
