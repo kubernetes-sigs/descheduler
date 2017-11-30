@@ -55,4 +55,6 @@ func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&rs.DryRun, "dry-run", rs.DryRun, "execute descheduler in dry run mode.")
 	// node-selector query causes descheduler to run only on nodes that matches the node labels in the query
 	fs.StringVar(&rs.NodeSelector, "node-selector", rs.NodeSelector, "Selector (label query) to filter on, supports '=', '==', and '!='.(e.g. -l key1=value1,key2=value2)")
+	// Enables CPU and memory profiling for descheduler.
+	fs.BoolVar(&rs.EnableProfiling, "enable-profiling", rs.EnableProfiling, "Enables CPU and memory profiling. The files are created as cpu%time.pprof and heap%time.pprof")
 }

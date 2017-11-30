@@ -40,4 +40,7 @@ type DeschedulerConfiguration struct {
 
 	// Node selectors
 	NodeSelector string
+
+	// Enables both CPU & memory profiling for descheduler.
+	EnableProfiling bool
 }

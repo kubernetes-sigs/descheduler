@@ -29,6 +29,10 @@ import (
 
 	aflag "k8s.io/apiserver/pkg/util/flag"
 	"k8s.io/apiserver/pkg/util/logs"
+
+	"os"
+	"runtime/pprof"
+	"time"
 )
 
 // NewDeschedulerCommand creates a *cobra.Command object with default parameters
@@ -57,5 +61,20 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 }
 
 func Run(rs *options.DeschedulerServer) error {
+	if rs.EnableProfiling {
+		timeNow := time.Now().Format("20060102150405")
+		// As of now, adding only CPU & memory profiles, we can include
+		// more profiles like blocking, trace, mutex. When we move to http
+		// based profiling all those profiles are automatically added.
+		cpuprofile, err := os.Create("cpu" + timeNow + ".pprof")
+		// The pprof file is of format cpu20171130152506.pprof
+		heapprofile, err := os.Create("heap" + timeNow + ".pprof")
+		if err != nil {
+			glog.Errorf("%v", err)
+		}
+		pprof.StartCPUProfile(cpuprofile)
+		defer pprof.StopCPUProfile()
+		pprof.WriteHeapProfile(heapprofile)
+	}
 	return descheduler.Run(rs)
 }
