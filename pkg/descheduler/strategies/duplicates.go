@@ -81,9 +81,15 @@ func ListDuplicatePodsOnANode(client clientset.Interface, node *v1.Node) Duplica
 func FindDuplicatePods(pods []*v1.Pod) DuplicatePodsMap {
 	dpm := DuplicatePodsMap{}
 	for _, pod := range pods {
-		// Ignoring the error here as in the ListDuplicatePodsOnNode function we call ListEvictablePodsOnNode
-		// which checks for error.
-		sr, _ := podutil.CreatorRef(pod)
+		var sr *v1.SerializedReference
+		var ok bool
+		// Check if sr exists in the map
+		if sr, ok = podutil.NewPodRefMap[pod.Name]; !ok {
+			// Ignoring the error here as in the ListDuplicatePodsOnNode function we call ListEvictablePodsOnNode
+			// which checks for error.
+			// Fallback to computing from CreatorRef.
+			sr, _ = podutil.CreatorRef(pod)
+		}
 		s := strings.Join([]string{sr.Reference.Kind, sr.Reference.Namespace, sr.Reference.Name}, "/")
 		dpm[s] = append(dpm[s], pod)
 	}

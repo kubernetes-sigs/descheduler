@@ -19,6 +19,7 @@ package strategies
 import (
 	"testing"
 
+	"fmt"
 	"github.com/kubernetes-incubator/descheduler/test"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -76,4 +77,31 @@ func TestFindDuplicatePods(t *testing.T) {
 		t.Errorf("Unexpected no of pods evicted")
 	}
 
+}
+
+// BenchmarkDuplicatePodsOnANode is used for benchmarking duplicate pod removal strategy.
+func BenchmarkDuplicatePodsOnANode(b *testing.B) {
+	podList := make([]v1.Pod, 0)
+	nodeList := make([]v1.Node, 0)
+	nl := make([]*v1.Node, 0)
+	// Simulating a 250 node cluster with 100 pods on each node.
+	for i := 0; i < 250; i++ {
+		nodeGenerated := test.BuildTestNode("node%d", 2000, 3000, 100)
+		nodeList = append(nodeList, *nodeGenerated)
+		nl = append(nl, nodeGenerated)
+		for i := 0; i < 100; i++ {
+			podGenerated := test.BuildTestPod(fmt.Sprintf("pod%d", i), 0, 0, nodeGenerated.Name)
+			podGenerated.Annotations = test.GetReplicaSetAnnotation()
+			podList = append(podList, *podGenerated)
+		}
+	}
+	fakeClient := &fake.Clientset{}
+	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+		return true, &v1.PodList{Items: podList}, nil
+	})
+	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
+		return true, &v1.NodeList{Items: nodeList}, nil
+	})
+	podsEvicted := deleteDuplicatePods(fakeClient, "v1", nl, false)
+	fmt.Println(podsEvicted)
 }
