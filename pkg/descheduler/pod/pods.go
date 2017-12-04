@@ -27,6 +27,13 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/types"
 )
 
+// Map to hold pod Name to serialized reference.
+type PodRefMap map[string]*v1.SerializedReference
+
+// A global variable to hold pod Name to serialized reference.
+// TODO: Make this metadata accessible across all strategies. Some items that could go in include podlist on node etc.
+var NewPodRefMap = PodRefMap{}
+
 // IsEvictable checks if a pod is evictable or not.
 func IsEvictable(pod *v1.Pod) bool {
 	sr, err := CreatorRef(pod)
@@ -36,6 +43,7 @@ func IsEvictable(pod *v1.Pod) bool {
 	if IsMirrorPod(pod) || IsPodWithLocalStorage(pod) || sr == nil || IsDaemonsetPod(sr) || IsCriticalPod(pod) {
 		return false
 	}
+	NewPodRefMap[pod.Name] = sr
 	return true
 }
 
