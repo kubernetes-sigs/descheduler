@@ -33,6 +33,9 @@ func TestPodTypes(t *testing.T) {
 	p3 := test.BuildTestPod("p3", 400, 0, n1.Name)
 	p4 := test.BuildTestPod("p4", 400, 0, n1.Name)
 	p5 := test.BuildTestPod("p5", 400, 0, n1.Name)
+	p6 := test.BuildTestPod("p6", 400, 0, n1.Name)
+	p6.Spec.Containers[0].Resources.Requests[v1.ResourceNvidiaGPU] = *resource.NewMilliQuantity(3, resource.DecimalSI)
+	p6.Annotations = test.GetNormalPodAnnotation()
 
 	p1.Annotations = test.GetReplicaSetAnnotation()
 	// The following 4 pods won't get evicted.
@@ -71,6 +74,9 @@ func TestPodTypes(t *testing.T) {
 	sr, _ = CreatorRef(p1)
 	if IsDaemonsetPod(sr) || IsPodWithLocalStorage(p1) || IsCriticalPod(p1) || IsMirrorPod(p1) {
 		t.Errorf("Expected p1 to be a normal pod.")
+	}
+	if !IsLatencySensitivePod(p6) {
+		t.Errorf("Expected p6 to be latency sensitive pod")
 	}
 
 }
