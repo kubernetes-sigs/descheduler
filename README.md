@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/kubernetes-incubator/descheduler.svg?branch=master)](https://travis-ci.org/kubernetes-incubator/descheduler)
+
 # Descheduler for Kubernetes
 
 ## Introduction
