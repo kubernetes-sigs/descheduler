@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/kubernetes-incubator/descheduler.svg?branch=master)](https://travis-ci.org/kubernetes-incubator/descheduler)
+[![Go Report Card](https://goreportcard.com/badge/github.com/kubernetes-incubator/descheduler)](https://goreportcard.com/report/github.com/kubernetes-incubator/descheduler)
 
 # Descheduler for Kubernetes
 
