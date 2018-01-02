@@ -24,9 +24,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/v1"
 )
 
-// TODO:@ravisantoshgudimetla. As of now building some test pods here. This needs to
-// move to utils after refactor.
-// buildTestPod creates a test pod with given parameters.
+// BuildTestPod creates a test pod with given parameters.
 func BuildTestPod(name string, cpu int64, memory int64, nodeName string) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
