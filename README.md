@@ -152,7 +152,7 @@ $ kubectl create -f descheduler-job.yaml
 ## Policy and Strategies
  
 Descheduler's policy is configurable and includes strategies to be enabled or disabled.
-Two strategies, `RemoveDuplicates` and `LowNodeUtilization` are currently implemented.
+Three strategies, `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity` are currently implemented.
 As part of the policy, the parameters associated with the strategies can be configured too.
 By default, all strategies are enabled.
 
@@ -164,7 +164,7 @@ those duplicate pods are evicted for better spreading of pods in a cluster. This
 if some nodes went down due to whatever reasons, and pods on them were moved to other nodes leading to
 more than one pod associated with RS or RC, for example, running on same node. Once the failed nodes
 are ready again, this strategy could be enabled to evict those duplicate pods. Currently, there are no
-parameters associated with this strategy. To disable this strategy, the policy would look like:
+parameters associated with this strategy. To disable this strategy, the policy should look like:
 
 ```
 apiVersion: "descheduler/v1alpha1"
@@ -216,6 +216,18 @@ This parameter can be configured to activate the strategy only when number of un
 are above the configured value. This could be helpful in large clusters where a few nodes could go
 under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero.
 
+### RemovePodsViolatingInterPodAntiAffinity
+
+This strategy makes sure that pods violating interpod anti-affinity are removed from nodes. For example, if there is podA on node and podB and podC(running on same node) have antiaffinity rules which prohibit them to run on the same node, then podA will be evicted from the node so that podB and podC could run. This issue could happen, when the anti-affinity rules for pods B,C are created when they are already running on node. Currently, there are no parameters associated with this strategy. To disable this strategy, the policy should look like:
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "RemovePodsViolatingInterPodAntiAffinity":
+     enabled: false
+```
+
 ## Pod Evictions
 
 When the descheduler decides to evict pods from a node, it employs following general mechanism:
@@ -235,10 +247,8 @@ disruption budget (PDB). The pods are evicted by using eviction subresource to h
 
 This roadmap is not in any particular order.
 
-* Addition of test cases (unit and end-to-end)
-* Ability to run inside a pod as a job
 * Strategy to consider taints and tolerations
-* Consideration of pod affinity and anti-affinity
+* Consideration of pod affinity 
 * Strategy to consider pod life time
 * Strategy to consider number of pending pods
 * Integration with cluster autoscaler
