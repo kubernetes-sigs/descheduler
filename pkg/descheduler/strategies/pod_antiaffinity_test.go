@@ -33,9 +33,9 @@ func TestPodAntiAffinity(t *testing.T) {
 	p2 := test.BuildTestPod("p2", 100, 0, node.Name)
 	p3 := test.BuildTestPod("p3", 100, 0, node.Name)
 	p3.Labels = map[string]string{"foo": "bar"}
-	p1.Annotations = test.GetNormalPodAnnotation()
-	p2.Annotations = test.GetNormalPodAnnotation()
-	p3.Annotations = test.GetNormalPodAnnotation()
+	p1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	p2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	p3.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p1.Spec.Affinity = &v1.Affinity{
 		PodAntiAffinity: &v1.PodAntiAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
