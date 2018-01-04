@@ -35,14 +35,16 @@ func TestPodTypes(t *testing.T) {
 	p5 := test.BuildTestPod("p5", 400, 0, n1.Name)
 	p6 := test.BuildTestPod("p6", 400, 0, n1.Name)
 	p6.Spec.Containers[0].Resources.Requests[v1.ResourceNvidiaGPU] = *resource.NewMilliQuantity(3, resource.DecimalSI)
-	p6.Annotations = test.GetNormalPodAnnotation()
 
-	p1.Annotations = test.GetReplicaSetAnnotation()
+	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+
+	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	// The following 4 pods won't get evicted.
 	// A daemonset.
-	p2.Annotations = test.GetDaemonSetAnnotation()
+	//p2.Annotations = test.GetDaemonSetAnnotation()
+	p2.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 	// A pod with local storage.
-	p3.Annotations = test.GetNormalPodAnnotation()
+	p3.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p3.Spec.Volumes = []v1.Volume{
 		{
 			Name: "sample",
@@ -67,12 +69,12 @@ func TestPodTypes(t *testing.T) {
 	if !IsPodWithLocalStorage(p3) {
 		t.Errorf("Expected p3 to be a pod with local storage.")
 	}
-	sr, _ := CreatorRef(p2)
-	if !IsDaemonsetPod(sr) {
+	ownerRefList := OwnerRef(p2)
+	if !IsDaemonsetPod(ownerRefList) {
 		t.Errorf("Expected p2 to be a daemonset pod.")
 	}
-	sr, _ = CreatorRef(p1)
-	if IsDaemonsetPod(sr) || IsPodWithLocalStorage(p1) || IsCriticalPod(p1) || IsMirrorPod(p1) {
+	ownerRefList = OwnerRef(p1)
+	if IsDaemonsetPod(ownerRefList) || IsPodWithLocalStorage(p1) || IsCriticalPod(p1) || IsMirrorPod(p1) {
 		t.Errorf("Expected p1 to be a normal pod.")
 	}
 	if !IsLatencySensitivePod(p6) {

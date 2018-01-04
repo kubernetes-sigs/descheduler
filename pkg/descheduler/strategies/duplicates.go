@@ -83,9 +83,12 @@ func FindDuplicatePods(pods []*v1.Pod) DuplicatePodsMap {
 	for _, pod := range pods {
 		// Ignoring the error here as in the ListDuplicatePodsOnNode function we call ListEvictablePodsOnNode
 		// which checks for error.
-		sr, _ := podutil.CreatorRef(pod)
-		s := strings.Join([]string{sr.Reference.Kind, sr.Reference.Namespace, sr.Reference.Name}, "/")
-		dpm[s] = append(dpm[s], pod)
+		ownerRefList := podutil.OwnerRef(pod)
+		for _, ownerRef := range ownerRefList {
+			// ownerRef doesn't need namespace since the assumption is owner needs to be in the same namespace.
+			s := strings.Join([]string{ownerRef.Kind, ownerRef.Name}, "/")
+			dpm[s] = append(dpm[s], pod)
+		}
 	}
 	return dpm
 }
