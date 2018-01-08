@@ -62,25 +62,25 @@ func GetMirrorPodAnnotation() map[string]string {
 	}
 }
 
-// GetNormalPodAnnotation returns the annotation needed for a pod.
-func GetNormalPodAnnotation() map[string]string {
-	return map[string]string{
-		"kubernetes.io/created-by": "{\"kind\":\"SerializedReference\",\"apiVersion\":\"v1\",\"reference\":{\"kind\":\"Pod\"}}",
-	}
+// GetNormalPodOwnerRefList returns the ownerRef needed for a pod.
+func GetNormalPodOwnerRefList() []metav1.OwnerReference {
+	ownerRefList := make([]metav1.OwnerReference, 0)
+	ownerRefList = append(ownerRefList, metav1.OwnerReference{Kind: "Pod", APIVersion: "v1"})
+	return ownerRefList
 }
 
-// GetReplicaSetAnnotation returns the annotation needed for replicaset pod.
-func GetReplicaSetAnnotation() map[string]string {
-	return map[string]string{
-		"kubernetes.io/created-by": "{\"kind\":\"SerializedReference\",\"apiVersion\":\"v1\",\"reference\":{\"kind\":\"ReplicaSet\"}}",
-	}
+// GetReplicaSetOwnerRefList returns the ownerRef needed for replicaset pod.
+func GetReplicaSetOwnerRefList() []metav1.OwnerReference {
+	ownerRefList := make([]metav1.OwnerReference, 0)
+	ownerRefList = append(ownerRefList, metav1.OwnerReference{Kind: "ReplicaSet", APIVersion: "v1"})
+	return ownerRefList
 }
 
-// GetDaemonSetAnnotation returns the annotation needed for daemonset pod.
-func GetDaemonSetAnnotation() map[string]string {
-	return map[string]string{
-		"kubernetes.io/created-by": "{\"kind\":\"SerializedReference\",\"apiVersion\":\"v1\",\"reference\":{\"kind\":\"DaemonSet\"}}",
-	}
+// GetDaemonSetOwnerRefList returns the ownerRef needed for daemonset pod.
+func GetDaemonSetOwnerRefList() []metav1.OwnerReference {
+	ownerRefList := make([]metav1.OwnerReference, 0)
+	ownerRefList = append(ownerRefList, metav1.OwnerReference{Kind: "DaemonSet", APIVersion: "v1"})
+	return ownerRefList
 }
 
 // GetCriticalPodAnnotation returns the annotation needed for critical pod.
