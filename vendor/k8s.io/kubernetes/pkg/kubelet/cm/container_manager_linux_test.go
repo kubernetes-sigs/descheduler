@@ -75,6 +75,26 @@ func (mi *fakeMountInterface) PathIsDevice(pathname string) (bool, error) {
 	return true, nil
 }
 
+func (mi *fakeMountInterface) MakeRShared(path string) error {
+	return nil
+}
+
+func (mi *fakeMountInterface) GetFileType(pathname string) (mount.FileType, error) {
+	return mount.FileType("fake"), nil
+}
+
+func (mi *fakeMountInterface) MakeDir(pathname string) error {
+	return nil
+}
+
+func (mi *fakeMountInterface) MakeFile(pathname string) error {
+	return nil
+}
+
+func (mi *fakeMountInterface) ExistsPath(pathname string) bool {
+	return true
+}
+
 func fakeContainerMgrMountInt() mount.Interface {
 	return &fakeMountInterface{
 		[]mount.MountPoint{

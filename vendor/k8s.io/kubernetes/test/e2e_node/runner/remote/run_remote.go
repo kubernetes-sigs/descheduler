@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -45,10 +46,12 @@ import (
 )
 
 var testArgs = flag.String("test_args", "", "Space-separated list of arguments to pass to Ginkgo test runner.")
+var testSuite = flag.String("test-suite", "default", "Test suite the runner initializes with. Currently support default|conformance")
 var instanceNamePrefix = flag.String("instance-name-prefix", "", "prefix for instance names")
 var zone = flag.String("zone", "", "gce zone the hosts live in")
 var project = flag.String("project", "", "gce project the hosts live in")
 var imageConfigFile = flag.String("image-config-file", "", "yaml file describing images to run")
+var imageConfigDir = flag.String("image-config-dir", "", "(optional)path to image config files")
 var imageProject = flag.String("image-project", "", "gce project the hosts live in")
 var images = flag.String("images", "", "images to test")
 var hosts = flag.String("hosts", "", "hosts to test")
@@ -59,6 +62,33 @@ var instanceMetadata = flag.String("instance-metadata", "", "key/value metadata 
 var gubernator = flag.Bool("gubernator", false, "If true, output Gubernator link to view logs")
 var ginkgoFlags = flag.String("ginkgo-flags", "", "Passed to ginkgo to specify additional flags such as --skip=.")
 var systemSpecName = flag.String("system-spec-name", "", "The name of the system spec used for validating the image in the node conformance test. The specs are at test/e2e_node/system/specs/. If unspecified, the default built-in spec (system.DefaultSpec) will be used.")
+
+// envs is the type used to collect all node envs. The key is the env name,
+// and the value is the env value
+type envs map[string]string
+
+// String function of flag.Value
+func (e *envs) String() string {
+	return fmt.Sprint(*e)
+}
+
+// Set function of flag.Value
+func (e *envs) Set(value string) error {
+	kv := strings.SplitN(value, "=", 2)
+	if len(kv) != 2 {
+		return fmt.Errorf("invalid env string")
+	}
+	emap := *e
+	emap[kv[0]] = kv[1]
+	return nil
+}
+
+// nodeEnvs is the node envs from the flag `node-env`.
+var nodeEnvs = make(envs)
+
+func init() {
+	flag.Var(&nodeEnvs, "node-env", "An environment variable passed to instance as metadata, e.g. when '--node-env=PATH=/usr/bin' is specified, there will be an extra instance metadata 'PATH=/usr/bin'.")
+}
 
 const (
 	defaultMachine                = "n1-standard-1"
@@ -113,6 +143,7 @@ type Resources struct {
 
 type GCEImage struct {
 	Image      string `json:"image, omitempty"`
+	ImageDesc  string `json:"image_description, omitempty"`
 	Project    string `json:"project"`
 	Metadata   string `json:"metadata"`
 	ImageRegex string `json:"image_regex, omitempty"`
@@ -131,7 +162,10 @@ type internalImageConfig struct {
 }
 
 type internalGCEImage struct {
-	image     string
+	image string
+	// imageDesc is the description of the image. If empty, the value in the
+	// 'image' will be used.
+	imageDesc string
 	project   string
 	resources Resources
 	metadata  *compute.Metadata
@@ -139,27 +173,18 @@ type internalGCEImage struct {
 	tests     []string
 }
 
-// parseFlags parse subcommands and flags
-func parseFlags() {
-	if len(os.Args) <= 1 {
-		glog.Fatalf("Too few flags specified: %v", os.Args)
-	}
-	// Parse subcommand.
-	subcommand := os.Args[1]
-	switch subcommand {
+func main() {
+	flag.Parse()
+	switch *testSuite {
 	case "conformance":
 		suite = remote.InitConformanceRemote()
 	// TODO: Add subcommand for node soaking, node conformance, cri validation.
-	default:
+	case "default":
 		// Use node e2e suite by default if no subcommand is specified.
 		suite = remote.InitNodeE2ERemote()
+	default:
+		glog.Fatalf("--test-suite must be one of default or conformance")
 	}
-	// Parse test flags.
-	flag.CommandLine.Parse(os.Args[2:])
-}
-
-func main() {
-	parseFlags()
 
 	rand.Seed(time.Now().UTC().UnixNano())
 	if *buildOnly {
@@ -181,8 +206,13 @@ func main() {
 		images: make(map[string]internalGCEImage),
 	}
 	if *imageConfigFile != "" {
+		configPath := *imageConfigFile
+		if *imageConfigDir != "" {
+			configPath = filepath.Join(*imageConfigDir, *imageConfigFile)
+		}
+
 		// parse images
-		imageConfigData, err := ioutil.ReadFile(*imageConfigFile)
+		imageConfigData, err := ioutil.ReadFile(configPath)
 		if err != nil {
 			glog.Fatalf("Could not read image config file provided: %v", err)
 		}
@@ -204,13 +234,21 @@ func main() {
 				images = []string{imageConfig.Image}
 			}
 			for _, image := range images {
+				metadata := imageConfig.Metadata
+				if len(strings.TrimSpace(*instanceMetadata)) > 0 {
+					metadata += "," + *instanceMetadata
+				}
 				gceImage := internalGCEImage{
 					image:     image,
+					imageDesc: imageConfig.ImageDesc,
 					project:   imageConfig.Project,
-					metadata:  getImageMetadata(imageConfig.Metadata),
+					metadata:  getImageMetadata(metadata),
 					machine:   imageConfig.Machine,
 					tests:     imageConfig.Tests,
 					resources: imageConfig.Resources,
+				}
+				if gceImage.imageDesc == "" {
+					gceImage.imageDesc = gceImage.image
 				}
 				if isRegex && len(images) > 1 {
 					// Use image name when shortName is not unique.
@@ -283,7 +321,7 @@ func main() {
 			fmt.Printf("Initializing e2e tests using host %s.\n", host)
 			running++
 			go func(host string, junitFilePrefix string) {
-				results <- testHost(host, *cleanup, junitFilePrefix, *ginkgoFlags)
+				results <- testHost(host, *cleanup, "", junitFilePrefix, *ginkgoFlags)
 			}(host, host)
 		}
 	}
@@ -361,7 +399,7 @@ func getImageMetadata(input string) *compute.Metadata {
 		val := v
 		metadataItems = append(metadataItems, &compute.MetadataItems{
 			Key:   k,
-			Value: val,
+			Value: &val,
 		})
 	}
 	ret := compute.Metadata{Items: metadataItems}
@@ -369,7 +407,7 @@ func getImageMetadata(input string) *compute.Metadata {
 }
 
 // Run tests in archive against host
-func testHost(host string, deleteFiles bool, junitFilePrefix string, ginkgoFlagsStr string) *TestResult {
+func testHost(host string, deleteFiles bool, imageDesc, junitFilePrefix, ginkgoFlagsStr string) *TestResult {
 	instance, err := computeService.Instances.Get(*project, *zone, host).Do()
 	if err != nil {
 		return &TestResult{
@@ -399,7 +437,7 @@ func testHost(host string, deleteFiles bool, junitFilePrefix string, ginkgoFlags
 		}
 	}
 
-	output, exitOk, err := remote.RunRemote(suite, path, host, deleteFiles, junitFilePrefix, *testArgs, ginkgoFlagsStr, *systemSpecName)
+	output, exitOk, err := remote.RunRemote(suite, path, host, deleteFiles, imageDesc, junitFilePrefix, *testArgs, ginkgoFlagsStr, *systemSpecName)
 	return &TestResult{
 		output: output,
 		err:    err,
@@ -485,7 +523,7 @@ func testImage(imageConfig *internalGCEImage, junitFilePrefix string) *TestResul
 	// If we are going to delete the instance, don't bother with cleaning up the files
 	deleteFiles := !*deleteInstances && *cleanup
 
-	result := testHost(host, deleteFiles, junitFilePrefix, ginkgoFlagsStr)
+	result := testHost(host, deleteFiles, imageConfig.imageDesc, junitFilePrefix, ginkgoFlagsStr)
 	// This is a temporary solution to collect serial node serial log. Only port 1 contains useful information.
 	// TODO(random-liu): Extract out and unify log collection logic with cluste e2e.
 	serialPortOutput, err := computeService.Instances.GetSerialPortOutput(*project, *zone, host).Port(1).Do()
@@ -532,10 +570,11 @@ func createInstance(imageConfig *internalGCEImage) (string, error) {
 
 	for _, accelerator := range imageConfig.resources.Accelerators {
 		if i.GuestAccelerators == nil {
+			autoRestart := true
 			i.GuestAccelerators = []*compute.AcceleratorConfig{}
 			i.Scheduling = &compute.Scheduling{
 				OnHostMaintenance: "TERMINATE",
-				AutomaticRestart:  true,
+				AutomaticRestart:  &autoRestart,
 			}
 		}
 		aType := fmt.Sprintf(acceleratorTypeResourceFormat, *project, *zone, accelerator.Type)
@@ -579,6 +618,8 @@ func createInstance(imageConfig *internalGCEImage) (string, error) {
 		if len(externalIp) > 0 {
 			remote.AddHostnameIp(name, externalIp)
 		}
+		// TODO(random-liu): Remove the docker version check. Use some other command to check
+		// instance readiness.
 		var output string
 		output, err = remote.SSH(name, "docker", "version")
 		if err != nil {
@@ -619,7 +660,7 @@ func isCloudInitUsed(metadata *compute.Metadata) bool {
 		return false
 	}
 	for _, item := range metadata.Items {
-		if item.Key == "user-data" && strings.HasPrefix(item.Value, "#cloud-config") {
+		if item.Key == "user-data" && item.Value != nil && strings.HasPrefix(*item.Value, "#cloud-config") {
 			return true
 		}
 	}
@@ -689,12 +730,19 @@ func parseInstanceMetadata(str string) map[string]string {
 			glog.Fatalf("Invalid instance metadata: %q", s)
 			continue
 		}
-		v, err := ioutil.ReadFile(kp[1])
+		metaPath := kp[1]
+		if *imageConfigDir != "" {
+			metaPath = filepath.Join(*imageConfigDir, metaPath)
+		}
+		v, err := ioutil.ReadFile(metaPath)
 		if err != nil {
-			glog.Fatalf("Failed to read metadata file %q: %v", kp[1], err)
+			glog.Fatalf("Failed to read metadata file %q: %v", metaPath, err)
 			continue
 		}
 		metadata[kp[0]] = string(v)
+	}
+	for k, v := range nodeEnvs {
+		metadata[k] = v
 	}
 	return metadata
 }
