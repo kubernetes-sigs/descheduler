@@ -20,10 +20,10 @@ import (
 	"sort"
 
 	"github.com/golang/glog"
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/kubernetes/pkg/api/v1"
+	clientset "k8s.io/client-go/kubernetes"
 	helper "k8s.io/kubernetes/pkg/api/v1/resource"
-	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 
 	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
 	"github.com/kubernetes-incubator/descheduler/pkg/api"
@@ -327,11 +327,7 @@ func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*
 			gPods = append(gPods, pod)
 		}
 
-		req, _, err := helper.PodRequestsAndLimits(pod)
-		if err != nil {
-			glog.Warningf("Error computing resource usage of pod, ignoring: %#v", pod.Name)
-			continue
-		}
+		req, _ := helper.PodRequestsAndLimits(pod)
 		for name, quantity := range req {
 			if name == v1.ResourceCPU || name == v1.ResourceMemory {
 				if value, ok := totalReqs[name]; !ok {
