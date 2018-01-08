@@ -17,7 +17,7 @@ limitations under the License.
 package utils
 
 import (
-	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
+	clientset "k8s.io/client-go/kubernetes"
 )
 
 const (

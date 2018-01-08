@@ -37,7 +37,6 @@ func Install(groupFactoryRegistry announced.APIGroupFactoryRegistry, registry *r
 		&announced.GroupMetaFactoryArgs{
 			GroupName:                  deschedulerapi.GroupName,
 			VersionPreferenceOrder:     []string{v1alpha1.SchemeGroupVersion.Version},
-			ImportPrefix:               "github.com/kubernetes-incubator/descheduler/pkg/api",
 			AddInternalObjectsToScheme: deschedulerapi.AddToScheme,
 		},
 		announced.VersionToSchemeFunc{

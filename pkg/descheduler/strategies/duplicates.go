@@ -20,9 +20,8 @@ import (
 	"github.com/golang/glog"
 	"strings"
 
-	"k8s.io/kubernetes/pkg/api/v1"
-	//TODO: Change to client-go instead of generated clientset.
-	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
+	"k8s.io/api/core/v1"
+	clientset "k8s.io/client-go/kubernetes"
 
 	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
 	"github.com/kubernetes-incubator/descheduler/pkg/api"

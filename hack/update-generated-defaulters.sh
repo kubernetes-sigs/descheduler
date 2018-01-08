@@ -1,7 +1,7 @@
 #!/bin/bash
 source "$(dirname "${BASH_SOURCE}")/lib/init.sh"
 
-go build -o "${OS_OUTPUT_BINPATH}/defaulter-gen" "${PRJ_PREFIX}/vendor/k8s.io/kubernetes/cmd/libs/go2idl/defaulter-gen"
+go build -o "${OS_OUTPUT_BINPATH}/defaulter-gen" "${PRJ_PREFIX}/vendor/k8s.io/code-generator/cmd/defaulter-gen"
 
 ${OS_OUTPUT_BINPATH}/defaulter-gen \
                 --go-header-file "hack/boilerplate/boilerplate.go.txt" \
