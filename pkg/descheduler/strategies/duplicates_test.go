@@ -39,15 +39,15 @@ func TestFindDuplicatePods(t *testing.T) {
 	p7 := test.BuildTestPod("p7", 100, 0, node.Name)
 
 	// All the following pods expect for one will be evicted.
-	p1.Annotations = test.GetReplicaSetAnnotation()
-	p2.Annotations = test.GetReplicaSetAnnotation()
-	p3.Annotations = test.GetReplicaSetAnnotation()
+	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p2.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p3.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 
 	// The following 4 pods won't get evicted.
 	// A daemonset.
-	p4.Annotations = test.GetDaemonSetAnnotation()
+	p4.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 	// A pod with local storage.
-	p5.Annotations = test.GetNormalPodAnnotation()
+	p5.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p5.Spec.Volumes = []v1.Volume{
 		{
 			Name: "sample",

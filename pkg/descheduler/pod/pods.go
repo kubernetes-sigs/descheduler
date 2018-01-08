@@ -19,7 +19,6 @@ package pod
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/v1"
 	"k8s.io/kubernetes/pkg/api/v1/helper/qos"
@@ -54,11 +53,8 @@ func IsLatencySensitivePod(pod *v1.Pod) bool {
 
 // IsEvictable checks if a pod is evictable or not.
 func IsEvictable(pod *v1.Pod) bool {
-	sr, err := CreatorRef(pod)
-	if err != nil {
-		sr = nil
-	}
-	if IsMirrorPod(pod) || IsPodWithLocalStorage(pod) || sr == nil || IsDaemonsetPod(sr) || IsCriticalPod(pod) || IsLatencySensitivePod(pod) {
+	ownerRefList := OwnerRef(pod)
+	if IsMirrorPod(pod) || IsPodWithLocalStorage(pod) || len(ownerRefList) == 0 || IsDaemonsetPod(ownerRefList) || IsCriticalPod(pod) {
 		return false
 	}
 	return true
@@ -116,9 +112,11 @@ func IsGuaranteedPod(pod *v1.Pod) bool {
 	return qos.GetPodQOS(pod) == v1.PodQOSGuaranteed
 }
 
-func IsDaemonsetPod(sr *v1.SerializedReference) bool {
-	if sr != nil {
-		return sr.Reference.Kind == "DaemonSet"
+func IsDaemonsetPod(ownerRefList []metav1.OwnerReference) bool {
+	for _, ownerRef := range ownerRefList {
+		if ownerRef.Kind == "DaemonSet" {
+			return true
+		}
 	}
 	return false
 }
@@ -139,15 +137,7 @@ func IsPodWithLocalStorage(pod *v1.Pod) bool {
 	return false
 }
 
-// CreatorRef returns the kind of the creator reference of the pod.
-func CreatorRef(pod *v1.Pod) (*v1.SerializedReference, error) {
-	creatorRef, found := pod.ObjectMeta.Annotations[v1.CreatedByAnnotation]
-	if !found {
-		return nil, nil
-	}
-	var sr v1.SerializedReference
-	if err := runtime.DecodeInto(api.Codecs.UniversalDecoder(), []byte(creatorRef), &sr); err != nil {
-		return nil, err
-	}
-	return &sr, nil
+// OwnerRef returns the ownerRefList for the pod.
+func OwnerRef(pod *v1.Pod) []metav1.OwnerReference {
+	return pod.ObjectMeta.GetOwnerReferences()
 }

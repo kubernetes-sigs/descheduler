@@ -55,16 +55,16 @@ func TestLowNodeUtilization(t *testing.T) {
 	p7 := test.BuildTestPod("p7", 400, 0, n1.Name)
 	p8 := test.BuildTestPod("p8", 400, 0, n1.Name)
 
-	p1.Annotations = test.GetReplicaSetAnnotation()
-	p2.Annotations = test.GetReplicaSetAnnotation()
-	p3.Annotations = test.GetReplicaSetAnnotation()
-	p4.Annotations = test.GetReplicaSetAnnotation()
-	p5.Annotations = test.GetReplicaSetAnnotation()
+	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p2.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p3.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p4.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p5.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	// The following 4 pods won't get evicted.
 	// A daemonset.
-	p6.Annotations = test.GetDaemonSetAnnotation()
+	p6.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 	// A pod with local storage.
-	p7.Annotations = test.GetNormalPodAnnotation()
+	p7.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p7.Spec.Volumes = []v1.Volume{
 		{
 			Name: "sample",
@@ -81,7 +81,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	p8.Namespace = "kube-system"
 	p8.Annotations = test.GetCriticalPodAnnotation()
 	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
-	p9.Annotations = test.GetReplicaSetAnnotation()
+	p9.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 		list := action.(core.ListAction)
