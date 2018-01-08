@@ -17,6 +17,7 @@ limitations under the License.
 package auth
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -27,15 +28,22 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apiserver/pkg/authentication/request/bearertoken"
+	"k8s.io/apiserver/pkg/authentication/token/tokenfile"
+	"k8s.io/apiserver/pkg/authentication/user"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	utilfeaturetesting "k8s.io/apiserver/pkg/util/feature/testing"
 	restclient "k8s.io/client-go/rest"
-	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/api/legacyscheme"
+	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/apis/policy"
 	"k8s.io/kubernetes/pkg/auth/nodeidentifier"
 	clientset "k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset"
 	informers "k8s.io/kubernetes/pkg/client/informers/informers_generated/internalversion"
+	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/kubeapiserver/authorizer"
 	"k8s.io/kubernetes/plugin/pkg/admission/noderestriction"
-	"k8s.io/kubernetes/plugin/pkg/auth/authorizer/rbac/bootstrappolicy"
 	"k8s.io/kubernetes/test/integration/framework"
 )
 
@@ -47,9 +55,24 @@ func TestNodeAuthorizer(t *testing.T) {
 		h.M.GenericAPIServer.Handler.ServeHTTP(w, req)
 	}))
 
+	const (
+		// Define credentials
+		tokenMaster      = "master-token"
+		tokenNodeUnknown = "unknown-token"
+		tokenNode1       = "node1-token"
+		tokenNode2       = "node2-token"
+	)
+
+	authenticator := bearertoken.New(tokenfile.New(map[string]*user.DefaultInfo{
+		tokenMaster:      {Name: "admin", Groups: []string{"system:masters"}},
+		tokenNodeUnknown: {Name: "unknown", Groups: []string{"system:nodes"}},
+		tokenNode1:       {Name: "system:node:node1", Groups: []string{"system:nodes"}},
+		tokenNode2:       {Name: "system:node:node2", Groups: []string{"system:nodes"}},
+	}))
+
 	// Build client config, clientset, and informers
-	clientConfig := &restclient.Config{Host: apiServer.URL, ContentConfig: restclient.ContentConfig{NegotiatedSerializer: api.Codecs}}
-	superuserClient := clientsetForUser("admin/system:masters", clientConfig)
+	clientConfig := &restclient.Config{Host: apiServer.URL, ContentConfig: restclient.ContentConfig{NegotiatedSerializer: legacyscheme.Codecs}}
+	superuserClient := clientsetForToken(tokenMaster, clientConfig)
 	informerFactory := informers.NewSharedInformerFactory(superuserClient, time.Minute)
 
 	// Set up Node+RBAC authorizer
@@ -57,22 +80,22 @@ func TestNodeAuthorizer(t *testing.T) {
 		AuthorizationModes: []string{"Node", "RBAC"},
 		InformerFactory:    informerFactory,
 	}
-	nodeRBACAuthorizer, err := authorizerConfig.New()
+	nodeRBACAuthorizer, _, err := authorizerConfig.New()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer bootstrappolicy.ClearClusterRoleBindingFilters()
 
 	// Set up NodeRestriction admission
 	nodeRestrictionAdmission := noderestriction.NewPlugin(nodeidentifier.NewDefaultNodeIdentifier())
 	nodeRestrictionAdmission.SetInternalKubeClientSet(superuserClient)
-	if err := nodeRestrictionAdmission.Validate(); err != nil {
+	if err := nodeRestrictionAdmission.ValidateInitialization(); err != nil {
 		t.Fatal(err)
 	}
 
 	// Start the server
 	masterConfig := framework.NewIntegrationTestMasterConfig()
-	masterConfig.GenericConfig.Authenticator = newFakeAuthenticator()
+	masterConfig.GenericConfig.Authenticator = authenticator
+
 	masterConfig.GenericConfig.Authorizer = nodeRBACAuthorizer
 	masterConfig.GenericConfig.AdmissionControl = nodeRestrictionAdmission
 	_, _, closeFn := framework.RunAMasterUsingServer(masterConfig, apiServer, h)
@@ -113,13 +136,14 @@ func TestNodeAuthorizer(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err := superuserClient.Core().PersistentVolumes().Create(&api.PersistentVolume{
 		ObjectMeta: metav1.ObjectMeta{Name: "mypv"},
 		Spec: api.PersistentVolumeSpec{
 			AccessModes:            []api.PersistentVolumeAccessMode{api.ReadOnlyMany},
 			Capacity:               api.ResourceList{api.ResourceStorage: resource.MustParse("1")},
 			ClaimRef:               &api.ObjectReference{Namespace: "ns", Name: "mypvc"},
-			PersistentVolumeSource: api.PersistentVolumeSource{AzureFile: &api.AzureFileVolumeSource{ShareName: "default", SecretName: "mypvsecret"}},
+			PersistentVolumeSource: api.PersistentVolumeSource{AzureFile: &api.AzureFilePersistentVolumeSource{ShareName: "default", SecretName: "mypvsecret"}},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -231,9 +255,24 @@ func TestNodeAuthorizer(t *testing.T) {
 		})
 	}
 
-	nodeanonClient := clientsetForUser("unknown/system:nodes", clientConfig)
-	node1Client := clientsetForUser("system:node:node1/system:nodes", clientConfig)
-	node2Client := clientsetForUser("system:node:node2/system:nodes", clientConfig)
+	capacity := 50
+	updatePVCCapacity := func(client clientset.Interface) error {
+		capacity++
+		statusString := fmt.Sprintf("{\"status\": {\"capacity\": {\"storage\": \"%dG\"}}}", capacity)
+		patchBytes := []byte(statusString)
+		_, err := client.Core().PersistentVolumeClaims("ns").Patch("mypvc", types.StrategicMergePatchType, patchBytes, "status")
+		return err
+	}
+
+	updatePVCPhase := func(client clientset.Interface) error {
+		patchBytes := []byte(`{"status":{"phase": "Bound"}}`)
+		_, err := client.Core().PersistentVolumeClaims("ns").Patch("mypvc", types.StrategicMergePatchType, patchBytes, "status")
+		return err
+	}
+
+	nodeanonClient := clientsetForToken(tokenNodeUnknown, clientConfig)
+	node1Client := clientsetForToken(tokenNode1, clientConfig)
+	node2Client := clientsetForToken(tokenNode2, clientConfig)
 
 	// all node requests from node1 and unknown node fail
 	expectForbidden(t, getSecret(nodeanonClient))
@@ -269,6 +308,7 @@ func TestNodeAuthorizer(t *testing.T) {
 	expectForbidden(t, getConfigMap(node2Client))
 	expectForbidden(t, getPVC(node2Client))
 	expectForbidden(t, getPV(node2Client))
+
 	expectForbidden(t, createNode2NormalPod(nodeanonClient))
 	// mirror pod and self node lifecycle is allowed
 	expectAllowed(t, createNode2MirrorPod(node2Client))
@@ -315,6 +355,7 @@ func TestNodeAuthorizer(t *testing.T) {
 	expectAllowed(t, getConfigMap(node2Client))
 	expectAllowed(t, getPVC(node2Client))
 	expectAllowed(t, getPV(node2Client))
+
 	expectForbidden(t, createNode2NormalPod(node2Client))
 	expectAllowed(t, updateNode2NormalPodStatus(node2Client))
 	expectAllowed(t, deleteNode2NormalPod(node2Client))
@@ -325,6 +366,24 @@ func TestNodeAuthorizer(t *testing.T) {
 	expectAllowed(t, createNode2MirrorPod(superuserClient))
 	expectAllowed(t, createNode2NormalPodEviction(node2Client))
 	expectAllowed(t, createNode2MirrorPodEviction(node2Client))
+
+	// re-create a pod as an admin to add object references
+	expectAllowed(t, createNode2NormalPod(superuserClient))
+	// With ExpandPersistentVolumes feature disabled
+	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ExpandPersistentVolumes, false)()
+	// node->pvc relationship not established
+	expectForbidden(t, updatePVCCapacity(node1Client))
+	// node->pvc relationship established but feature is disabled
+	expectForbidden(t, updatePVCCapacity(node2Client))
+
+	//Enabled ExpandPersistentVolumes feature
+	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.ExpandPersistentVolumes, true)()
+	// Node->pvc relationship not established
+	expectForbidden(t, updatePVCCapacity(node1Client))
+	// node->pvc relationship established and feature is enabled
+	expectAllowed(t, updatePVCCapacity(node2Client))
+	// node->pvc relationship established but updating phase
+	expectForbidden(t, updatePVCPhase(node2Client))
 }
 
 func expectForbidden(t *testing.T, err error) {

@@ -1,5 +1,5 @@
-load("@io_bazel_rules_go//go:def.bzl", "GoSource")
-load("@io_bazel_rules_go//go/private:common.bzl", "get_go_toolchain")
+load("@io_bazel_rules_go//go:def.bzl", "GoLibrary")
+load("@io_bazel_rules_go//go/private:mode.bzl", "get_mode")
 
 go_filetype = ["*.go"]
 
@@ -12,18 +12,7 @@ def _compute_genrule_variables(resolved_srcs, resolved_outs):
     variables["@"] = list(resolved_outs)[0].path
   return variables
 
-def _go_sources_aspect_impl(target, ctx):
-  transitive_sources = set(target[GoSource].go_sources)
-  for dep in ctx.rule.attr.deps:
-    transitive_sources = transitive_sources | dep.transitive_sources
-  return struct(transitive_sources = transitive_sources)
-
-go_sources_aspect = aspect(
-    attr_aspects = ["deps"],
-    implementation = _go_sources_aspect_impl,
-)
-
-def _compute_genrule_command(ctx):
+def _compute_genrule_command(ctx, go_stdlib):
   workspace_root = '$$(pwd)'
   if ctx.build_file_path.startswith('external/'):
     # We want GO_WORKSPACE to point at the root directory of the Bazel
@@ -40,15 +29,19 @@ def _compute_genrule_command(ctx):
 
   cmd = [
       'set -e',
+      'export GOROOT=$$(pwd)/' + go_stdlib.root_file.dirname,
+      'export GOOS=' + go_stdlib.goos,
+      'export GOARCH=' + go_stdlib.goarch,
       # setup main GOPATH
-      'export GOPATH=/tmp/gopath',
+      'GENRULE_TMPDIR=$$(mktemp -d $${TMPDIR:-/tmp}/bazel_%s_XXXXXXXX)' % ctx.attr.name,
+      'export GOPATH=$${GENRULE_TMPDIR}/gopath',
       'export GO_WORKSPACE=$${GOPATH}/src/' + ctx.attr.go_prefix.go_prefix,
       'mkdir -p $${GO_WORKSPACE%/*}',
       'ln -s %s/ $${GO_WORKSPACE}' % (workspace_root,),
       'if [[ ! -e $${GO_WORKSPACE}/external ]]; then ln -s $$(pwd)/external/ $${GO_WORKSPACE}/; fi',
       'if [[ ! -e $${GO_WORKSPACE}/bazel-out ]]; then ln -s $$(pwd)/bazel-out/ $${GO_WORKSPACE}/; fi',
       # setup genfile GOPATH
-      'export GENGOPATH=/tmp/gengopath',
+      'export GENGOPATH=$${GENRULE_TMPDIR}/gengopath',
       'export GENGO_WORKSPACE=$${GENGOPATH}/src/' + ctx.attr.go_prefix.go_prefix,
       'mkdir -p $${GENGO_WORKSPACE%/*}',
       'ln -s $$(pwd)/$(GENDIR) $${GENGO_WORKSPACE}',
@@ -61,24 +54,30 @@ def _compute_genrule_command(ctx):
   return '\n'.join(cmd)
 
 def _go_genrule_impl(ctx):
-  go_toolchain = get_go_toolchain(ctx)
-  all_srcs = set(go_toolchain.stdlib)
+  go_toolchain = ctx.toolchains["@io_bazel_rules_go//go:toolchain"]
+  mode = get_mode(ctx, ctx.attr._go_toolchain_flags)
+  go_stdlib = go_toolchain.stdlib.get(ctx, go_toolchain, mode)
+
+  all_srcs = depset(go_stdlib.files)
   label_dict = {}
 
   for dep in ctx.attr.go_deps:
-    all_srcs = all_srcs | dep.transitive_sources
+    lib = dep[GoLibrary]
+    all_srcs += lib.package.srcs
+    for transitive_lib in lib.transitive:
+      all_srcs += transitive_lib.srcs
 
   for dep in ctx.attr.srcs:
-    all_srcs = all_srcs | dep.files
+    all_srcs += dep.files
     label_dict[dep.label] = dep.files
 
-  cmd = _compute_genrule_command(ctx)
+  cmd = _compute_genrule_command(ctx, go_stdlib)
 
   resolved_inputs, argv, runfiles_manifests = ctx.resolve_command(
       command=cmd,
       attribute="cmd",
       expand_locations=True,
-      make_variables=_compute_genrule_variables(all_srcs, set(ctx.outputs.outs)),
+      make_variables=_compute_genrule_variables(all_srcs, depset(ctx.outputs.outs)),
       tools=ctx.attr.tools,
       label_dict=label_dict
   )
@@ -86,7 +85,7 @@ def _go_genrule_impl(ctx):
   ctx.action(
       inputs = list(all_srcs) + resolved_inputs,
       outputs = ctx.outputs.outs,
-      env = ctx.configuration.default_shell_env + go_toolchain.env,
+      env = ctx.configuration.default_shell_env,
       command = argv,
       progress_message = "%s %s" % (ctx.attr.message, ctx),
       mnemonic = "GoGenrule",
@@ -105,17 +104,14 @@ go_genrule = rule(
         ),
         "outs": attr.output_list(mandatory = True),
         "cmd": attr.string(mandatory = True),
-        "go_deps": attr.label_list(
-            aspects = [go_sources_aspect],
-        ),
+        "go_deps": attr.label_list(),
         "message": attr.string(),
         "executable": attr.bool(default = False),
-        # Next two rules copied from bazelbuild/rules_go@a9df110cf04e167b33f10473c7e904d780d921e6
+        "_go_toolchain_flags": attr.label(default = Label("@io_bazel_rules_go//go/private:go_toolchain_flags")),
+        # Next rule copied from bazelbuild/rules_go@a9df110cf04e167b33f10473c7e904d780d921e6
         # and then modified a bit.
-        # These will likely break at some point in the future, pending Bazel toolchain changes.
-        "_go_toolchain": attr.label(
-            default = Label("@io_bazel_rules_go_toolchain//:go_toolchain"),
-        ),
+        # I'm not sure if this is correct anymore.
+        # Also, go_prefix is deprecated, so this is probably going to break in the near future.
         "go_prefix": attr.label(
             providers = ["go_prefix"],
             default = Label(
@@ -127,5 +123,6 @@ go_genrule = rule(
         ),
     },
     output_to_genfiles = True,
+    toolchains = ["@io_bazel_rules_go//go:toolchain"],
     implementation = _go_genrule_impl,
 )

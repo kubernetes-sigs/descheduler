@@ -29,8 +29,7 @@ import (
 const (
 	openAPIGenTag = "// +k8s:openapi-gen"
 
-	baseImport = "k8s.io/kubernetes/"
-	staging    = "staging/src/"
+	staging = "staging/src/"
 )
 
 // walkGenerated updates the rule for kubernetes' OpenAPI generated file.
@@ -42,7 +41,7 @@ func (v *Vendorer) walkGenerated() error {
 		return nil
 	}
 	v.managedAttrs = append(v.managedAttrs, "openapi_targets", "vendor_targets")
-	paths, err := v.findOpenAPI(v.root)
+	paths, err := v.findOpenAPI(".")
 	if err != nil {
 		return err
 	}
@@ -52,6 +51,11 @@ func (v *Vendorer) walkGenerated() error {
 // findOpenAPI searches for all packages under root that request OpenAPI. It
 // returns the go import paths. It does not follow symlinks.
 func (v *Vendorer) findOpenAPI(root string) ([]string, error) {
+	for _, r := range v.skippedPaths {
+		if r.MatchString(root) {
+			return nil, nil
+		}
+	}
 	finfos, err := ioutil.ReadDir(root)
 	if err != nil {
 		return nil, err
@@ -77,7 +81,7 @@ func (v *Vendorer) findOpenAPI(root string) ([]string, error) {
 		}
 	}
 	if includeMe {
-		pkg, err := v.ctx.ImportDir(root, 0)
+		pkg, err := v.ctx.ImportDir(filepath.Join(v.root, root), 0)
 		if err != nil {
 			return nil, err
 		}
@@ -91,9 +95,10 @@ func (v *Vendorer) findOpenAPI(root string) ([]string, error) {
 func (v *Vendorer) addGeneratedOpenAPIRule(paths []string) error {
 	var openAPITargets []string
 	var vendorTargets []string
+	baseImport := v.cfg.GoPrefix + "/"
 	for _, p := range paths {
 		if !strings.HasPrefix(p, baseImport) {
-			return fmt.Errorf("openapi-gen path outside of kubernetes: %s", p)
+			return fmt.Errorf("openapi-gen path outside of %s: %s", v.cfg.GoPrefix, p)
 		}
 		np := p[len(baseImport):]
 		if strings.HasPrefix(np, staging) {
@@ -106,6 +111,12 @@ func (v *Vendorer) addGeneratedOpenAPIRule(paths []string) error {
 	sort.Strings(vendorTargets)
 
 	pkgPath := filepath.Join("pkg", "generated", "openapi")
+	// If we haven't walked this package yet, walk it so there is a go_library rule to modify
+	if len(v.newRules[pkgPath]) == 0 {
+		if err := v.updateSinglePkg(pkgPath); err != nil {
+			return err
+		}
+	}
 	for _, r := range v.newRules[pkgPath] {
 		if r.Name() == "go_default_library" {
 			r.SetAttr("openapi_targets", asExpr(openAPITargets))

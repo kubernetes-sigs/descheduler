@@ -35,6 +35,9 @@ type Cfg struct {
 	VendorMultipleBuildFiles bool
 	// whether to manage kubernetes' pkg/generated/openapi.
 	K8sOpenAPIGen bool
+	// Whether to manage the upstream Go rules provided by bazelbuild/rules_go.
+	// If using gazelle, set this to false (or omit).
+	ManageGoRules bool
 }
 
 // ReadCfg reads and unmarshals the specified json file into a Cfg struct.

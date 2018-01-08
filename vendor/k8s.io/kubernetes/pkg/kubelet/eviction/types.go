@@ -19,9 +19,9 @@ package eviction
 import (
 	"time"
 
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/kubernetes/pkg/api/v1"
 	statsapi "k8s.io/kubernetes/pkg/kubelet/apis/stats/v1alpha1"
 	evictionapi "k8s.io/kubernetes/pkg/kubelet/eviction/api"
 )
@@ -72,7 +72,7 @@ type DiskInfoProvider interface {
 type CapacityProvider interface {
 	// GetCapacity returns the amount of compute resources tracked by container manager available on the node.
 	GetCapacity() v1.ResourceList
-	// GetNodeAllocatable returns the amount of compute resources that have to be reserved from scheduling.
+	// GetNodeAllocatableReservation returns the amount of compute resources that have to be reserved from scheduling.
 	GetNodeAllocatableReservation() v1.ResourceList
 }
 
