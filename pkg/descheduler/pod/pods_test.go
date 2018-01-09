@@ -20,8 +20,8 @@ import (
 	"testing"
 
 	"github.com/kubernetes-incubator/descheduler/test"
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/kubernetes/pkg/api/v1"
 )
 
 func TestPodTypes(t *testing.T) {

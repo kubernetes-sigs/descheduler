@@ -64,11 +64,13 @@ func main() {
 		glog.Fatalf("cannot chdir into root %q: %v", v.root, err)
 	}
 
-	if err = v.walkVendor(); err != nil {
-		glog.Fatalf("err walking vendor: %v", err)
-	}
-	if err = v.walkRepo(); err != nil {
-		glog.Fatalf("err walking repo: %v", err)
+	if v.cfg.ManageGoRules {
+		if err = v.walkVendor(); err != nil {
+			glog.Fatalf("err walking vendor: %v", err)
+		}
+		if err = v.walkRepo(); err != nil {
+			glog.Fatalf("err walking repo: %v", err)
+		}
 	}
 	if err = v.walkGenerated(); err != nil {
 		glog.Fatalf("err walking generated: %v", err)
@@ -172,10 +174,6 @@ func writeHeaders(file *bzl.File) {
 		[]bzl.Expr{
 			pkgRule.Call,
 			&bzl.CallExpr{
-				X:    &bzl.LiteralExpr{Token: "licenses"},
-				List: []bzl.Expr{asExpr([]string{"notice"})},
-			},
-			&bzl.CallExpr{
 				X: &bzl.LiteralExpr{Token: "load"},
 				List: asExpr([]string{
 					"@io_bazel_rules_go//go:def.bzl",
@@ -230,7 +228,7 @@ func (v *Vendorer) walk(root string, f func(path, ipath string, pkg *build.Packa
 			return filepath.SkipDir
 		}
 		for _, r := range v.skippedPaths {
-			if r.Match([]byte(path)) {
+			if r.MatchString(path) {
 				return filepath.SkipDir
 			}
 		}
@@ -490,7 +488,7 @@ func (v *Vendorer) reconcileAllRules() (int, error) {
 	sort.Strings(paths)
 	written := 0
 	for _, path := range paths {
-		w, err := ReconcileRules(path, v.newRules[path], v.managedAttrs, v.dryRun)
+		w, err := ReconcileRules(path, v.newRules[path], v.managedAttrs, v.dryRun, v.cfg.ManageGoRules)
 		if w {
 			written++
 		}
@@ -625,13 +623,15 @@ func findBuildFile(pkgPath string) (bool, string) {
 
 // ReconcileRules reconciles, simplifies, and writes the rules for the specified package, adding
 // additional dependency rules as needed.
-func ReconcileRules(pkgPath string, rules []*bzl.Rule, managedAttrs []string, dryRun bool) (bool, error) {
+func ReconcileRules(pkgPath string, rules []*bzl.Rule, managedAttrs []string, dryRun bool, manageGoRules bool) (bool, error) {
 	_, path := findBuildFile(pkgPath)
 	info, err := os.Stat(path)
 	if err != nil && os.IsNotExist(err) {
 		f := &bzl.File{}
 		writeHeaders(f)
-		reconcileLoad(f, rules)
+		if manageGoRules {
+			reconcileLoad(f, rules)
+		}
 		writeRules(f, rules)
 		return writeFile(path, f, false, dryRun)
 	} else if err != nil {
@@ -658,7 +658,7 @@ func ReconcileRules(pkgPath string, rules []*bzl.Rule, managedAttrs []string, dr
 			f.Stmt = append(f.Stmt, r.Call)
 			continue
 		}
-		if !RuleIsManaged(o) {
+		if !RuleIsManaged(o, manageGoRules) {
 			continue
 		}
 		reconcileAttr := func(o, n *bzl.Rule, name string) {
@@ -675,12 +675,14 @@ func ReconcileRules(pkgPath string, rules []*bzl.Rule, managedAttrs []string, dr
 	}
 
 	for _, r := range oldRules {
-		if !RuleIsManaged(r) {
+		if !RuleIsManaged(r, manageGoRules) {
 			continue
 		}
 		f.DelRules(r.Kind(), r.Name())
 	}
-	reconcileLoad(f, f.Rules(""))
+	if manageGoRules {
+		reconcileLoad(f, f.Rules(""))
+	}
 
 	return writeFile(path, f, true, dryRun)
 }
@@ -724,8 +726,11 @@ func reconcileLoad(f *bzl.File, rules []*bzl.Rule) {
 
 // RuleIsManaged returns whether the provided rule is managed by this tool,
 // based on the tags set on the rule.
-func RuleIsManaged(r *bzl.Rule) bool {
+func RuleIsManaged(r *bzl.Rule, manageGoRules bool) bool {
 	var automanaged bool
+	if !manageGoRules && (strings.HasPrefix(r.Kind(), "go_") || strings.HasPrefix(r.Kind(), "cgo_")) {
+		return false
+	}
 	for _, tag := range r.AttrStrings("tags") {
 		if tag == automanagedTag {
 			automanaged = true

@@ -1,15 +1,23 @@
 package: github.com/kubernetes-incubator/descheduler
 import:
 - package: k8s.io/client-go
-  version: ec52d278b25c8fef82a965d93afdc74771ea6963
+  version: 78700dec6369ba22221b72770783300f143df150
+- package: k8s.io/api
+  version: af4bc157c3a209798fc897f6d4aaaaeb6c2e0d6a
 - package: k8s.io/apiserver
-  version: release-1.7
+  version: 91e14f394e4796abf5a994a349a222e7081d86b6
 - package: k8s.io/apimachinery
-  version: 917740426ad66ff818da4809990480bcc0786a77
+  version: 180eddb345a5be3a157cea1c624700ad5bd27b8f
 - package: k8s.io/kubernetes
-  version: 1.7.6
+  version: v1.9.0
+- package: k8s.io/code-generator
+  version: kubernetes-1.9.0
 - package: github.com/kubernetes/repo-infra
 - package: github.com/spf13/cobra
   version: f62e98d28ab7ad31d707ba837a966378465c7b57
 - package: k8s.io/gengo
-  version: c79c13d131b0a8f42d05faa6491c12e94ccc6f30
+- package: github.com/ugorji/go
+  version: v.1.1-beta
+- package: golang.org/x/tools
+  subpackages:
+  - imports

@@ -19,9 +19,9 @@ package client
 import (
 	"fmt"
 
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
 )
 
 func CreateClient(kubeconfig string) (clientset.Interface, error) {

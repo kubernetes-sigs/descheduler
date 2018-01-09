@@ -20,15 +20,19 @@ import (
 	"fmt"
 	"io"
 
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/diff"
 	"k8s.io/apiserver/pkg/admission"
-	"k8s.io/kubernetes/pkg/api"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	podutil "k8s.io/kubernetes/pkg/api/pod"
+	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/apis/policy"
 	"k8s.io/kubernetes/pkg/auth/nodeidentifier"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset"
 	coreinternalversion "k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset/typed/core/internalversion"
+	"k8s.io/kubernetes/pkg/features"
 	kubeapiserveradmission "k8s.io/kubernetes/pkg/kubeapiserver/admission"
 )
 
@@ -68,7 +72,7 @@ func (p *nodePlugin) SetInternalKubeClientSet(f internalclientset.Interface) {
 	p.podsGetter = f.Core()
 }
 
-func (p *nodePlugin) Validate() error {
+func (p *nodePlugin) ValidateInitialization() error {
 	if p.nodeIdentifier == nil {
 		return fmt.Errorf("%s requires a node identifier", PluginName)
 	}
@@ -81,6 +85,7 @@ func (p *nodePlugin) Validate() error {
 var (
 	podResource  = api.Resource("pods")
 	nodeResource = api.Resource("nodes")
+	pvcResource  = api.Resource("persistentvolumeclaims")
 )
 
 func (c *nodePlugin) Admit(a admission.Attributes) error {
@@ -93,7 +98,7 @@ func (c *nodePlugin) Admit(a admission.Attributes) error {
 
 	if len(nodeName) == 0 {
 		// disallow requests we cannot match to a particular node
-		return admission.NewForbidden(a, fmt.Errorf("could not determine node from user %s", a.GetUserInfo().GetName()))
+		return admission.NewForbidden(a, fmt.Errorf("could not determine node from user %q", a.GetUserInfo().GetName()))
 	}
 
 	switch a.GetResource().GroupResource() {
@@ -106,11 +111,19 @@ func (c *nodePlugin) Admit(a admission.Attributes) error {
 		case "eviction":
 			return c.admitPodEviction(nodeName, a)
 		default:
-			return admission.NewForbidden(a, fmt.Errorf("unexpected pod subresource %s", a.GetSubresource()))
+			return admission.NewForbidden(a, fmt.Errorf("unexpected pod subresource %q", a.GetSubresource()))
 		}
 
 	case nodeResource:
 		return c.admitNode(nodeName, a)
+
+	case pvcResource:
+		switch a.GetSubresource() {
+		case "status":
+			return c.admitPVCStatus(nodeName, a)
+		default:
+			return admission.NewForbidden(a, fmt.Errorf("may only update PVC status"))
+		}
 
 	default:
 		return nil
@@ -128,31 +141,31 @@ func (c *nodePlugin) admitPod(nodeName string, a admission.Attributes) error {
 
 		// only allow nodes to create mirror pods
 		if _, isMirrorPod := pod.Annotations[api.MirrorPodAnnotationKey]; !isMirrorPod {
-			return admission.NewForbidden(a, fmt.Errorf("pod does not have %q annotation, node %s can only create mirror pods", api.MirrorPodAnnotationKey, nodeName))
+			return admission.NewForbidden(a, fmt.Errorf("pod does not have %q annotation, node %q can only create mirror pods", api.MirrorPodAnnotationKey, nodeName))
 		}
 
 		// only allow nodes to create a pod bound to itself
 		if pod.Spec.NodeName != nodeName {
-			return admission.NewForbidden(a, fmt.Errorf("node %s can only create pods with spec.nodeName set to itself", nodeName))
+			return admission.NewForbidden(a, fmt.Errorf("node %q can only create pods with spec.nodeName set to itself", nodeName))
 		}
 
 		// don't allow a node to create a pod that references any other API objects
 		if pod.Spec.ServiceAccountName != "" {
-			return admission.NewForbidden(a, fmt.Errorf("node %s can not create pods that reference a service account", nodeName))
+			return admission.NewForbidden(a, fmt.Errorf("node %q can not create pods that reference a service account", nodeName))
 		}
 		hasSecrets := false
 		podutil.VisitPodSecretNames(pod, func(name string) (shouldContinue bool) { hasSecrets = true; return false })
 		if hasSecrets {
-			return admission.NewForbidden(a, fmt.Errorf("node %s can not create pods that reference secrets", nodeName))
+			return admission.NewForbidden(a, fmt.Errorf("node %q can not create pods that reference secrets", nodeName))
 		}
 		hasConfigMaps := false
 		podutil.VisitPodConfigmapNames(pod, func(name string) (shouldContinue bool) { hasConfigMaps = true; return false })
 		if hasConfigMaps {
-			return admission.NewForbidden(a, fmt.Errorf("node %s can not create pods that reference configmaps", nodeName))
+			return admission.NewForbidden(a, fmt.Errorf("node %q can not create pods that reference configmaps", nodeName))
 		}
 		for _, v := range pod.Spec.Volumes {
 			if v.PersistentVolumeClaim != nil {
-				return admission.NewForbidden(a, fmt.Errorf("node %s can not create pods that reference persistentvolumeclaims", nodeName))
+				return admission.NewForbidden(a, fmt.Errorf("node %q can not create pods that reference persistentvolumeclaims", nodeName))
 			}
 		}
 
@@ -173,12 +186,12 @@ func (c *nodePlugin) admitPod(nodeName string, a admission.Attributes) error {
 		}
 		// only allow a node to delete a pod bound to itself
 		if existingPod.Spec.NodeName != nodeName {
-			return admission.NewForbidden(a, fmt.Errorf("node %s can only delete pods with spec.nodeName set to itself", nodeName))
+			return admission.NewForbidden(a, fmt.Errorf("node %q can only delete pods with spec.nodeName set to itself", nodeName))
 		}
 		return nil
 
 	default:
-		return admission.NewForbidden(a, fmt.Errorf("unexpected operation %s", a.GetOperation()))
+		return admission.NewForbidden(a, fmt.Errorf("unexpected operation %q", a.GetOperation()))
 	}
 }
 
@@ -188,16 +201,16 @@ func (c *nodePlugin) admitPodStatus(nodeName string, a admission.Attributes) err
 		// require an existing pod
 		pod, ok := a.GetOldObject().(*api.Pod)
 		if !ok {
-			return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
+			return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetOldObject()))
 		}
 		// only allow a node to update status of a pod bound to itself
 		if pod.Spec.NodeName != nodeName {
-			return admission.NewForbidden(a, fmt.Errorf("node %s can only update pod status for pods with spec.nodeName set to itself", nodeName))
+			return admission.NewForbidden(a, fmt.Errorf("node %q can only update pod status for pods with spec.nodeName set to itself", nodeName))
 		}
 		return nil
 
 	default:
-		return admission.NewForbidden(a, fmt.Errorf("unexpected operation %s", a.GetOperation()))
+		return admission.NewForbidden(a, fmt.Errorf("unexpected operation %q", a.GetOperation()))
 	}
 }
 
@@ -240,20 +253,90 @@ func (c *nodePlugin) admitPodEviction(nodeName string, a admission.Attributes) e
 	}
 }
 
+func (c *nodePlugin) admitPVCStatus(nodeName string, a admission.Attributes) error {
+	switch a.GetOperation() {
+	case admission.Update:
+		if !utilfeature.DefaultFeatureGate.Enabled(features.ExpandPersistentVolumes) {
+			return admission.NewForbidden(a, fmt.Errorf("node %q may not update persistentvolumeclaim metadata", nodeName))
+		}
+
+		oldPVC, ok := a.GetOldObject().(*api.PersistentVolumeClaim)
+		if !ok {
+			return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetOldObject()))
+		}
+
+		newPVC, ok := a.GetObject().(*api.PersistentVolumeClaim)
+		if !ok {
+			return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
+		}
+
+		// make copies for comparison
+		oldPVC = oldPVC.DeepCopy()
+		newPVC = newPVC.DeepCopy()
+
+		// zero out resourceVersion to avoid comparing differences,
+		// since the new object could leave it empty to indicate an unconditional update
+		oldPVC.ObjectMeta.ResourceVersion = ""
+		newPVC.ObjectMeta.ResourceVersion = ""
+
+		oldPVC.Status.Capacity = nil
+		newPVC.Status.Capacity = nil
+
+		oldPVC.Status.Conditions = nil
+		newPVC.Status.Conditions = nil
+
+		// ensure no metadata changed. nodes should not be able to relabel, add finalizers/owners, etc
+		if !apiequality.Semantic.DeepEqual(oldPVC, newPVC) {
+			return admission.NewForbidden(a, fmt.Errorf("node %q may not update fields other than status.capacity and status.conditions: %v", nodeName, diff.ObjectReflectDiff(oldPVC, newPVC)))
+		}
+
+		return nil
+
+	default:
+		return admission.NewForbidden(a, fmt.Errorf("unexpected operation %q", a.GetOperation()))
+	}
+}
+
 func (c *nodePlugin) admitNode(nodeName string, a admission.Attributes) error {
 	requestedName := a.GetName()
-
-	// On create, get name from new object if unset in admission
-	if len(requestedName) == 0 && a.GetOperation() == admission.Create {
+	if a.GetOperation() == admission.Create {
 		node, ok := a.GetObject().(*api.Node)
 		if !ok {
 			return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
 		}
-		requestedName = node.Name
+
+		// Don't allow a node to create its Node API object with the config source set.
+		// We scope node access to things listed in the Node.Spec, so allowing this would allow a view escalation.
+		if node.Spec.ConfigSource != nil {
+			return admission.NewForbidden(a, fmt.Errorf("cannot create with non-nil configSource"))
+		}
+
+		// On create, get name from new object if unset in admission
+		if len(requestedName) == 0 {
+			requestedName = node.Name
+		}
+	}
+	if requestedName != nodeName {
+		return admission.NewForbidden(a, fmt.Errorf("node %q cannot modify node %q", nodeName, requestedName))
 	}
 
-	if requestedName != nodeName {
-		return admission.NewForbidden(a, fmt.Errorf("node %s cannot modify node %s", nodeName, requestedName))
+	if a.GetOperation() == admission.Update {
+		node, ok := a.GetObject().(*api.Node)
+		if !ok {
+			return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
+		}
+		oldNode, ok := a.GetOldObject().(*api.Node)
+		if !ok {
+			return admission.NewForbidden(a, fmt.Errorf("unexpected type %T", a.GetObject()))
+		}
+
+		// Don't allow a node to update the config source on its Node API object.
+		// We scope node access to things listed in the Node.Spec, so allowing this would allow a view escalation.
+		// We only do the check if the new node's configSource is non-nil; old kubelets might drop the field during a status update.
+		if node.Spec.ConfigSource != nil && !apiequality.Semantic.DeepEqual(node.Spec.ConfigSource, oldNode.Spec.ConfigSource) {
+			return admission.NewForbidden(a, fmt.Errorf("cannot update configSource to a new non-nil configSource"))
+		}
 	}
+
 	return nil
 }

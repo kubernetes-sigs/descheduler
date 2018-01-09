@@ -1,7 +1,5 @@
 package(default_visibility = ["//visibility:public"])
 
-licenses(["notice"])
-
 load(
     "@io_bazel_rules_go//go:def.bzl",
     "go_library",
@@ -15,7 +13,9 @@ go_library(
         "azure_backoff.go",
         "azure_blobDiskController.go",
         "azure_controllerCommon.go",
+        "azure_fakes.go",
         "azure_file.go",
+        "azure_instance_metadata.go",
         "azure_instances.go",
         "azure_loadbalancer.go",
         "azure_managedDiskController.go",
@@ -23,12 +23,12 @@ go_library(
         "azure_storage.go",
         "azure_storageaccount.go",
         "azure_util.go",
+        "azure_util_vmss.go",
         "azure_wrap.go",
         "azure_zones.go",
     ],
-    tags = ["automanaged"],
+    importpath = "k8s.io/kubernetes/pkg/cloudprovider/providers/azure",
     deps = [
-        "//pkg/api/v1:go_default_library",
         "//pkg/api/v1/service:go_default_library",
         "//pkg/cloudprovider:go_default_library",
         "//pkg/controller:go_default_library",
@@ -47,8 +47,10 @@ go_library(
         "//vendor/github.com/golang/glog:go_default_library",
         "//vendor/github.com/rubiojr/go-vhd/vhd:go_default_library",
         "//vendor/golang.org/x/crypto/pkcs12:go_default_library",
+        "//vendor/k8s.io/api/core/v1:go_default_library",
         "//vendor/k8s.io/apimachinery/pkg/types:go_default_library",
         "//vendor/k8s.io/apimachinery/pkg/util/errors:go_default_library",
+        "//vendor/k8s.io/apimachinery/pkg/util/sets:go_default_library",
         "//vendor/k8s.io/apimachinery/pkg/util/wait:go_default_library",
         "//vendor/k8s.io/client-go/util/flowcontrol:go_default_library",
     ],
@@ -56,15 +58,24 @@ go_library(
 
 go_test(
     name = "go_default_test",
-    srcs = ["azure_test.go"],
+    srcs = [
+        "azure_loadbalancer_test.go",
+        "azure_test.go",
+        "azure_util_test.go",
+    ],
+    importpath = "k8s.io/kubernetes/pkg/cloudprovider/providers/azure",
     library = ":go_default_library",
-    tags = ["automanaged"],
     deps = [
-        "//pkg/api/v1:go_default_library",
         "//pkg/api/v1/service:go_default_library",
+        "//pkg/kubelet/apis:go_default_library",
+        "//vendor/github.com/Azure/azure-sdk-for-go/arm/compute:go_default_library",
         "//vendor/github.com/Azure/azure-sdk-for-go/arm/network:go_default_library",
         "//vendor/github.com/Azure/go-autorest/autorest/to:go_default_library",
+        "//vendor/github.com/stretchr/testify/assert:go_default_library",
+        "//vendor/k8s.io/api/core/v1:go_default_library",
+        "//vendor/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
         "//vendor/k8s.io/apimachinery/pkg/types:go_default_library",
+        "//vendor/k8s.io/client-go/util/flowcontrol:go_default_library",
     ],
 )
 

@@ -20,13 +20,13 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
+	clientset "k8s.io/client-go/kubernetes"
+	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/kubernetes/pkg/api/v1"
-	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
-	corelisters "k8s.io/kubernetes/pkg/client/listers/core/v1"
 )
 
 // ReadyNodes returns ready nodes irrespective of whether they are
@@ -81,7 +81,7 @@ func GetNodeLister(client clientset.Interface, stopChannel <-chan struct{}) core
 	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	nodeLister := corelisters.NewNodeLister(store)
 	reflector := cache.NewReflector(listWatcher, &v1.Node{}, store, time.Hour)
-	reflector.RunUntil(stopChannel)
+	go reflector.Run(stopChannel)
 
 	// To give some time so that listing works, chosen randomly
 	time.Sleep(100 * time.Millisecond)

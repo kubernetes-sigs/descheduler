@@ -18,7 +18,7 @@ limitations under the License.
 package options
 
 import (
-	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
+	clientset "k8s.io/client-go/kubernetes"
 
 	// install the componentconfig api so we get its defaulting and conversion functions
 	"github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig"
