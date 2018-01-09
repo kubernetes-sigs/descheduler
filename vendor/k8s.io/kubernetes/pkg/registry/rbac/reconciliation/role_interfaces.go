@@ -19,14 +19,22 @@ package reconciliation
 import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/apimachinery/pkg/runtime"
+	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/apis/rbac"
 	core "k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset/typed/core/internalversion"
 	"k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset/typed/rbac/internalversion"
 )
 
+// +k8s:deepcopy-gen=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/kubernetes/pkg/registry/rbac/reconciliation.RuleOwner
+// +k8s:deepcopy-gen:nonpointer-interfaces=true
 type RoleRuleOwner struct {
 	Role *rbac.Role
+}
+
+func (o RoleRuleOwner) GetObject() runtime.Object {
+	return o.Role
 }
 
 func (o RoleRuleOwner) GetNamespace() string {
@@ -59,6 +67,13 @@ func (o RoleRuleOwner) GetRules() []rbac.PolicyRule {
 
 func (o RoleRuleOwner) SetRules(in []rbac.PolicyRule) {
 	o.Role.Rules = in
+}
+
+func (o RoleRuleOwner) GetAggregationRule() *rbac.AggregationRule {
+	return nil
+}
+
+func (o RoleRuleOwner) SetAggregationRule(in *rbac.AggregationRule) {
 }
 
 type RoleModifier struct {

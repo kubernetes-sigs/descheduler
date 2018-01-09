@@ -19,16 +19,15 @@ package strategies
 import (
 	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
 	"github.com/kubernetes-incubator/descheduler/pkg/api"
-	"k8s.io/kubernetes/pkg/api/v1"
-
-	"github.com/golang/glog"
 	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions"
 	podutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/pod"
+
+	"github.com/golang/glog"
+
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	//TODO: Change to client-go instead of generated clientset.
-	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset"
+	clientset "k8s.io/client-go/kubernetes"
 	priorityutil "k8s.io/kubernetes/plugin/pkg/scheduler/algorithm/priorities/util"
-	"k8s.io/kubernetes/plugin/pkg/scheduler/schedulercache"
 )
 
 // RemovePodsViolatingInterPodAntiAffinity with elimination strategy
@@ -72,7 +71,7 @@ func removePodsWithAffinityRules(client clientset.Interface, policyGroupVersion 
 
 // checkPodsWithAntiAffinityExist checks if there are other pods on the node that the current pod cannot tolerate.
 func checkPodsWithAntiAffinityExist(pod *v1.Pod, pods []*v1.Pod) bool {
-	affinity := schedulercache.ReconcileAffinity(pod)
+	affinity := pod.Spec.Affinity
 	if affinity != nil && affinity.PodAntiAffinity != nil {
 		for _, term := range getPodAntiAffinityTerms(affinity.PodAntiAffinity) {
 			namespaces := priorityutil.GetNamespacesFromPodAffinityTerm(pod, &term)
