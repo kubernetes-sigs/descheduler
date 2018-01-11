@@ -1,15 +1,10 @@
 hash: 374e925e75f6b711fd89523308d62c744e1a1846bc5923b36b864c19809eef8b
-updated: 2018-01-09T00:39:38.149357059-05:00
+updated: 2018-01-11T19:17:53.064730538+05:30
 imports:
 - name: github.com/davecgh/go-spew
   version: 782f4967f2dc4564575ca782fe2d04090b5faca8
   subpackages:
   - spew
-- name: github.com/docker/distribution
-  version: edc3ab29cdff8694dd6feb85cfeb4b5f1b38ed9c
-  subpackages:
-  - digestset
-  - reference
 - name: github.com/emicklei/go-restful
   version: ff4f55a206334ef123e4f79bbf348980da81ca46
   subpackages:
@@ -70,15 +65,13 @@ imports:
 - name: github.com/juju/ratelimit
   version: 5b9ff866471762aa2ab2dced63c9fb6f53921342
 - name: github.com/kubernetes/repo-infra
-  version: dbcbd7624d5e4eb29f33c48edf1b1651809827a3
+  version: 2a736b4fba317cf3038e3cbd06899b544b875fae
 - name: github.com/mailru/easyjson
   version: 2f5df55504ebc322e4d52d34df6a1f5b503bf26d
   subpackages:
   - buffer
   - jlexer
   - jwriter
-- name: github.com/opencontainers/go-digest
-  version: a6d0ee40d4207ea02364bd3b9e8e77b9159ba1eb
 - name: github.com/peterbourgon/diskv
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
 - name: github.com/PuerkitoBio/purell
@@ -135,7 +128,7 @@ imports:
   - unicode/norm
   - width
 - name: golang.org/x/tools
-  version: 8cab8a1319f0be9798e7fe78b15da75e5f94b2e9
+  version: fbec762f837dc349b73d1eaa820552e2ad177942
   subpackages:
   - imports
 - name: gopkg.in/inf.v0
@@ -173,10 +166,6 @@ imports:
   - storage/v1
   - storage/v1alpha1
   - storage/v1beta1
-- name: k8s.io/apiextensions-apiserver
-  version: aaccab68c17a51ccdfd3c8559221cce9334d3394
-  subpackages:
-  - pkg/features
 - name: k8s.io/apimachinery
   version: 180eddb345a5be3a157cea1c624700ad5bd27b8f
   subpackages:
@@ -224,8 +213,6 @@ imports:
 - name: k8s.io/apiserver
   version: 91e14f394e4796abf5a994a349a222e7081d86b6
   subpackages:
-  - pkg/features
-  - pkg/util/feature
   - pkg/util/flag
   - pkg/util/logs
 - name: k8s.io/client-go
@@ -327,26 +314,11 @@ imports:
 - name: k8s.io/kubernetes
   version: 925c127ec6b946659ad0fd596fa959be43f0cc05
   subpackages:
-  - pkg/api/legacyscheme
-  - pkg/api/v1
   - pkg/api/v1/resource
-  - pkg/apis/autoscaling
   - pkg/apis/core
   - pkg/apis/core/helper
-  - pkg/apis/core/helper/qos
-  - pkg/apis/core/install
-  - pkg/apis/core/v1
   - pkg/apis/core/v1/helper
-  - pkg/apis/extensions
-  - pkg/apis/networking
-  - pkg/apis/policy
-  - pkg/apis/policy/v1beta1
-  - pkg/apis/scheduling
-  - pkg/features
+  - pkg/apis/core/v1/helper/qos
   - pkg/kubelet/types
-  - pkg/util/parsers
-  - pkg/util/pointer
   - plugin/pkg/scheduler/algorithm/priorities/util
-  - plugin/pkg/scheduler/schedulercache
-  - plugin/pkg/scheduler/util
 testImports: []
