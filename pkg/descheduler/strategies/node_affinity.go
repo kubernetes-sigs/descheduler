@@ -26,12 +26,12 @@ import (
 	"k8s.io/api/core/v1"
 )
 
-func RemovePodsViolatingNodeAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node) {
-	evictionCount := removePodsViolatingNodeAffinityCount(ds, strategy, evictionPolicyGroupVersion, nodes)
+func RemovePodsViolatingNodeAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodePodCount nodePodEvictedCount) {
+	evictionCount := removePodsViolatingNodeAffinityCount(ds, strategy, evictionPolicyGroupVersion, nodes, nodePodCount, ds.MaxNoOfPodsToEvictPerNode)
 	glog.V(1).Infof("Evicted %v pods", evictionCount)
 }
 
-func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node) int {
+func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodepodCount nodePodEvictedCount, maxPodsToEvict int) int {
 	evictedPodCount := 0
 	if !strategy.Enabled {
 		return evictedPodCount
@@ -51,15 +51,19 @@ func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strateg
 				}
 
 				for _, pod := range pods {
+					if nodepodCount[node]+1 > maxPodsToEvict {
+						break
+					}
 					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
 
 						if !nodeutil.PodFitsCurrentNode(pod, node) && nodeutil.PodFitsAnyNode(pod, nodes) {
 							glog.V(1).Infof("Evicting pod: %v", pod.Name)
 							evictions.EvictPod(ds.Client, pod, evictionPolicyGroupVersion, false)
-							evictedPodCount++
+							nodepodCount[node]++
 						}
 					}
 				}
+				evictedPodCount += nodepodCount[node]
 			}
 		default:
 			glog.Errorf("invalid nodeAffinityType: %v", nodeAffinity)

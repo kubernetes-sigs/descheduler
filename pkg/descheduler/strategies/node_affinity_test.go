@@ -92,6 +92,8 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		pods                    []v1.Pod
 		strategy                api.DeschedulerStrategy
 		expectedEvictedPodCount int
+		npe                     nodePodEvictedCount
+		maxPodsToEvict          int
 	}{
 		{
 			description: "Strategy disabled, should not evict any pods",
@@ -104,8 +106,10 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 				},
 			},
 			expectedEvictedPodCount: 0,
-			pods:  addPodsToNode(nodeWithoutLabels),
-			nodes: []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			pods:           addPodsToNode(nodeWithoutLabels),
+			nodes:          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			npe:            nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
+			maxPodsToEvict: 0,
 		},
 		{
 			description: "Invalid strategy type, should not evict any pods",
@@ -118,15 +122,19 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 				},
 			},
 			expectedEvictedPodCount: 0,
-			pods:  addPodsToNode(nodeWithoutLabels),
-			nodes: []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			pods:           addPodsToNode(nodeWithoutLabels),
+			nodes:          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			npe:            nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
+			maxPodsToEvict: 0,
 		},
 		{
 			description:             "Pod is correctly scheduled on node, no eviction expected",
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
 			expectedEvictedPodCount: 0,
-			pods:  addPodsToNode(nodeWithLabels),
-			nodes: []*v1.Node{nodeWithLabels},
+			pods:           addPodsToNode(nodeWithLabels),
+			nodes:          []*v1.Node{nodeWithLabels},
+			npe:            nodePodEvictedCount{nodeWithLabels: 0},
+			maxPodsToEvict: 0,
 		},
 		{
 			description:             "Pod is scheduled on node without matching labels, another schedulable node available, should be evicted",
@@ -134,6 +142,17 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
+			maxPodsToEvict:          1,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvict set to 0, should not be evicted",
+			expectedEvictedPodCount: 0,
+			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
+			pods:                    addPodsToNode(nodeWithoutLabels),
+			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
+			maxPodsToEvict:          0,
 		},
 		{
 			description:             "Pod is scheduled on node without matching labels, but no node where pod fits is available, should not evict",
@@ -141,6 +160,8 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, unschedulableNodeWithLabels},
+			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, unschedulableNodeWithLabels: 0},
+			maxPodsToEvict:          0,
 		},
 	}
 
@@ -155,7 +176,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			Client: fakeClient,
 		}
 
-		actualEvictedPodCount := removePodsViolatingNodeAffinityCount(&ds, tc.strategy, "v1", tc.nodes)
+		actualEvictedPodCount := removePodsViolatingNodeAffinityCount(&ds, tc.strategy, "v1", tc.nodes, tc.npe, tc.maxPodsToEvict)
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)
 		}

@@ -79,8 +79,15 @@ func TestPodAntiAffinity(t *testing.T) {
 	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 		return true, node, nil
 	})
-	expectedEvictedPodCount := 1
-	podsEvicted := removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false)
+	npe := nodePodEvictedCount{}
+	npe[node] = 0
+	expectedEvictedPodCount := 0
+	podsEvicted := removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, 0)
+	if podsEvicted != expectedEvictedPodCount {
+		t.Errorf("Unexpected no of pods evicted")
+	}
+	expectedEvictedPodCount = 1
+	podsEvicted = removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, 1)
 	if podsEvicted != expectedEvictedPodCount {
 		t.Errorf("Unexpected no of pods evicted")
 	}
