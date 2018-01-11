@@ -31,15 +31,15 @@ import (
 )
 
 // RemovePodsViolatingInterPodAntiAffinity with elimination strategy
-func RemovePodsViolatingInterPodAntiAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node) {
+func RemovePodsViolatingInterPodAntiAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node, nodePodCount nodePodEvictedCount) {
 	if !strategy.Enabled {
 		return
 	}
-	removePodsWithAffinityRules(ds.Client, policyGroupVersion, nodes, ds.DryRun)
+	removePodsWithAffinityRules(ds.Client, policyGroupVersion, nodes, ds.DryRun, nodePodCount, ds.MaxNoOfPodsToEvictPerNode)
 }
 
 // removePodsWithAffinityRules evicts pods on the node which are having a pod affinity rules.
-func removePodsWithAffinityRules(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool) int {
+func removePodsWithAffinityRules(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodePodCount nodePodEvictedCount, maxPodsToEvict int) int {
 	podsEvicted := 0
 	for _, node := range nodes {
 		glog.V(1).Infof("Processing node: %#v\n", node.Name)
@@ -49,22 +49,25 @@ func removePodsWithAffinityRules(client clientset.Interface, policyGroupVersion 
 		}
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
-			if checkPodsWithAntiAffinityExist(pods[i], pods) {
-				success, err := evictions.EvictPod(client, pods[i], policyGroupVersion, dryRun)
-				if !success {
-					glog.Infof("Error when evicting pod: %#v (%#v)\n", pods[i].Name, err)
-				} else {
-					podsEvicted++
-					glog.V(1).Infof("Evicted pod: %#v (%#v)\n because of existing anti-affinity", pods[i].Name, err)
-					// Since the current pod is evicted all other pods which have anti-affinity with this
-					// pod need not be evicted.
-					// Update pods.
-					pods = append(pods[:i], pods[i+1:]...)
-					i--
-					totalPods--
+			if nodePodCount[node]+1 <= maxPodsToEvict {
+				if checkPodsWithAntiAffinityExist(pods[i], pods) {
+					success, err := evictions.EvictPod(client, pods[i], policyGroupVersion, dryRun)
+					if !success {
+						glog.Infof("Error when evicting pod: %#v (%#v)\n", pods[i].Name, err)
+					} else {
+						nodePodCount[node] += 1
+						glog.V(1).Infof("Evicted pod: %#v (%#v)\n because of existing anti-affinity", pods[i].Name, err)
+						// Since the current pod is evicted all other pods which have anti-affinity with this
+						// pod need not be evicted.
+						// Update pods.
+						pods = append(pods[:i], pods[i+1:]...)
+						i--
+						totalPods--
+					}
 				}
 			}
 		}
+		podsEvicted += nodePodCount[node]
 	}
 	return podsEvicted
 }
