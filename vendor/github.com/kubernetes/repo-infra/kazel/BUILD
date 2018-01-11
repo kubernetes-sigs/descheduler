@@ -27,7 +27,7 @@ go_library(
     importpath = "k8s.io/repo-infra/kazel",
     tags = ["automanaged"],
     deps = [
-        "//vendor/github.com/bazelbuild/buildifier/core:go_default_library",
+        "//vendor/github.com/bazelbuild/buildtools/build:go_default_library",
         "//vendor/github.com/golang/glog:go_default_library",
     ],
 )
