@@ -673,9 +673,9 @@ func (x *StrategyParameters) CodecEncodeSelf(e *codec1978.Encoder) {
 			_, _ = yysep2, yy2arr2
 			const yyr2 bool = false
 			if yyr2 || yy2arr2 {
-				r.WriteArrayStart(1)
+				r.WriteArrayStart(2)
 			} else {
-				r.WriteMapStart(1)
+				r.WriteMapStart(2)
 			}
 			if yyr2 || yy2arr2 {
 				r.WriteArrayElem()
@@ -687,6 +687,33 @@ func (x *StrategyParameters) CodecEncodeSelf(e *codec1978.Encoder) {
 				r.WriteMapElemValue()
 				yy6 := &x.NodeResourceUtilizationThresholds
 				yy6.CodecEncodeSelf(e)
+			}
+			if yyr2 || yy2arr2 {
+				r.WriteArrayElem()
+				if x.NodeAffinityType == nil {
+					r.EncodeNil()
+				} else {
+					yym9 := z.EncBinary()
+					_ = yym9
+					if false {
+					} else {
+						z.F.EncSliceStringV(x.NodeAffinityType, e)
+					}
+				}
+			} else {
+				r.WriteMapElemKey()
+				r.EncStructFieldKey(codecSelferValueTypeString1234, `NodeAffinityType`)
+				r.WriteMapElemValue()
+				if x.NodeAffinityType == nil {
+					r.EncodeNil()
+				} else {
+					yym10 := z.EncBinary()
+					_ = yym10
+					if false {
+					} else {
+						z.F.EncSliceStringV(x.NodeAffinityType, e)
+					}
+				}
 			}
 			if yyr2 || yy2arr2 {
 				r.WriteArrayEnd()
@@ -754,6 +781,18 @@ func (x *StrategyParameters) codecDecodeSelfFromMap(l int, d *codec1978.Decoder)
 				yyv4 := &x.NodeResourceUtilizationThresholds
 				yyv4.CodecDecodeSelf(d)
 			}
+		case "NodeAffinityType":
+			if r.TryDecodeAsNil() {
+				x.NodeAffinityType = nil
+			} else {
+				yyv5 := &x.NodeAffinityType
+				yym6 := z.DecBinary()
+				_ = yym6
+				if false {
+				} else {
+					z.F.DecSliceStringX(yyv5, d)
+				}
+			}
 		default:
 			z.DecStructFieldNotFound(-1, yys3)
 		} // end switch yys3
@@ -765,16 +804,16 @@ func (x *StrategyParameters) codecDecodeSelfFromArray(l int, d *codec1978.Decode
 	var h codecSelfer1234
 	z, r := codec1978.GenHelperDecoder(d)
 	_, _, _ = h, z, r
-	var yyj5 int
-	var yyb5 bool
-	var yyhl5 bool = l >= 0
-	yyj5++
-	if yyhl5 {
-		yyb5 = yyj5 > l
+	var yyj7 int
+	var yyb7 bool
+	var yyhl7 bool = l >= 0
+	yyj7++
+	if yyhl7 {
+		yyb7 = yyj7 > l
 	} else {
-		yyb5 = r.CheckBreak()
+		yyb7 = r.CheckBreak()
 	}
-	if yyb5 {
+	if yyb7 {
 		r.ReadArrayEnd()
 		return
 	}
@@ -782,21 +821,43 @@ func (x *StrategyParameters) codecDecodeSelfFromArray(l int, d *codec1978.Decode
 	if r.TryDecodeAsNil() {
 		x.NodeResourceUtilizationThresholds = NodeResourceUtilizationThresholds{}
 	} else {
-		yyv6 := &x.NodeResourceUtilizationThresholds
-		yyv6.CodecDecodeSelf(d)
+		yyv8 := &x.NodeResourceUtilizationThresholds
+		yyv8.CodecDecodeSelf(d)
+	}
+	yyj7++
+	if yyhl7 {
+		yyb7 = yyj7 > l
+	} else {
+		yyb7 = r.CheckBreak()
+	}
+	if yyb7 {
+		r.ReadArrayEnd()
+		return
+	}
+	r.ReadArrayElem()
+	if r.TryDecodeAsNil() {
+		x.NodeAffinityType = nil
+	} else {
+		yyv9 := &x.NodeAffinityType
+		yym10 := z.DecBinary()
+		_ = yym10
+		if false {
+		} else {
+			z.F.DecSliceStringX(yyv9, d)
+		}
 	}
 	for {
-		yyj5++
-		if yyhl5 {
-			yyb5 = yyj5 > l
+		yyj7++
+		if yyhl7 {
+			yyb7 = yyj7 > l
 		} else {
-			yyb5 = r.CheckBreak()
+			yyb7 = r.CheckBreak()
 		}
-		if yyb5 {
+		if yyb7 {
 			break
 		}
 		r.ReadArrayElem()
-		z.DecStructFieldNotFound(yyj5-1, "")
+		z.DecStructFieldNotFound(yyj7-1, "")
 	}
 	r.ReadArrayEnd()
 }
@@ -1131,7 +1192,7 @@ func (x codecSelfer1234) decStrategyList(v *StrategyList, d *codec1978.Decoder) 
 	yyl1 := r.ReadMapStart()
 	yybh1 := z.DecBasicHandle()
 	if yyv1 == nil {
-		yyrl1 := z.DecInferLen(yyl1, yybh1.MaxInitLen, 56)
+		yyrl1 := z.DecInferLen(yyl1, yybh1.MaxInitLen, 80)
 		yyv1 = make(map[StrategyName]DeschedulerStrategy, yyrl1)
 		*v = yyv1
 	}
