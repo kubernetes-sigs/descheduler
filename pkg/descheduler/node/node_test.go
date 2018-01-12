@@ -21,6 +21,7 @@ import (
 
 	"github.com/kubernetes-incubator/descheduler/test"
 	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -101,4 +102,246 @@ func TestIsNodeUschedulable(t *testing.T) {
 		}
 	}
 
+}
+
+func TestPodFitsCurrentNode(t *testing.T) {
+
+	nodeLabelKey := "kubernetes.io/desiredNode"
+	nodeLabelValue := "yes"
+
+	tests := []struct {
+		description string
+		pod         *v1.Pod
+		node        *v1.Node
+		success     bool
+	}{
+		{
+			description: "Pod with nodeAffinity set, expected to fit the node",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      nodeLabelKey,
+												Operator: "In",
+												Values: []string{
+													nodeLabelValue,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					},
+				},
+			},
+			success: true,
+		},
+		{
+			description: "Pod with nodeAffinity set, not expected to fit the node",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      nodeLabelKey,
+												Operator: "In",
+												Values: []string{
+													nodeLabelValue,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						nodeLabelKey: "no",
+					},
+				},
+			},
+			success: false,
+		},
+	}
+
+	for _, tc := range tests {
+		actual := PodFitsCurrentNode(tc.pod, tc.node)
+		if actual != tc.success {
+			t.Errorf("Test %#v failed", tc.description)
+		}
+	}
+}
+
+func TestPodFitsAnyNode(t *testing.T) {
+
+	nodeLabelKey := "kubernetes.io/desiredNode"
+	nodeLabelValue := "yes"
+
+	tests := []struct {
+		description string
+		pod         *v1.Pod
+		nodes       []*v1.Node
+		success     bool
+	}{
+		{
+			description: "Pod expected to fit one of the nodes",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      nodeLabelKey,
+												Operator: "In",
+												Values: []string{
+													nodeLabelValue,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			nodes: []*v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							nodeLabelKey: nodeLabelValue,
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							nodeLabelKey: "no",
+						},
+					},
+				},
+			},
+			success: true,
+		},
+		{
+			description: "Pod expected to fit none of the nodes",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      nodeLabelKey,
+												Operator: "In",
+												Values: []string{
+													nodeLabelValue,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			nodes: []*v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							nodeLabelKey: "unfit1",
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							nodeLabelKey: "unfit2",
+						},
+					},
+				},
+			},
+			success: false,
+		},
+		{
+			description: "Nodes are unschedulable but labels match, should fail",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      nodeLabelKey,
+												Operator: "In",
+												Values: []string{
+													nodeLabelValue,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			nodes: []*v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							nodeLabelKey: nodeLabelValue,
+						},
+					},
+					Spec: v1.NodeSpec{
+						Unschedulable: true,
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							nodeLabelKey: "no",
+						},
+					},
+				},
+			},
+			success: false,
+		},
+	}
+
+	for _, tc := range tests {
+		actual := PodFitsAnyNode(tc.pod, tc.nodes)
+		if actual != tc.success {
+			t.Errorf("Test %#v failed", tc.description)
+		}
+	}
 }
