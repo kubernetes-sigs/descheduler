@@ -256,6 +256,13 @@ This roadmap is not in any particular order.
 * Consideration of Kubernetes's scheduler's predicates
 
 
+## Compatibility matrix
+
+Descheduler  | supported Kubernetes version
+-------------|-----------------------------
+0.4          | 1.9+
+0.1-0.3      | 1.7-1.8
+
 ## Note
 
 This project is under active development, and is not intended for production use.
