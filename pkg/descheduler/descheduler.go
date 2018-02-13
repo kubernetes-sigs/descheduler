@@ -55,8 +55,8 @@ func Run(rs *options.DeschedulerServer) error {
 		return err
 	}
 
-	if len(nodes) == 0 {
-		glog.V(1).Infof("node list is empty")
+	if len(nodes) <= 1 {
+		glog.V(1).Infof("The cluster size is 0 or 1 meaning eviction causes service disruption or degradation. So aborting..")
 		return nil
 	}
 
