@@ -30,7 +30,7 @@ IMAGE:=descheduler:$(VERSION)
 all: build
 
 build:
-	go build ${LDFLAGS} -o _output/bin/descheduler github.com/kubernetes-incubator/descheduler/cmd/descheduler 
+	CGO_ENABLED=0 go build ${LDFLAGS} -o _output/bin/descheduler github.com/kubernetes-incubator/descheduler/cmd/descheduler
 
 image: build
 	docker build -t $(IMAGE) .
