@@ -57,8 +57,18 @@ in `kube-system` namespace.
 First we create a simple Docker image utilizing the Dockerfile found in the root directory:
 
 ```
+$ make dev-image
+```
+
+This creates an image based off the binary we've built before. To build both the
+binary and image in one step you can run the following command:
+
+```
 $ make image
 ```
+
+This eliminates the need to have Go installed locally and builds the binary
+within it's own container.
 
 ### Create a cluster role
 
@@ -150,7 +160,7 @@ $ kubectl create -f descheduler-job.yaml
 ```
 
 ## Policy and Strategies
- 
+
 Descheduler's policy is configurable and includes strategies to be enabled or disabled.
 Three strategies, `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity` are currently implemented.
 As part of the policy, the parameters associated with the strategies can be configured too.
@@ -232,12 +242,12 @@ strategies:
 
 When the descheduler decides to evict pods from a node, it employs following general mechanism:
 
-* Critical pods (with annotations scheduler.alpha.kubernetes.io/critical-pod) are never evicted. 
+* Critical pods (with annotations scheduler.alpha.kubernetes.io/critical-pod) are never evicted.
 * Pods (static or mirrored pods or stand alone pods) not part of an RC, RS, Deployment or Jobs are
 never evicted because these pods won't be recreated.
 * Pods associated with DaemonSets are never evicted.
 * Pods with local storage are never evicted.
-* Best efforts pods are evicted before Burstable and Guaranteed pods. 
+* Best efforts pods are evicted before Burstable and Guaranteed pods.
 
 ### Pod disruption Budget (PDB)
 Pods subject to Pod Disruption Budget (PDB) are not evicted if descheduling violates its pod
@@ -248,7 +258,7 @@ disruption budget (PDB). The pods are evicted by using eviction subresource to h
 This roadmap is not in any particular order.
 
 * Strategy to consider taints and tolerations
-* Consideration of pod affinity 
+* Consideration of pod affinity
 * Strategy to consider pod life time
 * Strategy to consider number of pending pods
 * Integration with cluster autoscaler
