@@ -47,6 +47,7 @@ func autoConvert_v1alpha1_DeschedulerConfiguration_To_componentconfig_Deschedule
 	out.PolicyConfigFile = in.PolicyConfigFile
 	out.DryRun = in.DryRun
 	out.NodeSelector = in.NodeSelector
+	out.MaxNoOfPodsToEvictPerNode = in.MaxNoOfPodsToEvictPerNode
 	return nil
 }
 
@@ -61,6 +62,7 @@ func autoConvert_componentconfig_DeschedulerConfiguration_To_v1alpha1_Deschedule
 	out.PolicyConfigFile = in.PolicyConfigFile
 	out.DryRun = in.DryRun
 	out.NodeSelector = in.NodeSelector
+	out.MaxNoOfPodsToEvictPerNode = in.MaxNoOfPodsToEvictPerNode
 	return nil
 }
 
