@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/kubernetes-incubator/descheduler/pkg/utils"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -123,4 +124,44 @@ func IsNodeUschedulable(node *v1.Node) bool {
 		return true
 	}
 	return false
+}
+
+// PodFitsAnyNode checks if the given pod fits any of the given nodes, based on
+// multiple criteria, like, pod node selector matching the node label, node
+// being schedulable or not.
+func PodFitsAnyNode(pod *v1.Pod, nodes []*v1.Node) bool {
+	for _, node := range nodes {
+
+		ok, err := utils.PodMatchNodeSelector(pod, node)
+		if err != nil || !ok {
+			continue
+		}
+		if ok {
+			if !IsNodeUschedulable(node) {
+				glog.V(2).Infof("Pod %v can possibly be scheduled on %v", pod.Name, node.Name)
+				return true
+			}
+			return false
+		}
+	}
+	return false
+}
+
+// PodFitsCurrentNode checks if the given pod fits on the given node if the pod
+// node selector matches the node label.
+func PodFitsCurrentNode(pod *v1.Pod, node *v1.Node) bool {
+	ok, err := utils.PodMatchNodeSelector(pod, node)
+
+	if err != nil {
+		glog.Error(err)
+		return false
+	}
+
+	if !ok {
+		glog.V(1).Infof("Pod %v does not fit on node %v", pod.Name, node.Name)
+		return false
+	}
+
+	glog.V(3).Infof("Pod %v fits on node %v", pod.Name, node.Name)
+	return true
 }

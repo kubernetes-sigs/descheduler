@@ -47,6 +47,7 @@ type DeschedulerStrategy struct {
 // Only one of its members may be specified
 type StrategyParameters struct {
 	NodeResourceUtilizationThresholds NodeResourceUtilizationThresholds
+	NodeAffinityType                  []string
 }
 
 type Percentage float64
