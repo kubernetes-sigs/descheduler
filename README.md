@@ -162,7 +162,7 @@ $ kubectl create -f descheduler-job.yaml
 ## Policy and Strategies
 
 Descheduler's policy is configurable and includes strategies to be enabled or disabled.
-Three strategies, `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity` are currently implemented.
+Four strategies, `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`, `RemovePodsViolatingNodeAffinity` are currently implemented.
 As part of the policy, the parameters associated with the strategies can be configured too.
 By default, all strategies are enabled.
 
@@ -236,6 +236,21 @@ kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingInterPodAntiAffinity":
      enabled: false
+```
+
+### RemovePodsViolatingNodeAffinity
+
+This strategy makes sure that pods violating node affinity are removed from nodes. For example, there is podA that was scheduled on nodeA which satisfied the node affinity rule `requiredDuringSchedulingIgnoredDuringExecution` at the time of scheduling, but over time nodeA no longer satisfies the rule, then if another node nodeB is available that satisfies the node affinity rule, then podA will be evicted from nodeA. The policy file should like this -
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "RemovePodsViolatingNodeAffinity":
+    enabled: true
+    params:
+      nodeAffinityType:
+      - "requiredDuringSchedulingIgnoredDuringExecution"
 ```
 
 ## Pod Evictions
