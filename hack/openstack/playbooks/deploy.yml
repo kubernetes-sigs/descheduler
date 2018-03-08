@@ -1,0 +1,96 @@
+---
+- name: Install docker
+  hosts: all
+  tasks:
+  - name: Selinux must be off!!!
+    command: setenforce 0
+
+  - package:
+      name: "{{ item }}"
+      state: present
+    with_items:
+      - "docker-1.12.*"
+
+  - name: Start docker
+    service:
+      name: docker
+      state: started
+
+  # https://kubernetes.io/docs/setup/independent/install-kubeadm/
+  - name: Add upstream Kubernetes repo
+    yum_repository:
+      name: kubernetes
+      description: Upstream kubernetes repo
+      baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+      enabled: yes
+      gpgcheck: 0
+      # repo_gpgcheck: 1
+      # gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg
+
+  - name: Install kubelet kubeadm kubectl
+    package:
+      name: "{{ item }}"
+      state: present
+    with_items:
+      - kubelet-{{ kube_version }}
+      - kubeadm-{{ kube_version }}
+      - kubectl-{{ kube_version }}
+
+  - name: Get hostname
+    command: hostname
+    register: host_hostname
+
+  - name: Update /etc/hosts on all hosts
+    lineinfile:
+      # since ansible 2.3 s/dest/path
+      dest: /etc/hosts
+      line: "{{ hostvars[inventory_hostname]['ansible_ssh_host'] }} {{ host_hostname.stdout }}"
+
+
+- name: Start kube master via kubeadm
+  hosts: masters
+  tasks:
+  - name: Enable firewalld port for apiserver
+    firewalld:
+      immediate: true
+      port: "{{ kube_apiserver_port }}/tcp"
+      permanent: true
+      state: enabled
+    # in case this is also a node with firewalld turned off
+    ignore_errors: yes
+
+  - name: Restart firewalld
+    service:
+      name: firewalld
+      state: restarted
+
+  - name: Start kube master via kubeadm
+    command: "kubeadm init --kubernetes-version=v{{ kube_version }} --apiserver-advertise-address={{ ansible_default_ipv4.address }}"
+    register: kubeadminit
+
+  - set_fact:
+      kubeadmjoincmd: "{{ item }}"
+    with_items: "{{ kubeadminit.stdout_lines }}"
+    when: item | search("kubeadm join")
+
+  - debug: var=kubeadmjoincmd
+
+  - name: Install network plugin
+    command: kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/kubeadm-kuberouter.yaml --kubeconfig /etc/kubernetes/admin.conf
+
+- name: Join kube nodes via kubeadm
+  hosts: nodes
+  serial: 1
+  tasks:
+    - debug: var=hostvars[groups.masters.0].kubeadmjoincmd
+
+    - set_fact:
+        kubeadmjoincmd: "{{ hostvars[groups.masters.0].kubeadmjoincmd }}"
+
+    - debug: var=kubeadmjoincmd
+
+    - name: Join nodes
+      command: "{{ kubeadmjoincmd }}"
+      register: kubeadmjoin
+
+    - debug: var=kubeadmjoin
