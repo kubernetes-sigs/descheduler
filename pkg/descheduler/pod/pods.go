@@ -54,7 +54,7 @@ func IsLatencySensitivePod(pod *v1.Pod) bool {
 // IsEvictable checks if a pod is evictable or not.
 func IsEvictable(pod *v1.Pod) bool {
 	ownerRefList := OwnerRef(pod)
-	if IsMirrorPod(pod) || IsPodWithLocalStorage(pod) || len(ownerRefList) == 0 || IsDaemonsetPod(ownerRefList) || IsCriticalPod(pod) {
+	if IsMirrorPod(pod) || IsPodWithLocalStorage(pod) || IsDaemonsetPod(ownerRefList) || IsCriticalPod(pod) {
 		return false
 	}
 	return true
