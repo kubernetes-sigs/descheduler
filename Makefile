@@ -41,5 +41,8 @@ image:
 clean:
 	rm -rf _output
 
-test:
+test-unit:
 	./test/run-unit-tests.sh
+
+test-e2e:
+	./test/run-e2e-tests.sh
