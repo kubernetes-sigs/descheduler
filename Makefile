@@ -46,3 +46,9 @@ test-unit:
 
 test-e2e:
 	./test/run-e2e-tests.sh
+
+gen:
+	./hack/update-codecgen.sh
+	./hack/update-generated-conversions.sh
+	./hack/update-generated-deep-copies.sh
+	./hack/update-generated-defaulters.sh

@@ -17,8 +17,9 @@ limitations under the License.
 package strategies
 
 import (
-	"github.com/golang/glog"
 	"strings"
+
+	"github.com/golang/glog"
 
 	"k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -35,15 +36,15 @@ type DuplicatePodsMap map[string][]*v1.Pod
 // RemoveDuplicatePods removes the duplicate pods on node. This strategy evicts all duplicate pods on node.
 // A pod is said to be a duplicate of other if both of them are from same creator, kind and are within the same
 // namespace. As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
-func RemoveDuplicatePods(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node) {
+func RemoveDuplicatePods(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node, nodepodCount nodePodEvictedCount) {
 	if !strategy.Enabled {
 		return
 	}
-	deleteDuplicatePods(ds.Client, policyGroupVersion, nodes, ds.DryRun)
+	deleteDuplicatePods(ds.Client, policyGroupVersion, nodes, ds.DryRun, nodepodCount, ds.MaxNoOfPodsToEvictPerNode)
 }
 
 // deleteDuplicatePods evicts the pod from node and returns the count of evicted pods.
-func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool) int {
+func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodepodCount nodePodEvictedCount, maxPodsToEvict int) int {
 	podsEvicted := 0
 	for _, node := range nodes {
 		glog.V(1).Infof("Processing node: %#v", node.Name)
@@ -53,16 +54,20 @@ func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, 
 				glog.V(1).Infof("%#v", creator)
 				// i = 0 does not evict the first pod
 				for i := 1; i < len(pods); i++ {
+					if nodepodCount[node]+1 > maxPodsToEvict {
+						break
+					}
 					success, err := evictions.EvictPod(client, pods[i], policyGroupVersion, dryRun)
 					if !success {
 						glog.Infof("Error when evicting pod: %#v (%#v)", pods[i].Name, err)
 					} else {
-						podsEvicted++
+						nodepodCount[node]++
 						glog.V(1).Infof("Evicted pod: %#v (%#v)", pods[i].Name, err)
 					}
 				}
 			}
 		}
+		podsEvicted += nodepodCount[node]
 	}
 	return podsEvicted
 }
