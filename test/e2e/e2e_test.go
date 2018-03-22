@@ -112,7 +112,8 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface) {
 	nodeUtilizationStrategyParams := deschedulerapi.StrategyParameters{NodeResourceUtilizationThresholds: nodeUtilizationThresholds}
 	lowNodeUtilizationStrategy := deschedulerapi.DeschedulerStrategy{Enabled: true, Params: nodeUtilizationStrategyParams}
 	ds := &options.DeschedulerServer{Client: clientset}
-	strategies.LowNodeUtilization(ds, lowNodeUtilizationStrategy, evictionPolicyGroupVersion, nodes)
+	nodePodCount := strategies.InitializeNodePodCount(nodes)
+	strategies.LowNodeUtilization(ds, lowNodeUtilizationStrategy, evictionPolicyGroupVersion, nodes, nodePodCount)
 	time.Sleep(10 * time.Second)
 
 	return

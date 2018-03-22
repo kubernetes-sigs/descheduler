@@ -42,4 +42,7 @@ type DeschedulerConfiguration struct {
 
 	// Node selectors
 	NodeSelector string
+
+	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
+	MaxNoOfPodsToEvictPerNode int
 }

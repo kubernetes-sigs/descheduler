@@ -37,11 +37,15 @@ func TestFindDuplicatePods(t *testing.T) {
 	p5 := test.BuildTestPod("p5", 100, 0, node.Name)
 	p6 := test.BuildTestPod("p6", 100, 0, node.Name)
 	p7 := test.BuildTestPod("p7", 100, 0, node.Name)
+	p8 := test.BuildTestPod("p8", 100, 0, node.Name)
+	p9 := test.BuildTestPod("p9", 100, 0, node.Name)
 
 	// All the following pods expect for one will be evicted.
 	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	p2.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	p3.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p8.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p9.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 
 	// The following 4 pods won't get evicted.
 	// A daemonset.
@@ -66,12 +70,14 @@ func TestFindDuplicatePods(t *testing.T) {
 	expectedEvictedPodCount := 2
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7}}, nil
+		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p9}}, nil
 	})
 	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 		return true, node, nil
 	})
-	podsEvicted := deleteDuplicatePods(fakeClient, "v1", []*v1.Node{node}, false)
+	npe := nodePodEvictedCount{}
+	npe[node] = 0
+	podsEvicted := deleteDuplicatePods(fakeClient, "v1", []*v1.Node{node}, false, npe, 2)
 	if podsEvicted != expectedEvictedPodCount {
 		t.Errorf("Unexpected no of pods evicted")
 	}
