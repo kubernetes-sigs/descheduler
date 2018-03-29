@@ -57,8 +57,18 @@ in `kube-system` namespace.
 First we create a simple Docker image utilizing the Dockerfile found in the root directory:
 
 ```
+$ make dev-image
+```
+
+This creates an image based off the binary we've built before. To build both the
+binary and image in one step you can run the following command:
+
+```
 $ make image
 ```
+
+This eliminates the need to have Go installed locally and builds the binary
+within it's own container.
 
 ### Create a cluster role
 
@@ -150,9 +160,9 @@ $ kubectl create -f descheduler-job.yaml
 ```
 
 ## Policy and Strategies
- 
+
 Descheduler's policy is configurable and includes strategies to be enabled or disabled.
-Three strategies, `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity` are currently implemented.
+Four strategies, `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`, `RemovePodsViolatingNodeAffinity` are currently implemented.
 As part of the policy, the parameters associated with the strategies can be configured too.
 By default, all strategies are enabled.
 
@@ -228,16 +238,31 @@ strategies:
      enabled: false
 ```
 
+### RemovePodsViolatingNodeAffinity
+
+This strategy makes sure that pods violating node affinity are removed from nodes. For example, there is podA that was scheduled on nodeA which satisfied the node affinity rule `requiredDuringSchedulingIgnoredDuringExecution` at the time of scheduling, but over time nodeA no longer satisfies the rule, then if another node nodeB is available that satisfies the node affinity rule, then podA will be evicted from nodeA. The policy file should like this -
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "RemovePodsViolatingNodeAffinity":
+    enabled: true
+    params:
+      nodeAffinityType:
+      - "requiredDuringSchedulingIgnoredDuringExecution"
+```
+
 ## Pod Evictions
 
 When the descheduler decides to evict pods from a node, it employs following general mechanism:
 
-* Critical pods (with annotations scheduler.alpha.kubernetes.io/critical-pod) are never evicted. 
+* Critical pods (with annotations scheduler.alpha.kubernetes.io/critical-pod) are never evicted.
 * Pods (static or mirrored pods or stand alone pods) not part of an RC, RS, Deployment or Jobs are
 never evicted because these pods won't be recreated.
 * Pods associated with DaemonSets are never evicted.
 * Pods with local storage are never evicted.
-* Best efforts pods are evicted before Burstable and Guaranteed pods. 
+* Best efforts pods are evicted before Burstable and Guaranteed pods.
 
 ### Pod disruption Budget (PDB)
 Pods subject to Pod Disruption Budget (PDB) are not evicted if descheduling violates its pod
@@ -248,13 +273,20 @@ disruption budget (PDB). The pods are evicted by using eviction subresource to h
 This roadmap is not in any particular order.
 
 * Strategy to consider taints and tolerations
-* Consideration of pod affinity 
+* Consideration of pod affinity
 * Strategy to consider pod life time
 * Strategy to consider number of pending pods
 * Integration with cluster autoscaler
 * Integration with metrics providers for obtaining real load metrics
 * Consideration of Kubernetes's scheduler's predicates
 
+
+## Compatibility matrix
+
+Descheduler  | supported Kubernetes version
+-------------|-----------------------------
+0.4          | 1.9+
+0.1-0.3      | 1.7-1.8
 
 ## Note
 

@@ -11,16 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-FROM golang:1.9.2
 
-WORKDIR /go/src/github.com/kubernetes-incubator/descheduler
-COPY . .
-RUN make
+#!/bin/bash
 
-FROM scratch
+# This just run e2e tests.
+PRJ_PREFIX="github.com/${REPO_ORG:-kubernetes-incubator}/descheduler"
+go test ${PRJ_PREFIX}/test/e2e/ -v
 
-MAINTAINER Avesh Agarwal <avagarwa@redhat.com>
-
-COPY --from=0 /go/src/github.com/kubernetes-incubator/descheduler/_output/bin/descheduler /bin/descheduler
-
-CMD ["/bin/descheduler", "--help"]

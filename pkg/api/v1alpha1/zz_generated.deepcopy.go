@@ -110,6 +110,11 @@ func (in *NodeResourceUtilizationThresholds) DeepCopy() *NodeResourceUtilization
 func (in *StrategyParameters) DeepCopyInto(out *StrategyParameters) {
 	*out = *in
 	in.NodeResourceUtilizationThresholds.DeepCopyInto(&out.NodeResourceUtilizationThresholds)
+	if in.NodeAffinityType != nil {
+		in, out := &in.NodeAffinityType, &out.NodeAffinityType
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 

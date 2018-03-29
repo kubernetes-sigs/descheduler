@@ -30,13 +30,25 @@ IMAGE:=descheduler:$(VERSION)
 all: build
 
 build:
-	go build ${LDFLAGS} -o _output/bin/descheduler github.com/kubernetes-incubator/descheduler/cmd/descheduler 
+	CGO_ENABLED=0 go build ${LDFLAGS} -o _output/bin/descheduler github.com/kubernetes-incubator/descheduler/cmd/descheduler
 
-image: build
+dev-image: build
+	docker build -f Dockerfile.dev -t $(IMAGE) .
+
+image:
 	docker build -t $(IMAGE) .
 
 clean:
 	rm -rf _output
 
-test:
+test-unit:
 	./test/run-unit-tests.sh
+
+test-e2e:
+	./test/run-e2e-tests.sh
+
+gen:
+	./hack/update-codecgen.sh
+	./hack/update-generated-conversions.sh
+	./hack/update-generated-deep-copies.sh
+	./hack/update-generated-defaulters.sh

@@ -14,6 +14,7 @@
 
 #!/bin/bash
 
-# run unit tests
-go test $(go list github.com/kubernetes-incubator/descheduler/... | grep -v github.com/kubernetes-incubator/descheduler/vendor/)
+# This just run unit-tests. Ignoring the current directory so as to avoid running e2e tests.
+PRJ_PREFIX="github.com/${REPO_ORG:-kubernetes-incubator}/descheduler"
+go test $(go list ${PRJ_PREFIX}/... | grep -v ${PRJ_PREFIX}/vendor/| grep -v ${PRJ_PREFIX}/test/)
 

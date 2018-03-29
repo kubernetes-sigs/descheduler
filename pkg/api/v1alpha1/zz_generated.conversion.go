@@ -123,6 +123,7 @@ func autoConvert_v1alpha1_StrategyParameters_To_api_StrategyParameters(in *Strat
 	if err := Convert_v1alpha1_NodeResourceUtilizationThresholds_To_api_NodeResourceUtilizationThresholds(&in.NodeResourceUtilizationThresholds, &out.NodeResourceUtilizationThresholds, s); err != nil {
 		return err
 	}
+	out.NodeAffinityType = *(*[]string)(unsafe.Pointer(&in.NodeAffinityType))
 	return nil
 }
 
@@ -135,6 +136,7 @@ func autoConvert_api_StrategyParameters_To_v1alpha1_StrategyParameters(in *api.S
 	if err := Convert_api_NodeResourceUtilizationThresholds_To_v1alpha1_NodeResourceUtilizationThresholds(&in.NodeResourceUtilizationThresholds, &out.NodeResourceUtilizationThresholds, s); err != nil {
 		return err
 	}
+	out.NodeAffinityType = *(*[]string)(unsafe.Pointer(&in.NodeAffinityType))
 	return nil
 }
 

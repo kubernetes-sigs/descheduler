@@ -109,15 +109,19 @@ func TestLowNodeUtilization(t *testing.T) {
 		}
 		return true, nil, fmt.Errorf("Wrong node: %v", getAction.GetName())
 	})
-	expectedPodsEvicted := 4
+	expectedPodsEvicted := 3
 	npm := CreateNodePodsMap(fakeClient, []*v1.Node{n1, n2, n3})
 	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds)
 	if len(lowNodes) != 1 {
 		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
 	}
-	podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, targetThresholds, false)
+	npe := nodePodEvictedCount{}
+	npe[n1] = 0
+	npe[n2] = 0
+	npe[n3] = 0
+	podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, targetThresholds, false, 3, npe)
 	if expectedPodsEvicted != podsEvicted {
-		t.Errorf("Expected %#v pods to be evicted but %#v got evicted", expectedPodsEvicted)
+		t.Errorf("Expected %#v pods to be evicted but %#v got evicted", expectedPodsEvicted, podsEvicted)
 	}
 
 }

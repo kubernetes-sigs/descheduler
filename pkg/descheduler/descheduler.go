@@ -55,14 +55,16 @@ func Run(rs *options.DeschedulerServer) error {
 		return err
 	}
 
-	if len(nodes) == 0 {
-		glog.V(1).Infof("node list is empty")
+	if len(nodes) <= 1 {
+		glog.V(1).Infof("The cluster size is 0 or 1 meaning eviction causes service disruption or degradation. So aborting..")
 		return nil
 	}
 
-	strategies.RemoveDuplicatePods(rs, deschedulerPolicy.Strategies["RemoveDuplicates"], evictionPolicyGroupVersion, nodes)
-	strategies.LowNodeUtilization(rs, deschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes)
-	strategies.RemovePodsViolatingInterPodAntiAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingInterPodAntiAffinity"], evictionPolicyGroupVersion, nodes)
+	nodePodCount := strategies.InitializeNodePodCount(nodes)
+	strategies.RemoveDuplicatePods(rs, deschedulerPolicy.Strategies["RemoveDuplicates"], evictionPolicyGroupVersion, nodes, nodePodCount)
+	strategies.LowNodeUtilization(rs, deschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes, nodePodCount)
+	strategies.RemovePodsViolatingInterPodAntiAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingInterPodAntiAffinity"], evictionPolicyGroupVersion, nodes, nodePodCount)
+	strategies.RemovePodsViolatingNodeAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingNodeAffinity"], evictionPolicyGroupVersion, nodes, nodePodCount)
 
 	return nil
 }
