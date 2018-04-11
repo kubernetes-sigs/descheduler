@@ -49,7 +49,7 @@ func removePodsWithAffinityRules(client clientset.Interface, policyGroupVersion 
 		}
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
-			if nodePodCount[node]+1 > maxPodsToEvict {
+			if maxPodsToEvict > 0 && nodePodCount[node]+1 > maxPodsToEvict {
 				break
 			}
 			if checkPodsWithAntiAffinityExist(pods[i], pods) {

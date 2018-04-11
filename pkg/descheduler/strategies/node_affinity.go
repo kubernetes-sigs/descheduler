@@ -51,7 +51,7 @@ func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strateg
 				}
 
 				for _, pod := range pods {
-					if nodepodCount[node]+1 > maxPodsToEvict {
+					if maxPodsToEvict > 0 && nodepodCount[node]+1 > maxPodsToEvict {
 						break
 					}
 					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
