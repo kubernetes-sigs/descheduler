@@ -218,7 +218,7 @@ func evictPods(inputPods []*v1.Pod,
 	if IsNodeAboveTargetUtilization(nodeUsage, targetThresholds) && (*totalPods > 0 || *totalCpu > 0 || *totalMem > 0) {
 		onePodPercentage := api.Percentage((float64(1) * 100) / float64(nodeCapacity.Pods().Value()))
 		for _, pod := range inputPods {
-			if *podsEvicted+1 > maxPodsToEvict {
+			if maxPodsToEvict > 0 && *podsEvicted+1 > maxPodsToEvict {
 				break
 			}
 			cUsage := helper.GetResourceRequest(pod, v1.ResourceCPU)

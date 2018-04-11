@@ -32,63 +32,58 @@ func TestPodAntiAffinity(t *testing.T) {
 	p1 := test.BuildTestPod("p1", 100, 0, node.Name)
 	p2 := test.BuildTestPod("p2", 100, 0, node.Name)
 	p3 := test.BuildTestPod("p3", 100, 0, node.Name)
-	p3.Labels = map[string]string{"foo": "bar"}
+	p4 := test.BuildTestPod("p4", 100, 0, node.Name)
+	p2.Labels = map[string]string{"foo": "bar"}
 	p1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p3.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p1.Spec.Affinity = &v1.Affinity{
-		PodAntiAffinity: &v1.PodAntiAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
-				{
-					LabelSelector: &metav1.LabelSelector{
-						MatchExpressions: []metav1.LabelSelectorRequirement{
-							{
-								Key:      "foo",
-								Operator: metav1.LabelSelectorOpIn,
-								Values:   []string{"bar"},
-							},
-						},
-					},
-					TopologyKey: "region",
-				},
-			},
-		},
-	}
-	p3.Spec.Affinity = &v1.Affinity{
-		PodAntiAffinity: &v1.PodAntiAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
-				{
-					LabelSelector: &metav1.LabelSelector{
-						MatchExpressions: []metav1.LabelSelectorRequirement{
-							{
-								Key:      "foo",
-								Operator: metav1.LabelSelectorOpIn,
-								Values:   []string{"bar"},
-							},
-						},
-					},
-					TopologyKey: "region",
-				},
-			},
-		},
-	}
+	p4.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+
+	// set pod anti affinity
+	setPodAntiAffinity(p1)
+	setPodAntiAffinity(p3)
+	setPodAntiAffinity(p4)
+
+	// create fake client
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3}}, nil
+		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4}}, nil
 	})
 	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 		return true, node, nil
 	})
 	npe := nodePodEvictedCount{}
 	npe[node] = 0
-	expectedEvictedPodCount := 0
+	expectedEvictedPodCount := 3
 	podsEvicted := removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, 0)
 	if podsEvicted != expectedEvictedPodCount {
-		t.Errorf("Unexpected no of pods evicted")
+		t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, expectedEvictedPodCount)
 	}
+	npe[node] = 0
 	expectedEvictedPodCount = 1
 	podsEvicted = removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, 1)
 	if podsEvicted != expectedEvictedPodCount {
-		t.Errorf("Unexpected no of pods evicted")
+		t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, expectedEvictedPodCount)
+	}
+}
+
+func setPodAntiAffinity(inputPod *v1.Pod) {
+	inputPod.Spec.Affinity = &v1.Affinity{
+		PodAntiAffinity: &v1.PodAntiAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+				{
+					LabelSelector: &metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key:      "foo",
+								Operator: metav1.LabelSelectorOpIn,
+								Values:   []string{"bar"},
+							},
+						},
+					},
+					TopologyKey: "region",
+				},
+			},
+		},
 	}
 }
