@@ -65,6 +65,7 @@ func Run(rs *options.DeschedulerServer) error {
 	strategies.LowNodeUtilization(rs, deschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes, nodePodCount)
 	strategies.RemovePodsViolatingInterPodAntiAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingInterPodAntiAffinity"], evictionPolicyGroupVersion, nodes, nodePodCount)
 	strategies.RemovePodsViolatingNodeAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingNodeAffinity"], evictionPolicyGroupVersion, nodes, nodePodCount)
+	strategies.RemovePodsHavingTooManyRestarts(rs, deschedulerPolicy.Strategies["RemovePodsHavingTooManyRestarts"], evictionPolicyGroupVersion, nodes, nodePodCount)
 
 	return nil
 }

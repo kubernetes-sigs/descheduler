@@ -17,3 +17,9 @@ strategies:
            "cpu" : 50
            "memory": 50
            "pods": 50
+  "RemovePodsHavingTooManyRestarts":
+     enabled: true
+     params:
+       podsHavingTooManyRestarts:
+         podeRestartThresholds: 100
+         includingInitContainers: true
