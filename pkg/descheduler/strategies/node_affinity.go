@@ -27,8 +27,7 @@ import (
 )
 
 func RemovePodsViolatingNodeAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodePodCount nodePodEvictedCount) {
-	evictionCount := removePodsViolatingNodeAffinityCount(ds, strategy, evictionPolicyGroupVersion, nodes, nodePodCount, ds.MaxNoOfPodsToEvictPerNode)
-	glog.V(1).Infof("Evicted %v pods", evictionCount)
+	removePodsViolatingNodeAffinityCount(ds, strategy, evictionPolicyGroupVersion, nodes, nodePodCount, ds.MaxNoOfPodsToEvictPerNode)
 }
 
 func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodepodCount nodePodEvictedCount, maxPodsToEvict int) int {
@@ -51,14 +50,14 @@ func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strateg
 				}
 
 				for _, pod := range pods {
-					if nodepodCount[node]+1 > maxPodsToEvict {
+					if maxPodsToEvict > 0 && nodepodCount[node]+1 > maxPodsToEvict {
 						break
 					}
 					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
 
 						if !nodeutil.PodFitsCurrentNode(pod, node) && nodeutil.PodFitsAnyNode(pod, nodes) {
 							glog.V(1).Infof("Evicting pod: %v", pod.Name)
-							evictions.EvictPod(ds.Client, pod, evictionPolicyGroupVersion, false)
+							evictions.EvictPod(ds.Client, pod, evictionPolicyGroupVersion, ds.DryRun)
 							nodepodCount[node]++
 						}
 					}
@@ -70,5 +69,6 @@ func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strateg
 			return evictedPodCount
 		}
 	}
+	glog.V(1).Infof("Evicted %v pods", evictedPodCount)
 	return evictedPodCount
 }
