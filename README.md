@@ -132,7 +132,7 @@ spec:
     metadata:
       name: descheduler-pod
       annotations:
-        scheduler.alpha.kubernetes.io/critical-pod: "true"
+        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
         containers:
         - name: descheduler
