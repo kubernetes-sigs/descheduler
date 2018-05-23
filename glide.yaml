@@ -18,6 +18,8 @@ import:
 - package: k8s.io/gengo
 - package: github.com/ugorji/go
   version: v.1.1-beta
+- package: github.com/Azure/go-autorest
+  version: e14a70c556c8e0db173358d1a903dca345a8e75e
 - package: golang.org/x/tools
   subpackages:
   - imports
