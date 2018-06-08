@@ -6,7 +6,25 @@
 %global gopath      %{_datadir}/gocode
 %global import_path github.com/openshift/descheduler
 
-%global golang_version 1.8.3
+%global golang_version 1.9.1
+%{!?version: %global version 0.4.0}
+%{!?release: %global release 1}
+
+%{!?commit: %global commit HEAD }
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
+# os_git_vars needed to run hack scripts during rpm builds
+%{!?os_git_vars: %global os_git_vars OS_GIT_VERSION='' OS_GIT_COMMIT='' OS_GIT_MAJOR='' OS_GIT_MINOR='' OS_GIT_TREE_STATE='' }
+
+%if 0%{?skip_build}
+%global do_build 0
+%else
+%global do_build 1
+%endif
+%if 0%{?skip_prep}
+%global do_prep 0
+%else
+%global do_prep 1
+%endif
 
 %if "%{dist}" == ".el7aos"
 %global package_name atomic-openshift
@@ -17,13 +35,13 @@
 %endif
 
 Name:           atomic-openshift-descheduler
-Version:        0.4.0
-Release:        1%{?dist}
+Version:        %{version}
+Release:        %{release}%{?dist}
 Summary:        Descheduler for OpenShift and Kubernetes
 License:        ASL 2.0
 URL:            https://%{import_path}
 
-Source0:        v0.4.0.tar.gz
+Source0:        https://%{import_path}/archive/%{commit}/%{name}-%{version}.tar.gz
 BuildRequires:  golang >= %{golang_version}
 
 %description
@@ -33,25 +51,45 @@ evicts some running pods based on its policy, so that the evicted pods can be
 rescheduled on more suitable nodes. 
 
 %prep
-%setup -n descheduler-%{version}
+%if 0%{do_prep}
+%setup -q
+%endif
 
 %build
-export GOPATH=`pwd`/go
-mkdir `pwd`/../descheduler
-mv * `pwd`/../descheduler
-mkdir -p `pwd`/go/src/github.com/kubernetes-incubator
-mv `pwd`/../descheduler `pwd`/go/src/github.com/kubernetes-incubator
-cd go/src/github.com/kubernetes-incubator/descheduler
-make
+%if 0%{do_build}
+%ifarch x86_64
+  BUILD_PLATFORM="linux/amd64"
+%endif
+%ifarch %{ix86}
+  BUILD_PLATFORM="linux/386"
+%endif
+%ifarch ppc64le
+  BUILD_PLATFORM="linux/ppc64le"
+%endif
+%ifarch %{arm} aarch64
+  BUILD_PLATFORM="linux/arm64"
+%endif
+%ifarch s390x
+  BUILD_PLATFORM="linux/s390x"
+%endif
+OS_ONLY_BUILD_PLATFORMS="${BUILD_PLATFORM}" %{os_git_vars} make build-cross
+%endif
 
 %install
+PLATFORM="$(go env GOHOSTOS)/$(go env GOHOSTARCH)"
 install -d %{buildroot}%{_bindir}
-install -p -m 755 go/src/github.com/kubernetes-incubator/descheduler/_output/bin/descheduler %{buildroot}%{_bindir}/descheduler
+
+# Install linux components
+for bin in descheduler
+do
+  echo "+++ INSTALLING ${bin}"
+  install -p -m 755 _output/local/bin/${PLATFORM}/${bin} %{buildroot}%{_bindir}/${bin}
+done
 
 %files
-%doc go/src/github.com/kubernetes-incubator/descheduler/README.md
-%doc go/src/github.com/kubernetes-incubator/descheduler/examples/*
-%license go/src/github.com/kubernetes-incubator/descheduler/LICENSE
+%doc README.md
+%license LICENSE
+%doc examples/*
 %{_bindir}/descheduler
 
 %changelog

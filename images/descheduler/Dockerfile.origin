@@ -1,4 +1,4 @@
-FROM rhel7:7-released
+FROM openshift/origin-base
 
 MAINTAINER Avesh Agarwal <avagarwa@redhat.com>
 
@@ -13,7 +13,7 @@ LABEL vendor="Red Hat, Inc." \
       Summary="Descheduler for Opensift and Kubernetes"
 
 RUN INSTALL_PKGS="atomic-openshift-descheduler" && \
-    yum install -y ${INSTALL_PKGS} && \
+    yum --enablerepo=origin-local-release install -y ${INSTALL_PKGS} && \
     rpm -V ${INSTALL_PKGS} && \
     yum clean all
 
