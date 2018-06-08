@@ -1,55 +1,132 @@
-# Copyright 2017 The Kubernetes Authors.
-# #
-# # Licensed under the Apache License, Version 2.0 (the "License");
-# # you may not use this file except in compliance with the License.
-# # You may obtain a copy of the License at
-# #
-# #     http://www.apache.org/licenses/LICENSE-2.0
-# #
-# # Unless required by applicable law or agreed to in writing, software
-# # distributed under the License is distributed on an "AS IS" BASIS,
-# # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# # See the License for the specific language governing permissions and
-# # limitations under the License.
+# Old-skool build tools.
+#
+# Targets (see each target for more information):
+#   all: Build code.
+#   build: Build code.
+#   check: Run verify, build, unit tests and cmd tests.
+#   test: Run all tests.
+#   run: Run all-in-one server
+#   clean: Clean up.
 
-.PHONY: test
+OUT_DIR = _output
+OS_OUTPUT_GOPATH ?= 1
 
-# VERSION is currently based on the last commit
-VERSION=`git describe --tags`
-COMMIT=`git rev-parse HEAD`
-BUILD=`date +%FT%T%z`
-REPO_ORG?=kubernetes-incubator
-LDFLAG_LOCATION=github.com/${REPO_ORG}/descheduler/cmd/descheduler/app
+export GOFLAGS
+export TESTFLAGS
+# If set to 1, create an isolated GOPATH inside _output using symlinks to avoid
+# other packages being accidentally included. Defaults to on.
+export OS_OUTPUT_GOPATH
+# May be used to set additional arguments passed to the image build commands for
+# mounting secrets specific to a build environment.
+export OS_BUILD_IMAGE_ARGS
 
-LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitCommit=${COMMIT}"
+# Tests run using `make` are most often run by the CI system, so we are OK to
+# assume the user wants jUnit output and will turn it off if they don't.
+JUNIT_REPORT ?= true
+
+# Build code.
+#
+# Args:
+#   WHAT: Directory names to build.  If any of these directories has a 'main'
+#     package, the build will produce executable files under $(OUT_DIR)/local/bin.
+#     If not specified, "everything" will be built.
+#   GOFLAGS: Extra flags to pass to 'go' when building.
+#   TESTFLAGS: Extra flags that should only be passed to hack/test-go.sh
+#
+# Example:
+#   make
+#   make all
+#   make all WHAT=cmd/oc GOFLAGS=-v
+all build:
+	hack/build-go.sh $(WHAT) $(GOFLAGS)
+.PHONY: all build
+
+# Run core verification and all self contained tests.
+#
+# Example:
+#   make check
+check: | verify test-unit
+.PHONY: check
 
 
-# IMAGE is the image name of descheduler
-# Should this be changed?
-IMAGE:=descheduler:$(VERSION)
+# Verify code conventions are properly setup.
+#
+# Example:
+#   make verify
+verify:
+	{ \
+	hack/verify-gofmt.sh ||r=1;\
+	hack/verify-govet.sh ||r=1;\
+	hack/verify-imports.sh ||r=1;\
+	exit $$r ;\
+	}
+.PHONY: verify
 
-all: build
 
-build:
-	CGO_ENABLED=0 go build ${LDFLAGS} -o _output/bin/descheduler github.com/${REPO_ORG}/descheduler/cmd/descheduler
+# Verify commit comments.
+#
+# Example:
+#   make verify-commits
+verify-commits:
+	hack/verify-upstream-commits.sh
+.PHONY: verify-commits
 
-dev-image: build
-	docker build -f Dockerfile.dev -t $(IMAGE) .
-
-image:
-	docker build -t $(IMAGE) .
-
-clean:
-	rm -rf _output
-
+# Run unit tests.
+#
+# Args:
+#   WHAT: Directory names to test.  All *_test.go files under these
+#     directories will be run.  If not specified, "everything" will be tested.
+#   TESTS: Same as WHAT.
+#   GOFLAGS: Extra flags to pass to 'go' when building.
+#   TESTFLAGS: Extra flags that should only be passed to hack/test-go.sh
+#
+# Example:
+#   make test-unit
+#   make test-unit WHAT=pkg/build TESTFLAGS=-v
 test-unit:
-	./test/run-unit-tests.sh
+	GOTEST_FLAGS="$(TESTFLAGS)" hack/test-go.sh $(WHAT) $(TESTS)
+.PHONY: test-unit
 
+# Run e2e tests.
+#
+# Example:
+#   make test-e2e
 test-e2e:
 	./test/run-e2e-tests.sh
+.PHONY: test-e2e
 
-gen:
-	./hack/update-codecgen.sh
-	./hack/update-generated-conversions.sh
-	./hack/update-generated-deep-copies.sh
-	./hack/update-generated-defaulters.sh
+# Remove all build artifacts.
+#
+# Example:
+#   make clean
+clean:
+	rm -rf $(OUT_DIR)
+.PHONY: clean
+
+# Build the cross compiled release binaries
+#
+# Example:
+#   make build-cross
+build-cross:
+	hack/build-cross.sh
+.PHONY: build-cross
+
+# Build RPMs only for the Linux AMD64 target
+#
+# Args:
+#
+# Example:
+#   make build-rpms
+build-rpms:
+	OS_ONLY_BUILD_PLATFORMS='linux/amd64' hack/build-rpms.sh
+.PHONY: build-rpms
+
+# Build images from the official RPMs
+# 
+# Args:
+#
+# Example:
+#   make build-images
+build-images: build-rpms
+	hack/build-images.sh
+.PHONY: build-images
