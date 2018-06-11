@@ -2,15 +2,13 @@ FROM openshift/origin-base
 
 MAINTAINER Avesh Agarwal <avagarwa@redhat.com>
 
-ENV container=docker
-
 LABEL vendor="Red Hat, Inc." \
       com.redhat.component="atomic-openshift-descheduler-docker" \
       name="openshift3/descheduler" \
       version="0.4.0" \
       release="1" \
       architecture="x86_64" \
-      Summary="Descheduler for Opensift and Kubernetes"
+      Summary="Descheduler for Openshift and Kubernetes"
 
 RUN INSTALL_PKGS="atomic-openshift-descheduler" && \
     yum --enablerepo=origin-local-release install -y ${INSTALL_PKGS} && \
