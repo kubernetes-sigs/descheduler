@@ -41,6 +41,7 @@ type NodeUsageMap struct {
 	bPods            []*v1.Pod
 	gPods            []*v1.Pod
 }
+
 type NodePodsMap map[*v1.Node][]*v1.Pod
 
 func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodepodCount nodePodEvictedCount) {
@@ -59,7 +60,7 @@ func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerS
 		return
 	}
 
-	npm := CreateNodePodsMap(ds.Client, nodes)
+	npm := createNodePodsMap(ds.Client, nodes)
 	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds)
 
 	glog.V(1).Infof("Criteria for a node under utilization: CPU: %v, Mem: %v, Pods: %v",
@@ -151,6 +152,9 @@ func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThr
 	return lowNodes, targetNodes
 }
 
+// evictPodsFromTargetNodes evicts pods based on priority, if all the pods on the node have priority, if not
+// evicts them based on QoS as fallback option.
+// TODO: @ravig Break this function into smaller functions.
 func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVersion string, targetNodes, lowNodes []NodeUsageMap, targetThresholds api.ResourceThresholds, dryRun bool, maxPodsToEvict int, nodepodCount nodePodEvictedCount) int {
 	podsEvicted := 0
 
@@ -191,12 +195,27 @@ func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVer
 		glog.V(3).Infof("evicting pods from node %#v with usage: %#v", node.node.Name, node.usage)
 		currentPodsEvicted := nodepodCount[node.node]
 
-		// evict best effort pods
-		evictPods(node.bePods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
-		// evict burstable pods
-		evictPods(node.bPods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
-		// evict guaranteed pods
-		evictPods(node.gPods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
+		// Check if one pod has priority, if yes, assume that all pods have priority and evict pods based on priority.
+		if node.allPods[0].Spec.Priority != nil {
+			glog.V(1).Infof("All pods have priority associated with them. Evicting pods based on priority")
+			evictablePods := make([]*v1.Pod, 0)
+			evictablePods = append(append(node.bPods, node.bePods...), node.gPods...)
+
+			// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
+			sortPodsBasedOnPriority(evictablePods)
+			evictPods(evictablePods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
+		} else {
+			// TODO: Remove this when we support only priority.
+			//  Falling back to evicting pods based on priority.
+			glog.V(1).Infof("Evicting pods based on QoS")
+			glog.V(1).Infof("There are %v non-evictable pods on the node", len(node.nonRemovablePods))
+			// evict best effort pods
+			evictPods(node.bePods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
+			// evict burstable pods
+			evictPods(node.bPods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
+			// evict guaranteed pods
+			evictPods(node.gPods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
+		}
 		nodepodCount[node.node] = currentPodsEvicted
 		podsEvicted = podsEvicted + nodepodCount[node.node]
 		glog.V(1).Infof("%v pods evicted from node %#v with usage %v", nodepodCount[node.node], node.node.Name, node.usage)
@@ -269,7 +288,30 @@ func SortNodesByUsage(nodes []NodeUsageMap) {
 	})
 }
 
-func CreateNodePodsMap(client clientset.Interface, nodes []*v1.Node) NodePodsMap {
+// sortPodsBasedOnPriority sorts pods based on priority and if their priorities are equal, they are sorted based on QoS tiers.
+func sortPodsBasedOnPriority(evictablePods []*v1.Pod) {
+	sort.Slice(evictablePods, func(i, j int) bool {
+		if evictablePods[i].Spec.Priority == nil && evictablePods[j].Spec.Priority != nil {
+			return true
+		}
+		if evictablePods[j].Spec.Priority == nil && evictablePods[i].Spec.Priority != nil {
+			return false
+		}
+		if (evictablePods[j].Spec.Priority == nil && evictablePods[i].Spec.Priority == nil) || (*evictablePods[i].Spec.Priority == *evictablePods[j].Spec.Priority) {
+			if podutil.IsBestEffortPod(evictablePods[i]) {
+				return true
+			}
+			if podutil.IsBurstablePod(evictablePods[i]) && podutil.IsGuaranteedPod(evictablePods[j]) {
+				return true
+			}
+			return false
+		}
+		return *evictablePods[i].Spec.Priority < *evictablePods[j].Spec.Priority
+	})
+}
+
+// createNodePodsMap returns nodepodsmap with evictable pods on node.
+func createNodePodsMap(client clientset.Interface, nodes []*v1.Node) NodePodsMap {
 	npm := NodePodsMap{}
 	for _, node := range nodes {
 		pods, err := podutil.ListPodsOnANode(client, node)
@@ -308,6 +350,7 @@ func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds 
 	return true
 }
 
+// Nodeutilization returns the current usage of node.
 func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod) {
 	bePods := []*v1.Pod{}
 	nonRemovablePods := []*v1.Pod{}
