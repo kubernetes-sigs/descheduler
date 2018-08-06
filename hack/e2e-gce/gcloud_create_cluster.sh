@@ -10,7 +10,7 @@ master_uuid=$(uuid)
 node1_uuid=$(uuid)
 node2_uuid=$(uuid)
 kube_apiserver_port=6443
-kube_version=1.9.4
+kube_version=1.11.1
 
 DESCHEDULER_ROOT=$(dirname "${BASH_SOURCE}")/../../
 E2E_GCE_HOME=$DESCHEDULER_ROOT/hack/e2e-gce
