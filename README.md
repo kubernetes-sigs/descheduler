@@ -285,7 +285,7 @@ This roadmap is not in any particular order.
 
 Descheduler  | supported Kubernetes version
 -------------|-----------------------------
-0.4          | 1.9+
+0.4+          | 1.9+
 0.1-0.3      | 1.7-1.8
 
 ## Note
