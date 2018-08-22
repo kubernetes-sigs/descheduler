@@ -267,9 +267,6 @@ func TestSortPodsByPriority(t *testing.T) {
 	podList := []*v1.Pod{p4, p3, p2, p1, p6, p5}
 
 	sortPodsBasedOnPriority(podList)
-	for _, pod := range podList {
-		fmt.Println(pod)
-	}
 	if !reflect.DeepEqual(podList[len(podList)-1], p4) {
 		t.Errorf("Expected last pod in sorted list to be %v which of highest priority and guaranteed but got %v", p4, podList[len(podList)-1])
 	}
