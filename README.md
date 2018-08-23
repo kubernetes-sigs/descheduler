@@ -287,9 +287,3 @@ Descheduler  | supported Kubernetes version
 -------------|-----------------------------
 0.4+          | 1.9+
 0.1-0.3      | 1.7-1.8
-
-## Note
-
-This project is under active development, and is not intended for production use.
-Any api could be changed any time with out any notice. That said, your feedback is
-very important and appreciated to make this project more stable and useful.
