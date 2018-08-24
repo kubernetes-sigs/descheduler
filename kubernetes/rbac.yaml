@@ -1,6 +1,6 @@
 ---
 kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: descheduler-cluster-role
   namespace: kube-system
@@ -21,7 +21,7 @@ metadata:
   name: descheduler-sa
   namespace: kube-system
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: descehduler-cluster-role-binding
