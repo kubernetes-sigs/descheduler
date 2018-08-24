@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: descheduler-job
+  namespace: kube-system
+spec:
+  parallelism: 1
+  completions: 1
+  template:
+    metadata:
+      name: descheduler-pod
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ""
+    spec:
+        containers:
+        - name: descheduler
+          image: descheduler:latest
+          volumeMounts:
+          - mountPath: /policy-dir
+            name: policy-volume
+          command:
+            - "/bin/descheduler"
+          args:
+            - "--policy-config-file"
+            - "/policy-dir/policy.yaml"
+            - "--v"
+            - "3"
+        restartPolicy: "Never"
+        serviceAccountName: descheduler-sa
+        volumes:
+        - name: policy-volume
+          configMap:
+            name: descheduler-policy-configmap
