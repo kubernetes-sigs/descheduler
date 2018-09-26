@@ -92,6 +92,12 @@ func GetCriticalPodAnnotation() map[string]string {
 	}
 }
 
+func GetBlacklistedPodAnnotation() map[string]string {
+	return map[string]string{
+		"descheduler.alpha.kubernetes.io/blacklist-pod": "",
+	}
+}
+
 // BuildTestNode creates a node with specified capacity.
 func BuildTestNode(name string, millicpu int64, mem int64, pods int64) *v1.Node {
 	node := &v1.Node{

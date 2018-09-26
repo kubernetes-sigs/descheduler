@@ -35,6 +35,7 @@ func TestPodTypes(t *testing.T) {
 	p5 := test.BuildTestPod("p5", 400, 0, n1.Name)
 	p6 := test.BuildTestPod("p6", 400, 0, n1.Name)
 	p6.Spec.Containers[0].Resources.Requests[v1.ResourceNvidiaGPU] = *resource.NewMilliQuantity(3, resource.DecimalSI)
+	p7 := test.BuildTestPod("p7", 400, 0, n1.Name)
 
 	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
@@ -80,5 +81,9 @@ func TestPodTypes(t *testing.T) {
 	if !IsLatencySensitivePod(p6) {
 		t.Errorf("Expected p6 to be latency sensitive pod")
 	}
-
+	// A blacklisted Pod.
+	p7.Annotations = test.GetBlacklistedPodAnnotation()
+	if !IsBlacklistedPod(p7) {
+		t.Errorf("Expected p7 to be a blacklisted pod.")
+	}
 }
