@@ -21,6 +21,8 @@ import (
 	"strings"
 	"testing"
 
+	"reflect"
+
 	"github.com/kubernetes-incubator/descheduler/pkg/api"
 	"github.com/kubernetes-incubator/descheduler/test"
 	"k8s.io/api/core/v1"
@@ -28,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"reflect"
 )
 
 // TODO: Make this table driven.
@@ -55,6 +56,7 @@ func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
 	p6 := test.BuildTestPod("p6", 400, 0, n1.Name)
 	p7 := test.BuildTestPod("p7", 400, 0, n1.Name)
 	p8 := test.BuildTestPod("p8", 400, 0, n1.Name)
+	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
 
 	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	p2.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
@@ -81,17 +83,19 @@ func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
 	// A Critical Pod.
 	p8.Namespace = "kube-system"
 	p8.Annotations = test.GetCriticalPodAnnotation()
-	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
-	p9.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	// A blacklisted Pod.
+	p9.Annotations = test.GetBlacklistedPodAnnotation()
+	p10 := test.BuildTestPod("p10", 400, 0, n1.Name)
+	p10.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 		list := action.(core.ListAction)
 		fieldString := list.GetListRestrictions().Fields.String()
 		if strings.Contains(fieldString, "n1") {
-			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8}}, nil
+			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p9}}, nil
 		}
 		if strings.Contains(fieldString, "n2") {
-			return true, &v1.PodList{Items: []v1.Pod{*p9}}, nil
+			return true, &v1.PodList{Items: []v1.Pod{*p10}}, nil
 		}
 		if strings.Contains(fieldString, "n3") {
 			return true, &v1.PodList{Items: []v1.Pod{}}, nil
@@ -160,6 +164,8 @@ func TestLowNodeUtilizationWithPriorities(t *testing.T) {
 	p7.Spec.Priority = &lowPriority
 	p8 := test.BuildTestPod("p8", 400, 0, n1.Name)
 	p8.Spec.Priority = &lowPriority
+	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
+	p9.Spec.Priority = &lowPriority
 
 	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	p2.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
@@ -186,17 +192,19 @@ func TestLowNodeUtilizationWithPriorities(t *testing.T) {
 	// A Critical Pod.
 	p8.Namespace = "kube-system"
 	p8.Annotations = test.GetCriticalPodAnnotation()
-	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
-	p9.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	// A blacklisted Pod.
+	p9.Annotations = test.GetBlacklistedPodAnnotation()
+	p10 := test.BuildTestPod("p10", 400, 0, n1.Name)
+	p10.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 		list := action.(core.ListAction)
 		fieldString := list.GetListRestrictions().Fields.String()
 		if strings.Contains(fieldString, "n1") {
-			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8}}, nil
+			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p9}}, nil
 		}
 		if strings.Contains(fieldString, "n2") {
-			return true, &v1.PodList{Items: []v1.Pod{*p9}}, nil
+			return true, &v1.PodList{Items: []v1.Pod{*p10}}, nil
 		}
 		if strings.Contains(fieldString, "n3") {
 			return true, &v1.PodList{Items: []v1.Pod{}}, nil

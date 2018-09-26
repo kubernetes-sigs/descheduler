@@ -39,6 +39,7 @@ func TestFindDuplicatePods(t *testing.T) {
 	p7 := test.BuildTestPod("p7", 100, 0, node.Name)
 	p8 := test.BuildTestPod("p8", 100, 0, node.Name)
 	p9 := test.BuildTestPod("p9", 100, 0, node.Name)
+	p10 := test.BuildTestPod("p10", 100, 0, node.Name)
 
 	// All the following pods expect for one will be evicted.
 	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
@@ -67,10 +68,12 @@ func TestFindDuplicatePods(t *testing.T) {
 	// A Critical Pod.
 	p7.Namespace = "kube-system"
 	p7.Annotations = test.GetCriticalPodAnnotation()
+	// A blacklisted Pod.
+	p10.Annotations = test.GetBlacklistedPodAnnotation()
 	expectedEvictedPodCount := 2
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p9}}, nil
+		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p9, *p10}}, nil
 	})
 	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 		return true, node, nil

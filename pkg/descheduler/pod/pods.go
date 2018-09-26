@@ -54,7 +54,7 @@ func IsLatencySensitivePod(pod *v1.Pod) bool {
 // IsEvictable checks if a pod is evictable or not.
 func IsEvictable(pod *v1.Pod) bool {
 	ownerRefList := OwnerRef(pod)
-	if IsMirrorPod(pod) || IsPodWithLocalStorage(pod) || len(ownerRefList) == 0 || IsDaemonsetPod(ownerRefList) || IsCriticalPod(pod) {
+	if IsMirrorPod(pod) || IsPodWithLocalStorage(pod) || len(ownerRefList) == 0 || IsDaemonsetPod(ownerRefList) || IsCriticalPod(pod) || IsBlacklistedPod(pod) {
 		return false
 	}
 	return true
@@ -118,6 +118,18 @@ func IsDaemonsetPod(ownerRefList []metav1.OwnerReference) bool {
 			return true
 		}
 	}
+	return false
+}
+
+func IsBlacklistedPod(pod *v1.Pod) bool {
+
+	for annotation := range pod.Annotations {
+		if annotation == "descheduler.alpha.kubernetes.io/blacklist-pod" {
+
+			return true
+		}
+	}
+
 	return false
 }
 
