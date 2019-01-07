@@ -251,6 +251,7 @@ strategies:
     params:
       nodeAffinityType:
       - "requiredDuringSchedulingIgnoredDuringExecution"
+      - "preferredDuringSchedulingIgnoredDuringExecution"
 ```
 
 ## Pod Evictions

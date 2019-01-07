@@ -63,15 +63,34 @@ func podMatchesNodeLabels(pod *v1.Pod, node *v1.Node) bool {
 	if affinity != nil && affinity.NodeAffinity != nil {
 		nodeAffinity := affinity.NodeAffinity
 		// if no required NodeAffinity requirements, will do no-op, means select all nodes.
-		if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
+		if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil && nodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution == nil {
 			return true
 		}
 
 		// Match node selector for requiredDuringSchedulingIgnoredDuringExecution.
 		if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
+
 			nodeSelectorTerms := nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
 			glog.V(10).Infof("Match for RequiredDuringSchedulingIgnoredDuringExecution node selector terms %+v", nodeSelectorTerms)
+
+			if nodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution != nil {
+
+				PreferredSchedulingTerms := nodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+				glog.V(10).Infof("Match for RequiredDuringSchedulingIgnoredDuringExecution node selector terms %+v", PreferredSchedulingTerms)
+
+				if nodeMatchesNodeSelectorTerms(node, nodeSelectorTerms) {
+					return nodeMatchesPreferredSelectorTerms(node, PreferredSchedulingTerms)
+				} else {
+					return false
+				}
+			}
+
 			return nodeMatchesNodeSelectorTerms(node, nodeSelectorTerms)
+		}
+		if nodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution != nil {
+			PreferredSchedulingTerms := nodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+			glog.V(10).Infof("Match for PreferredDuringSchedulingIgnoredDuringExecution node selector terms %+v", PreferredSchedulingTerms)
+			return nodeMatchesPreferredSelectorTerms(node, PreferredSchedulingTerms)
 		}
 	}
 	return true
@@ -84,6 +103,20 @@ func nodeMatchesNodeSelectorTerms(node *v1.Node, nodeSelectorTerms []v1.NodeSele
 		nodeSelector, err := v1helper.NodeSelectorRequirementsAsSelector(req.MatchExpressions)
 		if err != nil {
 			glog.V(10).Infof("Failed to parse MatchExpressions: %+v, regarding as not match.", req.MatchExpressions)
+			return false
+		}
+		if nodeSelector.Matches(labels.Set(node.Labels)) {
+			return true
+		}
+	}
+	return false
+}
+
+func nodeMatchesPreferredSelectorTerms(node *v1.Node, PreferredSchedulingTerms []v1.PreferredSchedulingTerm) bool {
+	for _, req := range PreferredSchedulingTerms {
+		nodeSelector, err := v1helper.NodeSelectorRequirementsAsSelector(req.Preference.MatchExpressions)
+		if err != nil {
+			glog.V(10).Infof("Failed to parse MatchExpressions: %+v, regarding as not match.", req.Preference.MatchExpressions)
 			return false
 		}
 		if nodeSelector.Matches(labels.Set(node.Labels)) {
