@@ -39,6 +39,15 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		},
 	}
 
+	preferredDuringSchedulingIgnoredDuringExecutionStrategy := api.DeschedulerStrategy{
+		Enabled: true,
+		Params: api.StrategyParameters{
+			NodeAffinityType: []string{
+				"preferredDuringSchedulingIgnoredDuringExecution",
+			},
+		},
+	}
+
 	nodeLabelKey := "kubernetes.io/desiredNode"
 	nodeLabelValue := "yes"
 	nodeWithLabels := test.BuildTestNode("nodeWithLabels", 2000, 3000, 10)
@@ -50,7 +59,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	nodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
 	unschedulableNodeWithLabels.Spec.Unschedulable = true
 
-	addPodsToNode := func(node *v1.Node) []v1.Pod {
+	addPodsToRequiredNode := func(node *v1.Node) []v1.Pod {
 		podWithNodeAffinity := test.BuildTestPod("podWithNodeAffinity", 100, 0, node.Name)
 		podWithNodeAffinity.Spec.Affinity = &v1.Affinity{
 			NodeAffinity: &v1.NodeAffinity{
@@ -68,6 +77,43 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 							},
 						},
 					},
+				},
+			},
+		}
+
+		pod1 := test.BuildTestPod("pod1", 100, 0, node.Name)
+		pod2 := test.BuildTestPod("pod2", 100, 0, node.Name)
+
+		podWithNodeAffinity.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		pod1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		pod2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+
+		return []v1.Pod{
+			*podWithNodeAffinity,
+			*pod1,
+			*pod2,
+		}
+	}
+
+	addPodsToPreferredNode := func(node *v1.Node) []v1.Pod {
+		podWithNodeAffinity := test.BuildTestPod("podWithNodeAffinity", 100, 0, node.Name)
+		podWithNodeAffinity.Spec.Affinity = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm {
+					{
+					Weight: 1,
+					Preference: v1.NodeSelectorTerm {
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      nodeLabelKey,
+									Operator: "In",
+									Values: []string{
+										nodeLabelValue,
+									},
+								},
+						},
+					},
+				},
 				},
 			},
 		}
@@ -106,7 +152,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 				},
 			},
 			expectedEvictedPodCount: 0,
-			pods:           addPodsToNode(nodeWithoutLabels),
+			pods:           addPodsToRequiredNode(nodeWithoutLabels),
 			nodes:          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 			npe:            nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
 			maxPodsToEvict: 0,
@@ -122,7 +168,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 				},
 			},
 			expectedEvictedPodCount: 0,
-			pods:           addPodsToNode(nodeWithoutLabels),
+			pods:           addPodsToRequiredNode(nodeWithoutLabels),
 			nodes:          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 			npe:            nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
 			maxPodsToEvict: 0,
@@ -131,7 +177,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			description:             "Pod is correctly scheduled on node, no eviction expected",
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
 			expectedEvictedPodCount: 0,
-			pods:           addPodsToNode(nodeWithLabels),
+			pods:           addPodsToRequiredNode(nodeWithLabels),
 			nodes:          []*v1.Node{nodeWithLabels},
 			npe:            nodePodEvictedCount{nodeWithLabels: 0},
 			maxPodsToEvict: 0,
@@ -140,7 +186,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			description:             "Pod is scheduled on node without matching labels, another schedulable node available, should be evicted",
 			expectedEvictedPodCount: 1,
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
-			pods:                    addPodsToNode(nodeWithoutLabels),
+			pods:                    addPodsToRequiredNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
 			maxPodsToEvict:          0,
@@ -149,7 +195,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvict set to 1, should not be evicted",
 			expectedEvictedPodCount: 1,
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
-			pods:                    addPodsToNode(nodeWithoutLabels),
+			pods:                    addPodsToRequiredNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
 			maxPodsToEvict:          1,
@@ -158,7 +204,75 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			description:             "Pod is scheduled on node without matching labels, but no node where pod fits is available, should not evict",
 			expectedEvictedPodCount: 0,
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
-			pods:                    addPodsToNode(nodeWithoutLabels),
+			pods:                    addPodsToRequiredNode(nodeWithoutLabels),
+			nodes:                   []*v1.Node{nodeWithoutLabels, unschedulableNodeWithLabels},
+			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, unschedulableNodeWithLabels: 0},
+			maxPodsToEvict:          0,
+		},
+		{
+			description: "Strategy disabled, should not evict any pods",
+			strategy: api.DeschedulerStrategy{
+				Enabled: false,
+				Params: api.StrategyParameters{
+					NodeAffinityType: []string{
+						"preferredDuringSchedulingIgnoredDuringExecution",
+					},
+				},
+			},
+			expectedEvictedPodCount: 0,
+			pods:           addPodsToPreferredNode(nodeWithoutLabels),
+			nodes:          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			npe:            nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
+			maxPodsToEvict: 0,
+		},
+		{
+			description: "Invalid strategy type, should not evict any pods",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: api.StrategyParameters{
+					NodeAffinityType: []string{
+						"preferredDuringSchedulingRequiredDuringExecution",
+					},
+				},
+			},
+			expectedEvictedPodCount: 0,
+			pods:           addPodsToPreferredNode(nodeWithoutLabels),
+			nodes:          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			npe:            nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
+			maxPodsToEvict: 0,
+		},
+		{
+			description:             "Pod is correctly scheduled on node, no eviction expected",
+			strategy:                preferredDuringSchedulingIgnoredDuringExecutionStrategy,
+			expectedEvictedPodCount: 0,
+			pods:           addPodsToPreferredNode(nodeWithLabels),
+			nodes:          []*v1.Node{nodeWithLabels},
+			npe:            nodePodEvictedCount{nodeWithLabels: 0},
+			maxPodsToEvict: 0,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, should be evicted",
+			expectedEvictedPodCount: 1,
+			strategy:                preferredDuringSchedulingIgnoredDuringExecutionStrategy,
+			pods:                    addPodsToPreferredNode(nodeWithoutLabels),
+			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
+			maxPodsToEvict:          0,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvict set to 1, should not be evicted",
+			expectedEvictedPodCount: 1,
+			strategy:                preferredDuringSchedulingIgnoredDuringExecutionStrategy,
+			pods:                    addPodsToPreferredNode(nodeWithoutLabels),
+			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
+			maxPodsToEvict:          1,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, but no node where pod fits is available, should not evict",
+			expectedEvictedPodCount: 0,
+			strategy:                preferredDuringSchedulingIgnoredDuringExecutionStrategy,
+			pods:                    addPodsToPreferredNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, unschedulableNodeWithLabels},
 			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, unschedulableNodeWithLabels: 0},
 			maxPodsToEvict:          0,
