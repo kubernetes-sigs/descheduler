@@ -38,16 +38,35 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			},
 		},
 	}
+	preferredDuringSchedulingIgnoredDuringExecutionStrategy := api.DeschedulerStrategy{
+		Enabled: true,
+		Params: api.StrategyParameters{
+			NodeAffinityType: []string{
+				"preferredDuringSchedulingIgnoredDuringExecution",
+			},
+		},
+	}
+	mixedStrategy := api.DeschedulerStrategy{
+		Enabled: true,
+		Params: api.StrategyParameters{
+			NodeAffinityType: []string{
+				"requiredDuringSchedulingIgnoredDuringExecution",
+				"preferredDuringSchedulingIgnoredDuringExecution",
+			},
+		},
+	}
 
 	nodeLabelKey := "kubernetes.io/desiredNode"
+	nodeLabelKey2 := "kubernetes.io/desiredNode2"
 	nodeLabelValue := "yes"
 	nodeWithLabels := test.BuildTestNode("nodeWithLabels", 2000, 3000, 10)
 	nodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
+	nodeWithLabels.Labels[nodeLabelKey2] = nodeLabelValue
 
 	nodeWithoutLabels := test.BuildTestNode("nodeWithoutLabels", 2000, 3000, 10)
 
 	unschedulableNodeWithLabels := test.BuildTestNode("unschedulableNodeWithLabels", 2000, 3000, 10)
-	nodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
+	unschedulableNodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
 	unschedulableNodeWithLabels.Spec.Unschedulable = true
 
 	addPodsToNode := func(node *v1.Node) []v1.Pod {
@@ -69,6 +88,44 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 						},
 					},
 				},
+				PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
+					{
+						Weight: 10,
+						Preference: v1.NodeSelectorTerm{
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      nodeLabelKey2,
+									Operator: "In",
+									Values: []string{
+										nodeLabelValue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		podWithNodeAffinity2 := test.BuildTestPod("podWithNodeAffinity2", 100, 0, node.Name)
+		podWithNodeAffinity2.Spec.Affinity = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
+					{
+						Weight: 10,
+						Preference: v1.NodeSelectorTerm{
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      nodeLabelKey2,
+									Operator: "In",
+									Values: []string{
+										nodeLabelValue,
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 		}
 
@@ -76,11 +133,13 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		pod2 := test.BuildTestPod("pod2", 100, 0, node.Name)
 
 		podWithNodeAffinity.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		podWithNodeAffinity2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 		pod1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 		pod2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
 		return []v1.Pod{
 			*podWithNodeAffinity,
+			*podWithNodeAffinity2,
 			*pod1,
 			*pod2,
 		}
@@ -161,6 +220,24 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, unschedulableNodeWithLabels},
 			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, unschedulableNodeWithLabels: 0},
+			maxPodsToEvict:          0,
+		},
+		{
+			description:             "2 pods scheduled on 0 score node, another better node available, should be evicted",
+			expectedEvictedPodCount: 2,
+			strategy:                preferredDuringSchedulingIgnoredDuringExecutionStrategy,
+			pods:                    addPodsToNode(nodeWithoutLabels),
+			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
+			maxPodsToEvict:          0,
+		},
+		{
+			description:             "[required/preferred mixed strategy]: There are 2 violated pods, both should be evicted",
+			expectedEvictedPodCount: 2,
+			strategy:                mixedStrategy,
+			pods:                    addPodsToNode(nodeWithoutLabels),
+			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
 			maxPodsToEvict:          0,
 		},
 	}

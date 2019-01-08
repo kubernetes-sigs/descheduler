@@ -345,3 +345,344 @@ func TestPodFitsAnyNode(t *testing.T) {
 		}
 	}
 }
+
+func TestCalcPodPriorityScore(t *testing.T) {
+
+	nodeLabelKey := "kubernetes.io/desiredNode"
+	nodeLabelKey2 := "kubernetes.io/desiredNode2"
+	nodeLabelValue := "yes"
+
+	desiredNode := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				nodeLabelKey:  nodeLabelValue,
+				nodeLabelKey2: nodeLabelValue,
+			},
+		},
+	}
+
+	podWithMultipleNodeAffinity := &v1.Pod{
+		Spec: v1.PodSpec{
+			Affinity: &v1.Affinity{
+				NodeAffinity: &v1.NodeAffinity{
+					PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
+						{
+							Weight: 10,
+							Preference: v1.NodeSelectorTerm{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      nodeLabelKey,
+										Operator: "In",
+										Values: []string{
+											nodeLabelValue,
+										},
+									},
+								},
+							},
+						},
+						{
+							Weight: 20,
+							Preference: v1.NodeSelectorTerm{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      nodeLabelKey2,
+										Operator: "In",
+										Values: []string{
+											nodeLabelValue,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		description   string
+		pod           *v1.Pod
+		node          *v1.Node
+		expectedScore int
+	}{
+		{
+			description:   "Pod with multiple nodeAffinity on desired node",
+			pod:           podWithMultipleNodeAffinity,
+			node:          desiredNode,
+			expectedScore: 30,
+		},
+		{
+			description: "Pod with multiple nodeAffinity on not desired node",
+			pod:         podWithMultipleNodeAffinity,
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						nodeLabelKey:  "no",
+						nodeLabelKey2: "no",
+					},
+				},
+			},
+			expectedScore: 0,
+		},
+		{
+			description: "Pod with multiple nodeAffinity on partially desired node",
+			pod:         podWithMultipleNodeAffinity,
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						nodeLabelKey:  nodeLabelValue,
+						nodeLabelKey2: "no",
+					},
+				},
+			},
+			expectedScore: 10,
+		},
+		{
+			description: "Pod with no affinity",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{},
+			},
+			node:          desiredNode,
+			expectedScore: 0,
+		},
+		{
+			description: "Pod with no nodeAffinity",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Affinity: &v1.Affinity{},
+				},
+			},
+			node:          desiredNode,
+			expectedScore: 0,
+		},
+		{
+			description: "Pod with no nodeAffinity preferredSchedulingTerms",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{},
+					},
+				},
+			},
+			node:          desiredNode,
+			expectedScore: 0,
+		},
+		{
+			description: "Pod with 0 weight nodeAffinity",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
+								{
+									Weight: 0,
+									Preference: v1.NodeSelectorTerm{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      nodeLabelKey,
+												Operator: "In",
+												Values: []string{
+													nodeLabelValue,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			node:          desiredNode,
+			expectedScore: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		actual, _ := CalcPodPriorityScore(tc.pod, tc.node)
+		if actual != tc.expectedScore {
+			t.Errorf("Test %#v failed", tc.description)
+		}
+	}
+}
+
+func TestFindBetterPreferredNode(t *testing.T) {
+
+	nodeLabelKey := "kubernetes.io/desiredNode"
+	nodeLabelKey2 := "kubernetes.io/desiredNode2"
+	nodeLabelValue := "yes"
+
+	desiredNode := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "desired",
+			Labels: map[string]string{
+				nodeLabelKey: nodeLabelValue,
+			},
+		},
+	}
+	desiredNode2 := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "desired2",
+			Labels: map[string]string{
+				nodeLabelKey: nodeLabelValue,
+			},
+		},
+	}
+	desiredNode3 := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "desired3",
+			Labels: map[string]string{
+				nodeLabelKey:  nodeLabelValue,
+				nodeLabelKey2: nodeLabelValue,
+			},
+		},
+	}
+	standardNode := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "standard",
+		},
+	}
+	desiredButUnschedulableNode := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "desiredButUnschedulable",
+			Labels: map[string]string{
+				nodeLabelKey: nodeLabelValue,
+			},
+		},
+		Spec: v1.NodeSpec{
+			Unschedulable: true,
+		},
+	}
+
+	podWithMultipleNodeAffinity := &v1.Pod{
+		Spec: v1.PodSpec{
+			Affinity: &v1.Affinity{
+				NodeAffinity: &v1.NodeAffinity{
+					PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
+						{
+							Weight: 10,
+							Preference: v1.NodeSelectorTerm{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      nodeLabelKey,
+										Operator: "In",
+										Values: []string{
+											nodeLabelValue,
+										},
+									},
+								},
+							},
+						},
+						{
+							Weight: 20,
+							Preference: v1.NodeSelectorTerm{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      nodeLabelKey2,
+										Operator: "In",
+										Values: []string{
+											nodeLabelValue,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		description             string
+		pod                     *v1.Pod
+		nodes                   []*v1.Node
+		currentNodeScore        int
+		exprectedFoundBetter    bool
+		exprectedScoreBetter    int
+		exprectedNodeNameBetter string
+	}{
+		{
+			description:             "Pod on 0 score node, there is a better node",
+			pod:                     podWithMultipleNodeAffinity,
+			nodes:                   []*v1.Node{desiredNode, standardNode},
+			currentNodeScore:        0,
+			exprectedFoundBetter:    true,
+			exprectedScoreBetter:    10,
+			exprectedNodeNameBetter: "desired",
+		},
+		{
+			description:             "Pod on 9 score node, there is a better node",
+			pod:                     podWithMultipleNodeAffinity,
+			nodes:                   []*v1.Node{desiredNode, standardNode},
+			currentNodeScore:        9,
+			exprectedFoundBetter:    true,
+			exprectedScoreBetter:    10,
+			exprectedNodeNameBetter: "desired",
+		},
+		{
+			description:             "Pod on 10 score node, there are no better nodes",
+			pod:                     podWithMultipleNodeAffinity,
+			nodes:                   []*v1.Node{desiredNode, standardNode},
+			currentNodeScore:        10,
+			exprectedFoundBetter:    false,
+			exprectedScoreBetter:    0,
+			exprectedNodeNameBetter: "",
+		},
+		{
+			description:             "Pod on 0 score node, there are no better nodes",
+			pod:                     podWithMultipleNodeAffinity,
+			nodes:                   []*v1.Node{standardNode},
+			currentNodeScore:        0,
+			exprectedFoundBetter:    false,
+			exprectedScoreBetter:    0,
+			exprectedNodeNameBetter: "",
+		},
+		{
+			description:             "Pod on 0 score node, there are no nodes",
+			pod:                     podWithMultipleNodeAffinity,
+			nodes:                   []*v1.Node{},
+			currentNodeScore:        0,
+			exprectedFoundBetter:    false,
+			exprectedScoreBetter:    0,
+			exprectedNodeNameBetter: "",
+		},
+		{
+			description:             "Pod on 0 score node, there is a better node but unschedulable",
+			pod:                     podWithMultipleNodeAffinity,
+			nodes:                   []*v1.Node{desiredButUnschedulableNode, standardNode},
+			currentNodeScore:        0,
+			exprectedFoundBetter:    false,
+			exprectedScoreBetter:    0,
+			exprectedNodeNameBetter: "",
+		},
+		{
+			description:             "Pod on 0 score node, there are better nodes(10/10/30), first is win",
+			pod:                     podWithMultipleNodeAffinity,
+			nodes:                   []*v1.Node{desiredNode, desiredNode2, desiredNode3, standardNode},
+			currentNodeScore:        0,
+			exprectedFoundBetter:    true,
+			exprectedScoreBetter:    10,
+			exprectedNodeNameBetter: "desired",
+		},
+		{
+			description:             "Pod on 0 score node, there are better nodes(30/10/10), first is win",
+			pod:                     podWithMultipleNodeAffinity,
+			nodes:                   []*v1.Node{desiredNode3, desiredNode, desiredNode2, standardNode},
+			currentNodeScore:        0,
+			exprectedFoundBetter:    true,
+			exprectedScoreBetter:    30,
+			exprectedNodeNameBetter: "desired3",
+		},
+	}
+
+	for _, tc := range tests {
+		foundBetter, scoreBetter, nodeNameBetter := FindBetterPreferredNode(tc.pod, tc.currentNodeScore, tc.nodes)
+		if foundBetter != tc.exprectedFoundBetter ||
+			scoreBetter != tc.exprectedScoreBetter ||
+			nodeNameBetter != tc.exprectedNodeNameBetter {
+			t.Errorf("Test %#v failed(%t, %d, %s)", tc.description, foundBetter, scoreBetter, nodeNameBetter)
+		}
+	}
+}

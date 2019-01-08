@@ -28,6 +28,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 )
 
 // ReadyNodes returns ready nodes irrespective of whether they are
@@ -164,4 +165,55 @@ func PodFitsCurrentNode(pod *v1.Pod, node *v1.Node) bool {
 
 	glog.V(3).Infof("Pod %v fits on node %v", pod.Name, node.Name)
 	return true
+}
+
+// CalcPodPriorityScore calculate pod's priority score on the given node.
+// return: priority score(1~) or 0 if error.
+func CalcPodPriorityScore(pod *v1.Pod, node *v1.Node) (int, error) {
+
+	// A nil element of PreferredDuringSchedulingIgnoredDuringExecution matches no objects.
+	// An element of PreferredDuringSchedulingIgnoredDuringExecution that refers to an
+	// empty PreferredSchedulingTerm matches all objects.
+	var count int32
+	affinity := pod.Spec.Affinity
+	if affinity != nil && affinity.NodeAffinity != nil && affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution != nil {
+		for _, preferredSchedulingTerm := range affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+			if preferredSchedulingTerm.Weight == 0 {
+				continue
+			}
+
+			nodeSelector, err := v1helper.NodeSelectorRequirementsAsSelector(preferredSchedulingTerm.Preference.MatchExpressions)
+			if err != nil {
+				return 0, err
+			}
+
+			if nodeSelector.Matches(labels.Set(node.Labels)) {
+				count += preferredSchedulingTerm.Weight
+			}
+		}
+	}
+
+	glog.V(3).Infof("Pod %v priority score is %d on node %v", pod.Name, int(count), node.Name)
+	return int(count), nil
+}
+
+// FindBetterPreferredNode find more preferred node than the the given pod node in the given nodes.
+// return: true, priority score(1~) and node name if better node found. false if not found.
+func FindBetterPreferredNode(pod *v1.Pod, podScore int, nodes []*v1.Node) (bool, int, string) {
+	for _, node := range nodes {
+
+		score, err := CalcPodPriorityScore(pod, node)
+		if err != nil {
+			glog.Errorf("Failed to calculate priority score for pod %v on node %v: %v", pod.Name, node.Name, err)
+			continue
+		}
+
+		if score > podScore {
+			if !IsNodeUschedulable(node) {
+				return true, score, node.Name
+			}
+		}
+	}
+
+	return false, 0, ""
 }
