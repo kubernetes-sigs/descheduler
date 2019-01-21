@@ -26,17 +26,46 @@ import (
 	"k8s.io/api/core/v1"
 )
 
-func Contains(a []string, x string) bool {
-	for _, n := range a {
-		if x == n {
-			return true
-		}
-	}
-	return false
-}
-
 func RemovePodsViolatingNodeAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodePodCount nodePodEvictedCount) {
 	removePodsViolatingNodeAffinityCount(ds, strategy, evictionPolicyGroupVersion, nodes, nodePodCount, ds.MaxNoOfPodsToEvictPerNode)
+}
+
+func PodCheckAndEvict(nodes []*v1.Node, ds *options.DeschedulerServer, affinityType string, evictedPodNames []string, evictionPolicyGroupVersion string, evictedPodCount int,  nodepodCount nodePodEvictedCount, maxPodsToEvict int) {
+	Contains := func (a []string, x string) bool {
+		for _, n := range a {
+			if x == n {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, node := range nodes {
+		glog.V(1).Infof("Processing node: %#v\n", node.Name)
+
+		pods, err := podutil.ListEvictablePodsOnNode(ds.Client, node)
+		if err != nil {
+			glog.Errorf("failed to get pods from %v: %v", node.Name, err)
+		}
+
+		for _, pod := range pods {
+			if maxPodsToEvict > 0 && nodepodCount[node]+1 > maxPodsToEvict {
+				break
+			}
+			if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
+
+				if !nodeutil.PodFitsCurrentNode(pod, node) && nodeutil.PodFitsAnyNode(pod, nodes) {
+					if !Contains(evictedPodNames, pod.Name) {
+						evictedPodNames = append(evictedPodNames, pod.Name)
+						glog.V(1).Infof("Evicting pod: %v", pod.Name)
+						evictions.EvictPod(ds.Client, pod, evictionPolicyGroupVersion, ds.DryRun)
+						nodepodCount[node]++
+						evictedPodCount++
+					}
+				}
+			}
+		}
+	}
 }
 
 func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodepodCount nodePodEvictedCount, maxPodsToEvict int) int {
@@ -51,59 +80,9 @@ func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strateg
 		glog.V(2).Infof("Executing for nodeAffinityType: %v", nodeAffinity)
 		switch nodeAffinity {
 		case "requiredDuringSchedulingIgnoredDuringExecution":
-			for _, node := range nodes {
-				glog.V(1).Infof("Processing node: %#v\n", node.Name)
-
-				pods, err := podutil.ListEvictablePodsOnNode(ds.Client, node)
-				if err != nil {
-					glog.Errorf("failed to get pods from %v: %v", node.Name, err)
-				}
-
-				for _, pod := range pods {
-					if maxPodsToEvict > 0 && nodepodCount[node]+1 > maxPodsToEvict {
-						break
-					}
-					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil {
-
-						if !nodeutil.PodFitsCurrentNode(pod, node) && nodeutil.PodFitsAnyNode(pod, nodes) && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-							if !Contains(evictedPodNames, pod.Name) {
-								evictedPodNames = append(evictedPodNames, pod.Name)
-								glog.V(1).Infof("Evicting pod: %v", pod.Name)
-								evictions.EvictPod(ds.Client, pod, evictionPolicyGroupVersion, ds.DryRun)
-								nodepodCount[node]++
-								evictedPodCount++
-							}
-						}
-					}
-				}
-			}
+			PodCheckAndEvict(nodes,ds,"requiredDuringSchedulingIgnoredDuringExecution",evictedPodNames, evictionPolicyGroupVersion, evictedPodCount, nodepodCount, maxPodsToEvict)
 		case "preferredDuringSchedulingIgnoredDuringExecution":
-			for _, node := range nodes {
-				glog.V(1).Infof("Processing node: %#v\n", node.Name)
-
-				pods, err := podutil.ListEvictablePodsOnNode(ds.Client, node)
-				if err != nil {
-					glog.Errorf("failed to get pods from %v: %v", node.Name, err)
-				}
-
-				for _, pod := range pods {
-					if maxPodsToEvict > 0 && nodepodCount[node]+1 > maxPodsToEvict {
-						break
-					}
-					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution != nil {
-
-						if !nodeutil.PodFitsCurrentNode(pod, node) && nodeutil.PodFitsAnyNode(pod, nodes) {
-							if !Contains(evictedPodNames, pod.Name) {
-								evictedPodNames = append(evictedPodNames, pod.Name)
-								glog.V(1).Infof("Evicting pod: %v", pod.Name)
-								evictions.EvictPod(ds.Client, pod, evictionPolicyGroupVersion, ds.DryRun)
-								nodepodCount[node]++
-								evictedPodCount++
-							}
-						}
-					}
-				}
-			}
+		  PodCheckAndEvict(nodes,ds,"preferredDuringSchedulingIgnoredDuringExecution",evictedPodNames, evictionPolicyGroupVersion, evictedPodCount,nodepodCount, maxPodsToEvict)
 		default:
 			glog.Errorf("invalid nodeAffinityType: %v", nodeAffinity)
 			return evictedPodCount
