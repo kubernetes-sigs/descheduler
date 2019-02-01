@@ -17,6 +17,8 @@ limitations under the License.
 package strategies
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/kubernetes-incubator/descheduler/test"
@@ -29,16 +31,18 @@ import (
 
 //TODO:@ravisantoshgudimetla This could be made table driven.
 func TestFindDuplicatePods(t *testing.T) {
-	node := test.BuildTestNode("n1", 2000, 3000, 10)
-	p1 := test.BuildTestPod("p1", 100, 0, node.Name)
-	p2 := test.BuildTestPod("p2", 100, 0, node.Name)
-	p3 := test.BuildTestPod("p3", 100, 0, node.Name)
-	p4 := test.BuildTestPod("p4", 100, 0, node.Name)
-	p5 := test.BuildTestPod("p5", 100, 0, node.Name)
-	p6 := test.BuildTestPod("p6", 100, 0, node.Name)
-	p7 := test.BuildTestPod("p7", 100, 0, node.Name)
-	p8 := test.BuildTestPod("p8", 100, 0, node.Name)
-	p9 := test.BuildTestPod("p9", 100, 0, node.Name)
+	n1 := test.BuildTestNode("n1", 2000, 3000, 10)
+	n2 := test.BuildTestNode("n2", 2000, 3000, 10)
+
+	p1 := test.BuildTestPod("p1", 100, 0, n1.Name)
+	p2 := test.BuildTestPod("p2", 100, 0, n1.Name)
+	p3 := test.BuildTestPod("p3", 100, 0, n1.Name)
+	p4 := test.BuildTestPod("p4", 100, 0, n1.Name)
+	p5 := test.BuildTestPod("p5", 100, 0, n1.Name)
+	p6 := test.BuildTestPod("p6", 100, 0, n1.Name)
+	p7 := test.BuildTestPod("p7", 100, 0, n1.Name)
+	p8 := test.BuildTestPod("p8", 100, 0, n1.Name)
+	p9 := test.BuildTestPod("p9", 100, 0, n1.Name)
 
 	// All the following pods expect for one will be evicted.
 	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
@@ -70,16 +74,85 @@ func TestFindDuplicatePods(t *testing.T) {
 	expectedEvictedPodCount := 2
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p9}}, nil
+		list := action.(core.ListAction)
+		fieldString := list.GetListRestrictions().Fields.String()
+		if strings.Contains(fieldString, "n1") {
+			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p9}}, nil
+		}
+		if strings.Contains(fieldString, "n2") {
+			return true, &v1.PodList{Items: []v1.Pod{}}, nil
+		}
+		return true, nil, fmt.Errorf("Failed to list: %v", list)
 	})
 	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
-		return true, node, nil
+		return true, &v1.NodeList{Items: []v1.Node{*n1, *n2}}, nil
 	})
 	npe := nodePodEvictedCount{}
-	npe[node] = 0
-	podsEvicted := deleteDuplicatePods(fakeClient, "v1", []*v1.Node{node}, false, npe, 2)
+	npe[n1] = 0
+	npe[n2] = 0
+	podsEvicted := deleteDuplicatePods(fakeClient, "v1", []*v1.Node{n1, n2}, false, npe, 2)
 	if podsEvicted != expectedEvictedPodCount {
 		t.Errorf("Unexpected no of pods evicted")
 	}
 
+}
+
+func TestFindDuplicatePodsWithMaster(t *testing.T) {
+	n0 := test.BuildTestNode("n0", 2000, 3000, 10)
+	n1 := test.BuildTestNode("n1", 2000, 3000, 10)
+	n2 := test.BuildTestNode("n2", 2000, 3000, 10)
+
+	masterTaint := v1.Taint{
+		Key:    "node-role.kubernetes.io/master",
+		Effect: "NoSchedule",
+	}
+	n0.Spec.Taints = append(n0.Spec.Taints, masterTaint)
+
+	p1 := test.BuildTestPod("p1", 100, 0, n1.Name)
+	p2 := test.BuildTestPod("p2", 100, 0, n1.Name)
+	p3 := test.BuildTestPod("p3", 100, 0, n2.Name)
+	p4 := test.BuildTestPod("p4", 100, 0, n2.Name)
+	p5 := test.BuildTestPod("p5", 100, 0, n2.Name)
+
+	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p2.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p3.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p4.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p5.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+
+	// As 'RS1' pods are present on all possible nodes, no evictions will happen for them
+	p1.ObjectMeta.OwnerReferences[0].Name = "RS1"
+	p2.ObjectMeta.OwnerReferences[0].Name = "RS1"
+	p3.ObjectMeta.OwnerReferences[0].Name = "RS1"
+
+	// As 'RS2' pods are present on only node 'n2', one pod should be evicted
+	p4.ObjectMeta.OwnerReferences[0].Name = "RS2"
+	p5.ObjectMeta.OwnerReferences[0].Name = "RS2"
+
+	fakeClient := &fake.Clientset{}
+	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+		list := action.(core.ListAction)
+		fieldString := list.GetListRestrictions().Fields.String()
+		if strings.Contains(fieldString, "n1") {
+			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2}}, nil
+		}
+		if strings.Contains(fieldString, "n2") {
+			return true, &v1.PodList{Items: []v1.Pod{*p3, *p4, *p5}}, nil
+		}
+		return true, nil, fmt.Errorf("Failed to list: %v", list)
+	})
+	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
+		return true, &v1.NodeList{Items: []v1.Node{*n0, *n1, *n2}}, nil
+	})
+
+	npe := nodePodEvictedCount{}
+	npe[n0] = 0
+	npe[n1] = 0
+	npe[n2] = 0
+
+	expectedEvictedPodCount := 1
+	podsEvicted := deleteDuplicatePods(fakeClient, "v1", []*v1.Node{n0, n1, n2}, false, npe, 2)
+	if podsEvicted != expectedEvictedPodCount {
+		t.Errorf("Unexpected no of pods evicted")
+	}
 }

@@ -92,3 +92,26 @@ func nodeMatchesNodeSelectorTerms(node *v1.Node, nodeSelectorTerms []v1.NodeSele
 	}
 	return false
 }
+
+// PodToleratesNodeTaints checks if a pod tolerations can tolerate the node taints
+func PodToleratesNodeTaints(pod *v1.Pod, node *v1.Node) (bool, error) {
+	return podToleratesNodeTaints(pod, node, func(t *v1.Taint) bool {
+		// PodToleratesNodeTaints is only interested in NoSchedule and NoExecute taints.
+		return t.Effect == v1.TaintEffectNoSchedule || t.Effect == v1.TaintEffectNoExecute
+	})
+}
+
+// PodToleratesNodeNoExecuteTaints checks if a pod tolerations can tolerate the node's NoExecute taints
+func PodToleratesNodeNoExecuteTaints(pod *v1.Pod, node *v1.Node) (bool, error) {
+	return podToleratesNodeTaints(pod, node, func(t *v1.Taint) bool {
+		return t.Effect == v1.TaintEffectNoExecute
+	})
+}
+
+func podToleratesNodeTaints(pod *v1.Pod, node *v1.Node, filter func(t *v1.Taint) bool) (bool, error) {
+	taints := node.Spec.Taints
+	if v1helper.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taints, filter) {
+		return true, nil
+	}
+	return false, nil
+}

@@ -27,6 +27,7 @@ import (
 	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
 	"github.com/kubernetes-incubator/descheduler/pkg/api"
 	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions"
+	nodeutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/node"
 	podutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/pod"
 )
 
@@ -46,11 +47,12 @@ func RemoveDuplicatePods(ds *options.DeschedulerServer, strategy api.Descheduler
 // deleteDuplicatePods evicts the pod from node and returns the count of evicted pods.
 func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodepodCount nodePodEvictedCount, maxPodsToEvict int) int {
 	podsEvicted := 0
+	dpmByNode, creatorIsSaturated := computeCreatorSaturation(client, nodes)
 	for _, node := range nodes {
 		glog.V(1).Infof("Processing node: %#v", node.Name)
-		dpm := ListDuplicatePodsOnANode(client, node)
+		dpm := dpmByNode[node]
 		for creator, pods := range dpm {
-			if len(pods) > 1 {
+			if len(pods) > 1 && !creatorIsSaturated[creator] {
 				glog.V(1).Infof("%#v", creator)
 				// i = 0 does not evict the first pod
 				for i := 1; i < len(pods); i++ {
@@ -70,6 +72,39 @@ func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, 
 		podsEvicted += nodepodCount[node]
 	}
 	return podsEvicted
+}
+
+// computeCreatorSaturation finds if creators in the cluster are _saturated_.
+// A creator is _saturated_ if atleast one pod is running on every possible nodes.
+// In such a case, pods of this creator are not evicted from any nodes even if duplicates are present.
+func computeCreatorSaturation(client clientset.Interface, nodes []*v1.Node) (map[*v1.Node]DuplicatePodsMap, map[string]bool) {
+	dpmByNode := make(map[*v1.Node]DuplicatePodsMap)
+	creatorAssignedNodes := make(map[string][]*v1.Node)
+	for _, node := range nodes {
+		dpmByNode[node] = ListDuplicatePodsOnANode(client, node)
+		for creator := range dpmByNode[node] {
+			creatorAssignedNodes[creator] = append(creatorAssignedNodes[creator], node)
+		}
+	}
+
+	creatorPossibleNodes := make(map[string][]*v1.Node)
+	for creator, nodeList := range creatorAssignedNodes {
+		creatorNode := nodeList[0]
+		creatorPod := dpmByNode[creatorNode][creator][0]
+		for _, node := range nodes {
+			if nodeutil.PodFitsCurrentNode(creatorPod, node) && nodeutil.PodToleratesNodeTaints(creatorPod, node) {
+				creatorPossibleNodes[creator] = append(creatorPossibleNodes[creator], node)
+			}
+		}
+	}
+
+	creatorIsSaturated := make(map[string]bool)
+	for creator, nodeList := range creatorAssignedNodes {
+		creatorIsSaturated[creator] = (len(creatorPossibleNodes[creator]) == len(nodeList))
+		glog.V(1).Infof("Creator %#v is saturated: %#v", creator, creatorIsSaturated[creator])
+	}
+
+	return dpmByNode, creatorIsSaturated
 }
 
 // ListDuplicatePodsOnANode lists duplicate pods on a given node.

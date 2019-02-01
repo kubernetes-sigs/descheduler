@@ -165,3 +165,21 @@ func PodFitsCurrentNode(pod *v1.Pod, node *v1.Node) bool {
 	glog.V(3).Infof("Pod %v fits on node %v", pod.Name, node.Name)
 	return true
 }
+
+// PodToleratesNodeTaints check if the given pod tolerates the taints on the given node
+func PodToleratesNodeTaints(pod *v1.Pod, node *v1.Node) bool {
+	ok, err := utils.PodToleratesNodeTaints(pod, node)
+
+	if err != nil {
+		glog.Error(err)
+		return false
+	}
+
+	if !ok {
+		glog.V(1).Infof("Pod %v does not tolerate taints on node %v", pod.Name, node.Name)
+		return false
+	}
+
+	glog.V(3).Infof("Pod %v tolerates taints on node %v", pod.Name, node.Name)
+	return true
+}
