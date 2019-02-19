@@ -50,19 +50,20 @@ func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, 
 		glog.V(1).Infof("Processing node: %#v", node.Name)
 		dpm := ListDuplicatePodsOnANode(client, node)
 		for creator, pods := range dpm {
-			if len(pods) > 1 {
-				glog.V(1).Infof("%#v", creator)
-				// i = 0 does not evict the first pod
-				for i := 1; i < len(pods); i++ {
-					if maxPodsToEvict > 0 && nodepodCount[node]+1 > maxPodsToEvict {
-						break
-					}
-					success, err := evictions.EvictPod(client, pods[i], policyGroupVersion, dryRun)
-					if !success {
-						glog.Infof("Error when evicting pod: %#v (%#v)", pods[i].Name, err)
-					} else {
-						nodepodCount[node]++
-						glog.V(1).Infof("Evicted pod: %#v (%#v)", pods[i].Name, err)
+			if len(pods) > 0 {
+				for i := 0; i < len(pods); i++ {
+					glog.V(5).Infof("Evaluating pod: %#v : %#v", creator, pods[i].Name)
+					if i > 0 {
+						if maxPodsToEvict > 0 && nodepodCount[node]+1 > maxPodsToEvict {
+							break
+						}
+						success, err := evictions.EvictPod(client, pods[i], policyGroupVersion, dryRun)
+						if !success {
+							glog.Infof("Error when evicting pod: %#v : %#v (%#v)", creator, pods[i].Name, err)
+						} else {
+							nodepodCount[node]++
+							glog.V(1).Infof("Evicted pod: %#v : %#v (%#v)", creator, pods[i].Name, err)
+						}
 					}
 				}
 			}
