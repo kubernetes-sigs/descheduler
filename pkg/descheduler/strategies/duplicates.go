@@ -90,8 +90,7 @@ func FindDuplicatePods(pods []*v1.Pod) DuplicatePodsMap {
 		// which checks for error.
 		ownerRefList := podutil.OwnerRef(pod)
 		for _, ownerRef := range ownerRefList {
-			// ownerRef doesn't need namespace since the assumption is owner needs to be in the same namespace.
-			s := strings.Join([]string{ownerRef.Kind, ownerRef.Name}, "/")
+			s := strings.Join([]string{ownerRef.Kind, pod.Namespace, ownerRef.Name}, "/")
 			dpm[s] = append(dpm[s], pod)
 		}
 	}
