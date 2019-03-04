@@ -138,11 +138,7 @@ spec:
           volumeMounts:
           - mountPath: /policy-dir
             name: policy-volume
-          command:
-          - "/bin/sh"
-          - "-ec"
-          - |
-            /bin/descheduler --policy-config-file /policy-dir/policy.yaml
+          command: ["/bin/descheduler",  "--policy-config-file", "/policy-dir/policy.yaml"]
         restartPolicy: "Never"
         serviceAccountName: descheduler-sa
         volumes:
