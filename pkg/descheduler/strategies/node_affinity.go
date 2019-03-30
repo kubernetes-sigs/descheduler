@@ -44,7 +44,7 @@ func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strateg
 			for _, node := range nodes {
 				glog.V(1).Infof("Processing node: %#v\n", node.Name)
 
-				pods, err := podutil.ListEvictablePodsOnNode(ds.Client, node)
+				pods, err := podutil.ListEvictablePodsOnNode(ds.Client, ds.AnnotationsPrefix, node)
 				if err != nil {
 					glog.Errorf("failed to get pods from %v: %v", node.Name, err)
 				}

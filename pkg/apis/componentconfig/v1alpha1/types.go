@@ -45,4 +45,7 @@ type DeschedulerConfiguration struct {
 
 	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
 	MaxNoOfPodsToEvictPerNode int `json:"maxNoOfPodsToEvictPerNode,omitempty"`
+
+	// Prefix of the annotations specific to the descheduler.
+	AnnotationsPrefix string `json:"annotationsPrefix,omitempty"`
 }

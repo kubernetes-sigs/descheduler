@@ -28,6 +28,7 @@ import (
 )
 
 func TestPodAntiAffinity(t *testing.T) {
+	testAnnotationsPrefix := "descheduler.test.io"
 	node := test.BuildTestNode("n1", 2000, 3000, 10)
 	p1 := test.BuildTestPod("p1", 100, 0, node.Name)
 	p2 := test.BuildTestPod("p2", 100, 0, node.Name)
@@ -38,6 +39,8 @@ func TestPodAntiAffinity(t *testing.T) {
 	p2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p3.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p4.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	p5 := test.BuildTestPod("p5", 400, 0, node.Name)
+	p5.ObjectMeta.Annotations[testAnnotationsPrefix+"/critical-pod"] = ""
 
 	// set pod anti affinity
 	setPodAntiAffinity(p1)
@@ -47,7 +50,7 @@ func TestPodAntiAffinity(t *testing.T) {
 	// create fake client
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4}}, nil
+		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5}}, nil
 	})
 	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 		return true, node, nil
@@ -55,13 +58,13 @@ func TestPodAntiAffinity(t *testing.T) {
 	npe := nodePodEvictedCount{}
 	npe[node] = 0
 	expectedEvictedPodCount := 3
-	podsEvicted := removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, 0)
+	podsEvicted := removePodsWithAffinityRules(fakeClient, testAnnotationsPrefix, "v1", []*v1.Node{node}, false, npe, 0)
 	if podsEvicted != expectedEvictedPodCount {
 		t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, expectedEvictedPodCount)
 	}
 	npe[node] = 0
 	expectedEvictedPodCount = 1
-	podsEvicted = removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, 1)
+	podsEvicted = removePodsWithAffinityRules(fakeClient, testAnnotationsPrefix, "v1", []*v1.Node{node}, false, npe, 1)
 	if podsEvicted != expectedEvictedPodCount {
 		t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, expectedEvictedPodCount)
 	}

@@ -40,15 +40,15 @@ func RemoveDuplicatePods(ds *options.DeschedulerServer, strategy api.Descheduler
 	if !strategy.Enabled {
 		return
 	}
-	deleteDuplicatePods(ds.Client, policyGroupVersion, nodes, ds.DryRun, nodepodCount, ds.MaxNoOfPodsToEvictPerNode)
+	deleteDuplicatePods(ds.Client, ds.AnnotationsPrefix, policyGroupVersion, nodes, ds.DryRun, nodepodCount, ds.MaxNoOfPodsToEvictPerNode)
 }
 
 // deleteDuplicatePods evicts the pod from node and returns the count of evicted pods.
-func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodepodCount nodePodEvictedCount, maxPodsToEvict int) int {
+func deleteDuplicatePods(client clientset.Interface, annotationsPrefix string, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodepodCount nodePodEvictedCount, maxPodsToEvict int) int {
 	podsEvicted := 0
 	for _, node := range nodes {
 		glog.V(1).Infof("Processing node: %#v", node.Name)
-		dpm := ListDuplicatePodsOnANode(client, node)
+		dpm := ListDuplicatePodsOnANode(client, annotationsPrefix, node)
 		for creator, pods := range dpm {
 			if len(pods) > 1 {
 				glog.V(1).Infof("%#v", creator)
@@ -73,8 +73,8 @@ func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, 
 }
 
 // ListDuplicatePodsOnANode lists duplicate pods on a given node.
-func ListDuplicatePodsOnANode(client clientset.Interface, node *v1.Node) DuplicatePodsMap {
-	pods, err := podutil.ListEvictablePodsOnNode(client, node)
+func ListDuplicatePodsOnANode(client clientset.Interface, annotationsPrefix string, node *v1.Node) DuplicatePodsMap {
+	pods, err := podutil.ListEvictablePodsOnNode(client, annotationsPrefix, node)
 	if err != nil {
 		return nil
 	}

@@ -29,6 +29,7 @@ import (
 
 //TODO:@ravisantoshgudimetla This could be made table driven.
 func TestFindDuplicatePods(t *testing.T) {
+	testAnnotationsPrefix := "descheduler.test.io"
 	node := test.BuildTestNode("n1", 2000, 3000, 10)
 	p1 := test.BuildTestPod("p1", 100, 0, node.Name)
 	p2 := test.BuildTestPod("p2", 100, 0, node.Name)
@@ -39,6 +40,8 @@ func TestFindDuplicatePods(t *testing.T) {
 	p7 := test.BuildTestPod("p7", 100, 0, node.Name)
 	p8 := test.BuildTestPod("p8", 100, 0, node.Name)
 	p9 := test.BuildTestPod("p9", 100, 0, node.Name)
+	p10 := test.BuildTestPod("p10", 400, 0, node.Name)
+	p10.ObjectMeta.Annotations[testAnnotationsPrefix+"/critical-pod"] = ""
 
 	// All the following pods expect for one will be evicted.
 	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
@@ -70,14 +73,14 @@ func TestFindDuplicatePods(t *testing.T) {
 	expectedEvictedPodCount := 2
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p9}}, nil
+		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p9, *p10}}, nil
 	})
 	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 		return true, node, nil
 	})
 	npe := nodePodEvictedCount{}
 	npe[node] = 0
-	podsEvicted := deleteDuplicatePods(fakeClient, "v1", []*v1.Node{node}, false, npe, 2)
+	podsEvicted := deleteDuplicatePods(fakeClient, testAnnotationsPrefix, "v1", []*v1.Node{node}, false, npe, 2)
 	if podsEvicted != expectedEvictedPodCount {
 		t.Errorf("Unexpected no of pods evicted")
 	}

@@ -33,6 +33,7 @@ import (
 
 // TODO: Make this table driven.
 func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
+	testAnnotationsPrefix := "descheduler.test.io"
 	var thresholds = make(api.ResourceThresholds)
 	var targetThresholds = make(api.ResourceThresholds)
 	thresholds[v1.ResourceCPU] = 30
@@ -83,12 +84,14 @@ func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
 	p8.Annotations = test.GetCriticalPodAnnotation()
 	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
 	p9.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p10 := test.BuildTestPod("p10", 400, 0, n1.Name)
+	p10.ObjectMeta.Annotations[testAnnotationsPrefix+"/critical-pod"] = ""
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 		list := action.(core.ListAction)
 		fieldString := list.GetListRestrictions().Fields.String()
 		if strings.Contains(fieldString, "n1") {
-			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8}}, nil
+			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p10}}, nil
 		}
 		if strings.Contains(fieldString, "n2") {
 			return true, &v1.PodList{Items: []v1.Pod{*p9}}, nil
@@ -112,7 +115,7 @@ func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
 	})
 	expectedPodsEvicted := 3
 	npm := createNodePodsMap(fakeClient, []*v1.Node{n1, n2, n3})
-	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds)
+	lowNodes, targetNodes := classifyNodes(testAnnotationsPrefix, npm, thresholds, targetThresholds)
 	if len(lowNodes) != 1 {
 		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
 	}
@@ -129,6 +132,7 @@ func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
 
 // TODO: Make this table driven.
 func TestLowNodeUtilizationWithPriorities(t *testing.T) {
+	testAnnotationsPrefix := "descheduler.test.io"
 	var thresholds = make(api.ResourceThresholds)
 	var targetThresholds = make(api.ResourceThresholds)
 	thresholds[v1.ResourceCPU] = 30
@@ -188,12 +192,14 @@ func TestLowNodeUtilizationWithPriorities(t *testing.T) {
 	p8.Annotations = test.GetCriticalPodAnnotation()
 	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
 	p9.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p10 := test.BuildTestPod("p10", 400, 0, n1.Name)
+	p10.ObjectMeta.Annotations[testAnnotationsPrefix+"/critical-pod"] = ""
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 		list := action.(core.ListAction)
 		fieldString := list.GetListRestrictions().Fields.String()
 		if strings.Contains(fieldString, "n1") {
-			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8}}, nil
+			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p10}}, nil
 		}
 		if strings.Contains(fieldString, "n2") {
 			return true, &v1.PodList{Items: []v1.Pod{*p9}}, nil
@@ -217,7 +223,7 @@ func TestLowNodeUtilizationWithPriorities(t *testing.T) {
 	})
 	expectedPodsEvicted := 3
 	npm := createNodePodsMap(fakeClient, []*v1.Node{n1, n2, n3})
-	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds)
+	lowNodes, targetNodes := classifyNodes(testAnnotationsPrefix, npm, thresholds, targetThresholds)
 	if len(lowNodes) != 1 {
 		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
 	}

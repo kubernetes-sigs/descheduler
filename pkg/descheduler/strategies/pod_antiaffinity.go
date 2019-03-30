@@ -35,15 +35,15 @@ func RemovePodsViolatingInterPodAntiAffinity(ds *options.DeschedulerServer, stra
 	if !strategy.Enabled {
 		return
 	}
-	removePodsWithAffinityRules(ds.Client, policyGroupVersion, nodes, ds.DryRun, nodePodCount, ds.MaxNoOfPodsToEvictPerNode)
+	removePodsWithAffinityRules(ds.Client, ds.AnnotationsPrefix, policyGroupVersion, nodes, ds.DryRun, nodePodCount, ds.MaxNoOfPodsToEvictPerNode)
 }
 
 // removePodsWithAffinityRules evicts pods on the node which are having a pod affinity rules.
-func removePodsWithAffinityRules(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodePodCount nodePodEvictedCount, maxPodsToEvict int) int {
+func removePodsWithAffinityRules(client clientset.Interface, annotationsPrefix string, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodePodCount nodePodEvictedCount, maxPodsToEvict int) int {
 	podsEvicted := 0
 	for _, node := range nodes {
 		glog.V(1).Infof("Processing node: %#v\n", node.Name)
-		pods, err := podutil.ListEvictablePodsOnNode(client, node)
+		pods, err := podutil.ListEvictablePodsOnNode(client, annotationsPrefix, node)
 		if err != nil {
 			return 0
 		}

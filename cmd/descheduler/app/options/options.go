@@ -39,7 +39,9 @@ type DeschedulerServer struct {
 func NewDeschedulerServer() *DeschedulerServer {
 	versioned := v1alpha1.DeschedulerConfiguration{}
 	deschedulerscheme.Scheme.Default(&versioned)
-	cfg := componentconfig.DeschedulerConfiguration{}
+	cfg := componentconfig.DeschedulerConfiguration{
+		AnnotationsPrefix: "descheduler.kubernetes.io",
+	}
 	deschedulerscheme.Scheme.Convert(versioned, &cfg, nil)
 	s := DeschedulerServer{
 		DeschedulerConfiguration: cfg,
@@ -57,4 +59,5 @@ func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&rs.NodeSelector, "node-selector", rs.NodeSelector, "Selector (label query) to filter on, supports '=', '==', and '!='.(e.g. -l key1=value1,key2=value2)")
 	// max-no-pods-to-evict limits the maximum number of pods to be evicted per node by descheduler.
 	fs.IntVar(&rs.MaxNoOfPodsToEvictPerNode, "max-pods-to-evict-per-node", rs.MaxNoOfPodsToEvictPerNode, "Limits the maximum number of pods to be evicted per node by descheduler")
+	fs.StringVar(&rs.AnnotationsPrefix, "annotations-prefix", rs.AnnotationsPrefix, "Prefix of the annotations specific to the descheduler")
 }

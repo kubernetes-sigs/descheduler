@@ -25,6 +25,7 @@ import (
 )
 
 func TestPodTypes(t *testing.T) {
+	testAnnotationsPrefix := "descheduler.test.io"
 	n1 := test.BuildTestNode("node1", 1000, 2000, 9)
 	p1 := test.BuildTestPod("p1", 400, 0, n1.Name)
 
@@ -34,6 +35,9 @@ func TestPodTypes(t *testing.T) {
 	p4 := test.BuildTestPod("p4", 400, 0, n1.Name)
 	p5 := test.BuildTestPod("p5", 400, 0, n1.Name)
 	p6 := test.BuildTestPod("p6", 400, 0, n1.Name)
+	p7 := test.BuildTestPod("p7", 400, 0, n1.Name)
+	p7.ObjectMeta.Annotations[testAnnotationsPrefix+"/critical-pod"] = ""
+
 	p6.Spec.Containers[0].Resources.Requests[v1.ResourceNvidiaGPU] = *resource.NewMilliQuantity(3, resource.DecimalSI)
 
 	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -63,9 +67,14 @@ func TestPodTypes(t *testing.T) {
 	if !IsMirrorPod(p4) {
 		t.Errorf("Expected p4 to be a mirror pod.")
 	}
-	if !IsCriticalPod(p5) {
+	if !IsCriticalPod(testAnnotationsPrefix, p5) {
 		t.Errorf("Expected p5 to be a critical pod.")
 	}
+
+	if !IsCriticalPod(testAnnotationsPrefix, p7) {
+		t.Errorf("Expected p7 to be a critical pod.")
+	}
+
 	if !IsPodWithLocalStorage(p3) {
 		t.Errorf("Expected p3 to be a pod with local storage.")
 	}
@@ -74,7 +83,7 @@ func TestPodTypes(t *testing.T) {
 		t.Errorf("Expected p2 to be a daemonset pod.")
 	}
 	ownerRefList = OwnerRef(p1)
-	if IsDaemonsetPod(ownerRefList) || IsPodWithLocalStorage(p1) || IsCriticalPod(p1) || IsMirrorPod(p1) {
+	if IsDaemonsetPod(ownerRefList) || IsPodWithLocalStorage(p1) || IsCriticalPod(testAnnotationsPrefix, p1) || IsMirrorPod(p1) {
 		t.Errorf("Expected p1 to be a normal pod.")
 	}
 	if !IsLatencySensitivePod(p6) {

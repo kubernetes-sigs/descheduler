@@ -28,9 +28,10 @@ import (
 func BuildTestPod(name string, cpu int64, memory int64, nodeName string) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "default",
-			Name:      name,
-			SelfLink:  fmt.Sprintf("/api/v1/namespaces/default/pods/%s", name),
+			Namespace:   "default",
+			Name:        name,
+			SelfLink:    fmt.Sprintf("/api/v1/namespaces/default/pods/%s", name),
+			Annotations: map[string]string{},
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{

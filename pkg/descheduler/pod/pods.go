@@ -52,23 +52,23 @@ func IsLatencySensitivePod(pod *v1.Pod) bool {
 }
 
 // IsEvictable checks if a pod is evictable or not.
-func IsEvictable(pod *v1.Pod) bool {
+func IsEvictable(annotationsPrefix string, pod *v1.Pod) bool {
 	ownerRefList := OwnerRef(pod)
-	if IsMirrorPod(pod) || IsPodWithLocalStorage(pod) || len(ownerRefList) == 0 || IsDaemonsetPod(ownerRefList) || IsCriticalPod(pod) {
+	if IsMirrorPod(pod) || IsPodWithLocalStorage(pod) || len(ownerRefList) == 0 || IsDaemonsetPod(ownerRefList) || IsCriticalPod(annotationsPrefix, pod) {
 		return false
 	}
 	return true
 }
 
 // ListEvictablePodsOnNode returns the list of evictable pods on node.
-func ListEvictablePodsOnNode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, error) {
+func ListEvictablePodsOnNode(client clientset.Interface, annotationsPrefix string, node *v1.Node) ([]*v1.Pod, error) {
 	pods, err := ListPodsOnANode(client, node)
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
 	evictablePods := make([]*v1.Pod, 0)
 	for _, pod := range pods {
-		if !IsEvictable(pod) {
+		if !IsEvictable(annotationsPrefix, pod) {
 			continue
 		} else {
 			evictablePods = append(evictablePods, pod)
@@ -96,8 +96,13 @@ func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, erro
 	return pods, nil
 }
 
-func IsCriticalPod(pod *v1.Pod) bool {
-	return types.IsCriticalPod(pod)
+func IsCriticalPod(annotationsPrefix string, pod *v1.Pod) bool {
+	if types.IsCriticalPod(pod) {
+		return true
+	}
+
+	val, ok := pod.ObjectMeta.Annotations[annotationsPrefix+"/critical-pod"]
+	return ok && val == ""
 }
 
 func IsBestEffortPod(pod *v1.Pod) bool {

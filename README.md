@@ -48,9 +48,7 @@ $ ./_output/bin/descheduler --help
 Descheduler can be run as a job inside of a pod. It has the advantage of
 being able to be run multiple times without needing user intervention.
 Descheduler pod is run as a critical pod to avoid being evicted by itself,
-or by kubelet due to an eviction event. Since critical pods are created in
-`kube-system` namespace, descheduler job and its pod will also be created
-in `kube-system` namespace.
+or by kubelet due to an eviction event.
 
 ###  Create a container image
 
@@ -130,7 +128,7 @@ spec:
     metadata:
       name: descheduler-pod
       annotations:
-        scheduler.alpha.kubernetes.io/critical-pod: ""
+        descheduler.kubernetes.io/critical-pod: ""
     spec:
         containers:
         - name: descheduler
@@ -253,7 +251,10 @@ strategies:
 
 When the descheduler decides to evict pods from a node, it employs following general mechanism:
 
-* Critical pods (with annotations scheduler.alpha.kubernetes.io/critical-pod) are never evicted.
+* Critical pods are never evicted.
+  * Pods with the descheduler.kubernetes.io/critical-pod annotation.
+  * Pods with SystemCriticalPriority or higher.
+  * [**DEPRECATED**] Pods with the scheduler.alpha.kubernetes.io/critical-pod annotation in the kube-system namespace.
 * Pods (static or mirrored pods or stand alone pods) not part of an RC, RS, Deployment or Jobs are
 never evicted because these pods won't be recreated.
 * Pods associated with DaemonSets are never evicted.

@@ -61,7 +61,7 @@ func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerS
 	}
 
 	npm := createNodePodsMap(ds.Client, nodes)
-	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds)
+	lowNodes, targetNodes := classifyNodes(ds.AnnotationsPrefix, npm, thresholds, targetThresholds)
 
 	glog.V(1).Infof("Criteria for a node under utilization: CPU: %v, Mem: %v, Pods: %v",
 		thresholds[v1.ResourceCPU], thresholds[v1.ResourceMemory], thresholds[v1.ResourcePods])
@@ -131,10 +131,10 @@ func validateTargetThresholds(targetThresholds api.ResourceThresholds) bool {
 
 // classifyNodes classifies the nodes into low-utilization or high-utilization nodes. If a node lies between
 // low and high thresholds, it is simply ignored.
-func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThresholds api.ResourceThresholds) ([]NodeUsageMap, []NodeUsageMap) {
+func classifyNodes(annotationsPrefix string, npm NodePodsMap, thresholds api.ResourceThresholds, targetThresholds api.ResourceThresholds) ([]NodeUsageMap, []NodeUsageMap) {
 	lowNodes, targetNodes := []NodeUsageMap{}, []NodeUsageMap{}
 	for node, pods := range npm {
-		usage, allPods, nonRemovablePods, bePods, bPods, gPods := NodeUtilization(node, pods)
+		usage, allPods, nonRemovablePods, bePods, bPods, gPods := NodeUtilization(annotationsPrefix, node, pods)
 		nuMap := NodeUsageMap{node, usage, allPods, nonRemovablePods, bePods, bPods, gPods}
 
 		// Check if node is underutilized and if we can schedule pods on it.
@@ -351,7 +351,7 @@ func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds 
 }
 
 // Nodeutilization returns the current usage of node.
-func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod) {
+func NodeUtilization(annotationsPrefix string, node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod) {
 	bePods := []*v1.Pod{}
 	nonRemovablePods := []*v1.Pod{}
 	bPods := []*v1.Pod{}
@@ -359,7 +359,7 @@ func NodeUtilization(node *v1.Node, pods []*v1.Pod) (api.ResourceThresholds, []*
 	totalReqs := map[v1.ResourceName]resource.Quantity{}
 	for _, pod := range pods {
 		// We need to compute the usage of nonRemovablePods unless it is a best effort pod. So, cannot use podutil.ListEvictablePodsOnNode
-		if !podutil.IsEvictable(pod) {
+		if !podutil.IsEvictable(annotationsPrefix, pod) {
 			nonRemovablePods = append(nonRemovablePods, pod)
 			if podutil.IsBestEffortPod(pod) {
 				continue
