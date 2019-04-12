@@ -48,6 +48,7 @@ func autoConvert_v1alpha1_DeschedulerConfiguration_To_componentconfig_Deschedule
 	out.DryRun = in.DryRun
 	out.NodeSelector = in.NodeSelector
 	out.MaxNoOfPodsToEvictPerNode = in.MaxNoOfPodsToEvictPerNode
+	out.EvictLocalStoragePods = in.EvictLocalStoragePods
 	return nil
 }
 
@@ -63,6 +64,7 @@ func autoConvert_componentconfig_DeschedulerConfiguration_To_v1alpha1_Deschedule
 	out.DryRun = in.DryRun
 	out.NodeSelector = in.NodeSelector
 	out.MaxNoOfPodsToEvictPerNode = in.MaxNoOfPodsToEvictPerNode
+	out.EvictLocalStoragePods = in.EvictLocalStoragePods
 	return nil
 }
 
