@@ -112,7 +112,7 @@ func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
 	})
 	expectedPodsEvicted := 3
 	npm := createNodePodsMap(fakeClient, []*v1.Node{n1, n2, n3})
-	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds)
+	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds, false)
 	if len(lowNodes) != 1 {
 		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
 	}
@@ -217,7 +217,7 @@ func TestLowNodeUtilizationWithPriorities(t *testing.T) {
 	})
 	expectedPodsEvicted := 3
 	npm := createNodePodsMap(fakeClient, []*v1.Node{n1, n2, n3})
-	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds)
+	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds, false)
 	if len(lowNodes) != 1 {
 		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
 	}

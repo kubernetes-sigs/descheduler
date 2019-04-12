@@ -176,7 +176,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			Client: fakeClient,
 		}
 
-		actualEvictedPodCount := removePodsViolatingNodeAffinityCount(&ds, tc.strategy, "v1", tc.nodes, tc.npe, tc.maxPodsToEvict)
+		actualEvictedPodCount := removePodsViolatingNodeAffinityCount(&ds, tc.strategy, "v1", tc.nodes, tc.npe, tc.maxPodsToEvict, false)
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)
 		}

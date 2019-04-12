@@ -77,7 +77,7 @@ func TestFindDuplicatePods(t *testing.T) {
 	})
 	npe := nodePodEvictedCount{}
 	npe[node] = 0
-	podsEvicted := deleteDuplicatePods(fakeClient, "v1", []*v1.Node{node}, false, npe, 2)
+	podsEvicted := deleteDuplicatePods(fakeClient, "v1", []*v1.Node{node}, false, npe, 2, false)
 	if podsEvicted != expectedEvictedPodCount {
 		t.Errorf("Unexpected no of pods evicted")
 	}
