@@ -45,4 +45,7 @@ type DeschedulerConfiguration struct {
 
 	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
 	MaxNoOfPodsToEvictPerNode int `json:"maxNoOfPodsToEvictPerNode,omitempty"`
+
+	// EvictLocalStoragePods allows pods using local storage to be evicted.
+	EvictLocalStoragePods bool `json:"evictLocalStoragePods,omitempty"`
 }
