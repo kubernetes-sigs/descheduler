@@ -120,10 +120,7 @@ func IsReady(node *v1.Node) bool {
 // IsNodeUschedulable checks if the node is unschedulable. This is helper function to check only in case of
 // underutilized node so that they won't be accounted for.
 func IsNodeUschedulable(node *v1.Node) bool {
-	if node.Spec.Unschedulable {
-		return true
-	}
-	return false
+	return node.Spec.Unschedulable
 }
 
 // PodFitsAnyNode checks if the given pod fits any of the given nodes, based on

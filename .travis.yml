@@ -1,7 +1,11 @@
+sudo: false
+
 language: go
+
 go:
-  - 1.9.1
+- "1.10"
+
 script:
-- hack/verify-gofmt.sh
-- make build
-- make test-unit
+  - make lint
+  - make build
+  - make test-unit

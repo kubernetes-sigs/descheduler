@@ -26,15 +26,39 @@ import (
 )
 
 func TestEvictPod(t *testing.T) {
-	n1 := test.BuildTestNode("node1", 1000, 2000, 9)
-	p1 := test.BuildTestPod("p1", 400, 0, n1.Name)
-	fakeClient := &fake.Clientset{}
-	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		return true, &v1.PodList{Items: []v1.Pod{*p1}}, nil
-	})
-	evicted, _ := EvictPod(fakeClient, p1, "v1", false)
-	if !evicted {
-		t.Errorf("Expected %v pod to be evicted", p1.Name)
+	node1 := test.BuildTestNode("node1", 1000, 2000, 9)
+	pod1 := test.BuildTestPod("p1", 400, 0, "node1")
+	tests := []struct {
+		description string
+		node        *v1.Node
+		pod         *v1.Pod
+		pods        []v1.Pod
+		want        bool
+	}{
+		{
+			description: "test pod eviction - pod present",
+			node:        node1,
+			pod:         pod1,
+			pods:        []v1.Pod{*pod1},
+			want:        true,
+		},
+		{
+			description: "test pod eviction - pod absent",
+			node:        node1,
+			pod:         pod1,
+			pods:        []v1.Pod{*test.BuildTestPod("p2", 400, 0, "node1"), *test.BuildTestPod("p3", 450, 0, "node1")},
+			want:        true,
+		},
 	}
 
+	for _, test := range tests {
+		fakeClient := &fake.Clientset{}
+		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+			return true, &v1.PodList{Items: test.pods}, nil
+		})
+		got, _ := EvictPod(fakeClient, test.pod, "v1", false)
+		if got != test.want {
+			t.Errorf("Test error for Desc: %s. Expected %v pod eviction to be %v, got %v", test.description, test.pod.Name, test.want, got)
+		}
+	}
 }
