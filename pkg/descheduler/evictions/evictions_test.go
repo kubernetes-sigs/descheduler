@@ -37,14 +37,14 @@ func TestEvictPod(t *testing.T) {
 			description:    "test pod eviction when pod is present",
 			node:           test.BuildTestNode("node1", 1000, 2000, 9),
 			pod:            test.BuildTestPod("p1", 400, 0, "node1"),
-			fakeClientPods: []v1.Pods{*pod},
+			fakeClientPods: []v1.Pod{*pod},
 			success:        true,
 		},
 		{
 			description:    "test pod eviction when pod is not present",
 			node:           test.BuildTestNode("node1", 1000, 2000, 9),
 			pod:            test.BuildTestPod("p1", 400, 0, "node1"),
-			fakeClientPods: []v1.Pods{},
+			fakeClientPods: []v1.Pod{},
 			success:        true,
 		},
 	}
