@@ -3,7 +3,7 @@ sudo: false
 language: go
 
 go:
-  - 1.9.1
+  - "1.10"
 services:
   - docker
 before_script:
@@ -19,6 +19,7 @@ before_script:
   - cp "$(kind get kubeconfig-path --name="kind")" /tmp/admin.conf
 script:
 - hack/verify-gofmt.sh
+- make lint
 - make build
 - make test-unit
 - make test-e2e
