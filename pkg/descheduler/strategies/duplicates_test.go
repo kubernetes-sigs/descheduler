@@ -27,8 +27,8 @@ import (
 	core "k8s.io/client-go/testing"
 )
 
-//TODO:@ravisantoshgudimetla This could be made table driven.
 func TestFindDuplicatePods(t *testing.T) {
+	// first setup pods
 	node := test.BuildTestNode("n1", 2000, 3000, 10)
 	p1 := test.BuildTestPod("p1", 100, 0, node.Name)
 	p1.Namespace = "dev"
@@ -86,23 +86,65 @@ func TestFindDuplicatePods(t *testing.T) {
 	// A Critical Pod.
 	p7.Annotations = test.GetCriticalPodAnnotation()
 
-	// Setup the fake client.
-	fakeClient := &fake.Clientset{}
-	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p9, *p10}}, nil
-	})
-	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
-		return true, node, nil
-	})
+	tests := []struct {
+		description             string
+		maxPodsToEvict          int
+		pods                    []v1.Pod
+		expectedEvictedPodCount int
+	}{
+		{
+			description:             "Three pods in the default Namespace, bound to same ReplicaSet. 2 should get deleted",
+			maxPodsToEvict:          2,
+			pods:                    []v1.Pod{*p1, *p2, *p3},
+			expectedEvictedPodCount: 2,
+		},
+		{
+			description:             "Three Pods in the test Namespace, bound to same ReplicaSet. 2 should be evicted",
+			maxPodsToEvict:          2,
+			pods:                    []v1.Pod{*p8, *p9, *p10},
+			expectedEvictedPodCount: 2,
+		},
+		{
+			description:             "pods are part of daemonset and local storage - none should get deleted",
+			maxPodsToEvict:          2,
+			pods:                    []v1.Pod{*p4, *p5},
+			expectedEvictedPodCount: 0,
+		},
+		{
+			description:             "pods are mirror pod and critical pod - none should get deleted",
+			maxPodsToEvict:          2,
+			pods:                    []v1.Pod{*p6, *p7},
+			expectedEvictedPodCount: 0,
+		},
+		{
+			description:             "pods are part of replicaset, daemonset and local storage - all  duplicate replicaset pods should get deleted",
+			maxPodsToEvict:          4,
+			pods:                    []v1.Pod{*p1, *p2, *p3, *p8, *p9, *p10, *p4, *p5},
+			expectedEvictedPodCount: 4,
+		},
+		{
+			description:             "pods are part of replicaset, daemonset, local storage, mirror pod and critical pod - all  duplicate replicaset pods should get deleted",
+			maxPodsToEvict:          5,
+			pods:                    []v1.Pod{*p1, *p2, *p3, *p8, *p9, *p10, *p4, *p5, *p6, *p7},
+			expectedEvictedPodCount: 4,
+		},
+	}
 
-	expectedEvictedPodCount := 4
-	npe := nodePodEvictedCount{}
-	npe[node] = 0
+	for _, test := range tests {
 
-	// Start evictions.
-	podsEvicted := deleteDuplicatePods(fakeClient, "v1", []*v1.Node{node}, false, npe, 10, false)
-	if podsEvicted != expectedEvictedPodCount {
-		t.Error("Unexpected number of pods evicted.\nExpected:\t", expectedEvictedPodCount, "\nActual:\t\t", podsEvicted)
+		npe := nodePodEvictedCount{}
+		npe[node] = 0
+		fakeClient := &fake.Clientset{}
+		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+			return true, &v1.PodList{Items: test.pods}, nil
+		})
+		fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
+			return true, node, nil
+		})
+		podsEvicted := deleteDuplicatePods(fakeClient, "v1", []*v1.Node{node}, false, npe, test.maxPodsToEvict, false)
+		if podsEvicted != test.expectedEvictedPodCount {
+			t.Errorf("Test error for Desc: %s. Expected deleted pods count %v , got %v", test.description, test.expectedEvictedPodCount, podsEvicted)
+		}
 	}
 
 }
