@@ -38,17 +38,18 @@ import (
 func MakePodSpec() v1.PodSpec {
 	return v1.PodSpec{
 		Containers: []v1.Container{{
-			Name:  "pause",
-			Image: "kubernetes/pause",
-			Ports: []v1.ContainerPort{{ContainerPort: 80}},
+			Name:            "pause",
+			ImagePullPolicy: "Never",
+			Image:           "kubernetes/pause",
+			Ports:           []v1.ContainerPort{{ContainerPort: 80}},
 			Resources: v1.ResourceRequirements{
 				Limits: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("100m"),
-					v1.ResourceMemory: resource.MustParse("500Mi"),
+					v1.ResourceMemory: resource.MustParse("1000Mi"),
 				},
 				Requests: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("100m"),
-					v1.ResourceMemory: resource.MustParse("500Mi"),
+					v1.ResourceMemory: resource.MustParse("800Mi"),
 				},
 			},
 		}},
