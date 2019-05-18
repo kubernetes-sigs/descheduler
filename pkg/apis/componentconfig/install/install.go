@@ -18,11 +18,11 @@ limitations under the License.
 package install
 
 import (
-	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig"
 	"github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig/v1alpha1"
 	deschedulerscheme "github.com/kubernetes-incubator/descheduler/pkg/descheduler/scheme"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 )
 
 func init() {

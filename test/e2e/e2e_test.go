@@ -126,7 +126,7 @@ func TestE2E(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
 	}
-	nodeList, err := clientSet.Core().Nodes().List(metav1.ListOptions{})
+	nodeList, err := clientSet.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Error listing node with %v", err)
 	}
