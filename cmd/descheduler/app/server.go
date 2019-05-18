@@ -27,8 +27,8 @@ import (
 	"github.com/golang/glog"
 	"github.com/spf13/cobra"
 
-	aflag "k8s.io/apiserver/pkg/util/flag"
-	"k8s.io/apiserver/pkg/util/logs"
+	aflag "k8s.io/component-base/cli/flag"
+	"k8s.io/component-base/logs"
 )
 
 // NewDeschedulerCommand creates a *cobra.Command object with default parameters
