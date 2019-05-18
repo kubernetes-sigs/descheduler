@@ -18,20 +18,18 @@ limitations under the License.
 package install
 
 import (
-	"k8s.io/apimachinery/pkg/apimachinery/announced"
-	"k8s.io/apimachinery/pkg/apimachinery/registered"
 	"k8s.io/apimachinery/pkg/runtime"
-
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig"
 	"github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig/v1alpha1"
 	deschedulerscheme "github.com/kubernetes-incubator/descheduler/pkg/descheduler/scheme"
 )
 
 func init() {
-	Install(deschedulerscheme.GroupFactoryRegistry, deschedulerscheme.Registry, deschedulerscheme.Scheme)
+	Install(deschedulerscheme.Scheme)
 }
 
-// Install registers the API group and adds types to a scheme
+/*// Install registers the API group and adds types to a scheme
 func Install(groupFactoryRegistry announced.APIGroupFactoryRegistry, registry *registered.APIRegistrationManager, scheme *runtime.Scheme) {
 	if err := announced.NewGroupMetaFactory(
 		&announced.GroupMetaFactoryArgs{
@@ -45,4 +43,11 @@ func Install(groupFactoryRegistry announced.APIGroupFactoryRegistry, registry *r
 	).Announce(groupFactoryRegistry).RegisterAndEnable(registry, scheme); err != nil {
 		panic(err)
 	}
+}
+*/
+
+func Install(scheme *runtime.Scheme) {
+	utilruntime.Must(componentconfig.AddToScheme(scheme))
+	utilruntime.Must(v1alpha1.AddToScheme(scheme))
+	utilruntime.Must(scheme.SetVersionPriority(v1alpha1.SchemeGroupVersion))
 }

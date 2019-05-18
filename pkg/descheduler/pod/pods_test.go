@@ -34,7 +34,7 @@ func TestPodTypes(t *testing.T) {
 	p4 := test.BuildTestPod("p4", 400, 0, n1.Name)
 	p5 := test.BuildTestPod("p5", 400, 0, n1.Name)
 	p6 := test.BuildTestPod("p6", 400, 0, n1.Name)
-	p6.Spec.Containers[0].Resources.Requests[v1.ResourceNvidiaGPU] = *resource.NewMilliQuantity(3, resource.DecimalSI)
+	p6.Spec.Containers[0].Resources.Limits[NVIDIAGPUResourceName] = *resource.NewMilliQuantity(3, resource.DecimalSI)
 
 	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
@@ -59,7 +59,8 @@ func TestPodTypes(t *testing.T) {
 	p4.Annotations = test.GetMirrorPodAnnotation()
 	// A Critical Pod.
 	p5.Namespace = "kube-system"
-	p5.Annotations = test.GetCriticalPodAnnotation()
+	criticalPriority := int32(2000000000)
+	p5.Spec.Priority = &criticalPriority
 	if !IsMirrorPod(p4) {
 		t.Errorf("Expected p4 to be a mirror pod.")
 	}
