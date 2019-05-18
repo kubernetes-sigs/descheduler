@@ -30,10 +30,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/golang/glog"
+	"time"
 
 	"golang.org/x/build/pargzip"
+
+	"k8s.io/klog"
 )
 
 func main() {
@@ -56,6 +57,8 @@ func main() {
 		owners     multiString
 		ownerName  string
 		ownerNames multiString
+
+		mtime string
 	)
 
 	flag.StringVar(&flagfile, "flagfile", "", "Path to flagfile")
@@ -77,60 +80,68 @@ func main() {
 	flag.StringVar(&ownerName, "owner_name", "", "Specify the owner name of all files, e.g. root.root.")
 	flag.Var(&ownerNames, "owner_names", "Specify the owner names of individual files, e.g. path/to/file=root.root.")
 
-	flag.Set("alsologtostderr", "true")
+	flag.StringVar(&mtime, "mtime", "",
+		"mtime to set on tar file entries. May be an integer (corresponding to epoch seconds) or the value \"portable\", which will use the value 2000-01-01, usable with non *nix OSes")
+
+	flag.Set("logtostderr", "true")
 
 	flag.Parse()
 
 	if flagfile != "" {
 		b, err := ioutil.ReadFile(flagfile)
 		if err != nil {
-			glog.Fatalf("couldn't read flagfile: %v", err)
+			klog.Fatalf("couldn't read flagfile: %v", err)
 		}
 		cmdline := strings.Split(string(b), "\n")
 		flag.CommandLine.Parse(cmdline)
 	}
 
 	if output == "" {
-		glog.Fatalf("--output flag is required")
+		klog.Fatalf("--output flag is required")
 	}
 
-	meta := newFileMeta(mode, modes, owner, owners, ownerName, ownerNames)
+	parsedMtime, err := parseMtimeFlag(mtime)
+	if err != nil {
+		klog.Fatalf("invalid value for --mtime: %s", mtime)
+	}
+
+	meta := newFileMeta(mode, modes, owner, owners, ownerName, ownerNames, parsedMtime)
 
 	tf, err := newTarFile(output, directory, compression, meta)
 	if err != nil {
-		glog.Fatalf("couldn't build tar: %v", err)
+		klog.Fatalf("couldn't build tar: %v", err)
 	}
 	defer tf.Close()
 
 	for _, file := range files {
 		parts := strings.SplitN(file, "=", 2)
 		if len(parts) != 2 {
-			glog.Fatalf("bad parts length for file %q", file)
+			klog.Fatalf("bad parts length for file %q", file)
 		}
 		if err := tf.addFile(parts[0], parts[1]); err != nil {
-			glog.Fatalf("couldn't add file: %v", err)
+			klog.Fatalf("couldn't add file: %v", err)
 		}
 	}
 
 	for _, tar := range tars {
 		if err := tf.addTar(tar); err != nil {
-			glog.Fatalf("couldn't add tar: %v", err)
+			klog.Fatalf("couldn't add tar: %v", err)
 		}
 	}
 
 	for _, deb := range debs {
 		if err := tf.addDeb(deb); err != nil {
-			glog.Fatalf("couldn't add deb: %v", err)
+			klog.Fatalf("couldn't add deb: %v", err)
 		}
 	}
 
 	for _, link := range links {
 		parts := strings.SplitN(link, ":", 2)
 		if len(parts) != 2 {
-			glog.Fatalf("bad parts length for link %q", link)
+			klog.Fatalf("bad parts length for link %q", link)
 		}
 		if err := tf.addLink(parts[0], parts[1]); err != nil {
-			glog.Fatalf("couldn't add link: %v", err)
+			klog.Fatalf("couldn't add link: %v", err)
 		}
 	}
 }
@@ -140,8 +151,9 @@ type tarFile struct {
 
 	tw *tar.Writer
 
-	meta     fileMeta
-	dirsMade map[string]struct{}
+	meta      fileMeta
+	dirsMade  map[string]struct{}
+	filesMade map[string]struct{}
 
 	closers []func()
 }
@@ -185,6 +197,7 @@ func newTarFile(output, directory, compression string, meta fileMeta) (*tarFile,
 		closers:   closers,
 		meta:      meta,
 		dirsMade:  map[string]struct{}{},
+		filesMade: map[string]struct{}{},
 	}, nil
 }
 
@@ -199,6 +212,11 @@ func (f *tarFile) addFile(file, dest string) error {
 
 	dest = filepath.Join(strings.TrimLeft(f.directory, "/"), dest)
 	dest = filepath.Clean(dest)
+
+	if ok := f.tryReservePath(dest); !ok {
+		klog.Warningf("Duplicate file in archive: %v, picking first occurence", dest)
+		return nil
+	}
 
 	info, err := os.Stat(file)
 	if err != nil {
@@ -215,13 +233,14 @@ func (f *tarFile) addFile(file, dest string) error {
 	}
 
 	header := tar.Header{
-		Name:  dest,
-		Mode:  int64(mode),
-		Uid:   uid,
-		Gid:   gid,
-		Size:  0,
-		Uname: uname,
-		Gname: gname,
+		Name:    dest,
+		Mode:    int64(mode),
+		Uid:     uid,
+		Gid:     gid,
+		Size:    0,
+		Uname:   uname,
+		Gname:   gname,
+		ModTime: f.meta.modTime,
 	}
 
 	if err := f.makeDirs(header); err != nil {
@@ -261,10 +280,15 @@ func (f *tarFile) addFile(file, dest string) error {
 }
 
 func (f *tarFile) addLink(symlink, target string) error {
+	if ok := f.tryReservePath(symlink); !ok {
+		klog.Warningf("Duplicate file in archive: %v, picking first occurence", symlink)
+		return nil
+	}
 	header := tar.Header{
 		Name:     symlink,
 		Typeflag: tar.TypeSymlink,
 		Linkname: target,
+		ModTime:  f.meta.modTime,
 	}
 	if err := f.makeDirs(header); err != nil {
 		return err
@@ -317,6 +341,20 @@ func (f *tarFile) addTar(toAdd string) error {
 		header.Name = filepath.Join(root, header.Name)
 		if header.Typeflag == tar.TypeDir && !strings.HasSuffix(header.Name, "/") {
 			header.Name = header.Name + "/"
+		} else if ok := f.tryReservePath(header.Name); !ok {
+			klog.Warningf("Duplicate file in archive: %v, picking first occurence", header.Name)
+			continue
+		}
+		// Create root directories with same permissions if missing.
+		// makeDirs keeps track of which directories exist,
+		// so it's safe to duplicate this here.
+		if err = f.makeDirs(*header); err != nil {
+			return err
+		}
+		// If this is a directory, then makeDirs already created it,
+		// so skip to the next entry.
+		if header.Typeflag == tar.TypeDir {
+			continue
 		}
 		err = f.tw.WriteHeader(header)
 		if err != nil {
@@ -349,6 +387,9 @@ func (f *tarFile) makeDirs(header tar.Header) error {
 			continue
 		}
 		dh := header
+		// Add the x bit to directories if the read bit is set,
+		// and make sure all directories are at least user RWX.
+		dh.Mode = header.Mode | 0700 | ((0444 & header.Mode) >> 2)
 		dh.Typeflag = tar.TypeDir
 		dh.Name = dir + "/"
 		if err := f.tw.WriteHeader(&dh); err != nil {
@@ -360,10 +401,42 @@ func (f *tarFile) makeDirs(header tar.Header) error {
 	return nil
 }
 
+func (f *tarFile) tryReservePath(path string) bool {
+	if _, ok := f.filesMade[path]; ok {
+		return false
+	}
+	if _, ok := f.dirsMade[path]; ok {
+		return false
+	}
+	f.filesMade[path] = struct{}{}
+	return true
+}
+
 func (f *tarFile) Close() {
 	for i := len(f.closers) - 1; i >= 0; i-- {
 		f.closers[i]()
 	}
+}
+
+// parseMtimeFlag matches the functionality of Bazel's python-based build_tar and archive modules
+// for the --mtime flag.
+// In particular:
+// - if no value is provided, use the Unix epoch
+// - if the string "portable" is provided, use a "deterministic date compatible with non *nix OSes"
+// - if an integer is provided, interpret that as the number of seconds since Unix epoch
+func parseMtimeFlag(input string) (time.Time, error) {
+	if input == "" {
+		return time.Unix(0, 0), nil
+	} else if input == "portable" {
+		// A deterministic time compatible with non *nix OSes.
+		// See also https://github.com/bazelbuild/bazel/issues/1299.
+		return time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), nil
+	}
+	seconds, err := strconv.ParseInt(input, 10, 64)
+	if err != nil {
+		return time.Unix(0, 0), err
+	}
+	return time.Unix(seconds, 0), nil
 }
 
 func newFileMeta(
@@ -373,13 +446,16 @@ func newFileMeta(
 	owners multiString,
 	ownerName string,
 	ownerNames multiString,
+	modTime time.Time,
 ) fileMeta {
-	var meta fileMeta
+	meta := fileMeta{
+		modTime: modTime,
+	}
 
 	if mode != "" {
 		i, err := strconv.ParseUint(mode, 8, 32)
 		if err != nil {
-			glog.Fatalf("couldn't parse mode: %v", mode)
+			klog.Fatalf("couldn't parse mode: %v", mode)
 		}
 		meta.defaultMode = os.FileMode(i)
 	}
@@ -388,14 +464,14 @@ func newFileMeta(
 	for _, filemode := range modes {
 		parts := strings.SplitN(filemode, "=", 2)
 		if len(parts) != 2 {
-			glog.Fatalf("expected two parts to %q", filemode)
+			klog.Fatalf("expected two parts to %q", filemode)
 		}
 		if parts[0][0] == '/' {
 			parts[0] = parts[0][1:]
 		}
 		i, err := strconv.ParseUint(parts[1], 8, 32)
 		if err != nil {
-			glog.Fatalf("couldn't parse mode: %v", filemode)
+			klog.Fatalf("couldn't parse mode: %v", filemode)
 		}
 		meta.modeMap[parts[0]] = os.FileMode(i)
 	}
@@ -403,7 +479,7 @@ func newFileMeta(
 	if ownerName != "" {
 		parts := strings.SplitN(ownerName, ".", 2)
 		if len(parts) != 2 {
-			glog.Fatalf("expected two parts to %q", ownerName)
+			klog.Fatalf("expected two parts to %q", ownerName)
 		}
 		meta.defaultUname = parts[0]
 		meta.defaultGname = parts[1]
@@ -414,13 +490,13 @@ func newFileMeta(
 	for _, name := range ownerNames {
 		parts := strings.SplitN(name, "=", 2)
 		if len(parts) != 2 {
-			glog.Fatalf("expected two parts to %q %v", name, parts)
+			klog.Fatalf("expected two parts to %q %v", name, parts)
 		}
 		filename, ownername := parts[0], parts[1]
 
 		parts = strings.SplitN(ownername, ".", 2)
 		if len(parts) != 2 {
-			glog.Fatalf("expected two parts to %q", name)
+			klog.Fatalf("expected two parts to %q", name)
 		}
 		uname, gname := parts[0], parts[1]
 
@@ -431,15 +507,15 @@ func newFileMeta(
 	if owner != "" {
 		parts := strings.SplitN(owner, ".", 2)
 		if len(parts) != 2 {
-			glog.Fatalf("expected two parts to %q", owner)
+			klog.Fatalf("expected two parts to %q", owner)
 		}
 		uid, err := strconv.Atoi(parts[0])
 		if err != nil {
-			glog.Fatalf("could not parse uid: %q", parts[0])
+			klog.Fatalf("could not parse uid: %q", parts[0])
 		}
 		gid, err := strconv.Atoi(parts[1])
 		if err != nil {
-			glog.Fatalf("could not parse gid: %q", parts[1])
+			klog.Fatalf("could not parse gid: %q", parts[1])
 		}
 		meta.defaultUID = uid
 		meta.defaultGID = gid
@@ -451,21 +527,21 @@ func newFileMeta(
 	for _, owner := range owners {
 		parts := strings.SplitN(owner, "=", 2)
 		if len(parts) != 2 {
-			glog.Fatalf("expected two parts to %q", owner)
+			klog.Fatalf("expected two parts to %q", owner)
 		}
 		filename, owner := parts[0], parts[1]
 
 		parts = strings.SplitN(parts[1], ".", 2)
 		if len(parts) != 2 {
-			glog.Fatalf("expected two parts to %q", owner)
+			klog.Fatalf("expected two parts to %q", owner)
 		}
 		uid, err := strconv.Atoi(parts[0])
 		if err != nil {
-			glog.Fatalf("could not parse uid: %q", parts[0])
+			klog.Fatalf("could not parse uid: %q", parts[0])
 		}
 		gid, err := strconv.Atoi(parts[1])
 		if err != nil {
-			glog.Fatalf("could not parse gid: %q", parts[1])
+			klog.Fatalf("could not parse gid: %q", parts[1])
 		}
 		meta.uidMap[filename] = uid
 		meta.gidMap[filename] = gid
@@ -483,6 +559,8 @@ type fileMeta struct {
 
 	defaultMode os.FileMode
 	modeMap     map[string]os.FileMode
+
+	modTime time.Time
 }
 
 func (f *fileMeta) getGID(fname string) int {

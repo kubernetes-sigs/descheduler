@@ -29,6 +29,7 @@ type errNotAcceptable struct {
 	accepted []string
 }
 
+// NewNotAcceptableError returns an error of NotAcceptable which contains specified string
 func NewNotAcceptableError(accepted []string) error {
 	return errNotAcceptable{accepted}
 }
@@ -41,7 +42,7 @@ func (e errNotAcceptable) Status() metav1.Status {
 	return metav1.Status{
 		Status:  metav1.StatusFailure,
 		Code:    http.StatusNotAcceptable,
-		Reason:  metav1.StatusReason("NotAcceptable"),
+		Reason:  metav1.StatusReasonNotAcceptable,
 		Message: e.Error(),
 	}
 }
@@ -51,6 +52,7 @@ type errUnsupportedMediaType struct {
 	accepted []string
 }
 
+// NewUnsupportedMediaTypeError returns an error of UnsupportedMediaType which contains specified string
 func NewUnsupportedMediaTypeError(accepted []string) error {
 	return errUnsupportedMediaType{accepted}
 }
@@ -63,7 +65,7 @@ func (e errUnsupportedMediaType) Status() metav1.Status {
 	return metav1.Status{
 		Status:  metav1.StatusFailure,
 		Code:    http.StatusUnsupportedMediaType,
-		Reason:  metav1.StatusReason("UnsupportedMediaType"),
+		Reason:  metav1.StatusReasonUnsupportedMediaType,
 		Message: e.Error(),
 	}
 }

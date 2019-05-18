@@ -28,9 +28,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 	k8sRuntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/util/goroutinemap/exponentialbackoff"
 	"k8s.io/kubernetes/pkg/volume/util/types"
 )
@@ -55,7 +55,7 @@ type NestedPendingOperations interface {
 	// concatenation of volumeName and podName is removed from the list of
 	// executing operations allowing a new operation to be started with the
 	// volumeName without error.
-	Run(volumeName v1.UniqueVolumeName, podName types.UniquePodName, operationFunc func() error, operationCompleteFunc func(error)) error
+	Run(volumeName v1.UniqueVolumeName, podName types.UniquePodName, generatedOperations types.GeneratedOperations) error
 
 	// Wait blocks until all operations are completed. This is typically
 	// necessary during tests - the test should wait until all operations finish
@@ -94,8 +94,7 @@ type operation struct {
 func (grm *nestedPendingOperations) Run(
 	volumeName v1.UniqueVolumeName,
 	podName types.UniquePodName,
-	operationFunc func() error,
-	operationCompleteFunc func(error)) error {
+	generatedOperations types.GeneratedOperations) error {
 	grm.lock.Lock()
 	defer grm.lock.Unlock()
 	opExists, previousOpIndex := grm.isOperationExists(volumeName, podName)
@@ -128,15 +127,20 @@ func (grm *nestedPendingOperations) Run(
 			})
 	}
 
-	go func() (err error) {
+	go func() (eventErr, detailedErr error) {
 		// Handle unhandled panics (very unlikely)
 		defer k8sRuntime.HandleCrash()
 		// Handle completion of and error, if any, from operationFunc()
-		defer grm.operationComplete(volumeName, podName, &err)
-		defer operationCompleteFunc(err)
+		defer grm.operationComplete(volumeName, podName, &detailedErr)
+		if generatedOperations.CompleteFunc != nil {
+			defer generatedOperations.CompleteFunc(&detailedErr)
+		}
+		if generatedOperations.EventRecorderFunc != nil {
+			defer generatedOperations.EventRecorderFunc(&eventErr)
+		}
 		// Handle panic, if any, from operationFunc()
-		defer k8sRuntime.RecoverFromPanic(&err)
-		return operationFunc()
+		defer k8sRuntime.RecoverFromPanic(&detailedErr)
+		return generatedOperations.OperationFunc()
 	}()
 
 	return nil
@@ -236,7 +240,7 @@ func (grm *nestedPendingOperations) operationComplete(
 		if *err != nil {
 			// Log error
 			logOperationName := getOperationName(volumeName, podName)
-			glog.Errorf("operation %s failed with: %v",
+			klog.Errorf("operation %s failed with: %v",
 				logOperationName,
 				*err)
 		}
@@ -248,7 +252,7 @@ func (grm *nestedPendingOperations) operationComplete(
 	if getOpErr != nil {
 		// Failed to find existing operation
 		logOperationName := getOperationName(volumeName, podName)
-		glog.Errorf("Operation %s completed. error: %v. exponentialBackOffOnError is enabled, but failed to get operation to update.",
+		klog.Errorf("Operation %s completed. error: %v. exponentialBackOffOnError is enabled, but failed to get operation to update.",
 			logOperationName,
 			*err)
 		return
@@ -260,7 +264,7 @@ func (grm *nestedPendingOperations) operationComplete(
 	// Log error
 	operationName :=
 		getOperationName(volumeName, podName)
-	glog.Errorf("%v", grm.operations[existingOpIndex].expBackoff.
+	klog.Errorf("%v", grm.operations[existingOpIndex].expBackoff.
 		GenerateNoRetriesPermittedMsg(operationName))
 }
 

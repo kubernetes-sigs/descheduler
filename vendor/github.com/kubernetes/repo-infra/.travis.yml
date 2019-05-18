@@ -1,8 +1,11 @@
 dist: trusty
 sudo: required
 
-# Install Bazel and set up GOPATH.
+# Install latest Go and Bazel and set up GOPATH.
 before_install:
+# gimme on travis is too old for .x version resolution, and gimme stable seems broken, too
+- LATEST_GO=$(gimme --known | sort -V | tail -1)
+- eval "$(gimme ${LATEST_GO})"
 - mkdir -p $GOPATH/src/k8s.io
 - mv $TRAVIS_BUILD_DIR $GOPATH/src/k8s.io
 - cd $GOPATH/src/k8s.io/repo-infra
@@ -13,13 +16,14 @@ before_install:
 install:
   - sudo apt-get install bazel
   - go get -u github.com/alecthomas/gometalinter
-  - go get -u github.com/bazelbuild/buildifier/buildifier
+  - go get -u github.com/bazelbuild/buildtools/buildifier
   - gometalinter --install
-  - go install ./...
 
 script:
-  - verify/verify-boilerplate.sh --rootdir="$GOPATH/src/k8s.io/repo-infra" -v
-  - verify/verify-go-src.sh --rootdir "$GOPATH/src/k8s.io/repo-infra" -v
-  - buildifier -mode=check $(find . -name BUILD -o -name '*.bzl' -type f)
-  - kazel --print-diff --validate
-  - bazel build //...
+  # Build first since we need the generated protobuf for the govet checks
+  - bazel build --config=ci //...
+  - ./verify/verify-boilerplate.sh --rootdir="$(pwd)" -v
+  - GOPATH="${GOPATH}:$(pwd)/bazel-bin/verify/verify-go-src-go_path" ./verify/verify-go-src.sh --rootdir "$(pwd)" -v
+  - ./verify/verify-bazel.sh
+  - buildifier -mode=check $(find . -name BUILD -o -name '*.bzl' -type f -not -wholename '*/vendor/*')
+  - bazel test --config=ci //...

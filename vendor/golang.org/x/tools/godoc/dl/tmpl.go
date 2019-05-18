@@ -2,8 +2,6 @@
 // Use of this source code is governed by the Apache 2.0
 // license that can be found in the LICENSE file.
 
-// +build appengine
-
 package dl
 
 // TODO(adg): refactor this to use the tools/godoc/static template.
@@ -220,7 +218,7 @@ $(document).ready(function() {
 			<p>This is an <b>unstable</b> version of Go. Use with caution.</p>
 			<p>If you already have Go installed, you can install this version by running:</p>
 <pre>
-go get golang.org/x/build/version/{{.Version}}
+go get golang.org/dl/{{.Version}}
 </pre>
 			<p>Then, use the <code>{{.Version}}</code> command instead of the <code>go</code> command to use {{.Version}}.</p>
 		{{end}}

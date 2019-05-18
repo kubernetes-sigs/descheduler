@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"golang.org/x/tools/go/ast/astutil"
+	"golang.org/x/tools/go/internal/cgo"
 )
 
 var ignoreVendor build.ImportMode
@@ -754,7 +755,7 @@ func (conf *Config) parsePackageFiles(bp *build.Package, which rune) ([]*ast.Fil
 
 	// Preprocess CgoFiles and parse the outputs (sequentially).
 	if which == 'g' && bp.CgoFiles != nil {
-		cgofiles, err := processCgoFiles(bp, conf.fset(), conf.DisplayPath, conf.ParserMode)
+		cgofiles, err := cgo.ProcessFiles(bp, conf.fset(), conf.DisplayPath, conf.ParserMode)
 		if err != nil {
 			errs = append(errs, err)
 		} else {
@@ -779,7 +780,7 @@ func (imp *importer) doImport(from *PackageInfo, to string) (*types.Package, err
 	if to == "C" {
 		// This should be unreachable, but ad hoc packages are
 		// not currently subject to cgo preprocessing.
-		// See https://github.com/golang/go/issues/11627.
+		// See https://golang.org/issue/11627.
 		return nil, fmt.Errorf(`the loader doesn't cgo-process ad hoc packages like %q; see Go issue 11627`,
 			from.Pkg.Path())
 	}

@@ -18,6 +18,7 @@ package parser_test
 
 import (
 	"bytes"
+	"path"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -61,7 +62,7 @@ type file struct {
 func construct(t *testing.T, files []file, testNamer namer.Namer) (*parser.Builder, types.Universe, []*types.Type) {
 	b := parser.New()
 	for _, f := range files {
-		if err := b.AddFileForTest(filepath.Dir(f.path), f.path, []byte(f.contents)); err != nil {
+		if err := b.AddFileForTest(path.Dir(f.path), filepath.FromSlash(f.path), []byte(f.contents)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -199,7 +200,7 @@ var FooAnotherVar proto.Frobber = proto.AnotherVar
 		t.Errorf("Wanted, got:\n%v\n-----\n%v\n", e, a)
 	}
 	if p := u.Package("base/foo/proto"); !p.HasImport("base/common/proto") {
-		t.Errorf("Unexpected lack of import line: %s", p.Imports)
+		t.Errorf("Unexpected lack of import line: %#v", p.Imports)
 	}
 }
 

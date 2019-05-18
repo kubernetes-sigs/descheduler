@@ -17,7 +17,7 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-gometalinter --deadline=50s --vendor \
+gometalinter --deadline="${GOMETALINTER_DEADLINE:-180s}" --vendor \
     --cyclo-over=50 --dupl-threshold=100 \
     --exclude=".*should not use dot imports \(golint\)$" \
     --disable-all \

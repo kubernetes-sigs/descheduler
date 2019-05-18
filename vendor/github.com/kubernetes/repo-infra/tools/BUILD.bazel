@@ -1,0 +1,65 @@
+# Note: we don't currently generate the CROSSTOOL file at build time
+# because it's needed by Bazel in the analysis phase, and running Go
+# programs during the analysis phase is tricky. (Also, we'd like to
+# avoid recompiling protoc all the time.)
+# Instead, we check in a pregenerated CROSSTOOL file, but also add a
+# test to verify that it is up-to-date.
+# Once CROSSTOOL has migrated to Starlark rules, we can try to
+# autogenerate this at build time instead.
+genrule(
+    name = "gen_crosstool",
+    # This is a proto, not a bzl file, but close enough.
+    srcs = ["//verify/boilerplate:boilerplate.bzl.txt"],
+    outs = ["generated_CROSSTOOL.textpb"],
+    cmd = "$(location //tools/generate_crosstool) --boilerplate=$< --out=$@",
+    tools = ["//tools/generate_crosstool"],
+    visibility = ["//verify:__pkg__"],
+)
+
+exports_files(["CROSSTOOL"])
+
+[cc_toolchain(
+    name = "cc-gcc-" + cpu,
+    all_files = ":empty",
+    compiler_files = ":empty",
+    dwp_files = ":empty",
+    linker_files = ":empty",
+    objcopy_files = ":empty",
+    strip_files = ":empty",
+    toolchain_identifier = toolchain_identifier,
+) for (cpu, toolchain_identifier) in [
+    ("k8", "host"),
+    ("arm", "cross-arm-linux-gnueabihf"),
+    ("aarch64", "cross-aarch64-linux-gnu"),
+    ("powerpc64le", "cross-powerpc64le-linux-gnu"),
+    ("s390x", "cross-s390x-linux-gnu"),
+]]
+
+cc_toolchain_suite(
+    name = "toolchain",
+    # Use both the bazely CPU names and goarchy CPU names
+    toolchains = {
+        "amd64|gcc": ":cc-gcc-k8",
+        "amd64": ":cc-gcc-k8",
+        "k8|gcc": ":cc-gcc-k8",
+        "k8": ":cc-gcc-k8",
+        "arm|gcc": ":cc-gcc-arm",
+        "arm": ":cc-gcc-arm",
+        "aarch64|gcc": ":cc-gcc-aarch64",
+        "aarch64": ":cc-gcc-aarch64",
+        "arm64|gcc": ":cc-gcc-aarch64",
+        "arm64": ":cc-gcc-aarch64",
+        "powerpc64le|gcc": ":cc-gcc-powerpc64le",
+        "powerpc64le": ":cc-gcc-powerpc64le",
+        "ppc64le|gcc": ":cc-gcc-powerpc64le",
+        "ppc64le": ":cc-gcc-powerpc64le",
+        "s390x|gcc": ":cc-gcc-s390x",
+        "s390x": ":cc-gcc-s390x",
+    },
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "empty",
+    srcs = [],
+)

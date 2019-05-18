@@ -38,8 +38,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/kubernetes/pkg/api/testapi"
 	"k8s.io/kubernetes/test/e2e/framework"
+	"k8s.io/kubernetes/test/e2e/framework/providers/gce"
+	"k8s.io/kubernetes/test/e2e/storage/utils"
+	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
 const (
@@ -52,7 +54,7 @@ const (
 	minNodes            = 2
 )
 
-var _ = SIGDescribe("Pod Disks", func() {
+var _ = utils.SIGDescribe("Pod Disks", func() {
 	var (
 		ns         string
 		cs         clientset.Interface
@@ -69,6 +71,8 @@ var _ = SIGDescribe("Pod Disks", func() {
 		cs = f.ClientSet
 		ns = f.Namespace.Name
 
+		framework.SkipIfMultizone(cs)
+
 		podClient = cs.CoreV1().Pods(ns)
 		nodeClient = cs.CoreV1().Nodes()
 		nodes = framework.GetReadySchedulableNodesOrDie(cs)
@@ -76,7 +80,7 @@ var _ = SIGDescribe("Pod Disks", func() {
 		host0Name = types.NodeName(nodes.Items[0].ObjectMeta.Name)
 		host1Name = types.NodeName(nodes.Items[1].ObjectMeta.Name)
 
-		mathrand.Seed(time.Now().UTC().UnixNano())
+		mathrand.Seed(time.Now().UnixNano())
 	})
 
 	Context("schedule pods each with a PD, delete pod and verify detach [Slow]", func() {
@@ -330,7 +334,7 @@ var _ = SIGDescribe("Pod Disks", func() {
 			disruptOp := t.disruptOp
 			It(fmt.Sprintf("when %s", t.descr), func() {
 				framework.SkipUnlessProviderIs("gce")
-				origNodeCnt := len(nodes.Items) // healhy nodes running kublet
+				origNodeCnt := len(nodes.Items) // healhy nodes running kubelet
 
 				By("creating a pd")
 				diskName, err := framework.CreatePDWithRetry()
@@ -382,15 +386,15 @@ var _ = SIGDescribe("Pod Disks", func() {
 
 				if disruptOp == deleteNode {
 					By("getting gce instances")
-					gceCloud, err := framework.GetGCECloud()
+					gceCloud, err := gce.GetGCECloud()
 					framework.ExpectNoError(err, fmt.Sprintf("Unable to create gcloud client err=%v", err))
 					output, err := gceCloud.ListInstanceNames(framework.TestContext.CloudConfig.ProjectID, framework.TestContext.CloudConfig.Zone)
 					framework.ExpectNoError(err, fmt.Sprintf("Unable to get list of node instances err=%v output=%s", err, output))
 					Expect(true, strings.Contains(string(output), string(host0Name)))
 
 					By("deleting host0")
-					resp, err := gceCloud.DeleteInstance(framework.TestContext.CloudConfig.ProjectID, framework.TestContext.CloudConfig.Zone, string(host0Name))
-					framework.ExpectNoError(err, fmt.Sprintf("Failed to delete host0Pod: err=%v response=%#v", err, resp))
+					err = gceCloud.DeleteInstance(framework.TestContext.CloudConfig.ProjectID, framework.TestContext.CloudConfig.Zone, string(host0Name))
+					framework.ExpectNoError(err, fmt.Sprintf("Failed to delete host0Pod: err=%v", err))
 					By("expecting host0 node to be re-created")
 					numNodes := countReadyNodes(cs, host0Name)
 					Expect(numNodes).To(Equal(origNodeCnt), fmt.Sprintf("Requires current node count (%d) to return to original node count (%d)", numNodes, origNodeCnt))
@@ -473,7 +477,7 @@ func verifyPDContentsViaContainer(f *framework.Framework, podName, containerName
 
 func detachPD(nodeName types.NodeName, pdName string) error {
 	if framework.TestContext.Provider == "gce" || framework.TestContext.Provider == "gke" {
-		gceCloud, err := framework.GetGCECloud()
+		gceCloud, err := gce.GetGCECloud()
 		if err != nil {
 			return err
 		}
@@ -524,7 +528,7 @@ func testPDPod(diskNames []string, targetNode types.NodeName, readOnly bool, num
 		if numContainers > 1 {
 			containers[i].Name = fmt.Sprintf("mycontainer%v", i+1)
 		}
-		containers[i].Image = "busybox"
+		containers[i].Image = imageutils.GetE2EImage(imageutils.BusyBox)
 		containers[i].Command = []string{"sleep", "6000"}
 		containers[i].VolumeMounts = make([]v1.VolumeMount, len(diskNames))
 		for k := range diskNames {
@@ -538,7 +542,7 @@ func testPDPod(diskNames []string, targetNode types.NodeName, readOnly bool, num
 	pod := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Pod",
-			APIVersion: testapi.Groups[v1.GroupName].GroupVersion().String(),
+			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "pd-test-" + string(uuid.NewUUID()),
@@ -573,11 +577,11 @@ func testPDPod(diskNames []string, targetNode types.NodeName, readOnly bool, num
 	return pod
 }
 
-// Waits for specified PD to to detach from specified hostName
+// Waits for specified PD to detach from specified hostName
 func waitForPDDetach(diskName string, nodeName types.NodeName) error {
 	if framework.TestContext.Provider == "gce" || framework.TestContext.Provider == "gke" {
 		framework.Logf("Waiting for GCE PD %q to detach from node %q.", diskName, nodeName)
-		gceCloud, err := framework.GetGCECloud()
+		gceCloud, err := gce.GetGCECloud()
 		if err != nil {
 			return err
 		}

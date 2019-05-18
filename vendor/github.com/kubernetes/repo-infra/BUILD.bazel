@@ -1,0 +1,8 @@
+# gazelle:prefix k8s.io/repo-infra
+
+# Use the Bazel-vendored protobuf library since we use go_proto_library
+# gazelle:resolve go github.com/golang/protobuf/proto @com_github_golang_protobuf//proto:go_default_library
+
+package(default_visibility = ["//visibility:public"])
+
+licenses(["notice"])

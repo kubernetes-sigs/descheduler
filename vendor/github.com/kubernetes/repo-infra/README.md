@@ -60,3 +60,6 @@ After this command, you will have:
         1.  The `HEAD` of the branch prior to when you ran `git subtree add`
         2.  The commit containing the squashed `repo-infra` commits
 
+### Contributing
+
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for instructions on how to contribute.

@@ -1,0 +1,4 @@
+build --verbose_failures
+test --test_output=errors
+
+build:ci --noshow_progress

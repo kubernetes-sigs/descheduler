@@ -138,9 +138,8 @@ and see only this:
 
 Also, inside the displayed text a line that ends
 	// HL
-will be highlighted in the display; the 'h' key in the browser will
-toggle extra emphasis of any highlighted lines. A highlighting mark
-may have a suffix word, such as
+will be highlighted in the display. A highlighting mark may have a
+suffix word, such as
 	// HLxxx
 Such highlights are enabled only if the code invocation ends with
 "HL" followed by the word:
@@ -224,7 +223,7 @@ html:
 The function html includes the contents of the specified file as
 unescaped HTML. This is useful for including custom HTML elements
 that cannot be created using only the slide format.
-It is your responsibilty to make sure the included HTML is valid and safe.
+It is your responsibility to make sure the included HTML is valid and safe.
 
 	.html file.html
 

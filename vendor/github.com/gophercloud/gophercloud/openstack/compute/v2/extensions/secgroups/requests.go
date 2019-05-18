@@ -23,18 +23,13 @@ func ListByServer(client *gophercloud.ServiceClient, serverID string) pagination
 	return commonList(client, listByServerURL(client, serverID))
 }
 
-// GroupOpts is the underlying struct responsible for creating or updating
-// security groups. It therefore represents the mutable attributes of a
-// security group.
-type GroupOpts struct {
+// CreateOpts is the struct responsible for creating a security group.
+type CreateOpts struct {
 	// the name of your security group.
 	Name string `json:"name" required:"true"`
 	// the description of your security group.
-	Description string `json:"description" required:"true"`
+	Description string `json:"description,omitempty"`
 }
-
-// CreateOpts is the struct responsible for creating a security group.
-type CreateOpts GroupOpts
 
 // CreateOptsBuilder allows extensions to add additional parameters to the
 // Create request.
@@ -61,7 +56,12 @@ func Create(client *gophercloud.ServiceClient, opts CreateOptsBuilder) (r Create
 }
 
 // UpdateOpts is the struct responsible for updating an existing security group.
-type UpdateOpts GroupOpts
+type UpdateOpts struct {
+	// the name of your security group.
+	Name string `json:"name,omitempty"`
+	// the description of your security group.
+	Description *string `json:"description,omitempty"`
+}
 
 // UpdateOptsBuilder allows extensions to add additional parameters to the
 // Update request.
@@ -172,12 +172,12 @@ func actionMap(prefix, groupName string) map[string]map[string]string {
 // AddServer will associate a server and a security group, enforcing the
 // rules of the group on the server.
 func AddServer(client *gophercloud.ServiceClient, serverID, groupName string) (r AddServerResult) {
-	_, r.Err = client.Post(serverActionURL(client, serverID), actionMap("add", groupName), &r.Body, nil)
+	_, r.Err = client.Post(serverActionURL(client, serverID), actionMap("add", groupName), nil, nil)
 	return
 }
 
 // RemoveServer will disassociate a server from a security group.
 func RemoveServer(client *gophercloud.ServiceClient, serverID, groupName string) (r RemoveServerResult) {
-	_, r.Err = client.Post(serverActionURL(client, serverID), actionMap("remove", groupName), &r.Body, nil)
+	_, r.Err = client.Post(serverActionURL(client, serverID), actionMap("remove", groupName), nil, nil)
 	return
 }

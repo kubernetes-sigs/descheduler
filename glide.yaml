@@ -1,17 +1,27 @@
 package: github.com/kubernetes-incubator/descheduler
 import:
-- package: k8s.io/client-go
-  version: 78700dec6369ba22221b72770783300f143df150
-- package: k8s.io/api
-  version: af4bc157c3a209798fc897f6d4aaaaeb6c2e0d6a
-- package: k8s.io/apiserver
-  version: 91e14f394e4796abf5a994a349a222e7081d86b6
 - package: k8s.io/apimachinery
-  version: 180eddb345a5be3a157cea1c624700ad5bd27b8f
+  version: release-1.14
+- package: k8s.io/api
+  version: release-1.14
+- package: k8s.io/apiserver
+  version: release-1.14
+- package: k8s.io/client-go
+  version: release-11.0
+- package: k8s.io/kube-aggregator
+  version: release-1.14
 - package: k8s.io/kubernetes
-  version: v1.9.0
+  version: release-1.14
+- package: k8s.io/kube-openapi
+  version: b3a7cee44a305be0a69e1b9ac03018307287e1b0
+- package: k8s.io/cli-runtime
+  version: release-1.14
 - package: k8s.io/code-generator
-  version: kubernetes-1.9.0
+  version: release-1.14
+- package: k8s.io/cloud-provider
+  version: release-1.14
+- package: k8s.io/apiextensions-apiserver
+  version: release-1.14
 - package: github.com/kubernetes/repo-infra
 - package: github.com/spf13/cobra
   version: f62e98d28ab7ad31d707ba837a966378465c7b57
@@ -19,7 +29,7 @@ import:
 - package: github.com/ugorji/go
   version: v.1.1-beta
 - package: github.com/Azure/go-autorest
-  version: e14a70c556c8e0db173358d1a903dca345a8e75e
+  version: ea233b6412b0421a65dc6160e16c893364664a95
 - package: golang.org/x/tools
   subpackages:
   - imports

@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_path")
+
+sh_test(
+    name = "verify-crosstool",
+    srcs = ["verify-crosstool.sh"],
+    args = [
+        "$(location //tools:CROSSTOOL)",
+        "$(location //tools:generated_CROSSTOOL.textpb)",
+    ],
+    data = [
+        "//tools:CROSSTOOL",
+        "//tools:generated_CROSSTOOL.textpb",
+    ],
+)
+
+go_path(
+    name = "verify-go-src-go_path",
+    mode = "link",
+    deps = ["//tools/generate_crosstool:crosstool_config_go_proto"],
+)

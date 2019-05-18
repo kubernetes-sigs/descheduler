@@ -20,7 +20,8 @@ const ListResponse = `
             "provider:segmentation_id": 9876543210,
             "provider:physical_network": null,
             "provider:network_type": "local",
-            "router:external": true
+            "router:external": true,
+            "port_security_enabled": true
         },
         {
             "status": "ACTIVE",
@@ -35,7 +36,8 @@ const ListResponse = `
             "provider:segmentation_id": 1234567890,
             "provider:physical_network": null,
             "provider:network_type": "local",
-            "router:external": false
+            "router:external": false,
+            "port_security_enabled": false
         }
     ]
 }`
@@ -55,7 +57,8 @@ const GetResponse = `
         "provider:segmentation_id": 9876543210,
         "provider:physical_network": null,
         "provider:network_type": "local",
-        "router:external": true
+        "router:external": true,
+        "port_security_enabled": true
     }
 }`
 
@@ -83,13 +86,40 @@ const CreateResponse = `
     }
 }`
 
+const CreatePortSecurityRequest = `
+{
+    "network": {
+        "name": "private",
+        "admin_state_up": true,
+        "port_security_enabled": false
+    }
+}`
+
+const CreatePortSecurityResponse = `
+{
+    "network": {
+        "status": "ACTIVE",
+        "subnets": ["08eae331-0402-425a-923c-34f7cfe39c1b"],
+        "name": "private",
+        "admin_state_up": true,
+        "tenant_id": "26a7980765d0414dbc1fc1f88cdb7e6e",
+        "shared": false,
+        "id": "db193ab3-96e3-4cb3-8fc5-05f4296d0324",
+        "provider:segmentation_id": 9876543210,
+        "provider:physical_network": null,
+        "provider:network_type": "local",
+        "port_security_enabled": false
+    }
+}`
+
 const CreateOptionalFieldsRequest = `
 {
   "network": {
       "name": "public",
       "admin_state_up": true,
       "shared": true,
-      "tenant_id": "12345"
+      "tenant_id": "12345",
+      "availability_zone_hints": ["zone1", "zone2"]
   }
 }`
 
@@ -115,6 +145,30 @@ const UpdateResponse = `
         "provider:segmentation_id": 1234567890,
         "provider:physical_network": null,
         "provider:network_type": "local"
+    }
+}`
+
+const UpdatePortSecurityRequest = `
+{
+    "network": {
+        "port_security_enabled": false
+    }
+}`
+
+const UpdatePortSecurityResponse = `
+{
+    "network": {
+        "status": "ACTIVE",
+        "subnets": ["08eae331-0402-425a-923c-34f7cfe39c1b"],
+        "name": "private",
+        "admin_state_up": true,
+        "tenant_id": "26a7980765d0414dbc1fc1f88cdb7e6e",
+        "shared": false,
+        "id": "4e8e5957-649f-477b-9e5b-f1f75b21c03c",
+        "provider:segmentation_id": 9876543210,
+        "provider:physical_network": null,
+        "provider:network_type": "local",
+        "port_security_enabled": false
     }
 }`
 

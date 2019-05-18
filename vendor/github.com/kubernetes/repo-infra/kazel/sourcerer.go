@@ -21,7 +21,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 
-	bzl "github.com/bazelbuild/buildifier/core"
+	"github.com/bazelbuild/buildtools/build"
 )
 
 const (
@@ -85,21 +85,21 @@ func (v *Vendorer) walkSource(pkgPath string) ([]string, error) {
 		return nil, nil
 	}
 
-	pkgSrcsExpr := &bzl.LiteralExpr{Token: `glob(["**"])`}
+	pkgSrcsExpr := &build.LiteralExpr{Token: `glob(["**"])`}
 	if pkgPath == "." {
-		pkgSrcsExpr = &bzl.LiteralExpr{Token: `glob(["**"], exclude=["bazel-*/**", ".git/**"])`}
+		pkgSrcsExpr = &build.LiteralExpr{Token: `glob(["**"], exclude=["bazel-*/**", ".git/**"])`}
 	}
 
-	v.addRules(pkgPath, []*bzl.Rule{
-		newRule(RuleTypeFileGroup,
-			func(_ ruleType) string { return pkgSrcsTarget },
-			map[string]bzl.Expr{
+	v.addRules(pkgPath, []*build.Rule{
+		newRule("filegroup",
+			pkgSrcsTarget,
+			map[string]build.Expr{
 				"srcs":       pkgSrcsExpr,
 				"visibility": asExpr([]string{"//visibility:private"}),
 			}),
-		newRule(RuleTypeFileGroup,
-			func(_ ruleType) string { return allSrcsTarget },
-			map[string]bzl.Expr{
+		newRule("filegroup",
+			allSrcsTarget,
+			map[string]build.Expr{
 				"srcs": asExpr(append(children, fmt.Sprintf(":%s", pkgSrcsTarget))),
 				// TODO: should this be more restricted?
 				"visibility": asExpr([]string{"//visibility:public"}),
