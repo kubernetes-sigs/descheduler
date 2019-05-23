@@ -48,6 +48,9 @@ type DeschedulerStrategy struct {
 type StrategyParameters struct {
 	NodeResourceUtilizationThresholds NodeResourceUtilizationThresholds
 	NodeAffinityType                  []string
+	// TopologySpreadConstraints describes how a group of pods should be spread across topology
+	// domains. Descheduler will use these constraints to decide which pods to evict.
+	NamespacedTopologySpreadConstraints []NamespacedTopologySpreadConstraint
 }
 
 type Percentage float64
@@ -57,4 +60,33 @@ type NodeResourceUtilizationThresholds struct {
 	Thresholds       ResourceThresholds
 	TargetThresholds ResourceThresholds
 	NumberOfNodes    int
+}
+
+type NamespacedTopologySpreadConstraint struct {
+	Namespace                 string
+	TopologySpreadConstraints []TopologySpreadConstraint
+}
+
+type TopologySpreadConstraint struct {
+	// MaxSkew describes the degree to which pods may be unevenly distributed.
+	// It's the maximum permitted difference between the number of matching pods in
+	// any two topology domains of a given topology type.
+	// For example, in a 3-zone cluster, currently pods with the same labelSelector
+	// are "spread" such that zone1 and zone2 each have one pod, but not zone3.
+	// - if MaxSkew is 1, incoming pod can only be scheduled to zone3 to become 1/1/1;
+	// scheduling it onto zone1(zone2) would make the ActualSkew(2) violate MaxSkew(1)
+	// - if MaxSkew is 2, incoming pod can be scheduled to any zone.
+	// It's a required value. Default value is 1 and 0 is not allowed.
+	MaxSkew int32
+	// TopologyKey is the key of node labels. Nodes that have a label with this key
+	// and identical values are considered to be in the same topology.
+	// We consider each <key, value> as a "bucket", and try to put balanced number
+	// of pods into each bucket.
+	// It's a required field.
+	TopologyKey string
+	// LabelSelector is used to find matching pods.
+	// Pods that match this label selector are counted to determine the number of pods
+	// in their corresponding topology domain.
+	// +optional
+	LabelSelector *metav1.LabelSelector
 }
