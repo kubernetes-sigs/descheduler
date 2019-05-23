@@ -77,6 +77,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		"RemovePodsViolatingNodeTaints":           strategies.RemovePodsViolatingNodeTaints,
 		"RemovePodsHavingTooManyRestarts":         strategies.RemovePodsHavingTooManyRestarts,
 		"PodLifeTime":                             strategies.PodLifeTime,
+		"TopologySpreadConstraint":                strategies.TopologySpreadConstraint,
 	}
 
 	nodeSelector := rs.NodeSelector
