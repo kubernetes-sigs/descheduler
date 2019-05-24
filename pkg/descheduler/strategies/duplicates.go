@@ -84,13 +84,12 @@ func ListDuplicatePodsOnANode(client clientset.Interface, node *v1.Node, evictLo
 // FindDuplicatePods takes a list of pods and returns a duplicatePodsMap.
 func FindDuplicatePods(pods []*v1.Pod) DuplicatePodsMap {
 	dpm := DuplicatePodsMap{}
+	// Ignoring the error here as in the ListDuplicatePodsOnNode function we call ListEvictablePodsOnNode which checks for error.
 	for _, pod := range pods {
-		// Ignoring the error here as in the ListDuplicatePodsOnNode function we call ListEvictablePodsOnNode
-		// which checks for error.
 		ownerRefList := podutil.OwnerRef(pod)
 		for _, ownerRef := range ownerRefList {
-			// ownerRef doesn't need namespace since the assumption is owner needs to be in the same namespace.
-			s := strings.Join([]string{ownerRef.Kind, ownerRef.Name}, "/")
+			// Kind and Namespace are not unique enough, which is why we use UID as well.
+			s := strings.Join([]string{ownerRef.Kind, ownerRef.Name, string(ownerRef.UID)}, "/")
 			dpm[s] = append(dpm[s], pod)
 		}
 	}
