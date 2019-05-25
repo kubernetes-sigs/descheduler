@@ -88,8 +88,8 @@ func FindDuplicatePods(pods []*v1.Pod) DuplicatePodsMap {
 	for _, pod := range pods {
 		ownerRefList := podutil.OwnerRef(pod)
 		for _, ownerRef := range ownerRefList {
-			// Kind and Namespace are not unique enough, which is why we use UID as well.
-			s := strings.Join([]string{ownerRef.Kind, ownerRef.Name, string(ownerRef.UID)}, "/")
+			// Namespace/Kind/Name should be unique for the cluster.
+			s := strings.Join([]string{pod.ObjectMeta.Namespace, ownerRef.Kind, ownerRef.Name}, "/")
 			dpm[s] = append(dpm[s], pod)
 		}
 	}
