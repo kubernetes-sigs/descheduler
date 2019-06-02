@@ -73,7 +73,7 @@ func GetNormalPodOwnerRefList() []metav1.OwnerReference {
 // GetReplicaSetOwnerRefList returns the ownerRef needed for replicaset pod.
 func GetReplicaSetOwnerRefList() []metav1.OwnerReference {
 	ownerRefList := make([]metav1.OwnerReference, 0)
-	ownerRefList = append(ownerRefList, metav1.OwnerReference{Kind: "ReplicaSet", APIVersion: "v1"})
+	ownerRefList = append(ownerRefList, metav1.OwnerReference{Kind: "ReplicaSet", APIVersion: "v1", Name: "replicaset-1"})
 	return ownerRefList
 }
 
