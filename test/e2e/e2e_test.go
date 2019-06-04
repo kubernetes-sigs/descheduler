@@ -115,8 +115,6 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface) {
 	nodePodCount := strategies.InitializeNodePodCount(nodes)
 	strategies.LowNodeUtilization(ds, lowNodeUtilizationStrategy, evictionPolicyGroupVersion, nodes, nodePodCount)
 	time.Sleep(10 * time.Second)
-
-	return
 }
 
 func TestE2E(t *testing.T) {
