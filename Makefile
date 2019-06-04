@@ -22,6 +22,8 @@ LDFLAG_LOCATION=github.com/kubernetes-incubator/descheduler/cmd/descheduler/app
 
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitCommit=${COMMIT}"
 
+GOLANGCI_VERSION := v1.15.0
+HAS_GOLANGCI := $(shell which golangci-lint)
 
 # IMAGE is the image name of descheduler
 # Should this be changed?
@@ -52,3 +54,8 @@ gen:
 	./hack/update-generated-conversions.sh
 	./hack/update-generated-deep-copies.sh
 	./hack/update-generated-defaulters.sh
+lint:
+ifndef HAS_GOLANGCI
+	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(GOPATH)/bin ${GOLANGCI_VERSION}
+endif
+	golangci-lint run
