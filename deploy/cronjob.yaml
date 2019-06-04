@@ -1,0 +1,48 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: descheduler-job
+  labels:
+    project: kubernetes
+    role: descheduler
+  namespace: kube-system
+spec:
+  schedule: "@hourly"
+  jobTemplate:
+    metadata:
+      labels:
+        project: kubernetes
+        role: descheduler
+    spec:
+      parallelism: 1
+      completions: 1
+      template:
+        metadata:
+          name: descheduler
+          labels:
+            project: kubernetes
+            role: descheduler
+          annotations:
+            scheduler.alpha.kubernetes.io/critical-pod: ""
+        spec:
+            containers:
+            - name: descheduler
+              image: descheduler:latest # use your own image here
+              volumeMounts:
+              - mountPath: /etc/descheduler
+                name: policy
+              securityContext:
+                readOnlyRootFilesystem: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+            restartPolicy: "Never"
+            serviceAccountName: descheduler-job
+            volumes:
+            - name: policy
+              configMap:
+                name: descheduler-policy
