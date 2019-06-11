@@ -44,26 +44,54 @@ func TestPodAntiAffinity(t *testing.T) {
 	setPodAntiAffinity(p3)
 	setPodAntiAffinity(p4)
 
-	// create fake client
-	fakeClient := &fake.Clientset{}
-	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4}}, nil
-	})
-	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
-		return true, node, nil
-	})
-	npe := nodePodEvictedCount{}
-	npe[node] = 0
-	expectedEvictedPodCount := 3
-	podsEvicted := removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, 0, false)
-	if podsEvicted != expectedEvictedPodCount {
-		t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, expectedEvictedPodCount)
+	tests := []struct {
+		description             string
+		maxPodsToEvict          int
+		pods                    []v1.Pod
+		expectedEvictedPodCount int
+	}{
+		{
+			description:             "Maximum pods to evict - 0",
+			maxPodsToEvict:          0,
+			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
+			expectedEvictedPodCount: 3,
+		},
+		{
+			description:             "Maximum pods to evict - 1",
+			maxPodsToEvict:          1,
+			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description:             "Maximum pods to evict - 2",
+			maxPodsToEvict:          2,
+			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
+			expectedEvictedPodCount: 2,
+		},
+		{
+			description:             "Maximum pods to evict - 3",
+			maxPodsToEvict:          3,
+			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
+			expectedEvictedPodCount: 3,
+		},
 	}
-	npe[node] = 0
-	expectedEvictedPodCount = 1
-	podsEvicted = removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, 1, false)
-	if podsEvicted != expectedEvictedPodCount {
-		t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, expectedEvictedPodCount)
+
+	for _, test := range tests {
+
+		npe := nodePodEvictedCount{}
+		npe[node] = 0
+		// create fake client
+		fakeClient := &fake.Clientset{}
+		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+			return true, &v1.PodList{Items: []v1.Pod{test.pods}}, nil
+		})
+		fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
+			return true, node, nil
+		})
+		podsEvicted := removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, test.maxPodsToEvict, false)
+		if podsEvicted != test.expectedEvictedPodCount {
+			t.Errorf("Test error for Desc: %s. Expected deleted pods count %v , got %v", test.description, test.expectedEvictedPodCount, podsEvicted)
+		}
 	}
 }
 
