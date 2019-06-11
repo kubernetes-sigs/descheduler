@@ -83,7 +83,7 @@ func TestPodAntiAffinity(t *testing.T) {
 		// create fake client
 		fakeClient := &fake.Clientset{}
 		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-			return true, &v1.PodList{Items: []v1.Pod{test.pods}}, nil
+			return true, &v1.PodList{Items: test.pods}, nil
 		})
 		fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 			return true, node, nil
