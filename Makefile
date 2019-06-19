@@ -42,11 +42,11 @@ dev-image: build
 image:
 	docker build -t $(IMAGE) .
 
-push-container: image
+push-container-to-gcloud: image
 	gcloud auth configure-docker
 	docker push $(IMAGE)
 
-push: push-container
+push: push-container-to-gcloud
 
 clean:
 	rm -rf _output
