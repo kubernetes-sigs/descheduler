@@ -29,7 +29,10 @@ HAS_GOLANGCI := $(shell which golangci-lint)
 REGISTRY?=staging-k8s.gcr.io
 
 # IMAGE is the image name of descheduler
-IMAGE:=$(REGISTRY)/descheduler:$(VERSION)
+IMAGE:=descheduler:$(VERSION)
+
+# IMAGE_GCLOUD is the image name of descheduler in the remote registry
+IMAGE_GCLOUD:=$(REGISTRY)/descheduler:$(VERSION)
 
 all: build
 
@@ -44,7 +47,8 @@ image:
 
 push-container-to-gcloud: image
 	gcloud auth configure-docker
-	docker push $(IMAGE)
+	docker tag $(IMAGE) $(IMAGE_GCLOUD)
+	docker push $(IMAGE_GCLOUD)
 
 push: push-container-to-gcloud
 
