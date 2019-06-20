@@ -15,7 +15,7 @@
 .PHONY: test
 
 # VERSION is currently based on the last commit
-VERSION=`git describe --tags`
+VERSION?=`git describe --tags`
 COMMIT=`git rev-parse HEAD`
 BUILD=`date +%FT%T%z`
 LDFLAG_LOCATION=github.com/kubernetes-incubator/descheduler/cmd/descheduler/app
@@ -25,9 +25,14 @@ LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}
 GOLANGCI_VERSION := v1.15.0
 HAS_GOLANGCI := $(shell which golangci-lint)
 
+# REGISTRY is the container registry to push into.
+REGISTRY?=staging-k8s.gcr.io
+
 # IMAGE is the image name of descheduler
-# Should this be changed?
 IMAGE:=descheduler:$(VERSION)
+
+# IMAGE_GCLOUD is the image name of descheduler in the remote registry
+IMAGE_GCLOUD:=$(REGISTRY)/descheduler:$(VERSION)
 
 all: build
 
@@ -39,6 +44,13 @@ dev-image: build
 
 image:
 	docker build -t $(IMAGE) .
+
+push-container-to-gcloud: image
+	gcloud auth configure-docker
+	docker tag $(IMAGE) $(IMAGE_GCLOUD)
+	docker push $(IMAGE_GCLOUD)
+
+push: push-container-to-gcloud
 
 clean:
 	rm -rf _output
