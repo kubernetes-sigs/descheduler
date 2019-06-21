@@ -14,7 +14,7 @@ spec:
     spec:
         containers:
         - name: descheduler
-          image: descheduler:latest
+          image: k8s.gcr.io/descheduler:latest
           volumeMounts:
           - mountPath: /policy-dir
             name: policy-volume
