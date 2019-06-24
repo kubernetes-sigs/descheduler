@@ -3,7 +3,12 @@ sudo: false
 language: go
 
 go:
-- "1.10"
+- "1.12"
+
+env:
+  global:
+  - GO111MODULE=on
+go_import_path: github.com/kubernetes-incubator/descheduler
 
 script:
   - make lint
