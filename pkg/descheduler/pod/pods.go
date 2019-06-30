@@ -81,6 +81,7 @@ func ListEvictablePodsOnNodeByNamespace(client clientset.Interface, node *v1.Nod
 	}
 	return evictablePods, nil
 }
+
 func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, error) {
 	return ListPodsOnANodeByNamespace(client, node, v1.NamespaceAll)
 }
@@ -102,6 +103,42 @@ func ListPodsOnANodeByNamespace(client clientset.Interface, node *v1.Node, names
 		pods = append(pods, &podList.Items[i])
 	}
 	return pods, nil
+}
+
+func ListPodsByNamespace(client clientset.Interface, namespace string) ([]*v1.Pod, error) {
+	fieldSelector, err := fields.ParseSelector("status.phase!=" + string(api.PodSucceeded) + ",status.phase!=" + string(api.PodFailed))
+	if err != nil {
+		return []*v1.Pod{}, err
+	}
+
+	podList, err := client.CoreV1().Pods(namespace).List(
+		metav1.ListOptions{FieldSelector: fieldSelector.String()})
+	if err != nil {
+		return []*v1.Pod{}, err
+	}
+
+	pods := make([]*v1.Pod, 0)
+	for i := range podList.Items {
+		pods = append(pods, &podList.Items[i])
+	}
+	return pods, nil
+}
+
+// ListEvictablePodsOnNode returns the list of evictable pods on node.
+func ListEvictablePodsByNamespace(client clientset.Interface, evictLocalStoragePods bool, namespace string) ([]*v1.Pod, error) {
+	pods, err := ListPodsByNamespace(client, namespace)
+	if err != nil {
+		return []*v1.Pod{}, err
+	}
+	evictablePods := make([]*v1.Pod, 0)
+	for _, pod := range pods {
+		if !IsEvictable(pod, evictLocalStoragePods) {
+			continue
+		} else {
+			evictablePods = append(evictablePods, pod)
+		}
+	}
+	return evictablePods, nil
 }
 
 func IsCriticalPod(pod *v1.Pod) bool {
