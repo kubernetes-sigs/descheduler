@@ -56,7 +56,7 @@ func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerS
 		return
 	}
 	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
-	if !validateTargetThresholds(targetThresholds) {
+	if !validateThresholds(targetThresholds) {
 		return
 	}
 
@@ -113,18 +113,6 @@ func validateThresholds(thresholds api.ResourceThresholds) bool {
 			glog.Errorf("only cpu, memory, or pods thresholds can be specified")
 			return false
 		}
-	}
-	return true
-}
-
-//This function could be merged into above once we are clear.
-func validateTargetThresholds(targetThresholds api.ResourceThresholds) bool {
-	if targetThresholds == nil {
-		glog.V(1).Infof("no target resource threshold is configured")
-		return false
-	} else if _, ok := targetThresholds[v1.ResourcePods]; !ok {
-		glog.V(1).Infof("no target resource threshold for pods is configured")
-		return false
 	}
 	return true
 }
