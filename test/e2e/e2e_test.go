@@ -18,6 +18,7 @@ package e2e
 
 import (
 	"github.com/golang/glog"
+	"math"
 	"testing"
 	"time"
 
@@ -38,17 +39,18 @@ import (
 func MakePodSpec() v1.PodSpec {
 	return v1.PodSpec{
 		Containers: []v1.Container{{
-			Name:  "pause",
-			Image: "kubernetes/pause",
-			Ports: []v1.ContainerPort{{ContainerPort: 80}},
+			Name:            "pause",
+			ImagePullPolicy: "Never",
+			Image:           "kubernetes/pause",
+			Ports:           []v1.ContainerPort{{ContainerPort: 80}},
 			Resources: v1.ResourceRequirements{
 				Limits: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("100m"),
-					v1.ResourceMemory: resource.MustParse("500Mi"),
+					v1.ResourceMemory: resource.MustParse("1000Mi"),
 				},
 				Requests: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("100m"),
-					v1.ResourceMemory: resource.MustParse("500Mi"),
+					v1.ResourceMemory: resource.MustParse("800Mi"),
 				},
 			},
 		}},
@@ -119,7 +121,8 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface) {
 
 func TestE2E(t *testing.T) {
 	// If we have reached here, it means cluster would have been already setup and the kubeconfig file should
-	// be in /tmp directory.
+	// be in /tmp directory as admin.conf.
+	var leastLoadedNode v1.Node
 	clientSet, err := client.CreateClient("/tmp/admin.conf")
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
@@ -130,20 +133,31 @@ func TestE2E(t *testing.T) {
 	}
 	// Assumption: We would have 3 node cluster by now. Kubeadm brings all the master components onto master node.
 	// So, the last node would have least utilization.
-	leastLoadedNode := nodeList.Items[2]
 	rc := RcByNameContainer("test-rc", int32(15), map[string]string{"test": "app"}, nil)
 	_, err = clientSet.CoreV1().ReplicationControllers("default").Create(rc)
 	if err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
-	podsOnleastUtilizedNode, err := podutil.ListPodsOnANode(clientSet, &leastLoadedNode)
-	if err != nil {
-		t.Errorf("Error listing pods on a node %v", err)
+	podsBefore := math.MaxInt16
+	for i := range nodeList.Items {
+		// Skip the Master Node
+		if _, exist := nodeList.Items[i].Labels["node-role.kubernetes.io/master"]; exist {
+			continue
+		}
+		// List all the pods on the current Node
+		podsOnANode, err := podutil.ListEvictablePodsOnNode(clientSet, &nodeList.Items[i], true)
+		if err != nil {
+			t.Errorf("Error listing pods on a node %v", err)
+		}
+		// Update leastLoadedNode if necessary
+		if tmpLoads := len(podsOnANode); tmpLoads < podsBefore {
+			leastLoadedNode = nodeList.Items[i]
+			podsBefore = tmpLoads
+		}
 	}
-	podsBefore := len(podsOnleastUtilizedNode)
 	t.Log("Eviction of pods starting")
 	startEndToEndForLowNodeUtilization(clientSet)
-	podsOnleastUtilizedNode, err = podutil.ListPodsOnANode(clientSet, &leastLoadedNode)
+	podsOnleastUtilizedNode, err := podutil.ListEvictablePodsOnNode(clientSet, &leastLoadedNode, true)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}
