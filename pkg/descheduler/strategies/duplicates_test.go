@@ -126,7 +126,7 @@ func TestFindDuplicatePods(t *testing.T) {
 
 	for _, testCase := range testCases {
 
-		npe := nodePodEvictedCount{}
+		npe := NodePodEvictedCount{}
 		npe[node] = 0
 		fakeClient := &fake.Clientset{}
 		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {

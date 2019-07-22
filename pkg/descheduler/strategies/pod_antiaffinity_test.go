@@ -52,7 +52,7 @@ func TestPodAntiAffinity(t *testing.T) {
 	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 		return true, node, nil
 	})
-	npe := nodePodEvictedCount{}
+	npe := NodePodEvictedCount{}
 	npe[node] = 0
 	expectedEvictedPodCount := 3
 	podsEvicted := removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, 0, false)

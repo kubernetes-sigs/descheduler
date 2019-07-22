@@ -18,10 +18,6 @@ package e2e
 
 import (
 	"github.com/golang/glog"
-	"math"
-	"testing"
-	"time"
-
 	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
 	deschedulerapi "github.com/kubernetes-incubator/descheduler/pkg/api"
 	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/client"
@@ -34,7 +30,32 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/pkg/api/testapi"
+	"k8s.io/kubernetes/pkg/util/labels"
+	"math"
+	"testing"
+	"time"
 )
+
+func makePodAntiAffinity() *v1.Affinity {
+	return &v1.Affinity{
+		PodAntiAffinity: &v1.PodAntiAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+				{
+					LabelSelector: &metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key:      "foo",
+								Operator: metav1.LabelSelectorOpIn,
+								Values:   []string{"bar"},
+							},
+						},
+					},
+					TopologyKey: "kubernetes.io/hostname",
+				},
+			},
+		},
+	}
+}
 
 func MakePodSpec() v1.PodSpec {
 	return v1.PodSpec{
@@ -54,6 +75,7 @@ func MakePodSpec() v1.PodSpec {
 				},
 			},
 		}},
+		Affinity: makePodAntiAffinity(),
 	}
 }
 
@@ -62,8 +84,6 @@ func RcByNameContainer(name string, replicas int32, labels map[string]string, gr
 
 	zeroGracePeriod := int64(0)
 
-	// Add "name": name to the labels, overwriting if it exists.
-	labels["name"] = name
 	if gracePeriod == nil {
 		gracePeriod = &zeroGracePeriod
 	}
@@ -77,9 +97,7 @@ func RcByNameContainer(name string, replicas int32, labels map[string]string, gr
 		},
 		Spec: v1.ReplicationControllerSpec{
 			Replicas: func(i int32) *int32 { return &i }(replicas),
-			Selector: map[string]string{
-				"name": name,
-			},
+			Selector: labels,
 			Template: &v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
@@ -91,7 +109,7 @@ func RcByNameContainer(name string, replicas int32, labels map[string]string, gr
 }
 
 // startEndToEndForLowNodeUtilization tests the lownode utilization strategy.
-func startEndToEndForLowNodeUtilization(clientset clientset.Interface) {
+func startEndToEndForLowNodeUtilization(clientSet clientset.Interface) {
 	var thresholds = make(deschedulerapi.ResourceThresholds)
 	var targetThresholds = make(deschedulerapi.ResourceThresholds)
 	thresholds[v1.ResourceMemory] = 20
@@ -101,22 +119,32 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface) {
 	targetThresholds[v1.ResourcePods] = 20
 	targetThresholds[v1.ResourceCPU] = 90
 	// Run descheduler.
-	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientset)
+	nodeUtilizationThresholds := deschedulerapi.NodeResourceUtilizationThresholds{Thresholds: thresholds, TargetThresholds: targetThresholds}
+	nodeUtilizationStrategyParams := deschedulerapi.StrategyParameters{NodeResourceUtilizationThresholds: nodeUtilizationThresholds}
+	runStrategy(clientSet, strategies.LowNodeUtilization, nodeUtilizationStrategyParams)
+}
+
+func E2eTestForRemovePodsViolatingInterPodAntiAffinity(clientSet clientset.Interface) {
+	runStrategy(clientSet, strategies.RemovePodsViolatingInterPodAntiAffinity, deschedulerapi.StrategyParameters{})
+}
+
+// Run selected strategy base on the func and param
+func runStrategy(clientSet clientset.Interface, strategyFunc func(ds *options.DeschedulerServer, strategy deschedulerapi.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node, nodePodCount strategies.NodePodEvictedCount), strategyParam deschedulerapi.StrategyParameters) strategies.NodePodEvictedCount {
+	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		glog.Fatalf("%v", err)
 	}
 	stopChannel := make(chan struct{})
-	nodes, err := nodeutil.ReadyNodes(clientset, "", stopChannel)
+	nodes, err := nodeutil.ReadyNodes(clientSet, "", stopChannel)
 	if err != nil {
 		glog.Fatalf("%v", err)
 	}
-	nodeUtilizationThresholds := deschedulerapi.NodeResourceUtilizationThresholds{Thresholds: thresholds, TargetThresholds: targetThresholds}
-	nodeUtilizationStrategyParams := deschedulerapi.StrategyParameters{NodeResourceUtilizationThresholds: nodeUtilizationThresholds}
-	lowNodeUtilizationStrategy := deschedulerapi.DeschedulerStrategy{Enabled: true, Params: nodeUtilizationStrategyParams}
-	ds := &options.DeschedulerServer{Client: clientset}
+	ds := &options.DeschedulerServer{Client: clientSet}
+	strategy := deschedulerapi.DeschedulerStrategy{Enabled: true, Params: strategyParam}
 	nodePodCount := strategies.InitializeNodePodCount(nodes)
-	strategies.LowNodeUtilization(ds, lowNodeUtilizationStrategy, evictionPolicyGroupVersion, nodes, nodePodCount)
+	strategyFunc(ds, strategy, evictionPolicyGroupVersion, nodes, nodePodCount)
 	time.Sleep(10 * time.Second)
+	return nodePodCount
 }
 
 func TestE2E(t *testing.T) {
@@ -127,17 +155,18 @@ func TestE2E(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
 	}
-	nodeList, err := clientSet.Core().Nodes().List(metav1.ListOptions{})
+	nodeList, err := clientSet.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Error listing node with %v", err)
 	}
 	// Assumption: We would have 3 node cluster by now. Kubeadm brings all the master components onto master node.
-	// So, the last node would have least utilization.
-	rc := RcByNameContainer("test-rc", int32(15), map[string]string{"test": "app"}, nil)
-	_, err = clientSet.CoreV1().ReplicationControllers("default").Create(rc)
+	ns, rcName := "default", "test-rc"
+	rc := RcByNameContainer(rcName, int32(15), map[string]string{"test": "app"}, nil)
+	_, err = clientSet.CoreV1().ReplicationControllers(ns).Create(rc)
 	if err != nil {
-		t.Errorf("Error creating deployment %v", err)
+		t.Errorf("Error creating RepplicationController %v", err)
 	}
+	time.Sleep(15 * time.Second)
 	podsBefore := math.MaxInt16
 	for i := range nodeList.Items {
 		// Skip the Master Node
@@ -150,19 +179,53 @@ func TestE2E(t *testing.T) {
 			t.Errorf("Error listing pods on a node %v", err)
 		}
 		// Update leastLoadedNode if necessary
-		if tmpLoads := len(podsOnANode); tmpLoads < podsBefore {
+		if tmpLoads := len(podsOnANode); tmpLoads != 0 && tmpLoads < podsBefore {
 			leastLoadedNode = nodeList.Items[i]
 			podsBefore = tmpLoads
 		}
 	}
-	t.Log("Eviction of pods starting")
+	t.Log("Evicting pods for low node utilization test")
 	startEndToEndForLowNodeUtilization(clientSet)
-	podsOnleastUtilizedNode, err := podutil.ListEvictablePodsOnNode(clientSet, &leastLoadedNode, true)
+	podsOnNode, err := podutil.ListEvictablePodsOnNode(clientSet, &leastLoadedNode, true)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}
-	podsAfter := len(podsOnleastUtilizedNode)
+	podsAfter := len(podsOnNode)
 	if podsBefore > podsAfter {
-		t.Fatalf("We should have see more pods on this node as per kubeadm's way of installing %v, %v", podsBefore, podsAfter)
+		t.Errorf("We should have see more or equal pods on this node %v, %v", podsBefore, podsAfter)
+	} else {
+		t.Logf("The lease utilized pod had %v pods before descheduling and %v pods after", podsBefore, podsAfter)
+	}
+	// Test for evicting pods based on Inter-Pod Anti-Affinity violations
+	podsBefore = podsAfter
+	podsOnNode, err = podutil.ListEvictablePodsOnNode(clientSet, &leastLoadedNode, true)
+	if err != nil {
+		t.Errorf("Error listing pods on a node %v", err)
+	}
+	podsLabeled := 1
+	// change pod labels so that it matched pod anti-affinity
+	for i, pod := range podsOnNode {
+		if i < podsLabeled {
+			labels.AddLabel(pod.Labels, "foo", "bar")
+			if _, err = clientSet.CoreV1().Pods(ns).Update(pod); err != nil {
+				t.Errorf("Error updating pods: %v", err)
+			}
+		}
+	}
+	t.Log("Evicting pods that are violating Inter-Pod Anti-Affinity predicates")
+	E2eTestForRemovePodsViolatingInterPodAntiAffinity(clientSet)
+	podsOnNode, err = podutil.ListEvictablePodsOnNode(clientSet, &leastLoadedNode, true)
+	if err != nil {
+		t.Errorf("Error listing pods on a node %v", err)
+	}
+	if podsAfter = len(podsOnNode); podsAfter != podsLabeled {
+		t.Errorf("E2e Test Inter-Pod Anti-Affinity Failed. We expect to eviect: %v pods, instead we evicted: %v pods.", podsBefore-podsLabeled, podsBefore-podsAfter)
+	} else {
+		t.Logf("Inter-pod affinity evicted all pods but %v", podsAfter)
+	}
+	// Delete test replication controller and all dependent pods after e2e tests
+	policy := metav1.DeletePropagationBackground
+	if err = clientSet.CoreV1().ReplicationControllers(ns).Delete(rcName, &metav1.DeleteOptions{PropagationPolicy: &policy}); err != nil {
+		t.Errorf("Error shutting down test Replication Controller %v", err)
 	}
 }

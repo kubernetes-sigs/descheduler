@@ -36,7 +36,7 @@ type DuplicatePodsMap map[string][]*v1.Pod
 // RemoveDuplicatePods removes the duplicate pods on node. This strategy evicts all duplicate pods on node.
 // A pod is said to be a duplicate of other if both of them are from same creator, kind and are within the same
 // namespace. As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
-func RemoveDuplicatePods(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node, nodepodCount nodePodEvictedCount) {
+func RemoveDuplicatePods(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node, nodepodCount NodePodEvictedCount) {
 	if !strategy.Enabled {
 		return
 	}
@@ -44,7 +44,7 @@ func RemoveDuplicatePods(ds *options.DeschedulerServer, strategy api.Descheduler
 }
 
 // deleteDuplicatePods evicts the pod from node and returns the count of evicted pods.
-func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodepodCount nodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
+func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodepodCount NodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
 	podsEvicted := 0
 	for _, node := range nodes {
 		glog.V(1).Infof("Processing node: %#v", node.Name)

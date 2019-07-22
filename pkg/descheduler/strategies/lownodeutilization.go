@@ -44,7 +44,7 @@ type NodeUsageMap struct {
 
 type NodePodsMap map[*v1.Node][]*v1.Pod
 
-func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodepodCount nodePodEvictedCount) {
+func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodepodCount NodePodEvictedCount) {
 	if !strategy.Enabled {
 		return
 	}
@@ -155,7 +155,7 @@ func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThr
 // evictPodsFromTargetNodes evicts pods based on priority, if all the pods on the node have priority, if not
 // evicts them based on QoS as fallback option.
 // TODO: @ravig Break this function into smaller functions.
-func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVersion string, targetNodes, lowNodes []NodeUsageMap, targetThresholds api.ResourceThresholds, dryRun bool, maxPodsToEvict int, nodepodCount nodePodEvictedCount) int {
+func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVersion string, targetNodes, lowNodes []NodeUsageMap, targetThresholds api.ResourceThresholds, dryRun bool, maxPodsToEvict int, nodepodCount NodePodEvictedCount) int {
 	podsEvicted := 0
 
 	SortNodesByUsage(targetNodes)

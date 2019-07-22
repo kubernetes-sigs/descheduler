@@ -23,12 +23,13 @@ import (
 // This file contains the datastructures, types & functions needed by all the strategies so that we don't have
 // to compute them again in each strategy.
 
-// nodePodEvictedCount keeps count of pods evicted on node. This is used in conjunction with strategies to
-type nodePodEvictedCount map[*v1.Node]int
+// NodePodEvictedCount keeps count of pods evicted on node. This is used in conjunction with strategies to
+// This type is made public for e2e testing purpose
+type NodePodEvictedCount map[*v1.Node]int
 
 // InitializeNodePodCount initializes the nodePodCount.
-func InitializeNodePodCount(nodeList []*v1.Node) nodePodEvictedCount {
-	var nodePodCount = make(nodePodEvictedCount)
+func InitializeNodePodCount(nodeList []*v1.Node) NodePodEvictedCount {
+	var nodePodCount = make(NodePodEvictedCount)
 	for _, node := range nodeList {
 		// Initialize podsEvicted till now with 0.
 		nodePodCount[node] = 0

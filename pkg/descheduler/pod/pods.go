@@ -78,7 +78,7 @@ func ListEvictablePodsOnNode(client clientset.Interface, node *v1.Node, evictLoc
 }
 
 func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, error) {
-	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + node.Name + ",status.phase!=" + string(api.PodSucceeded) + ",status.phase!=" + string(api.PodFailed))
+	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + node.Name + ",status.phase=" + string(api.PodRunning))
 	if err != nil {
 		return []*v1.Pod{}, err
 	}

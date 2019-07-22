@@ -116,7 +116,7 @@ func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
 	if len(lowNodes) != 1 {
 		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
 	}
-	npe := nodePodEvictedCount{}
+	npe := NodePodEvictedCount{}
 	npe[n1] = 0
 	npe[n2] = 0
 	npe[n3] = 0
@@ -221,7 +221,7 @@ func TestLowNodeUtilizationWithPriorities(t *testing.T) {
 	if len(lowNodes) != 1 {
 		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
 	}
-	npe := nodePodEvictedCount{}
+	npe := NodePodEvictedCount{}
 	npe[n1] = 0
 	npe[n2] = 0
 	npe[n3] = 0

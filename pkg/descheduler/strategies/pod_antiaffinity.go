@@ -31,7 +31,7 @@ import (
 )
 
 // RemovePodsViolatingInterPodAntiAffinity with elimination strategy
-func RemovePodsViolatingInterPodAntiAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node, nodePodCount nodePodEvictedCount) {
+func RemovePodsViolatingInterPodAntiAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node, nodePodCount NodePodEvictedCount) {
 	if !strategy.Enabled {
 		return
 	}
@@ -39,7 +39,7 @@ func RemovePodsViolatingInterPodAntiAffinity(ds *options.DeschedulerServer, stra
 }
 
 // removePodsWithAffinityRules evicts pods on the node which are having a pod affinity rules.
-func removePodsWithAffinityRules(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodePodCount nodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
+func removePodsWithAffinityRules(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodePodCount NodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
 	podsEvicted := 0
 	for _, node := range nodes {
 		glog.V(1).Infof("Processing node: %#v\n", node.Name)
