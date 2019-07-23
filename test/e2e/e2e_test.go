@@ -36,7 +36,7 @@ import (
 	"time"
 )
 
-func makePodAntiAffinity() *v1.Affinity {
+func makeAffinity() *v1.Affinity {
 	return &v1.Affinity{
 		PodAntiAffinity: &v1.PodAntiAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -51,6 +51,21 @@ func makePodAntiAffinity() *v1.Affinity {
 						},
 					},
 					TopologyKey: "kubernetes.io/hostname",
+				},
+			},
+		},
+		NodeAffinity: &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
+					{
+						MatchExpressions: []v1.NodeSelectorRequirement{
+							{
+								Key:      "kubernetes.io/node-type",
+								Operator: v1.NodeSelectorOpIn,
+								Values:   []string{"local"},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -75,7 +90,7 @@ func MakePodSpec() v1.PodSpec {
 				},
 			},
 		}},
-		Affinity: makePodAntiAffinity(),
+		Affinity: makeAffinity(),
 	}
 }
 
@@ -143,30 +158,21 @@ func runStrategy(clientSet clientset.Interface, strategyFunc func(ds *options.De
 	strategy := deschedulerapi.DeschedulerStrategy{Enabled: true, Params: strategyParam}
 	nodePodCount := strategies.InitializeNodePodCount(nodes)
 	strategyFunc(ds, strategy, evictionPolicyGroupVersion, nodes, nodePodCount)
-	time.Sleep(10 * time.Second)
+	time.Sleep(15 * time.Second)
 	return nodePodCount
 }
 
-func TestE2E(t *testing.T) {
-	// If we have reached here, it means cluster would have been already setup and the kubeconfig file should
-	// be in /tmp directory as admin.conf.
+func E2eForViolatingNodeAffinity(clientSet clientset.Interface) {
+	nodeAffinityStrategyParams := deschedulerapi.StrategyParameters{NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"}}
+	runStrategy(clientSet, strategies.RemovePodsViolatingNodeAffinity, nodeAffinityStrategyParams)
+}
+
+func getLeastUtilizedNode(clientSet clientset.Interface) (*v1.Node, int) {
 	var leastLoadedNode v1.Node
-	clientSet, err := client.CreateClient("/tmp/admin.conf")
-	if err != nil {
-		t.Errorf("Error during client creation with %v", err)
-	}
 	nodeList, err := clientSet.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
-		t.Errorf("Error listing node with %v", err)
+		glog.Errorf("Error listing node with %v", err)
 	}
-	// Assumption: We would have 3 node cluster by now. Kubeadm brings all the master components onto master node.
-	ns, rcName := "default", "test-rc"
-	rc := RcByNameContainer(rcName, int32(15), map[string]string{"test": "app"}, nil)
-	_, err = clientSet.CoreV1().ReplicationControllers(ns).Create(rc)
-	if err != nil {
-		t.Errorf("Error creating RepplicationController %v", err)
-	}
-	time.Sleep(15 * time.Second)
 	podsBefore := math.MaxInt16
 	for i := range nodeList.Items {
 		// Skip the Master Node
@@ -176,7 +182,7 @@ func TestE2E(t *testing.T) {
 		// List all the pods on the current Node
 		podsOnANode, err := podutil.ListEvictablePodsOnNode(clientSet, &nodeList.Items[i], true)
 		if err != nil {
-			t.Errorf("Error listing pods on a node %v", err)
+			glog.Errorf("Error listing pods on a node %v", err)
 		}
 		// Update leastLoadedNode if necessary
 		if tmpLoads := len(podsOnANode); tmpLoads != 0 && tmpLoads < podsBefore {
@@ -184,27 +190,59 @@ func TestE2E(t *testing.T) {
 			podsBefore = tmpLoads
 		}
 	}
+	return &leastLoadedNode, podsBefore
+}
+
+func TestE2E(t *testing.T) {
+	// If we have reached here, it means cluster would have been already setup and the kubeconfig file should
+	// be in /tmp directory as admin.conf.
+	clientSet, err := client.CreateClient("/tmp/admin.conf")
+	if err != nil {
+		t.Errorf("Error during client creation with %v", err)
+	}
+	nodeList, err := clientSet.CoreV1().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		t.Errorf("Error listing node with %v", err)
+	}
+	// Label nodes for node affinity test
+	for _, node := range nodeList.Items {
+		node.Labels["kubernetes.io/node-type"] = "local"
+		if _, err = clientSet.CoreV1().Nodes().Update(&node); err != nil {
+			t.Errorf("Error assiging labels to node for node affinity test %v", err)
+		}
+	}
+	// Assumption: We would have 3 node cluster by now. Kubeadm brings all the master components onto master node.
+	// So, the last node would have least utilization.
+	ns, rcName := "default", "test-rc"
+	rc := RcByNameContainer(rcName, int32(15), map[string]string{"test": "app"}, nil)
+	_, err = clientSet.CoreV1().ReplicationControllers("default").Create(rc)
+	if err != nil {
+		t.Errorf("Error creating deployment %v", err)
+	} else {
+		time.Sleep(15 * time.Second)
+	}
+	leastLoadedNode, podsBefore := getLeastUtilizedNode(clientSet)
 	t.Log("Evicting pods for low node utilization test")
 	startEndToEndForLowNodeUtilization(clientSet)
-	podsOnNode, err := podutil.ListEvictablePodsOnNode(clientSet, &leastLoadedNode, true)
+	podsOnleastUtilizedNode, err := podutil.ListEvictablePodsOnNode(clientSet, leastLoadedNode, true)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}
-	podsAfter := len(podsOnNode)
+	podsAfter := len(podsOnleastUtilizedNode)
 	if podsBefore > podsAfter {
-		t.Errorf("We should have see more or equal pods on this node %v, %v", podsBefore, podsAfter)
+		t.Errorf("Failed: E2e test for low node utilization. We should have see more or equal pods on %v node %v, %v", leastLoadedNode.Name, podsBefore, podsAfter)
 	} else {
-		t.Logf("The lease utilized pod had %v pods before descheduling and %v pods after", podsBefore, podsAfter)
+		t.Logf("The lease utilized node had %v pods before descheduling and %v pods after", podsBefore, podsAfter)
 	}
 	// Test for evicting pods based on Inter-Pod Anti-Affinity violations
 	podsBefore = podsAfter
-	podsOnNode, err = podutil.ListEvictablePodsOnNode(clientSet, &leastLoadedNode, true)
+	podsOnleastUtilizedNode, err = podutil.ListEvictablePodsOnNode(clientSet, leastLoadedNode, true)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}
 	podsLabeled := 1
 	// change pod labels so that it matched pod anti-affinity
-	for i, pod := range podsOnNode {
+	for i, pod := range podsOnleastUtilizedNode {
 		if i < podsLabeled {
 			labels.AddLabel(pod.Labels, "foo", "bar")
 			if _, err = clientSet.CoreV1().Pods(ns).Update(pod); err != nil {
@@ -212,16 +250,33 @@ func TestE2E(t *testing.T) {
 			}
 		}
 	}
-	t.Log("Evicting pods that are violating Inter-Pod Anti-Affinity predicates")
+	t.Log("Evicting pods for Inter-Pod Anti-Affinity violation test")
 	E2eTestForRemovePodsViolatingInterPodAntiAffinity(clientSet)
-	podsOnNode, err = podutil.ListEvictablePodsOnNode(clientSet, &leastLoadedNode, true)
+	podsOnleastUtilizedNode, err = podutil.ListEvictablePodsOnNode(clientSet, leastLoadedNode, true)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}
-	if podsAfter = len(podsOnNode); podsAfter != podsLabeled {
-		t.Errorf("E2e Test Inter-Pod Anti-Affinity Failed. We expect to eviect: %v pods, instead we evicted: %v pods.", podsBefore-podsLabeled, podsBefore-podsAfter)
+	if podsAfter = len(podsOnleastUtilizedNode); podsAfter != podsLabeled {
+		t.Errorf("Failed: E2e test for Inter-Pod Anti-Affinity. We expect to eviect: %v pods, instead we evicted: %v pods.", podsBefore-podsLabeled, podsBefore-podsAfter)
 	} else {
-		t.Logf("Inter-pod affinity evicted all pods but %v", podsAfter)
+		t.Logf("Inter-pod affinity evicted all but %v pods.", podsAfter)
+	}
+	t.Log("Evicting pods for node affinity violation test.")
+	leastLoadedNode, _ = getLeastUtilizedNode(clientSet)
+	// Change one node label and unmatch node affinity
+	leastLoadedNode.Labels["kubernetes.io/node-type"] = "remote"
+	if _, err = clientSet.CoreV1().Nodes().Update(leastLoadedNode); err != nil {
+		t.Errorf("Error reassigning labels to node during node affinity test %v", err)
+	}
+	E2eForViolatingNodeAffinity(clientSet)
+	podsOnleastUtilizedNode, err = podutil.ListEvictablePodsOnNode(clientSet, leastLoadedNode, true)
+	if err != nil {
+		t.Errorf("Error listing pods on a node %v", err)
+	}
+	if len(podsOnleastUtilizedNode) != int(0) {
+		t.Errorf("Failed: E2e test for Node affinity. Pods are not evicted or statyed away from this node that is violating node affinity.")
+	} else {
+		t.Logf("Node affinity violating pods are all evicted from %v node.", leastLoadedNode.Name)
 	}
 	// Delete test replication controller and all dependent pods after e2e tests
 	policy := metav1.DeletePropagationBackground
