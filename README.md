@@ -26,8 +26,6 @@ but relies on the default scheduler for that.
 
 ## Build and Run
 
-- Checkout the repo into your $GOPATH directory under src/sigs.k8s.io/descheduler
-
 Build descheduler:
 
 ```sh
@@ -39,6 +37,8 @@ and run descheduler:
 ```sh
 $ ./_output/bin/descheduler --kubeconfig <path to kubeconfig> --policy-config-file <path-to-policy-file>
 ```
+
+If you want more information about what descheduler is doing add `-v 1` to the command line
 
 For more information about available options run:
 ```
@@ -156,6 +156,10 @@ the policy `policy-file` is mounted as a volume from the config map.
 ```
 $ kubectl create -f descheduler-job.yaml
 ```
+
+### Examples
+
+See [descheduler.yaml](examples/descheduler.yaml) and [descheduler-job.yaml](examples/descheduler-job.yaml) for a combined yaml file of the above steps. 
 
 ## Policy and Strategies
 
