@@ -43,8 +43,19 @@ data:
     apiVersion: "descheduler/v1alpha1"
     kind: "DeschedulerPolicy"
     strategies:
-      "RemovePodsViolatingNodeAffinity":
+      "RemoveDuplicates":
+        enabled: true
+      "RemovePodsViolatingInterPodAntiAffinity":
+        enabled: true
+      "LowNodeUtilization":
         enabled: true
         params:
-          nodeAffinityType:
-          - "requiredDuringSchedulingIgnoredDuringExecution"
+          nodeResourceUtilizationThresholds:
+            thresholds:
+              "cpu" : 20
+              "memory": 20
+              "pods": 20
+            targetThresholds:
+              "cpu" : 50
+              "memory": 50
+              "pods": 50
