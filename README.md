@@ -160,7 +160,7 @@ $ kubectl create -f descheduler-job.yaml
 ## Policy and Strategies
 
 Descheduler's policy is configurable and includes strategies to be enabled or disabled.
-Four strategies, `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`, `RemovePodsViolatingNodeAffinity` are currently implemented.
+Five strategies, `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`, `RemovePodsViolatingNodeAffinity` , `RemovePodsViolatingNodeTaints` are currently implemented.
 As part of the policy, the parameters associated with the strategies can be configured too.
 By default, all strategies are enabled.
 
@@ -250,7 +250,17 @@ strategies:
       nodeAffinityType:
       - "requiredDuringSchedulingIgnoredDuringExecution"
 ```
+### RemovePodsViolatingNodeTaints
 
+This strategy makes sure that pods violating NoSchedule taints on nodes are removed. For example: there is a pod "podA" with toleration to tolerate a taint ``key=value:NoSchedule`` scheduled and running on the tainted node. If the node's taint is subsequently updated/removed, taint is no longer satisfied by its pods' tolerations and will be evicted. The policy file should look like:
+
+````
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "RemovePodsViolatingNodeTaints":
+    enabled: true
+````
 ## Pod Evictions
 
 When the descheduler decides to evict pods from a node, it employs following general mechanism:
@@ -273,7 +283,6 @@ disruption budget (PDB). The pods are evicted by using eviction subresource to h
 
 This roadmap is not in any particular order.
 
-* Strategy to consider taints and tolerations
 * Consideration of pod affinity
 * Strategy to consider pod life time
 * Strategy to consider number of pending pods
