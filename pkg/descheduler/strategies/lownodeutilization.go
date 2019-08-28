@@ -67,7 +67,7 @@ func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerS
 		thresholds[v1.ResourceCPU], thresholds[v1.ResourceMemory], thresholds[v1.ResourcePods])
 
 	if len(lowNodes) == 0 {
-		glog.V(1).Infof("No node is underutilized, nothing to do here, you might tune your thersholds further")
+		glog.V(1).Infof("No node is underutilized, nothing to do here, you might tune your thresholds further")
 		return
 	}
 	glog.V(1).Infof("Total number of underutilized nodes: %v", len(lowNodes))
