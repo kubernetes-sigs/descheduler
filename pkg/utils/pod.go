@@ -2,10 +2,12 @@ package utils
 
 import (
 	"fmt"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/component-base/featuregate"
+	"k8s.io/klog"
 )
 
 const (
@@ -178,4 +180,16 @@ func maxResourceList(list, new v1.ResourceList) {
 			}
 		}
 	}
+}
+
+// PodToleratesTaints returns true if a pod tolerates one node's taints
+func PodToleratesTaints(pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
+	for nodeName, taintsForNode := range taintsOfNodes {
+		if len(pod.Spec.Tolerations) >= len(taintsForNode) && TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taintsForNode, nil) {
+			return true
+		}
+		klog.V(5).Infof("pod: %#v doesn't tolerate node %s's taints", pod.Name, nodeName)
+	}
+
+	return false
 }
