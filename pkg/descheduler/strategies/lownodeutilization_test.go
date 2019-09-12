@@ -23,12 +23,18 @@ import (
 
 	"reflect"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -325,5 +331,185 @@ func TestValidateThresholds(t *testing.T) {
 		if isValid != test.succeed {
 			t.Errorf("expected validity of threshold: %#v\nto be %v but got %v instead", test.input, test.succeed, isValid)
 		}
+	}
+}
+
+func newFake(objects ...runtime.Object) *core.Fake {
+	scheme := runtime.NewScheme()
+	codecs := serializer.NewCodecFactory(scheme)
+	fake.AddToScheme(scheme)
+	o := core.NewObjectTracker(scheme, codecs.UniversalDecoder())
+	for _, obj := range objects {
+		if err := o.Add(obj); err != nil {
+			panic(err)
+		}
+	}
+
+	fakePtr := core.Fake{}
+	fakePtr.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+		objs, err := o.List(
+			schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+			schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
+			action.GetNamespace(),
+		)
+		if err != nil {
+			return true, nil, err
+		}
+
+		obj := &v1.PodList{
+			Items: []v1.Pod{},
+		}
+		for _, pod := range objs.(*v1.PodList).Items {
+			podFieldSet := fields.Set(map[string]string{
+				"spec.nodeName": pod.Spec.NodeName,
+				"status.phase":  string(pod.Status.Phase),
+			})
+			match := action.(core.ListAction).GetListRestrictions().Fields.Matches(podFieldSet)
+			if !match {
+				continue
+			}
+			obj.Items = append(obj.Items, *pod.DeepCopy())
+		}
+		return true, obj, nil
+	})
+	fakePtr.AddReactor("*", "*", core.ObjectReaction(o))
+	fakePtr.AddWatchReactor("*", core.DefaultWatchReactor(watch.NewFake(), nil))
+
+	return &fakePtr
+}
+
+func TestWithTaints(t *testing.T) {
+	strategy := api.DeschedulerStrategy{
+		Enabled: true,
+		Params: api.StrategyParameters{
+			NodeResourceUtilizationThresholds: api.NodeResourceUtilizationThresholds{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourcePods: 20,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					v1.ResourcePods: 70,
+				},
+			},
+		},
+	}
+
+	n1 := test.BuildTestNode("n1", 2000, 3000, 10)
+	n2 := test.BuildTestNode("n2", 1000, 3000, 10)
+	n3 := test.BuildTestNode("n3", 1000, 3000, 10)
+	n3withTaints := n3.DeepCopy()
+	n3withTaints.Spec.Taints = []v1.Taint{
+		{
+			Key:    "key",
+			Value:  "value",
+			Effect: v1.TaintEffectNoSchedule,
+		},
+	}
+
+	podThatToleratesTaint := test.BuildTestPod("tolerate_pod", 200, 0, n1.Name)
+	podThatToleratesTaint.Spec.Tolerations = []v1.Toleration{
+		{
+			Key:   "key",
+			Value: "value",
+		},
+	}
+
+	tests := []struct {
+		name              string
+		nodes             []*v1.Node
+		pods              []*v1.Pod
+		evictionsExpected int
+	}{
+		{
+			name:  "No taints",
+			nodes: []*v1.Node{n1, n2, n3},
+			pods: []*v1.Pod{
+				//Node 1 pods
+				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_8_%s", n1.Name), 200, 0, n1.Name),
+				// Node 2 pods
+				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n2.Name), 200, 0, n2.Name),
+			},
+			evictionsExpected: 1,
+		},
+		{
+			name:  "No pod tolerates node taint",
+			nodes: []*v1.Node{n1, n3withTaints},
+			pods: []*v1.Pod{
+				//Node 1 pods
+				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_8_%s", n1.Name), 200, 0, n1.Name),
+				// Node 3 pods
+				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n3withTaints.Name), 200, 0, n3withTaints.Name),
+			},
+			evictionsExpected: 0,
+		},
+		{
+			name:  "Pod which tolerates node taint",
+			nodes: []*v1.Node{n1, n3withTaints},
+			pods: []*v1.Pod{
+				//Node 1 pods
+				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name),
+				podThatToleratesTaint,
+				// Node 3 pods
+				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n3withTaints.Name), 200, 0, n3withTaints.Name),
+			},
+			evictionsExpected: 1,
+		},
+	}
+
+	for _, item := range tests {
+		t.Run(item.name, func(t *testing.T) {
+			var objs []runtime.Object
+			for _, node := range item.nodes {
+				objs = append(objs, node)
+			}
+
+			for _, pod := range item.pods {
+				pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+				objs = append(objs, pod)
+			}
+
+			fakePtr := newFake(objs...)
+			var evictionCounter int
+			fakePtr.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+				if action.GetSubresource() != "eviction" || action.GetResource().Resource != "pods" {
+					return false, nil, nil
+				}
+				evictionCounter++
+				return true, nil, nil
+			})
+
+			ds := &options.DeschedulerServer{
+				Client: &fake.Clientset{Fake: *fakePtr},
+				DeschedulerConfiguration: componentconfig.DeschedulerConfiguration{
+					EvictLocalStoragePods: false,
+				},
+			}
+
+			nodePodCount := utils.InitializeNodePodCount(item.nodes)
+			LowNodeUtilization(ds, strategy, "policy/v1", item.nodes, nodePodCount)
+
+			if item.evictionsExpected != evictionCounter {
+				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, evictionCounter)
+			}
+		})
 	}
 }
