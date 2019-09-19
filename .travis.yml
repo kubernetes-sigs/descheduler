@@ -6,6 +6,8 @@ go:
   - 1.13.x
 
 script:
+- mkdir -p ~/gopath/src/sigs.k8s.io/
+- mv ~/gopath/src/github.com/kubernetes-sigs/descheduler ~/gopath/src/sigs.k8s.io/.
 - hack/verify-gofmt.sh
 - make lint
 - make build
