@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"github.com/golang/glog"
+
 	"k8s.io/api/core/v1"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"

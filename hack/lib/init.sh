@@ -58,3 +58,4 @@ fi
 if [[ -n "${JUNIT_REPORT:-}" ]]; then
   export JUNIT_REPORT_OUTPUT="${LOG_DIR}/raw_test_output.log"
 fi
+

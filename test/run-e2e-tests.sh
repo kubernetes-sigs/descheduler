@@ -15,6 +15,5 @@
 #!/bin/bash
 
 # This just run e2e tests.
-PRJ_PREFIX="github.com/${REPO_ORG:-kubernetes-incubator}/descheduler"
+PRJ_PREFIX="sigs.k8s.io/descheduler"
 go test ${PRJ_PREFIX}/test/e2e/ -v
-

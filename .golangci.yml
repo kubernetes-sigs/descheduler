@@ -12,4 +12,4 @@ linters:
 
 linters-settings:
   goimports:
-local-prefixes: github.com/kubernetes-incubator/descheduler
+local-prefixes: sigs.k8s.io/descheduler
