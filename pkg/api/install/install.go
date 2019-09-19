@@ -22,9 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/apimachinery/registered"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	deschedulerapi "github.com/kubernetes-incubator/descheduler/pkg/api"
-	"github.com/kubernetes-incubator/descheduler/pkg/api/v1alpha1"
-	deschedulerscheme "github.com/kubernetes-incubator/descheduler/pkg/descheduler/scheme"
+	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
+	deschedulerscheme "sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 )
 
 func init() {

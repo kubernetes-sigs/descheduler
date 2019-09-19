@@ -40,7 +40,7 @@ generated_files=($(
 
 # We only work for deps within this prefix.
 #my_prefix="k8s.io/kubernetes"
-my_prefix="github.com/${REPO_ORG:-kubernetes-incubator}/descheduler"
+my_prefix="sigs.k8s.io/descheduler"
 
 # Register function to be called on EXIT to remove codecgen
 # binary and also to touch the files that should be regenerated

@@ -19,7 +19,7 @@ package strategies
 import (
 	"testing"
 
-	"github.com/kubernetes-incubator/descheduler/test"
+	"sigs.k8s.io/descheduler/test"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
