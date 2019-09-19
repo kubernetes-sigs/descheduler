@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"sigs.k8s.io/descheduler/pkg/utils"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -28,6 +27,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 // ReadyNodes returns ready nodes irrespective of whether they are
