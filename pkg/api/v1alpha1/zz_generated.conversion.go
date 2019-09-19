@@ -23,9 +23,9 @@ package v1alpha1
 import (
 	unsafe "unsafe"
 
-	api "github.com/kubernetes-incubator/descheduler/pkg/api"
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
+	api "sigs.k8s.io/descheduler/pkg/api"
 )
 
 func init() {

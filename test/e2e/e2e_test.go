@@ -22,18 +22,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
-	deschedulerapi "github.com/kubernetes-incubator/descheduler/pkg/api"
-	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/client"
-	eutils "github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions/utils"
-	nodeutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/node"
-	podutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/pod"
-	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/strategies"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/pkg/api/testapi"
+	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
+	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/descheduler/client"
+	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
+	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 )
 
 func MakePodSpec() v1.PodSpec {

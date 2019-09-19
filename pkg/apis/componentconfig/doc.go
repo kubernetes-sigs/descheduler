@@ -16,4 +16,4 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package,register
 
-package componentconfig // import "github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig"
+package componentconfig // import "sigs.k8s.io/descheduler/pkg/apis/componentconfig"

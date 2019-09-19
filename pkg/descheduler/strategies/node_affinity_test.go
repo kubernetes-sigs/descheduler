@@ -19,13 +19,13 @@ package strategies
 import (
 	"testing"
 
-	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
-	"github.com/kubernetes-incubator/descheduler/pkg/api"
-	"github.com/kubernetes-incubator/descheduler/test"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
+	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/test"
 )
 
 func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
