@@ -19,12 +19,12 @@ package strategies
 import (
 	"testing"
 
-	"sigs.k8s.io/descheduler/test"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/descheduler/test"
 )
 
 func TestPodAntiAffinity(t *testing.T) {
