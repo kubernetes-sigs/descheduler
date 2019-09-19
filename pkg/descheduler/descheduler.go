@@ -21,11 +21,11 @@ import (
 
 	"github.com/golang/glog"
 
-	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
-	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/client"
-	eutils "github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions/utils"
-	nodeutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/node"
-	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/strategies"
+	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
+	"sigs.k8s.io/descheduler/pkg/descheduler/client"
+	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
+	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 )
 
 func Run(rs *options.DeschedulerServer) error {

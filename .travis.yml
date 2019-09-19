@@ -18,6 +18,8 @@ before_script:
   - kind load docker-image kubernetes/pause
   - cp "$(kind get kubeconfig-path --name="kind")" /tmp/admin.conf
 script:
+- mkdir -p ~/gopath/src/sigs.k8s.io/
+- mv ~/gopath/src/github.com/kubernetes-sigs/descheduler ~/gopath/src/sigs.k8s.io/.
 - hack/verify-gofmt.sh
 - make lint
 - make build

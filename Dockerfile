@@ -13,7 +13,7 @@
 # limitations under the License.
 FROM golang:1.9.2
 
-WORKDIR /go/src/github.com/kubernetes-incubator/descheduler
+WORKDIR /go/src/sigs.k8s.io/descheduler
 COPY . .
 RUN make
 
@@ -21,6 +21,6 @@ FROM scratch
 
 MAINTAINER Avesh Agarwal <avagarwa@redhat.com>
 
-COPY --from=0 /go/src/github.com/kubernetes-incubator/descheduler/_output/bin/descheduler /bin/descheduler
+COPY --from=0 /go/src/sigs.k8s.io/descheduler/_output/bin/descheduler /bin/descheduler
 
 CMD ["/bin/descheduler", "--help"]

@@ -18,7 +18,7 @@
 VERSION?=`git describe --tags`
 COMMIT=`git rev-parse HEAD`
 BUILD=`date +%FT%T%z`
-LDFLAG_LOCATION=github.com/kubernetes-incubator/descheduler/cmd/descheduler/app
+LDFLAG_LOCATION=sigs.k8s.io/descheduler/cmd/descheduler/app
 
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitCommit=${COMMIT}"
 
@@ -37,7 +37,7 @@ IMAGE_GCLOUD:=$(REGISTRY)/descheduler:$(VERSION)
 all: build
 
 build:
-	CGO_ENABLED=0 go build ${LDFLAGS} -o _output/bin/descheduler github.com/kubernetes-incubator/descheduler/cmd/descheduler
+	CGO_ENABLED=0 go build ${LDFLAGS} -o _output/bin/descheduler sigs.k8s.io/descheduler/cmd/descheduler
 
 dev-image: build
 	docker build -f Dockerfile.dev -t $(IMAGE) .
