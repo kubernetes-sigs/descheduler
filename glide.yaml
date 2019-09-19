@@ -1,4 +1,4 @@
-package: github.com/kubernetes-incubator/descheduler
+package: sigs.k8s.io/descheduler
 import:
 - package: k8s.io/client-go
   version: 78700dec6369ba22221b72770783300f143df150

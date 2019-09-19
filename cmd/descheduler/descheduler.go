@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app"
+	"sigs.k8s.io/descheduler/cmd/descheduler/app"
 )
 
 func main() {
