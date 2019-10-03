@@ -17,12 +17,13 @@ limitations under the License.
 package e2e
 
 import (
-	"github.com/golang/glog"
 	"math"
 	"testing"
 	"time"
 
-	"k8s.io/api/core/v1"
+	"github.com/golang/glog"
+
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -122,7 +123,6 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface) {
 func TestE2E(t *testing.T) {
 	// If we have reached here, it means cluster would have been already setup and the kubeconfig file should
 	// be in /tmp directory as admin.conf.
-	var leastLoadedNode v1.Node
 	clientSet, err := client.CreateClient("/tmp/admin.conf")
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
@@ -138,6 +138,28 @@ func TestE2E(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
+	evictPods(t, clientSet, nodeList, rc)
+
+	rc.Spec.Template.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+	rc.Spec.Replicas = func(i int32) *int32 { return &i }(15)
+	rc.Spec.Template.Spec.Volumes = []v1.Volume{
+		{
+			Name: "sample",
+			VolumeSource: v1.VolumeSource{
+				EmptyDir: &v1.EmptyDirVolumeSource{
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+			},
+		},
+	}
+	_, err = clientSet.CoreV1().ReplicationControllers("default").Create(rc)
+	if err != nil {
+		t.Errorf("Error creating deployment %v", err)
+	}
+	evictPods(t, clientSet, nodeList, rc)
+}
+
+func evictPods(t *testing.T, clientSet clientset.Interface, nodeList *v1.NodeList, rc *v1.ReplicationController) {
+	var leastLoadedNode v1.Node
 	podsBefore := math.MaxInt16
 	for i := range nodeList.Items {
 		// Skip the Master Node
@@ -165,4 +187,33 @@ func TestE2E(t *testing.T) {
 	if podsBefore > podsAfter {
 		t.Fatalf("We should have see more pods on this node as per kubeadm's way of installing %v, %v", podsBefore, podsAfter)
 	}
+
+	//set number of replicas to 0
+	rc.Spec.Replicas = func(i int32) *int32 { return &i }(0)
+	_, err = clientSet.CoreV1().ReplicationControllers("default").Update(rc)
+	if err != nil {
+		t.Errorf("Error updating replica controller %v", err)
+	}
+	allPodsDeleted := false
+	//wait 30 seconds until all pods are deleted
+	for i := 0; i < 6; i++ {
+		scale, _ := clientSet.CoreV1().ReplicationControllers("default").GetScale(rc.Name, metav1.GetOptions{})
+		if scale.Spec.Replicas == 0 {
+			allPodsDeleted = true
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	if !allPodsDeleted {
+		t.Errorf("Deleting of rc pods took too long")
+	}
+
+	err = clientSet.CoreV1().ReplicationControllers("default").Delete(rc.Name, &metav1.DeleteOptions{})
+	if err != nil {
+		t.Errorf("Error deleting rc %v", err)
+	}
+
+	//wait until rc is deleted
+	time.Sleep(5 * time.Second)
 }
