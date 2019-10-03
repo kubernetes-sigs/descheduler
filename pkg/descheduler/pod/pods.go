@@ -19,13 +19,17 @@ package pod
 import (
 	"strings"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	clientset "k8s.io/client-go/kubernetes"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/apis/core/v1/helper/qos"
 	"k8s.io/kubernetes/pkg/kubelet/types"
+)
+
+const (
+	evictPodAnnotationKey = "descheduler.alpha.kubernetes.io/evict"
 )
 
 // checkLatencySensitiveResourcesForAContainer checks if there are any latency sensitive resources like GPUs.
@@ -56,7 +60,7 @@ func IsLatencySensitivePod(pod *v1.Pod) bool {
 // IsEvictable checks if a pod is evictable or not.
 func IsEvictable(pod *v1.Pod, evictLocalStoragePods bool) bool {
 	ownerRefList := OwnerRef(pod)
-	if IsMirrorPod(pod) || (!evictLocalStoragePods && IsPodWithLocalStorage(pod)) || len(ownerRefList) == 0 || IsDaemonsetPod(ownerRefList) || IsCriticalPod(pod) {
+	if !HaveEvictAnnotation(pod) && (IsMirrorPod(pod) || (!evictLocalStoragePods && IsPodWithLocalStorage(pod)) || len(ownerRefList) == 0 || IsDaemonsetPod(ownerRefList) || IsCriticalPod(pod)) {
 		return false
 	}
 	return true
@@ -139,6 +143,12 @@ func IsDaemonsetPod(ownerRefList []metav1.OwnerReference) bool {
 // IsMirrorPod checks whether the pod is a mirror pod.
 func IsMirrorPod(pod *v1.Pod) bool {
 	_, found := pod.ObjectMeta.Annotations[types.ConfigMirrorAnnotationKey]
+	return found
+}
+
+// HaveEvictAnnotation checks if the pod have evict annotation
+func HaveEvictAnnotation(pod *v1.Pod) bool {
+	_, found := pod.ObjectMeta.Annotations[evictPodAnnotationKey]
 	return found
 }
 
