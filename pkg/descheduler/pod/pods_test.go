@@ -21,6 +21,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/kubernetes/pkg/apis/scheduling"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -208,6 +209,8 @@ func TestPodTypes(t *testing.T) {
 	// A Critical Pod.
 	p5.Namespace = "kube-system"
 	p5.Annotations = test.GetCriticalPodAnnotation()
+	systemCriticalPriority := scheduling.SystemCriticalPriority
+	p5.Spec.Priority = &systemCriticalPriority
 	if !IsMirrorPod(p4) {
 		t.Errorf("Expected p4 to be a mirror pod.")
 	}
