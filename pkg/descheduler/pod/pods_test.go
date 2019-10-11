@@ -183,7 +183,6 @@ func TestPodTypes(t *testing.T) {
 	p4 := test.BuildTestPod("p4", 400, 0, n1.Name)
 	p5 := test.BuildTestPod("p5", 400, 0, n1.Name)
 	p6 := test.BuildTestPod("p6", 400, 0, n1.Name)
-	p6.Spec.Containers[0].Resources.Requests[v1.ResourceNvidiaGPU] = *resource.NewMilliQuantity(3, resource.DecimalSI)
 
 	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
@@ -225,9 +224,6 @@ func TestPodTypes(t *testing.T) {
 	ownerRefList = OwnerRef(p1)
 	if IsDaemonsetPod(ownerRefList) || IsPodWithLocalStorage(p1) || IsCriticalPod(p1) || IsMirrorPod(p1) {
 		t.Errorf("Expected p1 to be a normal pod.")
-	}
-	if !IsLatencySensitivePod(p6) {
-		t.Errorf("Expected p6 to be latency sensitive pod")
 	}
 
 }
