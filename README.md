@@ -259,6 +259,9 @@ never evicted because these pods won't be recreated.
 * Pods associated with DaemonSets are never evicted.
 * Pods with local storage are never evicted.
 * Best efforts pods are evicted before Burstable and Guaranteed pods.
+* All types of pods with annotation descheduler.alpha.kubernetes.io/evict are evicted. This 
+annotation is used to override checks which prevent eviction and user can select which pod is evicted. 
+User should know how and if the pod will be recreated.
 
 ### Pod disruption Budget (PDB)
 Pods subject to Pod Disruption Budget (PDB) are not evicted if descheduling violates its pod
