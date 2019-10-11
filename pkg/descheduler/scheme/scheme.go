@@ -17,17 +17,11 @@ limitations under the License.
 package scheme
 
 import (
-	"os"
-
-	"k8s.io/apimachinery/pkg/apimachinery/announced"
-	"k8s.io/apimachinery/pkg/apimachinery/registered"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
 var (
-	GroupFactoryRegistry = make(announced.APIGroupFactoryRegistry)
-	Registry             = registered.NewOrDie(os.Getenv("DESCHEDULER_API_VERSIONS"))
 	Scheme               = runtime.NewScheme()
 	Codecs               = serializer.NewCodecFactory(Scheme)
 )
