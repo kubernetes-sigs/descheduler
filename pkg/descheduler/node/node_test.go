@@ -26,35 +26,30 @@ import (
 )
 
 func TestReadyNodes(t *testing.T) {
-	node1 := test.BuildTestNode("node1", 1000, 2000, 9)
-	node1.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeOutOfDisk, Status: v1.ConditionTrue}}
-	node2 := test.BuildTestNode("node2", 1000, 2000, 9)
-	node3 := test.BuildTestNode("node3", 1000, 2000, 9)
-	node3.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeMemoryPressure, Status: v1.ConditionTrue}}
-	node4 := test.BuildTestNode("node4", 1000, 2000, 9)
-	node4.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeNetworkUnavailable, Status: v1.ConditionTrue}}
-	node5 := test.BuildTestNode("node5", 1000, 2000, 9)
-	node5.Spec.Unschedulable = true
-	node6 := test.BuildTestNode("node6", 1000, 2000, 9)
-	node6.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeReady, Status: v1.ConditionFalse}}
+	node1 := test.BuildTestNode("node2", 1000, 2000, 9)
+	node2 := test.BuildTestNode("node3", 1000, 2000, 9)
+	node2.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeMemoryPressure, Status: v1.ConditionTrue}}
+	node3 := test.BuildTestNode("node4", 1000, 2000, 9)
+	node3.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeNetworkUnavailable, Status: v1.ConditionTrue}}
+	node4 := test.BuildTestNode("node5", 1000, 2000, 9)
+	node4.Spec.Unschedulable = true
+	node5 := test.BuildTestNode("node6", 1000, 2000, 9)
+	node5.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeReady, Status: v1.ConditionFalse}}
 
 	if !IsReady(node1) {
-		t.Errorf("Expected %v to be ready", node1.Name)
-	}
-	if !IsReady(node2) {
 		t.Errorf("Expected %v to be ready", node2.Name)
 	}
-	if !IsReady(node3) {
+	if !IsReady(node2) {
 		t.Errorf("Expected %v to be ready", node3.Name)
 	}
-	if !IsReady(node4) {
+	if !IsReady(node3) {
 		t.Errorf("Expected %v to be ready", node4.Name)
 	}
-	if !IsReady(node5) {
+	if !IsReady(node4) {
 		t.Errorf("Expected %v to be ready", node5.Name)
 	}
-	if IsReady(node6) {
-		t.Errorf("Expected %v to be not ready", node6.Name)
+	if IsReady(node5) {
+		t.Errorf("Expected %v to be not ready", node5.Name)
 	}
 
 }
