@@ -45,7 +45,7 @@ func EvictPod(client clientset.Interface, pod *v1.Pod, policyGroupVersion string
 		},
 		DeleteOptions: deleteOptions,
 	}
-	err := client.Policy().Evictions(eviction.Namespace).Evict(eviction)
+	err := client.PolicyV1beta1().Evictions(eviction.Namespace).Evict(eviction)
 
 	if err == nil {
 		return true, nil

@@ -32,31 +32,6 @@ const (
 	evictPodAnnotationKey = "descheduler.alpha.kubernetes.io/evict"
 )
 
-// checkLatencySensitiveResourcesForAContainer checks if there are any latency sensitive resources like GPUs.
-func checkLatencySensitiveResourcesForAContainer(rl v1.ResourceList) bool {
-	if rl == nil {
-		return false
-	}
-	for rName := range rl {
-		if rName == v1.ResourceNvidiaGPU {
-			return true
-		}
-		// TODO: Add support for other high value resources like hugepages etc. once kube is rebased to 1.8.
-	}
-	return false
-}
-
-// IsLatencySensitivePod checks if a pod consumes high value devices like GPUs, hugepages or when cpu pinning enabled.
-func IsLatencySensitivePod(pod *v1.Pod) bool {
-	for _, container := range pod.Spec.Containers {
-		resourceList := container.Resources.Requests
-		if checkLatencySensitiveResourcesForAContainer(resourceList) {
-			return true
-		}
-	}
-	return false
-}
-
 // IsEvictable checks if a pod is evictable or not.
 func IsEvictable(pod *v1.Pod, evictLocalStoragePods bool) bool {
 	ownerRefList := OwnerRef(pod)
