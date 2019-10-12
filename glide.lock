@@ -1,5 +1,5 @@
 hash: f82bf395df6f00004b1794606a9256d5c69b62deb5498b574a08b2b5d15f7a6a
-updated: 2019-10-12T11:11:23.472932-04:00
+updated: 2019-10-12T11:22:30.564437-04:00
 imports:
 - name: cloud.google.com/go
   version: 8c41231e01b2085512d98153bcffb847ff9b4b9f
@@ -87,10 +87,6 @@ imports:
   version: 67fc4837d267bc9bfd6e47f77783fcc3dffc68de
 - name: github.com/spf13/pflag
   version: 298182f68c66c05229eb03ac171abe6e309ee79a
-- name: github.com/ugorji/go
-  version: 42bc974514ff101a54c6b72a0e4dee29d96c0b26
-  subpackages:
-  - codec
 - name: golang.org/x/crypto
   version: e84da0312774c21d64ee2317962ef669b27ffb41
   subpackages:
