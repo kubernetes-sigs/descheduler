@@ -32,6 +32,7 @@ type Interface interface {
 	AllocateNext() (net.IP, error)
 	Release(net.IP) error
 	ForEach(func(net.IP))
+	CIDR() net.IPNet
 
 	// For testing
 	Has(ip net.IP) bool
@@ -78,7 +79,7 @@ type Range struct {
 }
 
 // NewAllocatorCIDRRange creates a Range over a net.IPNet, calling allocatorFactory to construct the backing store.
-func NewAllocatorCIDRRange(cidr *net.IPNet, allocatorFactory allocator.AllocatorFactory) *Range {
+func NewAllocatorCIDRRange(cidr *net.IPNet, allocatorFactory allocator.AllocatorFactory) (*Range, error) {
 	max := RangeSize(cidr)
 	base := bigForIP(cidr.IP)
 	rangeSpec := cidr.String()
@@ -88,14 +89,15 @@ func NewAllocatorCIDRRange(cidr *net.IPNet, allocatorFactory allocator.Allocator
 		base: base.Add(base, big.NewInt(1)), // don't use the network base
 		max:  maximum(0, int(max-2)),        // don't use the network broadcast,
 	}
-	r.alloc = allocatorFactory(r.max, rangeSpec)
-	return &r
+	var err error
+	r.alloc, err = allocatorFactory(r.max, rangeSpec)
+	return &r, err
 }
 
 // Helper that wraps NewAllocatorCIDRRange, for creating a range backed by an in-memory store.
-func NewCIDRRange(cidr *net.IPNet) *Range {
-	return NewAllocatorCIDRRange(cidr, func(max int, rangeSpec string) allocator.Interface {
-		return allocator.NewAllocationMap(max, rangeSpec)
+func NewCIDRRange(cidr *net.IPNet) (*Range, error) {
+	return NewAllocatorCIDRRange(cidr, func(max int, rangeSpec string) (allocator.Interface, error) {
+		return allocator.NewAllocationMap(max, rangeSpec), nil
 	})
 }
 
@@ -105,7 +107,10 @@ func NewFromSnapshot(snap *api.RangeAllocation) (*Range, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := NewCIDRRange(ipnet)
+	r, err := NewCIDRRange(ipnet)
+	if err != nil {
+		return nil, err
+	}
 	if err := r.Restore(ipnet, snap.Data); err != nil {
 		return nil, err
 	}
@@ -262,11 +267,18 @@ func calculateIPOffset(base *big.Int, ip net.IP) int {
 // RangeSize returns the size of a range in valid addresses.
 func RangeSize(subnet *net.IPNet) int64 {
 	ones, bits := subnet.Mask.Size()
-	if bits == 32 && (bits-ones) >= 31 || bits == 128 && (bits-ones) >= 63 {
+	if bits == 32 && (bits-ones) >= 31 || bits == 128 && (bits-ones) >= 127 {
 		return 0
 	}
-	max := int64(1) << uint(bits-ones)
-	return max
+	// For IPv6, the max size will be limited to 65536
+	// This is due to the allocator keeping track of all the
+	// allocated IP's in a bitmap. This will keep the size of
+	// the bitmap to 64k.
+	if bits == 128 && (bits-ones) >= 16 {
+		return int64(1) << uint(16)
+	} else {
+		return int64(1) << uint(bits-ones)
+	}
 }
 
 // GetIndexedIP returns a net.IP that is subnet.IP + index in the contiguous IP space.

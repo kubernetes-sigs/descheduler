@@ -19,7 +19,7 @@ package results
 import (
 	"sync"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 )
@@ -43,7 +43,10 @@ type Manager interface {
 type Result bool
 
 const (
+	// Success is encoded as "true" (type Result)
 	Success Result = true
+
+	// Failure is encoded as "false" (type Result)
 	Failure Result = false
 )
 
@@ -55,6 +58,18 @@ func (r Result) String() string {
 		return "Failure"
 	default:
 		return "UNKNOWN"
+	}
+}
+
+// ToPrometheusType translates a Result to a form which is better understood by prometheus.
+func (r Result) ToPrometheusType() float64 {
+	switch r {
+	case Success:
+		return 0
+	case Failure:
+		return 1
+	default:
+		return -1
 	}
 }
 
@@ -77,7 +92,7 @@ type manager struct {
 
 var _ Manager = &manager{}
 
-// NewManager creates ane returns an empty results manager.
+// NewManager creates and returns an empty results manager.
 func NewManager() Manager {
 	return &manager{
 		cache:   make(map[kubecontainer.ContainerID]Result),

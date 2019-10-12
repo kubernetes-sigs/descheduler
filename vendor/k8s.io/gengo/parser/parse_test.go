@@ -18,6 +18,7 @@ package parser_test
 
 import (
 	"bytes"
+	"path"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -41,14 +42,49 @@ func TestRecursive(t *testing.T) {
 		t.Fatalf("Fail finding types: %v", err)
 	}
 	foundB := false
+	foundC := false
 	for _, p := range b.FindPackages() {
 		t.Logf("Package: %v", p)
 		if p == "k8s.io/gengo/testdata/a/b" {
 			foundB = true
 		}
+		if p == "k8s.io/gengo/testdata/a/c" {
+			foundC = true
+		}
 	}
 	if !foundB {
 		t.Errorf("Expected to find packages a and b")
+	}
+	if foundC {
+		t.Error("Did not expect to find package c")
+	}
+}
+
+func TestRecursiveWithTestGoFiles(t *testing.T) {
+	d := args.Default()
+	d.IncludeTestFiles = true
+	d.InputDirs = []string{"k8s.io/gengo/testdata/a/..."}
+	b, err := d.NewBuilder()
+	if err != nil {
+		t.Fatalf("Fail making builder: %v", err)
+	}
+	_, err = b.FindTypes()
+	if err != nil {
+		t.Fatalf("Fail finding types: %v", err)
+	}
+	foundB := false
+	foundC := false
+	for _, p := range b.FindPackages() {
+		t.Logf("Package: %v", p)
+		if p == "k8s.io/gengo/testdata/a/b" {
+			foundB = true
+		}
+		if p == "k8s.io/gengo/testdata/a/c" {
+			foundC = true
+		}
+	}
+	if !foundC || !foundB {
+		t.Errorf("Expected to find packages a, b and c")
 	}
 }
 
@@ -61,7 +97,7 @@ type file struct {
 func construct(t *testing.T, files []file, testNamer namer.Namer) (*parser.Builder, types.Universe, []*types.Type) {
 	b := parser.New()
 	for _, f := range files {
-		if err := b.AddFileForTest(filepath.Dir(f.path), f.path, []byte(f.contents)); err != nil {
+		if err := b.AddFileForTest(path.Dir(f.path), filepath.FromSlash(f.path), []byte(f.contents)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -199,7 +235,7 @@ var FooAnotherVar proto.Frobber = proto.AnotherVar
 		t.Errorf("Wanted, got:\n%v\n-----\n%v\n", e, a)
 	}
 	if p := u.Package("base/foo/proto"); !p.HasImport("base/common/proto") {
-		t.Errorf("Unexpected lack of import line: %s", p.Imports)
+		t.Errorf("Unexpected lack of import line: %#v", p.Imports)
 	}
 }
 

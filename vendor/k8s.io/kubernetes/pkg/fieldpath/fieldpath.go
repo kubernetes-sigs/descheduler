@@ -21,13 +21,19 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 // FormatMap formats map[string]string to a string.
 func FormatMap(m map[string]string) (fmtStr string) {
-	for key, value := range m {
-		fmtStr += fmt.Sprintf("%v=%q\n", key, value)
+	// output with keys in sorted order to provide stable output
+	keys := sets.NewString()
+	for key := range m {
+		keys.Insert(key)
+	}
+	for _, key := range keys.List() {
+		fmtStr += fmt.Sprintf("%v=%q\n", key, m[key])
 	}
 	fmtStr = strings.TrimSuffix(fmtStr, "\n")
 
@@ -40,7 +46,7 @@ func FormatMap(m map[string]string) (fmtStr string) {
 func ExtractFieldPathAsString(obj interface{}, fieldPath string) (string, error) {
 	accessor, err := meta.Accessor(obj)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	if path, subscript, ok := SplitMaybeSubscriptedPath(fieldPath); ok {

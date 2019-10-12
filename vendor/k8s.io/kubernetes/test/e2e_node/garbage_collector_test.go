@@ -19,16 +19,17 @@ package e2e_node
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/kubernetes/pkg/kubelet/dockershim/libdocker"
+	internalapi "k8s.io/cri-api/pkg/apis"
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
+	"k8s.io/kubernetes/pkg/kubelet/types"
 	"k8s.io/kubernetes/test/e2e/framework"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/ginkgo"
+	"github.com/onsi/gomega"
 )
 
 const (
@@ -37,11 +38,9 @@ const (
 	maxPerPodContainer = 1
 	maxTotalContainers = -1
 
-	defaultRuntimeRequestTimeoutDuration = 1 * time.Minute
-	defaultImagePullProgressDeadline     = 1 * time.Minute
-	garbageCollectDuration               = 3 * time.Minute
-	setupDuration                        = 10 * time.Minute
-	runtimePollInterval                  = 10 * time.Second
+	garbageCollectDuration = 3 * time.Minute
+	setupDuration          = 10 * time.Minute
+	runtimePollInterval    = 10 * time.Second
 )
 
 type testPodSpec struct {
@@ -70,7 +69,7 @@ type testRun struct {
 
 // GarbageCollect tests that the Kubelet conforms to the Kubelet Garbage Collection Policy, found here:
 // http://kubernetes.io/docs/admin/garbage-collection/
-var _ = framework.KubeDescribe("GarbageCollect [Serial]", func() {
+var _ = framework.KubeDescribe("GarbageCollect [Serial][NodeFeature:GarbageCollect]", func() {
 	f := framework.NewDefaultFramework("garbage-collect-test")
 	containerNamePrefix := "gc-test-container-"
 	podNamePrefix := "gc-test-pod-"
@@ -130,24 +129,49 @@ var _ = framework.KubeDescribe("GarbageCollect [Serial]", func() {
 		},
 	}
 	for _, test := range tests {
-		// TODO (dashpole): Once the Container Runtime Interface (CRI) is complete, generalize run on other runtimes (other than docker)
-		dockerContainerGCTest(f, test)
+		containerGCTest(f, test)
 	}
 })
 
 // Tests the following:
 // 	pods are created, and all containers restart the specified number of times
-// 	while contianers are running, the number of copies of a single container does not exceed maxPerPodContainer
+// 	while containers are running, the number of copies of a single container does not exceed maxPerPodContainer
 // 	while containers are running, the total number of containers does not exceed maxTotalContainers
 // 	while containers are running, if not constrained by maxPerPodContainer or maxTotalContainers, keep an extra copy of each container
 // 	once pods are killed, all containers are eventually cleaned up
 func containerGCTest(f *framework.Framework, test testRun) {
-	Context(fmt.Sprintf("Garbage Collection Test: %s", test.testName), func() {
-		BeforeEach(func() {
+	var runtime internalapi.RuntimeService
+	ginkgo.BeforeEach(func() {
+		var err error
+		runtime, _, err = getCRIClient()
+		framework.ExpectNoError(err)
+	})
+	for _, pod := range test.testPods {
+		// Initialize the getContainerNames function to use CRI runtime client.
+		pod.getContainerNames = func() ([]string, error) {
+			relevantContainers := []string{}
+			containers, err := runtime.ListContainers(&runtimeapi.ContainerFilter{
+				LabelSelector: map[string]string{
+					types.KubernetesPodNameLabel:      pod.podName,
+					types.KubernetesPodNamespaceLabel: f.Namespace.Name,
+				},
+			})
+			if err != nil {
+				return relevantContainers, err
+			}
+			for _, container := range containers {
+				relevantContainers = append(relevantContainers, container.Labels[types.KubernetesContainerNameLabel])
+			}
+			return relevantContainers, nil
+		}
+	}
+
+	ginkgo.Context(fmt.Sprintf("Garbage Collection Test: %s", test.testName), func() {
+		ginkgo.BeforeEach(func() {
 			realPods := getPods(test.testPods)
 			f.PodClient().CreateBatch(realPods)
-			By("Making sure all containers restart the specified number of times")
-			Eventually(func() error {
+			ginkgo.By("Making sure all containers restart the specified number of times")
+			gomega.Eventually(func() error {
 				for _, podSpec := range test.testPods {
 					err := verifyPodRestartCount(f, podSpec.podName, podSpec.numContainers, podSpec.restartCount)
 					if err != nil {
@@ -155,15 +179,15 @@ func containerGCTest(f *framework.Framework, test testRun) {
 					}
 				}
 				return nil
-			}, setupDuration, runtimePollInterval).Should(BeNil())
+			}, setupDuration, runtimePollInterval).Should(gomega.BeNil())
 		})
 
-		It(fmt.Sprintf("Should eventually garbage collect containers when we exceed the number of dead containers per container"), func() {
+		ginkgo.It(fmt.Sprintf("Should eventually garbage collect containers when we exceed the number of dead containers per container"), func() {
 			totalContainers := 0
 			for _, pod := range test.testPods {
 				totalContainers += pod.numContainers*2 + 1
 			}
-			Eventually(func() error {
+			gomega.Eventually(func() error {
 				total := 0
 				for _, pod := range test.testPods {
 					containerNames, err := pod.getContainerNames()
@@ -175,8 +199,8 @@ func containerGCTest(f *framework.Framework, test testRun) {
 					for i := 0; i < pod.numContainers; i++ {
 						containerCount := 0
 						for _, containerName := range containerNames {
-							if strings.Contains(containerName, pod.getContainerName(i)) {
-								containerCount += 1
+							if containerName == pod.getContainerName(i) {
+								containerCount++
 							}
 						}
 						if containerCount > maxPerPodContainer+1 {
@@ -190,11 +214,11 @@ func containerGCTest(f *framework.Framework, test testRun) {
 					return fmt.Errorf("expected total number of containers: %v, to be <= maxTotalContainers: %v", total, maxTotalContainers)
 				}
 				return nil
-			}, garbageCollectDuration, runtimePollInterval).Should(BeNil())
+			}, garbageCollectDuration, runtimePollInterval).Should(gomega.BeNil())
 
 			if maxPerPodContainer >= 2 && maxTotalContainers < 0 { // make sure constraints wouldn't make us gc old containers
-				By("Making sure the kubelet consistently keeps around an extra copy of each container.")
-				Consistently(func() error {
+				ginkgo.By("Making sure the kubelet consistently keeps around an extra copy of each container.")
+				gomega.Consistently(func() error {
 					for _, pod := range test.testPods {
 						containerNames, err := pod.getContainerNames()
 						if err != nil {
@@ -203,8 +227,8 @@ func containerGCTest(f *framework.Framework, test testRun) {
 						for i := 0; i < pod.numContainers; i++ {
 							containerCount := 0
 							for _, containerName := range containerNames {
-								if strings.Contains(containerName, pod.getContainerName(i)) {
-									containerCount += 1
+								if containerName == pod.getContainerName(i) {
+									containerCount++
 								}
 							}
 							if pod.restartCount > 0 && containerCount < maxPerPodContainer+1 {
@@ -213,18 +237,18 @@ func containerGCTest(f *framework.Framework, test testRun) {
 						}
 					}
 					return nil
-				}, garbageCollectDuration, runtimePollInterval).Should(BeNil())
+				}, garbageCollectDuration, runtimePollInterval).Should(gomega.BeNil())
 			}
 		})
 
-		AfterEach(func() {
+		ginkgo.AfterEach(func() {
 			for _, pod := range test.testPods {
-				By(fmt.Sprintf("Deleting Pod %v", pod.podName))
+				ginkgo.By(fmt.Sprintf("Deleting Pod %v", pod.podName))
 				f.PodClient().DeleteSync(pod.podName, &metav1.DeleteOptions{}, framework.DefaultPodDeletionTimeout)
 			}
 
-			By("Making sure all containers get cleaned up")
-			Eventually(func() error {
+			ginkgo.By("Making sure all containers get cleaned up")
+			gomega.Eventually(func() error {
 				for _, pod := range test.testPods {
 					containerNames, err := pod.getContainerNames()
 					if err != nil {
@@ -235,9 +259,9 @@ func containerGCTest(f *framework.Framework, test testRun) {
 					}
 				}
 				return nil
-			}, garbageCollectDuration, runtimePollInterval).Should(BeNil())
+			}, garbageCollectDuration, runtimePollInterval).Should(gomega.BeNil())
 
-			if CurrentGinkgoTestDescription().Failed && framework.TestContext.DumpLogsOnFailure {
+			if ginkgo.CurrentGinkgoTestDescription().Failed && framework.TestContext.DumpLogsOnFailure {
 				logNodeEvents(f)
 				logPodEvents(f)
 			}
@@ -245,42 +269,9 @@ func containerGCTest(f *framework.Framework, test testRun) {
 	})
 }
 
-// Runs containerGCTest using the docker runtime.
-func dockerContainerGCTest(f *framework.Framework, test testRun) {
-	var runtime libdocker.Interface
-	BeforeEach(func() {
-		runtime = libdocker.ConnectToDockerOrDie(
-			defaultDockerEndpoint,
-			defaultRuntimeRequestTimeoutDuration,
-			defaultImagePullProgressDeadline,
-			false,
-			false,
-		)
-	})
-	for _, pod := range test.testPods {
-		// Initialize the getContainerNames function to use the libdocker api
-		thisPrefix := pod.containerPrefix
-		pod.getContainerNames = func() ([]string, error) {
-			relevantContainers := []string{}
-			dockerContainers, err := libdocker.GetKubeletDockerContainers(runtime, true)
-			if err != nil {
-				return relevantContainers, err
-			}
-			for _, container := range dockerContainers {
-				// only look for containers from this testspec
-				if strings.Contains(container.Names[0], thisPrefix) {
-					relevantContainers = append(relevantContainers, container.Names[0])
-				}
-			}
-			return relevantContainers, nil
-		}
-	}
-	containerGCTest(f, test)
-}
-
 func getPods(specs []*testPodSpec) (pods []*v1.Pod) {
 	for _, spec := range specs {
-		By(fmt.Sprintf("Creating %v containers with restartCount: %v", spec.numContainers, spec.restartCount))
+		ginkgo.By(fmt.Sprintf("Creating %v containers with restartCount: %v", spec.numContainers, spec.restartCount))
 		containers := []v1.Container{}
 		for i := 0; i < spec.numContainers; i++ {
 			containers = append(containers, v1.Container{

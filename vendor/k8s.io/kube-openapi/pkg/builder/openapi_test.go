@@ -30,20 +30,10 @@ import (
 )
 
 // setUp is a convenience function for setting up for (most) tests.
-func setUp(t *testing.T, fullMethods bool) (openAPI, *restful.Container, *assert.Assertions) {
+func setUp(t *testing.T, fullMethods bool) (*openapi.Config, *restful.Container, *assert.Assertions) {
 	assert := assert.New(t)
 	config, container := getConfig(fullMethods)
-	return openAPI{
-		config: config,
-		swagger: &spec.Swagger{
-			SwaggerProps: spec.SwaggerProps{
-				Swagger:     OpenAPIVersion,
-				Definitions: spec.Definitions{},
-				Paths:       &spec.Paths{Paths: map[string]spec.PathItem{}},
-				Info:        config.Info,
-			},
-		},
-	}, container, assert
+	return config, container, assert
 }
 
 func noOp(request *restful.Request, response *restful.Response) {}
@@ -63,6 +53,36 @@ type TestOutput struct {
 	Name string `json:"name,omitempty"`
 	// Number of outputs
 	Count int `json:"count,omitempty"`
+}
+
+type TestExtensionV2Schema struct{}
+
+func (_ TestExtensionV2Schema) OpenAPIDefinition() *openapi.OpenAPIDefinition {
+	schema := spec.Schema{
+		VendorExtensible: spec.VendorExtensible{
+			Extensions: map[string]interface{}{
+				openapi.ExtensionV2Schema: spec.Schema{
+					SchemaProps: spec.SchemaProps{
+						Type: []string{"integer"},
+					},
+				},
+			},
+		},
+	}
+	schema.Description = "Test extension V2 spec conversion"
+	schema.Properties = map[string]spec.Schema{
+		"apple": {
+			SchemaProps: spec.SchemaProps{
+				Description: "Name of the output",
+				Type:        []string{"string"},
+				Format:      "",
+			},
+		},
+	}
+	return &openapi.OpenAPIDefinition{
+		Schema:       schema,
+		Dependencies: []string{},
+	}
 }
 
 func (_ TestInput) OpenAPIDefinition() *openapi.OpenAPIDefinition {
@@ -192,12 +212,14 @@ func getConfig(fullMethods bool) (*openapi.Config, *restful.Container) {
 		},
 		GetDefinitions: func(_ openapi.ReferenceCallback) map[string]openapi.OpenAPIDefinition {
 			return map[string]openapi.OpenAPIDefinition{
-				"k8s.io/kube-openapi/pkg/builder.TestInput":  *TestInput{}.OpenAPIDefinition(),
-				"k8s.io/kube-openapi/pkg/builder.TestOutput": *TestOutput{}.OpenAPIDefinition(),
+				"k8s.io/kube-openapi/pkg/builder.TestInput":           *TestInput{}.OpenAPIDefinition(),
+				"k8s.io/kube-openapi/pkg/builder.TestOutput":          *TestOutput{}.OpenAPIDefinition(),
+				"k8s.io/kube-openapi/pkg/builder.TestExtensionV2Schema": *TestExtensionV2Schema{}.OpenAPIDefinition(),
 				// Bazel changes the package name, this is ok for testing, but we need to fix it if it happened
 				// in the main code.
-				"k8s.io/kube-openapi/pkg/builder/go_default_test.TestInput":  *TestInput{}.OpenAPIDefinition(),
-				"k8s.io/kube-openapi/pkg/builder/go_default_test.TestOutput": *TestOutput{}.OpenAPIDefinition(),
+				"k8s.io/kube-openapi/pkg/builder/go_default_test.TestInput":           *TestInput{}.OpenAPIDefinition(),
+				"k8s.io/kube-openapi/pkg/builder/go_default_test.TestOutput":          *TestOutput{}.OpenAPIDefinition(),
+				"k8s.io/kube-openapi/pkg/builder/go_default_test.TestExtensionV2Schema": *TestExtensionV2Schema{}.OpenAPIDefinition(),
 			}
 		},
 		GetDefinitionName: func(name string) (string, spec.Extensions) {
@@ -425,8 +447,8 @@ func getTestOutputDefinition() spec.Schema {
 	}
 }
 
-func TestBuildSwaggerSpec(t *testing.T) {
-	o, container, assert := setUp(t, true)
+func TestBuildOpenAPISpec(t *testing.T) {
+	config, container, assert := setUp(t, true)
 	expected := &spec.Swagger{
 		SwaggerProps: spec.SwaggerProps{
 			Info: &spec.Info{
@@ -449,7 +471,7 @@ func TestBuildSwaggerSpec(t *testing.T) {
 			},
 		},
 	}
-	err := o.init(container.RegisteredWebServices())
+	swagger, err := BuildOpenAPISpec(container.RegisteredWebServices(), config)
 	if !assert.NoError(err) {
 		return
 	}
@@ -457,7 +479,51 @@ func TestBuildSwaggerSpec(t *testing.T) {
 	if !assert.NoError(err) {
 		return
 	}
-	actual_json, err := json.Marshal(o.swagger)
+	actual_json, err := json.Marshal(swagger)
+	if !assert.NoError(err) {
+		return
+	}
+	assert.Equal(string(expected_json), string(actual_json))
+}
+
+func TestBuildOpenAPIDefinitionsForResource(t *testing.T) {
+	config, _, assert := setUp(t, true)
+	expected := &spec.Definitions{
+		"builder.TestInput": getTestInputDefinition(),
+	}
+	swagger, err := BuildOpenAPIDefinitionsForResource(TestInput{}, config)
+	if !assert.NoError(err) {
+		return
+	}
+	expected_json, err := json.Marshal(expected)
+	if !assert.NoError(err) {
+		return
+	}
+	actual_json, err := json.Marshal(swagger)
+	if !assert.NoError(err) {
+		return
+	}
+	assert.Equal(string(expected_json), string(actual_json))
+}
+
+func TestBuildOpenAPIDefinitionsForResourceWithExtensionV2Schema(t *testing.T) {
+	config, _, assert := setUp(t, true)
+	expected := &spec.Definitions{
+		"builder.TestExtensionV2Schema": spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"integer"},
+			},
+		},
+	}
+	swagger, err := BuildOpenAPIDefinitionsForResource(TestExtensionV2Schema{}, config)
+	if !assert.NoError(err) {
+		return
+	}
+	expected_json, err := json.Marshal(expected)
+	if !assert.NoError(err) {
+		return
+	}
+	actual_json, err := json.Marshal(swagger)
 	if !assert.NoError(err) {
 		return
 	}

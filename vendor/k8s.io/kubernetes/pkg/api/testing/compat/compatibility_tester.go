@@ -19,7 +19,6 @@ package compat
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -30,14 +29,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
-	"k8s.io/kubernetes/pkg/printers"
 )
 
-// Based on: https://github.com/openshift/origin/blob/master/pkg/api/compatibility_test.go
-//
 // TestCompatibility reencodes the input using the codec for the given
 // version and checks for the presence of the expected keys and absent
 // keys in the resulting JSON.
+// Based on: https://github.com/openshift/origin/blob/master/pkg/api/compatibility_test.go
 func TestCompatibility(
 	t *testing.T,
 	version schema.GroupVersion,
@@ -72,14 +69,11 @@ func TestCompatibility(
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	hasError := false
 	for k, expectedValue := range expectedKeys {
 		keys := strings.Split(k, ".")
 		if actualValue, ok, err := getJSONValue(generic, keys...); err != nil || !ok {
 			t.Errorf("Unexpected error for %s: %v", k, err)
-			hasError = true
 		} else if !reflect.DeepEqual(expectedValue, fmt.Sprintf("%v", actualValue)) {
-			hasError = true
 			t.Errorf("Unexpected value for %v: expected %v, got %v", k, expectedValue, actualValue)
 		}
 	}
@@ -89,14 +83,17 @@ func TestCompatibility(
 		actualValue, ok, err := getJSONValue(generic, keys...)
 		if err == nil || ok {
 			t.Errorf("Unexpected value found for key %s: %v", absentKey, actualValue)
-			hasError = true
 		}
 	}
 
-	if hasError {
-		printer := &printers.JSONPrinter{}
-		printer.PrintObj(obj, os.Stdout)
-		t.Logf("2: Encoded value: %#v", string(output))
+	if t.Failed() {
+		data, err := json.MarshalIndent(obj, "", "    ")
+		if err != nil {
+			t.Log(err)
+		} else {
+			t.Log(string(data))
+		}
+		t.Logf("2: Encoded value: %v", string(output))
 	}
 }
 
@@ -117,17 +114,17 @@ func getJSONValue(data map[string]interface{}, keys ...string) (interface{}, boo
 	// Look up the value
 	value, ok := data[key]
 	if !ok {
-		return nil, false, fmt.Errorf("No key %s found", key)
+		return nil, false, fmt.Errorf("no key %s found", key)
 	}
 
 	// Get the indexed value if an index is specified
 	if index >= 0 {
 		valueSlice, ok := value.([]interface{})
 		if !ok {
-			return nil, false, fmt.Errorf("Key %s did not hold a slice", key)
+			return nil, false, fmt.Errorf("key %s did not hold a slice", key)
 		}
 		if index >= len(valueSlice) {
-			return nil, false, fmt.Errorf("Index %d out of bounds for slice at key: %v", index, key)
+			return nil, false, fmt.Errorf("index %d out of bounds for slice at key: %v", index, key)
 		}
 		value = valueSlice[index]
 	}
@@ -138,7 +135,7 @@ func getJSONValue(data map[string]interface{}, keys ...string) (interface{}, boo
 
 	childData, ok := value.(map[string]interface{})
 	if !ok {
-		return nil, false, fmt.Errorf("Key %s did not hold a map", keys[0])
+		return nil, false, fmt.Errorf("key %s did not hold a map", keys[0])
 	}
 	return getJSONValue(childData, keys[1:]...)
 }

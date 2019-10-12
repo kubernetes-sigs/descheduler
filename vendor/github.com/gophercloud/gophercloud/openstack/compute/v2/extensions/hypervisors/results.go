@@ -3,7 +3,9 @@ package hypervisors
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/pagination"
 )
 
@@ -26,8 +28,38 @@ type CPUInfo struct {
 // Service represents a Compute service running on the hypervisor.
 type Service struct {
 	Host           string `json:"host"`
-	ID             int    `json:"id"`
+	ID             string `json:"-"`
 	DisabledReason string `json:"disabled_reason"`
+}
+
+func (r *Service) UnmarshalJSON(b []byte) error {
+	type tmp Service
+	var s struct {
+		tmp
+		ID interface{} `json:"id"`
+	}
+
+	err := json.Unmarshal(b, &s)
+	if err != nil {
+		return err
+	}
+
+	*r = Service(s.tmp)
+
+	// OpenStack Compute service returns ID in string representation since
+	// 2.53 microversion API (Pike release).
+	switch t := s.ID.(type) {
+	case int:
+		r.ID = strconv.Itoa(t)
+	case float64:
+		r.ID = strconv.Itoa(int(t))
+	case string:
+		r.ID = t
+	default:
+		return fmt.Errorf("ID has unexpected type: %T", t)
+	}
+
+	return nil
 }
 
 // Hypervisor represents a hypervisor in the OpenStack cloud.
@@ -71,7 +103,7 @@ type Hypervisor struct {
 	HypervisorVersion int `json:"-"`
 
 	// ID is the unique ID of the hypervisor.
-	ID int `json:"id"`
+	ID string `json:"-"`
 
 	// LocalGB is the disk space in the hypervisor, measured in GB.
 	LocalGB int `json:"-"`
@@ -102,6 +134,7 @@ func (r *Hypervisor) UnmarshalJSON(b []byte) error {
 	type tmp Hypervisor
 	var s struct {
 		tmp
+		ID                interface{} `json:"id"`
 		CPUInfo           interface{} `json:"cpu_info"`
 		HypervisorVersion interface{} `json:"hypervisor_version"`
 		FreeDiskGB        interface{} `json:"free_disk_gb"`
@@ -132,9 +165,11 @@ func (r *Hypervisor) UnmarshalJSON(b []byte) error {
 		return fmt.Errorf("CPUInfo has unexpected type: %T", t)
 	}
 
-	err = json.Unmarshal(tmpb, &r.CPUInfo)
-	if err != nil {
-		return err
+	if len(tmpb) != 0 {
+		err = json.Unmarshal(tmpb, &r.CPUInfo)
+		if err != nil {
+			return err
+		}
 	}
 
 	// These fields may be returned as a scientific notation, so they need
@@ -145,7 +180,7 @@ func (r *Hypervisor) UnmarshalJSON(b []byte) error {
 	case float64:
 		r.HypervisorVersion = int(t)
 	default:
-		return fmt.Errorf("Hypervisor version of unexpected type")
+		return fmt.Errorf("Hypervisor version has unexpected type: %T", t)
 	}
 
 	switch t := s.FreeDiskGB.(type) {
@@ -154,7 +189,7 @@ func (r *Hypervisor) UnmarshalJSON(b []byte) error {
 	case float64:
 		r.FreeDiskGB = int(t)
 	default:
-		return fmt.Errorf("Free disk GB of unexpected type")
+		return fmt.Errorf("Free disk GB has unexpected type: %T", t)
 	}
 
 	switch t := s.LocalGB.(type) {
@@ -163,7 +198,20 @@ func (r *Hypervisor) UnmarshalJSON(b []byte) error {
 	case float64:
 		r.LocalGB = int(t)
 	default:
-		return fmt.Errorf("Local GB of unexpected type")
+		return fmt.Errorf("Local GB has unexpected type: %T", t)
+	}
+
+	// OpenStack Compute service returns ID in string representation since
+	// 2.53 microversion API (Pike release).
+	switch t := s.ID.(type) {
+	case int:
+		r.ID = strconv.Itoa(t)
+	case float64:
+		r.ID = strconv.Itoa(int(t))
+	case string:
+		r.ID = t
+	default:
+		return fmt.Errorf("ID has unexpected type: %T", t)
 	}
 
 	return nil
@@ -188,4 +236,132 @@ func ExtractHypervisors(p pagination.Page) ([]Hypervisor, error) {
 	}
 	err := (p.(HypervisorPage)).ExtractInto(&h)
 	return h.Hypervisors, err
+}
+
+type HypervisorResult struct {
+	gophercloud.Result
+}
+
+// Extract interprets any HypervisorResult as a Hypervisor, if possible.
+func (r HypervisorResult) Extract() (*Hypervisor, error) {
+	var s struct {
+		Hypervisor Hypervisor `json:"hypervisor"`
+	}
+	err := r.ExtractInto(&s)
+	return &s.Hypervisor, err
+}
+
+// Statistics represents a summary statistics for all enabled
+// hypervisors over all compute nodes in the OpenStack cloud.
+type Statistics struct {
+	// The number of hypervisors.
+	Count int `json:"count"`
+
+	// The current_workload is the number of tasks the hypervisor is responsible for
+	CurrentWorkload int `json:"current_workload"`
+
+	// The actual free disk on this hypervisor(in GB).
+	DiskAvailableLeast int `json:"disk_available_least"`
+
+	// The free disk remaining on this hypervisor(in GB).
+	FreeDiskGB int `json:"free_disk_gb"`
+
+	// The free RAM in this hypervisor(in MB).
+	FreeRamMB int `json:"free_ram_mb"`
+
+	// The disk in this hypervisor(in GB).
+	LocalGB int `json:"local_gb"`
+
+	// The disk used in this hypervisor(in GB).
+	LocalGBUsed int `json:"local_gb_used"`
+
+	// The memory of this hypervisor(in MB).
+	MemoryMB int `json:"memory_mb"`
+
+	// The memory used in this hypervisor(in MB).
+	MemoryMBUsed int `json:"memory_mb_used"`
+
+	// The total number of running vms on all hypervisors.
+	RunningVMs int `json:"running_vms"`
+
+	// The number of vcpu in this hypervisor.
+	VCPUs int `json:"vcpus"`
+
+	// The number of vcpu used in this hypervisor.
+	VCPUsUsed int `json:"vcpus_used"`
+}
+
+type StatisticsResult struct {
+	gophercloud.Result
+}
+
+// Extract interprets any StatisticsResult as a Statistics, if possible.
+func (r StatisticsResult) Extract() (*Statistics, error) {
+	var s struct {
+		Stats Statistics `json:"hypervisor_statistics"`
+	}
+	err := r.ExtractInto(&s)
+	return &s.Stats, err
+}
+
+// Uptime represents uptime and additional info for a specific hypervisor.
+type Uptime struct {
+	// The hypervisor host name provided by the Nova virt driver.
+	// For the Ironic driver, it is the Ironic node uuid.
+	HypervisorHostname string `json:"hypervisor_hostname"`
+
+	// The id of the hypervisor.
+	ID string `json:"-"`
+
+	// The state of the hypervisor. One of up or down.
+	State string `json:"state"`
+
+	// The status of the hypervisor. One of enabled or disabled.
+	Status string `json:"status"`
+
+	// The total uptime of the hypervisor and information about average load.
+	Uptime string `json:"uptime"`
+}
+
+func (r *Uptime) UnmarshalJSON(b []byte) error {
+	type tmp Uptime
+	var s struct {
+		tmp
+		ID interface{} `json:"id"`
+	}
+
+	err := json.Unmarshal(b, &s)
+	if err != nil {
+		return err
+	}
+
+	*r = Uptime(s.tmp)
+
+	// OpenStack Compute service returns ID in string representation since
+	// 2.53 microversion API (Pike release).
+	switch t := s.ID.(type) {
+	case int:
+		r.ID = strconv.Itoa(t)
+	case float64:
+		r.ID = strconv.Itoa(int(t))
+	case string:
+		r.ID = t
+	default:
+		return fmt.Errorf("ID has unexpected type: %T", t)
+	}
+
+	return nil
+}
+
+type UptimeResult struct {
+	gophercloud.Result
+}
+
+// Extract interprets any UptimeResult as a Uptime, if possible.
+func (r UptimeResult) Extract() (*Uptime, error) {
+	var s struct {
+		Uptime Uptime `json:"hypervisor"`
+	}
+	err := r.ExtractInto(&s)
+	return &s.Uptime, err
 }

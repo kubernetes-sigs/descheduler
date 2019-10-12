@@ -17,11 +17,17 @@ limitations under the License.
 package responsewriters
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"strconv"
+	"strings"
+	"sync"
+
+	"k8s.io/apiserver/pkg/features"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -31,34 +37,18 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/metrics"
 	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/apiserver/pkg/util/flushwriter"
 	"k8s.io/apiserver/pkg/util/wsstream"
 )
 
-// WriteObject renders a returned runtime.Object to the response as a stream or an encoded object. If the object
-// returned by the response implements rest.ResourceStreamer that interface will be used to render the
-// response. The Accept header and current API version will be passed in, and the output will be copied
-// directly to the response body. If content type is returned it is used, otherwise the content type will
-// be "application/octet-stream". All other objects are sent to standard JSON serialization.
-func WriteObject(ctx request.Context, statusCode int, gv schema.GroupVersion, s runtime.NegotiatedSerializer, object runtime.Object, w http.ResponseWriter, req *http.Request) {
-	stream, ok := object.(rest.ResourceStreamer)
-	if ok {
-		requestInfo, _ := request.RequestInfoFrom(ctx)
-		metrics.RecordLongRunning(req, requestInfo, func() {
-			StreamObject(ctx, statusCode, gv, s, stream, w, req)
-		})
-		return
-	}
-	WriteObjectNegotiated(ctx, s, gv, w, req, statusCode, object)
-}
-
 // StreamObject performs input stream negotiation from a ResourceStreamer and writes that to the response.
 // If the client requests a websocket upgrade, negotiate for a websocket reader protocol (because many
 // browser clients cannot easily handle binary streaming protocols).
-func StreamObject(ctx request.Context, statusCode int, gv schema.GroupVersion, s runtime.NegotiatedSerializer, stream rest.ResourceStreamer, w http.ResponseWriter, req *http.Request) {
-	out, flush, contentType, err := stream.InputStream(gv.String(), req.Header.Get("Accept"))
+func StreamObject(statusCode int, gv schema.GroupVersion, s runtime.NegotiatedSerializer, stream rest.ResourceStreamer, w http.ResponseWriter, req *http.Request) {
+	out, flush, contentType, err := stream.InputStream(req.Context(), gv.String(), req.Header.Get("Accept"))
 	if err != nil {
-		ErrorNegotiated(ctx, err, s, gv, w, req)
+		ErrorNegotiated(err, s, gv, w, req)
 		return
 	}
 	if out == nil {
@@ -81,6 +71,10 @@ func StreamObject(ctx request.Context, statusCode int, gv schema.GroupVersion, s
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(statusCode)
+	// Flush headers, if possible
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
 	writer := w.(io.Writer)
 	if flush {
 		writer = flushwriter.Wrap(w)
@@ -89,20 +83,154 @@ func StreamObject(ctx request.Context, statusCode int, gv schema.GroupVersion, s
 }
 
 // SerializeObject renders an object in the content type negotiated by the client using the provided encoder.
-// The context is optional and can be nil.
-func SerializeObject(mediaType string, encoder runtime.Encoder, w http.ResponseWriter, req *http.Request, statusCode int, object runtime.Object) {
-	w.Header().Set("Content-Type", mediaType)
-	w.WriteHeader(statusCode)
-
-	if err := encoder.Encode(object, w); err != nil {
-		errorJSONFatal(err, encoder, w)
+// The context is optional and can be nil. This method will perform optional content compression if requested by
+// a client and the feature gate for APIResponseCompression is enabled.
+func SerializeObject(mediaType string, encoder runtime.Encoder, hw http.ResponseWriter, req *http.Request, statusCode int, object runtime.Object) {
+	w := &deferredResponseWriter{
+		mediaType:       mediaType,
+		statusCode:      statusCode,
+		contentEncoding: negotiateContentEncoding(req),
+		hw:              hw,
 	}
+
+	err := encoder.Encode(object, w)
+	if err == nil {
+		err = w.Close()
+		if err == nil {
+			return
+		}
+	}
+
+	// make a best effort to write the object if a failure is detected
+	utilruntime.HandleError(fmt.Errorf("apiserver was unable to write a JSON response: %v", err))
+	status := ErrorToAPIStatus(err)
+	candidateStatusCode := int(status.Code)
+	// if the current status code is successful, allow the error's status code to overwrite it
+	if statusCode >= http.StatusOK && statusCode < http.StatusBadRequest {
+		w.statusCode = candidateStatusCode
+	}
+	output, err := runtime.Encode(encoder, status)
+	if err != nil {
+		w.mediaType = "text/plain"
+		output = []byte(fmt.Sprintf("%s: %s", status.Reason, status.Message))
+	}
+	if _, err := w.Write(output); err != nil {
+		utilruntime.HandleError(fmt.Errorf("apiserver was unable to write a fallback JSON response: %v", err))
+	}
+	w.Close()
 }
 
+var gzipPool = &sync.Pool{
+	New: func() interface{} {
+		gw, err := gzip.NewWriterLevel(nil, defaultGzipContentEncodingLevel)
+		if err != nil {
+			panic(err)
+		}
+		return gw
+	},
+}
+
+const (
+	// defaultGzipContentEncodingLevel is set to 4 which uses less CPU than the default level
+	defaultGzipContentEncodingLevel = 4
+	// defaultGzipThresholdBytes is compared to the size of the first write from the stream
+	// (usually the entire object), and if the size is smaller no gzipping will be performed
+	// if the client requests it.
+	defaultGzipThresholdBytes = 128 * 1024
+)
+
+// negotiateContentEncoding returns a supported client-requested content encoding for the
+// provided request. It will return the empty string if no supported content encoding was
+// found or if response compression is disabled.
+func negotiateContentEncoding(req *http.Request) string {
+	encoding := req.Header.Get("Accept-Encoding")
+	if len(encoding) == 0 {
+		return ""
+	}
+	if !utilfeature.DefaultFeatureGate.Enabled(features.APIResponseCompression) {
+		return ""
+	}
+	for len(encoding) > 0 {
+		var token string
+		if next := strings.Index(encoding, ","); next != -1 {
+			token = encoding[:next]
+			encoding = encoding[next+1:]
+		} else {
+			token = encoding
+			encoding = ""
+		}
+		switch strings.TrimSpace(token) {
+		case "gzip":
+			return "gzip"
+		}
+	}
+	return ""
+}
+
+type deferredResponseWriter struct {
+	mediaType       string
+	statusCode      int
+	contentEncoding string
+
+	hasWritten bool
+	hw         http.ResponseWriter
+	w          io.Writer
+}
+
+func (w *deferredResponseWriter) Write(p []byte) (n int, err error) {
+	if w.hasWritten {
+		return w.w.Write(p)
+	}
+	w.hasWritten = true
+
+	hw := w.hw
+	header := hw.Header()
+	switch {
+	case w.contentEncoding == "gzip" && len(p) > defaultGzipThresholdBytes:
+		header.Set("Content-Encoding", "gzip")
+		header.Add("Vary", "Accept-Encoding")
+
+		gw := gzipPool.Get().(*gzip.Writer)
+		gw.Reset(hw)
+
+		w.w = gw
+	default:
+		w.w = hw
+	}
+
+	header.Set("Content-Type", w.mediaType)
+	hw.WriteHeader(w.statusCode)
+	return w.w.Write(p)
+}
+
+func (w *deferredResponseWriter) Close() error {
+	if !w.hasWritten {
+		return nil
+	}
+	var err error
+	switch t := w.w.(type) {
+	case *gzip.Writer:
+		err = t.Close()
+		t.Reset(nil)
+		gzipPool.Put(t)
+	}
+	return err
+}
+
+var nopCloser = ioutil.NopCloser(nil)
+
 // WriteObjectNegotiated renders an object in the content type negotiated by the client.
-// The context is optional and can be nil.
-func WriteObjectNegotiated(ctx request.Context, s runtime.NegotiatedSerializer, gv schema.GroupVersion, w http.ResponseWriter, req *http.Request, statusCode int, object runtime.Object) {
-	serializer, err := negotiation.NegotiateOutputSerializer(req, s)
+func WriteObjectNegotiated(s runtime.NegotiatedSerializer, restrictions negotiation.EndpointRestrictions, gv schema.GroupVersion, w http.ResponseWriter, req *http.Request, statusCode int, object runtime.Object) {
+	stream, ok := object.(rest.ResourceStreamer)
+	if ok {
+		requestInfo, _ := request.RequestInfoFrom(req.Context())
+		metrics.RecordLongRunning(req, requestInfo, metrics.APIServerComponent, func() {
+			StreamObject(statusCode, gv, s, stream, w, req)
+		})
+		return
+	}
+
+	_, serializer, err := negotiation.NegotiateOutputMediaType(req, s, restrictions)
 	if err != nil {
 		// if original statusCode was not successful we need to return the original error
 		// we cannot hide it behind negotiation problems
@@ -115,7 +243,7 @@ func WriteObjectNegotiated(ctx request.Context, s runtime.NegotiatedSerializer, 
 		return
 	}
 
-	if ae := request.AuditEventFrom(ctx); ae != nil {
+	if ae := request.AuditEventFrom(req.Context()); ae != nil {
 		audit.LogResponseObject(ae, object, gv, s)
 	}
 
@@ -125,7 +253,7 @@ func WriteObjectNegotiated(ctx request.Context, s runtime.NegotiatedSerializer, 
 
 // ErrorNegotiated renders an error to the response. Returns the HTTP status code of the error.
 // The context is optional and may be nil.
-func ErrorNegotiated(ctx request.Context, err error, s runtime.NegotiatedSerializer, gv schema.GroupVersion, w http.ResponseWriter, req *http.Request) int {
+func ErrorNegotiated(err error, s runtime.NegotiatedSerializer, gv schema.GroupVersion, w http.ResponseWriter, req *http.Request) int {
 	status := ErrorToAPIStatus(err)
 	code := int(status.Code)
 	// when writing an error, check to see if the status indicates a retry after period
@@ -139,25 +267,7 @@ func ErrorNegotiated(ctx request.Context, err error, s runtime.NegotiatedSeriali
 		return code
 	}
 
-	WriteObjectNegotiated(ctx, s, gv, w, req, code, status)
-	return code
-}
-
-// errorJSONFatal renders an error to the response, and if codec fails will render plaintext.
-// Returns the HTTP status code of the error.
-func errorJSONFatal(err error, codec runtime.Encoder, w http.ResponseWriter) int {
-	utilruntime.HandleError(fmt.Errorf("apiserver was unable to write a JSON response: %v", err))
-	status := ErrorToAPIStatus(err)
-	code := int(status.Code)
-	output, err := runtime.Encode(codec, status)
-	if err != nil {
-		w.WriteHeader(code)
-		fmt.Fprintf(w, "%s: %s", status.Reason, status.Message)
-		return code
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	w.Write(output)
+	WriteObjectNegotiated(s, negotiation.DefaultEndpointRestrictions, gv, w, req, code, status)
 	return code
 }
 
