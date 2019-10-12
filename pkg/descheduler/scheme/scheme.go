@@ -22,6 +22,6 @@ import (
 )
 
 var (
-	Scheme               = runtime.NewScheme()
-	Codecs               = serializer.NewCodecFactory(Scheme)
+	Scheme = runtime.NewScheme()
+	Codecs = serializer.NewCodecFactory(Scheme)
 )
