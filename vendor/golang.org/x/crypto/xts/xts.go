@@ -25,6 +25,8 @@ import (
 	"crypto/cipher"
 	"encoding/binary"
 	"errors"
+
+	"golang.org/x/crypto/internal/subtle"
 )
 
 // Cipher contains an expanded key structure. It doesn't contain mutable state
@@ -55,7 +57,7 @@ func NewCipher(cipherFunc func([]byte) (cipher.Block, error), key []byte) (c *Ci
 }
 
 // Encrypt encrypts a sector of plaintext and puts the result into ciphertext.
-// Plaintext and ciphertext may be the same slice but should not overlap.
+// Plaintext and ciphertext must overlap entirely or not at all.
 // Sectors must be a multiple of 16 bytes and less than 2²⁴ bytes.
 func (c *Cipher) Encrypt(ciphertext, plaintext []byte, sectorNum uint64) {
 	if len(ciphertext) < len(plaintext) {
@@ -63,6 +65,9 @@ func (c *Cipher) Encrypt(ciphertext, plaintext []byte, sectorNum uint64) {
 	}
 	if len(plaintext)%blockSize != 0 {
 		panic("xts: plaintext is not a multiple of the block size")
+	}
+	if subtle.InexactOverlap(ciphertext[:len(plaintext)], plaintext) {
+		panic("xts: invalid buffer overlap")
 	}
 
 	var tweak [blockSize]byte
@@ -86,7 +91,7 @@ func (c *Cipher) Encrypt(ciphertext, plaintext []byte, sectorNum uint64) {
 }
 
 // Decrypt decrypts a sector of ciphertext and puts the result into plaintext.
-// Plaintext and ciphertext may be the same slice but should not overlap.
+// Plaintext and ciphertext must overlap entirely or not at all.
 // Sectors must be a multiple of 16 bytes and less than 2²⁴ bytes.
 func (c *Cipher) Decrypt(plaintext, ciphertext []byte, sectorNum uint64) {
 	if len(plaintext) < len(ciphertext) {
@@ -94,6 +99,9 @@ func (c *Cipher) Decrypt(plaintext, ciphertext []byte, sectorNum uint64) {
 	}
 	if len(ciphertext)%blockSize != 0 {
 		panic("xts: ciphertext is not a multiple of the block size")
+	}
+	if subtle.InexactOverlap(plaintext[:len(ciphertext)], ciphertext) {
+		panic("xts: invalid buffer overlap")
 	}
 
 	var tweak [blockSize]byte

@@ -17,8 +17,118 @@ package azure
 
 import (
 	"encoding/json"
+	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path"
+	"path/filepath"
+	"runtime"
 	"testing"
 )
+
+// This correlates to the expected contents of ./testdata/test_environment_1.json
+var testEnvironment1 = Environment{
+	Name:                         "--unit-test--",
+	ManagementPortalURL:          "--management-portal-url",
+	PublishSettingsURL:           "--publish-settings-url--",
+	ServiceManagementEndpoint:    "--service-management-endpoint--",
+	ResourceManagerEndpoint:      "--resource-management-endpoint--",
+	ActiveDirectoryEndpoint:      "--active-directory-endpoint--",
+	GalleryEndpoint:              "--gallery-endpoint--",
+	KeyVaultEndpoint:             "--key-vault--endpoint--",
+	GraphEndpoint:                "--graph-endpoint--",
+	StorageEndpointSuffix:        "--storage-endpoint-suffix--",
+	SQLDatabaseDNSSuffix:         "--sql-database-dns-suffix--",
+	TrafficManagerDNSSuffix:      "--traffic-manager-dns-suffix--",
+	KeyVaultDNSSuffix:            "--key-vault-dns-suffix--",
+	ServiceBusEndpointSuffix:     "--service-bus-endpoint-suffix--",
+	ServiceManagementVMDNSSuffix: "--asm-vm-dns-suffix--",
+	ResourceManagerVMDNSSuffix:   "--arm-vm-dns-suffix--",
+	ContainerRegistryDNSSuffix:   "--container-registry-dns-suffix--",
+	TokenAudience:                "--token-audience",
+}
+
+func TestEnvironment_EnvironmentFromURL_NoOverride_Success(t *testing.T) {
+	fileContents, _ := ioutil.ReadFile(filepath.Join("testdata", "test_metadata_environment_1.json"))
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fileContents))
+	}))
+	defer ts.Close()
+
+	got, err := EnvironmentFromURL(ts.URL)
+
+	if err != nil {
+		t.Error(err)
+	}
+	if got.Name != "HybridEnvironment" {
+		t.Logf("got: %v want: HybridEnvironment", got.Name)
+		t.Fail()
+	}
+}
+
+func TestEnvironment_EnvironmentFromURL_OverrideStorageSuffix_Success(t *testing.T) {
+	fileContents, _ := ioutil.ReadFile(filepath.Join("testdata", "test_metadata_environment_1.json"))
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fileContents))
+	}))
+	defer ts.Close()
+	overrideProperty := OverrideProperty{
+		Key:   EnvironmentStorageEndpointSuffix,
+		Value: "fakeStorageSuffix",
+	}
+	got, err := EnvironmentFromURL(ts.URL, overrideProperty)
+
+	if err != nil {
+		t.Error(err)
+	}
+	if got.StorageEndpointSuffix != "fakeStorageSuffix" {
+		t.Logf("got: %v want: fakeStorageSuffix", got.StorageEndpointSuffix)
+		t.Fail()
+	}
+}
+
+func TestEnvironment_EnvironmentFromURL_EmptyEndpoint_Failure(t *testing.T) {
+	_, err := EnvironmentFromURL("")
+
+	if err == nil {
+		t.Fail()
+	}
+	if err.Error() != "Metadata resource manager endpoint is empty" {
+		t.Fail()
+	}
+}
+
+func TestEnvironment_EnvironmentFromFile(t *testing.T) {
+	got, err := EnvironmentFromFile(filepath.Join("testdata", "test_environment_1.json"))
+	if err != nil {
+		t.Error(err)
+	}
+
+	if got != testEnvironment1 {
+		t.Logf("got: %v want: %v", got, testEnvironment1)
+		t.Fail()
+	}
+}
+
+func TestEnvironment_EnvironmentFromName_Stack(t *testing.T) {
+	_, currentFile, _, _ := runtime.Caller(0)
+	prevEnvFilepathValue := os.Getenv(EnvironmentFilepathName)
+	os.Setenv(EnvironmentFilepathName, filepath.Join(path.Dir(currentFile), "testdata", "test_environment_1.json"))
+	defer os.Setenv(EnvironmentFilepathName, prevEnvFilepathValue)
+
+	got, err := EnvironmentFromName("AZURESTACKCLOUD")
+	if err != nil {
+		t.Error(err)
+	}
+
+	if got != testEnvironment1 {
+		t.Logf("got: %v want: %v", got, testEnvironment1)
+		t.Fail()
+	}
+}
 
 func TestEnvironmentFromName(t *testing.T) {
 	name := "azurechinacloud"
@@ -73,6 +183,7 @@ func TestDeserializeEnvironment(t *testing.T) {
 		"ActiveDirectoryEndpoint": "--active-directory-endpoint--",
 		"galleryEndpoint": "--gallery-endpoint--",
 		"graphEndpoint": "--graph-endpoint--",
+		"serviceBusEndpoint": "--service-bus-endpoint--",
 		"keyVaultDNSSuffix": "--key-vault-dns-suffix--",
 		"keyVaultEndpoint": "--key-vault-endpoint--",
 		"managementPortalURL": "--management-portal-url--",
@@ -118,6 +229,9 @@ func TestDeserializeEnvironment(t *testing.T) {
 	if "--key-vault-endpoint--" != testSubject.KeyVaultEndpoint {
 		t.Errorf("Expected KeyVaultEndpoint to be \"--key-vault-endpoint--\", but got %q", testSubject.KeyVaultEndpoint)
 	}
+	if "--service-bus-endpoint--" != testSubject.ServiceBusEndpoint {
+		t.Errorf("Expected ServiceBusEndpoint to be \"--service-bus-endpoint--\", but goet %q", testSubject.ServiceBusEndpoint)
+	}
 	if "--graph-endpoint--" != testSubject.GraphEndpoint {
 		t.Errorf("Expected GraphEndpoint to be \"--graph-endpoint--\", but got %q", testSubject.GraphEndpoint)
 	}
@@ -155,6 +269,7 @@ func TestRoundTripSerialization(t *testing.T) {
 		GalleryEndpoint:              "--gallery-endpoint--",
 		KeyVaultEndpoint:             "--key-vault--endpoint--",
 		GraphEndpoint:                "--graph-endpoint--",
+		ServiceBusEndpoint:           "--service-bus-endpoint--",
 		StorageEndpointSuffix:        "--storage-endpoint-suffix--",
 		SQLDatabaseDNSSuffix:         "--sql-database-dns-suffix--",
 		TrafficManagerDNSSuffix:      "--traffic-manager-dns-suffix--",
@@ -196,6 +311,9 @@ func TestRoundTripSerialization(t *testing.T) {
 	}
 	if env.GalleryEndpoint != testSubject.GalleryEndpoint {
 		t.Errorf("Expected GalleryEndpoint to be %q, but got %q", env.GalleryEndpoint, testSubject.GalleryEndpoint)
+	}
+	if env.ServiceBusEndpoint != testSubject.ServiceBusEndpoint {
+		t.Errorf("Expected ServiceBusEnpoint to be %q, but got %q", env.ServiceBusEndpoint, testSubject.ServiceBusEndpoint)
 	}
 	if env.KeyVaultEndpoint != testSubject.KeyVaultEndpoint {
 		t.Errorf("Expected KeyVaultEndpoint to be %q, but got %q", env.KeyVaultEndpoint, testSubject.KeyVaultEndpoint)

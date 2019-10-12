@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Copyright 2016 The Kubernetes Authors.
 #
@@ -33,10 +33,12 @@ source "${KUBE_ROOT}/cluster/gce/gci/helper.sh"
 function create-master-instance {
   local address=""
   [[ -n ${1:-} ]] && address="${1}"
+  local internal_address=""
+  [[ -n ${2:-} ]] && internal_address="${2}"
 
   write-master-env
   ensure-gci-metadata-files
-  create-master-instance-internal "${MASTER_NAME}" "${address}"
+  create-master-instance-internal "${MASTER_NAME}" "${address}" "${internal_address}"
 }
 
 function replicate-master-instance() {
@@ -62,14 +64,55 @@ function replicate-master-instance() {
   kube_env="$(echo "${kube_env}" | grep -v "ETCD_PEER_CERT")"
   kube_env="$(echo -e "${kube_env}\nETCD_PEER_CERT: '${ETCD_PEER_CERT_BASE64}'")"
 
+  local master_certs="$(get-metadata "${existing_master_zone}" "${existing_master_name}" kube-master-certs)"
+
+  ETCD_APISERVER_CA_KEY="$(echo "${master_certs}" | grep "ETCD_APISERVER_CA_KEY" |  sed "s/^.*: '//" | sed "s/'$//")"
+  ETCD_APISERVER_CA_CERT="$(echo "${master_certs}" | grep "ETCD_APISERVER_CA_CERT" |  sed "s/^.*: '//" | sed "s/'$//")"
+  create-etcd-apiserver-certs "etcd-${REPLICA_NAME}" "${REPLICA_NAME}" "${ETCD_APISERVER_CA_CERT}" "${ETCD_APISERVER_CA_KEY}"
+
+  master_certs="$(echo "${master_certs}" | grep -v "ETCD_APISERVER_SERVER_KEY")"
+  master_certs="$(echo -e "${master_certs}\nETCD_APISERVER_SERVER_KEY: '${ETCD_APISERVER_SERVER_KEY_BASE64}'")"
+  master_certs="$(echo "${master_certs}" | grep -v "ETCD_APISERVER_SERVER_CERT")"
+  master_certs="$(echo -e "${master_certs}\nETCD_APISERVER_SERVER_CERT: '${ETCD_APISERVER_SERVER_CERT_BASE64}'")"
+  master_certs="$(echo "${master_certs}" | grep -v "ETCD_APISERVER_CLIENT_KEY")"
+  master_certs="$(echo -e "${master_certs}\nETCD_APISERVER_CLIENT_KEY: '${ETCD_APISERVER_CLIENT_KEY_BASE64}'")"
+  master_certs="$(echo "${master_certs}" | grep -v "ETCD_APISERVER_CLIENT_CERT")"
+  master_certs="$(echo -e "${master_certs}\nETCD_APISERVER_CLIENT_CERT: '${ETCD_APISERVER_CLIENT_CERT_BASE64}'")"
+
   echo "${kube_env}" > ${KUBE_TEMP}/master-kube-env.yaml
+  echo "${master_certs}" > ${KUBE_TEMP}/kube-master-certs.yaml
   get-metadata "${existing_master_zone}" "${existing_master_name}" cluster-name > "${KUBE_TEMP}/cluster-name.txt"
   get-metadata "${existing_master_zone}" "${existing_master_name}" gci-update-strategy > "${KUBE_TEMP}/gci-update.txt"
   get-metadata "${existing_master_zone}" "${existing_master_name}" gci-ensure-gke-docker > "${KUBE_TEMP}/gci-ensure-gke-docker.txt"
   get-metadata "${existing_master_zone}" "${existing_master_name}" gci-docker-version > "${KUBE_TEMP}/gci-docker-version.txt"
-  get-metadata "${existing_master_zone}" "${existing_master_name}" kube-master-certs > "${KUBE_TEMP}/kube-master-certs.yaml"
+  get-metadata "${existing_master_zone}" "${existing_master_name}" cluster-location > "${KUBE_TEMP}/cluster-location.txt"
 
   create-master-instance-internal "${REPLICA_NAME}"
+}
+
+
+# run-gcloud-command runs a given command over ssh with retries.
+function run-gcloud-command() {
+  local master_name="${1}"
+  local zone="${2}"
+  local command="${3}"
+
+  local retries=5
+  local sleep_sec=10
+
+  local result=""
+
+  for attempt in $(seq 1 ${retries}); do
+    if result=$(gcloud compute ssh "${master_name}" --project "${PROJECT}" --zone "${zone}" --command "${command}" -- -oConnectTimeout=60 2>&1); then
+      echo "Successfully executed '${command}' on ${master_name}"
+      return 0
+    fi
+
+    sleep "${sleep_sec}"
+  done
+  echo "Failed to execute '${command}' on ${master_name} despite ${retries} attempts" >&2
+  echo "Last attempt failed with: ${result}" >&2
+  return 1
 }
 
 
@@ -82,30 +125,38 @@ function create-master-instance-internal() {
     retries=30
     sleep_sec=60
   fi
-  if [[ "${ENABLE_IP_ALIASES:-}" == 'true' ]]; then
-    gcloud="gcloud beta"
-  fi
 
   local -r master_name="${1}"
   local -r address="${2:-}"
+  local -r internal_address="${3:-}"
 
   local preemptible_master=""
   if [[ "${PREEMPTIBLE_MASTER:-}" == "true" ]]; then
     preemptible_master="--preemptible --maintenance-policy TERMINATE"
   fi
 
+  local enable_ip_aliases
+  if [[ "${NODE_IPAM_MODE:-}" == "CloudAllocator" ]]; then
+    enable_ip_aliases=true
+  else
+    enable_ip_aliases=false
+  fi
+
   local network=$(make-gcloud-network-argument \
     "${NETWORK_PROJECT}" "${REGION}" "${NETWORK}" "${SUBNETWORK:-}" \
-    "${address:-}" "${ENABLE_IP_ALIASES:-}" "${IP_ALIAS_SIZE:-}")
+    "${address:-}" "${enable_ip_aliases:-}" "${IP_ALIAS_SIZE:-}")
 
   local metadata="kube-env=${KUBE_TEMP}/master-kube-env.yaml"
+  metadata="${metadata},kubelet-config=${KUBE_TEMP}/master-kubelet-config.yaml"
   metadata="${metadata},user-data=${KUBE_ROOT}/cluster/gce/gci/master.yaml"
   metadata="${metadata},configure-sh=${KUBE_ROOT}/cluster/gce/gci/configure.sh"
+  metadata="${metadata},cluster-location=${KUBE_TEMP}/cluster-location.txt"
   metadata="${metadata},cluster-name=${KUBE_TEMP}/cluster-name.txt"
   metadata="${metadata},gci-update-strategy=${KUBE_TEMP}/gci-update.txt"
   metadata="${metadata},gci-ensure-gke-docker=${KUBE_TEMP}/gci-ensure-gke-docker.txt"
   metadata="${metadata},gci-docker-version=${KUBE_TEMP}/gci-docker-version.txt"
   metadata="${metadata},kube-master-certs=${KUBE_TEMP}/kube-master-certs.yaml"
+  metadata="${metadata},cluster-location=${KUBE_TEMP}/cluster-location.txt"
   metadata="${metadata},${MASTER_EXTRA_METADATA}"
 
   local disk="name=${master_name}-pd"
@@ -130,6 +181,10 @@ function create-master-instance-internal() {
       ${preemptible_master} \
       ${network} 2>&1); then
       echo "${result}" >&2
+
+      if [[ -n "${internal_address:-}" ]]; then
+        attach-internal-master-ip "${master_name}" "${ZONE}" "${internal_address}"
+      fi
       return 0
     else
       echo "${result}" >&2

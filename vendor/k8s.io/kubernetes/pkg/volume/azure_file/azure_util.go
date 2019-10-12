@@ -1,3 +1,5 @@
+// +build !providerless
+
 /*
 Copyright 2016 The Kubernetes Authors.
 
@@ -29,9 +31,10 @@ import (
 const (
 	fileMode        = "file_mode"
 	dirMode         = "dir_mode"
+	gid             = "gid"
 	vers            = "vers"
-	defaultFileMode = "0700"
-	defaultDirMode  = "0700"
+	defaultFileMode = "0777"
+	defaultDirMode  = "0777"
 	defaultVers     = "3.0"
 )
 
@@ -50,7 +53,7 @@ func (s *azureSvc) GetAzureCredentials(host volume.VolumeHost, nameSpace, secret
 		return "", "", fmt.Errorf("Cannot get kube client")
 	}
 
-	keys, err := kubeClient.Core().Secrets(nameSpace).Get(secretName, metav1.GetOptions{})
+	keys, err := kubeClient.CoreV1().Secrets(nameSpace).Get(secretName, metav1.GetOptions{})
 	if err != nil {
 		return "", "", fmt.Errorf("Couldn't get secret %v/%v", nameSpace, secretName)
 	}
@@ -65,6 +68,7 @@ func (s *azureSvc) GetAzureCredentials(host volume.VolumeHost, nameSpace, secret
 	if accountName == "" || accountKey == "" {
 		return "", "", fmt.Errorf("Invalid %v/%v, couldn't extract azurestorageaccountname or azurestorageaccountkey", nameSpace, secretName)
 	}
+	accountName = strings.TrimSpace(accountName)
 	return accountName, accountKey, nil
 }
 
@@ -85,7 +89,7 @@ func (s *azureSvc) SetAzureCredentials(host volume.VolumeHost, nameSpace, accoun
 		},
 		Type: "Opaque",
 	}
-	_, err := kubeClient.Core().Secrets(nameSpace).Create(secret)
+	_, err := kubeClient.CoreV1().Secrets(nameSpace).Create(secret)
 	if errors.IsAlreadyExists(err) {
 		err = nil
 	}
@@ -95,11 +99,12 @@ func (s *azureSvc) SetAzureCredentials(host volume.VolumeHost, nameSpace, accoun
 	return secretName, err
 }
 
-// check whether mountOptions contain file_mode and dir_mode, if not, append default mode
-func appendDefaultMountOptions(mountOptions []string) []string {
+// check whether mountOptions contain file_mode, dir_mode, vers, gid, if not, append default mode
+func appendDefaultMountOptions(mountOptions []string, fsGroup *int64) []string {
 	fileModeFlag := false
 	dirModeFlag := false
 	versFlag := false
+	gidFlag := false
 
 	for _, mountOption := range mountOptions {
 		if strings.HasPrefix(mountOption, fileMode) {
@@ -110,6 +115,9 @@ func appendDefaultMountOptions(mountOptions []string) []string {
 		}
 		if strings.HasPrefix(mountOption, vers) {
 			versFlag = true
+		}
+		if strings.HasPrefix(mountOption, gid) {
+			gidFlag = true
 		}
 	}
 
@@ -124,6 +132,10 @@ func appendDefaultMountOptions(mountOptions []string) []string {
 
 	if !versFlag {
 		allMountOptions = append(allMountOptions, fmt.Sprintf("%s=%s", vers, defaultVers))
+	}
+
+	if !gidFlag && fsGroup != nil {
+		allMountOptions = append(allMountOptions, fmt.Sprintf("%s=%d", gid, *fsGroup))
 	}
 	return allMountOptions
 }

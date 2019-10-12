@@ -18,17 +18,19 @@ package benchmark
 
 import (
 	"fmt"
-	"github.com/golang/glog"
-	"k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/kubernetes/plugin/pkg/scheduler"
-	testutils "k8s.io/kubernetes/test/utils"
 	"math"
 	"strconv"
 	"testing"
 	"time"
+
+	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers/core/v1"
+	"k8s.io/klog"
+	"k8s.io/kubernetes/pkg/scheduler/factory"
+	testutils "k8s.io/kubernetes/test/utils"
 )
 
 const (
@@ -49,10 +51,6 @@ var (
 	baseNodeTemplate = &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "sample-node-",
-		},
-		Spec: v1.NodeSpec{
-			// TODO: investigate why this is needed.
-			ExternalID: "foo",
 		},
 		Status: v1.NodeStatus{
 			Capacity: v1.ResourceList{
@@ -83,7 +81,7 @@ func TestSchedule100Node3KPods(t *testing.T) {
 	if min < threshold3K {
 		t.Errorf("Failing: Scheduling rate was too low for an interval, we saw rate of %v, which is the allowed minimum of %v ! ", min, threshold3K)
 	} else if min < warning3K {
-		fmt.Printf("Warning: pod scheduling throughput for 3k pods was slow for an interval... Saw a interval with very low (%v) scheduling rate!", min)
+		fmt.Printf("Warning: pod scheduling throughput for 3k pods was slow for an interval... Saw an interval with very low (%v) scheduling rate!", min)
 	} else {
 		fmt.Printf("Minimal observed throughput for 3k pod test: %v\n", min)
 	}
@@ -97,7 +95,7 @@ func TestSchedule100Node3KPods(t *testing.T) {
 // 	}
 // 	config := defaultSchedulerBenchmarkConfig(2000, 60000)
 // 	if min := schedulePods(config); min < threshold60K {
-// 		t.Errorf("To small pod scheduling throughput for 60k pods. Expected %v got %v", threshold60K, min)
+// 		t.Errorf("Too small pod scheduling throughput for 60k pods. Expected %v got %v", threshold60K, min)
 // 	} else {
 // 		fmt.Printf("Minimal observed throughput for 60k pod test: %v\n", min)
 // 	}
@@ -105,22 +103,22 @@ func TestSchedule100Node3KPods(t *testing.T) {
 
 // testConfig contains the some input parameters needed for running test-suite
 type testConfig struct {
-	numPods                   int
-	numNodes                  int
-	mutatedNodeTemplate       *v1.Node
-	mutatedPodTemplate        *v1.Pod
-	schedulerSupportFunctions scheduler.Configurator
-	destroyFunc               func()
+	numPods             int
+	numNodes            int
+	mutatedNodeTemplate *v1.Node
+	mutatedPodTemplate  *v1.Pod
+	schedulerSupport    *factory.ConfigFactoryArgs
+	destroyFunc         func()
 }
 
 // getBaseConfig returns baseConfig after initializing number of nodes and pods.
 func getBaseConfig(nodes int, pods int) *testConfig {
-	schedulerConfigFactory, destroyFunc := mustSetupScheduler()
+	schedulerConfigArgs, destroyFunc := mustSetupScheduler()
 	return &testConfig{
-		schedulerSupportFunctions: schedulerConfigFactory,
-		destroyFunc:               destroyFunc,
-		numNodes:                  nodes,
-		numPods:                   pods,
+		schedulerSupport: schedulerConfigArgs,
+		destroyFunc:      destroyFunc,
+		numNodes:         nodes,
+		numPods:          pods,
 	}
 }
 
@@ -134,17 +132,18 @@ func schedulePods(config *testConfig) int32 {
 	prev := 0
 	// On startup there may be a latent period where NO scheduling occurs (qps = 0).
 	// We are interested in low scheduling rates (i.e. qps=2),
-	minQps := int32(math.MaxInt32)
+	minQPS := int32(math.MaxInt32)
 	start := time.Now()
+	podLister := config.schedulerSupport.PodInformer.Lister()
 	// Bake in time for the first pod scheduling event.
 	for {
 		time.Sleep(50 * time.Millisecond)
-		scheduled, err := config.schedulerSupportFunctions.GetScheduledPodLister().List(labels.Everything())
+		scheduled, err := getScheduledPods(podLister)
 		if err != nil {
-			glog.Fatalf("%v", err)
+			klog.Fatalf("%v", err)
 		}
 		// 30,000 pods -> wait till @ least 300 are scheduled to start measuring.
-		// TODO Find out why sometimes there may be scheduling blips in the beggining.
+		// TODO Find out why sometimes there may be scheduling blips in the beginning.
 		if len(scheduled) > config.numPods/100 {
 			break
 		}
@@ -157,30 +156,48 @@ func schedulePods(config *testConfig) int32 {
 		// This can potentially affect performance of scheduler, since List() is done under mutex.
 		// Listing 10000 pods is an expensive operation, so running it frequently may impact scheduler.
 		// TODO: Setup watch on apiserver and wait until all pods scheduled.
-		scheduled, err := config.schedulerSupportFunctions.GetScheduledPodLister().List(labels.Everything())
+		scheduled, err := getScheduledPods(podLister)
 		if err != nil {
-			glog.Fatalf("%v", err)
+			klog.Fatalf("%v", err)
 		}
 
 		// We will be completed when all pods are done being scheduled.
 		// return the worst-case-scenario interval that was seen during this time.
 		// Note this should never be low due to cold-start, so allow bake in sched time if necessary.
 		if len(scheduled) >= config.numPods {
+			consumed := int(time.Since(start) / time.Second)
+			if consumed <= 0 {
+				consumed = 1
+			}
 			fmt.Printf("Scheduled %v Pods in %v seconds (%v per second on average). min QPS was %v\n",
-				config.numPods, int(time.Since(start)/time.Second), config.numPods/int(time.Since(start)/time.Second), minQps)
-			return minQps
+				config.numPods, consumed, config.numPods/consumed, minQPS)
+			return minQPS
 		}
 
 		// There's no point in printing it for the last iteration, as the value is random
 		qps := len(scheduled) - prev
-		qpsStats[qps] += 1
-		if int32(qps) < minQps {
-			minQps = int32(qps)
+		qpsStats[qps]++
+		if int32(qps) < minQPS {
+			minQPS = int32(qps)
 		}
 		fmt.Printf("%ds\trate: %d\ttotal: %d (qps frequency: %v)\n", time.Since(start)/time.Second, qps, len(scheduled), qpsStats)
 		prev = len(scheduled)
 		time.Sleep(1 * time.Second)
 	}
+}
+
+func getScheduledPods(lister listers.PodLister) ([]*v1.Pod, error) {
+	all, err := lister.List(labels.Everything())
+	if err != nil {
+		return nil, err
+	}
+	scheduled := make([]*v1.Pod, 0, len(all))
+	for _, pod := range all {
+		if len(pod.Spec.NodeName) > 0 {
+			scheduled = append(scheduled, pod)
+		}
+	}
+	return scheduled, nil
 }
 
 // mutateNodeTemplate returns the modified node needed for creation of nodes.
@@ -220,19 +237,17 @@ func (na nodeAffinity) mutatePodTemplate(pod *v1.Pod) {
 // generateNodes generates nodes to be used for scheduling.
 func (inputConfig *schedulerPerfConfig) generateNodes(config *testConfig) {
 	for i := 0; i < inputConfig.NodeCount; i++ {
-		config.schedulerSupportFunctions.GetClient().CoreV1().Nodes().Create(config.mutatedNodeTemplate)
-
+		config.schedulerSupport.Client.CoreV1().Nodes().Create(config.mutatedNodeTemplate)
 	}
 	for i := 0; i < config.numNodes-inputConfig.NodeCount; i++ {
-		config.schedulerSupportFunctions.GetClient().CoreV1().Nodes().Create(baseNodeTemplate)
-
+		config.schedulerSupport.Client.CoreV1().Nodes().Create(baseNodeTemplate)
 	}
 }
 
 // generatePods generates pods to be used for scheduling.
 func (inputConfig *schedulerPerfConfig) generatePods(config *testConfig) {
-	testutils.CreatePod(config.schedulerSupportFunctions.GetClient(), "sample", inputConfig.PodCount, config.mutatedPodTemplate)
-	testutils.CreatePod(config.schedulerSupportFunctions.GetClient(), "sample", config.numPods-inputConfig.PodCount, basePodTemplate)
+	testutils.CreatePod(config.schedulerSupport.Client, "sample", inputConfig.PodCount, config.mutatedPodTemplate)
+	testutils.CreatePod(config.schedulerSupport.Client, "sample", config.numPods-inputConfig.PodCount, basePodTemplate)
 }
 
 // generatePodAndNodeTopology is the wrapper function for modifying both pods and node objects.
@@ -258,7 +273,7 @@ func (inputConfig *schedulerPerfConfig) generatePodAndNodeTopology(config *testC
 }
 
 // writePodAndNodeTopologyToConfig reads a configuration and then applies it to a test configuration.
-//TODO: As of now, this function is not doing anything expect for reading input values to priority structs.
+//TODO: As of now, this function is not doing anything except for reading input values to priority structs.
 func writePodAndNodeTopologyToConfig(config *testConfig) error {
 	// High Level structure that should be filled for every predicate or priority.
 	inputConfig := &schedulerPerfConfig{

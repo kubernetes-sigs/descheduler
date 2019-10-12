@@ -21,19 +21,14 @@ import (
 	"io/ioutil"
 	"os"
 
+	cmdsanity "k8s.io/kubectl/pkg/cmd/util/sanity"
 	"k8s.io/kubernetes/pkg/kubectl/cmd"
-	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
-	cmdsanity "k8s.io/kubernetes/pkg/kubectl/cmd/util/sanity"
-)
-
-var (
-	skip = []string{}
 )
 
 func main() {
 	var errorCount int
 
-	kubectl := cmd.NewKubectlCommand(cmdutil.NewFactory(nil), os.Stdin, ioutil.Discard, ioutil.Discard)
+	kubectl := cmd.NewKubectlCommand(os.Stdin, ioutil.Discard, ioutil.Discard)
 	errors := cmdsanity.RunCmdChecks(kubectl, cmdsanity.AllCmdChecks, []string{})
 	for _, err := range errors {
 		errorCount++

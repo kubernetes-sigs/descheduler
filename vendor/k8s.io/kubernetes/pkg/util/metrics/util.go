@@ -19,26 +19,19 @@ package metrics
 import (
 	"fmt"
 	"sync"
-	"time"
 
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/flowcontrol"
-
-	"github.com/golang/glog"
-	"github.com/prometheus/client_golang/prometheus"
-)
-
-const (
-	updatePeriod = 5 * time.Second
+	"k8s.io/component-base/metrics"
+	"k8s.io/component-base/metrics/legacyregistry"
 )
 
 var (
 	metricsLock        sync.Mutex
-	rateLimiterMetrics = make(map[string]rateLimiterMetric)
+	rateLimiterMetrics = make(map[string]*rateLimiterMetric)
 )
 
 type rateLimiterMetric struct {
-	metric prometheus.Gauge
+	metric metrics.GaugeMetric
 	stopCh chan struct{}
 }
 
@@ -47,18 +40,20 @@ func registerRateLimiterMetric(ownerName string) error {
 	defer metricsLock.Unlock()
 
 	if _, ok := rateLimiterMetrics[ownerName]; ok {
-		return fmt.Errorf("Rate Limiter Metric for %v already registered", ownerName)
+		// only register once in Prometheus. We happen to see an ownerName reused in parallel integration tests.
+		return nil
 	}
-	metric := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:      "rate_limiter_use",
-		Subsystem: ownerName,
-		Help:      fmt.Sprintf("A metric measuring the saturation of the rate limiter for %v", ownerName),
+	metric := metrics.NewGauge(&metrics.GaugeOpts{
+		Name:           "rate_limiter_use",
+		Subsystem:      ownerName,
+		Help:           fmt.Sprintf("A metric measuring the saturation of the rate limiter for %v", ownerName),
+		StabilityLevel: metrics.ALPHA,
 	})
-	if err := prometheus.Register(metric); err != nil {
+	if err := legacyregistry.Register(metric); err != nil {
 		return fmt.Errorf("error registering rate limiter usage metric: %v", err)
 	}
 	stopCh := make(chan struct{})
-	rateLimiterMetrics[ownerName] = rateLimiterMetric{
+	rateLimiterMetrics[ownerName] = &rateLimiterMetric{
 		metric: metric,
 		stopCh: stopCh,
 	}
@@ -71,29 +66,12 @@ func RegisterMetricAndTrackRateLimiterUsage(ownerName string, rateLimiter flowco
 	if err := registerRateLimiterMetric(ownerName); err != nil {
 		return err
 	}
-	go wait.Until(func() {
-		metricsLock.Lock()
-		defer metricsLock.Unlock()
-		rateLimiterMetrics[ownerName].metric.Set(rateLimiter.Saturation())
-	}, updatePeriod, rateLimiterMetrics[ownerName].stopCh)
+	// TODO: determine how to track rate limiter saturation
+	// See discussion at https://go-review.googlesource.com/c/time/+/29958#message-4caffc11669cadd90e2da4c05122cfec50ea6a22
+	// go wait.Until(func() {
+	//   metricsLock.Lock()
+	//   defer metricsLock.Unlock()
+	//   rateLimiterMetrics[ownerName].metric.Set()
+	// }, updatePeriod, rateLimiterMetrics[ownerName].stopCh)
 	return nil
-}
-
-// UnregisterMetricAndUntrackRateLimiterUsage unregisters a metric ownerName_rate_limiter_use from prometheus and
-// stops the goroutine that updates this metric
-func UnregisterMetricAndUntrackRateLimiterUsage(ownerName string) bool {
-	metricsLock.Lock()
-	defer metricsLock.Unlock()
-
-	rlm, ok := rateLimiterMetrics[ownerName]
-	if !ok {
-		glog.Warningf("Rate Limiter Metric for %v not registered", ownerName)
-		return false
-	}
-
-	close(rlm.stopCh)
-	prometheus.Unregister(rlm.metric)
-	delete(rateLimiterMetrics, ownerName)
-
-	return true
 }
