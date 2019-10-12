@@ -19,7 +19,7 @@ package qos
 import (
 	"testing"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/pkg/apis/core"
@@ -39,21 +39,8 @@ func TestGetPodQOS(t *testing.T) {
 			expected: v1.PodQOSGuaranteed,
 		},
 		{
-			pod: newPod("guaranteed-with-gpu", []v1.Container{
-				newContainer("guaranteed", getResourceList("100m", "100Mi"), addResource("nvidia-gpu", "2", getResourceList("100m", "100Mi"))),
-			}),
-			expected: v1.PodQOSGuaranteed,
-		},
-		{
 			pod: newPod("guaranteed-guaranteed", []v1.Container{
 				newContainer("guaranteed", getResourceList("100m", "100Mi"), getResourceList("100m", "100Mi")),
-				newContainer("guaranteed", getResourceList("100m", "100Mi"), getResourceList("100m", "100Mi")),
-			}),
-			expected: v1.PodQOSGuaranteed,
-		},
-		{
-			pod: newPod("guaranteed-guaranteed-with-gpu", []v1.Container{
-				newContainer("guaranteed", getResourceList("100m", "100Mi"), addResource("nvidia-gpu", "2", getResourceList("100m", "100Mi"))),
 				newContainer("guaranteed", getResourceList("100m", "100Mi"), getResourceList("100m", "100Mi")),
 			}),
 			expected: v1.PodQOSGuaranteed,
@@ -66,28 +53,21 @@ func TestGetPodQOS(t *testing.T) {
 			expected: v1.PodQOSBestEffort,
 		},
 		{
-			pod: newPod("best-effort-best-effort-with-gpu", []v1.Container{
-				newContainer("best-effort", getResourceList("", ""), addResource("nvidia-gpu", "2", getResourceList("", ""))),
+			pod: newPod("best-effort", []v1.Container{
 				newContainer("best-effort", getResourceList("", ""), getResourceList("", "")),
 			}),
 			expected: v1.PodQOSBestEffort,
 		},
 		{
-			pod: newPod("best-effort-with-gpu", []v1.Container{
-				newContainer("best-effort", getResourceList("", ""), addResource("nvidia-gpu", "2", getResourceList("", ""))),
-			}),
-			expected: v1.PodQOSBestEffort,
-		},
-		{
 			pod: newPod("best-effort-burstable", []v1.Container{
-				newContainer("best-effort", getResourceList("", ""), addResource("nvidia-gpu", "2", getResourceList("", ""))),
+				newContainer("best-effort", getResourceList("", ""), getResourceList("", "")),
 				newContainer("burstable", getResourceList("1", ""), getResourceList("2", "")),
 			}),
 			expected: v1.PodQOSBurstable,
 		},
 		{
 			pod: newPod("best-effort-guaranteed", []v1.Container{
-				newContainer("best-effort", getResourceList("", ""), addResource("nvidia-gpu", "2", getResourceList("", ""))),
+				newContainer("best-effort", getResourceList("", ""), getResourceList("", "")),
 				newContainer("guaranteed", getResourceList("10m", "100Mi"), getResourceList("10m", "100Mi")),
 			}),
 			expected: v1.PodQOSBurstable,
@@ -126,14 +106,24 @@ func TestGetPodQOS(t *testing.T) {
 		},
 		{
 			pod: newPod("burstable-2", []v1.Container{
-				newContainer("burstable", getResourceList("0", "0"), addResource("nvidia-gpu", "2", getResourceList("100m", "200Mi"))),
+				newContainer("burstable", getResourceList("0", "0"), getResourceList("100m", "200Mi")),
 			}),
 			expected: v1.PodQOSBurstable,
 		},
 		{
-			pod: newPod("burstable-hugepages", []v1.Container{
-				newContainer("burstable", addResource("hugepages-2Mi", "1Gi", getResourceList("0", "0")), addResource("hugepages-2Mi", "1Gi", getResourceList("0", "0"))),
+			pod: newPod("best-effort-hugepages", []v1.Container{
+				newContainer("best-effort", addResource("hugepages-2Mi", "1Gi", getResourceList("0", "0")), addResource("hugepages-2Mi", "1Gi", getResourceList("0", "0"))),
 			}),
+			expected: v1.PodQOSBestEffort,
+		},
+		{
+			pod: newPodWithInitContainers("init-container",
+				[]v1.Container{
+					newContainer("best-effort", getResourceList("", ""), getResourceList("", "")),
+				},
+				[]v1.Container{
+					newContainer("burstable", getResourceList("10m", "100Mi"), getResourceList("100m", "200Mi")),
+				}),
 			expected: v1.PodQOSBurstable,
 		},
 	}
@@ -189,6 +179,18 @@ func newPod(name string, containers []v1.Container) *v1.Pod {
 		},
 		Spec: v1.PodSpec{
 			Containers: containers,
+		},
+	}
+}
+
+func newPodWithInitContainers(name string, containers []v1.Container, initContainers []v1.Container) *v1.Pod {
+	return &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: v1.PodSpec{
+			Containers:     containers,
+			InitContainers: initContainers,
 		},
 	}
 }

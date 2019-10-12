@@ -1,12 +1,13 @@
-/* // +build testing */
+// comment this out // + build testing
 
-// Copyright (c) 2012-2015 Ugorji Nwoke. All rights reserved.
+// Copyright (c) 2012-2018 Ugorji Nwoke. All rights reserved.
 // Use of this source code is governed by a MIT license found in the LICENSE file.
 
 package codec
 
 // This file contains values used by tests and benchmarks.
-// The benchmarks will test performance against other libraries (encoding/json, json-iterator, bson, gob, etc).
+// The benchmarks will test performance against other libraries
+// (encoding/json, json-iterator, bson, gob, etc).
 // Consequently, we only use values that will parse well in all engines,
 // and only leverage features that work across multiple libraries for a truer comparison.
 // For example,
@@ -17,8 +18,16 @@ package codec
 
 import (
 	"math"
+	"strconv"
 	"strings"
 )
+
+// func init() {
+// 	rt := reflect.TypeOf((*TestStruc)(nil)).Elem()
+// 	defTypeInfos.get(rt2id(rt), rt)
+// }
+
+const numStrUi64T = 32 // use 8, prefer 32, test with 1024
 
 type wrapSliceUint64 []uint64
 type wrapSliceString []string
@@ -26,6 +35,8 @@ type wrapUint64 uint64
 type wrapString string
 type wrapUint64Slice []wrapUint64
 type wrapStringSlice []wrapString
+
+// some other types
 
 type stringUint64T struct {
 	S string
@@ -49,43 +60,32 @@ type AnonInTestStruc struct {
 
 	// use these to test 0-len or nil slices/maps/arrays
 	AI64arr0    [0]int64
-	A164slice0  []int64
+	AI64slice0  []int64
 	AUi64sliceN []uint64
 	AMSU16N     map[string]uint16
 	AMSU16E     map[string]uint16
 }
 
+// testSimpleFields is a sub-set of TestStrucCommon
 type testSimpleFields struct {
 	S string
 
 	I64 int64
-	I32 int32
-	I16 int16
 	I8  int8
 
-	I64n int64
-	I32n int32
-	I16n int16
-	I8n  int8
-
 	Ui64 uint64
-	Ui32 uint32
-	Ui16 uint16
 	Ui8  uint8
 
 	F64 float64
 	F32 float32
 
-	B  bool
-	By uint8 // byte: msgp doesn't like byte
+	B bool
 
 	Sslice    []string
-	I64slice  []int64
 	I16slice  []int16
 	Ui64slice []uint64
 	Ui8slice  []uint8
 	Bslice    []bool
-	Byslice   []byte
 
 	Iptrslice []*int64
 
@@ -127,6 +127,8 @@ type TestStrucCommon struct {
 	Bslice    []bool
 	Byslice   []byte
 
+	BytesSlice [][]byte
+
 	Iptrslice []*int64
 
 	WrapSliceInt64  wrapSliceUint64
@@ -134,9 +136,12 @@ type TestStrucCommon struct {
 
 	Msi64 map[string]int64
 
+	Msbytes map[string][]byte
+
 	Simplef testSimpleFields
 
 	SstrUi64T []stringUint64T
+	MstrUi64T map[string]*stringUint64T
 
 	AnonInTestStruc
 
@@ -225,12 +230,12 @@ func populateTestStrucCommon(ts *TestStrucCommon, n int, bench, useInterface, us
 			math.MaxFloat64, math.SmallestNonzeroFloat64,
 		},
 		AF32slice: []float32{
-			11.11e-11, -11.11e+11,
-			2.222E+12, -2.222E-12,
-			-555.55E-5, 555.55E+5,
-			666.66E-6, -666.66E+6,
-			7777.7777E-7, -7777.7777E-7,
-			-8888.8888E+8, 8888.8888E+8,
+			11.11e-1, -11.11e+1,
+			2.222E+2, -2.222E-2,
+			-55.55E-5, 55.55E+5,
+			66.66E-6, -66.66E+6,
+			777.777E-7, -777.777E-7,
+			-8.88E+8, 8.88E-8,
 			-99999.9999E+9, 99999.9999E+9,
 			// these below are hairy enough to need strconv.ParseFloat
 			33.33E-33, -33.33E+33,
@@ -240,7 +245,7 @@ func populateTestStrucCommon(ts *TestStrucCommon, n int, bench, useInterface, us
 			math.MaxFloat32, math.SmallestNonzeroFloat32,
 		},
 
-		A164slice0:  []int64{},
+		AI64slice0:  []int64{},
 		AUi64sliceN: nil,
 		AMSU16N:     nil,
 		AMSU16E:     map[string]uint16{},
@@ -280,26 +285,26 @@ func populateTestStrucCommon(ts *TestStrucCommon, n int, bench, useInterface, us
 		Ui8slice:  []uint8{210, 211, 212},
 		Bslice:    []bool{true, false, true, false},
 		Byslice:   []byte{13, 14, 15},
-
+		BytesSlice: [][]byte{
+			[]byte(strRpt(n, "one")),
+			[]byte(strRpt(n, "two")),
+			[]byte(strRpt(n, "\"three\"")),
+		},
 		Msi64: map[string]int64{
 			strRpt(n, "one"):       1,
 			strRpt(n, "two"):       2,
 			strRpt(n, "\"three\""): 3,
 		},
-
+		Msbytes: map[string][]byte{
+			strRpt(n, "one"):       []byte(strRpt(n, "one")),
+			strRpt(n, "two"):       []byte(strRpt(n, "two")),
+			strRpt(n, "\"three\""): []byte(strRpt(n, "\"three\"")),
+		},
 		WrapSliceInt64:  []uint64{4, 16, 64, 256},
 		WrapSliceString: []string{strRpt(n, "4"), strRpt(n, "16"), strRpt(n, "64"), strRpt(n, "256")},
 
 		// R: Raw([]byte("goodbye")),
 		// Rext: RawExt{ 120, []byte("hello"), }, // TODO: don't set this - it's hard to test
-
-		// DecodeNaked bombs here, because the stringUint64T is decoded as a map,
-		// and a map cannot be the key type of a map.
-		// Thus, don't initialize this here.
-		// Msu2wss: map[stringUint64T]wrapStringSlice{
-		// 	{"5", 5}: []wrapString{"1", "2", "3", "4", "5"},
-		// 	{"3", 3}: []wrapString{"1", "2", "3"},
-		// },
 
 		// make Simplef same as top-level
 		// TODO: should this have slightly different values???
@@ -307,33 +312,22 @@ func populateTestStrucCommon(ts *TestStrucCommon, n int, bench, useInterface, us
 			S: strRpt(n, `some really really cool names that are nigerian and american like "ugorji melody nwoke" - get it? `),
 
 			// set the numbers close to the limits
-			I8:   math.MaxInt8 * 2 / 3,  // 8,
-			I8n:  math.MinInt8 * 2 / 3,  // 8,
-			I16:  math.MaxInt16 * 2 / 3, // 16,
-			I16n: math.MinInt16 * 2 / 3, // 16,
-			I32:  math.MaxInt32 * 2 / 3, // 32,
-			I32n: math.MinInt32 * 2 / 3, // 32,
-			I64:  math.MaxInt64 * 2 / 3, // 64,
-			I64n: math.MinInt64 * 2 / 3, // 64,
+			I8:  math.MaxInt8 * 2 / 3,  // 8,
+			I64: math.MaxInt64 * 2 / 3, // 64,
 
 			Ui64: math.MaxUint64 * 2 / 3, // 64
-			Ui32: math.MaxUint32 * 2 / 3, // 32
-			Ui16: math.MaxUint16 * 2 / 3, // 16
 			Ui8:  math.MaxUint8 * 2 / 3,  // 8
 
 			F32: 3.402823e+38, // max representable float32 without losing precision
 			F64: 3.40281991833838838338e+53,
 
-			B:  true,
-			By: 5,
+			B: true,
 
 			Sslice:    []string{strRpt(n, "one"), strRpt(n, "two"), strRpt(n, "three")},
-			I64slice:  []int64{1111, 2222, 3333},
 			I16slice:  []int16{44, 55, 66},
 			Ui64slice: []uint64{12121212, 34343434, 56565656},
 			Ui8slice:  []uint8{210, 211, 212},
 			Bslice:    []bool{true, false, true, false},
-			Byslice:   []byte{13, 14, 15},
 
 			Msi64: map[string]int64{
 				strRpt(n, "one"):       1,
@@ -345,9 +339,16 @@ func populateTestStrucCommon(ts *TestStrucCommon, n int, bench, useInterface, us
 			WrapSliceString: []string{strRpt(n, "4"), strRpt(n, "16"), strRpt(n, "64"), strRpt(n, "256")},
 		},
 
-		SstrUi64T:       []stringUint64T{{"1", 1}, {"2", 2}, {"3", 3}, {"4", 4}},
+		SstrUi64T:       make([]stringUint64T, numStrUi64T), // {{"1", 1}, {"2", 2}, {"3", 3}, {"4", 4}},
+		MstrUi64T:       make(map[string]*stringUint64T, numStrUi64T),
 		AnonInTestStruc: a,
 		NotAnon:         a,
+	}
+
+	for i := uint64(0); i < numStrUi64T; i++ {
+		ss := strings.Repeat(strconv.FormatUint(i, 10), int(i)) // 4)
+		ts.SstrUi64T[i] = stringUint64T{S: ss, U: i}
+		ts.MstrUi64T[ss] = &ts.SstrUi64T[i]
 	}
 
 	if bench {
@@ -367,6 +368,7 @@ func populateTestStrucCommon(ts *TestStrucCommon, n int, bench, useInterface, us
 		// ts.Iptrslice = nil
 	}
 	if !useStringKeyOnly {
+		var _ byte = 0 // so this empty branch doesn't flag a warning
 		// ts.AnonInTestStruc.AMU32F64 = map[uint32]float64{1: 1, 2: 2, 3: 3} // Json/Bson barf
 	}
 }

@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"reflect"
 	"strings"
 
 	restful "github.com/emicklei/go-restful"
@@ -32,8 +31,6 @@ import (
 
 const (
 	OpenAPIVersion = "2.0"
-	// TODO: Make this configurable.
-	extensionPrefix = "x-kubernetes-"
 )
 
 type openAPI struct {
@@ -45,27 +42,59 @@ type openAPI struct {
 
 // BuildOpenAPISpec builds OpenAPI spec given a list of webservices (containing routes) and common.Config to customize it.
 func BuildOpenAPISpec(webServices []*restful.WebService, config *common.Config) (*spec.Swagger, error) {
+	o := newOpenAPI(config)
+	err := o.buildPaths(webServices)
+	if err != nil {
+		return nil, err
+	}
+	return o.finalizeSwagger()
+}
+
+// BuildOpenAPIDefinitionsForResource builds a partial OpenAPI spec given a sample object and common.Config to customize it.
+func BuildOpenAPIDefinitionsForResource(model interface{}, config *common.Config) (*spec.Definitions, error) {
+	o := newOpenAPI(config)
+	// We can discard the return value of toSchema because all we care about is the side effect of calling it.
+	// All the models created for this resource get added to o.swagger.Definitions
+	_, err := o.toSchema(util.GetCanonicalTypeName(model))
+	if err != nil {
+		return nil, err
+	}
+	swagger, err := o.finalizeSwagger()
+	if err != nil {
+		return nil, err
+	}
+	return &swagger.Definitions, nil
+}
+
+// BuildOpenAPIDefinitionsForResources returns the OpenAPI spec which includes the definitions for the
+// passed type names.
+func BuildOpenAPIDefinitionsForResources(config *common.Config, names ...string) (*spec.Swagger, error) {
+	o := newOpenAPI(config)
+	// We can discard the return value of toSchema because all we care about is the side effect of calling it.
+	// All the models created for this resource get added to o.swagger.Definitions
+	for _, name := range names {
+		_, err := o.toSchema(name)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return o.finalizeSwagger()
+}
+
+// newOpenAPI sets up the openAPI object so we can build the spec.
+func newOpenAPI(config *common.Config) openAPI {
 	o := openAPI{
 		config: config,
 		swagger: &spec.Swagger{
 			SwaggerProps: spec.SwaggerProps{
 				Swagger:     OpenAPIVersion,
 				Definitions: spec.Definitions{},
+				Responses:   config.ResponseDefinitions,
 				Paths:       &spec.Paths{Paths: map[string]spec.PathItem{}},
 				Info:        config.Info,
 			},
 		},
 	}
-
-	err := o.init(webServices)
-	if err != nil {
-		return nil, err
-	}
-
-	return o.swagger, nil
-}
-
-func (o *openAPI) init(webServices []*restful.WebService) error {
 	if o.config.GetOperationIDAndTags == nil {
 		o.config.GetOperationIDAndTags = func(r *restful.Route) (string, []string, error) {
 			return r.Operation, nil, nil
@@ -83,33 +112,25 @@ func (o *openAPI) init(webServices []*restful.WebService) error {
 	if o.config.CommonResponses == nil {
 		o.config.CommonResponses = map[int]spec.Response{}
 	}
-	err := o.buildPaths(webServices)
-	if err != nil {
-		return err
-	}
+	return o
+}
+
+// finalizeSwagger is called after the spec is built and returns the final spec.
+// NOTE: finalizeSwagger also make changes to the final spec, as specified in the config.
+func (o *openAPI) finalizeSwagger() (*spec.Swagger, error) {
 	if o.config.SecurityDefinitions != nil {
 		o.swagger.SecurityDefinitions = *o.config.SecurityDefinitions
 		o.swagger.Security = o.config.DefaultSecurity
 	}
 	if o.config.PostProcessSpec != nil {
+		var err error
 		o.swagger, err = o.config.PostProcessSpec(o.swagger)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	return nil
-}
-
-func getCanonicalizeTypeName(t reflect.Type) string {
-	if t.PkgPath() == "" {
-		return t.Name()
-	}
-	path := t.PkgPath()
-	if strings.Contains(path, "/vendor/") {
-		path = path[strings.Index(path, "/vendor/")+len("/vendor/"):]
-	}
-	return path + "." + t.Name()
+	return o.swagger, nil
 }
 
 func (o *openAPI) buildDefinitionRecursively(name string) error {
@@ -131,6 +152,11 @@ func (o *openAPI) buildDefinitionRecursively(name string) error {
 				schema.Extensions[k] = v
 			}
 		}
+		if v, ok := item.Schema.Extensions[common.ExtensionV2Schema]; ok {
+			if v2Schema, isOpenAPISchema := v.(spec.Schema); isOpenAPISchema {
+				schema = v2Schema
+			}
+		}
 		o.swagger.Definitions[uniqueName] = schema
 		for _, v := range item.Dependencies {
 			if err := o.buildDefinitionRecursively(v); err != nil {
@@ -143,15 +169,10 @@ func (o *openAPI) buildDefinitionRecursively(name string) error {
 	return nil
 }
 
-// buildDefinitionForType build a definition for a given type and return a referable name to it's definition.
+// buildDefinitionForType build a definition for a given type and return a referable name to its definition.
 // This is the main function that keep track of definitions used in this spec and is depend on code generated
 // by k8s.io/kubernetes/cmd/libs/go2idl/openapi-gen.
-func (o *openAPI) buildDefinitionForType(sample interface{}) (string, error) {
-	t := reflect.TypeOf(sample)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	name := getCanonicalizeTypeName(t)
+func (o *openAPI) buildDefinitionForType(name string) (string, error) {
 	if err := o.buildDefinitionRecursively(name); err != nil {
 		return "", err
 	}
@@ -252,7 +273,7 @@ func (o *openAPI) buildOperations(route restful.Route, inPathCommonParamsMap map
 		},
 	}
 	for k, v := range route.Metadata {
-		if strings.HasPrefix(k, extensionPrefix) {
+		if strings.HasPrefix(k, common.ExtensionPrefix) {
 			if ret.Extensions == nil {
 				ret.Extensions = spec.Extensions{}
 			}
@@ -302,7 +323,7 @@ func (o *openAPI) buildOperations(route restful.Route, inPathCommonParamsMap map
 }
 
 func (o *openAPI) buildResponse(model interface{}, description string) (spec.Response, error) {
-	schema, err := o.toSchema(model)
+	schema, err := o.toSchema(util.GetCanonicalTypeName(model))
 	if err != nil {
 		return spec.Response{}, err
 	}
@@ -347,8 +368,8 @@ func (o *openAPI) findCommonParameters(routes []restful.Route) (map[interface{}]
 	return commonParamsMap, nil
 }
 
-func (o *openAPI) toSchema(model interface{}) (_ *spec.Schema, err error) {
-	if openAPIType, openAPIFormat := common.GetOpenAPITypeFormat(getCanonicalizeTypeName(reflect.TypeOf(model))); openAPIType != "" {
+func (o *openAPI) toSchema(name string) (_ *spec.Schema, err error) {
+	if openAPIType, openAPIFormat := common.GetOpenAPITypeFormat(name); openAPIType != "" {
 		return &spec.Schema{
 			SchemaProps: spec.SchemaProps{
 				Type:   []string{openAPIType},
@@ -356,7 +377,7 @@ func (o *openAPI) toSchema(model interface{}) (_ *spec.Schema, err error) {
 			},
 		}, nil
 	} else {
-		ref, err := o.buildDefinitionForType(model)
+		ref, err := o.buildDefinitionForType(name)
 		if err != nil {
 			return nil, err
 		}
@@ -380,7 +401,7 @@ func (o *openAPI) buildParameter(restParam restful.ParameterData, bodySample int
 	case restful.BodyParameterKind:
 		if bodySample != nil {
 			ret.In = "body"
-			ret.Schema, err = o.toSchema(bodySample)
+			ret.Schema, err = o.toSchema(util.GetCanonicalTypeName(bodySample))
 			return ret, err
 		} else {
 			// There is not enough information in the body parameter to build the definition.

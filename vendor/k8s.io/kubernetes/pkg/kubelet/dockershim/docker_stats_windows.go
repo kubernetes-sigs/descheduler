@@ -19,49 +19,18 @@ limitations under the License.
 package dockershim
 
 import (
+	"context"
 	"time"
 
-	runtimeapi "k8s.io/kubernetes/pkg/kubelet/apis/cri/v1alpha1/runtime"
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
-// ContainerStats returns stats for a container stats request based on container id.
-func (ds *dockerService) ContainerStats(containerID string) (*runtimeapi.ContainerStats, error) {
-	containerStats, err := ds.getContainerStats(containerID)
-	if err != nil {
-		return nil, err
-	}
-	return containerStats, nil
-}
-
-// ListContainerStats returns stats for a list container stats request based on a filter.
-func (ds *dockerService) ListContainerStats(containerStatsFilter *runtimeapi.ContainerStatsFilter) ([]*runtimeapi.ContainerStats, error) {
-	filter := &runtimeapi.ContainerFilter{}
-
-	if containerStatsFilter != nil {
-		filter.Id = containerStatsFilter.Id
-		filter.PodSandboxId = containerStatsFilter.PodSandboxId
-		filter.LabelSelector = containerStatsFilter.LabelSelector
-	}
-
-	containers, err := ds.ListContainers(filter)
-	if err != nil {
-		return nil, err
-	}
-
-	var stats []*runtimeapi.ContainerStats
-	for _, container := range containers {
-		containerStats, err := ds.getContainerStats(container.Id)
-		if err != nil {
-			return nil, err
-		}
-
-		stats = append(stats, containerStats)
-	}
-
-	return stats, nil
-}
-
 func (ds *dockerService) getContainerStats(containerID string) (*runtimeapi.ContainerStats, error) {
+	info, err := ds.client.Info()
+	if err != nil {
+		return nil, err
+	}
+
 	statsJSON, err := ds.client.GetContainerStats(containerID)
 	if err != nil {
 		return nil, err
@@ -72,10 +41,11 @@ func (ds *dockerService) getContainerStats(containerID string) (*runtimeapi.Cont
 		return nil, err
 	}
 
-	status, err := ds.ContainerStatus(containerID)
+	statusResp, err := ds.ContainerStatus(context.Background(), &runtimeapi.ContainerStatusRequest{ContainerId: containerID})
 	if err != nil {
 		return nil, err
 	}
+	status := statusResp.GetStatus()
 
 	dockerStats := statsJSON.Stats
 	timestamp := time.Now().UnixNano()
@@ -98,6 +68,7 @@ func (ds *dockerService) getContainerStats(containerID string) (*runtimeapi.Cont
 		},
 		WritableLayer: &runtimeapi.FilesystemUsage{
 			Timestamp: timestamp,
+			FsId:      &runtimeapi.FilesystemIdentifier{Mountpoint: info.DockerRootDir},
 			UsedBytes: &runtimeapi.UInt64Value{Value: uint64(*containerJSON.SizeRw)},
 		},
 	}

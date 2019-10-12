@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -229,9 +230,49 @@ func ExampleString() {
 
 func TestStringWithValidString(t *testing.T) {
 	i := 123
-	if String(i) != "123" {
-		t.Fatal("autorest: String method failed to convert integer 123 to string")
+	if got, want := String(i), "123"; got != want {
+		t.Logf("got:  %q\nwant: %q", got, want)
+		t.Fail()
 	}
+}
+
+func TestStringWithStringSlice(t *testing.T) {
+	s := []string{"string1", "string2"}
+	if got, want := String(s, ","), "string1,string2"; got != want {
+		t.Logf("got:  %q\nwant: %q", got, want)
+		t.Fail()
+	}
+}
+
+func TestStringWithEnum(t *testing.T) {
+	type TestEnumType string
+	s := TestEnumType("string1")
+	if got, want := String(s), "string1"; got != want {
+		t.Logf("got:  %q\nwant: %q", got, want)
+		t.Fail()
+	}
+}
+
+func TestStringWithEnumSlice(t *testing.T) {
+	type TestEnumType string
+	s := []TestEnumType{"string1", "string2"}
+	if got, want := String(s, ","), "string1,string2"; got != want {
+		t.Logf("got:  %q\nwant: %q", got, want)
+		t.Fail()
+	}
+}
+
+func ExampleAsStringSlice() {
+	type TestEnumType string
+
+	a := []TestEnumType{"value1", "value2"}
+	b, _ := AsStringSlice(a)
+	for _, c := range b {
+		fmt.Println(c)
+	}
+	// Output:
+	// value1
+	// value2
 }
 
 func TestEncodeWithValidPath(t *testing.T) {
@@ -283,6 +324,45 @@ func TestMapToValuesWithArrayValues(t *testing.T) {
 
 	if !isEqual(v, MapToValues(m)) {
 		t.Fatalf("autorest: MapToValues method failed to return correct values - expected(%v) got(%v)", v, MapToValues(m))
+	}
+}
+
+type someTempError struct{}
+
+func (s someTempError) Error() string {
+	return "temporary error"
+}
+func (s someTempError) Timeout() bool {
+	return true
+}
+func (s someTempError) Temporary() bool {
+	return true
+}
+
+func TestIsTemporaryNetworkErrorTrue(t *testing.T) {
+	if !IsTemporaryNetworkError(someTempError{}) {
+		t.Fatal("expected someTempError to be a temporary network error")
+	}
+	if !IsTemporaryNetworkError(errors.New("non-temporary network error")) {
+		t.Fatal("expected random error to be a temporary network error")
+	}
+}
+
+type someFatalError struct{}
+
+func (s someFatalError) Error() string {
+	return "fatal error"
+}
+func (s someFatalError) Timeout() bool {
+	return false
+}
+func (s someFatalError) Temporary() bool {
+	return false
+}
+
+func TestIsTemporaryNetworkErrorFalse(t *testing.T) {
+	if IsTemporaryNetworkError(someFatalError{}) {
+		t.Fatal("expected someFatalError to be a fatal network error")
 	}
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2012-2015 Ugorji Nwoke. All rights reserved.
+// Copyright (c) 2012-2018 Ugorji Nwoke. All rights reserved.
 // Use of this source code is governed by a MIT license found in the LICENSE file.
 
 package codec
@@ -80,10 +80,12 @@ func TestCborIndefiniteLength(t *testing.T) {
 
 	NewDecoderBytes(buf.Bytes(), testCborH).MustDecode(&vv)
 	if err := deepEqual(v, vv); err != nil {
-		logT(t, "-------- Before and After marshal do not match: Error: %v", err)
-		logT(t, "    ....... GOLDEN:  (%T) %#v", v, v)
-		logT(t, "    ....... DECODED: (%T) %#v", vv, vv)
-		failT(t)
+		t.Logf("-------- Before and After marshal do not match: Error: %v", err)
+		if testVerbose {
+			t.Logf("    ....... GOLDEN:  (%T) %#v", v, v)
+			t.Logf("    ....... DECODED: (%T) %#v", vv, vv)
+		}
+		t.FailNow()
 	}
 }
 
@@ -112,8 +114,8 @@ func TestCborGoldens(t *testing.T) {
 	var gs []*testCborGolden
 	f, err := os.Open("test-cbor-goldens.json")
 	if err != nil {
-		logT(t, "error opening test-cbor-goldens.json: %v", err)
-		failT(t)
+		t.Logf("error opening test-cbor-goldens.json: %v", err)
+		t.FailNow()
 	}
 	defer f.Close()
 	jh := new(JsonHandle)
@@ -123,8 +125,8 @@ func TestCborGoldens(t *testing.T) {
 	// err = d.Decode(&gs)
 	d.MustDecode(&gs)
 	if err != nil {
-		logT(t, "error json decoding test-cbor-goldens.json: %v", err)
-		failT(t)
+		t.Logf("error json decoding test-cbor-goldens.json: %v", err)
+		t.FailNow()
 	}
 
 	tagregex := regexp.MustCompile(`[\d]+\(.+?\)`)
@@ -134,7 +136,9 @@ func TestCborGoldens(t *testing.T) {
 		// skip tags or simple or those with prefix, as we can't verify them.
 		if g.Skip || strings.HasPrefix(g.Diagnostic, "simple(") || tagregex.MatchString(g.Diagnostic) {
 			// fmt.Printf("%v: skipped\n", i)
-			logT(t, "[%v] skipping because skip=true OR unsupported simple value or Tag Value", i)
+			if testVerbose {
+				t.Logf("[%v] skipping because skip=true OR unsupported simple value or Tag Value", i)
+			}
 			continue
 		}
 		// println("++++++++++++", i, "g.Diagnostic", g.Diagnostic)
@@ -149,8 +153,8 @@ func TestCborGoldens(t *testing.T) {
 		}
 		bs, err := hex.DecodeString(g.Hex)
 		if err != nil {
-			logT(t, "[%v] error hex decoding %s [%v]: %v", i, g.Hex, err)
-			failT(t)
+			t.Logf("[%v] error hex decoding %s [%v]: %v", i, g.Hex, g.Hex, err)
+			t.FailNow()
 		}
 		var v interface{}
 		NewDecoderBytes(bs, testCborH).MustDecode(&v)
@@ -174,7 +178,7 @@ func TestCborGoldens(t *testing.T) {
 			testCborError(t, i, nil, v, nil, &b)
 		default:
 			v0 := g.Decoded
-			// testCborCoerceJsonNumber(reflect.ValueOf(&v0))
+			// testCborCoerceJsonNumber(rv4i(&v0))
 			testCborError(t, i, v0, v, deepEqual(v0, v), nil)
 		}
 	}
@@ -186,16 +190,20 @@ func testCborError(t *testing.T, i int, v0, v1 interface{}, err error, equal *bo
 		return
 	}
 	if err != nil {
-		logT(t, "[%v] deepEqual error: %v", i, err)
-		logT(t, "    ....... GOLDEN:  (%T) %#v", v0, v0)
-		logT(t, "    ....... DECODED: (%T) %#v", v1, v1)
-		failT(t)
+		t.Logf("[%v] deepEqual error: %v", i, err)
+		if testVerbose {
+			t.Logf("    ....... GOLDEN:  (%T) %#v", v0, v0)
+			t.Logf("    ....... DECODED: (%T) %#v", v1, v1)
+		}
+		t.FailNow()
 	}
 	if equal != nil && !*equal {
-		logT(t, "[%v] values not equal", i)
-		logT(t, "    ....... GOLDEN:  (%T) %#v", v0, v0)
-		logT(t, "    ....... DECODED: (%T) %#v", v1, v1)
-		failT(t)
+		t.Logf("[%v] values not equal", i)
+		if testVerbose {
+			t.Logf("    ....... GOLDEN:  (%T) %#v", v0, v0)
+			t.Logf("    ....... DECODED: (%T) %#v", v1, v1)
+		}
+		t.FailNow()
 	}
 	// fmt.Printf("%v testCborError passed (checks passed)\n", i)
 }
@@ -222,9 +230,139 @@ func TestCborHalfFloat(t *testing.T) {
 		bigen.PutUint16(ba[1:], k)
 		testUnmarshalErr(&res, ba[:3], testCborH, t, "-")
 		if res == v {
-			logT(t, "equal floats: from %x %b, %v", k, k, v)
+			if testVerbose {
+				t.Logf("equal floats: from %x %b, %v", k, k, v)
+			}
 		} else {
-			failT(t, "unequal floats: from %x %b, %v != %v", k, k, res, v)
+			t.Logf("unequal floats: from %x %b, %v != %v", k, k, res, v)
+			t.FailNow()
 		}
+	}
+}
+
+func TestCborSkipTags(t *testing.T) {
+	type Tcbortags struct {
+		A string
+		M map[string]interface{}
+		// A []interface{}
+	}
+	var b8 [8]byte
+	var w bytesEncAppender
+	w.b = []byte{}
+
+	// To make it easier,
+	//    - use tags between math.MaxUint8 and math.MaxUint16 (incl SelfDesc)
+	//    - use 1 char strings for key names
+	//    - use 3-6 char strings for map keys
+	//    - use integers that fit in 2 bytes (between 0x20 and 0xff)
+
+	var tags = [...]uint64{math.MaxUint8 * 2, math.MaxUint8 * 8, 55799, math.MaxUint16 / 2}
+	var tagIdx int
+	var doAddTag bool
+	addTagFn8To16 := func() {
+		if !doAddTag {
+			return
+		}
+		// writes a tag between MaxUint8 and MaxUint16 (culled from cborEncDriver.encUint)
+		w.writen1(cborBaseTag + 0x19)
+		// bigenHelper.writeUint16
+		bigen.PutUint16(b8[:2], uint16(tags[tagIdx%len(tags)]))
+		w.writeb(b8[:2])
+		tagIdx++
+	}
+
+	var v Tcbortags
+	v.A = "cbor"
+	v.M = make(map[string]interface{})
+	v.M["111"] = uint64(111)
+	v.M["111.11"] = 111.11
+	v.M["true"] = true
+	// v.A = append(v.A, 222, 22.22, "true")
+
+	// make stream manually (interspacing tags around it)
+	// WriteMapStart - e.encLen(cborBaseMap, length) - encUint(length, bd)
+	// EncodeStringEnc - e.encStringBytesS(cborBaseString, v)
+
+	fnEncode := func() {
+		w.b = w.b[:0]
+		addTagFn8To16()
+		// write v (Tcbortags, with 3 fields = map with 3 entries)
+		w.writen1(2 + cborBaseMap) // 3 fields = 3 entries
+		// write v.A
+		var s = "A"
+		w.writen1(byte(len(s)) + cborBaseString)
+		w.writestr(s)
+		w.writen1(byte(len(v.A)) + cborBaseString)
+		w.writestr(v.A)
+		//w.writen1(0)
+
+		addTagFn8To16()
+		s = "M"
+		w.writen1(byte(len(s)) + cborBaseString)
+		w.writestr(s)
+
+		addTagFn8To16()
+		w.writen1(byte(len(v.M)) + cborBaseMap)
+
+		addTagFn8To16()
+		s = "111"
+		w.writen1(byte(len(s)) + cborBaseString)
+		w.writestr(s)
+		w.writen2(cborBaseUint+0x18, uint8(111))
+
+		addTagFn8To16()
+		s = "111.11"
+		w.writen1(byte(len(s)) + cborBaseString)
+		w.writestr(s)
+		w.writen1(cborBdFloat64)
+		bigen.PutUint64(b8[:8], math.Float64bits(111.11))
+		w.writeb(b8[:8])
+
+		addTagFn8To16()
+		s = "true"
+		w.writen1(byte(len(s)) + cborBaseString)
+		w.writestr(s)
+		w.writen1(cborBdTrue)
+	}
+
+	var h CborHandle
+	h.SkipUnexpectedTags = true
+	h.Canonical = true
+
+	var gold []byte
+	NewEncoderBytes(&gold, &h).MustEncode(v)
+	// xdebug2f("encoded:    gold: %v", gold)
+
+	// w.b is the encoded bytes
+	var v2 Tcbortags
+	doAddTag = false
+	fnEncode()
+	// xdebug2f("manual:  no-tags: %v", w.b)
+
+	testDeepEqualErr(gold, w.b, t, "cbor-skip-tags--bytes---")
+	NewDecoderBytes(w.b, &h).MustDecode(&v2)
+	testDeepEqualErr(v, v2, t, "cbor-skip-tags--no-tags-")
+
+	var v3 Tcbortags
+	doAddTag = true
+	fnEncode()
+	// xdebug2f("manual: has-tags: %v", w.b)
+	NewDecoderBytes(w.b, &h).MustDecode(&v3)
+	testDeepEqualErr(v, v2, t, "cbor-skip-tags--has-tags")
+
+	// Github 300 - tests naked path
+	{
+		expected := []interface{}{"x", uint64(0x0)}
+		toDecode := []byte{0x82, 0x61, 0x78, 0x00}
+
+		var raw interface{}
+
+		NewDecoderBytes(toDecode, &h).MustDecode(&raw)
+		testDeepEqualErr(expected, raw, t, "cbor-skip-tags--gh-300---no-skips")
+
+		toDecode = []byte{0xd9, 0xd9, 0xf7, 0x82, 0x61, 0x78, 0x00}
+		raw = nil
+		NewDecoderBytes(toDecode, &h).MustDecode(&raw)
+		testDeepEqualErr(expected, raw, t, "cbor-skip-tags--gh-300--has-skips")
 	}
 }

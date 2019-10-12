@@ -11,95 +11,72 @@ import (
 	"github.com/gophercloud/gophercloud/acceptance/tools"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/attachinterfaces"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/extendedserverattributes"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/extendedstatus"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/lockunlock"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/pauseunpause"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/serverusage"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/suspendresume"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	th "github.com/gophercloud/gophercloud/testhelper"
 )
 
-func TestServersList(t *testing.T) {
-	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
-
-	allPages, err := servers.List(client, servers.ListOpts{}).AllPages()
-	if err != nil {
-		t.Fatalf("Unable to retrieve servers: %v", err)
-	}
-
-	allServers, err := servers.ExtractServers(allPages)
-	if err != nil {
-		t.Fatalf("Unable to extract servers: %v", err)
-	}
-
-	for _, server := range allServers {
-		tools.PrintResource(t, server)
-	}
-}
-
 func TestServersCreateDestroy(t *testing.T) {
+	clients.RequireLong(t)
+
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	choices, err := clients.AcceptanceTestChoicesFromEnv()
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 
 	server, err := CreateServer(t, client)
-	if err != nil {
-		t.Fatalf("Unable to create server: %v", err)
-	}
-
+	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
 
-	newServer, err := servers.Get(client, server.ID).Extract()
-	if err != nil {
-		t.Errorf("Unable to retrieve server: %v", err)
+	allPages, err := servers.List(client, servers.ListOpts{}).AllPages()
+	th.AssertNoErr(t, err)
+
+	allServers, err := servers.ExtractServers(allPages)
+	th.AssertNoErr(t, err)
+
+	var found bool
+	for _, s := range allServers {
+		tools.PrintResource(t, server)
+
+		if s.ID == server.ID {
+			found = true
+		}
 	}
-	tools.PrintResource(t, newServer)
+
+	th.AssertEquals(t, found, true)
 
 	allAddressPages, err := servers.ListAddresses(client, server.ID).AllPages()
-	if err != nil {
-		t.Errorf("Unable to list server addresses: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	allAddresses, err := servers.ExtractAddresses(allAddressPages)
-	if err != nil {
-		t.Errorf("Unable to extract server addresses: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	for network, address := range allAddresses {
 		t.Logf("Addresses on %s: %+v", network, address)
 	}
 
 	allInterfacePages, err := attachinterfaces.List(client, server.ID).AllPages()
-	if err != nil {
-		t.Errorf("Unable to list server Interfaces: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	allInterfaces, err := attachinterfaces.ExtractInterfaces(allInterfacePages)
-	if err != nil {
-		t.Errorf("Unable to extract server Interfaces: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
-	for _, Interface := range allInterfaces {
-		t.Logf("Interfaces: %+v", Interface)
+	for _, iface := range allInterfaces {
+		t.Logf("Interfaces: %+v", iface)
 	}
 
 	allNetworkAddressPages, err := servers.ListAddressesByNetwork(client, server.ID, choices.NetworkName).AllPages()
-	if err != nil {
-		t.Errorf("Unable to list server addresses: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	allNetworkAddresses, err := servers.ExtractNetworkAddresses(allNetworkAddressPages)
-	if err != nil {
-		t.Errorf("Unable to extract server addresses: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	t.Logf("Addresses on %s:", choices.NetworkName)
 	for _, address := range allNetworkAddresses {
@@ -107,42 +84,43 @@ func TestServersCreateDestroy(t *testing.T) {
 	}
 }
 
-func TestServersCreateDestroyWithExtensions(t *testing.T) {
+func TestServersWithExtensionsCreateDestroy(t *testing.T) {
+	clients.RequireLong(t)
+
 	var extendedServer struct {
 		servers.Server
 		availabilityzones.ServerAvailabilityZoneExt
+		extendedstatus.ServerExtendedStatusExt
+		serverusage.UsageExt
 	}
 
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	server, err := CreateServer(t, client)
-	if err != nil {
-		t.Fatalf("Unable to create server: %v", err)
-	}
+	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
 
 	err = servers.Get(client, server.ID).ExtractInto(&extendedServer)
-	if err != nil {
-		t.Errorf("Unable to retrieve server: %v", err)
-	}
+	th.AssertNoErr(t, err)
 	tools.PrintResource(t, extendedServer)
 
-	t.Logf("Availability Zone: %s\n", extendedServer.AvailabilityZone)
+	th.AssertEquals(t, extendedServer.AvailabilityZone, "nova")
+	th.AssertEquals(t, int(extendedServer.PowerState), extendedstatus.RUNNING)
+	th.AssertEquals(t, extendedServer.TaskState, "")
+	th.AssertEquals(t, extendedServer.VmState, "active")
+	th.AssertEquals(t, extendedServer.LaunchedAt.IsZero(), false)
+	th.AssertEquals(t, extendedServer.TerminatedAt.IsZero(), true)
 }
 
 func TestServersWithoutImageRef(t *testing.T) {
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	server, err := CreateServerWithoutImageRef(t, client)
 	if err != nil {
 		if err400, ok := err.(*gophercloud.ErrUnexpectedResponseCode); ok {
-			if !strings.Contains("Missing imageRef attribute", string(err400.Body)) {
+			if !strings.Contains(string(err400.Body), "Missing imageRef attribute") {
 				defer DeleteServer(t, client, server)
 			}
 		}
@@ -150,15 +128,13 @@ func TestServersWithoutImageRef(t *testing.T) {
 }
 
 func TestServersUpdate(t *testing.T) {
+	clients.RequireLong(t)
+
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	server, err := CreateServer(t, client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
 
 	alternateName := tools.RandomString("ACPTTEST", 16)
@@ -173,13 +149,9 @@ func TestServersUpdate(t *testing.T) {
 	}
 
 	updated, err := servers.Update(client, server.ID, updateOpts).Extract()
-	if err != nil {
-		t.Fatalf("Unable to rename server: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
-	if updated.ID != server.ID {
-		t.Errorf("Updated server ID [%s] didn't match original server ID [%s]!", updated.ID, server.ID)
-	}
+	th.AssertEquals(t, updated.ID, server.ID)
 
 	err = tools.WaitFor(func() (bool, error) {
 		latest, err := servers.Get(client, updated.ID).Extract()
@@ -192,81 +164,99 @@ func TestServersUpdate(t *testing.T) {
 }
 
 func TestServersMetadata(t *testing.T) {
-	t.Parallel()
+	clients.RequireLong(t)
 
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	server, err := CreateServer(t, client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
+
+	tools.PrintResource(t, server)
 
 	metadata, err := servers.UpdateMetadata(client, server.ID, servers.MetadataOpts{
 		"foo":  "bar",
 		"this": "that",
 	}).Extract()
-	if err != nil {
-		t.Fatalf("Unable to update metadata: %v", err)
-	}
+	th.AssertNoErr(t, err)
 	t.Logf("UpdateMetadata result: %+v\n", metadata)
 
-	err = servers.DeleteMetadatum(client, server.ID, "foo").ExtractErr()
-	if err != nil {
-		t.Fatalf("Unable to delete metadatum: %v", err)
+	server, err = servers.Get(client, server.ID).Extract()
+	th.AssertNoErr(t, err)
+
+	tools.PrintResource(t, server)
+
+	expectedMetadata := map[string]string{
+		"abc":  "def",
+		"foo":  "bar",
+		"this": "that",
 	}
+	th.AssertDeepEquals(t, expectedMetadata, server.Metadata)
+
+	err = servers.DeleteMetadatum(client, server.ID, "foo").ExtractErr()
+	th.AssertNoErr(t, err)
+
+	server, err = servers.Get(client, server.ID).Extract()
+	th.AssertNoErr(t, err)
+
+	tools.PrintResource(t, server)
+
+	expectedMetadata = map[string]string{
+		"abc":  "def",
+		"this": "that",
+	}
+	th.AssertDeepEquals(t, expectedMetadata, server.Metadata)
 
 	metadata, err = servers.CreateMetadatum(client, server.ID, servers.MetadatumOpts{
 		"foo": "baz",
 	}).Extract()
-	if err != nil {
-		t.Fatalf("Unable to create metadatum: %v", err)
-	}
+	th.AssertNoErr(t, err)
 	t.Logf("CreateMetadatum result: %+v\n", metadata)
 
-	metadata, err = servers.Metadatum(client, server.ID, "foo").Extract()
-	if err != nil {
-		t.Fatalf("Unable to get metadatum: %v", err)
+	server, err = servers.Get(client, server.ID).Extract()
+	th.AssertNoErr(t, err)
+
+	tools.PrintResource(t, server)
+
+	expectedMetadata = map[string]string{
+		"abc":  "def",
+		"this": "that",
+		"foo":  "baz",
 	}
+	th.AssertDeepEquals(t, expectedMetadata, server.Metadata)
+
+	metadata, err = servers.Metadatum(client, server.ID, "foo").Extract()
+	th.AssertNoErr(t, err)
 	t.Logf("Metadatum result: %+v\n", metadata)
 	th.AssertEquals(t, "baz", metadata["foo"])
 
 	metadata, err = servers.Metadata(client, server.ID).Extract()
-	if err != nil {
-		t.Fatalf("Unable to get metadata: %v", err)
-	}
+	th.AssertNoErr(t, err)
 	t.Logf("Metadata result: %+v\n", metadata)
 
+	th.AssertDeepEquals(t, expectedMetadata, metadata)
+
 	metadata, err = servers.ResetMetadata(client, server.ID, servers.MetadataOpts{}).Extract()
-	if err != nil {
-		t.Fatalf("Unable to reset metadata: %v", err)
-	}
+	th.AssertNoErr(t, err)
 	t.Logf("ResetMetadata result: %+v\n", metadata)
 	th.AssertDeepEquals(t, map[string]string{}, metadata)
 }
 
 func TestServersActionChangeAdminPassword(t *testing.T) {
-	t.Parallel()
+	clients.RequireLong(t)
+	clients.RequireGuestAgent(t)
 
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	server, err := CreateServer(t, client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
 
 	randomPassword := tools.MakeNewPassword(server.AdminPass)
 	res := servers.ChangeAdminPassword(client, server.ID, randomPassword)
-	if res.Err != nil {
-		t.Fatal(res.Err)
-	}
+	th.AssertNoErr(t, res.Err)
 
 	if err = WaitForComputeStatus(client, server, "PASSWORD"); err != nil {
 		t.Fatal(err)
@@ -278,28 +268,22 @@ func TestServersActionChangeAdminPassword(t *testing.T) {
 }
 
 func TestServersActionReboot(t *testing.T) {
-	t.Parallel()
+	clients.RequireLong(t)
 
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	server, err := CreateServer(t, client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
 
-	rebootOpts := &servers.RebootOpts{
+	rebootOpts := servers.RebootOpts{
 		Type: servers.SoftReboot,
 	}
 
 	t.Logf("Attempting reboot of server %s", server.ID)
 	res := servers.Reboot(client, server.ID, rebootOpts)
-	if res.Err != nil {
-		t.Fatalf("Unable to reboot server: %v", res.Err)
-	}
+	th.AssertNoErr(t, res.Err)
 
 	if err = WaitForComputeStatus(client, server, "REBOOT"); err != nil {
 		t.Fatal(err)
@@ -311,22 +295,16 @@ func TestServersActionReboot(t *testing.T) {
 }
 
 func TestServersActionRebuild(t *testing.T) {
-	t.Parallel()
+	clients.RequireLong(t)
 
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	choices, err := clients.AcceptanceTestChoicesFromEnv()
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 
 	server, err := CreateServer(t, client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
 
 	t.Logf("Attempting to rebuild server %s", server.ID)
@@ -338,13 +316,9 @@ func TestServersActionRebuild(t *testing.T) {
 	}
 
 	rebuilt, err := servers.Rebuild(client, server.ID, rebuildOpts).Extract()
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 
-	if rebuilt.ID != server.ID {
-		t.Errorf("Expected rebuilt server ID of [%s]; got [%s]", server.ID, rebuilt.ID)
-	}
+	th.AssertEquals(t, rebuilt.ID, server.ID)
 
 	if err = WaitForComputeStatus(client, rebuilt, "REBUILD"); err != nil {
 		t.Fatal(err)
@@ -356,17 +330,16 @@ func TestServersActionRebuild(t *testing.T) {
 }
 
 func TestServersActionResizeConfirm(t *testing.T) {
-	t.Parallel()
+	clients.RequireLong(t)
+
+	choices, err := clients.AcceptanceTestChoicesFromEnv()
+	th.AssertNoErr(t, err)
 
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	server, err := CreateServer(t, client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
 
 	t.Logf("Attempting to resize server %s", server.ID)
@@ -380,20 +353,24 @@ func TestServersActionResizeConfirm(t *testing.T) {
 	if err = WaitForComputeStatus(client, server, "ACTIVE"); err != nil {
 		t.Fatal(err)
 	}
+
+	server, err = servers.Get(client, server.ID).Extract()
+	th.AssertNoErr(t, err)
+
+	th.AssertEquals(t, server.Flavor["id"], choices.FlavorIDResize)
 }
 
 func TestServersActionResizeRevert(t *testing.T) {
-	t.Parallel()
+	clients.RequireLong(t)
+
+	choices, err := clients.AcceptanceTestChoicesFromEnv()
+	th.AssertNoErr(t, err)
 
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	server, err := CreateServer(t, client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
 
 	t.Logf("Attempting to resize server %s", server.ID)
@@ -407,112 +384,179 @@ func TestServersActionResizeRevert(t *testing.T) {
 	if err = WaitForComputeStatus(client, server, "ACTIVE"); err != nil {
 		t.Fatal(err)
 	}
+
+	server, err = servers.Get(client, server.ID).Extract()
+	th.AssertNoErr(t, err)
+
+	th.AssertEquals(t, server.Flavor["id"], choices.FlavorID)
 }
 
 func TestServersActionPause(t *testing.T) {
-	t.Parallel()
+	clients.RequireLong(t)
 
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	server, err := CreateServer(t, client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
 
 	t.Logf("Attempting to pause server %s", server.ID)
 	err = pauseunpause.Pause(client, server.ID).ExtractErr()
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 
 	err = WaitForComputeStatus(client, server, "PAUSED")
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 
 	err = pauseunpause.Unpause(client, server.ID).ExtractErr()
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 
 	err = WaitForComputeStatus(client, server, "ACTIVE")
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 }
 
 func TestServersActionSuspend(t *testing.T) {
-	t.Parallel()
+	clients.RequireLong(t)
 
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	server, err := CreateServer(t, client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
 
 	t.Logf("Attempting to suspend server %s", server.ID)
 	err = suspendresume.Suspend(client, server.ID).ExtractErr()
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 
 	err = WaitForComputeStatus(client, server, "SUSPENDED")
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 
 	err = suspendresume.Resume(client, server.ID).ExtractErr()
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 
 	err = WaitForComputeStatus(client, server, "ACTIVE")
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 }
 
 func TestServersActionLock(t *testing.T) {
-	t.Parallel()
+	clients.RequireLong(t)
+	clients.RequireNonAdmin(t)
 
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	server, err := CreateServer(t, client)
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
 
 	t.Logf("Attempting to Lock server %s", server.ID)
 	err = lockunlock.Lock(client, server.ID).ExtractErr()
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 
+	t.Logf("Attempting to delete locked server %s", server.ID)
 	err = servers.Delete(client, server.ID).ExtractErr()
-	if err == nil {
-		t.Fatalf("Should not have been able to delete the server")
-	}
+	th.AssertEquals(t, err != nil, true)
 
+	t.Logf("Attempting to unlock server %s", server.ID)
 	err = lockunlock.Unlock(client, server.ID).ExtractErr()
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 
 	err = WaitForComputeStatus(client, server, "ACTIVE")
-	if err != nil {
-		t.Fatal(err)
+	th.AssertNoErr(t, err)
+}
+
+func TestServersConsoleOutput(t *testing.T) {
+	clients.RequireLong(t)
+
+	client, err := clients.NewComputeV2Client()
+	th.AssertNoErr(t, err)
+
+	server, err := CreateServer(t, client)
+	th.AssertNoErr(t, err)
+	defer DeleteServer(t, client, server)
+
+	outputOpts := &servers.ShowConsoleOutputOpts{
+		Length: 4,
 	}
+	output, err := servers.ShowConsoleOutput(client, server.ID, outputOpts).Extract()
+	th.AssertNoErr(t, err)
+
+	tools.PrintResource(t, output)
+}
+
+func TestServersTags(t *testing.T) {
+	clients.RequireLong(t)
+	clients.SkipRelease(t, "mitaka")
+	clients.SkipRelease(t, "newton")
+
+	choices, err := clients.AcceptanceTestChoicesFromEnv()
+	th.AssertNoErr(t, err)
+
+	client, err := clients.NewComputeV2Client()
+	th.AssertNoErr(t, err)
+	client.Microversion = "2.52"
+
+	networkClient, err := clients.NewNetworkV2Client()
+	th.AssertNoErr(t, err)
+
+	networkID, err := networks.IDFromName(networkClient, choices.NetworkName)
+	th.AssertNoErr(t, err)
+
+	server, err := CreateServerWithTags(t, client, networkID)
+	th.AssertNoErr(t, err)
+	defer DeleteServer(t, client, server)
+}
+
+func TestServersWithExtendedAttributesCreateDestroy(t *testing.T) {
+	clients.RequireLong(t)
+	clients.RequireAdmin(t)
+	clients.SkipRelease(t, "stable/mitaka")
+	clients.SkipRelease(t, "stable/newton")
+
+	client, err := clients.NewComputeV2Client()
+	th.AssertNoErr(t, err)
+	client.Microversion = "2.3"
+
+	server, err := CreateServer(t, client)
+	th.AssertNoErr(t, err)
+	defer DeleteServer(t, client, server)
+
+	result := servers.Get(client, server.ID)
+	th.AssertNoErr(t, result.Err)
+
+	reservationID, err := extendedserverattributes.ExtractReservationID(result.Result)
+	th.AssertNoErr(t, err)
+	th.AssertEquals(t, reservationID != "", true)
+	t.Logf("reservationID: %s", reservationID)
+
+	launchIndex, err := extendedserverattributes.ExtractLaunchIndex(result.Result)
+	th.AssertNoErr(t, err)
+	th.AssertEquals(t, launchIndex, 0)
+	t.Logf("launchIndex: %d", launchIndex)
+
+	ramdiskID, err := extendedserverattributes.ExtractRamdiskID(result.Result)
+	th.AssertNoErr(t, err)
+	th.AssertEquals(t, ramdiskID == "", true)
+	t.Logf("ramdiskID: %s", ramdiskID)
+
+	kernelID, err := extendedserverattributes.ExtractKernelID(result.Result)
+	th.AssertNoErr(t, err)
+	th.AssertEquals(t, kernelID == "", true)
+	t.Logf("kernelID: %s", kernelID)
+
+	hostname, err := extendedserverattributes.ExtractHostname(result.Result)
+	th.AssertNoErr(t, err)
+	th.AssertEquals(t, hostname != "", true)
+	t.Logf("hostname: %s", hostname)
+
+	rootDeviceName, err := extendedserverattributes.ExtractRootDeviceName(result.Result)
+	th.AssertNoErr(t, err)
+	th.AssertEquals(t, rootDeviceName != "", true)
+	t.Logf("rootDeviceName: %s", rootDeviceName)
+
+	userData, err := extendedserverattributes.ExtractUserData(result.Result)
+	th.AssertNoErr(t, err)
+	th.AssertEquals(t, userData == "", true)
+	t.Logf("userData: %s", userData)
 }

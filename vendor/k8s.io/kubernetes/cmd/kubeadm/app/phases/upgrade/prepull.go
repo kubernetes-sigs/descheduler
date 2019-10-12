@@ -20,14 +20,17 @@ import (
 	"fmt"
 	"time"
 
-	apps "k8s.io/api/apps/v1beta2"
-	"k8s.io/api/core/v1"
+	"github.com/pkg/errors"
+	apps "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	"k8s.io/kubernetes/cmd/kubeadm/app/constants"
 	"k8s.io/kubernetes/cmd/kubeadm/app/images"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
+	utilpointer "k8s.io/utils/pointer"
 )
 
 const (
@@ -41,15 +44,15 @@ type Prepuller interface {
 	DeleteFunc(string) error
 }
 
-// DaemonSetPrepuller makes sure the control plane images are availble on all masters
+// DaemonSetPrepuller makes sure the control-plane images are available on all control-planes
 type DaemonSetPrepuller struct {
 	client clientset.Interface
-	cfg    *kubeadmapi.MasterConfiguration
+	cfg    *kubeadmapi.ClusterConfiguration
 	waiter apiclient.Waiter
 }
 
 // NewDaemonSetPrepuller creates a new instance of the DaemonSetPrepuller struct
-func NewDaemonSetPrepuller(client clientset.Interface, waiter apiclient.Waiter, cfg *kubeadmapi.MasterConfiguration) *DaemonSetPrepuller {
+func NewDaemonSetPrepuller(client clientset.Interface, waiter apiclient.Waiter, cfg *kubeadmapi.ClusterConfiguration) *DaemonSetPrepuller {
 	return &DaemonSetPrepuller{
 		client: client,
 		cfg:    cfg,
@@ -59,12 +62,17 @@ func NewDaemonSetPrepuller(client clientset.Interface, waiter apiclient.Waiter, 
 
 // CreateFunc creates a DaemonSet for making the image available on every relevant node
 func (d *DaemonSetPrepuller) CreateFunc(component string) error {
-	image := images.GetCoreImage(component, d.cfg.GetControlPlaneImageRepository(), d.cfg.KubernetesVersion, d.cfg.UnifiedControlPlaneImage)
+	var image string
+	if component == constants.Etcd {
+		image = images.GetEtcdImage(d.cfg)
+	} else {
+		image = images.GetKubernetesImage(component, d.cfg)
+	}
 	ds := buildPrePullDaemonSet(component, image)
 
 	// Create the DaemonSet in the API Server
 	if err := apiclient.CreateOrUpdateDaemonSet(d.client, ds); err != nil {
-		return fmt.Errorf("unable to create a DaemonSet for prepulling the component %q: %v", component, err)
+		return errors.Wrapf(err, "unable to create a DaemonSet for prepulling the component %q", component)
 	}
 	return nil
 }
@@ -78,16 +86,17 @@ func (d *DaemonSetPrepuller) WaitFunc(component string) {
 // DeleteFunc deletes the DaemonSet used for making the image available on every relevant node
 func (d *DaemonSetPrepuller) DeleteFunc(component string) error {
 	dsName := addPrepullPrefix(component)
-	if err := apiclient.DeleteDaemonSetForeground(d.client, metav1.NamespaceSystem, dsName); err != nil {
-		return fmt.Errorf("unable to cleanup the DaemonSet used for prepulling %s: %v", component, err)
+	// TODO: The IsNotFound() check is required in cases where the DaemonSet is missing.
+	// Investigate why this happens: https://github.com/kubernetes/kubeadm/issues/1700
+	if err := apiclient.DeleteDaemonSetForeground(d.client, metav1.NamespaceSystem, dsName); err != nil && !apierrors.IsNotFound(err) {
+		return errors.Wrapf(err, "unable to cleanup the DaemonSet used for prepulling %s", component)
 	}
 	fmt.Printf("[upgrade/prepull] Prepulled image for component %s.\n", component)
 	return nil
 }
 
 // PrepullImagesInParallel creates DaemonSets synchronously but waits in parallel for the images to pull
-func PrepullImagesInParallel(kubePrepuller Prepuller, timeout time.Duration) error {
-	componentsToPrepull := constants.MasterComponents
+func PrepullImagesInParallel(kubePrepuller Prepuller, timeout time.Duration, componentsToPrepull []string) error {
 	fmt.Printf("[upgrade/prepull] Will prepull images for components %v\n", componentsToPrepull)
 
 	timeoutChan := time.After(timeout)
@@ -99,11 +108,11 @@ func PrepullImagesInParallel(kubePrepuller Prepuller, timeout time.Duration) err
 		}
 	}
 
-	// Create a channel for streaming data from goroutines that run in parallell to a blocking for loop that cleans up
+	// Create a channel for streaming data from goroutines that run in parallel to a blocking for loop that cleans up
 	prePulledChan := make(chan string, len(componentsToPrepull))
 	for _, component := range componentsToPrepull {
 		go func(c string) {
-			// Wait as long as needed. This WaitFunc call should be blocking until completetion
+			// Wait as long as needed. This WaitFunc call should be blocking until completion
 			kubePrepuller.WaitFunc(c)
 			// When the task is done, go ahead and cleanup by sending the name to the channel
 			prePulledChan <- c
@@ -126,7 +135,7 @@ func waitForItemsFromChan(timeoutChan <-chan time.Time, stringChan chan string, 
 	for {
 		select {
 		case <-timeoutChan:
-			return fmt.Errorf("The prepull operation timed out")
+			return errors.New("the prepull operation timed out")
 		case result := <-stringChan:
 			i++
 			// If the cleanup function errors; error here as well
@@ -154,6 +163,11 @@ func buildPrePullDaemonSet(component, image string) *apps.DaemonSet {
 			Namespace: metav1.NamespaceSystem,
 		},
 		Spec: apps.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": addPrepullPrefix(component),
+				},
+			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
@@ -171,8 +185,13 @@ func buildPrePullDaemonSet(component, image string) *apps.DaemonSet {
 					NodeSelector: map[string]string{
 						constants.LabelNodeRoleMaster: "",
 					},
-					Tolerations:                   []v1.Toleration{constants.MasterToleration},
+					Tolerations:                   []v1.Toleration{constants.ControlPlaneToleration},
 					TerminationGracePeriodSeconds: &gracePeriodSecs,
+					// Explicitly add a PodSecurityContext to allow these Pods to run as non-root.
+					// This prevents restrictive PSPs from blocking the Pod creation.
+					SecurityContext: &v1.PodSecurityContext{
+						RunAsUser: utilpointer.Int64Ptr(999),
+					},
 				},
 			},
 		},

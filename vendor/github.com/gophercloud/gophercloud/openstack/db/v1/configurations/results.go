@@ -1,6 +1,7 @@
 package configurations
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
@@ -9,8 +10,8 @@ import (
 
 // Config represents a configuration group API resource.
 type Config struct {
-	Created              time.Time `json:"created"`
-	Updated              time.Time `json:"updated"`
+	Created              time.Time `json:"-"`
+	Updated              time.Time `json:"-"`
 	DatastoreName        string    `json:"datastore_name"`
 	DatastoreVersionID   string    `json:"datastore_version_id"`
 	DatastoreVersionName string    `json:"datastore_version_name"`
@@ -18,6 +19,25 @@ type Config struct {
 	ID                   string
 	Name                 string
 	Values               map[string]interface{}
+}
+
+func (r *Config) UnmarshalJSON(b []byte) error {
+	type tmp Config
+	var s struct {
+		tmp
+		Created gophercloud.JSONRFC3339NoZ `json:"created"`
+		Updated gophercloud.JSONRFC3339NoZ `json:"updated"`
+	}
+	err := json.Unmarshal(b, &s)
+	if err != nil {
+		return err
+	}
+	*r = Config(s.tmp)
+
+	r.Created = time.Time(s.Created)
+	r.Updated = time.Time(s.Updated)
+
+	return nil
 }
 
 // ConfigPage contains a page of Config resources in a paginated collection.

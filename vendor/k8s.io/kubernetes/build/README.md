@@ -5,8 +5,8 @@ Building Kubernetes is easy if you take advantage of the containerized build env
 ## Requirements
 
 1. Docker, using one of the following configurations:
-  * **Mac OS X** You can either use Docker for Mac or docker-machine. See installation instructions [here](https://docs.docker.com/docker-for-mac/).
-     **Note**: You will want to set the Docker VM to have at least 3GB of initial memory or building will likely fail. (See: [#11852]( http://issue.k8s.io/11852)).
+  * **macOS** You can either use Docker for Mac or docker-machine. See installation instructions [here](https://docs.docker.com/docker-for-mac/).
+     **Note**: You will want to set the Docker VM to have at least 4.5GB of initial memory or building will likely fail. (See: [#11852]( http://issue.k8s.io/11852)).
   * **Linux with local Docker**  Install Docker according to the [instructions](https://docs.docker.com/installation/#installation) for your OS.
   * **Remote Docker engine** Use a big machine in the cloud to build faster. This is a little trickier so look at the section later on.
 2. **Optional** [Google Cloud SDK](https://developers.google.com/cloud/sdk/)
@@ -19,21 +19,22 @@ While it is possible to build Kubernetes using a local golang installation, we h
 
 ## Key scripts
 
-The following scripts are found in the `build/` directory. Note that all scripts must be run from the Kubernetes root directory.
+The following scripts are found in the [`build/`](.) directory. Note that all scripts must be run from the Kubernetes root directory.
 
-* `build/run.sh`: Run a command in a build docker container.  Common invocations:
+* [`build/run.sh`](run.sh): Run a command in a build docker container.  Common invocations:
   *  `build/run.sh make`: Build just linux binaries in the container.  Pass options and packages as necessary.
   *  `build/run.sh make cross`: Build all binaries for all platforms
+  *  `build/run.sh make kubectl KUBE_BUILD_PLATFORMS=darwin/amd64`: Build the specific binary for the specific platform (`kubectl` and `darwin/amd64` respectively in this example)
   *  `build/run.sh make test`: Run all unit tests
   *  `build/run.sh make test-integration`: Run integration test
   *  `build/run.sh make test-cmd`: Run CLI tests
-* `build/copy-output.sh`: This will copy the contents of `_output/dockerized/bin` from the Docker container to the local `_output/dockerized/bin`. It will also copy out specific file patterns that are generated as part of the build process. This is run automatically as part of `build/run.sh`.
-* `build/make-clean.sh`: Clean out the contents of `_output`, remove any locally built container images and remove the data container.
-* `/build/shell.sh`: Drop into a `bash` shell in a build container with a snapshot of the current repo code.
+* [`build/copy-output.sh`](copy-output.sh): This will copy the contents of `_output/dockerized/bin` from the Docker container to the local `_output/dockerized/bin`. It will also copy out specific file patterns that are generated as part of the build process. This is run automatically as part of `build/run.sh`.
+* [`build/make-clean.sh`](make-clean.sh): Clean out the contents of `_output`, remove any locally built container images and remove the data container.
+* [`build/shell.sh`](shell.sh): Drop into a `bash` shell in a build container with a snapshot of the current repo code.
 
 ## Basic Flow
 
-The scripts directly under `build/` are used to build and test.  They will ensure that the `kube-build` Docker image is built (based on `build/build-image/Dockerfile`) and then execute the appropriate command in that container.  These scripts will both ensure that the right data is cached from run to run for incremental builds and will copy the results back out of the container.
+The scripts directly under [`build/`](.) are used to build and test.  They will ensure that the `kube-build` Docker image is built (based on [`build/build-image/Dockerfile`](build-image/Dockerfile)) and then execute the appropriate command in that container.  These scripts will both ensure that the right data is cached from run to run for incremental builds and will copy the results back out of the container.
 
 The `kube-build` container image is built by first creating a "context" directory in `_output/images/build-image`.  It is done there instead of at the root of the Kubernetes repo to minimize the amount of data we need to package up when building the image.
 
@@ -81,7 +82,7 @@ docker-machine create \
 # Set up local docker to talk to that machine
 eval $(docker-machine env ${KUBE_BUILD_VM})
 
-# Pin down the port that rsync will be exposed on on the remote machine
+# Pin down the port that rsync will be exposed on the remote machine
 export KUBE_RSYNC_PORT=8730
 
 # forward local 8730 to that machine so that rsync works
@@ -92,7 +93,7 @@ Look at `docker-machine stop`, `docker-machine start` and `docker-machine rm` to
 
 ## Releasing
 
-The `build/release.sh` script will build a release.  It will build binaries, run tests, (optionally) build runtime Docker images.
+The [`build/release.sh`](release.sh) script will build a release.  It will build binaries, run tests, (optionally) build runtime Docker images.
 
 The main output is a tar file: `kubernetes.tar.gz`.  This includes:
 * Cross compiled client utilities.
@@ -100,13 +101,30 @@ The main output is a tar file: `kubernetes.tar.gz`.  This includes:
 * Examples
 * Cluster deployment scripts for various clouds
 * Tar file containing all server binaries
-* Tar file containing salt deployment tree shared across multiple cloud deployments.
 
 In addition, there are some other tar files that are created:
 * `kubernetes-client-*.tar.gz` Client binaries for a specific platform.
 * `kubernetes-server-*.tar.gz` Server binaries for a specific platform.
-* `kubernetes-salt.tar.gz` The salt script/tree shared across multiple deployment scripts.
 
 When building final release tars, they are first staged into `_output/release-stage` before being tar'd up and put into `_output/release-tars`.
+
+## Reproducibility
+`make release`, its variant `make quick-release`, and Bazel all provide a
+hermetic build environment which should provide some level of reproducibility
+for builds. `make` itself is **not** hermetic.
+
+The Kubernetes build environment supports the [`SOURCE_DATE_EPOCH` environment
+variable](https://reproducible-builds.org/specs/source-date-epoch/) specified by
+the Reproducible Builds project, which can be set to a UNIX epoch timestamp.
+This will be used for the build timestamps embedded in compiled Go binaries,
+and maybe someday also Docker images.
+
+One reasonable setting for this variable is to use the commit timestamp from the
+tip of the tree being built; this is what the Kubernetes CI system uses. For
+example, you could use the following one-liner:
+
+```bash
+SOURCE_DATE_EPOCH=$(git show -s --format=format:%ct HEAD)
+```
 
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/build/README.md?pixel)]()

@@ -25,13 +25,14 @@ import (
 
 var (
 	// Regexp, matching the contents of log entries, parsed or not
-	logEntryMessageRegex = regexp.MustCompile("(?:I\\d+ \\d+:\\d+:\\d+.\\d+       \\d+ logs_generator.go:67] )?(\\d+) .*")
+	logEntryMessageRegex = regexp.MustCompile("(?:I\\d+ \\d+:\\d+:\\d+.\\d+ {7}\\d+ logs_generator.go:67] )?(\\d+) .*")
 )
 
 // LogEntry represents a log entry, received from the logging backend.
 type LogEntry struct {
 	LogName     string
 	TextPayload string
+	Location    string
 	JSONPayload map[string]interface{}
 }
 

@@ -1,7 +1,23 @@
-// Copyright (c) 2012-2015 Ugorji Nwoke. All rights reserved.
+// Copyright (c) 2012-2018 Ugorji Nwoke. All rights reserved.
 // Use of this source code is governed by a MIT license found in the LICENSE file.
 
-// codecgen generates codec.Selfer implementations for a set of types.
+// codecgen generates static implementations of the encoder and decoder functions
+// for a given type, bypassing reflection, and giving some performance benefits in terms of
+// wall and cpu time, and memory usage.
+//
+// Benchmarks (as of Dec 2018) show that codecgen gives about
+//
+//   - for binary formats (cbor, etc): 25% on encoding and 30% on decoding to/from []byte
+//   - for text formats (json, etc): 15% on encoding and 25% on decoding to/from []byte
+//
+// Note that (as of Dec 2018) codecgen completely ignores
+//
+// - MissingFielder interface
+//   (if you types implements it, codecgen ignores that)
+// - decode option PreferArrayOverSlice
+//   (we cannot dynamically create non-static arrays without reflection)
+//
+// In explicit package terms: codecgen generates codec.Selfer implementations for a set of types.
 package main
 
 import (
@@ -11,7 +27,6 @@ import (
 	"flag"
 	"fmt"
 	"go/ast"
-	"go/build"
 	"go/parser"
 	"go/token"
 	"math/rand"
@@ -55,20 +70,33 @@ import (
 )
 
 func CodecGenTempWrite{{ .RandString }}() {
+	os.Remove("{{ .OutFile }}")
 	fout, err := os.Create("{{ .OutFile }}")
 	if err != nil {
 		panic(err)
 	}
 	defer fout.Close()
-	var out bytes.Buffer
 	
-	var typs []reflect.Type 
+	var typs []reflect.Type
+	var typ reflect.Type
+	var numfields int
 {{ range $index, $element := .Types }}
 	var t{{ $index }} {{ . }}
-	typs = append(typs, reflect.TypeOf(t{{ $index }}))
+typ = reflect.TypeOf(t{{ $index }})
+	typs = append(typs, typ)
+	if typ.Kind() == reflect.Struct { numfields += typ.NumField() } else { numfields += 1 }
 {{ end }}
-	{{ if not .CodecPkgFiles }}{{ .CodecPkgName }}.{{ end }}Gen(&out, "{{ .BuildTag }}", "{{ .PackageName }}", "{{ .RandString }}", {{ .NoExtensions }}, {{ if not .CodecPkgFiles }}{{ .CodecPkgName }}.{{ end }}NewTypeInfos(strings.Split("{{ .StructTags }}", ",")), typs...)
+
+	// println("initializing {{ .OutFile }}, buf size: {{ .AllFilesSize }}*16",
+	// 	{{ .AllFilesSize }}*16, "num fields: ", numfields)
+	var out = bytes.NewBuffer(make([]byte, 0, numfields*1024)) // {{ .AllFilesSize }}*16
+	{{ if not .CodecPkgFiles }}{{ .CodecPkgName }}.{{ end }}Gen(out,
+		"{{ .BuildTag }}", "{{ .PackageName }}", "{{ .RandString }}", {{ .NoExtensions }},
+		{{ if not .CodecPkgFiles }}{{ .CodecPkgName }}.{{ end }}NewTypeInfos(strings.Split("{{ .StructTags }}", ",")),
+		 typs...)
+
 	bout, err := format.Source(out.Bytes())
+	// println("... lengths: before formatting: ", len(out.Bytes()), ", after formatting", len(bout))
 	if err != nil {
 		fout.Write(out.Bytes())
 		panic(err)
@@ -97,14 +125,15 @@ func Generate(outfile, buildTag, codecPkgPath string,
 	if len(infiles) == 0 {
 		return
 	}
-	if outfile == "" || codecPkgPath == "" {
-		err = errors.New("outfile and codec package path cannot be blank")
-		return
+	if codecPkgPath == "" {
+		return errors.New("codec package path cannot be blank")
+	}
+	if outfile == "" {
+		return errors.New("outfile cannot be blank")
 	}
 	if uid < 0 {
 		uid = -uid
-	}
-	if uid == 0 {
+	} else if uid == 0 {
 		rr := rand.New(rand.NewSource(time.Now().UnixNano()))
 		uid = 101 + rr.Int63n(9777)
 	}
@@ -115,7 +144,7 @@ func Generate(outfile, buildTag, codecPkgPath string,
 	if err != nil {
 		return
 	}
-	pkg, err := build.Default.ImportDir(absdir, build.AllowBinary)
+	importPath, err := pkgPath(absdir)
 	if err != nil {
 		return
 	}
@@ -129,6 +158,7 @@ func Generate(outfile, buildTag, codecPkgPath string,
 		BuildTag        string
 		StructTags      string
 		Types           []string
+		AllFilesSize    int64
 		CodecPkgFiles   bool
 		NoExtensions    bool
 	}
@@ -141,7 +171,7 @@ func Generate(outfile, buildTag, codecPkgPath string,
 		StructTags:      st,
 		NoExtensions:    noExtensions,
 	}
-	tv.ImportPath = pkg.ImportPath
+	tv.ImportPath = importPath
 	if tv.ImportPath == tv.CodecImportPath {
 		tv.CodecPkgFiles = true
 		tv.CodecPkgName = "codec"
@@ -150,11 +180,17 @@ func Generate(outfile, buildTag, codecPkgPath string,
 		tv.ImportPath = stripVendor(tv.ImportPath)
 	}
 	astfiles := make([]*ast.File, len(infiles))
+	var fi os.FileInfo
 	for i, infile := range infiles {
 		if filepath.Dir(infile) != lastdir {
-			err = errors.New("in files must all be in same directory as outfile")
+			err = errors.New("all input files must all be in same directory as output file")
 			return
 		}
+		if fi, err = os.Stat(infile); err != nil {
+			return
+		}
+		tv.AllFilesSize += fi.Size()
+
 		fset := token.NewFileSet()
 		astfiles[i], err = parser.ParseFile(fset, infile, nil, 0)
 		if err != nil {
@@ -251,12 +287,9 @@ func Generate(outfile, buildTag, codecPkgPath string,
 	// frun, err = ioutil.TempFile("", "codecgen-")
 	// frunName := filepath.Join(os.TempDir(), "codecgen-"+strconv.FormatInt(time.Now().UnixNano(), 10)+".go")
 
-	frunMainName := "codecgen-main-" + tv.RandString + ".generated.go"
-	frunPkgName := "codecgen-pkg-" + tv.RandString + ".generated.go"
-	if deleteTempFile {
-		defer os.Remove(frunMainName)
-		defer os.Remove(frunPkgName)
-	}
+	frunMainName := filepath.Join(lastdir, "codecgen-main-"+tv.RandString+".generated.go")
+	frunPkgName := filepath.Join(lastdir, "codecgen-pkg-"+tv.RandString+".generated.go")
+
 	// var frunMain, frunPkg *os.File
 	if _, err = gen1(frunMainName, genFrunMainTmpl, &tv); err != nil {
 		return
@@ -270,6 +303,7 @@ func Generate(outfile, buildTag, codecPkgPath string,
 
 	// execute go run frun
 	cmd := exec.Command("go", "run", "-tags", "codecgen.exec safe "+goRunTag, frunMainName) //, frunPkg.Name())
+	cmd.Dir = lastdir
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
@@ -279,6 +313,14 @@ func Generate(outfile, buildTag, codecPkgPath string,
 		return
 	}
 	os.Stdout.Write(buf.Bytes())
+
+	// only delete these files if codecgen ran successfully.
+	// if unsuccessful, these files are here for diagnosis.
+	if deleteTempFile {
+		os.Remove(frunMainName)
+		os.Remove(frunPkgName)
+	}
+
 	return
 }
 
@@ -295,6 +337,7 @@ func gen1(frunName, tmplStr string, tv interface{}) (frun *os.File, err error) {
 	}
 	bw := bufio.NewWriter(frun)
 	if err = t.Execute(bw, tv); err != nil {
+		bw.Flush()
 		return
 	}
 	if err = bw.Flush(); err != nil {

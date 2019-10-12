@@ -1,26 +1,23 @@
-package(default_visibility = ["//visibility:public"])
-
-load(
-    "@io_bazel_rules_go//go:def.bzl",
-    "go_binary",
-    "go_library",
-)
-
-go_binary(
-    name = "openapi-gen",
-    importpath = "k8s.io/code-generator/cmd/openapi-gen",
-    library = ":go_default_library",
-)
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
     name = "go_default_library",
     srcs = ["main.go"],
+    importmap = "k8s.io/kubernetes/vendor/k8s.io/code-generator/cmd/openapi-gen",
     importpath = "k8s.io/code-generator/cmd/openapi-gen",
+    visibility = ["//visibility:private"],
     deps = [
-        "//vendor/github.com/golang/glog:go_default_library",
-        "//vendor/k8s.io/gengo/args:go_default_library",
+        "//vendor/github.com/spf13/pflag:go_default_library",
+        "//vendor/k8s.io/klog:go_default_library",
+        "//vendor/k8s.io/kube-openapi/cmd/openapi-gen/args:go_default_library",
         "//vendor/k8s.io/kube-openapi/pkg/generators:go_default_library",
     ],
+)
+
+go_binary(
+    name = "openapi-gen",
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
 )
 
 filegroup(
@@ -34,4 +31,5 @@ filegroup(
     name = "all-srcs",
     srcs = [":package-srcs"],
     tags = ["automanaged"],
+    visibility = ["//visibility:public"],
 )
