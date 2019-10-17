@@ -161,7 +161,7 @@ func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVer
 	SortNodesByUsage(targetNodes)
 
 	// upper bound on total number of pods/cpu/memory to be moved
-	var totalPods, totalCpu, totalMem float64
+	var totalPods, totalCPU, totalMem float64
 	for _, node := range lowNodes {
 		nodeCapacity := node.node.Status.Capacity
 		if len(node.node.Status.Allocatable) > 0 {
@@ -174,7 +174,7 @@ func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVer
 		// totalCPU capacity to be moved
 		if _, ok := targetThresholds[v1.ResourceCPU]; ok {
 			cpuPercentage := targetThresholds[v1.ResourceCPU] - node.usage[v1.ResourceCPU]
-			totalCpu += ((float64(cpuPercentage) * float64(nodeCapacity.Cpu().MilliValue())) / 100)
+			totalCPU += ((float64(cpuPercentage) * float64(nodeCapacity.Cpu().MilliValue())) / 100)
 		}
 
 		// totalMem capacity to be moved
@@ -184,7 +184,7 @@ func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVer
 		}
 	}
 
-	glog.V(1).Infof("Total capacity to be moved: CPU:%v, Mem:%v, Pods:%v", totalCpu, totalMem, totalPods)
+	glog.V(1).Infof("Total capacity to be moved: CPU:%v, Mem:%v, Pods:%v", totalCPU, totalMem, totalPods)
 	glog.V(1).Infof("********Number of pods evicted from each node:***********")
 
 	for _, node := range targetNodes {
@@ -203,18 +203,18 @@ func evictPodsFromTargetNodes(client clientset.Interface, evictionPolicyGroupVer
 
 			// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 			sortPodsBasedOnPriority(evictablePods)
-			evictPods(evictablePods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
+			evictPods(evictablePods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
 		} else {
 			// TODO: Remove this when we support only priority.
 			//  Falling back to evicting pods based on priority.
 			glog.V(1).Infof("Evicting pods based on QoS")
 			glog.V(1).Infof("There are %v non-evictable pods on the node", len(node.nonRemovablePods))
 			// evict best effort pods
-			evictPods(node.bePods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
+			evictPods(node.bePods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
 			// evict burstable pods
-			evictPods(node.bPods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
+			evictPods(node.bPods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
 			// evict guaranteed pods
-			evictPods(node.gPods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCpu, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
+			evictPods(node.gPods, client, evictionPolicyGroupVersion, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, &currentPodsEvicted, dryRun, maxPodsToEvict)
 		}
 		nodepodCount[node.node] = currentPodsEvicted
 		podsEvicted = podsEvicted + nodepodCount[node.node]
@@ -230,11 +230,11 @@ func evictPods(inputPods []*v1.Pod,
 	nodeCapacity v1.ResourceList,
 	nodeUsage api.ResourceThresholds,
 	totalPods *float64,
-	totalCpu *float64,
+	totalCPU *float64,
 	totalMem *float64,
 	podsEvicted *int,
 	dryRun bool, maxPodsToEvict int) {
-	if IsNodeAboveTargetUtilization(nodeUsage, targetThresholds) && (*totalPods > 0 || *totalCpu > 0 || *totalMem > 0) {
+	if IsNodeAboveTargetUtilization(nodeUsage, targetThresholds) && (*totalPods > 0 || *totalCPU > 0 || *totalMem > 0) {
 		onePodPercentage := api.Percentage((float64(1) * 100) / float64(nodeCapacity.Pods().Value()))
 		for _, pod := range inputPods {
 			if maxPodsToEvict > 0 && *podsEvicted+1 > maxPodsToEvict {
@@ -253,7 +253,7 @@ func evictPods(inputPods []*v1.Pod,
 				*totalPods--
 
 				// update remaining cpu
-				*totalCpu -= float64(cUsage)
+				*totalCPU -= float64(cUsage)
 				nodeUsage[v1.ResourceCPU] -= api.Percentage((float64(cUsage) * 100) / float64(nodeCapacity.Cpu().MilliValue()))
 
 				// update remaining memory
@@ -262,7 +262,7 @@ func evictPods(inputPods []*v1.Pod,
 
 				glog.V(3).Infof("updated node usage: %#v", nodeUsage)
 				// check if node utilization drops below target threshold or required capacity (cpu, memory, pods) is moved
-				if !IsNodeAboveTargetUtilization(nodeUsage, targetThresholds) || (*totalPods <= 0 && *totalCpu <= 0 && *totalMem <= 0) {
+				if !IsNodeAboveTargetUtilization(nodeUsage, targetThresholds) || (*totalPods <= 0 && *totalCPU <= 0 && *totalMem <= 0) {
 					break
 				}
 			}
@@ -350,7 +350,7 @@ func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds 
 	return true
 }
 
-// Nodeutilization returns the current usage of node.
+// NodeUtilization returns the current usage of node.
 func NodeUtilization(node *v1.Node, pods []*v1.Pod, evictLocalStoragePods bool) (api.ResourceThresholds, []*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod) {
 	bePods := []*v1.Pod{}
 	nonRemovablePods := []*v1.Pod{}
