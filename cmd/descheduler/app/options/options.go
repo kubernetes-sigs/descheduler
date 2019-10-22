@@ -22,7 +22,6 @@ import (
 
 	// install the componentconfig api so we get its defaulting and conversion functions
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
-	_ "sigs.k8s.io/descheduler/pkg/apis/componentconfig/install"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
 	deschedulerscheme "sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 

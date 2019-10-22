@@ -17,7 +17,8 @@ limitations under the License.
 package flowcontrol
 
 import (
-	"math"
+	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -116,29 +117,6 @@ func TestThrottle(t *testing.T) {
 	}
 }
 
-func TestRateLimiterSaturation(t *testing.T) {
-	const e = 0.000001
-	tests := []struct {
-		capacity int
-		take     int
-
-		expectedSaturation float64
-	}{
-		{1, 1, 1},
-		{10, 3, 0.3},
-	}
-	for i, tt := range tests {
-		rl := NewTokenBucketRateLimiter(1, tt.capacity)
-		for i := 0; i < tt.take; i++ {
-			rl.Accept()
-		}
-		if math.Abs(rl.Saturation()-tt.expectedSaturation) > e {
-			t.Fatalf("#%d: Saturation rate difference isn't within tolerable range\n want=%f, get=%f",
-				i, tt.expectedSaturation, rl.Saturation())
-		}
-	}
-}
-
 func TestAlwaysFake(t *testing.T) {
 	rl := NewFakeAlwaysRateLimiter()
 	if !rl.TryAccept() {
@@ -173,5 +151,23 @@ func TestNeverFake(t *testing.T) {
 	wg.Wait()
 	if !finished {
 		t.Error("Stop should make Accept unblock in NeverFake.")
+	}
+}
+
+func TestWait(t *testing.T) {
+	r := NewTokenBucketRateLimiter(0.0001, 1)
+
+	ctx, cancelFn := context.WithTimeout(context.Background(), time.Second)
+	defer cancelFn()
+	if err := r.Wait(ctx); err != nil {
+		t.Errorf("unexpected wait failed, err: %v", err)
+	}
+
+	ctx2, cancelFn2 := context.WithTimeout(context.Background(), time.Second)
+	defer cancelFn2()
+	if err := r.Wait(ctx2); err == nil {
+		t.Errorf("unexpected wait success")
+	} else {
+		t.Log(fmt.Sprintf("wait err: %v", err))
 	}
 }

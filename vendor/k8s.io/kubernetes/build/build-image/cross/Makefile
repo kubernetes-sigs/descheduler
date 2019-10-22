@@ -14,14 +14,15 @@
 
 .PHONY:	build push
 
-IMAGE=kube-cross
+REGISTRY?=staging-k8s.gcr.io
+IMAGE=$(REGISTRY)/kube-cross
 TAG=$(shell cat VERSION)
 
 
 all: push
 
 build:
-	docker build --pull -t gcr.io/google_containers/$(IMAGE):$(TAG) .
+	docker build --pull -t $(IMAGE):$(TAG) .
 
 push: build
-	gcloud docker --server=gcr.io -- push gcr.io/google_containers/$(IMAGE):$(TAG)
+	docker push $(IMAGE):$(TAG)

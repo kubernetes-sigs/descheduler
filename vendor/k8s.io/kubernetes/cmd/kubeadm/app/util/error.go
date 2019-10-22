@@ -17,12 +17,13 @@ limitations under the License.
 package util
 
 import (
+	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/kubernetes/cmd/kubeadm/app/preflight"
+	errorsutil "k8s.io/apimachinery/pkg/util/errors"
 )
 
 const (
@@ -33,10 +34,6 @@ const (
 	// ValidationExitCode defines the exit code validation checks
 	ValidationExitCode = 3
 )
-
-type debugError interface {
-	DebugError() (msg string, args []interface{})
-}
 
 // fatal prints the message if set and then exits.
 func fatal(msg string, code int) {
@@ -57,22 +54,47 @@ func fatal(msg string, code int) {
 // This method is generic to the command in use and may be used by non-Kubectl
 // commands.
 func CheckErr(err error) {
-	checkErr("", err, fatal)
+	checkErr(err, fatal)
+}
+
+// preflightError allows us to know if the error is a preflight error or not
+// defining the interface here avoids an import cycle of pulling in preflight into the util package
+type preflightError interface {
+	Preflight() bool
 }
 
 // checkErr formats a given error as a string and calls the passed handleErr
-// func with that string and an kubectl exit code.
-func checkErr(prefix string, err error, handleErr func(string, int)) {
+// func with that string and an exit code.
+func checkErr(err error, handleErr func(string, int)) {
+
+	var msg string
+	if err != nil {
+		msg = fmt.Sprintf("%s\nTo see the stack trace of this error execute with --v=5 or higher", err.Error())
+		// check if the verbosity level in klog is high enough and print a stack trace.
+		f := flag.CommandLine.Lookup("v")
+		if f != nil {
+			// assume that the "v" flag contains a parseable Int32 as per klog's "Level" type alias,
+			// thus no error from ParseInt is handled here.
+			if v, e := strconv.ParseInt(f.Value.String(), 10, 32); e == nil {
+				// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md
+				// klog.V(5) - Trace level verbosity
+				if v > 4 {
+					msg = fmt.Sprintf("%+v", err)
+				}
+			}
+		}
+	}
+
 	switch err.(type) {
 	case nil:
 		return
-	case *preflight.Error:
-		handleErr(err.Error(), PreFlightExitCode)
-	case utilerrors.Aggregate:
-		handleErr(err.Error(), ValidationExitCode)
+	case preflightError:
+		handleErr(msg, PreFlightExitCode)
+	case errorsutil.Aggregate:
+		handleErr(msg, ValidationExitCode)
 
 	default:
-		handleErr(err.Error(), DefaultErrorExitCode)
+		handleErr(msg, DefaultErrorExitCode)
 	}
 }
 

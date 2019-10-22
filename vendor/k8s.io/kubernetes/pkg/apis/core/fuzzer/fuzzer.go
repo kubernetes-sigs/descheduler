@@ -23,10 +23,9 @@ import (
 
 	fuzz "github.com/google/gofuzz"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	runtimeserializer "k8s.io/apimachinery/pkg/runtime/serializer"
@@ -34,7 +33,7 @@ import (
 	"k8s.io/kubernetes/pkg/apis/core"
 )
 
-// Funcs returns the fuzzer functions for the core core group.
+// Funcs returns the fuzzer functions for the core group.
 var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(q *resource.Quantity, c fuzz.Continue) {
@@ -49,12 +48,6 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			j.Name = c.RandString()
 			j.ResourceVersion = strconv.FormatUint(c.RandUint64(), 10)
 			j.FieldPath = c.RandString()
-		},
-		func(j *core.ListOptions, c fuzz.Continue) {
-			label, _ := labels.Parse("a=b")
-			j.LabelSelector = label
-			field, _ := fields.ParseSelector("a=b")
-			j.FieldSelector = field
 		},
 		func(j *core.PodExecOptions, c fuzz.Continue) {
 			j.Stdout = true
@@ -92,6 +85,10 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			if s.SchedulerName == "" {
 				s.SchedulerName = core.DefaultSchedulerName
 			}
+			if s.EnableServiceLinks == nil {
+				enableServiceLinks := corev1.DefaultEnableServiceLinks
+				s.EnableServiceLinks = &enableServiceLinks
+			}
 		},
 		func(j *core.PodPhase, c fuzz.Continue) {
 			statuses := []core.PodPhase{core.PodPending, core.PodRunning, core.PodFailed, core.PodUnknown}
@@ -100,6 +97,19 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 		func(j *core.Binding, c fuzz.Continue) {
 			c.Fuzz(&j.ObjectMeta)
 			j.Target.Name = c.RandString()
+		},
+		func(j *core.ReplicationController, c fuzz.Continue) {
+			c.FuzzNoCustom(j)
+
+			// match defaulting
+			if j.Spec.Template != nil {
+				if len(j.Labels) == 0 {
+					j.Labels = j.Spec.Template.Labels
+				}
+				if len(j.Spec.Selector) == 0 {
+					j.Spec.Selector = j.Spec.Template.Labels
+				}
+			}
 		},
 		func(j *core.ReplicationControllerSpec, c fuzz.Continue) {
 			c.FuzzNoCustom(j) // fuzz self without calling this function again
@@ -123,14 +133,14 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			q.Limits = make(core.ResourceList)
 			q.Requests = make(core.ResourceList)
 			cpuLimit := randomQuantity()
-			q.Limits[core.ResourceCPU] = *cpuLimit.Copy()
-			q.Requests[core.ResourceCPU] = *cpuLimit.Copy()
+			q.Limits[core.ResourceCPU] = cpuLimit.DeepCopy()
+			q.Requests[core.ResourceCPU] = cpuLimit.DeepCopy()
 			memoryLimit := randomQuantity()
-			q.Limits[core.ResourceMemory] = *memoryLimit.Copy()
-			q.Requests[core.ResourceMemory] = *memoryLimit.Copy()
+			q.Limits[core.ResourceMemory] = memoryLimit.DeepCopy()
+			q.Requests[core.ResourceMemory] = memoryLimit.DeepCopy()
 			storageLimit := randomQuantity()
-			q.Limits[core.ResourceStorage] = *storageLimit.Copy()
-			q.Requests[core.ResourceStorage] = *storageLimit.Copy()
+			q.Limits[core.ResourceStorage] = storageLimit.DeepCopy()
+			q.Requests[core.ResourceStorage] = storageLimit.DeepCopy()
 		},
 		func(q *core.LimitRangeItem, c fuzz.Continue) {
 			var cpuLimit resource.Quantity
@@ -138,16 +148,16 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 
 			q.Type = core.LimitTypeContainer
 			q.Default = make(core.ResourceList)
-			q.Default[core.ResourceCPU] = *(cpuLimit.Copy())
+			q.Default[core.ResourceCPU] = cpuLimit.DeepCopy()
 
 			q.DefaultRequest = make(core.ResourceList)
-			q.DefaultRequest[core.ResourceCPU] = *(cpuLimit.Copy())
+			q.DefaultRequest[core.ResourceCPU] = cpuLimit.DeepCopy()
 
 			q.Max = make(core.ResourceList)
-			q.Max[core.ResourceCPU] = *(cpuLimit.Copy())
+			q.Max[core.ResourceCPU] = cpuLimit.DeepCopy()
 
 			q.Min = make(core.ResourceList)
-			q.Min[core.ResourceCPU] = *(cpuLimit.Copy())
+			q.Min[core.ResourceCPU] = cpuLimit.DeepCopy()
 
 			q.MaxLimitRequestRatio = make(core.ResourceList)
 			q.MaxLimitRequestRatio[core.ResourceCPU] = resource.MustParse("10")
@@ -258,7 +268,7 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			*d = policies[c.Rand.Intn(len(policies))]
 		},
 		func(p *core.Protocol, c fuzz.Continue) {
-			protocols := []core.Protocol{core.ProtocolTCP, core.ProtocolUDP}
+			protocols := []core.Protocol{core.ProtocolTCP, core.ProtocolUDP, core.ProtocolSCTP}
 			*p = protocols[c.Rand.Intn(len(protocols))]
 		},
 		func(p *core.ServiceAffinity, c fuzz.Continue) {
@@ -268,6 +278,11 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 		func(p *core.ServiceType, c fuzz.Continue) {
 			types := []core.ServiceType{core.ServiceTypeClusterIP, core.ServiceTypeNodePort, core.ServiceTypeLoadBalancer}
 			*p = types[c.Rand.Intn(len(types))]
+		},
+		func(p *core.IPFamily, c fuzz.Continue) {
+			types := []core.IPFamily{core.IPv4Protocol, core.IPv6Protocol}
+			selected := types[c.Rand.Intn(len(types))]
+			*p = selected
 		},
 		func(p *core.ServiceExternalTrafficPolicyType, c fuzz.Continue) {
 			types := []core.ServiceExternalTrafficPolicyType{core.ServiceExternalTrafficPolicyTypeCluster, core.ServiceExternalTrafficPolicyTypeLocal}
@@ -393,11 +408,15 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			pv.Status.Message = c.RandString()
 			reclamationPolicies := []core.PersistentVolumeReclaimPolicy{core.PersistentVolumeReclaimRecycle, core.PersistentVolumeReclaimRetain}
 			pv.Spec.PersistentVolumeReclaimPolicy = reclamationPolicies[c.Rand.Intn(len(reclamationPolicies))]
+			volumeModes := []core.PersistentVolumeMode{core.PersistentVolumeFilesystem, core.PersistentVolumeBlock}
+			pv.Spec.VolumeMode = &volumeModes[c.Rand.Intn(len(volumeModes))]
 		},
 		func(pvc *core.PersistentVolumeClaim, c fuzz.Continue) {
 			c.FuzzNoCustom(pvc) // fuzz self without calling this function again
 			types := []core.PersistentVolumeClaimPhase{core.ClaimBound, core.ClaimPending, core.ClaimLost}
 			pvc.Status.Phase = types[c.Rand.Intn(len(types))]
+			volumeModes := []core.PersistentVolumeMode{core.PersistentVolumeFilesystem, core.PersistentVolumeBlock}
+			pvc.Spec.VolumeMode = &volumeModes[c.Rand.Intn(len(volumeModes))]
 		},
 		func(obj *core.AzureDiskVolumeSource, c fuzz.Continue) {
 			if obj.CachingMode == nil {
@@ -476,10 +495,6 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			case core.ServiceAffinityNone:
 				ss.SessionAffinityConfig = nil
 			}
-		},
-		func(n *core.Node, c fuzz.Continue) {
-			c.FuzzNoCustom(n)
-			n.Spec.ExternalID = "external"
 		},
 		func(s *core.NodeStatus, c fuzz.Continue) {
 			c.FuzzNoCustom(s)

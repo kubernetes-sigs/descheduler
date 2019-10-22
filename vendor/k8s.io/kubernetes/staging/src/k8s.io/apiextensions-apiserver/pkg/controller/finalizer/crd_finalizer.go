@@ -21,11 +21,12 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -40,6 +41,16 @@ import (
 	informers "k8s.io/apiextensions-apiserver/pkg/client/informers/internalversion/apiextensions/internalversion"
 	listers "k8s.io/apiextensions-apiserver/pkg/client/listers/apiextensions/internalversion"
 )
+
+// OverlappingBuiltInResources returns the set of built-in group/resources that are persisted
+// in storage paths that overlap with CRD storage paths, and should not be deleted
+// by this controller if an associated CRD is deleted.
+func OverlappingBuiltInResources() map[schema.GroupResource]bool {
+	return map[schema.GroupResource]bool{
+		{Group: "apiregistration.k8s.io", Resource: "apiservices"}:             true,
+		{Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions"}: true,
+	}
+}
 
 // CRDFinalizer is a controller that finalizes the CRD by deleting all the CRs associated with it.
 type CRDFinalizer struct {
@@ -65,7 +76,7 @@ type ListerCollectionDeleter interface {
 type CRClientGetter interface {
 	// GetCustomResourceListerCollectionDeleter gets the ListerCollectionDeleter for the given CRD
 	// UID.
-	GetCustomResourceListerCollectionDeleter(crd *apiextensions.CustomResourceDefinition) ListerCollectionDeleter
+	GetCustomResourceListerCollectionDeleter(crd *apiextensions.CustomResourceDefinition) (ListerCollectionDeleter, error)
 }
 
 // NewCRDFinalizer creates a new CRDFinalizer.
@@ -79,7 +90,7 @@ func NewCRDFinalizer(
 		crdLister:      crdInformer.Lister(),
 		crdSynced:      crdInformer.Informer().HasSynced,
 		crClientGetter: crClientGetter,
-		queue:          workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "CustomResourceDefinition-CRDFinalizer"),
+		queue:          workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "crd_finalizer"),
 	}
 
 	crdInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -116,13 +127,25 @@ func (c *CRDFinalizer) sync(key string) error {
 		Message: "CustomResource deletion is in progress",
 	})
 	crd, err = c.crdClient.CustomResourceDefinitions().UpdateStatus(crd)
+	if apierrors.IsNotFound(err) || apierrors.IsConflict(err) {
+		// deleted or changed in the meantime, we'll get called again
+		return nil
+	}
 	if err != nil {
 		return err
 	}
 
 	// Now we can start deleting items.  We should use the REST API to ensure that all normal admission runs.
 	// Since we control the endpoints, we know that delete collection works. No need to delete if not established.
-	if apiextensions.IsCRDConditionTrue(crd, apiextensions.Established) {
+	if OverlappingBuiltInResources()[schema.GroupResource{Group: crd.Spec.Group, Resource: crd.Spec.Names.Plural}] {
+		// Skip deletion, explain why, and proceed to remove the finalizer and delete the CRD
+		apiextensions.SetCRDCondition(crd, apiextensions.CustomResourceDefinitionCondition{
+			Type:    apiextensions.Terminating,
+			Status:  apiextensions.ConditionFalse,
+			Reason:  "OverlappingBuiltInResource",
+			Message: "instances overlap with built-in resources in storage",
+		})
+	} else if apiextensions.IsCRDConditionTrue(crd, apiextensions.Established) {
 		cond, deleteErr := c.deleteInstances(crd)
 		apiextensions.SetCRDCondition(crd, cond)
 		if deleteErr != nil {
@@ -143,21 +166,30 @@ func (c *CRDFinalizer) sync(key string) error {
 
 	apiextensions.CRDRemoveFinalizer(crd, apiextensions.CustomResourceCleanupFinalizer)
 	crd, err = c.crdClient.CustomResourceDefinitions().UpdateStatus(crd)
+	if apierrors.IsNotFound(err) || apierrors.IsConflict(err) {
+		// deleted or changed in the meantime, we'll get called again
+		return nil
+	}
 	if err != nil {
 		return err
 	}
 
 	// and now issue another delete, which should clean it all up if no finalizers remain or no-op if they do
-	return c.crdClient.CustomResourceDefinitions().Delete(crd.Name, nil)
+	// TODO(liggitt): just return in 1.16, once n-1 apiservers automatically delete when finalizers are all removed
+	err = c.crdClient.CustomResourceDefinitions().Delete(crd.Name, nil)
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	return err
 }
 
 func (c *CRDFinalizer) deleteInstances(crd *apiextensions.CustomResourceDefinition) (apiextensions.CustomResourceDefinitionCondition, error) {
 	// Now we can start deleting items. While it would be ideal to use a REST API client, doing so
 	// could incorrectly delete a ThirdPartyResource with the same URL as the CustomResource, so we go
 	// directly to the storage instead. Since we control the storage, we know that delete collection works.
-	crClient := c.crClientGetter.GetCustomResourceListerCollectionDeleter(crd)
-	if crClient == nil {
-		err := fmt.Errorf("unable to find a custom resource client for %s.%s", crd.Status.AcceptedNames.Plural, crd.Spec.Group)
+	crClient, err := c.crClientGetter.GetCustomResourceListerCollectionDeleter(crd)
+	if err != nil {
+		err = fmt.Errorf("unable to find a custom resource client for %s.%s: %v", crd.Status.AcceptedNames.Plural, crd.Spec.Group, err)
 		return apiextensions.CustomResourceDefinitionCondition{
 			Type:    apiextensions.Terminating,
 			Status:  apiextensions.ConditionTrue,
@@ -191,7 +223,7 @@ func (c *CRDFinalizer) deleteInstances(crd *apiextensions.CustomResourceDefiniti
 		// don't retry deleting the same namespace
 		deletedNamespaces.Insert(metadata.GetNamespace())
 		nsCtx := genericapirequest.WithNamespace(ctx, metadata.GetNamespace())
-		if _, err := crClient.DeleteCollection(nsCtx, nil, nil); err != nil {
+		if _, err := crClient.DeleteCollection(nsCtx, rest.ValidateAllObjectFunc, nil, nil); err != nil {
 			deleteErrors = append(deleteErrors, err)
 			continue
 		}
@@ -216,7 +248,7 @@ func (c *CRDFinalizer) deleteInstances(crd *apiextensions.CustomResourceDefiniti
 		if len(listObj.(*unstructured.UnstructuredList).Items) == 0 {
 			return true, nil
 		}
-		glog.V(2).Infof("%s.%s waiting for %d items to be removed", crd.Status.AcceptedNames.Plural, crd.Spec.Group, len(listObj.(*unstructured.UnstructuredList).Items))
+		klog.V(2).Infof("%s.%s waiting for %d items to be removed", crd.Status.AcceptedNames.Plural, crd.Spec.Group, len(listObj.(*unstructured.UnstructuredList).Items))
 		return false, nil
 	})
 	if err != nil {
@@ -239,8 +271,8 @@ func (c *CRDFinalizer) Run(workers int, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
 
-	glog.Infof("Starting CRDFinalizer")
-	defer glog.Infof("Shutting down CRDFinalizer")
+	klog.Infof("Starting CRDFinalizer")
+	defer klog.Infof("Shutting down CRDFinalizer")
 
 	if !cache.WaitForCacheSync(stopCh, c.crdSynced) {
 		return
@@ -281,7 +313,7 @@ func (c *CRDFinalizer) processNextWorkItem() bool {
 func (c *CRDFinalizer) enqueue(obj *apiextensions.CustomResourceDefinition) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	if err != nil {
-		utilruntime.HandleError(fmt.Errorf("Couldn't get key for object %#v: %v", obj, err))
+		utilruntime.HandleError(fmt.Errorf("couldn't get key for object %#v: %v", obj, err))
 		return
 	}
 

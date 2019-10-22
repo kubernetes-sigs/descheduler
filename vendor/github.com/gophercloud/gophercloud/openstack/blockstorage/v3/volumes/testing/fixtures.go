@@ -17,7 +17,11 @@ func MockListResponse(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, `
+		r.ParseForm()
+		marker := r.Form.Get("marker")
+		switch marker {
+		case "":
+			fmt.Fprintf(w, `
   {
   "volumes": [
     {
@@ -80,9 +84,19 @@ func MockListResponse(t *testing.T) {
       "status": "available",
       "description": null
     }
-  ]
+  ],
+	"volumes_links": [
+	{
+		"href": "%s/volumes/detail?marker=1",
+		"rel": "next"
+	}]
 }
-  `)
+  `, th.Server.URL)
+		case "1":
+			fmt.Fprintf(w, `{"volumes": []}`)
+		default:
+			t.Fatalf("Unexpected marker: [%s]", marker)
+		}
 	})
 }
 
@@ -127,6 +141,10 @@ func MockGetResponse(t *testing.T) {
     "os-vol-mig-status-attr:migstat": null,
     "metadata": {},
     "status": "available",
+    "volume_image_metadata": {
+      "container_format": "bare",
+      "image_name": "centos"
+    },
     "description": null
   }
 }

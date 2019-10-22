@@ -18,15 +18,17 @@ package kubelet
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/klog"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/events"
 	"k8s.io/kubernetes/pkg/kubelet/eviction"
@@ -71,7 +73,7 @@ type UpdatePodOptions struct {
 // PodWorkers is an abstract interface for testability.
 type PodWorkers interface {
 	UpdatePod(options *UpdatePodOptions)
-	ForgetNonExistingPodWorkers(desiredPods map[types.UID]empty)
+	ForgetNonExistingPodWorkers(desiredPods map[types.UID]sets.Empty)
 	ForgetWorker(uid types.UID)
 }
 
@@ -96,8 +98,11 @@ const (
 	// jitter factor for resyncInterval
 	workerResyncIntervalJitterFactor = 0.5
 
-	// jitter factor for backOffPeriod
+	// jitter factor for backOffPeriod and backOffOnTransientErrorPeriod
 	workerBackOffPeriodJitterFactor = 0.5
+
+	// backoff period when transient error occurred.
+	backOffOnTransientErrorPeriod = time.Second
 )
 
 type podWorkers struct {
@@ -183,7 +188,7 @@ func (p *podWorkers) managePodLoop(podUpdates <-chan UpdatePodOptions) {
 		}
 		if err != nil {
 			// IMPORTANT: we do not log errors here, the syncPodFn is responsible for logging errors
-			glog.Errorf("Error syncing pod %s (%q), skipping: %v", update.Pod.UID, format.Pod(update.Pod), err)
+			klog.Errorf("Error syncing pod %s (%q), skipping: %v", update.Pod.UID, format.Pod(update.Pod), err)
 		}
 		p.wrapUp(update.Pod.UID, err)
 	}
@@ -235,10 +240,8 @@ func (p *podWorkers) removeWorker(uid types.UID) {
 		delete(p.podUpdates, uid)
 		// If there is an undelivered work update for this pod we need to remove it
 		// since per-pod goroutine won't be able to put it to the already closed
-		// channel when it finish processing the current work update.
-		if _, cached := p.lastUndeliveredWorkUpdate[uid]; cached {
-			delete(p.lastUndeliveredWorkUpdate, uid)
-		}
+		// channel when it finishes processing the current work update.
+		delete(p.lastUndeliveredWorkUpdate, uid)
 	}
 }
 func (p *podWorkers) ForgetWorker(uid types.UID) {
@@ -247,7 +250,7 @@ func (p *podWorkers) ForgetWorker(uid types.UID) {
 	p.removeWorker(uid)
 }
 
-func (p *podWorkers) ForgetNonExistingPodWorkers(desiredPods map[types.UID]empty) {
+func (p *podWorkers) ForgetNonExistingPodWorkers(desiredPods map[types.UID]sets.Empty) {
 	p.podLock.Lock()
 	defer p.podLock.Unlock()
 	for key := range p.podUpdates {
@@ -263,6 +266,9 @@ func (p *podWorkers) wrapUp(uid types.UID, syncErr error) {
 	case syncErr == nil:
 		// No error; requeue at the regular resync interval.
 		p.workQueue.Enqueue(uid, wait.Jitter(p.resyncInterval, workerResyncIntervalJitterFactor))
+	case strings.Contains(syncErr.Error(), NetworkNotReadyErrorMsg):
+		// Network is not ready; back off for short period of time and retry as network might be ready soon.
+		p.workQueue.Enqueue(uid, wait.Jitter(backOffOnTransientErrorPeriod, workerBackOffPeriodJitterFactor))
 	default:
 		// Error occurred during the sync; back off and then retry.
 		p.workQueue.Enqueue(uid, wait.Jitter(p.backOffPeriod, workerBackOffPeriodJitterFactor))
@@ -306,7 +312,7 @@ func killPodNow(podWorkers PodWorkers, recorder record.EventRecorder) eviction.K
 		type response struct {
 			err error
 		}
-		ch := make(chan response)
+		ch := make(chan response, 1)
 		podWorkers.UpdatePod(&UpdatePodOptions{
 			Pod:        pod,
 			UpdateType: kubetypes.SyncPodKill,

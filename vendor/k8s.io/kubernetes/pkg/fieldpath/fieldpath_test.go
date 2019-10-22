@@ -33,9 +33,10 @@ func TestExtractFieldPathAsString(t *testing.T) {
 		expectedMessageFragment string
 	}{
 		{
-			name:      "not an API object",
-			fieldPath: "metadata.name",
-			obj:       "",
+			name:                    "not an API object",
+			fieldPath:               "metadata.name",
+			obj:                     "",
+			expectedMessageFragment: "object does not implement the Object interfaces",
 		},
 		{
 			name:      "ok - namespace",
@@ -108,6 +109,28 @@ func TestExtractFieldPathAsString(t *testing.T) {
 			expectedValue: "1",
 		},
 		{
+			name:      "ok - uid",
+			fieldPath: "metadata.uid",
+			obj: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					UID: "b70b3269-858e-12a8-9cf2-1232a194038a",
+				},
+			},
+			expectedValue: "b70b3269-858e-12a8-9cf2-1232a194038a",
+		},
+		{
+			name:      "ok - label",
+			fieldPath: "metadata.labels['something']",
+			obj: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"something": "label value",
+					},
+				},
+			},
+			expectedValue: "label value",
+		},
+		{
 			name:      "invalid expression",
 			fieldPath: "metadata.whoops",
 			obj: &v1.Pod{
@@ -136,6 +159,12 @@ func TestExtractFieldPathAsString(t *testing.T) {
 				},
 			},
 			expectedMessageFragment: "invalid key subscript in metadata.labels",
+		},
+		{
+			name:                    "invalid subscript",
+			fieldPath:               "metadata.notexisting['something']",
+			obj:                     &v1.Pod{},
+			expectedMessageFragment: "fieldPath \"metadata.notexisting['something']\" does not support subscript",
 		},
 	}
 

@@ -17,6 +17,7 @@ limitations under the License.
 package scheduler
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -24,8 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/kubernetes/test/integration/framework"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
+	"k8s.io/kubernetes/pkg/features"
+	"k8s.io/kubernetes/pkg/scheduler/algorithmprovider"
+	st "k8s.io/kubernetes/pkg/scheduler/testing"
 	testutils "k8s.io/kubernetes/test/utils"
+	imageutils "k8s.io/kubernetes/test/utils/image"
 )
 
 // This file tests the scheduler predicates functionality.
@@ -75,7 +81,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Labels: podLabel2,
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					Affinity: &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -108,7 +114,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Labels: podLabel2,
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					Affinity: &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -140,7 +146,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Labels: podLabel2,
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					Affinity: &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -167,7 +173,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Labels: podLabel,
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					NodeName:   nodes[0].Name,
 				},
 			},
@@ -183,7 +189,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Labels: podLabel2,
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					Affinity: &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -205,7 +211,7 @@ func TestInterPodAffinity(t *testing.T) {
 				},
 			},
 			pods: []*v1.Pod{{Spec: v1.PodSpec{
-				Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+				Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 				NodeName:   nodes[0].Name},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "fakename2",
@@ -221,7 +227,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Labels: podLabel2,
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					Affinity: &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -244,7 +250,7 @@ func TestInterPodAffinity(t *testing.T) {
 				},
 			},
 			pods: []*v1.Pod{{Spec: v1.PodSpec{
-				Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+				Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 				NodeName:   nodes[0].Name},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "fakename2",
@@ -260,7 +266,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Labels: podLabel,
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					Affinity: &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -282,7 +288,7 @@ func TestInterPodAffinity(t *testing.T) {
 				},
 			},
 			pods: []*v1.Pod{{Spec: v1.PodSpec{
-				Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+				Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 				NodeName:   nodes[0].Name}, ObjectMeta: metav1.ObjectMeta{
 				Name:   "fakename2",
 				Labels: podLabel}}},
@@ -297,7 +303,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Labels: podLabel2,
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					Affinity: &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -336,7 +342,7 @@ func TestInterPodAffinity(t *testing.T) {
 				},
 			},
 			pods: []*v1.Pod{{Spec: v1.PodSpec{
-				Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+				Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 				NodeName:   nodes[0].Name}, ObjectMeta: metav1.ObjectMeta{
 				Name:   "fakename2",
 				Labels: podLabel}}},
@@ -351,7 +357,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Name:   "fakename",
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					Affinity: &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -390,7 +396,7 @@ func TestInterPodAffinity(t *testing.T) {
 				},
 			},
 			pods: []*v1.Pod{{Spec: v1.PodSpec{
-				Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+				Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 				NodeName:   nodes[0].Name}, ObjectMeta: metav1.ObjectMeta{
 				Name:   "fakename2",
 				Labels: podLabel}}},
@@ -405,7 +411,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Labels: podLabel2,
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					Affinity: &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -443,7 +449,7 @@ func TestInterPodAffinity(t *testing.T) {
 				},
 			},
 			pods: []*v1.Pod{{Spec: v1.PodSpec{
-				Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+				Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 				NodeName:   nodes[0].Name}, ObjectMeta: metav1.ObjectMeta{
 				Name:   "fakename2",
 				Labels: podLabel}}},
@@ -458,7 +464,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Labels: podLabel2,
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					Affinity: &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -498,7 +504,7 @@ func TestInterPodAffinity(t *testing.T) {
 			pods: []*v1.Pod{
 				{
 					Spec: v1.PodSpec{
-						Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+						Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 						NodeName:   nodes[0].Name,
 						Affinity: &v1.Affinity{
 							PodAntiAffinity: &v1.PodAntiAffinity{
@@ -535,7 +541,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Labels: podLabel2,
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					Affinity: &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -573,7 +579,7 @@ func TestInterPodAffinity(t *testing.T) {
 				},
 			},
 			pods: []*v1.Pod{{Spec: v1.PodSpec{
-				Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+				Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 				NodeName:   nodes[0].Name}, ObjectMeta: metav1.ObjectMeta{
 				Name:   "fakename2",
 				Labels: podLabel}}},
@@ -588,7 +594,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Labels: podLabel,
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					Affinity: &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -629,7 +635,7 @@ func TestInterPodAffinity(t *testing.T) {
 				{
 					Spec: v1.PodSpec{
 						NodeName:   nodes[0].Name,
-						Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+						Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 						Affinity: &v1.Affinity{
 							PodAntiAffinity: &v1.PodAntiAffinity{
 								RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -665,7 +671,7 @@ func TestInterPodAffinity(t *testing.T) {
 					Labels: podLabel,
 				},
 				Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					Affinity: &v1.Affinity{
 						PodAffinity: &v1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -687,7 +693,7 @@ func TestInterPodAffinity(t *testing.T) {
 				},
 			},
 			pods: []*v1.Pod{{Spec: v1.PodSpec{
-				Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+				Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 				NodeName:   "machine2"}, ObjectMeta: metav1.ObjectMeta{
 				Name:   "fakename2",
 				Labels: podLabel}}},
@@ -701,12 +707,12 @@ func TestInterPodAffinity(t *testing.T) {
 					Name:   "fakename",
 					Labels: podLabel,
 				},
-				Spec: v1.PodSpec{Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}}},
+				Spec: v1.PodSpec{Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}}},
 			},
 			pods: []*v1.Pod{
 				{
 					Spec: v1.PodSpec{NodeName: nodes[0].Name,
-						Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+						Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 						Affinity: &v1.Affinity{
 							PodAntiAffinity: &v1.PodAntiAffinity{
 								RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -741,12 +747,12 @@ func TestInterPodAffinity(t *testing.T) {
 					Name:   "fake-name",
 					Labels: podLabel,
 				},
-				Spec: v1.PodSpec{Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}}},
+				Spec: v1.PodSpec{Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}}},
 			},
 			pods: []*v1.Pod{
 				{
 					Spec: v1.PodSpec{NodeName: nodes[0].Name,
-						Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+						Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 						Affinity: &v1.Affinity{
 							PodAntiAffinity: &v1.PodAntiAffinity{
 								RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -779,7 +785,7 @@ func TestInterPodAffinity(t *testing.T) {
 			pod: &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "fake-name2"},
 				Spec: v1.PodSpec{
-					Containers:   []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers:   []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					NodeSelector: map[string]string{"region": "r1"},
 					Affinity: &v1.Affinity{
 						PodAntiAffinity: &v1.PodAntiAffinity{
@@ -803,7 +809,7 @@ func TestInterPodAffinity(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				{Spec: v1.PodSpec{
-					Containers: []v1.Container{{Name: "container", Image: framework.GetPauseImageName(cs)}},
+					Containers: []v1.Container{{Name: "container", Image: imageutils.GetPauseImageName()}},
 					NodeName:   nodes[0].Name}, ObjectMeta: metav1.ObjectMeta{Name: "fakename", Labels: map[string]string{"foo": "abc"}}},
 			},
 			fits: false,
@@ -870,3 +876,215 @@ func TestInterPodAffinity(t *testing.T) {
 		}
 	}
 }
+
+// TestNodePIDPressure verifies that scheduler's CheckNodePIDPressurePredicate predicate
+// functions works correctly.
+func TestNodePIDPressure(t *testing.T) {
+	context := initTest(t, "node-pid-pressure")
+	defer cleanupTest(t, context)
+	// Add a node.
+	node, err := createNode(context.clientSet, "testnode", nil)
+	if err != nil {
+		t.Fatalf("Cannot create node: %v", err)
+	}
+
+	cs := context.clientSet
+
+	// Adds PID pressure condition to the node.
+	node.Status.Conditions = []v1.NodeCondition{
+		{
+			Type:   v1.NodePIDPressure,
+			Status: v1.ConditionTrue,
+		},
+	}
+
+	// Update node condition.
+	err = updateNodeStatus(context.clientSet, node)
+	if err != nil {
+		t.Fatalf("Cannot update node: %v", err)
+	}
+
+	// Create test pod.
+	testPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "pidpressure-fake-name"},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{Name: "container", Image: imageutils.GetPauseImageName()},
+			},
+		},
+	}
+
+	testPod, err = cs.CoreV1().Pods(context.ns.Name).Create(testPod)
+	if err != nil {
+		t.Fatalf("Test Failed: error: %v, while creating pod", err)
+	}
+
+	err = waitForPodUnschedulable(cs, testPod)
+	if err != nil {
+		t.Errorf("Test Failed: error, %v, while waiting for scheduled", err)
+	}
+
+	cleanupPods(cs, t, []*v1.Pod{testPod})
+}
+
+// TestEvenPodsSpreadPredicate verifies that EvenPodsSpread predicate functions well.
+func TestEvenPodsSpreadPredicate(t *testing.T) {
+	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.EvenPodsSpread, true)()
+	// Apply feature gates to enable EvenPodsSpread
+	defer algorithmprovider.ApplyFeatureGates()()
+
+	context := initTest(t, "eps-predicate")
+	cs := context.clientSet
+	ns := context.ns.Name
+	defer cleanupTest(t, context)
+	// Add 4 nodes.
+	nodes, err := createNodes(cs, "node", nil, 4)
+	if err != nil {
+		t.Fatalf("Cannot create nodes: %v", err)
+	}
+	for i, node := range nodes {
+		// Apply labels "zone: zone-{0,1}" and "node: <node name>" to each node.
+		labels := map[string]string{
+			"zone": fmt.Sprintf("zone-%d", i/2),
+			"node": node.Name,
+		}
+		if err = testutils.AddLabelsToNode(cs, node.Name, labels); err != nil {
+			t.Fatalf("Cannot add labels to node: %v", err)
+		}
+		if err = waitForNodeLabels(cs, node.Name, labels); err != nil {
+			t.Fatalf("Failed to poll node labels: %v", err)
+		}
+	}
+
+	pause := imageutils.GetPauseImageName()
+	tests := []struct {
+		name           string
+		incomingPod    *v1.Pod
+		existingPods   []*v1.Pod
+		fits           bool
+		candidateNodes []string // nodes expected to schedule onto
+	}{
+		// note: naming starts at index 0
+		{
+			name: "place pod on a 1/1/0/1 cluster with MaxSkew=1, node-2 is the only fit",
+			incomingPod: st.MakePod().Namespace(ns).Name("p").Label("foo", "").Container(pause).
+				SpreadConstraint(1, "node", hardSpread, st.MakeLabelSelector().Exists("foo").Obj()).
+				Obj(),
+			existingPods: []*v1.Pod{
+				st.MakePod().Namespace(ns).Name("p0").Node("node-0").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().Namespace(ns).Name("p1").Node("node-1").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().Namespace(ns).Name("p3").Node("node-3").Label("foo", "").Container(pause).Obj(),
+			},
+			fits:           true,
+			candidateNodes: []string{"node-2"},
+		},
+		{
+			name: "place pod on a 2/0/0/1 cluster with MaxSkew=2, node-{1,2,3} are good fits",
+			incomingPod: st.MakePod().Namespace(ns).Name("p").Label("foo", "").Container(pause).
+				SpreadConstraint(2, "node", hardSpread, st.MakeLabelSelector().Exists("foo").Obj()).
+				Obj(),
+			existingPods: []*v1.Pod{
+				st.MakePod().Namespace(ns).Name("p0a").Node("node-0").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().Namespace(ns).Name("p0b").Node("node-0").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().Namespace(ns).Name("p3").Node("node-3").Label("foo", "").Container(pause).Obj(),
+			},
+			fits:           true,
+			candidateNodes: []string{"node-1", "node-2", "node-3"},
+		},
+		{
+			name: "pod is required to be placed on zone0, so only node-1 fits",
+			incomingPod: st.MakePod().Namespace(ns).Name("p").Label("foo", "").Container(pause).
+				NodeAffinityIn("zone", []string{"zone-0"}).
+				SpreadConstraint(1, "node", hardSpread, st.MakeLabelSelector().Exists("foo").Obj()).
+				Obj(),
+			existingPods: []*v1.Pod{
+				st.MakePod().Namespace(ns).Name("p0").Node("node-0").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().Namespace(ns).Name("p3").Node("node-3").Label("foo", "").Container(pause).Obj(),
+			},
+			fits:           true,
+			candidateNodes: []string{"node-1"},
+		},
+		{
+			name: "two constraints: pod can only be placed to zone-1/node-2",
+			incomingPod: st.MakePod().Namespace(ns).Name("p").Label("foo", "").Container(pause).
+				SpreadConstraint(1, "zone", hardSpread, st.MakeLabelSelector().Exists("foo").Obj()).
+				SpreadConstraint(1, "node", hardSpread, st.MakeLabelSelector().Exists("foo").Obj()).
+				Obj(),
+			existingPods: []*v1.Pod{
+				st.MakePod().Namespace(ns).Name("p0").Node("node-0").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().Namespace(ns).Name("p1").Node("node-1").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().Namespace(ns).Name("p3a").Node("node-3").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().Namespace(ns).Name("p3b").Node("node-3").Label("foo", "").Container(pause).Obj(),
+			},
+			fits:           true,
+			candidateNodes: []string{"node-2"},
+		},
+		{
+			name: "pod cannot be placed onto any node",
+			incomingPod: st.MakePod().Namespace(ns).Name("p").Label("foo", "").Container(pause).
+				NodeAffinityNotIn("node", []string{"node-0"}). // mock a 3-node cluster
+				SpreadConstraint(1, "zone", hardSpread, st.MakeLabelSelector().Exists("foo").Obj()).
+				SpreadConstraint(1, "node", hardSpread, st.MakeLabelSelector().Exists("foo").Obj()).
+				Obj(),
+			existingPods: []*v1.Pod{
+				st.MakePod().Namespace(ns).Name("p1a").Node("node-1").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().Namespace(ns).Name("p1b").Node("node-1").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().Namespace(ns).Name("p2a").Node("node-2").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().Namespace(ns).Name("p2b").Node("node-2").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().Namespace(ns).Name("p3").Node("node-3").Label("foo", "").Container(pause).Obj(),
+			},
+			fits: false,
+		},
+		{
+			name: "high priority pod can preempt others",
+			incomingPod: st.MakePod().Namespace(ns).Name("p").Label("foo", "").Container(pause).Priority(100).
+				NodeAffinityNotIn("node", []string{"node-0"}). // mock a 3-node cluster
+				SpreadConstraint(1, "zone", hardSpread, st.MakeLabelSelector().Exists("foo").Obj()).
+				SpreadConstraint(1, "node", hardSpread, st.MakeLabelSelector().Exists("foo").Obj()).
+				Obj(),
+			existingPods: []*v1.Pod{
+				st.MakePod().ZeroTerminationGracePeriod().Namespace(ns).Name("p1a").Node("node-1").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().ZeroTerminationGracePeriod().Namespace(ns).Name("p1b").Node("node-1").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().ZeroTerminationGracePeriod().Namespace(ns).Name("p2a").Node("node-2").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().ZeroTerminationGracePeriod().Namespace(ns).Name("p2b").Node("node-2").Label("foo", "").Container(pause).Obj(),
+				st.MakePod().ZeroTerminationGracePeriod().Namespace(ns).Name("p3").Node("node-3").Label("foo", "").Container(pause).Obj(),
+			},
+			fits:           true,
+			candidateNodes: []string{"node-1", "node-2", "node-3"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			allPods := append(tt.existingPods, tt.incomingPod)
+			defer cleanupPods(cs, t, allPods)
+			for _, pod := range tt.existingPods {
+				createdPod, err := cs.CoreV1().Pods(pod.Namespace).Create(pod)
+				if err != nil {
+					t.Fatalf("Test Failed: error while creating pod during test: %v", err)
+				}
+				err = wait.Poll(pollInterval, wait.ForeverTestTimeout, podScheduled(cs, createdPod.Namespace, createdPod.Name))
+				if err != nil {
+					t.Errorf("Test Failed: error while waiting for pod during test: %v", err)
+				}
+			}
+			testPod, err := cs.CoreV1().Pods(tt.incomingPod.Namespace).Create(tt.incomingPod)
+			if err != nil && !errors.IsInvalid(err) {
+				t.Fatalf("Test Failed: error while creating pod during test: %v", err)
+			}
+
+			if tt.fits {
+				err = wait.Poll(pollInterval, wait.ForeverTestTimeout, podScheduledIn(cs, testPod.Namespace, testPod.Name, tt.candidateNodes))
+			} else {
+				err = wait.Poll(pollInterval, wait.ForeverTestTimeout, podUnschedulable(cs, testPod.Namespace, testPod.Name))
+			}
+			if err != nil {
+				t.Errorf("Test Failed: %v", err)
+			}
+		})
+	}
+}
+
+var (
+	hardSpread = v1.DoNotSchedule
+	softSpread = v1.ScheduleAnyway
+)

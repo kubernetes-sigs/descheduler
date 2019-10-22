@@ -24,7 +24,6 @@ import (
 
 	"github.com/golang/glog"
 	"sigs.k8s.io/descheduler/pkg/api"
-	_ "sigs.k8s.io/descheduler/pkg/api/install"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 )

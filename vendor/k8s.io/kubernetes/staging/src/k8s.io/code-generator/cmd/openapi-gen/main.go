@@ -1,5 +1,5 @@
 /*
-Copyright 2016 The Kubernetes Authors.
+Copyright 2018 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,31 +17,41 @@ limitations under the License.
 // This package generates openAPI definition file to be used in open API spec generation on API servers. To generate
 // definition for a specific type or package add "+k8s:openapi-gen=true" tag to the type/package comment lines. To
 // exclude a type from a tagged package, add "+k8s:openapi-gen=false" tag to the type comment lines.
+
 package main
 
 import (
-	"path/filepath"
+	"flag"
+	"log"
 
-	"k8s.io/gengo/args"
+	generatorargs "k8s.io/kube-openapi/cmd/openapi-gen/args"
 	"k8s.io/kube-openapi/pkg/generators"
 
-	"github.com/golang/glog"
+	"github.com/spf13/pflag"
+
+	"k8s.io/klog"
 )
 
 func main() {
-	arguments := args.Default()
+	klog.InitFlags(nil)
+	genericArgs, customArgs := generatorargs.NewDefaults()
 
-	// Override defaults.
-	arguments.GoHeaderFilePath = filepath.Join(args.DefaultSourceTree(), "k8s.io/kubernetes/hack/boilerplate/boilerplate.go.txt")
-	arguments.OutputFileBaseName = "openapi_generated"
+	genericArgs.AddFlags(pflag.CommandLine)
+	customArgs.AddFlags(pflag.CommandLine)
+	flag.Set("logtostderr", "true")
+	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
+	pflag.Parse()
 
-	// Run it.
-	if err := arguments.Execute(
+	if err := generatorargs.Validate(genericArgs); err != nil {
+		log.Fatalf("Arguments validation error: %v", err)
+	}
+
+	// Generates the code for the OpenAPIDefinitions.
+	if err := genericArgs.Execute(
 		generators.NameSystems(),
 		generators.DefaultNameSystem(),
 		generators.Packages,
 	); err != nil {
-		glog.Fatalf("Error: %v", err)
+		log.Fatalf("OpenAPI code generation error: %v", err)
 	}
-	glog.V(2).Info("Completed successfully.")
 }

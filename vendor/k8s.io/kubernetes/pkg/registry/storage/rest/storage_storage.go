@@ -24,8 +24,12 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	serverstorage "k8s.io/apiserver/pkg/server/storage"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	storageapi "k8s.io/kubernetes/pkg/apis/storage"
+	"k8s.io/kubernetes/pkg/features"
+	csidriverstore "k8s.io/kubernetes/pkg/registry/storage/csidriver/storage"
+	csinodestore "k8s.io/kubernetes/pkg/registry/storage/csinode/storage"
 	storageclassstore "k8s.io/kubernetes/pkg/registry/storage/storageclass/storage"
 	volumeattachmentstore "k8s.io/kubernetes/pkg/registry/storage/volumeattachment/storage"
 )
@@ -33,64 +37,105 @@ import (
 type RESTStorageProvider struct {
 }
 
-func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, bool) {
-	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(storageapi.GroupName, legacyscheme.Registry, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
+func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, bool, error) {
+	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(storageapi.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
 	// TODO refactor the plumbing to provide the information in the APIGroupInfo
 
-	if apiResourceConfigSource.AnyResourcesForVersionEnabled(storageapiv1alpha1.SchemeGroupVersion) {
-		apiGroupInfo.VersionedResourcesStorageMap[storageapiv1alpha1.SchemeGroupVersion.Version] = p.v1alpha1Storage(apiResourceConfigSource, restOptionsGetter)
-		apiGroupInfo.GroupMeta.GroupVersion = storageapiv1alpha1.SchemeGroupVersion
+	if apiResourceConfigSource.VersionEnabled(storageapiv1alpha1.SchemeGroupVersion) {
+		if storageMap, err := p.v1alpha1Storage(apiResourceConfigSource, restOptionsGetter); err != nil {
+			return genericapiserver.APIGroupInfo{}, false, err
+		} else {
+			apiGroupInfo.VersionedResourcesStorageMap[storageapiv1alpha1.SchemeGroupVersion.Version] = storageMap
+		}
 	}
-	if apiResourceConfigSource.AnyResourcesForVersionEnabled(storageapiv1beta1.SchemeGroupVersion) {
-		apiGroupInfo.VersionedResourcesStorageMap[storageapiv1beta1.SchemeGroupVersion.Version] = p.v1beta1Storage(apiResourceConfigSource, restOptionsGetter)
-		apiGroupInfo.GroupMeta.GroupVersion = storageapiv1beta1.SchemeGroupVersion
+	if apiResourceConfigSource.VersionEnabled(storageapiv1beta1.SchemeGroupVersion) {
+		if storageMap, err := p.v1beta1Storage(apiResourceConfigSource, restOptionsGetter); err != nil {
+			return genericapiserver.APIGroupInfo{}, false, err
+		} else {
+			apiGroupInfo.VersionedResourcesStorageMap[storageapiv1beta1.SchemeGroupVersion.Version] = storageMap
+		}
 	}
-	if apiResourceConfigSource.AnyResourcesForVersionEnabled(storageapiv1.SchemeGroupVersion) {
-		apiGroupInfo.VersionedResourcesStorageMap[storageapiv1.SchemeGroupVersion.Version] = p.v1Storage(apiResourceConfigSource, restOptionsGetter)
-		apiGroupInfo.GroupMeta.GroupVersion = storageapiv1.SchemeGroupVersion
+	if apiResourceConfigSource.VersionEnabled(storageapiv1.SchemeGroupVersion) {
+		if storageMap, err := p.v1Storage(apiResourceConfigSource, restOptionsGetter); err != nil {
+			return genericapiserver.APIGroupInfo{}, false, err
+		} else {
+			apiGroupInfo.VersionedResourcesStorageMap[storageapiv1.SchemeGroupVersion.Version] = storageMap
+		}
 	}
 
-	return apiGroupInfo, true
+	return apiGroupInfo, true, nil
 }
 
-func (p RESTStorageProvider) v1alpha1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) map[string]rest.Storage {
-	version := storageapiv1alpha1.SchemeGroupVersion
-
+func (p RESTStorageProvider) v1alpha1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
-
-	if apiResourceConfigSource.ResourceEnabled(version.WithResource("volumeattachments")) {
-		volumeAttachmentStorage := volumeattachmentstore.NewREST(restOptionsGetter)
-		storage["volumeattachments"] = volumeAttachmentStorage
+	// volumeattachments
+	volumeAttachmentStorage, err := volumeattachmentstore.NewStorage(restOptionsGetter)
+	if err != nil {
+		return storage, err
 	}
+	storage["volumeattachments"] = volumeAttachmentStorage.VolumeAttachment
 
-	return storage
+	return storage, nil
 }
 
-func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) map[string]rest.Storage {
-	version := storageapiv1beta1.SchemeGroupVersion
-
+func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
 	storage := map[string]rest.Storage{}
+	// storageclasses
+	storageClassStorage, err := storageclassstore.NewREST(restOptionsGetter)
+	if err != nil {
+		return storage, err
+	}
+	storage["storageclasses"] = storageClassStorage
 
-	if apiResourceConfigSource.ResourceEnabled(version.WithResource("storageclasses")) {
-		storageClassStorage := storageclassstore.NewREST(restOptionsGetter)
-		storage["storageclasses"] = storageClassStorage
+	// volumeattachments
+	volumeAttachmentStorage, err := volumeattachmentstore.NewStorage(restOptionsGetter)
+	if err != nil {
+		return storage, err
+	}
+	storage["volumeattachments"] = volumeAttachmentStorage.VolumeAttachment
+
+	// register csinodes if CSINodeInfo feature gate is enabled
+	if utilfeature.DefaultFeatureGate.Enabled(features.CSINodeInfo) {
+		csiNodeStorage, err := csinodestore.NewStorage(restOptionsGetter)
+		if err != nil {
+			return storage, err
+		}
+		storage["csinodes"] = csiNodeStorage.CSINode
 	}
 
-	return storage
+	// register csidrivers if CSIDriverRegistry feature gate is enabled
+	if utilfeature.DefaultFeatureGate.Enabled(features.CSIDriverRegistry) {
+		csiDriverStorage, err := csidriverstore.NewStorage(restOptionsGetter)
+		if err != nil {
+			return storage, err
+		}
+		storage["csidrivers"] = csiDriverStorage.CSIDriver
+	}
+
+	return storage, nil
 }
 
-func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) map[string]rest.Storage {
-	version := storageapiv1.SchemeGroupVersion
-
-	storage := map[string]rest.Storage{}
-
-	if apiResourceConfigSource.ResourceEnabled(version.WithResource("storageclasses")) {
-		storageClassStorage := storageclassstore.NewREST(restOptionsGetter)
-		storage["storageclasses"] = storageClassStorage
+func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (map[string]rest.Storage, error) {
+	storageClassStorage, err := storageclassstore.NewREST(restOptionsGetter)
+	if err != nil {
+		return nil, err
+	}
+	volumeAttachmentStorage, err := volumeattachmentstore.NewStorage(restOptionsGetter)
+	if err != nil {
+		return nil, err
 	}
 
-	return storage
+	storage := map[string]rest.Storage{
+		// storageclasses
+		"storageclasses": storageClassStorage,
+
+		// volumeattachments
+		"volumeattachments":        volumeAttachmentStorage.VolumeAttachment,
+		"volumeattachments/status": volumeAttachmentStorage.Status,
+	}
+
+	return storage, nil
 }
 
 func (p RESTStorageProvider) GroupName() string {

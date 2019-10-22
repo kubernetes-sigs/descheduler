@@ -25,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/kube-aggregator/pkg/apis/apiregistration"
+	apiregistration "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 )
 
 func TestHandleVersionUpdate(t *testing.T) {
@@ -42,8 +42,16 @@ func TestHandleVersionUpdate(t *testing.T) {
 			startingCRDs: []*apiextensions.CustomResourceDefinition{
 				{
 					Spec: apiextensions.CustomResourceDefinitionSpec{
-						Group:   "group.com",
-						Version: "v1",
+						Group: "group.com",
+						// Version field is deprecated and crd registration won't rely on it at all.
+						// defaulting route will fill up Versions field if user only provided version field.
+						Versions: []apiextensions.CustomResourceDefinitionVersion{
+							{
+								Name:    "v1",
+								Served:  true,
+								Storage: true,
+							},
+						},
 					},
 				},
 			},
@@ -66,8 +74,14 @@ func TestHandleVersionUpdate(t *testing.T) {
 			startingCRDs: []*apiextensions.CustomResourceDefinition{
 				{
 					Spec: apiextensions.CustomResourceDefinitionSpec{
-						Group:   "group.com",
-						Version: "v1",
+						Group: "group.com",
+						Versions: []apiextensions.CustomResourceDefinitionVersion{
+							{
+								Name:    "v1",
+								Served:  true,
+								Storage: true,
+							},
+						},
 					},
 				},
 			},
@@ -78,27 +92,28 @@ func TestHandleVersionUpdate(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		registration := &fakeAPIServiceRegistration{}
-		crdCache := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
-		crdLister := crdlisters.NewCustomResourceDefinitionLister(crdCache)
-		c := crdRegistrationController{
-			crdLister:              crdLister,
-			apiServiceRegistration: registration,
-		}
-		for i := range test.startingCRDs {
-			crdCache.Add(test.startingCRDs[i])
-		}
+		t.Run(test.name, func(t *testing.T) {
+			registration := &fakeAPIServiceRegistration{}
+			crdCache := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
+			crdLister := crdlisters.NewCustomResourceDefinitionLister(crdCache)
+			c := crdRegistrationController{
+				crdLister:              crdLister,
+				apiServiceRegistration: registration,
+			}
+			for i := range test.startingCRDs {
+				crdCache.Add(test.startingCRDs[i])
+			}
 
-		c.handleVersionUpdate(test.version)
+			c.handleVersionUpdate(test.version)
 
-		if !reflect.DeepEqual(test.expectedAdded, registration.added) {
-			t.Errorf("%s expected %v, got %v", test.name, test.expectedAdded, registration.added)
-		}
-		if !reflect.DeepEqual(test.expectedRemoved, registration.removed) {
-			t.Errorf("%s expected %v, got %v", test.name, test.expectedRemoved, registration.removed)
-		}
+			if !reflect.DeepEqual(test.expectedAdded, registration.added) {
+				t.Errorf("%s expected %v, got %v", test.name, test.expectedAdded, registration.added)
+			}
+			if !reflect.DeepEqual(test.expectedRemoved, registration.removed) {
+				t.Errorf("%s expected %v, got %v", test.name, test.expectedRemoved, registration.removed)
+			}
+		})
 	}
-
 }
 
 type fakeAPIServiceRegistration struct {

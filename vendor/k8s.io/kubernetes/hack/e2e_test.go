@@ -63,13 +63,23 @@ func TestParse(t *testing.T) {
 		err      error
 	}{
 		{
+			[]string{"foo", "-v=false"},
+			flags{getDefault, oldDefault, []string{"--verbose-commands=false"}},
+			nil,
+		},
+		{
+			[]string{"foo", "-v"},
+			flags{getDefault, oldDefault, []string{"--verbose-commands=true"}},
+			nil,
+		},
+		{
 			[]string{"hello", "world"},
-			flags{getDefault, oldDefault, []string{"world"}},
+			flags{getDefault, oldDefault, []string{"--verbose-commands=true", "world"}},
 			nil,
 		},
 		{
 			[]string{"hello", "--", "--venus", "--karaoke"},
-			flags{getDefault, oldDefault, []string{"--venus", "--karaoke"}},
+			flags{getDefault, oldDefault, []string{"--verbose-commands=true", "--venus", "--karaoke"}},
 			nil,
 		},
 		{
@@ -84,12 +94,12 @@ func TestParse(t *testing.T) {
 		},
 		{
 			[]string{"omg", "--get=false", "--", "ugh"},
-			flags{false, oldDefault, []string{"ugh"}},
+			flags{false, oldDefault, []string{"--verbose-commands=true", "ugh"}},
 			nil,
 		},
 		{
 			[]string{"wee", "--old=5m", "--get"},
-			flags{true, 5 * time.Minute, []string{}},
+			flags{true, 5 * time.Minute, []string{"--verbose-commands=true"}},
 			nil,
 		},
 		{
@@ -104,7 +114,7 @@ func TestParse(t *testing.T) {
 		},
 		{
 			[]string{"wut", "--", "-h"},
-			flags{getDefault, oldDefault, []string{"-h"}},
+			flags{getDefault, oldDefault, []string{"--verbose-commands=true", "-h"}},
 			nil,
 		},
 	}
@@ -128,10 +138,10 @@ func TestParse(t *testing.T) {
 }
 
 func TestLook(t *testing.T) {
-	lpf := errors.New("LookPath failed")
-	sf := errors.New("Stat failed")
-	lpnc := errors.New("LookPath should not be called")
-	snc := errors.New("Stat should not be called")
+	lpf := errors.New("lookPath failed")
+	sf := errors.New("stat failed")
+	lpnc := errors.New("lookPath should not be called")
+	snc := errors.New("stat should not be called")
 	cases := []struct {
 		stat     error
 		lookPath error
@@ -314,7 +324,7 @@ func TestGetKubetest(t *testing.T) {
 			stat: func(p string) (os.FileInfo, error) {
 				// stat
 				if p != c.stat {
-					return nil, fmt.Errorf("Failed to find %s", p)
+					return nil, fmt.Errorf("failed to find %s", p)
 				}
 				return FileInfo{time.Now().Add(c.age * -1)}, nil
 			},
@@ -322,7 +332,7 @@ func TestGetKubetest(t *testing.T) {
 				if c.path {
 					return filepath.Join(p, name), nil
 				}
-				return "", fmt.Errorf("Not on path: %s", name)
+				return "", fmt.Errorf("not on path: %s", name)
 			},
 			goPath: c.goPath,
 			wait: func(cmd string, args ...string) error {

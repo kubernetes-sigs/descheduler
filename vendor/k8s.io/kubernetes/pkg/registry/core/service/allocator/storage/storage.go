@@ -17,6 +17,7 @@ limitations under the License.
 package storage
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -32,8 +33,6 @@ import (
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/registry/core/rangeallocation"
 	"k8s.io/kubernetes/pkg/registry/core/service/allocator"
-
-	"golang.org/x/net/context"
 )
 
 var (
@@ -61,8 +60,11 @@ var _ rangeallocation.RangeRegistry = &Etcd{}
 
 // NewEtcd returns an allocator that is backed by Etcd and can manage
 // persisting the snapshot state of allocation after each allocation is made.
-func NewEtcd(alloc allocator.Snapshottable, baseKey string, resource schema.GroupResource, config *storagebackend.Config) *Etcd {
-	storage, d := generic.NewRawStorage(config)
+func NewEtcd(alloc allocator.Snapshottable, baseKey string, resource schema.GroupResource, config *storagebackend.Config) (*Etcd, error) {
+	storage, d, err := generic.NewRawStorage(config)
+	if err != nil {
+		return nil, err
+	}
 
 	// TODO : Remove RegisterStorageCleanup below when PR
 	// https://github.com/kubernetes/kubernetes/pull/50690
@@ -74,7 +76,7 @@ func NewEtcd(alloc allocator.Snapshottable, baseKey string, resource schema.Grou
 		storage:  storage,
 		baseKey:  baseKey,
 		resource: resource,
-	}
+	}, nil
 }
 
 // Allocate attempts to allocate the item locally and then in etcd.
