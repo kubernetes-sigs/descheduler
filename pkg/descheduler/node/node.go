@@ -50,7 +50,7 @@ func ReadyNodes(client clientset.Interface, nodeSelector string, stopChannel <-c
 	if len(nodes) == 0 {
 		glog.V(2).Infof("node lister returned empty list, now fetch directly")
 
-		nItems, err := client.Core().Nodes().List(metav1.ListOptions{LabelSelector: nodeSelector})
+		nItems, err := client.CoreV1().Nodes().List(metav1.ListOptions{LabelSelector: nodeSelector})
 		if err != nil {
 			return []*v1.Node{}, err
 		}
@@ -78,7 +78,7 @@ func GetNodeLister(client clientset.Interface, stopChannel <-chan struct{}) core
 	if stopChannel == nil {
 		return nil
 	}
-	listWatcher := cache.NewListWatchFromClient(client.Core().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
+	listWatcher := cache.NewListWatchFromClient(client.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
 	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	nodeLister := corelisters.NewNodeLister(store)
 	reflector := cache.NewReflector(listWatcher, &v1.Node{}, store, time.Hour)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/diskconfig"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/extendedstatus"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/pagination"
 	th "github.com/gophercloud/gophercloud/testhelper"
@@ -66,6 +67,7 @@ func TestListAllServersWithExtensions(t *testing.T) {
 	type ServerWithExt struct {
 		servers.Server
 		availabilityzones.ServerAvailabilityZoneExt
+		extendedstatus.ServerExtendedStatusExt
 		diskconfig.ServerDiskConfigExt
 	}
 
@@ -77,6 +79,9 @@ func TestListAllServersWithExtensions(t *testing.T) {
 	th.AssertNoErr(t, err)
 	th.AssertEquals(t, 3, len(actual))
 	th.AssertEquals(t, "nova", actual[0].AvailabilityZone)
+	th.AssertEquals(t, "RUNNING", actual[0].PowerState.String())
+	th.AssertEquals(t, "", actual[0].TaskState)
+	th.AssertEquals(t, "active", actual[0].VmState)
 	th.AssertEquals(t, diskconfig.Manual, actual[0].DiskConfig)
 }
 
@@ -89,6 +94,23 @@ func TestCreateServer(t *testing.T) {
 		Name:      "derp",
 		ImageRef:  "f90f6034-2570-4974-8351-6b49732ef2eb",
 		FlavorRef: "1",
+	}).Extract()
+	th.AssertNoErr(t, err)
+
+	th.CheckDeepEquals(t, ServerDerp, *actual)
+}
+
+func TestCreateServers(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleServersCreationSuccessfully(t, SingleServerBody)
+
+	actual, err := servers.Create(client.ServiceClient(), servers.CreateOpts{
+		Name:      "derp",
+		ImageRef:  "f90f6034-2570-4974-8351-6b49732ef2eb",
+		FlavorRef: "1",
+		Min:       3,
+		Max:       3,
 	}).Extract()
 	th.AssertNoErr(t, err)
 
@@ -237,12 +259,16 @@ func TestGetServerWithExtensions(t *testing.T) {
 	var s struct {
 		servers.Server
 		availabilityzones.ServerAvailabilityZoneExt
+		extendedstatus.ServerExtendedStatusExt
 		diskconfig.ServerDiskConfigExt
 	}
 
 	err := servers.Get(client.ServiceClient(), "1234asdf").ExtractInto(&s)
 	th.AssertNoErr(t, err)
 	th.AssertEquals(t, "nova", s.AvailabilityZone)
+	th.AssertEquals(t, "RUNNING", s.PowerState.String())
+	th.AssertEquals(t, "", s.TaskState)
+	th.AssertEquals(t, "active", s.VmState)
 	th.AssertEquals(t, diskconfig.Manual, s.DiskConfig)
 
 	err = servers.Get(client.ServiceClient(), "1234asdf").ExtractInto(s)
@@ -274,6 +300,20 @@ func TestChangeServerAdminPassword(t *testing.T) {
 	th.AssertNoErr(t, res.Err)
 }
 
+func TestShowConsoleOutput(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleShowConsoleOutputSuccessfully(t, ConsoleOutputBody)
+
+	outputOpts := &servers.ShowConsoleOutputOpts{
+		Length: 50,
+	}
+	actual, err := servers.ShowConsoleOutput(client.ServiceClient(), "1234asdf", outputOpts).Extract()
+
+	th.AssertNoErr(t, err)
+	th.AssertByteArrayEquals(t, []byte(ConsoleOutput), []byte(actual))
+}
+
 func TestGetPassword(t *testing.T) {
 	th.SetupHTTP()
 	defer th.TeardownHTTP()
@@ -288,7 +328,7 @@ func TestRebootServer(t *testing.T) {
 	defer th.TeardownHTTP()
 	HandleRebootSuccessfully(t)
 
-	res := servers.Reboot(client.ServiceClient(), "1234asdf", &servers.RebootOpts{
+	res := servers.Reboot(client.ServiceClient(), "1234asdf", servers.RebootOpts{
 		Type: servers.SoftReboot,
 	})
 	th.AssertNoErr(t, res.Err)
@@ -358,20 +398,6 @@ func TestRevertResize(t *testing.T) {
 
 	res := servers.RevertResize(client.ServiceClient(), "1234asdf")
 	th.AssertNoErr(t, res.Err)
-}
-
-func TestRescue(t *testing.T) {
-	th.SetupHTTP()
-	defer th.TeardownHTTP()
-
-	HandleServerRescueSuccessfully(t)
-
-	res := servers.Rescue(client.ServiceClient(), "1234asdf", servers.RescueOpts{
-		AdminPass: "1234567890",
-	})
-	th.AssertNoErr(t, res.Err)
-	adminPass, _ := res.Extract()
-	th.AssertEquals(t, "1234567890", adminPass)
 }
 
 func TestGetMetadatum(t *testing.T) {
@@ -540,4 +566,30 @@ func TestMarshalPersonality(t *testing.T) {
 	if actual[0]["contents"] != base64.StdEncoding.EncodeToString(contents) {
 		t.Fatal("file contents incorrect")
 	}
+}
+
+func TestCreateServerWithTags(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleServerWithTagsCreationSuccessfully(t)
+
+	c := client.ServiceClient()
+	c.Microversion = "2.52"
+
+	tags := []string{"foo", "bar"}
+	createOpts := servers.CreateOpts{
+		Name:      "derp",
+		ImageRef:  "f90f6034-2570-4974-8351-6b49732ef2eb",
+		FlavorRef: "1",
+		Tags:      tags,
+	}
+	res := servers.Create(c, createOpts)
+	th.AssertNoErr(t, res.Err)
+	actualServer, err := res.Extract()
+	th.AssertNoErr(t, err)
+	th.CheckDeepEquals(t, ServerDerp, *actualServer)
+
+	actualTags, err := res.ExtractTags()
+	th.AssertNoErr(t, err)
+	th.CheckDeepEquals(t, tags, actualTags)
 }

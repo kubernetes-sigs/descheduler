@@ -377,7 +377,7 @@ func NodeUtilization(node *v1.Node, pods []*v1.Pod, evictLocalStoragePods bool) 
 		for name, quantity := range req {
 			if name == v1.ResourceCPU || name == v1.ResourceMemory {
 				if value, ok := totalReqs[name]; !ok {
-					totalReqs[name] = *quantity.Copy()
+					totalReqs[name] = quantity.DeepCopy()
 				} else {
 					value.Add(quantity)
 					totalReqs[name] = value

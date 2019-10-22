@@ -6,111 +6,196 @@ import (
 	"testing"
 
 	"github.com/gophercloud/gophercloud/acceptance/clients"
+	identity "github.com/gophercloud/gophercloud/acceptance/openstack/identity/v3"
 	"github.com/gophercloud/gophercloud/acceptance/tools"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	th "github.com/gophercloud/gophercloud/testhelper"
 )
 
 func TestFlavorsList(t *testing.T) {
-	t.Logf("** Default flavors (same as Project flavors): **")
-	t.Logf("")
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
+
+	choices, err := clients.AcceptanceTestChoicesFromEnv()
+	th.AssertNoErr(t, err)
 
 	allPages, err := flavors.ListDetail(client, nil).AllPages()
-	if err != nil {
-		t.Fatalf("Unable to retrieve flavors: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	allFlavors, err := flavors.ExtractFlavors(allPages)
-	if err != nil {
-		t.Fatalf("Unable to extract flavor results: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
+	var found bool
 	for _, flavor := range allFlavors {
 		tools.PrintResource(t, flavor)
+
+		if flavor.ID == choices.FlavorID {
+			found = true
+		}
 	}
 
-	flavorAccessTypes := [3]flavors.AccessType{flavors.PublicAccess, flavors.PrivateAccess, flavors.AllAccess}
-	for _, flavorAccessType := range flavorAccessTypes {
-		t.Logf("** %s flavors: **", flavorAccessType)
-		t.Logf("")
+	th.AssertEquals(t, found, true)
+}
+
+func TestFlavorsAccessTypeList(t *testing.T) {
+	client, err := clients.NewComputeV2Client()
+	th.AssertNoErr(t, err)
+
+	flavorAccessTypes := map[string]flavors.AccessType{
+		"public":  flavors.PublicAccess,
+		"private": flavors.PrivateAccess,
+		"all":     flavors.AllAccess,
+	}
+
+	for flavorTypeName, flavorAccessType := range flavorAccessTypes {
+		t.Logf("** %s flavors: **", flavorTypeName)
 		allPages, err := flavors.ListDetail(client, flavors.ListOpts{AccessType: flavorAccessType}).AllPages()
-		if err != nil {
-			t.Fatalf("Unable to retrieve flavors: %v", err)
-		}
+		th.AssertNoErr(t, err)
 
 		allFlavors, err := flavors.ExtractFlavors(allPages)
-		if err != nil {
-			t.Fatalf("Unable to extract flavor results: %v", err)
-		}
+		th.AssertNoErr(t, err)
 
 		for _, flavor := range allFlavors {
 			tools.PrintResource(t, flavor)
-			t.Logf("")
 		}
 	}
-
 }
 
 func TestFlavorsGet(t *testing.T) {
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	choices, err := clients.AcceptanceTestChoicesFromEnv()
-	if err != nil {
-		t.Fatal(err)
-	}
+	th.AssertNoErr(t, err)
 
 	flavor, err := flavors.Get(client, choices.FlavorID).Extract()
-	if err != nil {
-		t.Fatalf("Unable to get flavor information: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	tools.PrintResource(t, flavor)
+
+	th.AssertEquals(t, flavor.ID, choices.FlavorID)
 }
 
-func TestFlavorCreateDelete(t *testing.T) {
+func TestFlavorsCreateDelete(t *testing.T) {
+	clients.RequireAdmin(t)
+
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	flavor, err := CreateFlavor(t, client)
-	if err != nil {
-		t.Fatalf("Unable to create flavor: %v", err)
-	}
+	th.AssertNoErr(t, err)
 	defer DeleteFlavor(t, client, flavor)
 
 	tools.PrintResource(t, flavor)
 }
 
-func TestFlavorAccessesList(t *testing.T) {
+func TestFlavorsAccessesList(t *testing.T) {
+	clients.RequireAdmin(t)
+
 	client, err := clients.NewComputeV2Client()
-	if err != nil {
-		t.Fatalf("Unable to create a compute client: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	flavor, err := CreatePrivateFlavor(t, client)
-	if err != nil {
-		t.Fatalf("Unable to create flavor: %v", err)
-	}
+	th.AssertNoErr(t, err)
 	defer DeleteFlavor(t, client, flavor)
 
 	allPages, err := flavors.ListAccesses(client, flavor.ID).AllPages()
-	if err != nil {
-		t.Fatalf("Unable to list flavor accesses: %v", err)
-	}
+	th.AssertNoErr(t, err)
 
 	allAccesses, err := flavors.ExtractAccesses(allPages)
-	if err != nil {
-		t.Fatalf("Unable to extract accesses: %v", err)
+	th.AssertNoErr(t, err)
+
+	th.AssertEquals(t, len(allAccesses), 0)
+}
+
+func TestFlavorsAccessCRUD(t *testing.T) {
+	clients.RequireAdmin(t)
+
+	client, err := clients.NewComputeV2Client()
+	th.AssertNoErr(t, err)
+
+	identityClient, err := clients.NewIdentityV3Client()
+	th.AssertNoErr(t, err)
+
+	project, err := identity.CreateProject(t, identityClient, nil)
+	th.AssertNoErr(t, err)
+	defer identity.DeleteProject(t, identityClient, project.ID)
+
+	flavor, err := CreatePrivateFlavor(t, client)
+	th.AssertNoErr(t, err)
+	defer DeleteFlavor(t, client, flavor)
+
+	addAccessOpts := flavors.AddAccessOpts{
+		Tenant: project.ID,
 	}
 
-	for _, access := range allAccesses {
+	accessList, err := flavors.AddAccess(client, flavor.ID, addAccessOpts).Extract()
+	th.AssertNoErr(t, err)
+
+	th.AssertEquals(t, len(accessList), 1)
+	th.AssertEquals(t, accessList[0].TenantID, project.ID)
+	th.AssertEquals(t, accessList[0].FlavorID, flavor.ID)
+
+	for _, access := range accessList {
 		tools.PrintResource(t, access)
 	}
+
+	removeAccessOpts := flavors.RemoveAccessOpts{
+		Tenant: project.ID,
+	}
+
+	accessList, err = flavors.RemoveAccess(client, flavor.ID, removeAccessOpts).Extract()
+	th.AssertNoErr(t, err)
+
+	th.AssertEquals(t, len(accessList), 0)
+}
+
+func TestFlavorsExtraSpecsCRUD(t *testing.T) {
+	clients.RequireAdmin(t)
+
+	client, err := clients.NewComputeV2Client()
+	th.AssertNoErr(t, err)
+
+	flavor, err := CreatePrivateFlavor(t, client)
+	th.AssertNoErr(t, err)
+	defer DeleteFlavor(t, client, flavor)
+
+	createOpts := flavors.ExtraSpecsOpts{
+		"hw:cpu_policy":        "CPU-POLICY",
+		"hw:cpu_thread_policy": "CPU-THREAD-POLICY",
+	}
+	createdExtraSpecs, err := flavors.CreateExtraSpecs(client, flavor.ID, createOpts).Extract()
+	th.AssertNoErr(t, err)
+
+	tools.PrintResource(t, createdExtraSpecs)
+
+	th.AssertEquals(t, len(createdExtraSpecs), 2)
+	th.AssertEquals(t, createdExtraSpecs["hw:cpu_policy"], "CPU-POLICY")
+	th.AssertEquals(t, createdExtraSpecs["hw:cpu_thread_policy"], "CPU-THREAD-POLICY")
+
+	err = flavors.DeleteExtraSpec(client, flavor.ID, "hw:cpu_policy").ExtractErr()
+	th.AssertNoErr(t, err)
+
+	updateOpts := flavors.ExtraSpecsOpts{
+		"hw:cpu_thread_policy": "CPU-THREAD-POLICY-BETTER",
+	}
+	updatedExtraSpec, err := flavors.UpdateExtraSpec(client, flavor.ID, updateOpts).Extract()
+	th.AssertNoErr(t, err)
+
+	tools.PrintResource(t, updatedExtraSpec)
+
+	allExtraSpecs, err := flavors.ListExtraSpecs(client, flavor.ID).Extract()
+	th.AssertNoErr(t, err)
+
+	tools.PrintResource(t, allExtraSpecs)
+
+	th.AssertEquals(t, len(allExtraSpecs), 1)
+	th.AssertEquals(t, allExtraSpecs["hw:cpu_thread_policy"], "CPU-THREAD-POLICY-BETTER")
+
+	spec, err := flavors.GetExtraSpec(client, flavor.ID, "hw:cpu_thread_policy").Extract()
+	th.AssertNoErr(t, err)
+
+	tools.PrintResource(t, spec)
+
+	th.AssertEquals(t, spec["hw:cpu_thread_policy"], "CPU-THREAD-POLICY-BETTER")
 }

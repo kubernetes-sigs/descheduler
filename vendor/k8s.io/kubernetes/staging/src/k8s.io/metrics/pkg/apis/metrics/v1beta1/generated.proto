@@ -1,5 +1,5 @@
 /*
-Copyright 2017 The Kubernetes Authors.
+Copyright The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,12 +26,11 @@ import "k8s.io/apimachinery/pkg/api/resource/generated.proto";
 import "k8s.io/apimachinery/pkg/apis/meta/v1/generated.proto";
 import "k8s.io/apimachinery/pkg/runtime/generated.proto";
 import "k8s.io/apimachinery/pkg/runtime/schema/generated.proto";
-import "k8s.io/apimachinery/pkg/util/intstr/generated.proto";
 
 // Package-wide variables from generator "generated".
 option go_package = "v1beta1";
 
-// resource usage metrics of a container.
+// ContainerMetrics sets resource usage metrics of a container.
 message ContainerMetrics {
   // Container name corresponding to the one from pod.spec.containers.
   optional string name = 1;
@@ -40,7 +39,7 @@ message ContainerMetrics {
   map<string, k8s.io.apimachinery.pkg.api.resource.Quantity> usage = 2;
 }
 
-// resource usage metrics of a node.
+// NodeMetrics sets resource usage metrics of a node.
 message NodeMetrics {
   optional k8s.io.apimachinery.pkg.apis.meta.v1.ObjectMeta metadata = 1;
 
@@ -57,14 +56,14 @@ message NodeMetrics {
 // NodeMetricsList is a list of NodeMetrics.
 message NodeMetricsList {
   // Standard list metadata.
-  // More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds
+  // More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
   optional k8s.io.apimachinery.pkg.apis.meta.v1.ListMeta metadata = 1;
 
   // List of node metrics.
   repeated NodeMetrics items = 2;
 }
 
-// resource usage metrics of a pod.
+// PodMetrics sets resource usage metrics of a pod.
 message PodMetrics {
   optional k8s.io.apimachinery.pkg.apis.meta.v1.ObjectMeta metadata = 1;
 
@@ -81,7 +80,7 @@ message PodMetrics {
 // PodMetricsList is a list of PodMetrics.
 message PodMetricsList {
   // Standard list metadata.
-  // More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds
+  // More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
   optional k8s.io.apimachinery.pkg.apis.meta.v1.ListMeta metadata = 1;
 
   // List of pod metrics.

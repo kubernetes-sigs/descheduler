@@ -77,6 +77,8 @@ type Volume struct {
 	ConsistencyGroupID string `json:"consistencygroup_id"`
 	// Multiattach denotes if the volume is multi-attach capable.
 	Multiattach bool `json:"multiattach"`
+	// Image metadata entries, only included for volumes that were created from an image, or from a snapshot of a volume originally created from an image.
+	VolumeImageMetadata map[string]string `json:"volume_image_metadata"`
 }
 
 // UnmarshalJSON another unmarshalling function
@@ -101,13 +103,24 @@ func (r *Volume) UnmarshalJSON(b []byte) error {
 
 // VolumePage is a pagination.pager that is returned from a call to the List function.
 type VolumePage struct {
-	pagination.SinglePageBase
+	pagination.LinkedPageBase
 }
 
 // IsEmpty returns true if a ListResult contains no Volumes.
 func (r VolumePage) IsEmpty() (bool, error) {
 	volumes, err := ExtractVolumes(r)
 	return len(volumes) == 0, err
+}
+
+func (page VolumePage) NextPageURL() (string, error) {
+	var s struct {
+		Links []gophercloud.Link `json:"volumes_links"`
+	}
+	err := page.ExtractInto(&s)
+	if err != nil {
+		return "", err
+	}
+	return gophercloud.ExtractNextURL(s.Links)
 }
 
 // ExtractVolumes extracts and returns Volumes. It is used while iterating over a volumes.List call.

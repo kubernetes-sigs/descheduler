@@ -17,14 +17,17 @@ limitations under the License.
 package passwordfile
 
 import (
+	"context"
+	"crypto/subtle"
 	"encoding/csv"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
+	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
@@ -70,7 +73,7 @@ func NewCSV(path string) (*PasswordAuthenticator, error) {
 		}
 		recordNum++
 		if _, exist := users[obj.info.Name]; exist {
-			glog.Warningf("duplicate username '%s' has been found in password file '%s', record number '%d'", obj.info.Name, path, recordNum)
+			klog.Warningf("duplicate username '%s' has been found in password file '%s', record number '%d'", obj.info.Name, path, recordNum)
 		}
 		users[obj.info.Name] = obj
 	}
@@ -78,13 +81,13 @@ func NewCSV(path string) (*PasswordAuthenticator, error) {
 	return &PasswordAuthenticator{users}, nil
 }
 
-func (a *PasswordAuthenticator) AuthenticatePassword(username, password string) (user.Info, bool, error) {
+func (a *PasswordAuthenticator) AuthenticatePassword(ctx context.Context, username, password string) (*authenticator.Response, bool, error) {
 	user, ok := a.users[username]
 	if !ok {
 		return nil, false, nil
 	}
-	if user.password != password {
+	if subtle.ConstantTimeCompare([]byte(user.password), []byte(password)) == 0 {
 		return nil, false, nil
 	}
-	return user.info, true, nil
+	return &authenticator.Response{User: user.info}, true, nil
 }

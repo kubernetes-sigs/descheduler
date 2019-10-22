@@ -21,6 +21,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/kubernetes/pkg/apis/scheduling"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -183,7 +184,6 @@ func TestPodTypes(t *testing.T) {
 	p4 := test.BuildTestPod("p4", 400, 0, n1.Name)
 	p5 := test.BuildTestPod("p5", 400, 0, n1.Name)
 	p6 := test.BuildTestPod("p6", 400, 0, n1.Name)
-	p6.Spec.Containers[0].Resources.Requests[v1.ResourceNvidiaGPU] = *resource.NewMilliQuantity(3, resource.DecimalSI)
 
 	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
@@ -209,6 +209,8 @@ func TestPodTypes(t *testing.T) {
 	// A Critical Pod.
 	p5.Namespace = "kube-system"
 	p5.Annotations = test.GetCriticalPodAnnotation()
+	systemCriticalPriority := scheduling.SystemCriticalPriority
+	p5.Spec.Priority = &systemCriticalPriority
 	if !IsMirrorPod(p4) {
 		t.Errorf("Expected p4 to be a mirror pod.")
 	}
@@ -225,9 +227,6 @@ func TestPodTypes(t *testing.T) {
 	ownerRefList = OwnerRef(p1)
 	if IsDaemonsetPod(ownerRefList) || IsPodWithLocalStorage(p1) || IsCriticalPod(p1) || IsMirrorPod(p1) {
 		t.Errorf("Expected p1 to be a normal pod.")
-	}
-	if !IsLatencySensitivePod(p6) {
-		t.Errorf("Expected p6 to be latency sensitive pod")
 	}
 
 }

@@ -41,11 +41,16 @@ const (
 var testContainerID = kubecontainer.ContainerID{Type: "test", ID: "cOnTaInEr_Id"}
 
 func getTestRunningStatus() v1.PodStatus {
+	return getTestRunningStatusWithStarted(true)
+}
+
+func getTestRunningStatusWithStarted(started bool) v1.PodStatus {
 	containerStatus := v1.ContainerStatus{
 		Name:        testContainerName,
 		ContainerID: testContainerID.String(),
 	}
 	containerStatus.State.Running = &v1.ContainerStateRunning{StartedAt: metav1.Now()}
+	containerStatus.Started = &started
 	podStatus := v1.PodStatus{
 		Phase:             v1.PodRunning,
 		ContainerStatuses: []v1.ContainerStatus{containerStatus},
@@ -93,13 +98,15 @@ func setTestProbe(pod *v1.Pod, probeType probeType, probeSpec v1.Probe) {
 		pod.Spec.Containers[0].ReadinessProbe = &probeSpec
 	case liveness:
 		pod.Spec.Containers[0].LivenessProbe = &probeSpec
+	case startup:
+		pod.Spec.Containers[0].StartupProbe = &probeSpec
 	}
 }
 
 func newTestManager() *manager {
 	refManager := kubecontainer.NewRefManager()
 	refManager.SetRef(testContainerID, &v1.ObjectReference{}) // Suppress prober warnings.
-	podManager := kubepod.NewBasicPodManager(nil, nil, nil)
+	podManager := kubepod.NewBasicPodManager(nil, nil, nil, nil)
 	// Add test pod to pod manager, so that status manager can get the pod from pod manager if needed.
 	podManager.AddPod(getTestPod())
 	m := NewManager(
