@@ -14,3 +14,9 @@
 3，LowNodeUtilization策略中，未加入对Pod标签的校验。
 
 4，policy文件无法动态生成，可以根据自身需要增加controller模块控制policy中的阈值。
+
+
+逻辑问题汇总：
+
+1，在驱逐最大负载节点上的pod时，如向指定驱逐某个pod，必须考虑所取的最大负载节点上是否存在该pod。否则其永远不会驱逐pod
+
