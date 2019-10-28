@@ -1,5 +1,5 @@
 hash: f82bf395df6f00004b1794606a9256d5c69b62deb5498b574a08b2b5d15f7a6a
-updated: 2019-10-12T11:22:30.564437-04:00
+updated: 2019-10-28T17:02:34.793943-04:00
 imports:
 - name: cloud.google.com/go
   version: 8c41231e01b2085512d98153bcffb847ff9b4b9f
@@ -32,8 +32,6 @@ imports:
   subpackages:
   - proto
   - sortkeys
-- name: github.com/golang/glog
-  version: 23def4e6c14b4da8ac2ed8007337bc5eb5007998
 - name: github.com/golang/protobuf
   version: b5d812f8a3706043e23a9cd5babf2e5423744d30
   subpackages:
@@ -362,7 +360,7 @@ imports:
   - featuregate
   - logs
 - name: k8s.io/gengo
-  version: 7fa3014cb28f99ce2d9e803bcd3efa7edd4effa9
+  version: 26a664648505d962332bda642b27306bc10d1082
 - name: k8s.io/klog
   version: 3ca30a56d8a775276f9cdae009ba326fdc05af7f
 - name: k8s.io/kube-openapi
@@ -370,7 +368,7 @@ imports:
   subpackages:
   - pkg/util/proto
 - name: k8s.io/kubernetes
-  version: c97fe5036ef3df2967d086711e6c0c405941e14b
+  version: b1e4a13ba1f74f363154ea2e1d36047ea55190a3
   subpackages:
   - pkg/api/legacyscheme
   - pkg/api/testapi
