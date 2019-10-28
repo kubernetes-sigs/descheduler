@@ -21,12 +21,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/glog"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/api/testapi"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
@@ -104,12 +103,12 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface) {
 	// Run descheduler.
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientset)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
-		glog.Fatalf("%v", err)
+		klog.Fatalf("%v", err)
 	}
 	stopChannel := make(chan struct{})
 	nodes, err := nodeutil.ReadyNodes(clientset, "", stopChannel)
 	if err != nil {
-		glog.Fatalf("%v", err)
+		klog.Fatalf("%v", err)
 	}
 	nodeUtilizationThresholds := deschedulerapi.NodeResourceUtilizationThresholds{Thresholds: thresholds, TargetThresholds: targetThresholds}
 	nodeUtilizationStrategyParams := deschedulerapi.StrategyParameters{NodeResourceUtilizationThresholds: nodeUtilizationThresholds}

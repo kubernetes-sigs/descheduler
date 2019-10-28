@@ -17,9 +17,9 @@ limitations under the License.
 package strategies
 
 import (
-	"github.com/golang/glog"
-
 	"k8s.io/api/core/v1"
+	"k8s.io/klog"
+
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -38,16 +38,16 @@ func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strateg
 	}
 
 	for _, nodeAffinity := range strategy.Params.NodeAffinityType {
-		glog.V(2).Infof("Executing for nodeAffinityType: %v", nodeAffinity)
+		klog.V(2).Infof("Executing for nodeAffinityType: %v", nodeAffinity)
 
 		switch nodeAffinity {
 		case "requiredDuringSchedulingIgnoredDuringExecution":
 			for _, node := range nodes {
-				glog.V(1).Infof("Processing node: %#v\n", node.Name)
+				klog.V(1).Infof("Processing node: %#v\n", node.Name)
 
 				pods, err := podutil.ListEvictablePodsOnNode(ds.Client, node, evictLocalStoragePods)
 				if err != nil {
-					glog.Errorf("failed to get pods from %v: %v", node.Name, err)
+					klog.Errorf("failed to get pods from %v: %v", node.Name, err)
 				}
 
 				for _, pod := range pods {
@@ -57,7 +57,7 @@ func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strateg
 					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
 
 						if !nodeutil.PodFitsCurrentNode(pod, node) && nodeutil.PodFitsAnyNode(pod, nodes) {
-							glog.V(1).Infof("Evicting pod: %v", pod.Name)
+							klog.V(1).Infof("Evicting pod: %v", pod.Name)
 							evictions.EvictPod(ds.Client, pod, evictionPolicyGroupVersion, ds.DryRun)
 							nodepodCount[node]++
 						}
@@ -66,10 +66,10 @@ func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strateg
 				evictedPodCount += nodepodCount[node]
 			}
 		default:
-			glog.Errorf("invalid nodeAffinityType: %v", nodeAffinity)
+			klog.Errorf("invalid nodeAffinityType: %v", nodeAffinity)
 			return evictedPodCount
 		}
 	}
-	glog.V(1).Infof("Evicted %v pods", evictedPodCount)
+	klog.V(1).Infof("Evicted %v pods", evictedPodCount)
 	return evictedPodCount
 }

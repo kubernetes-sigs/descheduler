@@ -22,11 +22,10 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 
-	"github.com/golang/glog"
-
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/klog"
 	priorityutil "k8s.io/kubernetes/pkg/scheduler/algorithm/priorities/util"
 )
 
@@ -42,7 +41,7 @@ func RemovePodsViolatingInterPodAntiAffinity(ds *options.DeschedulerServer, stra
 func removePodsWithAffinityRules(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodePodCount nodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
 	podsEvicted := 0
 	for _, node := range nodes {
-		glog.V(1).Infof("Processing node: %#v\n", node.Name)
+		klog.V(1).Infof("Processing node: %#v\n", node.Name)
 		pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
 		if err != nil {
 			return 0
@@ -55,10 +54,10 @@ func removePodsWithAffinityRules(client clientset.Interface, policyGroupVersion 
 			if checkPodsWithAntiAffinityExist(pods[i], pods) {
 				success, err := evictions.EvictPod(client, pods[i], policyGroupVersion, dryRun)
 				if !success {
-					glog.Infof("Error when evicting pod: %#v (%#v)\n", pods[i].Name, err)
+					klog.Infof("Error when evicting pod: %#v (%#v)\n", pods[i].Name, err)
 				} else {
 					nodePodCount[node]++
-					glog.V(1).Infof("Evicted pod: %#v (%#v)\n because of existing anti-affinity", pods[i].Name, err)
+					klog.V(1).Infof("Evicted pod: %#v (%#v)\n because of existing anti-affinity", pods[i].Name, err)
 					// Since the current pod is evicted all other pods which have anti-affinity with this
 					// pod need not be evicted.
 					// Update pods.
@@ -81,7 +80,7 @@ func checkPodsWithAntiAffinityExist(pod *v1.Pod, pods []*v1.Pod) bool {
 			namespaces := priorityutil.GetNamespacesFromPodAffinityTerm(pod, &term)
 			selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
 			if err != nil {
-				glog.Infof("%v", err)
+				klog.Infof("%v", err)
 				return false
 			}
 			for _, existingPod := range pods {
