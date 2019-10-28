@@ -24,11 +24,11 @@ import (
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
 
-	"github.com/golang/glog"
 	"github.com/spf13/cobra"
 
 	aflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/logs"
+	"k8s.io/klog"
 )
 
 // NewDeschedulerCommand creates a *cobra.Command object with default parameters
@@ -43,7 +43,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 			defer logs.FlushLogs()
 			err := Run(s)
 			if err != nil {
-				glog.Errorf("%v", err)
+				klog.Errorf("%v", err)
 			}
 		},
 	}

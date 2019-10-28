@@ -19,9 +19,9 @@ package utils
 import (
 	"fmt"
 
-	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/klog"
 	v1helper "k8s.io/kubernetes/pkg/apis/core/v1/helper"
 )
 
@@ -70,7 +70,7 @@ func podMatchesNodeLabels(pod *v1.Pod, node *v1.Node) bool {
 		// Match node selector for requiredDuringSchedulingIgnoredDuringExecution.
 		if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
 			nodeSelectorTerms := nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
-			glog.V(10).Infof("Match for RequiredDuringSchedulingIgnoredDuringExecution node selector terms %+v", nodeSelectorTerms)
+			klog.V(10).Infof("Match for RequiredDuringSchedulingIgnoredDuringExecution node selector terms %+v", nodeSelectorTerms)
 			return nodeMatchesNodeSelectorTerms(node, nodeSelectorTerms)
 		}
 	}
@@ -83,7 +83,7 @@ func nodeMatchesNodeSelectorTerms(node *v1.Node, nodeSelectorTerms []v1.NodeSele
 	for _, req := range nodeSelectorTerms {
 		nodeSelector, err := v1helper.NodeSelectorRequirementsAsSelector(req.MatchExpressions)
 		if err != nil {
-			glog.V(10).Infof("Failed to parse MatchExpressions: %+v, regarding as not match.", req.MatchExpressions)
+			klog.V(10).Infof("Failed to parse MatchExpressions: %+v, regarding as not match.", req.MatchExpressions)
 			return false
 		}
 		if nodeSelector.Matches(labels.Set(node.Labels)) {
