@@ -227,16 +227,12 @@ func (b *Builder) AddDirRecursive(dir string) error {
 		klog.Warningf("Ignoring directory %v: %v", dir, err)
 	}
 
-	// filepath.Walk does not follow symlinks. We therefore evaluate symlinks and use that with
-	// filepath.Walk.
-	realPath, err := filepath.EvalSymlinks(b.buildPackages[dir].Dir)
-	if err != nil {
-		return err
-	}
-
+	// filepath.Walk includes the root dir, but we already did that, so we'll
+	// remove that prefix and rebuild a package import path.
+	prefix := b.buildPackages[dir].Dir
 	fn := func(filePath string, info os.FileInfo, err error) error {
 		if info != nil && info.IsDir() {
-			rel := filepath.ToSlash(strings.TrimPrefix(filePath, realPath))
+			rel := filepath.ToSlash(strings.TrimPrefix(filePath, prefix))
 			if rel != "" {
 				// Make a pkg path.
 				pkg := path.Join(string(canonicalizeImportPath(b.buildPackages[dir].ImportPath)), rel)
@@ -249,7 +245,7 @@ func (b *Builder) AddDirRecursive(dir string) error {
 		}
 		return nil
 	}
-	if err := filepath.Walk(realPath, fn); err != nil {
+	if err := filepath.Walk(b.buildPackages[dir].Dir, fn); err != nil {
 		return err
 	}
 	return nil
