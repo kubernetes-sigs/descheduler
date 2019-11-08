@@ -12,7 +12,7 @@ spec:
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
-        containers:
+      containers:
         - name: descheduler
           image: descheduler:latest
           volumeMounts:
