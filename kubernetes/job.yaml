@@ -25,9 +25,9 @@ spec:
             - "/policy-dir/policy.yaml"
             - "--v"
             - "3"
-        restartPolicy: "Never"
-        serviceAccountName: descheduler-sa
-        volumes:
-        - name: policy-volume
-          configMap:
-            name: descheduler-policy-configmap
+      restartPolicy: "Never"
+      serviceAccountName: descheduler-sa
+      volumes:
+      - name: policy-volume
+        configMap:
+          name: descheduler-policy-configmap
