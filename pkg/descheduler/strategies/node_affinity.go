@@ -17,7 +17,7 @@ limitations under the License.
 package strategies
 
 import (
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
@@ -45,7 +45,7 @@ func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strateg
 			for _, node := range nodes {
 				klog.V(1).Infof("Processing node: %#v\n", node.Name)
 
-				pods, err := podutil.ListEvictablePodsOnNode(ds.Client, node, evictLocalStoragePods)
+				pods, err := podutil.ListEvictablePodsOnNode(ds.Client, ds.PodSelector, node, evictLocalStoragePods)
 				if err != nil {
 					klog.Errorf("failed to get pods from %v: %v", node.Name, err)
 				}

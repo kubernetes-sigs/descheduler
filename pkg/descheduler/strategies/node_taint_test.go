@@ -2,13 +2,14 @@ package strategies
 
 import (
 	"fmt"
-	"k8s.io/api/core/v1"
+	"testing"
+
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/test"
-	"testing"
 )
 
 func createNoScheduleTaint(key, value string, index int) v1.Taint {
@@ -158,14 +159,14 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-
+		labelSelector := ""
 		// create fake client
 		fakeClient := &fake.Clientset{}
 		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 			return true, &v1.PodList{Items: tc.pods}, nil
 		})
 
-		actualEvictedPodCount := deletePodsViolatingNodeTaints(fakeClient, "v1", tc.nodes, false, tc.npe, tc.maxPodsToEvict, tc.evictLocalStoragePods)
+		actualEvictedPodCount := deletePodsViolatingNodeTaints(fakeClient, "v1", tc.nodes, false, tc.npe, labelSelector, tc.maxPodsToEvict, tc.evictLocalStoragePods)
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)
 		}

@@ -19,8 +19,9 @@ package strategies
 import (
 	"sort"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 	helper "k8s.io/kubernetes/pkg/api/v1/resource"
@@ -60,7 +61,7 @@ func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerS
 		return
 	}
 
-	npm := createNodePodsMap(ds.Client, nodes)
+	npm := createNodePodsMap(ds.Client, ds.PodSelector, nodes)
 	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds, ds.EvictLocalStoragePods)
 
 	klog.V(1).Infof("Criteria for a node under utilization: CPU: %v, Mem: %v, Pods: %v",
@@ -311,10 +312,15 @@ func sortPodsBasedOnPriority(evictablePods []*v1.Pod) {
 }
 
 // createNodePodsMap returns nodepodsmap with evictable pods on node.
-func createNodePodsMap(client clientset.Interface, nodes []*v1.Node) NodePodsMap {
+func createNodePodsMap(client clientset.Interface, podSelector string, nodes []*v1.Node) NodePodsMap {
 	npm := NodePodsMap{}
+	selector, err := labels.Parse(podSelector)
+	if err != nil {
+		return npm
+	}
+
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(client, node)
+		pods, err := podutil.ListPodsOnANode(client, selector, node)
 		if err != nil {
 			klog.Warningf("node %s will not be processed, error in accessing its pods (%#v)", node.Name, err)
 		} else {

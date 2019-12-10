@@ -19,7 +19,7 @@ package strategies
 import (
 	"testing"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
@@ -43,7 +43,7 @@ func TestPodAntiAffinity(t *testing.T) {
 	setPodAntiAffinity(p1)
 	setPodAntiAffinity(p3)
 	setPodAntiAffinity(p4)
-
+	labelSelector := ""
 	// create fake client
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
@@ -55,13 +55,13 @@ func TestPodAntiAffinity(t *testing.T) {
 	npe := nodePodEvictedCount{}
 	npe[node] = 0
 	expectedEvictedPodCount := 3
-	podsEvicted := removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, 0, false)
+	podsEvicted := removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, labelSelector, 0, false)
 	if podsEvicted != expectedEvictedPodCount {
 		t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, expectedEvictedPodCount)
 	}
 	npe[node] = 0
 	expectedEvictedPodCount = 1
-	podsEvicted = removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, 1, false)
+	podsEvicted = removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, labelSelector, 1, false)
 	if podsEvicted != expectedEvictedPodCount {
 		t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, expectedEvictedPodCount)
 	}

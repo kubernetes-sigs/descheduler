@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 )
@@ -37,15 +37,15 @@ func RemovePodsViolatingNodeTaints(ds *options.DeschedulerServer, strategy api.D
 	if !strategy.Enabled {
 		return
 	}
-	deletePodsViolatingNodeTaints(ds.Client, policyGroupVersion, nodes, ds.DryRun, nodePodCount, ds.MaxNoOfPodsToEvictPerNode, ds.EvictLocalStoragePods)
+	deletePodsViolatingNodeTaints(ds.Client, policyGroupVersion, nodes, ds.DryRun, nodePodCount, ds.PodSelector, ds.MaxNoOfPodsToEvictPerNode, ds.EvictLocalStoragePods)
 }
 
 // deletePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
-func deletePodsViolatingNodeTaints(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodePodCount nodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
+func deletePodsViolatingNodeTaints(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodePodCount nodePodEvictedCount, podSelector string, maxPodsToEvict int, evictLocalStoragePods bool) int {
 	podsEvicted := 0
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
-		pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
+		pods, err := podutil.ListEvictablePodsOnNode(client, podSelector, node, evictLocalStoragePods)
 		if err != nil {
 			//no pods evicted as error encountered retrieving evictable Pods
 			return 0

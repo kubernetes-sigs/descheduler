@@ -160,13 +160,14 @@ func TestE2E(t *testing.T) {
 func evictPods(t *testing.T, clientSet clientset.Interface, nodeList *v1.NodeList, rc *v1.ReplicationController) {
 	var leastLoadedNode v1.Node
 	podsBefore := math.MaxInt16
+	labelSelector := ""
 	for i := range nodeList.Items {
 		// Skip the Master Node
 		if _, exist := nodeList.Items[i].Labels["node-role.kubernetes.io/master"]; exist {
 			continue
 		}
 		// List all the pods on the current Node
-		podsOnANode, err := podutil.ListEvictablePodsOnNode(clientSet, &nodeList.Items[i], true)
+		podsOnANode, err := podutil.ListEvictablePodsOnNode(clientSet, labelSelector, &nodeList.Items[i], true)
 		if err != nil {
 			t.Errorf("Error listing pods on a node %v", err)
 		}
@@ -178,7 +179,7 @@ func evictPods(t *testing.T, clientSet clientset.Interface, nodeList *v1.NodeLis
 	}
 	t.Log("Eviction of pods starting")
 	startEndToEndForLowNodeUtilization(clientSet)
-	podsOnleastUtilizedNode, err := podutil.ListEvictablePodsOnNode(clientSet, &leastLoadedNode, true)
+	podsOnleastUtilizedNode, err := podutil.ListEvictablePodsOnNode(clientSet, labelSelector, &leastLoadedNode, true)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}

@@ -20,6 +20,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/apis/core/v1/helper/qos"
@@ -40,8 +41,12 @@ func IsEvictable(pod *v1.Pod, evictLocalStoragePods bool) bool {
 }
 
 // ListEvictablePodsOnNode returns the list of evictable pods on node.
-func ListEvictablePodsOnNode(client clientset.Interface, node *v1.Node, evictLocalStoragePods bool) ([]*v1.Pod, error) {
-	pods, err := ListPodsOnANode(client, node)
+func ListEvictablePodsOnNode(client clientset.Interface, labelSelector string, node *v1.Node, evictLocalStoragePods bool) ([]*v1.Pod, error) {
+	podSelector, err := labels.Parse(labelSelector)
+	if err != nil {
+		return []*v1.Pod{}, err
+	}
+	pods, err := ListPodsOnANode(client, podSelector, node)
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
@@ -56,14 +61,14 @@ func ListEvictablePodsOnNode(client clientset.Interface, node *v1.Node, evictLoc
 	return evictablePods, nil
 }
 
-func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, error) {
+func ListPodsOnANode(client clientset.Interface, labelSelector labels.Selector, node *v1.Node) ([]*v1.Pod, error) {
 	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + node.Name + ",status.phase!=" + string(api.PodSucceeded) + ",status.phase!=" + string(api.PodFailed))
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
 
 	podList, err := client.CoreV1().Pods(v1.NamespaceAll).List(
-		metav1.ListOptions{FieldSelector: fieldSelector.String()})
+		metav1.ListOptions{FieldSelector: fieldSelector.String(), LabelSelector: labelSelector.String()})
 	if err != nil {
 		return []*v1.Pod{}, err
 	}

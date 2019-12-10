@@ -21,12 +21,13 @@ import (
 	"strings"
 	"testing"
 
-	"k8s.io/api/core/v1"
+	"reflect"
+
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"reflect"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -83,6 +84,7 @@ func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
 	p8.Annotations = test.GetCriticalPodAnnotation()
 	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
 	p9.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	labelSelector := ""
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 		list := action.(core.ListAction)
@@ -111,7 +113,7 @@ func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
 		return true, nil, fmt.Errorf("Wrong node: %v", getAction.GetName())
 	})
 	expectedPodsEvicted := 3
-	npm := createNodePodsMap(fakeClient, []*v1.Node{n1, n2, n3})
+	npm := createNodePodsMap(fakeClient, labelSelector, []*v1.Node{n1, n2, n3})
 	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds, false)
 	if len(lowNodes) != 1 {
 		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
@@ -188,6 +190,7 @@ func TestLowNodeUtilizationWithPriorities(t *testing.T) {
 	p8.Annotations = test.GetCriticalPodAnnotation()
 	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
 	p9.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	labelSelector := ""
 	fakeClient := &fake.Clientset{}
 	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 		list := action.(core.ListAction)
@@ -216,7 +219,7 @@ func TestLowNodeUtilizationWithPriorities(t *testing.T) {
 		return true, nil, fmt.Errorf("Wrong node: %v", getAction.GetName())
 	})
 	expectedPodsEvicted := 3
-	npm := createNodePodsMap(fakeClient, []*v1.Node{n1, n2, n3})
+	npm := createNodePodsMap(fakeClient, labelSelector, []*v1.Node{n1, n2, n3})
 	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds, false)
 	if len(lowNodes) != 1 {
 		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")

@@ -19,10 +19,9 @@ package strategies
 import (
 	"strings"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
-
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -39,15 +38,15 @@ func RemoveDuplicatePods(ds *options.DeschedulerServer, strategy api.Descheduler
 	if !strategy.Enabled {
 		return
 	}
-	deleteDuplicatePods(ds.Client, policyGroupVersion, nodes, ds.DryRun, nodepodCount, ds.MaxNoOfPodsToEvictPerNode, ds.EvictLocalStoragePods)
+	deleteDuplicatePods(ds.Client, policyGroupVersion, nodes, ds.DryRun, nodepodCount, ds.PodSelector, ds.MaxNoOfPodsToEvictPerNode, ds.EvictLocalStoragePods)
 }
 
 // deleteDuplicatePods evicts the pod from node and returns the count of evicted pods.
-func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodepodCount nodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
+func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodepodCount nodePodEvictedCount, labelSelector string, maxPodsToEvict int, evictLocalStoragePods bool) int {
 	podsEvicted := 0
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v", node.Name)
-		dpm := ListDuplicatePodsOnANode(client, node, evictLocalStoragePods)
+		dpm := ListDuplicatePodsOnANode(client, labelSelector, node, evictLocalStoragePods)
 		for creator, pods := range dpm {
 			if len(pods) > 1 {
 				klog.V(1).Infof("%#v", creator)
@@ -72,8 +71,8 @@ func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, 
 }
 
 // ListDuplicatePodsOnANode lists duplicate pods on a given node.
-func ListDuplicatePodsOnANode(client clientset.Interface, node *v1.Node, evictLocalStoragePods bool) DuplicatePodsMap {
-	pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
+func ListDuplicatePodsOnANode(client clientset.Interface, labelSelector string, node *v1.Node, evictLocalStoragePods bool) DuplicatePodsMap {
+	pods, err := podutil.ListEvictablePodsOnNode(client, labelSelector, node, evictLocalStoragePods)
 	if err != nil {
 		return nil
 	}
