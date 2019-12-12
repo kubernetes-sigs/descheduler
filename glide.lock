@@ -1,5 +1,5 @@
 hash: f82bf395df6f00004b1794606a9256d5c69b62deb5498b574a08b2b5d15f7a6a
-updated: 2019-10-28T17:02:34.793943-04:00
+updated: 2019-12-11T21:28:26.970892-06:00
 imports:
 - name: cloud.google.com/go
   version: 8c41231e01b2085512d98153bcffb847ff9b4b9f
@@ -32,6 +32,10 @@ imports:
   subpackages:
   - proto
   - sortkeys
+- name: github.com/golang/groupcache
+  version: 02826c3e79038b59d737d3b1c0a1d937f71a4433
+  subpackages:
+  - lru
 - name: github.com/golang/protobuf
   version: b5d812f8a3706043e23a9cd5babf2e5423744d30
   subpackages:
@@ -342,6 +346,8 @@ imports:
   - tools/clientcmd/api/v1
   - tools/metrics
   - tools/pager
+  - tools/record
+  - tools/record/util
   - tools/reference
   - transport
   - util/cert
@@ -368,7 +374,7 @@ imports:
   subpackages:
   - pkg/util/proto
 - name: k8s.io/kubernetes
-  version: b1e4a13ba1f74f363154ea2e1d36047ea55190a3
+  version: d70a3ca08fe72ad8dd0b2d72cf032474ab2ce2a9
   subpackages:
   - pkg/api/legacyscheme
   - pkg/api/testapi
