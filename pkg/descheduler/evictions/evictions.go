@@ -19,11 +19,15 @@ package evictions
 import (
 	"fmt"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/record"
+	"k8s.io/klog"
 
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 )
@@ -48,6 +52,11 @@ func EvictPod(client clientset.Interface, pod *v1.Pod, policyGroupVersion string
 	err := client.PolicyV1beta1().Evictions(eviction.Namespace).Evict(eviction)
 
 	if err == nil {
+		eventBroadcaster := record.NewBroadcaster()
+		eventBroadcaster.StartLogging(klog.V(3).Infof)
+		eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: client.CoreV1().Events(pod.Namespace)})
+		r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
+		r.Event(pod, v1.EventTypeNormal, "Descheduled", "pod evicted by sigs.k8s.io/descheduler")
 		return true, nil
 	} else if apierrors.IsTooManyRequests(err) {
 		return false, fmt.Errorf("error when evicting pod (ignoring) %q: %v", pod.Name, err)
