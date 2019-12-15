@@ -28,6 +28,19 @@ go, Java, C++.
 
 2 Dynamic scheduling and deployment solutions for containerized services based on cluster resources
 
+## Build and Run
+Build descheduler:
+
+$ make
+and run descheduler:
+
+$ ./_output/bin/descheduler --kubeconfig <path to kubeconfig> --policy-config-file <path-to-policy-file>
+If you want more information about what descheduler is doing add -v 1 to the command line
+
+For more information about available options run:
+
+$ ./_output/bin/descheduler --help
+
 ## Tips：
 
 1 In duplicates strategies, the rules for detecting whether the pod in the same deployment has been deployed on the same node，which can be tailored to individual needs: to modify FindDuplicatePods
@@ -39,8 +52,6 @@ go, Java, C++.
 4 The policy file cannot be generated dynamically, so you can increase the threshold in the controller module control policy according to your own needs.
 
 5 
-
-逻辑问题汇总：
 
 1 When pod on the maximum load node is expelled, You must consider whether the pod exists on the maximum load node you take.Otherwise the node will never expel the pod. 
 
