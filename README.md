@@ -1,9 +1,11 @@
 [![Build Status](https://travis-ci.org/kubernetes-incubator/descheduler.svg?branch=master)](https://travis-ci.org/kubernetes-incubator/descheduler)
 [![Go Report Card](https://goreportcard.com/badge/github.com/kubernetes-incubator/descheduler)](https://goreportcard.com/report/github.com/kubernetes-incubator/descheduler)
 
-# kubernetes二次调度
+#  Load Rebalancing of Cloud Computing Services
 
-原始说明详见原版链接：
+## Introduction
+
+---
 
 该版本中有些需要进行个性化修改的点：
 
