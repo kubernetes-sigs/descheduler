@@ -51,7 +51,5 @@ $ ./_output/bin/descheduler --help
 
 4 The policy file cannot be generated dynamically, so you can increase the threshold in the controller module control policy according to your own needs.
 
-5 
-
-1 When pod on the maximum load node is expelled, You must consider whether the pod exists on the maximum load node you take.Otherwise the node will never expel the pod. 
+5 When pod on the maximum load node is expelled, You must consider whether the pod exists on the maximum load node you take.Otherwise the node will never expel the pod. 
 
