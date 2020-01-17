@@ -133,19 +133,18 @@ spec:
   template:
     metadata:
       name: descheduler-pod
-      annotations:
-        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
-        containers:
+      priorityClassName: system-cluster-critical
+      containers:
         - name: descheduler
           image: descheduler
           volumeMounts:
-          - mountPath: /policy-dir
-            name: policy-volume
-          command: ["/bin/descheduler",  "--policy-config-file", "/policy-dir/policy.yaml"]
-        restartPolicy: "Never"
-        serviceAccountName: descheduler-sa
-        volumes:
+            - mountPath: /policy-dir
+              name: policy-volume
+          command: ["/bin/descheduler",  "--policy-config-file", "/policy-dir/policy.yaml", "-v", "1"]
+      restartPolicy: "Never"
+      serviceAccountName: descheduler-sa
+      volumes:
         - name: policy-volume
           configMap:
             name: descheduler-policy-configmap
