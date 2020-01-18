@@ -10,9 +10,8 @@ spec:
   template:
     metadata:
       name: descheduler-pod
-      annotations:
-        scheduler.alpha.kubernetes.io/critical-pod: ""
     spec:
+      priorityClassName: system-cluster-critical
       containers:
         - name: descheduler
           image: docker.io/aveshagarwal/descheduler:0.9.0
