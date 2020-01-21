@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/builder"
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/builder/flat"
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/builder/nested"
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/parser"
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/parser/gotest"
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/parser/oscmd"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/builder"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/builder/flat"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/builder/nested"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/parser"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/parser/gotest"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/parser/oscmd"
 )
 
 type testSuitesBuilderType string

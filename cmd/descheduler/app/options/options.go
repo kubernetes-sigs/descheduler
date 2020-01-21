@@ -21,10 +21,10 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 
 	// install the componentconfig api so we get its defaulting and conversion functions
-	"github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig"
-	_ "github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig/install"
-	"github.com/kubernetes-incubator/descheduler/pkg/apis/componentconfig/v1alpha1"
-	deschedulerscheme "github.com/kubernetes-incubator/descheduler/pkg/descheduler/scheme"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
+	_ "sigs.k8s.io/descheduler/pkg/apis/componentconfig/install"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
+	deschedulerscheme "sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 
 	"github.com/spf13/pflag"
 )

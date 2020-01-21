@@ -1,8 +1,8 @@
 FROM registry.svc.ci.openshift.org/openshift/release:golang-1.10 AS builder
-WORKDIR /go/src/github.com/kubernetes-incubator/descheduler
+WORKDIR /go/src/sigs.k8s.io/descheduler
 COPY . .
 RUN make build
 
 FROM registry.svc.ci.openshift.org/openshift/origin-v4.0:base
-COPY --from=builder /go/src/github.com/kubernetes-incubator/descheduler/_output/local/bin/linux/amd64/descheduler /usr/bin/
+COPY --from=builder /go/src/sigs.k8s.io/descheduler/_output/local/bin/linux/amd64/descheduler /usr/bin/
 CMD ["/usr/bin/descheduler"]

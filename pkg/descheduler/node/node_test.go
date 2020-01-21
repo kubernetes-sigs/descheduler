@@ -19,10 +19,10 @@ package node
 import (
 	"testing"
 
-	"github.com/kubernetes-incubator/descheduler/test"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+	"sigs.k8s.io/descheduler/test"
 )
 
 func TestReadyNodes(t *testing.T) {

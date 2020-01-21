@@ -21,8 +21,8 @@ import (
 	"flag"
 	"io"
 
-	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
-	"github.com/kubernetes-incubator/descheduler/pkg/descheduler"
+	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
+	"sigs.k8s.io/descheduler/pkg/descheduler"
 
 	"github.com/golang/glog"
 	"github.com/spf13/cobra"

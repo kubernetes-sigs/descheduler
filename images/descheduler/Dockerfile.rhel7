@@ -1,9 +1,9 @@
 FROM registry.svc.ci.openshift.org/ocp/builder:golang-1.10 AS builder
-WORKDIR /go/src/github.com/kubernetes-incubator/descheduler
+WORKDIR /go/src/sigs.k8s.io/descheduler
 COPY . .
 RUN make build; \
     mkdir -p /tmp/build; \
-    cp /go/src/github.com/kubernetes-incubator/descheduler/_output/local/bin/linux/$(go env GOARCH)/descheduler /tmp/build/descheduler
+    cp /go/src/sigs.k8s.io/descheduler/_output/local/bin/linux/$(go env GOARCH)/descheduler /tmp/build/descheduler
 
 FROM registry.svc.ci.openshift.org/ocp/4.0:base
 COPY --from=builder /tmp/build/descheduler /usr/bin/

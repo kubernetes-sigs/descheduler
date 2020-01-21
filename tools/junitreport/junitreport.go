@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/cmd"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/cmd"
 )
 
 var (

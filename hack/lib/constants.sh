@@ -2,7 +2,7 @@
 
 # This script provides constants for the Golang binary build process
 
-readonly OS_GO_PACKAGE=github.com/kubernetes-incubator/descheduler
+readonly OS_GO_PACKAGE=sigs.k8s.io/descheduler
 
 readonly OS_BUILD_ENV_GOLANG="${OS_BUILD_ENV_GOLANG:-1.9}"
 readonly OS_BUILD_ENV_IMAGE="${OS_BUILD_ENV_IMAGE:-openshift/origin-release:golang-${OS_BUILD_ENV_GOLANG}}"

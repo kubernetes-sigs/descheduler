@@ -3,7 +3,7 @@ package stack
 import (
 	"fmt"
 
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/api"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/api"
 )
 
 // TestSuiteStack is a data structure that holds api.TestSuite objects in a LIFO

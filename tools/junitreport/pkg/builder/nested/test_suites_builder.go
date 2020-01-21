@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/api"
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/builder"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/api"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/builder"
 )
 
 // NewTestSuitesBuilder returns a new nested test suites builder. All test suites consumed by

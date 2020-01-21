@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/api"
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/builder/nested"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/api"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/builder/nested"
 )
 
 // TestNestedParse tests that parsing the `go test` output in the test directory with a nested builder works as expected

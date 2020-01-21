@@ -3,7 +3,7 @@ package parser
 import (
 	"bufio"
 
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/api"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/api"
 )
 
 // TestOutputParser knows how to parse test output to create a collection of test suites

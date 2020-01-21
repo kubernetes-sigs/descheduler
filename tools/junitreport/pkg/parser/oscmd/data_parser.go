@@ -3,8 +3,8 @@ package oscmd
 import (
 	"regexp"
 
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/api"
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/parser/stack"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/api"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/parser/stack"
 )
 
 func newTestDataParser() stack.TestDataParser {

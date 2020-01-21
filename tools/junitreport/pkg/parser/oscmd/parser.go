@@ -1,9 +1,9 @@
 package oscmd
 
 import (
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/builder"
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/parser"
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/parser/stack"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/builder"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/parser"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/parser/stack"
 )
 
 // NewParser returns a new parser that's capable of parsing `os::cmd` test output
