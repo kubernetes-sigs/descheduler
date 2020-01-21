@@ -17,8 +17,6 @@ limitations under the License.
 package pod
 
 import (
-	"strings"
-
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -78,20 +76,7 @@ func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, erro
 }
 
 func IsCriticalPod(pod *v1.Pod) bool {
-	return IsCritical(pod.Namespace, pod.Annotations)
-}
-
-func IsCritical(ns string, annotations map[string]string) bool {
-	// Critical pods are restricted to "kube-system" and "openshift-*" namespaces as of now.
-	// for openshift-* namespaces, see: https://github.com/openshift/origin/pull/19104
-	if ns != api.NamespaceSystem && !strings.HasPrefix(ns, "openshift-") {
-		return false
-	}
-	val, ok := annotations[types.CriticalPodAnnotationKey]
-	if ok && val == "" {
-		return true
-	}
-	return false
+	return types.IsCriticalPod(pod)
 }
 
 func IsBestEffortPod(pod *v1.Pod) bool {
