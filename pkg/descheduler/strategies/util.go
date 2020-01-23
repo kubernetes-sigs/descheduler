@@ -16,9 +16,7 @@ limitations under the License.
 
 package strategies
 
-import (
-	"k8s.io/api/core/v1"
-)
+import v1 "k8s.io/api/core/v1"
 
 // This file contains the datastructures, types & functions needed by all the strategies so that we don't have
 // to compute them again in each strategy.

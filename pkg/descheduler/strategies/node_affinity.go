@@ -17,7 +17,7 @@ limitations under the License.
 package strategies
 
 import (
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
