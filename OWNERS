@@ -1,9 +1,13 @@
-approvers:
-- aveshagarwal
-- k82cn
-- ravisantoshgudimetla
 reviewers:
-- aveshagarwal
-- k82cn
-- ravisantoshgudimetla
-- damemi
+  - ravisantoshgudimetla
+  - sttts
+  - damemi
+  - soltysh
+  - ingvagabund
+approvers:
+  - mfojtik
+  - ravisantoshgudimetla
+  - sttts
+  - damemi
+  - soltysh
+  - ingvagabund
