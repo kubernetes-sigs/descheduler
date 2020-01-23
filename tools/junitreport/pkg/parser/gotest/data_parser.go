@@ -3,7 +3,7 @@ package gotest
 import (
 	"regexp"
 
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/api"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/api"
 )
 
 // testStartPattern matches the line in verbose `go test` output that marks the declaration of a test.

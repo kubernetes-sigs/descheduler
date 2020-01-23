@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/api"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/api"
 )
 
 // Summarize reads the input into a TestSuites structure and summarizes the tests contained within,

@@ -8,8 +8,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/diff"
 
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/api"
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/builder/nested"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/api"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/builder/nested"
 )
 
 // TestNestedParse tests that parsing the `go test` output in the test directory with a nested builder works as expected
@@ -450,7 +450,7 @@ func TestNestedParse(t *testing.T) {
 						},
 					},
 					{
-						Name:       "github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/parser/gotest/example",
+						Name:       "sigs.k8s.io/descheduler/tools/junitreport/pkg/parser/gotest/example",
 						NumTests:   19,
 						NumFailed:  9,
 						Duration:   0.006,

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/api"
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/builder"
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/parser"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/api"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/builder"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/parser"
 )
 
 // NewParser returns a new parser that's capable of parsing Go unit test output

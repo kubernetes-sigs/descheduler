@@ -1,6 +1,6 @@
 package builder
 
-import "github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/api"
+import "sigs.k8s.io/descheduler/tools/junitreport/pkg/api"
 
 // TestSuitesBuilder knows how to aggregate data to form a collection of test suites.
 type TestSuitesBuilder interface {

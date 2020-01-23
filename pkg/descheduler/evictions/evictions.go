@@ -25,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 
-	eutils "github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions/utils"
+	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 )
 
 func EvictPod(client clientset.Interface, pod *v1.Pod, policyGroupVersion string, dryRun bool) (bool, error) {

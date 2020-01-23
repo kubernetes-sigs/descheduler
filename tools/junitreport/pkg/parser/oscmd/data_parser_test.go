@@ -3,7 +3,7 @@ package oscmd
 import (
 	"testing"
 
-	"github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/api"
+	"sigs.k8s.io/descheduler/tools/junitreport/pkg/api"
 )
 
 func TestMarksTestBeginning(t *testing.T) {

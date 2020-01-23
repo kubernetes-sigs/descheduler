@@ -1,6 +1,6 @@
 package stack
 
-import "github.com/kubernetes-incubator/descheduler/tools/junitreport/pkg/api"
+import "sigs.k8s.io/descheduler/tools/junitreport/pkg/api"
 
 // TestDataParser knows how to take raw test data and extract the useful information from it
 type TestDataParser interface {
