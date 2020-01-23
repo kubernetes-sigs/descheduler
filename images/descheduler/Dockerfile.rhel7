@@ -1,7 +1,7 @@
 FROM registry.svc.ci.openshift.org/ocp/builder:golang-1.13 AS builder
 WORKDIR /go/src/sigs.k8s.io/descheduler
 COPY . .
-RUN make build; \
+RUN make build WHAT=cmd/descheduler; \
     mkdir -p /tmp/build; \
     cp /go/src/sigs.k8s.io/descheduler/_output/local/bin/linux/$(go env GOARCH)/descheduler /tmp/build/descheduler
 
