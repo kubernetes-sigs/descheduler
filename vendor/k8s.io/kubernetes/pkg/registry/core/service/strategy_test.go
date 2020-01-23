@@ -23,10 +23,16 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/diff"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
 	api "k8s.io/kubernetes/pkg/apis/core"
+	_ "k8s.io/kubernetes/pkg/apis/core/install"
+
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
+	"k8s.io/kubernetes/pkg/features"
 )
 
 func TestExportService(t *testing.T) {
@@ -111,22 +117,23 @@ func TestExportService(t *testing.T) {
 
 func TestCheckGeneratedNameError(t *testing.T) {
 	expect := errors.NewNotFound(api.Resource("foos"), "bar")
-	if err := rest.CheckGeneratedNameError(Strategy, expect, &api.Pod{}); err != expect {
+	if err := rest.CheckGeneratedNameError(Strategy, expect, &api.Service{}); err != expect {
 		t.Errorf("NotFoundError should be ignored: %v", err)
 	}
 
 	expect = errors.NewAlreadyExists(api.Resource("foos"), "bar")
-	if err := rest.CheckGeneratedNameError(Strategy, expect, &api.Pod{}); err != expect {
+	if err := rest.CheckGeneratedNameError(Strategy, expect, &api.Service{}); err != expect {
 		t.Errorf("AlreadyExists should be returned when no GenerateName field: %v", err)
 	}
 
 	expect = errors.NewAlreadyExists(api.Resource("foos"), "bar")
-	if err := rest.CheckGeneratedNameError(Strategy, expect, &api.Pod{ObjectMeta: metav1.ObjectMeta{GenerateName: "foo"}}); err == nil || !errors.IsServerTimeout(err) {
+	if err := rest.CheckGeneratedNameError(Strategy, expect, &api.Service{ObjectMeta: metav1.ObjectMeta{GenerateName: "foo"}}); err == nil || !errors.IsServerTimeout(err) {
 		t.Errorf("expected try again later error: %v", err)
 	}
 }
 
 func makeValidService() api.Service {
+	defaultServiceIPFamily := api.IPv4Protocol
 	return api.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "valid",
@@ -140,6 +147,7 @@ func makeValidService() api.Service {
 			SessionAffinity: "None",
 			Type:            api.ServiceTypeClusterIP,
 			Ports:           []api.ServicePort{{Name: "p", Protocol: "TCP", Port: 8675, TargetPort: intstr.FromInt(8675)}},
+			IPFamily:        &defaultServiceIPFamily,
 		},
 	}
 }
@@ -239,4 +247,71 @@ func TestServiceStatusStrategy(t *testing.T) {
 	if len(errs) != 0 {
 		t.Errorf("Unexpected error %v", errs)
 	}
+}
+
+func makeServiceWithIPFamily(IPFamily *api.IPFamily) *api.Service {
+	return &api.Service{
+		Spec: api.ServiceSpec{
+			IPFamily: IPFamily,
+		},
+	}
+}
+func TestDropDisabledField(t *testing.T) {
+	ipv4Service := api.IPv4Protocol
+	ipv6Service := api.IPv6Protocol
+	testCases := []struct {
+		name            string
+		enableDualStack bool
+		svc             *api.Service
+		oldSvc          *api.Service
+		compareSvc      *api.Service
+	}{
+		{
+			name:            "not dual stack, field not used",
+			enableDualStack: false,
+			svc:             makeServiceWithIPFamily(nil),
+			oldSvc:          nil,
+			compareSvc:      makeServiceWithIPFamily(nil),
+		},
+		{
+			name:            "not dual stack, field used in new, not in old",
+			enableDualStack: false,
+			svc:             makeServiceWithIPFamily(&ipv4Service),
+			oldSvc:          nil,
+			compareSvc:      makeServiceWithIPFamily(nil),
+		},
+		{
+			name:            "not dual stack, field used in old and new",
+			enableDualStack: false,
+			svc:             makeServiceWithIPFamily(&ipv4Service),
+			oldSvc:          makeServiceWithIPFamily(&ipv4Service),
+			compareSvc:      makeServiceWithIPFamily(&ipv4Service),
+		},
+		{
+			name:            "dualstack, field used",
+			enableDualStack: true,
+			svc:             makeServiceWithIPFamily(&ipv6Service),
+			oldSvc:          nil,
+			compareSvc:      makeServiceWithIPFamily(&ipv6Service),
+		},
+
+		/* add more tests for other dropped fields as needed */
+	}
+	for _, tc := range testCases {
+		func() {
+			defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.IPv6DualStack, tc.enableDualStack)()
+			old := tc.oldSvc.DeepCopy()
+			dropServiceDisabledFields(tc.svc, tc.oldSvc)
+
+			// old node  should never be changed
+			if !reflect.DeepEqual(tc.oldSvc, old) {
+				t.Errorf("%v: old svc changed: %v", tc.name, diff.ObjectReflectDiff(tc.oldSvc, old))
+			}
+
+			if !reflect.DeepEqual(tc.svc, tc.compareSvc) {
+				t.Errorf("%v: unexpected svc spec: %v", tc.name, diff.ObjectReflectDiff(tc.svc, tc.compareSvc))
+			}
+		}()
+	}
+
 }

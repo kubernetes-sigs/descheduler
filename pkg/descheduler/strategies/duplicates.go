@@ -19,10 +19,9 @@ package strategies
 import (
 	"strings"
 
-	"github.com/golang/glog"
-
 	"k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/klog"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -40,18 +39,18 @@ func RemoveDuplicatePods(ds *options.DeschedulerServer, strategy api.Descheduler
 	if !strategy.Enabled {
 		return
 	}
-	deleteDuplicatePods(ds.Client, policyGroupVersion, nodes, ds.DryRun, nodepodCount, ds.MaxNoOfPodsToEvictPerNode)
+	deleteDuplicatePods(ds.Client, policyGroupVersion, nodes, ds.DryRun, nodepodCount, ds.MaxNoOfPodsToEvictPerNode, ds.EvictLocalStoragePods)
 }
 
 // deleteDuplicatePods evicts the pod from node and returns the count of evicted pods.
-func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodepodCount nodePodEvictedCount, maxPodsToEvict int) int {
+func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodepodCount nodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
 	podsEvicted := 0
 	for _, node := range nodes {
-		glog.V(1).Infof("Processing node: %#v", node.Name)
-		dpm := ListDuplicatePodsOnANode(client, node)
+		klog.V(1).Infof("Processing node: %#v", node.Name)
+		dpm := ListDuplicatePodsOnANode(client, node, evictLocalStoragePods)
 		for creator, pods := range dpm {
 			if len(pods) > 1 {
-				glog.V(1).Infof("%#v", creator)
+				klog.V(1).Infof("%#v", creator)
 				// i = 0 does not evict the first pod
 				for i := 1; i < len(pods); i++ {
 					if maxPodsToEvict > 0 && nodepodCount[node]+1 > maxPodsToEvict {
@@ -59,10 +58,10 @@ func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, 
 					}
 					success, err := evictions.EvictPod(client, pods[i], policyGroupVersion, dryRun)
 					if !success {
-						glog.Infof("Error when evicting pod: %#v (%#v)", pods[i].Name, err)
+						klog.Infof("Error when evicting pod: %#v (%#v)", pods[i].Name, err)
 					} else {
 						nodepodCount[node]++
-						glog.V(1).Infof("Evicted pod: %#v (%#v)", pods[i].Name, err)
+						klog.V(1).Infof("Evicted pod: %#v (%#v)", pods[i].Name, err)
 					}
 				}
 			}
@@ -73,8 +72,8 @@ func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, 
 }
 
 // ListDuplicatePodsOnANode lists duplicate pods on a given node.
-func ListDuplicatePodsOnANode(client clientset.Interface, node *v1.Node) DuplicatePodsMap {
-	pods, err := podutil.ListEvictablePodsOnNode(client, node)
+func ListDuplicatePodsOnANode(client clientset.Interface, node *v1.Node, evictLocalStoragePods bool) DuplicatePodsMap {
+	pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
 	if err != nil {
 		return nil
 	}
@@ -84,13 +83,12 @@ func ListDuplicatePodsOnANode(client clientset.Interface, node *v1.Node) Duplica
 // FindDuplicatePods takes a list of pods and returns a duplicatePodsMap.
 func FindDuplicatePods(pods []*v1.Pod) DuplicatePodsMap {
 	dpm := DuplicatePodsMap{}
+	// Ignoring the error here as in the ListDuplicatePodsOnNode function we call ListEvictablePodsOnNode which checks for error.
 	for _, pod := range pods {
-		// Ignoring the error here as in the ListDuplicatePodsOnNode function we call ListEvictablePodsOnNode
-		// which checks for error.
 		ownerRefList := podutil.OwnerRef(pod)
 		for _, ownerRef := range ownerRefList {
-			// ownerRef doesn't need namespace since the assumption is owner needs to be in the same namespace.
-			s := strings.Join([]string{ownerRef.Kind, ownerRef.Name}, "/")
+			// Namespace/Kind/Name should be unique for the cluster.
+			s := strings.Join([]string{pod.ObjectMeta.Namespace, ownerRef.Kind, ownerRef.Name}, "/")
 			dpm[s] = append(dpm[s], pod)
 		}
 	}

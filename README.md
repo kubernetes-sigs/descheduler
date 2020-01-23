@@ -1,5 +1,5 @@
-[![Build Status](https://travis-ci.org/kubernetes-incubator/descheduler.svg?branch=master)](https://travis-ci.org/kubernetes-incubator/descheduler)
-[![Go Report Card](https://goreportcard.com/badge/github.com/kubernetes-incubator/descheduler)](https://goreportcard.com/report/github.com/kubernetes-incubator/descheduler)
+[![Build Status](https://travis-ci.org/kubernetes-sigs/descheduler.svg?branch=master)](https://travis-ci.org/kubernetes-sigs/descheduler)
+[![Go Report Card](https://goreportcard.com/badge/kubernetes-sigs/descheduler)](https://goreportcard.com/report/sigs.k8s.io/descheduler)
 
 # Descheduler for Kubernetes
 
@@ -26,8 +26,6 @@ but relies on the default scheduler for that.
 
 ## Build and Run
 
-- Checkout the repo into your $GOPATH directory under src/sigs.k8s.io/descheduler
-
 Build descheduler:
 
 ```sh
@@ -39,6 +37,8 @@ and run descheduler:
 ```sh
 $ ./_output/bin/descheduler --kubeconfig <path to kubeconfig> --policy-config-file <path-to-policy-file>
 ```
+
+If you want more information about what descheduler is doing add `-v 1` to the command line
 
 For more information about available options run:
 ```
@@ -131,23 +131,18 @@ spec:
   template:
     metadata:
       name: descheduler-pod
-      annotations:
-        scheduler.alpha.kubernetes.io/critical-pod: "true"
     spec:
-        containers:
+      priorityClassName: system-cluster-critical
+      containers:
         - name: descheduler
           image: descheduler
           volumeMounts:
-          - mountPath: /policy-dir
-            name: policy-volume
-          command:
-          - "/bin/sh"
-          - "-ec"
-          - |
-            /bin/descheduler --policy-config-file /policy-dir/policy.yaml
-        restartPolicy: "Never"
-        serviceAccountName: descheduler-sa
-        volumes:
+            - mountPath: /policy-dir
+              name: policy-volume
+          command: ["/bin/descheduler",  "--policy-config-file", "/policy-dir/policy.yaml", "-v", "1"]
+      restartPolicy: "Never"
+      serviceAccountName: descheduler-sa
+      volumes:
         - name: policy-volume
           configMap:
             name: descheduler-policy-configmap
@@ -161,10 +156,14 @@ the policy `policy-file` is mounted as a volume from the config map.
 $ kubectl create -f descheduler-job.yaml
 ```
 
+### Examples
+
+See [descheduler.yaml](examples/descheduler.yaml) and [descheduler-job.yaml](examples/descheduler-job.yaml) for a combined yaml file of the above steps. 
+
 ## Policy and Strategies
 
 Descheduler's policy is configurable and includes strategies to be enabled or disabled.
-Four strategies, `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`, `RemovePodsViolatingNodeAffinity` are currently implemented.
+Five strategies, `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`, `RemovePodsViolatingNodeAffinity` , `RemovePodsViolatingNodeTaints` are currently implemented.
 As part of the policy, the parameters associated with the strategies can be configured too.
 By default, all strategies are enabled.
 
@@ -254,7 +253,17 @@ strategies:
       nodeAffinityType:
       - "requiredDuringSchedulingIgnoredDuringExecution"
 ```
+### RemovePodsViolatingNodeTaints
 
+This strategy makes sure that pods violating NoSchedule taints on nodes are removed. For example: there is a pod "podA" with toleration to tolerate a taint ``key=value:NoSchedule`` scheduled and running on the tainted node. If the node's taint is subsequently updated/removed, taint is no longer satisfied by its pods' tolerations and will be evicted. The policy file should look like:
+
+````
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "RemovePodsViolatingNodeTaints":
+    enabled: true
+````
 ## Pod Evictions
 
 When the descheduler decides to evict pods from a node, it employs following general mechanism:
@@ -265,6 +274,9 @@ never evicted because these pods won't be recreated.
 * Pods associated with DaemonSets are never evicted.
 * Pods with local storage are never evicted.
 * Best efforts pods are evicted before Burstable and Guaranteed pods.
+* All types of pods with annotation descheduler.alpha.kubernetes.io/evict are evicted. This 
+annotation is used to override checks which prevent eviction and user can select which pod is evicted. 
+User should know how and if the pod will be recreated.
 
 ### Pod disruption Budget (PDB)
 Pods subject to Pod Disruption Budget (PDB) are not evicted if descheduling violates its pod
@@ -274,7 +286,6 @@ disruption budget (PDB). The pods are evicted by using eviction subresource to h
 
 This roadmap is not in any particular order.
 
-* Strategy to consider taints and tolerations
 * Consideration of pod affinity
 * Strategy to consider pod life time
 * Strategy to consider number of pending pods
@@ -287,11 +298,18 @@ This roadmap is not in any particular order.
 
 Descheduler  | supported Kubernetes version
 -------------|-----------------------------
-0.4          | 1.9+
+0.4+          | 1.9+
 0.1-0.3      | 1.7-1.8
 
-## Note
+## Community, discussion, contribution, and support
 
-This project is under active development, and is not intended for production use.
-Any api could be changed any time with out any notice. That said, your feedback is
-very important and appreciated to make this project more stable and useful.
+Learn how to engage with the Kubernetes community on the [community page](http://kubernetes.io/community/).
+
+You can reach the maintainers of this project at:
+
+- [Slack channel](https://kubernetes.slack.com/messages/sig-scheduling)
+- [Mailing list](https://groups.google.com/forum/#!forum/kubernetes-sig-scheduling)
+
+### Code of conduct
+
+Participation in the Kubernetes community is governed by the [Kubernetes Code of Conduct](code-of-conduct.md).

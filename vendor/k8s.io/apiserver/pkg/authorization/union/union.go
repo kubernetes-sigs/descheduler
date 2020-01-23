@@ -20,11 +20,12 @@ limitations under the License.
 // subauthorizer returns a NoOpinion, then the union authorizer moves onto the
 // next authorizer or, if the subauthorizer was the last authorizer, returns
 // NoOpinion as the aggregate decision. I.e. union authorizer creates an
-// aggregate decision and supports short-circut allows and denies from
+// aggregate decision and supports short-circuit allows and denies from
 // subauthorizers.
 package union
 
 import (
+	"context"
 	"strings"
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -41,14 +42,14 @@ func New(authorizationHandlers ...authorizer.Authorizer) authorizer.Authorizer {
 }
 
 // Authorizes against a chain of authorizer.Authorizer objects and returns nil if successful and returns error if unsuccessful
-func (authzHandler unionAuthzHandler) Authorize(a authorizer.Attributes) (authorizer.Decision, string, error) {
+func (authzHandler unionAuthzHandler) Authorize(ctx context.Context, a authorizer.Attributes) (authorizer.Decision, string, error) {
 	var (
 		errlist    []error
 		reasonlist []string
 	)
 
 	for _, currAuthzHandler := range authzHandler {
-		decision, reason, err := currAuthzHandler.Authorize(a)
+		decision, reason, err := currAuthzHandler.Authorize(ctx, a)
 
 		if err != nil {
 			errlist = append(errlist, err)

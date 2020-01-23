@@ -21,14 +21,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	core "k8s.io/client-go/testing"
 	"k8s.io/kubernetes/pkg/volume"
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
-	"k8s.io/kubernetes/pkg/volume/util/volumehelper"
+	"k8s.io/kubernetes/pkg/volume/util"
 )
 
 func TestListVolumesForPod(t *testing.T) {
@@ -37,6 +37,21 @@ func TestListVolumesForPod(t *testing.T) {
 	kubelet := testKubelet.kubelet
 
 	pod := podWithUIDNameNsSpec("12345678", "foo", "test", v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Name: "container1",
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "vol1",
+						MountPath: "/mnt/vol1",
+					},
+					{
+						Name:      "vol2",
+						MountPath: "/mnt/vol2",
+					},
+				},
+			},
+		},
 		Volumes: []v1.Volume{
 			{
 				Name: "vol1",
@@ -64,7 +79,7 @@ func TestListVolumesForPod(t *testing.T) {
 	err := kubelet.volumeManager.WaitForAttachAndMount(pod)
 	assert.NoError(t, err)
 
-	podName := volumehelper.GetUniquePodName(pod)
+	podName := util.GetUniquePodName(pod)
 
 	volumesToReturn, volumeExsit := kubelet.ListVolumesForPod(types.UID(podName))
 	assert.True(t, volumeExsit, "expected to find volumes for pod %q", podName)
@@ -74,7 +89,6 @@ func TestListVolumesForPod(t *testing.T) {
 
 	outerVolumeSpecName2 := "vol2"
 	assert.NotNil(t, volumesToReturn[outerVolumeSpecName2], "key %s", outerVolumeSpecName2)
-
 }
 
 func TestPodVolumesExist(t *testing.T) {
@@ -89,6 +103,17 @@ func TestPodVolumesExist(t *testing.T) {
 				UID:  "pod1uid",
 			},
 			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Name: "container1",
+						VolumeMounts: []v1.VolumeMount{
+							{
+								Name:      "vol1",
+								MountPath: "/mnt/vol1",
+							},
+						},
+					},
+				},
 				Volumes: []v1.Volume{
 					{
 						Name: "vol1",
@@ -107,6 +132,17 @@ func TestPodVolumesExist(t *testing.T) {
 				UID:  "pod2uid",
 			},
 			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Name: "container2",
+						VolumeMounts: []v1.VolumeMount{
+							{
+								Name:      "vol2",
+								MountPath: "/mnt/vol2",
+							},
+						},
+					},
+				},
 				Volumes: []v1.Volume{
 					{
 						Name: "vol2",
@@ -125,6 +161,17 @@ func TestPodVolumesExist(t *testing.T) {
 				UID:  "pod3uid",
 			},
 			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Name: "container3",
+						VolumeMounts: []v1.VolumeMount{
+							{
+								Name:      "vol3",
+								MountPath: "/mnt/vol3",
+							},
+						},
+					},
+				},
 				Volumes: []v1.Volume{
 					{
 						Name: "vol3",
@@ -160,6 +207,17 @@ func TestVolumeAttachAndMountControllerDisabled(t *testing.T) {
 	kubelet := testKubelet.kubelet
 
 	pod := podWithUIDNameNsSpec("12345678", "foo", "test", v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Name: "container1",
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "vol1",
+						MountPath: "/mnt/vol1",
+					},
+				},
+			},
+		},
 		Volumes: []v1.Volume{
 			{
 				Name: "vol1",
@@ -180,7 +238,7 @@ func TestVolumeAttachAndMountControllerDisabled(t *testing.T) {
 	assert.NoError(t, err)
 
 	podVolumes := kubelet.volumeManager.GetMountedVolumesForPod(
-		volumehelper.GetUniquePodName(pod))
+		util.GetUniquePodName(pod))
 
 	expectedPodVolumes := []string{"vol1"}
 	assert.Len(t, podVolumes, len(expectedPodVolumes), "Volumes for pod %+v", pod)
@@ -204,6 +262,17 @@ func TestVolumeUnmountAndDetachControllerDisabled(t *testing.T) {
 	kubelet := testKubelet.kubelet
 
 	pod := podWithUIDNameNsSpec("12345678", "foo", "test", v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Name: "container1",
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "vol1",
+						MountPath: "/mnt/vol1",
+					},
+				},
+			},
+		},
 		Volumes: []v1.Volume{
 			{
 				Name: "vol1",
@@ -227,7 +296,7 @@ func TestVolumeUnmountAndDetachControllerDisabled(t *testing.T) {
 	assert.NoError(t, err)
 
 	podVolumes := kubelet.volumeManager.GetMountedVolumesForPod(
-		volumehelper.GetUniquePodName(pod))
+		util.GetUniquePodName(pod))
 
 	expectedPodVolumes := []string{"vol1"}
 	assert.Len(t, podVolumes, len(expectedPodVolumes), "Volumes for pod %+v", pod)
@@ -252,7 +321,7 @@ func TestVolumeUnmountAndDetachControllerDisabled(t *testing.T) {
 
 	// Verify volumes unmounted
 	podVolumes = kubelet.volumeManager.GetMountedVolumesForPod(
-		volumehelper.GetUniquePodName(pod))
+		util.GetUniquePodName(pod))
 
 	assert.Len(t, podVolumes, 0,
 		"Expected volumes to be unmounted and detached. But some volumes are still mounted: %#v", podVolumes)
@@ -261,7 +330,7 @@ func TestVolumeUnmountAndDetachControllerDisabled(t *testing.T) {
 		1 /* expectedTearDownCallCount */, testKubelet.volumePlugin))
 
 	// Verify volumes detached and no longer reported as in use
-	assert.NoError(t, waitForVolumeDetach(v1.UniqueVolumeName("fake/vol1"), kubelet.volumeManager))
+	assert.NoError(t, waitForVolumeDetach(v1.UniqueVolumeName("fake/fake-device"), kubelet.volumeManager))
 	assert.True(t, testKubelet.volumePlugin.GetNewAttacherCallCount() >= 1, "Expected plugin NewAttacher to be called at least once")
 	assert.NoError(t, volumetest.VerifyDetachCallCount(
 		1 /* expectedDetachCallCount */, testKubelet.volumePlugin))
@@ -279,11 +348,10 @@ func TestVolumeAttachAndMountControllerEnabled(t *testing.T) {
 				Status: v1.NodeStatus{
 					VolumesAttached: []v1.AttachedVolume{
 						{
-							Name:       "fake/vol1",
+							Name:       "fake/fake-device",
 							DevicePath: "fake/path",
 						},
 					}},
-				Spec: v1.NodeSpec{ExternalID: testKubeletHostname},
 			}, nil
 		})
 	kubeClient.AddReactor("*", "*", func(action core.Action) (bool, runtime.Object, error) {
@@ -291,6 +359,17 @@ func TestVolumeAttachAndMountControllerEnabled(t *testing.T) {
 	})
 
 	pod := podWithUIDNameNsSpec("12345678", "foo", "test", v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Name: "container1",
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "vol1",
+						MountPath: "/mnt/vol1",
+					},
+				},
+			},
+		},
 		Volumes: []v1.Volume{
 			{
 				Name: "vol1",
@@ -310,14 +389,14 @@ func TestVolumeAttachAndMountControllerEnabled(t *testing.T) {
 
 	// Fake node status update
 	go simulateVolumeInUseUpdate(
-		v1.UniqueVolumeName("fake/vol1"),
+		v1.UniqueVolumeName("fake/fake-device"),
 		stopCh,
 		kubelet.volumeManager)
 
 	assert.NoError(t, kubelet.volumeManager.WaitForAttachAndMount(pod))
 
 	podVolumes := kubelet.volumeManager.GetMountedVolumesForPod(
-		volumehelper.GetUniquePodName(pod))
+		util.GetUniquePodName(pod))
 
 	expectedPodVolumes := []string{"vol1"}
 	assert.Len(t, podVolumes, len(expectedPodVolumes), "Volumes for pod %+v", pod)
@@ -346,11 +425,10 @@ func TestVolumeUnmountAndDetachControllerEnabled(t *testing.T) {
 				Status: v1.NodeStatus{
 					VolumesAttached: []v1.AttachedVolume{
 						{
-							Name:       "fake/vol1",
+							Name:       "fake/fake-device",
 							DevicePath: "fake/path",
 						},
 					}},
-				Spec: v1.NodeSpec{ExternalID: testKubeletHostname},
 			}, nil
 		})
 	kubeClient.AddReactor("*", "*", func(action core.Action) (bool, runtime.Object, error) {
@@ -358,6 +436,17 @@ func TestVolumeUnmountAndDetachControllerEnabled(t *testing.T) {
 	})
 
 	pod := podWithUIDNameNsSpec("12345678", "foo", "test", v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Name: "container1",
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "vol1",
+						MountPath: "/mnt/vol1",
+					},
+				},
+			},
+		},
 		Volumes: []v1.Volume{
 			{
 				Name: "vol1",
@@ -378,7 +467,7 @@ func TestVolumeUnmountAndDetachControllerEnabled(t *testing.T) {
 
 	// Fake node status update
 	go simulateVolumeInUseUpdate(
-		v1.UniqueVolumeName("fake/vol1"),
+		v1.UniqueVolumeName("fake/fake-device"),
 		stopCh,
 		kubelet.volumeManager)
 
@@ -386,7 +475,7 @@ func TestVolumeUnmountAndDetachControllerEnabled(t *testing.T) {
 	assert.NoError(t, kubelet.volumeManager.WaitForAttachAndMount(pod))
 
 	podVolumes := kubelet.volumeManager.GetMountedVolumesForPod(
-		volumehelper.GetUniquePodName(pod))
+		util.GetUniquePodName(pod))
 
 	expectedPodVolumes := []string{"vol1"}
 	assert.Len(t, podVolumes, len(expectedPodVolumes), "Volumes for pod %+v", pod)
@@ -410,7 +499,7 @@ func TestVolumeUnmountAndDetachControllerEnabled(t *testing.T) {
 
 	// Verify volumes unmounted
 	podVolumes = kubelet.volumeManager.GetMountedVolumesForPod(
-		volumehelper.GetUniquePodName(pod))
+		util.GetUniquePodName(pod))
 
 	assert.Len(t, podVolumes, 0,
 		"Expected volumes to be unmounted and detached. But some volumes are still mounted: %#v", podVolumes)
@@ -419,7 +508,7 @@ func TestVolumeUnmountAndDetachControllerEnabled(t *testing.T) {
 		1 /* expectedTearDownCallCount */, testKubelet.volumePlugin))
 
 	// Verify volumes detached and no longer reported as in use
-	assert.NoError(t, waitForVolumeDetach(v1.UniqueVolumeName("fake/vol1"), kubelet.volumeManager))
+	assert.NoError(t, waitForVolumeDetach(v1.UniqueVolumeName("fake/fake-device"), kubelet.volumeManager))
 	assert.True(t, testKubelet.volumePlugin.GetNewAttacherCallCount() >= 1, "Expected plugin NewAttacher to be called at least once")
 	assert.NoError(t, volumetest.VerifyZeroDetachCallCount(testKubelet.volumePlugin))
 }
@@ -441,11 +530,11 @@ func (f *stubVolume) CanMount() error {
 	return nil
 }
 
-func (f *stubVolume) SetUp(fsGroup *int64) error {
+func (f *stubVolume) SetUp(mounterArgs volume.MounterArgs) error {
 	return nil
 }
 
-func (f *stubVolume) SetUpAt(dir string, fsGroup *int64) error {
+func (f *stubVolume) SetUpAt(dir string, mounterArgs volume.MounterArgs) error {
 	return nil
 }
 
@@ -465,6 +554,15 @@ func (f *stubBlockVolume) GetPodDeviceMapPath() (string, string) {
 func (f *stubBlockVolume) SetUpDevice() (string, error) {
 	return "", nil
 }
+
+func (f stubBlockVolume) MapPodDevice() error {
+	return nil
+}
+
 func (f *stubBlockVolume) TearDownDevice(mapPath string, devicePath string) error {
+	return nil
+}
+
+func (f *stubBlockVolume) UnmapPodDevice() error {
 	return nil
 }

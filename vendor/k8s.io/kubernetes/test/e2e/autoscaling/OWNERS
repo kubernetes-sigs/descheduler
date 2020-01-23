@@ -1,14 +1,11 @@
+# See the OWNERS docs at https://go.k8s.io/owners
+
 reviewers:
-  - aleksandra-malinowska
-  - bskiba
-  - jszczepkowski
-  - MaciekPytel
-  - mwielgus
-  - wasylkowski
+  - sig-autoscaling-maintainers
 approvers:
-  - aleksandra-malinowska
-  - bskiba
+  - sig-autoscaling-maintainers
+emeritus_approvers:
   - jszczepkowski
-  - MaciekPytel
-  - mwielgus
   - wasylkowski
+labels:
+- sig/autoscaling

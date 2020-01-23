@@ -19,7 +19,7 @@ package descheduler
 import (
 	"fmt"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
@@ -56,7 +56,7 @@ func Run(rs *options.DeschedulerServer) error {
 	}
 
 	if len(nodes) <= 1 {
-		glog.V(1).Infof("The cluster size is 0 or 1 meaning eviction causes service disruption or degradation. So aborting..")
+		klog.V(1).Infof("The cluster size is 0 or 1 meaning eviction causes service disruption or degradation. So aborting..")
 		return nil
 	}
 
@@ -65,6 +65,6 @@ func Run(rs *options.DeschedulerServer) error {
 	strategies.LowNodeUtilization(rs, deschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes, nodePodCount)
 	strategies.RemovePodsViolatingInterPodAntiAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingInterPodAntiAffinity"], evictionPolicyGroupVersion, nodes, nodePodCount)
 	strategies.RemovePodsViolatingNodeAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingNodeAffinity"], evictionPolicyGroupVersion, nodes, nodePodCount)
-
+	strategies.RemovePodsViolatingNodeTaints(rs, deschedulerPolicy.Strategies["RemovePodsViolatingNodeTaints"], evictionPolicyGroupVersion, nodes, nodePodCount)
 	return nil
 }

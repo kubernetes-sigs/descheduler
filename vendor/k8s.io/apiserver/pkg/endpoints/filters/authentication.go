@@ -20,86 +20,132 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-
-	"github.com/golang/glog"
-	"github.com/prometheus/client_golang/prometheus"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/endpoints/handlers/responsewriters"
-	"k8s.io/apiserver/pkg/endpoints/request"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
+	"k8s.io/component-base/metrics"
+	"k8s.io/component-base/metrics/legacyregistry"
+	"k8s.io/klog"
+)
+
+/*
+ * By default, all the following metrics are defined as falling under
+ * ALPHA stability level https://github.com/kubernetes/enhancements/blob/master/keps/sig-instrumentation/20190404-kubernetes-control-plane-metrics-stability.md#stability-classes)
+ *
+ * Promoting the stability level of the metric is a responsibility of the component owner, since it
+ * involves explicitly acknowledging support for the metric across multiple releases, in accordance with
+ * the metric stability policy.
+ */
+const (
+	successLabel = "success"
+	failureLabel = "failure"
+	errorLabel   = "error"
 )
 
 var (
-	authenticatedUserCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "authenticated_user_requests",
-			Help: "Counter of authenticated requests broken out by username.",
+	authenticatedUserCounter = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Name:           "authenticated_user_requests",
+			Help:           "Counter of authenticated requests broken out by username.",
+			StabilityLevel: metrics.ALPHA,
 		},
 		[]string{"username"},
+	)
+
+	authenticatedAttemptsCounter = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Name:           "authentication_attempts",
+			Help:           "Counter of authenticated attempts.",
+			StabilityLevel: metrics.ALPHA,
+		},
+		[]string{"result"},
+	)
+
+	authenticationLatency = metrics.NewHistogramVec(
+		&metrics.HistogramOpts{
+			Name:           "authentication_duration_seconds",
+			Help:           "Authentication duration in seconds broken out by result.",
+			Buckets:        metrics.ExponentialBuckets(0.001, 2, 15),
+			StabilityLevel: metrics.ALPHA,
+		},
+		[]string{"result"},
 	)
 )
 
 func init() {
-	prometheus.MustRegister(authenticatedUserCounter)
+	legacyregistry.MustRegister(authenticatedUserCounter)
+	legacyregistry.MustRegister(authenticatedAttemptsCounter)
+	legacyregistry.MustRegister(authenticationLatency)
 }
 
 // WithAuthentication creates an http handler that tries to authenticate the given request as a user, and then
 // stores any such user found onto the provided context for the request. If authentication fails or returns an error
 // the failed handler is used. On success, "Authorization" header is removed from the request and handler
 // is invoked to serve the request.
-func WithAuthentication(handler http.Handler, mapper genericapirequest.RequestContextMapper, auth authenticator.Request, failed http.Handler) http.Handler {
+func WithAuthentication(handler http.Handler, auth authenticator.Request, failed http.Handler, apiAuds authenticator.Audiences) http.Handler {
 	if auth == nil {
-		glog.Warningf("Authentication is disabled")
+		klog.Warningf("Authentication is disabled")
 		return handler
 	}
-	return genericapirequest.WithRequestContext(
-		http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			user, ok, err := auth.AuthenticateRequest(req)
-			if err != nil || !ok {
-				if err != nil {
-					glog.Errorf("Unable to authenticate the request due to an error: %v", err)
-				}
-				failed.ServeHTTP(w, req)
-				return
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		authenticationStart := time.Now()
+
+		if len(apiAuds) > 0 {
+			req = req.WithContext(authenticator.WithAudiences(req.Context(), apiAuds))
+		}
+		resp, ok, err := auth.AuthenticateRequest(req)
+		if err != nil || !ok {
+			if err != nil {
+				klog.Errorf("Unable to authenticate the request due to an error: %v", err)
+				authenticatedAttemptsCounter.WithLabelValues(errorLabel).Inc()
+				authenticationLatency.WithLabelValues(errorLabel).Observe(time.Since(authenticationStart).Seconds())
+			} else if !ok {
+				authenticatedAttemptsCounter.WithLabelValues(failureLabel).Inc()
+				authenticationLatency.WithLabelValues(failureLabel).Observe(time.Since(authenticationStart).Seconds())
 			}
 
-			// authorization header is not required anymore in case of a successful authentication.
-			req.Header.Del("Authorization")
+			failed.ServeHTTP(w, req)
+			return
+		}
 
-			if ctx, ok := mapper.Get(req); ok {
-				mapper.Update(req, genericapirequest.WithUser(ctx, user))
-			}
+		if len(apiAuds) > 0 && len(resp.Audiences) > 0 && len(authenticator.Audiences(apiAuds).Intersect(resp.Audiences)) == 0 {
+			klog.Errorf("Unable to match the audience: %v , accepted: %v", resp.Audiences, apiAuds)
+			failed.ServeHTTP(w, req)
+			return
+		}
 
-			authenticatedUserCounter.WithLabelValues(compressUsername(user.GetName())).Inc()
+		// authorization header is not required anymore in case of a successful authentication.
+		req.Header.Del("Authorization")
 
-			handler.ServeHTTP(w, req)
-		}),
-		mapper,
-	)
+		req = req.WithContext(genericapirequest.WithUser(req.Context(), resp.User))
+
+		authenticatedUserCounter.WithLabelValues(compressUsername(resp.User.GetName())).Inc()
+		authenticatedAttemptsCounter.WithLabelValues(successLabel).Inc()
+		authenticationLatency.WithLabelValues(successLabel).Observe(time.Since(authenticationStart).Seconds())
+
+		handler.ServeHTTP(w, req)
+	})
 }
 
-func Unauthorized(requestContextMapper request.RequestContextMapper, s runtime.NegotiatedSerializer, supportsBasicAuth bool) http.Handler {
+func Unauthorized(s runtime.NegotiatedSerializer, supportsBasicAuth bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if supportsBasicAuth {
 			w.Header().Set("WWW-Authenticate", `Basic realm="kubernetes-master"`)
 		}
-		ctx, ok := requestContextMapper.Get(req)
-		if !ok {
-			responsewriters.InternalError(w, req, errors.New("no context found for request"))
-			return
-		}
-		requestInfo, found := request.RequestInfoFrom(ctx)
+		ctx := req.Context()
+		requestInfo, found := genericapirequest.RequestInfoFrom(ctx)
 		if !found {
 			responsewriters.InternalError(w, req, errors.New("no RequestInfo found in the context"))
 			return
 		}
 
 		gv := schema.GroupVersion{Group: requestInfo.APIGroup, Version: requestInfo.APIVersion}
-		responsewriters.ErrorNegotiated(ctx, apierrors.NewUnauthorized("Unauthorized"), s, gv, w, req)
+		responsewriters.ErrorNegotiated(apierrors.NewUnauthorized("Unauthorized"), s, gv, w, req)
 	})
 }
 

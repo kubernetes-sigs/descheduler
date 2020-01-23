@@ -17,16 +17,19 @@ limitations under the License.
 package defaulttolerationseconds
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
 
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apiserver/pkg/admission"
 	api "k8s.io/kubernetes/pkg/apis/core"
-	"k8s.io/kubernetes/pkg/apis/core/helper"
-	"k8s.io/kubernetes/plugin/pkg/scheduler/algorithm"
 )
+
+// PluginName indicates name of admission plugin.
+const PluginName = "DefaultTolerationSeconds"
 
 var (
 	defaultNotReadyTolerationSeconds = flag.Int64("default-not-ready-toleration-seconds", 300,
@@ -36,11 +39,25 @@ var (
 	defaultUnreachableTolerationSeconds = flag.Int64("default-unreachable-toleration-seconds", 300,
 		"Indicates the tolerationSeconds of the toleration for unreachable:NoExecute"+
 			" that is added by default to every pod that does not already have such a toleration.")
+
+	notReadyToleration = api.Toleration{
+		Key:               v1.TaintNodeNotReady,
+		Operator:          api.TolerationOpExists,
+		Effect:            api.TaintEffectNoExecute,
+		TolerationSeconds: defaultNotReadyTolerationSeconds,
+	}
+
+	unreachableToleration = api.Toleration{
+		Key:               v1.TaintNodeUnreachable,
+		Operator:          api.TolerationOpExists,
+		Effect:            api.TaintEffectNoExecute,
+		TolerationSeconds: defaultUnreachableTolerationSeconds,
+	}
 )
 
 // Register registers a plugin
 func Register(plugins *admission.Plugins) {
-	plugins.Register("DefaultTolerationSeconds", func(config io.Reader) (admission.Interface, error) {
+	plugins.Register(PluginName, func(config io.Reader) (admission.Interface, error) {
 		return NewDefaultTolerationSeconds(), nil
 	})
 }
@@ -65,7 +82,7 @@ func NewDefaultTolerationSeconds() *Plugin {
 }
 
 // Admit makes an admission decision based on the request attributes
-func (p *Plugin) Admit(attributes admission.Attributes) (err error) {
+func (p *Plugin) Admit(ctx context.Context, attributes admission.Attributes, o admission.ObjectInterfaces) (err error) {
 	if attributes.GetResource().GroupResource() != api.Resource("pods") {
 		return nil
 	}
@@ -85,38 +102,24 @@ func (p *Plugin) Admit(attributes admission.Attributes) (err error) {
 	toleratesNodeNotReady := false
 	toleratesNodeUnreachable := false
 	for _, toleration := range tolerations {
-		if (toleration.Key == algorithm.TaintNodeNotReady || len(toleration.Key) == 0) &&
+		if (toleration.Key == v1.TaintNodeNotReady || len(toleration.Key) == 0) &&
 			(toleration.Effect == api.TaintEffectNoExecute || len(toleration.Effect) == 0) {
 			toleratesNodeNotReady = true
 		}
 
-		if (toleration.Key == algorithm.TaintNodeUnreachable || len(toleration.Key) == 0) &&
+		if (toleration.Key == v1.TaintNodeUnreachable || len(toleration.Key) == 0) &&
 			(toleration.Effect == api.TaintEffectNoExecute || len(toleration.Effect) == 0) {
 			toleratesNodeUnreachable = true
 		}
 	}
 
-	// no change is required, return immediately
-	if toleratesNodeNotReady && toleratesNodeUnreachable {
-		return nil
-	}
-
 	if !toleratesNodeNotReady {
-		helper.AddOrUpdateTolerationInPod(pod, &api.Toleration{
-			Key:               algorithm.TaintNodeNotReady,
-			Operator:          api.TolerationOpExists,
-			Effect:            api.TaintEffectNoExecute,
-			TolerationSeconds: defaultNotReadyTolerationSeconds,
-		})
+		pod.Spec.Tolerations = append(pod.Spec.Tolerations, notReadyToleration)
 	}
 
 	if !toleratesNodeUnreachable {
-		helper.AddOrUpdateTolerationInPod(pod, &api.Toleration{
-			Key:               algorithm.TaintNodeUnreachable,
-			Operator:          api.TolerationOpExists,
-			Effect:            api.TaintEffectNoExecute,
-			TolerationSeconds: defaultUnreachableTolerationSeconds,
-		})
+		pod.Spec.Tolerations = append(pod.Spec.Tolerations, unreachableToleration)
 	}
+
 	return nil
 }

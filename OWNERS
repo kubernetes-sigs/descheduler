@@ -1,8 +1,13 @@
-approvers:
-- aveshagarwal
-- ravisantoshgudimetla
-- jayunit100
 reviewers:
-- aveshagarwal
-- ravisantoshgudimetla
-- jayunit100
+  - ravisantoshgudimetla
+  - sttts
+  - damemi
+  - soltysh
+  - ingvagabund
+approvers:
+  - mfojtik
+  - ravisantoshgudimetla
+  - sttts
+  - damemi
+  - soltysh
+  - ingvagabund

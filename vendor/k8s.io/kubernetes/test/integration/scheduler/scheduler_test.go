@@ -20,39 +20,32 @@ package scheduler
 
 import (
 	"fmt"
-	"reflect"
 	"testing"
 	"time"
 
-	"k8s.io/api/core/v1"
-	policy "k8s.io/api/policy/v1beta1"
+	"github.com/google/go-cmp/cmp"
+
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/diff"
-	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
-	clientv1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
-	"k8s.io/kubernetes/pkg/api/testapi"
-	"k8s.io/kubernetes/pkg/apis/componentconfig"
-	schedulerapp "k8s.io/kubernetes/plugin/cmd/kube-scheduler/app"
-	"k8s.io/kubernetes/plugin/pkg/scheduler"
-	"k8s.io/kubernetes/plugin/pkg/scheduler/algorithm"
-	_ "k8s.io/kubernetes/plugin/pkg/scheduler/algorithmprovider"
-	schedulerapi "k8s.io/kubernetes/plugin/pkg/scheduler/api"
-	"k8s.io/kubernetes/plugin/pkg/scheduler/factory"
-	"k8s.io/kubernetes/plugin/pkg/scheduler/schedulercache"
+	"k8s.io/kubernetes/pkg/scheduler"
+	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
+	_ "k8s.io/kubernetes/pkg/scheduler/algorithmprovider"
+	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
+	schedulerframework "k8s.io/kubernetes/pkg/scheduler/framework/v1alpha1"
+	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
 	"k8s.io/kubernetes/test/integration/framework"
 )
-
-const enableEquivalenceCache = true
 
 type nodeMutationFunc func(t *testing.T, n *v1.Node, nodeLister corelisters.NodeLister, c clientset.Interface)
 
@@ -61,20 +54,20 @@ type nodeStateManager struct {
 	makeUnSchedulable nodeMutationFunc
 }
 
-func PredicateOne(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulercache.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
+func PredicateOne(pod *v1.Pod, meta predicates.Metadata, nodeInfo *schedulernodeinfo.NodeInfo) (bool, []predicates.PredicateFailureReason, error) {
 	return true, nil, nil
 }
 
-func PredicateTwo(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulercache.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
+func PredicateTwo(pod *v1.Pod, meta predicates.Metadata, nodeInfo *schedulernodeinfo.NodeInfo) (bool, []predicates.PredicateFailureReason, error) {
 	return true, nil, nil
 }
 
-func PriorityOne(pod *v1.Pod, nodeNameToInfo map[string]*schedulercache.NodeInfo, nodes []*v1.Node) (schedulerapi.HostPriorityList, error) {
-	return []schedulerapi.HostPriority{}, nil
+func PriorityOne(pod *v1.Pod, meta interface{}, nodeInfo *schedulernodeinfo.NodeInfo) (schedulerframework.NodeScore, error) {
+	return schedulerframework.NodeScore{}, nil
 }
 
-func PriorityTwo(pod *v1.Pod, nodeNameToInfo map[string]*schedulercache.NodeInfo, nodes []*v1.Node) (schedulerapi.HostPriorityList, error) {
-	return []schedulerapi.HostPriority{}, nil
+func PriorityTwo(pod *v1.Pod, meta interface{}, nodeInfo *schedulernodeinfo.NodeInfo) (schedulerframework.NodeScore, error) {
+	return schedulerframework.NodeScore{}, nil
 }
 
 // TestSchedulerCreationFromConfigMap verifies that scheduler can be created
@@ -87,79 +80,234 @@ func TestSchedulerCreationFromConfigMap(t *testing.T) {
 	ns := framework.CreateTestingNamespace("configmap", s, t)
 	defer framework.DeleteTestingNamespace(ns, s, t)
 
-	clientSet := clientset.NewForConfigOrDie(&restclient.Config{Host: s.URL, ContentConfig: restclient.ContentConfig{GroupVersion: testapi.Groups[v1.GroupName].GroupVersion()}})
+	clientSet := clientset.NewForConfigOrDie(&restclient.Config{Host: s.URL, ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}}})
 	defer clientSet.CoreV1().Nodes().DeleteCollection(nil, metav1.ListOptions{})
 	informerFactory := informers.NewSharedInformerFactory(clientSet, 0)
 
 	// Pre-register some predicate and priority functions
-	factory.RegisterFitPredicate("PredicateOne", PredicateOne)
-	factory.RegisterFitPredicate("PredicateTwo", PredicateTwo)
-	factory.RegisterPriorityFunction("PriorityOne", PriorityOne, 1)
-	factory.RegisterPriorityFunction("PriorityTwo", PriorityTwo, 1)
+	scheduler.RegisterFitPredicate("PredicateOne", PredicateOne)
+	scheduler.RegisterFitPredicate("PredicateTwo", PredicateTwo)
+	scheduler.RegisterPriorityMapReduceFunction("PriorityOne", PriorityOne, nil, 1)
+	scheduler.RegisterPriorityMapReduceFunction("PriorityTwo", PriorityTwo, nil, 1)
 
-	// Add a ConfigMap object.
-	configPolicyName := "scheduler-custom-policy-config"
-	policyConfigMap := v1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Namespace: metav1.NamespaceSystem, Name: configPolicyName},
-		Data: map[string]string{
-			componentconfig.SchedulerPolicyConfigMapKey: `{
-			"kind" : "Policy",
-			"apiVersion" : "v1",
-			"predicates" : [
-				{"name" : "PredicateOne"},
-				{"name" : "PredicateTwo"}
-			],
-			"priorities" : [
-				{"name" : "PriorityOne", "weight" : 1},
-				{"name" : "PriorityTwo", "weight" : 5}
-			]
+	for i, test := range []struct {
+		policy               string
+		expectedPredicates   sets.String
+		expectedPrioritizers sets.String
+		expectedPlugins      map[string][]kubeschedulerconfig.Plugin
+	}{
+		{
+			policy: `{
+				"kind" : "Policy",
+				"apiVersion" : "v1",
+				"predicates" : [
+					{"name" : "PredicateOne"},
+					{"name" : "PredicateTwo"}
+				],
+				"priorities" : [
+					{"name" : "PriorityOne", "weight" : 1},
+					{"name" : "PriorityTwo", "weight" : 5}
+				]
 			}`,
-		},
-	}
-
-	policyConfigMap.APIVersion = testapi.Groups[v1.GroupName].GroupVersion().String()
-	clientSet.CoreV1().ConfigMaps(metav1.NamespaceSystem).Create(&policyConfigMap)
-
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartRecordingToSink(&clientv1core.EventSinkImpl{Interface: clientv1core.New(clientSet.CoreV1().RESTClient()).Events("")})
-
-	ss := &schedulerapp.SchedulerServer{
-		SchedulerName: v1.DefaultSchedulerName,
-		AlgorithmSource: componentconfig.SchedulerAlgorithmSource{
-			Policy: &componentconfig.SchedulerPolicySource{
-				ConfigMap: &componentconfig.SchedulerPolicyConfigMapSource{
-					Namespace: policyConfigMap.Namespace,
-					Name:      policyConfigMap.Name,
+			expectedPredicates: sets.NewString(
+				"PredicateOne",
+				"PredicateTwo",
+			),
+			expectedPrioritizers: sets.NewString(
+				"PriorityOne",
+				"PriorityTwo",
+			),
+			expectedPlugins: map[string][]kubeschedulerconfig.Plugin{
+				"FilterPlugin": {
+					{Name: "NodeUnschedulable"},
+					{Name: "TaintToleration"},
 				},
 			},
 		},
-		HardPodAffinitySymmetricWeight: v1.DefaultHardPodAffinitySymmetricWeight,
-		Client:          clientSet,
-		InformerFactory: informerFactory,
-		PodInformer:     factory.NewPodInformer(clientSet, 0, v1.DefaultSchedulerName),
-		EventClient:     clientSet.CoreV1(),
-		Recorder:        eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: v1.DefaultSchedulerName}),
-		Broadcaster:     eventBroadcaster,
-	}
+		{
+			policy: `{
+				"kind" : "Policy",
+				"apiVersion" : "v1"
+			}`,
+			expectedPrioritizers: sets.NewString(),
+			expectedPlugins: map[string][]kubeschedulerconfig.Plugin{
+				"FilterPlugin": {
+					{Name: "NodeUnschedulable"},
+					{Name: "NodeResourcesFit"},
+					{Name: "NodeName"},
+					{Name: "NodePorts"},
+					{Name: "NodeAffinity"},
+					{Name: "VolumeRestrictions"},
+					{Name: "TaintToleration"},
+					{Name: "EBSLimits"},
+					{Name: "GCEPDLimits"},
+					{Name: "NodeVolumeLimits"},
+					{Name: "AzureDiskLimits"},
+					{Name: "VolumeBinding"},
+					{Name: "VolumeZone"},
+					{Name: "InterPodAffinity"},
+				},
+				"ScorePlugin": {
+					{Name: "NodeResourcesBalancedAllocation", Weight: 1},
+					{Name: "ImageLocality", Weight: 1},
+					{Name: "InterPodAffinity", Weight: 1},
+					{Name: "NodeResourcesLeastAllocated", Weight: 1},
+					{Name: "NodeAffinity", Weight: 1},
+					{Name: "NodePreferAvoidPods", Weight: 10000},
+					{Name: "DefaultPodTopologySpread", Weight: 1},
+					{Name: "TaintToleration", Weight: 1},
+				},
+			},
+		},
+		{
+			policy: `{
+				"kind" : "Policy",
+				"apiVersion" : "v1",
+				"predicates" : [],
+				"priorities" : []
+			}`,
+			expectedPredicates:   sets.NewString(),
+			expectedPrioritizers: sets.NewString(),
+			expectedPlugins: map[string][]kubeschedulerconfig.Plugin{
+				"FilterPlugin": {
+					{Name: "NodeUnschedulable"},
+					{Name: "TaintToleration"},
+				},
+			},
+		},
+		{
+			policy: `apiVersion: v1
+kind: Policy
+predicates:
+- name: PredicateOne
+- name: PredicateTwo
+priorities:
+- name: PriorityOne
+  weight: 1
+- name: PriorityTwo
+  weight: 5
+`,
+			expectedPredicates: sets.NewString(
+				"PredicateOne",
+				"PredicateTwo",
+			),
+			expectedPrioritizers: sets.NewString(
+				"PriorityOne",
+				"PriorityTwo",
+			),
+			expectedPlugins: map[string][]kubeschedulerconfig.Plugin{
+				"FilterPlugin": {
+					{Name: "NodeUnschedulable"},
+					{Name: "TaintToleration"},
+				},
+			},
+		},
+		{
+			policy: `apiVersion: v1
+kind: Policy
+`,
+			expectedPrioritizers: sets.NewString(),
+			expectedPlugins: map[string][]kubeschedulerconfig.Plugin{
+				"FilterPlugin": {
+					{Name: "NodeUnschedulable"},
+					{Name: "NodeResourcesFit"},
+					{Name: "NodeName"},
+					{Name: "NodePorts"},
+					{Name: "NodeAffinity"},
+					{Name: "VolumeRestrictions"},
+					{Name: "TaintToleration"},
+					{Name: "EBSLimits"},
+					{Name: "GCEPDLimits"},
+					{Name: "NodeVolumeLimits"},
+					{Name: "AzureDiskLimits"},
+					{Name: "VolumeBinding"},
+					{Name: "VolumeZone"},
+					{Name: "InterPodAffinity"},
+				},
+				"ScorePlugin": {
+					{Name: "NodeResourcesBalancedAllocation", Weight: 1},
+					{Name: "ImageLocality", Weight: 1},
+					{Name: "InterPodAffinity", Weight: 1},
+					{Name: "NodeResourcesLeastAllocated", Weight: 1},
+					{Name: "NodeAffinity", Weight: 1},
+					{Name: "NodePreferAvoidPods", Weight: 10000},
+					{Name: "DefaultPodTopologySpread", Weight: 1},
+					{Name: "TaintToleration", Weight: 1},
+				},
+			},
+		},
+		{
+			policy: `apiVersion: v1
+kind: Policy
+predicates: []
+priorities: []
+`,
+			expectedPredicates:   sets.NewString(),
+			expectedPrioritizers: sets.NewString(),
+			expectedPlugins: map[string][]kubeschedulerconfig.Plugin{
+				"FilterPlugin": {
+					{Name: "NodeUnschedulable"},
+					{Name: "TaintToleration"},
+				},
+			},
+		},
+	} {
+		// Add a ConfigMap object.
+		configPolicyName := fmt.Sprintf("scheduler-custom-policy-config-%d", i)
+		policyConfigMap := v1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Namespace: metav1.NamespaceSystem, Name: configPolicyName},
+			Data:       map[string]string{kubeschedulerconfig.SchedulerPolicyConfigMapKey: test.policy},
+		}
 
-	config, err := ss.SchedulerConfig()
-	if err != nil {
-		t.Fatalf("couldn't make scheduler config: %v", err)
-	}
+		policyConfigMap.APIVersion = "v1"
+		clientSet.CoreV1().ConfigMaps(metav1.NamespaceSystem).Create(&policyConfigMap)
 
-	// Verify that the config is applied correctly.
-	schedPredicates := config.Algorithm.Predicates()
-	schedPrioritizers := config.Algorithm.Prioritizers()
-	// Includes one mandatory predicates.
-	if len(schedPredicates) != 3 || len(schedPrioritizers) != 2 {
-		t.Errorf("Unexpected number of predicates or priority functions. Number of predicates: %v, number of prioritizers: %v", len(schedPredicates), len(schedPrioritizers))
-	}
-	// Check a predicate and a priority function.
-	if schedPredicates["PredicateTwo"] == nil {
-		t.Errorf("Expected to have a PodFitsHostPorts predicate.")
-	}
-	if schedPrioritizers[1].Function == nil || schedPrioritizers[1].Weight != 5 {
-		t.Errorf("Unexpected prioritizer: func: %v, weight: %v", schedPrioritizers[1].Function, schedPrioritizers[1].Weight)
+		eventBroadcaster := events.NewBroadcaster(&events.EventSinkImpl{Interface: clientSet.EventsV1beta1().Events("")})
+		stopCh := make(chan struct{})
+		eventBroadcaster.StartRecordingToSink(stopCh)
+
+		defaultBindTimeout := int64(30)
+
+		sched, err := scheduler.New(clientSet,
+			informerFactory,
+			scheduler.NewPodInformer(clientSet, 0),
+			eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.DefaultSchedulerName),
+			nil,
+			scheduler.WithName(v1.DefaultSchedulerName),
+			scheduler.WithAlgorithmSource(kubeschedulerconfig.SchedulerAlgorithmSource{
+				Policy: &kubeschedulerconfig.SchedulerPolicySource{
+					ConfigMap: &kubeschedulerconfig.SchedulerPolicyConfigMapSource{
+						Namespace: policyConfigMap.Namespace,
+						Name:      policyConfigMap.Name,
+					},
+				},
+			}),
+			scheduler.WithHardPodAffinitySymmetricWeight(v1.DefaultHardPodAffinitySymmetricWeight),
+			scheduler.WithBindTimeoutSeconds(defaultBindTimeout),
+		)
+		if err != nil {
+			t.Fatalf("couldn't make scheduler config: %v", err)
+		}
+
+		// Verify that the config is applied correctly.
+		schedPredicates := sets.NewString()
+		for k := range sched.Algorithm.Predicates() {
+			schedPredicates.Insert(k)
+		}
+		schedPrioritizers := sets.NewString()
+		for _, p := range sched.Algorithm.Prioritizers() {
+			schedPrioritizers.Insert(p.Name)
+		}
+		if !schedPredicates.Equal(test.expectedPredicates) {
+			t.Errorf("Expected predicates %v, got %v", test.expectedPredicates, schedPredicates)
+		}
+		if !schedPrioritizers.Equal(test.expectedPrioritizers) {
+			t.Errorf("Expected priority functions %v, got %v", test.expectedPrioritizers, schedPrioritizers)
+		}
+		schedPlugins := sched.Framework.ListPlugins()
+		if diff := cmp.Diff(test.expectedPlugins, schedPlugins); diff != "" {
+			t.Errorf("unexpected predicates diff (-want, +got): %s", diff)
+		}
 	}
 }
 
@@ -172,34 +320,34 @@ func TestSchedulerCreationFromNonExistentConfigMap(t *testing.T) {
 	ns := framework.CreateTestingNamespace("configmap", s, t)
 	defer framework.DeleteTestingNamespace(ns, s, t)
 
-	clientSet := clientset.NewForConfigOrDie(&restclient.Config{Host: s.URL, ContentConfig: restclient.ContentConfig{GroupVersion: testapi.Groups[v1.GroupName].GroupVersion()}})
+	clientSet := clientset.NewForConfigOrDie(&restclient.Config{Host: s.URL, ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}}})
 	defer clientSet.CoreV1().Nodes().DeleteCollection(nil, metav1.ListOptions{})
 
 	informerFactory := informers.NewSharedInformerFactory(clientSet, 0)
 
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartRecordingToSink(&clientv1core.EventSinkImpl{Interface: clientv1core.New(clientSet.CoreV1().RESTClient()).Events("")})
+	eventBroadcaster := events.NewBroadcaster(&events.EventSinkImpl{Interface: clientSet.EventsV1beta1().Events("")})
+	stopCh := make(chan struct{})
+	eventBroadcaster.StartRecordingToSink(stopCh)
 
-	ss := &schedulerapp.SchedulerServer{
-		SchedulerName: v1.DefaultSchedulerName,
-		AlgorithmSource: componentconfig.SchedulerAlgorithmSource{
-			Policy: &componentconfig.SchedulerPolicySource{
-				ConfigMap: &componentconfig.SchedulerPolicyConfigMapSource{
+	defaultBindTimeout := int64(30)
+
+	_, err := scheduler.New(clientSet,
+		informerFactory,
+		scheduler.NewPodInformer(clientSet, 0),
+		eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.DefaultSchedulerName),
+		nil,
+		scheduler.WithName(v1.DefaultSchedulerName),
+		scheduler.WithAlgorithmSource(kubeschedulerconfig.SchedulerAlgorithmSource{
+			Policy: &kubeschedulerconfig.SchedulerPolicySource{
+				ConfigMap: &kubeschedulerconfig.SchedulerPolicyConfigMapSource{
 					Namespace: "non-existent-config",
 					Name:      "non-existent-config",
 				},
 			},
-		},
-		HardPodAffinitySymmetricWeight: v1.DefaultHardPodAffinitySymmetricWeight,
-		Client:          clientSet,
-		InformerFactory: informerFactory,
-		PodInformer:     factory.NewPodInformer(clientSet, 0, v1.DefaultSchedulerName),
-		EventClient:     clientSet.CoreV1(),
-		Recorder:        eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: v1.DefaultSchedulerName}),
-		Broadcaster:     eventBroadcaster,
-	}
+		}),
+		scheduler.WithHardPodAffinitySymmetricWeight(v1.DefaultHardPodAffinitySymmetricWeight),
+		scheduler.WithBindTimeoutSeconds(defaultBindTimeout))
 
-	_, err := ss.SchedulerConfig()
 	if err == nil {
 		t.Fatalf("Creation of scheduler didn't fail while the policy ConfigMap didn't exist.")
 	}
@@ -209,7 +357,7 @@ func TestUnschedulableNodes(t *testing.T) {
 	context := initTest(t, "unschedulable-nodes")
 	defer cleanupTest(t, context)
 
-	nodeLister := context.schedulerConfigFactory.GetNodeLister()
+	nodeLister := context.informerFactory.Core().V1().Nodes().Lister()
 	// NOTE: This test cannot run in parallel, because it is creating and deleting
 	// non-namespaced objects (Nodes).
 	defer context.clientSet.CoreV1().Nodes().DeleteCollection(nil, metav1.ListOptions{})
@@ -218,12 +366,6 @@ func TestUnschedulableNodes(t *testing.T) {
 		Type:              v1.NodeReady,
 		Status:            v1.ConditionTrue,
 		Reason:            fmt.Sprintf("schedulable condition"),
-		LastHeartbeatTime: metav1.Time{Time: time.Now()},
-	}
-	badCondition := v1.NodeCondition{
-		Type:              v1.NodeReady,
-		Status:            v1.ConditionUnknown,
-		Reason:            fmt.Sprintf("unschedulable condition"),
 		LastHeartbeatTime: metav1.Time{Time: time.Now()},
 	}
 	// Create a new schedulable node, since we're first going to apply
@@ -284,43 +426,6 @@ func TestUnschedulableNodes(t *testing.T) {
 				}
 			},
 		},
-		// Test node.Status.Conditions=ConditionTrue/Unknown
-		{
-			makeUnSchedulable: func(t *testing.T, n *v1.Node, nodeLister corelisters.NodeLister, c clientset.Interface) {
-				n.Status = v1.NodeStatus{
-					Capacity: v1.ResourceList{
-						v1.ResourcePods: *resource.NewQuantity(32, resource.DecimalSI),
-					},
-					Conditions: []v1.NodeCondition{badCondition},
-				}
-				if _, err = c.CoreV1().Nodes().UpdateStatus(n); err != nil {
-					t.Fatalf("Failed to update node with bad status condition: %v", err)
-				}
-				err = waitForReflection(t, nodeLister, nodeKey, func(node interface{}) bool {
-					return node != nil && node.(*v1.Node).Status.Conditions[0].Status == v1.ConditionUnknown
-				})
-				if err != nil {
-					t.Fatalf("Failed to observe reflected update for status condition update: %v", err)
-				}
-			},
-			makeSchedulable: func(t *testing.T, n *v1.Node, nodeLister corelisters.NodeLister, c clientset.Interface) {
-				n.Status = v1.NodeStatus{
-					Capacity: v1.ResourceList{
-						v1.ResourcePods: *resource.NewQuantity(32, resource.DecimalSI),
-					},
-					Conditions: []v1.NodeCondition{goodCondition},
-				}
-				if _, err = c.CoreV1().Nodes().UpdateStatus(n); err != nil {
-					t.Fatalf("Failed to update node with healthy status condition: %v", err)
-				}
-				err = waitForReflection(t, nodeLister, nodeKey, func(node interface{}) bool {
-					return node != nil && node.(*v1.Node).Status.Conditions[0].Status == v1.ConditionTrue
-				})
-				if err != nil {
-					t.Fatalf("Failed to observe reflected update for status condition update: %v", err)
-				}
-			},
-		},
 	}
 
 	for i, mod := range nodeModifications {
@@ -342,7 +447,7 @@ func TestUnschedulableNodes(t *testing.T) {
 		// There are no schedulable nodes - the pod shouldn't be scheduled.
 		err = waitForPodToScheduleWithTimeout(context.clientSet, myPod, 2*time.Second)
 		if err == nil {
-			t.Errorf("Pod scheduled successfully on unschedulable nodes")
+			t.Errorf("Test %d: Pod scheduled successfully on unschedulable nodes", i)
 		}
 		if err != wait.ErrWaitTimeout {
 			t.Errorf("Test %d: failed while trying to confirm the pod does not get scheduled on the node: %v", i, err)
@@ -375,25 +480,23 @@ func TestUnschedulableNodes(t *testing.T) {
 }
 
 func TestMultiScheduler(t *testing.T) {
-	/*
-		This integration tests the multi-scheduler feature in the following way:
-		1. create a default scheduler
-		2. create a node
-		3. create 3 pods: testPodNoAnnotation, testPodWithAnnotationFitsDefault and testPodWithAnnotationFitsFoo
-			- note: the first two should be picked and scheduled by default scheduler while the last one should be
-			        picked by scheduler of name "foo-scheduler" which does not exist yet.
-		4. **check point-1**:
-			- testPodNoAnnotation, testPodWithAnnotationFitsDefault should be scheduled
-			- testPodWithAnnotationFitsFoo should NOT be scheduled
-		5. create a scheduler with name "foo-scheduler"
-		6. **check point-2**:
-			- testPodWithAnnotationFitsFoo should be scheduled
-		7. stop default scheduler
-		8. create 2 pods: testPodNoAnnotation2 and testPodWithAnnotationFitsDefault2
-			- note: these two pods belong to default scheduler which no longer exists
-		9. **check point-3**:
-			- testPodNoAnnotation2 and testPodWithAnnotationFitsDefault2 should NOT be scheduled
-	*/
+	// This integration tests the multi-scheduler feature in the following way:
+	// 1. create a default scheduler
+	// 2. create a node
+	// 3. create 3 pods: testPodNoAnnotation, testPodWithAnnotationFitsDefault and testPodWithAnnotationFitsFoo
+	//	  - note: the first two should be picked and scheduled by default scheduler while the last one should be
+	//	          picked by scheduler of name "foo-scheduler" which does not exist yet.
+	// 4. **check point-1**:
+	//	   - testPodNoAnnotation, testPodWithAnnotationFitsDefault should be scheduled
+	//	   - testPodWithAnnotationFitsFoo should NOT be scheduled
+	// 5. create a scheduler with name "foo-scheduler"
+	// 6. **check point-2**:
+	//     - testPodWithAnnotationFitsFoo should be scheduled
+	// 7. stop default scheduler
+	// 8. create 2 pods: testPodNoAnnotation2 and testPodWithAnnotationFitsDefault2
+	//    - note: these two pods belong to default scheduler which no longer exists
+	// 9. **check point-3**:
+	//     - testPodNoAnnotation2 and testPodWithAnnotationFitsDefault2 should NOT be scheduled
 
 	// 1. create and start default-scheduler
 	context := initTest(t, "multi-scheduler")
@@ -453,39 +556,7 @@ func TestMultiScheduler(t *testing.T) {
 	}
 
 	// 5. create and start a scheduler with name "foo-scheduler"
-	clientSet2 := clientset.NewForConfigOrDie(&restclient.Config{Host: context.httpServer.URL, ContentConfig: restclient.ContentConfig{GroupVersion: testapi.Groups[v1.GroupName].GroupVersion()}})
-	informerFactory2 := informers.NewSharedInformerFactory(context.clientSet, 0)
-	podInformer2 := factory.NewPodInformer(context.clientSet, 0, fooScheduler)
-
-	schedulerConfigFactory2 := factory.NewConfigFactory(
-		fooScheduler,
-		clientSet2,
-		informerFactory2.Core().V1().Nodes(),
-		podInformer2,
-		informerFactory2.Core().V1().PersistentVolumes(),
-		informerFactory2.Core().V1().PersistentVolumeClaims(),
-		informerFactory2.Core().V1().ReplicationControllers(),
-		informerFactory2.Extensions().V1beta1().ReplicaSets(),
-		informerFactory2.Apps().V1beta1().StatefulSets(),
-		informerFactory2.Core().V1().Services(),
-		informerFactory2.Policy().V1beta1().PodDisruptionBudgets(),
-		informerFactory2.Storage().V1().StorageClasses(),
-		v1.DefaultHardPodAffinitySymmetricWeight,
-		enableEquivalenceCache,
-	)
-	schedulerConfig2, err := schedulerConfigFactory2.Create()
-	if err != nil {
-		t.Errorf("Couldn't create scheduler config: %v", err)
-	}
-	eventBroadcaster2 := record.NewBroadcaster()
-	schedulerConfig2.Recorder = eventBroadcaster2.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: fooScheduler})
-	eventBroadcaster2.StartRecordingToSink(&clientv1core.EventSinkImpl{Interface: clientv1core.New(clientSet2.CoreV1().RESTClient()).Events("")})
-	go podInformer2.Informer().Run(schedulerConfig2.StopEverything)
-	informerFactory2.Start(schedulerConfig2.StopEverything)
-
-	sched2, _ := scheduler.NewFromConfigurator(&scheduler.FakeConfigurator{Config: schedulerConfig2}, nil...)
-	sched2.Run()
-	defer close(schedulerConfig2.StopEverything)
+	context = initTestSchedulerWithOptions(t, context, true, nil, time.Second, scheduler.WithName(fooScheduler))
 
 	//	6. **check point-2**:
 	//		- testPodWithAnnotationFitsFoo should be scheduled
@@ -615,90 +686,95 @@ func TestAllocatable(t *testing.T) {
 	}
 }
 
-// TestPDBCache verifies that scheduler cache works as expected when handling
-// PodDisruptionBudget.
-func TestPDBCache(t *testing.T) {
-	context := initTest(t, "pdbcache")
+// TestSchedulerInformers tests that scheduler receives informer events and updates its cache when
+// pods are scheduled by other schedulers.
+func TestSchedulerInformers(t *testing.T) {
+	// Initialize scheduler.
+	context := initTest(t, "scheduler-informer")
 	defer cleanupTest(t, context)
+	cs := context.clientSet
 
-	intstrMin := intstr.FromInt(4)
-	pdb := &policy.PodDisruptionBudget{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: context.ns.Name,
-			Name:      "test-pdb",
-			Labels:    map[string]string{"tkey1": "tval1", "tkey2": "tval2"},
+	defaultPodRes := &v1.ResourceRequirements{Requests: v1.ResourceList{
+		v1.ResourceCPU:    *resource.NewMilliQuantity(200, resource.DecimalSI),
+		v1.ResourceMemory: *resource.NewQuantity(200, resource.BinarySI)},
+	}
+	defaultNodeRes := &v1.ResourceList{
+		v1.ResourcePods:   *resource.NewQuantity(32, resource.DecimalSI),
+		v1.ResourceCPU:    *resource.NewMilliQuantity(500, resource.DecimalSI),
+		v1.ResourceMemory: *resource.NewQuantity(500, resource.BinarySI),
+	}
+
+	type nodeConfig struct {
+		name string
+		res  *v1.ResourceList
+	}
+
+	tests := []struct {
+		description         string
+		nodes               []*nodeConfig
+		existingPods        []*v1.Pod
+		pod                 *v1.Pod
+		preemptedPodIndexes map[int]struct{}
+	}{
+		{
+			description: "Pod cannot be scheduled when node is occupied by pods scheduled by other schedulers",
+			nodes:       []*nodeConfig{{name: "node-1", res: defaultNodeRes}},
+			existingPods: []*v1.Pod{
+				initPausePod(context.clientSet, &pausePodConfig{
+					Name:          "pod1",
+					Namespace:     context.ns.Name,
+					Resources:     defaultPodRes,
+					Labels:        map[string]string{"foo": "bar"},
+					NodeName:      "node-1",
+					SchedulerName: "foo-scheduler",
+				}),
+				initPausePod(context.clientSet, &pausePodConfig{
+					Name:          "pod2",
+					Namespace:     context.ns.Name,
+					Resources:     defaultPodRes,
+					Labels:        map[string]string{"foo": "bar"},
+					NodeName:      "node-1",
+					SchedulerName: "bar-scheduler",
+				}),
+			},
+			pod: initPausePod(cs, &pausePodConfig{
+				Name:      "unschedulable-pod",
+				Namespace: context.ns.Name,
+				Resources: defaultPodRes,
+			}),
+			preemptedPodIndexes: map[int]struct{}{2: {}},
 		},
-		Spec: policy.PodDisruptionBudgetSpec{
-			MinAvailable: &intstrMin,
-			Selector:     &metav1.LabelSelector{MatchLabels: map[string]string{"tkey": "tvalue"}},
-		},
 	}
 
-	createdPDB, err := context.clientSet.PolicyV1beta1().PodDisruptionBudgets(context.ns.Name).Create(pdb)
-	if err != nil {
-		t.Errorf("Failed to create PDB: %v", err)
-	}
-	// Wait for PDB to show up in the scheduler's cache.
-	if err = wait.Poll(time.Second, 15*time.Second, func() (bool, error) {
-		cachedPDBs, err := context.scheduler.Config().SchedulerCache.ListPDBs(labels.Everything())
-		if err != nil {
-			t.Errorf("Error while polling for PDB: %v", err)
-			return false, err
+	for _, test := range tests {
+		for _, nodeConf := range test.nodes {
+			_, err := createNode(cs, nodeConf.name, nodeConf.res)
+			if err != nil {
+				t.Fatalf("Error creating node %v: %v", nodeConf.name, err)
+			}
 		}
-		return len(cachedPDBs) > 0, err
-	}); err != nil {
-		t.Fatalf("No PDB was added to the cache: %v", err)
-	}
-	// Read PDB from the cache and compare it.
-	cachedPDBs, err := context.scheduler.Config().SchedulerCache.ListPDBs(labels.Everything())
-	if len(cachedPDBs) != 1 {
-		t.Fatalf("Expected to have 1 pdb in cache, but found %d.", len(cachedPDBs))
-	}
-	if !reflect.DeepEqual(createdPDB, cachedPDBs[0]) {
-		t.Errorf("Got different PDB than expected.\nDifference detected on:\n%s", diff.ObjectReflectDiff(createdPDB, cachedPDBs[0]))
-	}
 
-	// Update PDB and change its labels.
-	pdbCopy := *cachedPDBs[0]
-	pdbCopy.Labels = map[string]string{}
-	updatedPDB, err := context.clientSet.PolicyV1beta1().PodDisruptionBudgets(context.ns.Name).Update(&pdbCopy)
-	if err != nil {
-		t.Errorf("Failed to update PDB: %v", err)
-	}
-	// Wait for PDB to be updated in the scheduler's cache.
-	if err = wait.Poll(time.Second, 15*time.Second, func() (bool, error) {
-		cachedPDBs, err := context.scheduler.Config().SchedulerCache.ListPDBs(labels.Everything())
-		if err != nil {
-			t.Errorf("Error while polling for PDB: %v", err)
-			return false, err
+		pods := make([]*v1.Pod, len(test.existingPods))
+		var err error
+		// Create and run existingPods.
+		for i, p := range test.existingPods {
+			if pods[i], err = runPausePod(cs, p); err != nil {
+				t.Fatalf("Test [%v]: Error running pause pod: %v", test.description, err)
+			}
 		}
-		return len(cachedPDBs[0].Labels) == 0, err
-	}); err != nil {
-		t.Fatalf("No PDB was updated in the cache: %v", err)
-	}
-	// Read PDB from the cache and compare it.
-	cachedPDBs, err = context.scheduler.Config().SchedulerCache.ListPDBs(labels.Everything())
-	if len(cachedPDBs) != 1 {
-		t.Errorf("Expected to have 1 pdb in cache, but found %d.", len(cachedPDBs))
-	}
-	if !reflect.DeepEqual(updatedPDB, cachedPDBs[0]) {
-		t.Errorf("Got different PDB than expected.\nDifference detected on:\n%s", diff.ObjectReflectDiff(updatedPDB, cachedPDBs[0]))
-	}
+		// Create the new "pod".
+		unschedulable, err := createPausePod(cs, test.pod)
+		if err != nil {
+			t.Errorf("Error while creating new pod: %v", err)
+		}
+		if err := waitForPodUnschedulable(cs, unschedulable); err != nil {
+			t.Errorf("Pod %v got scheduled: %v", unschedulable.Name, err)
+		}
 
-	// Delete PDB.
-	err = context.clientSet.PolicyV1beta1().PodDisruptionBudgets(context.ns.Name).Delete(pdb.Name, &metav1.DeleteOptions{})
-	if err != nil {
-		t.Errorf("Failed to delete PDB: %v", err)
-	}
-	// Wait for PDB to be deleted from the scheduler's cache.
-	if err = wait.Poll(time.Second, 15*time.Second, func() (bool, error) {
-		cachedPDBs, err := context.scheduler.Config().SchedulerCache.ListPDBs(labels.Everything())
-		if err != nil {
-			t.Errorf("Error while polling for PDB: %v", err)
-			return false, err
-		}
-		return len(cachedPDBs) == 0, err
-	}); err != nil {
-		t.Errorf("No PDB was deleted from the cache: %v", err)
+		// Cleanup
+		pods = append(pods, unschedulable)
+		cleanupPods(cs, t, pods)
+		cs.PolicyV1beta1().PodDisruptionBudgets(context.ns.Name).DeleteCollection(nil, metav1.ListOptions{})
+		cs.CoreV1().Nodes().DeleteCollection(nil, metav1.ListOptions{})
 	}
 }

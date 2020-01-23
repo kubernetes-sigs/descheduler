@@ -20,35 +20,35 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
+	"k8s.io/utils/integer"
+	utilnet "k8s.io/utils/net"
 
-	"k8s.io/kubernetes/pkg/registry/core/service/ipallocator"
+	kubeoptions "k8s.io/kubernetes/pkg/kubeapiserver/options"
 )
 
-// DefaultServiceIPRange takes a the serviceIPRange flag and returns the defaulted service ip range (if  needed),
-// api server service IP, and an error
-// TODO move this out of the genericapiserver package
-func DefaultServiceIPRange(passedServiceClusterIPRange net.IPNet) (net.IPNet, net.IP, error) {
+// ServiceIPRange checks if the serviceClusterIPRange flag is nil, raising a warning if so and
+// setting service ip range to the default value in kubeoptions.DefaultServiceIPCIDR
+// for now until the default is removed per the deprecation timeline guidelines.
+// Returns service ip range, api server service IP, and an error
+func ServiceIPRange(passedServiceClusterIPRange net.IPNet) (net.IPNet, net.IP, error) {
 	serviceClusterIPRange := passedServiceClusterIPRange
 	if passedServiceClusterIPRange.IP == nil {
-		defaultNet := "10.0.0.0/24"
-		glog.Infof("Network range for service cluster IPs is unspecified. Defaulting to %v.", defaultNet)
-		_, defaultServiceClusterIPRange, err := net.ParseCIDR(defaultNet)
-		if err != nil {
-			return net.IPNet{}, net.IP{}, err
-		}
-		serviceClusterIPRange = *defaultServiceClusterIPRange
+		klog.Warningf("No CIDR for service cluster IPs specified. Default value which was %s is deprecated and will be removed in future releases. Please specify it using --service-cluster-ip-range on kube-apiserver.", kubeoptions.DefaultServiceIPCIDR.String())
+		serviceClusterIPRange = kubeoptions.DefaultServiceIPCIDR
 	}
-	if size := ipallocator.RangeSize(&serviceClusterIPRange); size < 8 {
+
+	size := integer.Int64Min(utilnet.RangeSize(&serviceClusterIPRange), 1<<16)
+	if size < 8 {
 		return net.IPNet{}, net.IP{}, fmt.Errorf("The service cluster IP range must be at least %d IP addresses", 8)
 	}
 
 	// Select the first valid IP from ServiceClusterIPRange to use as the GenericAPIServer service IP.
-	apiServerServiceIP, err := ipallocator.GetIndexedIP(&serviceClusterIPRange, 1)
+	apiServerServiceIP, err := utilnet.GetIndexedIP(&serviceClusterIPRange, 1)
 	if err != nil {
 		return net.IPNet{}, net.IP{}, err
 	}
-	glog.V(4).Infof("Setting service IP to %q (read-write).", apiServerServiceIP)
+	klog.V(4).Infof("Setting service IP to %q (read-write).", apiServerServiceIP)
 
 	return serviceClusterIPRange, apiServerServiceIP, nil
 }

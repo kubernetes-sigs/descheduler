@@ -24,20 +24,6 @@
 #  Set KUBERNETES_PROVIDER to choose between different providers:
 #  Google Compute Engine [default]
 #   * export KUBERNETES_PROVIDER=gce; wget -q -O - https://get.k8s.io | bash
-#  Google Container Engine
-#   * export KUBERNETES_PROVIDER=gke; wget -q -O - https://get.k8s.io | bash
-#  Amazon EC2
-#   * export KUBERNETES_PROVIDER=aws; wget -q -O - https://get.k8s.io | bash
-#  Libvirt (with CoreOS as a guest operating system)
-#   * export KUBERNETES_PROVIDER=libvirt-coreos; wget -q -O - https://get.k8s.io | bash
-#  Microsoft Azure
-#   * export KUBERNETES_PROVIDER=azure-legacy; wget -q -O - https://get.k8s.io | bash
-#  Vagrant (local virtual machines)
-#   * export KUBERNETES_PROVIDER=vagrant; wget -q -O - https://get.k8s.io | bash
-#  VMWare Photon Controller
-#   * export KUBERNETES_PROVIDER=photon-controller; wget -q -O - https://get.k8s.io | bash
-#  OpenStack-Heat
-#   * export KUBERNETES_PROVIDER=openstack-heat; wget -q -O - https://get.k8s.io | bash
 #
 #  Set KUBERNETES_RELEASE to choose a specific release instead of the current
 #    stable release, (e.g. 'v1.3.7').
@@ -47,6 +33,23 @@
 #
 #  Set KUBERNETES_SERVER_ARCH to choose the server (Kubernetes cluster)
 #  architecture to download:
+#    * amd64 [default]
+#    * arm
+#    * arm64
+#
+#  Set KUBERNETES_NODE_PLATFORM to choose the platform for which to download
+#  the node binaries. If none of KUBERNETES_NODE_PLATFORM and
+#  KUBERNETES_NODE_ARCH is set, no node binaries will be downloaded. If only
+#  one of the two is set, the other will be defaulted to the
+#  KUBERNETES_SERVER_PLATFORM/ARCH.
+#    * linux
+#    * windows
+#
+#  Set KUBERNETES_NODE_ARCH to choose the node architecture to download the
+#  node binaries. If none of KUBERNETES_NODE_PLATFORM and
+#  KUBERNETES_NODE_ARCH is set, no node binaries will be downloaded. If only
+#  one of the two is set, the other will be defaulted to the
+#  KUBERNETES_SERVER_PLATFORM/ARCH.
 #    * amd64 [default]
 #    * arm
 #    * arm64
@@ -82,10 +85,11 @@ KUBE_CI_VERSION_REGEX="^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-([a
 #   KUBE_VERSION
 function set_binary_version() {
   if [[ "${1}" =~ "/" ]]; then
-    export KUBE_VERSION=$(curl -fsSL --retry 5 "https://dl.k8s.io/${1}.txt")
+    KUBE_VERSION=$(curl -fsSL --retry 5 "https://dl.k8s.io/${1}.txt")
   else
-    export KUBE_VERSION=${1}
+    KUBE_VERSION=${1}
   fi
+  export KUBE_VERSION
 }
 
 # Use the script from inside the Kubernetes tarball to fetch the client and
@@ -118,6 +122,17 @@ function create_cluster {
   )
 }
 
+# Get default service account credentials of the VM.
+GCE_METADATA_INTERNAL="http://metadata.google.internal/computeMetadata/v1/instance"
+function get-credentials {
+  curl "${GCE_METADATA_INTERNAL}/service-accounts/default/token" -H "Metadata-Flavor: Google" -s | python -c \
+    'import sys; import json; print(json.loads(sys.stdin.read())["access_token"])'
+}
+
+function valid-storage-scope {
+  curl "${GCE_METADATA_INTERNAL}/service-accounts/default/scopes" -H "Metadata-Flavor: Google" -s | grep -E "auth/devstorage|auth/cloud-platform"
+}
+
 if [[ -n "${KUBERNETES_SKIP_DOWNLOAD-}" ]]; then
   create_cluster
   exit 0
@@ -126,7 +141,7 @@ fi
 if [[ -d "./kubernetes" ]]; then
   if [[ -z "${KUBERNETES_SKIP_CONFIRM-}" ]]; then
     echo "'kubernetes' directory already exist. Should we skip download step and start to create cluster based on it? [Y]/n"
-    read confirm
+    read -r confirm
     if [[ ! "${confirm}" =~ ^[nN]$ ]]; then
       echo "Skipping download step."
       create_cluster
@@ -140,10 +155,8 @@ fi
 kernel=$(uname -s)
 case "${kernel}" in
   Darwin)
-    platform="darwin"
     ;;
   Linux)
-    platform="linux"
     ;;
   *)
     echo "Unknown, unsupported platform: ${kernel}." >&2
@@ -155,16 +168,12 @@ esac
 machine=$(uname -m)
 case "${machine}" in
   x86_64*|i?86_64*|amd64*)
-    arch="amd64"
     ;;
   aarch64*|arm64*)
-    arch="arm64"
     ;;
   arm*)
-    arch="arm"
     ;;
   i?86*)
-    arch="386"
     ;;
   *)
     echo "Unknown, unsupported architecture (${machine})." >&2
@@ -221,7 +230,7 @@ fi
 
 if [[ -z "${KUBERNETES_SKIP_CONFIRM-}" ]]; then
   echo "Is this ok? [Y]/n"
-  read confirm
+  read -r confirm
   if [[ "${confirm}" =~ ^[nN]$ ]]; then
     echo "Aborting."
     exit 0
@@ -230,7 +239,13 @@ fi
 
 if "${need_download}"; then
   if [[ $(which curl) ]]; then
-    curl -fL --retry 5 --keepalive-time 2 "${kubernetes_tar_url}" -o "${file}"
+    # if the url belongs to GCS API we should use oauth2_token in the headers
+    curl_headers=""
+    if { [[ "${KUBERNETES_PROVIDER:-gce}" == "gce" ]] || [[ "${KUBERNETES_PROVIDER}" == "gke" ]] ; } &&
+       [[ "$kubernetes_tar_url" =~ ^https://storage.googleapis.com.* ]] && valid-storage-scope ; then
+      curl_headers="Authorization: Bearer $(get-credentials)"
+    fi
+    curl ${curl_headers:+-H "${curl_headers}"} -fL --retry 3 --keepalive-time 2 "${kubernetes_tar_url}" -o "${file}"
   elif [[ $(which wget) ]]; then
     wget "${kubernetes_tar_url}"
   else

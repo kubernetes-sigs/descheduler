@@ -58,7 +58,7 @@ func TestSecretboxKeyRotation(t *testing.T) {
 
 	// verify changing the context does not fails storage
 	// Secretbox is not currently an authenticating store
-	from, stale, err = p.TransformFromStorage(out, value.DefaultContext([]byte("incorrect_context")))
+	_, _, err = p.TransformFromStorage(out, value.DefaultContext([]byte("incorrect_context")))
 	if err != nil {
 		t.Fatalf("secretbox is not authenticated")
 	}
@@ -77,12 +77,39 @@ func TestSecretboxKeyRotation(t *testing.T) {
 	}
 }
 
-func BenchmarkSecretboxRead_32_1024(b *testing.B)        { benchmarkSecretboxRead(b, 32, 1024, false) }
-func BenchmarkSecretboxRead_32_16384(b *testing.B)       { benchmarkSecretboxRead(b, 32, 16384, false) }
-func BenchmarkSecretboxRead_32_16384_Stale(b *testing.B) { benchmarkSecretboxRead(b, 32, 16384, true) }
+func BenchmarkSecretboxRead(b *testing.B) {
+	tests := []struct {
+		keyLength   int
+		valueLength int
+		expectStale bool
+	}{
+		{keyLength: 32, valueLength: 1024, expectStale: false},
+		{keyLength: 32, valueLength: 16384, expectStale: false},
+		{keyLength: 32, valueLength: 16384, expectStale: true},
+	}
+	for _, t := range tests {
+		name := fmt.Sprintf("%vKeyLength/%vValueLength/%vExpectStale", t.keyLength, t.valueLength, t.expectStale)
+		b.Run(name, func(b *testing.B) {
+			benchmarkSecretboxRead(b, t.keyLength, t.valueLength, t.expectStale)
+		})
+	}
+}
 
-func BenchmarkSecretboxWrite_32_1024(b *testing.B)  { benchmarkSecretboxWrite(b, 32, 1024) }
-func BenchmarkSecretboxWrite_32_16384(b *testing.B) { benchmarkSecretboxWrite(b, 32, 16384) }
+func BenchmarkSecretboxWrite(b *testing.B) {
+	tests := []struct {
+		keyLength   int
+		valueLength int
+	}{
+		{keyLength: 32, valueLength: 1024},
+		{keyLength: 32, valueLength: 16384},
+	}
+	for _, t := range tests {
+		name := fmt.Sprintf("%vKeyLength/%vValueLength", t.keyLength, t.valueLength)
+		b.Run(name, func(b *testing.B) {
+			benchmarkSecretboxWrite(b, t.keyLength, t.valueLength)
+		})
+	}
+}
 
 func benchmarkSecretboxRead(b *testing.B, keyLength int, valueLength int, expectStale bool) {
 	p := value.NewPrefixTransformers(nil,

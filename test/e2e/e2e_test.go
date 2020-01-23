@@ -17,38 +17,40 @@ limitations under the License.
 package e2e
 
 import (
-	"github.com/golang/glog"
+	"math"
 	"testing"
 	"time"
 
-	"github.com/kubernetes-incubator/descheduler/cmd/descheduler/app/options"
-	deschedulerapi "github.com/kubernetes-incubator/descheduler/pkg/api"
-	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/client"
-	eutils "github.com/kubernetes-incubator/descheduler/pkg/descheduler/evictions/utils"
-	nodeutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/node"
-	podutil "github.com/kubernetes-incubator/descheduler/pkg/descheduler/pod"
-	"github.com/kubernetes-incubator/descheduler/pkg/descheduler/strategies"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/api/testapi"
+	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
+	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/descheduler/client"
+	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
+	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 )
 
 func MakePodSpec() v1.PodSpec {
 	return v1.PodSpec{
 		Containers: []v1.Container{{
-			Name:  "pause",
-			Image: "kubernetes/pause",
-			Ports: []v1.ContainerPort{{ContainerPort: 80}},
+			Name:            "pause",
+			ImagePullPolicy: "Never",
+			Image:           "kubernetes/pause",
+			Ports:           []v1.ContainerPort{{ContainerPort: 80}},
 			Resources: v1.ResourceRequirements{
 				Limits: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("100m"),
-					v1.ResourceMemory: resource.MustParse("500Mi"),
+					v1.ResourceMemory: resource.MustParse("1000Mi"),
 				},
 				Requests: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("100m"),
-					v1.ResourceMemory: resource.MustParse("500Mi"),
+					v1.ResourceMemory: resource.MustParse("800Mi"),
 				},
 			},
 		}},
@@ -101,12 +103,12 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface) {
 	// Run descheduler.
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientset)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
-		glog.Fatalf("%v", err)
+		klog.Fatalf("%v", err)
 	}
 	stopChannel := make(chan struct{})
 	nodes, err := nodeutil.ReadyNodes(clientset, "", stopChannel)
 	if err != nil {
-		glog.Fatalf("%v", err)
+		klog.Fatalf("%v", err)
 	}
 	nodeUtilizationThresholds := deschedulerapi.NodeResourceUtilizationThresholds{Thresholds: thresholds, TargetThresholds: targetThresholds}
 	nodeUtilizationStrategyParams := deschedulerapi.StrategyParameters{NodeResourceUtilizationThresholds: nodeUtilizationThresholds}
@@ -115,37 +117,68 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface) {
 	nodePodCount := strategies.InitializeNodePodCount(nodes)
 	strategies.LowNodeUtilization(ds, lowNodeUtilizationStrategy, evictionPolicyGroupVersion, nodes, nodePodCount)
 	time.Sleep(10 * time.Second)
-
-	return
 }
 
 func TestE2E(t *testing.T) {
 	// If we have reached here, it means cluster would have been already setup and the kubeconfig file should
-	// be in /tmp directory.
+	// be in /tmp directory as admin.conf.
 	clientSet, err := client.CreateClient("/tmp/admin.conf")
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
 	}
-	nodeList, err := clientSet.Core().Nodes().List(metav1.ListOptions{})
+	nodeList, err := clientSet.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Error listing node with %v", err)
 	}
 	// Assumption: We would have 3 node cluster by now. Kubeadm brings all the master components onto master node.
 	// So, the last node would have least utilization.
-	leastLoadedNode := nodeList.Items[2]
 	rc := RcByNameContainer("test-rc", int32(15), map[string]string{"test": "app"}, nil)
 	_, err = clientSet.CoreV1().ReplicationControllers("default").Create(rc)
 	if err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
-	podsOnleastUtilizedNode, err := podutil.ListPodsOnANode(clientSet, &leastLoadedNode)
-	if err != nil {
-		t.Errorf("Error listing pods on a node %v", err)
+	evictPods(t, clientSet, nodeList, rc)
+
+	rc.Spec.Template.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+	rc.Spec.Replicas = func(i int32) *int32 { return &i }(15)
+	rc.Spec.Template.Spec.Volumes = []v1.Volume{
+		{
+			Name: "sample",
+			VolumeSource: v1.VolumeSource{
+				EmptyDir: &v1.EmptyDirVolumeSource{
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+			},
+		},
 	}
-	podsBefore := len(podsOnleastUtilizedNode)
+	_, err = clientSet.CoreV1().ReplicationControllers("default").Create(rc)
+	if err != nil {
+		t.Errorf("Error creating deployment %v", err)
+	}
+	evictPods(t, clientSet, nodeList, rc)
+}
+
+func evictPods(t *testing.T, clientSet clientset.Interface, nodeList *v1.NodeList, rc *v1.ReplicationController) {
+	var leastLoadedNode v1.Node
+	podsBefore := math.MaxInt16
+	for i := range nodeList.Items {
+		// Skip the Master Node
+		if _, exist := nodeList.Items[i].Labels["node-role.kubernetes.io/master"]; exist {
+			continue
+		}
+		// List all the pods on the current Node
+		podsOnANode, err := podutil.ListEvictablePodsOnNode(clientSet, &nodeList.Items[i], true)
+		if err != nil {
+			t.Errorf("Error listing pods on a node %v", err)
+		}
+		// Update leastLoadedNode if necessary
+		if tmpLoads := len(podsOnANode); tmpLoads < podsBefore {
+			leastLoadedNode = nodeList.Items[i]
+			podsBefore = tmpLoads
+		}
+	}
 	t.Log("Eviction of pods starting")
 	startEndToEndForLowNodeUtilization(clientSet)
-	podsOnleastUtilizedNode, err = podutil.ListPodsOnANode(clientSet, &leastLoadedNode)
+	podsOnleastUtilizedNode, err := podutil.ListEvictablePodsOnNode(clientSet, &leastLoadedNode, true)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}
@@ -153,4 +186,33 @@ func TestE2E(t *testing.T) {
 	if podsBefore > podsAfter {
 		t.Fatalf("We should have see more pods on this node as per kubeadm's way of installing %v, %v", podsBefore, podsAfter)
 	}
+
+	//set number of replicas to 0
+	rc.Spec.Replicas = func(i int32) *int32 { return &i }(0)
+	_, err = clientSet.CoreV1().ReplicationControllers("default").Update(rc)
+	if err != nil {
+		t.Errorf("Error updating replica controller %v", err)
+	}
+	allPodsDeleted := false
+	//wait 30 seconds until all pods are deleted
+	for i := 0; i < 6; i++ {
+		scale, _ := clientSet.CoreV1().ReplicationControllers("default").GetScale(rc.Name, metav1.GetOptions{})
+		if scale.Spec.Replicas == 0 {
+			allPodsDeleted = true
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	if !allPodsDeleted {
+		t.Errorf("Deleting of rc pods took too long")
+	}
+
+	err = clientSet.CoreV1().ReplicationControllers("default").Delete(rc.Name, &metav1.DeleteOptions{})
+	if err != nil {
+		t.Errorf("Error deleting rc %v", err)
+	}
+
+	//wait until rc is deleted
+	time.Sleep(5 * time.Second)
 }

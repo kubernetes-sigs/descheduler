@@ -18,13 +18,14 @@ package cephfs
 
 import (
 	"os"
-	"path"
+	"path/filepath"
 	"testing"
 
-	"k8s.io/api/core/v1"
+	"k8s.io/utils/mount"
+
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utiltesting "k8s.io/client-go/util/testing"
-	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/kubernetes/pkg/volume"
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
 )
@@ -75,20 +76,19 @@ func TestPlugin(t *testing.T) {
 			},
 		},
 	}
-
-	mounter, err := plug.(*cephfsPlugin).newMounterInternal(volume.NewSpecFromVolume(spec), types.UID("poduid"), &mount.FakeMounter{}, "secrets")
-	volumePath := mounter.GetPath()
+	mounter, err := plug.(*cephfsPlugin).newMounterInternal(volume.NewSpecFromVolume(spec), types.UID("poduid"), mount.NewFakeMounter(nil), "secrets")
 	if err != nil {
 		t.Errorf("Failed to make a new Mounter: %v", err)
 	}
 	if mounter == nil {
 		t.Errorf("Got a nil Mounter")
 	}
-	volpath := path.Join(tmpDir, "pods/poduid/volumes/kubernetes.io~cephfs/vol1")
+	volumePath := mounter.GetPath()
+	volpath := filepath.Join(tmpDir, "pods/poduid/volumes/kubernetes.io~cephfs/vol1")
 	if volumePath != volpath {
 		t.Errorf("Got unexpected path: %s", volumePath)
 	}
-	if err := mounter.SetUp(nil); err != nil {
+	if err := mounter.SetUp(volume.MounterArgs{}); err != nil {
 		t.Errorf("Expected success, got: %v", err)
 	}
 	if _, err := os.Stat(volumePath); err != nil {
@@ -98,7 +98,7 @@ func TestPlugin(t *testing.T) {
 			t.Errorf("SetUp() failed: %v", err)
 		}
 	}
-	unmounter, err := plug.(*cephfsPlugin).newUnmounterInternal("vol1", types.UID("poduid"), &mount.FakeMounter{})
+	unmounter, err := plug.(*cephfsPlugin).newUnmounterInternal("vol1", types.UID("poduid"), mount.NewFakeMounter(nil))
 	if err != nil {
 		t.Errorf("Failed to make a new Unmounter: %v", err)
 	}
@@ -129,6 +129,9 @@ func TestConstructVolumeSpec(t *testing.T) {
 	}
 
 	cephfsSpec, err := plug.(*cephfsPlugin).ConstructVolumeSpec("cephfsVolume", "/cephfsVolume/")
+	if err != nil {
+		t.Errorf("ConstructVolumeSpec() failed: %v", err)
+	}
 
 	if cephfsSpec.Name() != "cephfsVolume" {
 		t.Errorf("Get wrong cephfs spec name, got: %s", cephfsSpec.Name())
@@ -223,5 +226,26 @@ func TestGetSecretNameAndNamespaceForPV(t *testing.T) {
 				err, resultNs, resultName)
 		}
 	}
+}
 
+func TestGetAccessModes(t *testing.T) {
+	tmpDir, err := utiltesting.MkTmpdir("cephfs_test")
+	if err != nil {
+		t.Fatalf("error creating temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	plugMgr := volume.VolumePluginMgr{}
+	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, volumetest.NewFakeVolumeHost(tmpDir, nil, nil))
+
+	plug, err := plugMgr.FindPersistentPluginByName("kubernetes.io/cephfs")
+	if err != nil {
+		t.Errorf("Can't find the plugin by name")
+	}
+	modes := plug.GetAccessModes()
+	for _, v := range modes {
+		if !volumetest.ContainsAccessMode(modes, v) {
+			t.Errorf("Expected AccessModeTypes: %s", v)
+		}
+	}
 }

@@ -63,12 +63,12 @@ func (g *versionInterfaceGenerator) GenerateType(c *generator.Context, t *types.
 	m := map[string]interface{}{
 		"interfacesTweakListOptionsFunc":  c.Universe.Type(types.Name{Package: g.internalInterfacesPackage, Name: "TweakListOptionsFunc"}),
 		"interfacesSharedInformerFactory": c.Universe.Type(types.Name{Package: g.internalInterfacesPackage, Name: "SharedInformerFactory"}),
-		"types": g.types,
+		"types":                           g.types,
 	}
 
 	sw.Do(versionTemplate, m)
 	for _, typeDef := range g.types {
-		tags, err := util.ParseClientGenTags(typeDef.SecondClosestCommentLines)
+		tags, err := util.ParseClientGenTags(append(typeDef.SecondClosestCommentLines, typeDef.CommentLines...))
 		if err != nil {
 			return err
 		}

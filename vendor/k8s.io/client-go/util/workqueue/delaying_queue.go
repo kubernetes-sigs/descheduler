@@ -18,6 +18,7 @@ package workqueue
 
 import (
 	"container/heap"
+	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/clock"
@@ -34,18 +35,21 @@ type DelayingInterface interface {
 
 // NewDelayingQueue constructs a new workqueue with delayed queuing ability
 func NewDelayingQueue() DelayingInterface {
-	return newDelayingQueue(clock.RealClock{}, "")
+	return NewDelayingQueueWithCustomClock(clock.RealClock{}, "")
 }
 
+// NewNamedDelayingQueue constructs a new named workqueue with delayed queuing ability
 func NewNamedDelayingQueue(name string) DelayingInterface {
-	return newDelayingQueue(clock.RealClock{}, name)
+	return NewDelayingQueueWithCustomClock(clock.RealClock{}, name)
 }
 
-func newDelayingQueue(clock clock.Clock, name string) DelayingInterface {
+// NewDelayingQueueWithCustomClock constructs a new named workqueue
+// with ability to inject real or fake clock for testing purposes
+func NewDelayingQueueWithCustomClock(clock clock.Clock, name string) DelayingInterface {
 	ret := &delayingType{
 		Interface:       NewNamed(name),
 		clock:           clock,
-		heartbeat:       clock.Tick(maxWait),
+		heartbeat:       clock.NewTicker(maxWait),
 		stopCh:          make(chan struct{}),
 		waitingForAddCh: make(chan *waitFor, 1000),
 		metrics:         newRetryMetrics(name),
@@ -65,12 +69,11 @@ type delayingType struct {
 
 	// stopCh lets us signal a shutdown to the waiting loop
 	stopCh chan struct{}
+	// stopOnce guarantees we only signal shutdown a single time
+	stopOnce sync.Once
 
 	// heartbeat ensures we wait no more than maxWait before firing
-	//
-	// TODO: replace with Ticker (and add to clock) so this can be cleaned up.
-	// clock.Tick will leak.
-	heartbeat <-chan time.Time
+	heartbeat clock.Ticker
 
 	// waitingForAddCh is a buffered channel that feeds waitingForAdd
 	waitingForAddCh chan *waitFor
@@ -89,7 +92,7 @@ type waitFor struct {
 
 // waitForPriorityQueue implements a priority queue for waitFor items.
 //
-// waitForPriorityQueue implements heap.Interface. The item occuring next in
+// waitForPriorityQueue implements heap.Interface. The item occurring next in
 // time (i.e., the item with the smallest readyAt) is at the root (index 0).
 // Peek returns this minimum item at index 0. Pop returns the minimum item after
 // it has been removed from the queue and placed at index Len()-1 by
@@ -134,10 +137,14 @@ func (pq waitForPriorityQueue) Peek() interface{} {
 	return pq[0]
 }
 
-// ShutDown gives a way to shut off this queue
+// ShutDown stops the queue. After the queue drains, the returned shutdown bool
+// on Get() will be true. This method may be invoked more than once.
 func (q *delayingType) ShutDown() {
-	q.Interface.ShutDown()
-	close(q.stopCh)
+	q.stopOnce.Do(func() {
+		q.Interface.ShutDown()
+		close(q.stopCh)
+		q.heartbeat.Stop()
+	})
 }
 
 // AddAfter adds the given item to the work queue after the given delay
@@ -174,6 +181,9 @@ func (q *delayingType) waitingLoop() {
 	// Make a placeholder channel to use when there are no items in our list
 	never := make(<-chan time.Time)
 
+	// Make a timer that expires when the item at the head of the waiting queue is ready
+	var nextReadyAtTimer clock.Timer
+
 	waitingForQueue := &waitForPriorityQueue{}
 	heap.Init(waitingForQueue)
 
@@ -201,15 +211,19 @@ func (q *delayingType) waitingLoop() {
 		// Set up a wait for the first item's readyAt (if one exists)
 		nextReadyAt := never
 		if waitingForQueue.Len() > 0 {
+			if nextReadyAtTimer != nil {
+				nextReadyAtTimer.Stop()
+			}
 			entry := waitingForQueue.Peek().(*waitFor)
-			nextReadyAt = q.clock.After(entry.readyAt.Sub(now))
+			nextReadyAtTimer = q.clock.NewTimer(entry.readyAt.Sub(now))
+			nextReadyAt = nextReadyAtTimer.C()
 		}
 
 		select {
 		case <-q.stopCh:
 			return
 
-		case <-q.heartbeat:
+		case <-q.heartbeat.C():
 			// continue the loop, which will add ready items
 
 		case <-nextReadyAt:

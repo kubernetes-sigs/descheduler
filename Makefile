@@ -83,6 +83,7 @@ verify-commits:
 # Example:
 #   make test-unit
 #   make test-unit WHAT=pkg/build TESTFLAGS=-v
+
 test-unit:
 	GOTEST_FLAGS="$(TESTFLAGS)" hack/test-go.sh $(WHAT) $(TESTS)
 .PHONY: test-unit

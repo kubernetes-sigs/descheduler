@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,7 +47,7 @@ func construct(t *testing.T, files map[string]string, testNamer namer.Namer) (*p
 	return b, u, o
 }
 
-func testOpenAPITypeWritter(t *testing.T, code string) (error, *assert.Assertions, *bytes.Buffer) {
+func testOpenAPITypeWriter(t *testing.T, code string) (error, error, *assert.Assertions, *bytes.Buffer, *bytes.Buffer) {
 	assert := assert.New(t)
 	var testFiles = map[string]string{
 		"base/foo/bar.go": code,
@@ -54,20 +55,33 @@ func testOpenAPITypeWritter(t *testing.T, code string) (error, *assert.Assertion
 	rawNamer := namer.NewRawNamer("o", nil)
 	namers := namer.NameSystems{
 		"raw": namer.NewRawNamer("", nil),
+		"private": &namer.NameStrategy{
+			Join: func(pre string, in []string, post string) string {
+				return strings.Join(in, "_")
+			},
+			PrependPackageNames: 4, // enough to fully qualify from k8s.io/api/...
+		},
 	}
 	builder, universe, _ := construct(t, testFiles, rawNamer)
 	context, err := generator.NewContext(builder, namers, "raw")
 	if err != nil {
 		t.Fatal(err)
 	}
-	buffer := &bytes.Buffer{}
-	sw := generator.NewSnippetWriter(buffer, context, "$", "$")
 	blahT := universe.Type(types.Name{Package: "base/foo", Name: "Blah"})
-	return newOpenAPITypeWriter(sw).generate(blahT), assert, buffer
+
+	callBuffer := &bytes.Buffer{}
+	callSW := generator.NewSnippetWriter(callBuffer, context, "$", "$")
+	callError := newOpenAPITypeWriter(callSW, context).generateCall(blahT)
+
+	funcBuffer := &bytes.Buffer{}
+	funcSW := generator.NewSnippetWriter(funcBuffer, context, "$", "$")
+	funcError := newOpenAPITypeWriter(funcSW, context).generate(blahT)
+
+	return callError, funcError, assert, callBuffer, funcBuffer
 }
 
 func TestSimple(t *testing.T) {
-	err, assert, buffer := testOpenAPITypeWritter(t, `
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
 package foo
 
 // Blah is a test.
@@ -112,18 +126,28 @@ type Blah struct {
 	// +k8s:openapi-gen=x-kubernetes-member-tag:member_test
 	WithExtension string
 	// a member with struct tag as extension
-	// +patchStrategy=ps
+	// +patchStrategy=merge
 	// +patchMergeKey=pmk
-	WithStructTagExtension string `+"`"+`patchStrategy:"ps" patchMergeKey:"pmk"`+"`"+`
+	WithStructTagExtension string `+"`"+`patchStrategy:"merge" patchMergeKey:"pmk"`+"`"+`
+	// a member with a list type
+	// +listType=atomic
+	WithListType []string
 }
 		`)
-	if err != nil {
-		t.Fatal(err)
+	if callErr != nil {
+		t.Fatal(callErr)
 	}
-	assert.Equal(`"base/foo.Blah": {
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": schema_base_foo_Blah(ref),
+`, callBuffer.String())
+	assert.Equal(`func schema_base_foo_Blah(ref common.ReferenceCallback) common.OpenAPIDefinition {
+return common.OpenAPIDefinition{
 Schema: spec.Schema{
 SchemaProps: spec.SchemaProps{
 Description: "Blah is a test.",
+Type: []string{"object"},
 Properties: map[string]spec.Schema{
 "String": {
 SchemaProps: spec.SchemaProps{
@@ -246,7 +270,7 @@ Format: "",
 VendorExtensible: spec.VendorExtensible{
 Extensions: spec.Extensions{
 "x-kubernetes-patch-merge-key": "pmk",
-"x-kubernetes-patch-strategy": "ps",
+"x-kubernetes-patch-strategy": "merge",
 },
 },
 SchemaProps: spec.SchemaProps{
@@ -255,8 +279,27 @@ Type: []string{"string"},
 Format: "",
 },
 },
+"WithListType": {
+VendorExtensible: spec.VendorExtensible{
+Extensions: spec.Extensions{
+"x-kubernetes-list-type": "atomic",
 },
-Required: []string{"String","Int64","Int32","Int16","Int8","Uint","Uint64","Uint32","Uint16","Uint8","Byte","Bool","Float64","Float32","ByteArray","WithExtension","WithStructTagExtension"},
+},
+SchemaProps: spec.SchemaProps{
+Description: "a member with a list type",
+Type: []string{"array"},
+Items: &spec.SchemaOrArray{
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"string"},
+Format: "",
+},
+},
+},
+},
+},
+},
+Required: []string{"String","Int64","Int32","Int16","Int8","Uint","Uint64","Uint32","Uint16","Uint8","Byte","Bool","Float64","Float32","ByteArray","WithExtension","WithStructTagExtension","WithListType"},
 },
 VendorExtensible: spec.VendorExtensible{
 Extensions: spec.Extensions{
@@ -264,14 +307,44 @@ Extensions: spec.Extensions{
 },
 },
 },
-Dependencies: []string{
-},
-},
-`, buffer.String())
+}
 }
 
-func TestFailingSample1(t *testing.T) {
-	err, assert, _ := testOpenAPITypeWritter(t, `
+`, funcBuffer.String())
+}
+
+func TestEmptyProperties(t *testing.T) {
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
+package foo
+
+// Blah demonstrate a struct without fields.
+type Blah struct {
+}
+	`)
+	if callErr != nil {
+		t.Fatal(callErr)
+	}
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": schema_base_foo_Blah(ref),
+`, callBuffer.String())
+	assert.Equal(`func schema_base_foo_Blah(ref common.ReferenceCallback) common.OpenAPIDefinition {
+return common.OpenAPIDefinition{
+Schema: spec.Schema{
+SchemaProps: spec.SchemaProps{
+Description: "Blah demonstrate a struct without fields.",
+Type: []string{"object"},
+},
+},
+}
+}
+
+`, funcBuffer.String())
+}
+
+func TestNestedMapString(t *testing.T) {
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
 package foo
 
 // Map sample tests openAPIGen.generateMapProperty method.
@@ -280,13 +353,187 @@ type Blah struct {
 	StringToArray map[string]map[string]string
 }
 	`)
-	if assert.Error(err, "An error was expected") {
-		assert.Equal(err, fmt.Errorf("map Element kind Map is not supported in map[string]map[string]string"))
+	if callErr != nil {
+		t.Fatal(callErr)
+	}
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": schema_base_foo_Blah(ref),
+`, callBuffer.String())
+	assert.Equal(`func schema_base_foo_Blah(ref common.ReferenceCallback) common.OpenAPIDefinition {
+return common.OpenAPIDefinition{
+Schema: spec.Schema{
+SchemaProps: spec.SchemaProps{
+Description: "Map sample tests openAPIGen.generateMapProperty method.",
+Type: []string{"object"},
+Properties: map[string]spec.Schema{
+"StringToArray": {
+SchemaProps: spec.SchemaProps{
+Description: "A sample String to String map",
+Type: []string{"object"},
+AdditionalProperties: &spec.SchemaOrBool{
+Allows: true,
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"object"},
+AdditionalProperties: &spec.SchemaOrBool{
+Allows: true,
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"string"},
+Format: "",
+},
+},
+},
+},
+},
+},
+},
+},
+},
+Required: []string{"StringToArray"},
+},
+},
+}
+}
+
+`, funcBuffer.String())
+}
+
+func TestNestedMapInt(t *testing.T) {
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
+package foo
+
+// Map sample tests openAPIGen.generateMapProperty method.
+type Blah struct {
+	// A sample String to String map
+	StringToArray map[string]map[string]int
+}
+	`)
+	if callErr != nil {
+		t.Fatal(callErr)
+	}
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": schema_base_foo_Blah(ref),
+`, callBuffer.String())
+	assert.Equal(`func schema_base_foo_Blah(ref common.ReferenceCallback) common.OpenAPIDefinition {
+return common.OpenAPIDefinition{
+Schema: spec.Schema{
+SchemaProps: spec.SchemaProps{
+Description: "Map sample tests openAPIGen.generateMapProperty method.",
+Type: []string{"object"},
+Properties: map[string]spec.Schema{
+"StringToArray": {
+SchemaProps: spec.SchemaProps{
+Description: "A sample String to String map",
+Type: []string{"object"},
+AdditionalProperties: &spec.SchemaOrBool{
+Allows: true,
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"object"},
+AdditionalProperties: &spec.SchemaOrBool{
+Allows: true,
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"integer"},
+Format: "int32",
+},
+},
+},
+},
+},
+},
+},
+},
+},
+Required: []string{"StringToArray"},
+},
+},
+}
+}
+
+`, funcBuffer.String())
+}
+
+func TestNestedMapBoolean(t *testing.T) {
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
+package foo
+
+// Map sample tests openAPIGen.generateMapProperty method.
+type Blah struct {
+	// A sample String to String map
+	StringToArray map[string]map[string]bool
+}
+	`)
+	if callErr != nil {
+		t.Fatal(callErr)
+	}
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": schema_base_foo_Blah(ref),
+`, callBuffer.String())
+	assert.Equal(`func schema_base_foo_Blah(ref common.ReferenceCallback) common.OpenAPIDefinition {
+return common.OpenAPIDefinition{
+Schema: spec.Schema{
+SchemaProps: spec.SchemaProps{
+Description: "Map sample tests openAPIGen.generateMapProperty method.",
+Type: []string{"object"},
+Properties: map[string]spec.Schema{
+"StringToArray": {
+SchemaProps: spec.SchemaProps{
+Description: "A sample String to String map",
+Type: []string{"object"},
+AdditionalProperties: &spec.SchemaOrBool{
+Allows: true,
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"object"},
+AdditionalProperties: &spec.SchemaOrBool{
+Allows: true,
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"boolean"},
+Format: "",
+},
+},
+},
+},
+},
+},
+},
+},
+},
+Required: []string{"StringToArray"},
+},
+},
+}
+}
+
+`, funcBuffer.String())
+}
+
+func TestFailingSample1(t *testing.T) {
+	_, funcErr, assert, _, _ := testOpenAPITypeWriter(t, `
+package foo
+
+// Map sample tests openAPIGen.generateMapProperty method.
+type Blah struct {
+	// A sample String to String map
+	StringToArray map[string]map[string]map[int]string
+}
+	`)
+	if assert.Error(funcErr, "An error was expected") {
+		assert.Equal(funcErr, fmt.Errorf("map with non-string keys are not supported by OpenAPI in map[int]string"))
 	}
 }
 
 func TestFailingSample2(t *testing.T) {
-	err, assert, _ := testOpenAPITypeWritter(t, `
+	_, funcErr, assert, _, _ := testOpenAPITypeWriter(t, `
 package foo
 
 // Map sample tests openAPIGen.generateMapProperty method.
@@ -294,13 +541,198 @@ type Blah struct {
 	// A sample String to String map
 	StringToArray map[int]string
 }	`)
-	if assert.Error(err, "An error was expected") {
-		assert.Equal(err, fmt.Errorf("map with non-string keys are not supported by OpenAPI in map[int]string"))
+	if assert.Error(funcErr, "An error was expected") {
+		assert.Equal(funcErr, fmt.Errorf("map with non-string keys are not supported by OpenAPI in map[int]string"))
 	}
 }
 
+func TestCustomDef(t *testing.T) {
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
+package foo
+
+import openapi "k8s.io/kube-openapi/pkg/common"
+
+type Blah struct {
+}
+
+func (_ Blah) OpenAPIDefinition() openapi.OpenAPIDefinition {
+	return openapi.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type:   []string{"string"},
+				Format: "date-time",
+			},
+		},
+	}
+}
+`)
+	if callErr != nil {
+		t.Fatal(callErr)
+	}
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": foo.Blah{}.OpenAPIDefinition(),
+`, callBuffer.String())
+	assert.Equal(``, funcBuffer.String())
+}
+
+func TestCustomDefV3(t *testing.T) {
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
+package foo
+
+import openapi "k8s.io/kube-openapi/pkg/common"
+
+type Blah struct {
+}
+
+func (_ Blah) OpenAPIV3Definition() openapi.OpenAPIDefinition {
+	return openapi.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type:   []string{"string"},
+				Format: "date-time",
+			},
+		},
+	}
+}
+`)
+	if callErr != nil {
+		t.Fatal(callErr)
+	}
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": foo.Blah{}.OpenAPIV3Definition(),
+`, callBuffer.String())
+	assert.Equal(``, funcBuffer.String())
+}
+
+func TestCustomDefV2AndV3(t *testing.T) {
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
+package foo
+
+import openapi "k8s.io/kube-openapi/pkg/common"
+
+type Blah struct {
+}
+
+func (_ Blah) OpenAPIV3Definition() openapi.OpenAPIDefinition {
+	return openapi.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type:   []string{"string"},
+				Format: "date-time",
+			},
+		},
+	}
+}
+
+func (_ Blah) OpenAPIDefinition() openapi.OpenAPIDefinition {
+	return openapi.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type:   []string{"string"},
+				Format: "date-time",
+			},
+		},
+	}
+}
+`)
+	if callErr != nil {
+		t.Fatal(callErr)
+	}
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": common.EmbedOpenAPIDefinitionIntoV2Extension(foo.Blah{}.OpenAPIV3Definition(), foo.Blah{}.OpenAPIDefinition()),
+`, callBuffer.String())
+	assert.Equal(``, funcBuffer.String())
+}
+
+func TestCustomDefs(t *testing.T) {
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
+package foo
+
+// Blah is a custom type
+type Blah struct {
+}
+
+func (_ Blah) OpenAPISchemaType() []string { return []string{"string"} }
+func (_ Blah) OpenAPISchemaFormat() string { return "date-time" }
+`)
+	if callErr != nil {
+		t.Fatal(callErr)
+	}
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": schema_base_foo_Blah(ref),
+`, callBuffer.String())
+	assert.Equal(`func schema_base_foo_Blah(ref common.ReferenceCallback) common.OpenAPIDefinition {
+return common.OpenAPIDefinition{
+Schema: spec.Schema{
+SchemaProps: spec.SchemaProps{
+Description: "Blah is a custom type",
+Type:foo.Blah{}.OpenAPISchemaType(),
+Format:foo.Blah{}.OpenAPISchemaFormat(),
+},
+},
+}
+}
+
+`, funcBuffer.String())
+}
+
+func TestCustomDefsV3(t *testing.T) {
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
+package foo
+
+import openapi "k8s.io/kube-openapi/pkg/common"
+
+// Blah is a custom type
+type Blah struct {
+}
+
+func (_ Blah) OpenAPIV3Definition() openapi.OpenAPIDefinition {
+	return openapi.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type:   []string{"string"},
+				Format: "date-time",
+			},
+		},
+	}
+}
+
+func (_ Blah) OpenAPISchemaType() []string { return []string{"string"} }
+func (_ Blah) OpenAPISchemaFormat() string { return "date-time" }
+`)
+	if callErr != nil {
+		t.Fatal(callErr)
+	}
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": schema_base_foo_Blah(ref),
+`, callBuffer.String())
+	assert.Equal(`func schema_base_foo_Blah(ref common.ReferenceCallback) common.OpenAPIDefinition {
+return common.EmbedOpenAPIDefinitionIntoV2Extension(foo.Blah{}.OpenAPIV3Definition(), common.OpenAPIDefinition{
+Schema: spec.Schema{
+SchemaProps: spec.SchemaProps{
+Description: "Blah is a custom type",
+Type:foo.Blah{}.OpenAPISchemaType(),
+Format:foo.Blah{}.OpenAPISchemaFormat(),
+},
+},
+})
+}
+
+`, funcBuffer.String())
+}
+
 func TestPointer(t *testing.T) {
-	err, assert, buffer := testOpenAPITypeWritter(t, `
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
 package foo
 
 // PointerSample demonstrate pointer's properties
@@ -315,13 +747,20 @@ type Blah struct {
 	MapPointer *map[string]string
 }
 	`)
-	if err != nil {
-		t.Fatal(err)
+	if callErr != nil {
+		t.Fatal(callErr)
 	}
-	assert.Equal(`"base/foo.Blah": {
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": schema_base_foo_Blah(ref),
+`, callBuffer.String())
+	assert.Equal(`func schema_base_foo_Blah(ref common.ReferenceCallback) common.OpenAPIDefinition {
+return common.OpenAPIDefinition{
 Schema: spec.Schema{
 SchemaProps: spec.SchemaProps{
 Description: "PointerSample demonstrate pointer's properties",
+Type: []string{"object"},
 Properties: map[string]spec.Schema{
 "StringPointer": {
 SchemaProps: spec.SchemaProps{
@@ -355,6 +794,7 @@ SchemaProps: spec.SchemaProps{
 Description: "A map pointer",
 Type: []string{"object"},
 AdditionalProperties: &spec.SchemaOrBool{
+Allows: true,
 Schema: &spec.Schema{
 SchemaProps: spec.SchemaProps{
 Type: []string{"string"},
@@ -370,6 +810,320 @@ Required: []string{"StringPointer","StructPointer","SlicePointer","MapPointer"},
 },
 Dependencies: []string{
 "base/foo.Blah",},
+}
+}
+
+`, funcBuffer.String())
+}
+
+func TestNestedLists(t *testing.T) {
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
+package foo
+
+// Blah is a test.
+// +k8s:openapi-gen=true
+// +k8s:openapi-gen=x-kubernetes-type-tag:type_test
+type Blah struct {
+	// Nested list
+	NestedList [][]int64
+}
+`)
+	if callErr != nil {
+		t.Fatal(callErr)
+	}
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": schema_base_foo_Blah(ref),
+`, callBuffer.String())
+	assert.Equal(`func schema_base_foo_Blah(ref common.ReferenceCallback) common.OpenAPIDefinition {
+return common.OpenAPIDefinition{
+Schema: spec.Schema{
+SchemaProps: spec.SchemaProps{
+Description: "Blah is a test.",
+Type: []string{"object"},
+Properties: map[string]spec.Schema{
+"NestedList": {
+SchemaProps: spec.SchemaProps{
+Description: "Nested list",
+Type: []string{"array"},
+Items: &spec.SchemaOrArray{
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"array"},
+Items: &spec.SchemaOrArray{
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"integer"},
+Format: "int64",
 },
-`, buffer.String())
+},
+},
+},
+},
+},
+},
+},
+},
+Required: []string{"NestedList"},
+},
+VendorExtensible: spec.VendorExtensible{
+Extensions: spec.Extensions{
+"x-kubernetes-type-tag": "type_test",
+},
+},
+},
+}
+}
+
+`, funcBuffer.String())
+}
+
+func TestNestListOfMaps(t *testing.T) {
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
+package foo
+
+// Blah is a test.
+// +k8s:openapi-gen=true
+// +k8s:openapi-gen=x-kubernetes-type-tag:type_test
+type Blah struct {
+	// Nested list of maps
+	NestedListOfMaps [][]map[string]string
+}
+`)
+	if callErr != nil {
+		t.Fatal(callErr)
+	}
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": schema_base_foo_Blah(ref),
+`, callBuffer.String())
+	assert.Equal(`func schema_base_foo_Blah(ref common.ReferenceCallback) common.OpenAPIDefinition {
+return common.OpenAPIDefinition{
+Schema: spec.Schema{
+SchemaProps: spec.SchemaProps{
+Description: "Blah is a test.",
+Type: []string{"object"},
+Properties: map[string]spec.Schema{
+"NestedListOfMaps": {
+SchemaProps: spec.SchemaProps{
+Description: "Nested list of maps",
+Type: []string{"array"},
+Items: &spec.SchemaOrArray{
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"array"},
+Items: &spec.SchemaOrArray{
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"object"},
+AdditionalProperties: &spec.SchemaOrBool{
+Allows: true,
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"string"},
+Format: "",
+},
+},
+},
+},
+},
+},
+},
+},
+},
+},
+},
+},
+Required: []string{"NestedListOfMaps"},
+},
+VendorExtensible: spec.VendorExtensible{
+Extensions: spec.Extensions{
+"x-kubernetes-type-tag": "type_test",
+},
+},
+},
+}
+}
+
+`, funcBuffer.String())
+}
+
+func TestExtensions(t *testing.T) {
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
+package foo
+
+// Blah is a test.
+// +k8s:openapi-gen=true
+// +k8s:openapi-gen=x-kubernetes-type-tag:type_test
+type Blah struct {
+	// a member with a list type with two map keys
+	// +listType=map
+	// +listMapKey=port
+	// +listMapKey=protocol
+	WithListField []string
+
+	// another member with a list type with one map key
+	// +listType=map
+	// +listMapKey=port
+	WithListField2 []string
+}
+		`)
+	if callErr != nil {
+		t.Fatal(callErr)
+	}
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": schema_base_foo_Blah(ref),
+`, callBuffer.String())
+	assert.Equal(`func schema_base_foo_Blah(ref common.ReferenceCallback) common.OpenAPIDefinition {
+return common.OpenAPIDefinition{
+Schema: spec.Schema{
+SchemaProps: spec.SchemaProps{
+Description: "Blah is a test.",
+Type: []string{"object"},
+Properties: map[string]spec.Schema{
+"WithListField": {
+VendorExtensible: spec.VendorExtensible{
+Extensions: spec.Extensions{
+"x-kubernetes-list-map-keys": []interface{}{
+"port",
+"protocol",
+},
+"x-kubernetes-list-type": "map",
+},
+},
+SchemaProps: spec.SchemaProps{
+Description: "a member with a list type with two map keys",
+Type: []string{"array"},
+Items: &spec.SchemaOrArray{
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"string"},
+Format: "",
+},
+},
+},
+},
+},
+"WithListField2": {
+VendorExtensible: spec.VendorExtensible{
+Extensions: spec.Extensions{
+"x-kubernetes-list-map-keys": []interface{}{
+"port",
+},
+"x-kubernetes-list-type": "map",
+},
+},
+SchemaProps: spec.SchemaProps{
+Description: "another member with a list type with one map key",
+Type: []string{"array"},
+Items: &spec.SchemaOrArray{
+Schema: &spec.Schema{
+SchemaProps: spec.SchemaProps{
+Type: []string{"string"},
+Format: "",
+},
+},
+},
+},
+},
+},
+Required: []string{"WithListField","WithListField2"},
+},
+VendorExtensible: spec.VendorExtensible{
+Extensions: spec.Extensions{
+"x-kubernetes-type-tag": "type_test",
+},
+},
+},
+}
+}
+
+`, funcBuffer.String())
+}
+
+func TestUnion(t *testing.T) {
+	callErr, funcErr, assert, callBuffer, funcBuffer := testOpenAPITypeWriter(t, `
+package foo
+
+// Blah is a test.
+// +k8s:openapi-gen=true
+// +k8s:openapi-gen=x-kubernetes-type-tag:type_test
+// +union
+type Blah struct {
+	// +unionDiscriminator
+	Discriminator *string `+"`"+`json:"discriminator"`+"`"+`
+        // +optional
+        Numeric int `+"`"+`json:"numeric"`+"`"+`
+        // +optional
+        String string `+"`"+`json:"string"`+"`"+`
+        // +optional
+        Float float64 `+"`"+`json:"float"`+"`"+`
+}
+		`)
+	if callErr != nil {
+		t.Fatal(callErr)
+	}
+	if funcErr != nil {
+		t.Fatal(funcErr)
+	}
+	assert.Equal(`"base/foo.Blah": schema_base_foo_Blah(ref),
+`, callBuffer.String())
+	assert.Equal(`func schema_base_foo_Blah(ref common.ReferenceCallback) common.OpenAPIDefinition {
+return common.OpenAPIDefinition{
+Schema: spec.Schema{
+SchemaProps: spec.SchemaProps{
+Description: "Blah is a test.",
+Type: []string{"object"},
+Properties: map[string]spec.Schema{
+"discriminator": {
+SchemaProps: spec.SchemaProps{
+Type: []string{"string"},
+Format: "",
+},
+},
+"numeric": {
+SchemaProps: spec.SchemaProps{
+Type: []string{"integer"},
+Format: "int32",
+},
+},
+"string": {
+SchemaProps: spec.SchemaProps{
+Type: []string{"string"},
+Format: "",
+},
+},
+"float": {
+SchemaProps: spec.SchemaProps{
+Type: []string{"number"},
+Format: "double",
+},
+},
+},
+Required: []string{"discriminator"},
+},
+VendorExtensible: spec.VendorExtensible{
+Extensions: spec.Extensions{
+"x-kubernetes-type-tag": "type_test",
+"x-kubernetes-unions": []interface{}{
+map[string]interface{}{
+"discriminator": "discriminator",
+"fields-to-discriminateBy": map[string]interface{}{
+"float": "Float",
+"numeric": "Numeric",
+"string": "String",
+},
+},
+},
+},
+},
+},
+}
+}
+
+`, funcBuffer.String())
 }

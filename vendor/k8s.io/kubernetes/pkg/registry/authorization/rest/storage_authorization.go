@@ -37,64 +37,50 @@ type RESTStorageProvider struct {
 	RuleResolver authorizer.RuleResolver
 }
 
-func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, bool) {
+func (p RESTStorageProvider) NewRESTStorage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) (genericapiserver.APIGroupInfo, bool, error) {
 	if p.Authorizer == nil {
-		return genericapiserver.APIGroupInfo{}, false
+		return genericapiserver.APIGroupInfo{}, false, nil
 	}
 
-	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(authorization.GroupName, legacyscheme.Registry, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
+	apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(authorization.GroupName, legacyscheme.Scheme, legacyscheme.ParameterCodec, legacyscheme.Codecs)
 	// If you add a version here, be sure to add an entry in `k8s.io/kubernetes/cmd/kube-apiserver/app/aggregator.go with specific priorities.
 	// TODO refactor the plumbing to provide the information in the APIGroupInfo
 
-	if apiResourceConfigSource.AnyResourcesForVersionEnabled(authorizationv1beta1.SchemeGroupVersion) {
+	if apiResourceConfigSource.VersionEnabled(authorizationv1beta1.SchemeGroupVersion) {
 		apiGroupInfo.VersionedResourcesStorageMap[authorizationv1beta1.SchemeGroupVersion.Version] = p.v1beta1Storage(apiResourceConfigSource, restOptionsGetter)
-		apiGroupInfo.GroupMeta.GroupVersion = authorizationv1beta1.SchemeGroupVersion
 	}
 
-	if apiResourceConfigSource.AnyResourcesForVersionEnabled(authorizationv1.SchemeGroupVersion) {
+	if apiResourceConfigSource.VersionEnabled(authorizationv1.SchemeGroupVersion) {
 		apiGroupInfo.VersionedResourcesStorageMap[authorizationv1.SchemeGroupVersion.Version] = p.v1Storage(apiResourceConfigSource, restOptionsGetter)
-		apiGroupInfo.GroupMeta.GroupVersion = authorizationv1.SchemeGroupVersion
 	}
 
-	return apiGroupInfo, true
+	return apiGroupInfo, true, nil
 }
 
 func (p RESTStorageProvider) v1beta1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) map[string]rest.Storage {
-	version := authorizationv1beta1.SchemeGroupVersion
-
 	storage := map[string]rest.Storage{}
-	if apiResourceConfigSource.ResourceEnabled(version.WithResource("subjectaccessreviews")) {
-		storage["subjectaccessreviews"] = subjectaccessreview.NewREST(p.Authorizer)
-	}
-	if apiResourceConfigSource.ResourceEnabled(version.WithResource("selfsubjectaccessreviews")) {
-		storage["selfsubjectaccessreviews"] = selfsubjectaccessreview.NewREST(p.Authorizer)
-	}
-	if apiResourceConfigSource.ResourceEnabled(version.WithResource("localsubjectaccessreviews")) {
-		storage["localsubjectaccessreviews"] = localsubjectaccessreview.NewREST(p.Authorizer)
-	}
-	if apiResourceConfigSource.ResourceEnabled(version.WithResource("selfsubjectrulesreviews")) {
-		storage["selfsubjectrulesreviews"] = selfsubjectrulesreview.NewREST(p.RuleResolver)
-	}
+	// subjectaccessreviews
+	storage["subjectaccessreviews"] = subjectaccessreview.NewREST(p.Authorizer)
+	// selfsubjectaccessreviews
+	storage["selfsubjectaccessreviews"] = selfsubjectaccessreview.NewREST(p.Authorizer)
+	// localsubjectaccessreviews
+	storage["localsubjectaccessreviews"] = localsubjectaccessreview.NewREST(p.Authorizer)
+	// selfsubjectrulesreviews
+	storage["selfsubjectrulesreviews"] = selfsubjectrulesreview.NewREST(p.RuleResolver)
 
 	return storage
 }
 
 func (p RESTStorageProvider) v1Storage(apiResourceConfigSource serverstorage.APIResourceConfigSource, restOptionsGetter generic.RESTOptionsGetter) map[string]rest.Storage {
-	version := authorizationv1beta1.SchemeGroupVersion
-
 	storage := map[string]rest.Storage{}
-	if apiResourceConfigSource.ResourceEnabled(version.WithResource("subjectaccessreviews")) {
-		storage["subjectaccessreviews"] = subjectaccessreview.NewREST(p.Authorizer)
-	}
-	if apiResourceConfigSource.ResourceEnabled(version.WithResource("selfsubjectaccessreviews")) {
-		storage["selfsubjectaccessreviews"] = selfsubjectaccessreview.NewREST(p.Authorizer)
-	}
-	if apiResourceConfigSource.ResourceEnabled(version.WithResource("localsubjectaccessreviews")) {
-		storage["localsubjectaccessreviews"] = localsubjectaccessreview.NewREST(p.Authorizer)
-	}
-	if apiResourceConfigSource.ResourceEnabled(version.WithResource("selfsubjectrulesreviews")) {
-		storage["selfsubjectrulesreviews"] = selfsubjectrulesreview.NewREST(p.RuleResolver)
-	}
+	// subjectaccessreviews
+	storage["subjectaccessreviews"] = subjectaccessreview.NewREST(p.Authorizer)
+	// selfsubjectaccessreviews
+	storage["selfsubjectaccessreviews"] = selfsubjectaccessreview.NewREST(p.Authorizer)
+	// localsubjectaccessreviews
+	storage["localsubjectaccessreviews"] = localsubjectaccessreview.NewREST(p.Authorizer)
+	// selfsubjectrulesreviews
+	storage["selfsubjectrulesreviews"] = selfsubjectrulesreview.NewREST(p.RuleResolver)
 
 	return storage
 }

@@ -21,17 +21,16 @@ import (
 	"io/ioutil"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog"
 
-	"github.com/golang/glog"
 	"sigs.k8s.io/descheduler/pkg/api"
-	_ "sigs.k8s.io/descheduler/pkg/api/install"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 )
 
 func LoadPolicyConfig(policyConfigFile string) (*api.DeschedulerPolicy, error) {
 	if policyConfigFile == "" {
-		glog.V(1).Infof("policy config file not specified")
+		klog.V(1).Infof("policy config file not specified")
 		return nil, nil
 	}
 

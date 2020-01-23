@@ -17,36 +17,44 @@ limitations under the License.
 package cache
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/clock"
-	"k8s.io/apiserver/pkg/authentication/user"
+	"github.com/google/uuid"
 
-	"github.com/pborman/uuid"
+	"k8s.io/apimachinery/pkg/util/clock"
+	"k8s.io/apiserver/pkg/authentication/authenticator"
+	"k8s.io/apiserver/pkg/authentication/user"
 )
 
 func TestSimpleCache(t *testing.T) {
-	testCache(newSimpleCache(4096, clock.RealClock{}), t)
+	testCache(newSimpleCache(clock.RealClock{}), t)
 }
 
-func BenchmarkSimpleCache(b *testing.B) {
-	benchmarkCache(newSimpleCache(4096, clock.RealClock{}), b)
+// Note: the performance profile of this benchmark may not match that in the production.
+// When making change to SimpleCache, run test with and without concurrency to better understand the impact.
+// This is a tool to test and measure high concurrency of the cache in isolation and not to the Kubernetes usage of the Cache.
+func BenchmarkCacheContentions(b *testing.B) {
+	for _, numKeys := range []int{1 << 8, 1 << 12, 1 << 16} {
+		b.Run(fmt.Sprintf("Simple/keys=%d", numKeys), func(b *testing.B) {
+			benchmarkCache(newSimpleCache(clock.RealClock{}), b, numKeys)
+		})
+		b.Run(fmt.Sprintf("Striped/keys=%d", numKeys), func(b *testing.B) {
+			benchmarkCache(newStripedCache(32, fnvHashFunc, func() cache { return newSimpleCache(clock.RealClock{}) }), b, numKeys)
+		})
+	}
 }
 
 func TestStripedCache(t *testing.T) {
-	testCache(newStripedCache(32, fnvKeyFunc, func() cache { return newSimpleCache(128, clock.RealClock{}) }), t)
+	testCache(newStripedCache(32, fnvHashFunc, func() cache { return newSimpleCache(clock.RealClock{}) }), t)
 }
 
-func BenchmarkStripedCache(b *testing.B) {
-	benchmarkCache(newStripedCache(32, fnvKeyFunc, func() cache { return newSimpleCache(128, clock.RealClock{}) }), b)
-}
-
-func benchmarkCache(cache cache, b *testing.B) {
+func benchmarkCache(cache cache, b *testing.B, numKeys int) {
 	keys := []string{}
-	for i := 0; i < b.N; i++ {
-		key := uuid.NewRandom().String()
+	for i := 0; i < numKeys; i++ {
+		key := uuid.New().String()
 		keys = append(keys, key)
 	}
 
@@ -55,7 +63,7 @@ func benchmarkCache(cache cache, b *testing.B) {
 	b.SetParallelism(500)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			key := keys[rand.Intn(b.N)]
+			key := keys[rand.Intn(numKeys)]
 			_, ok := cache.get(key)
 			if ok {
 				cache.remove(key)
@@ -71,19 +79,19 @@ func testCache(cache cache, t *testing.T) {
 		t.Errorf("Expected null, false, got %#v, %v", result, ok)
 	}
 
-	record1 := &cacheRecord{user: &user.DefaultInfo{Name: "bob"}}
-	record2 := &cacheRecord{user: &user.DefaultInfo{Name: "alice"}}
+	record1 := &cacheRecord{resp: &authenticator.Response{User: &user.DefaultInfo{Name: "bob"}}}
+	record2 := &cacheRecord{resp: &authenticator.Response{User: &user.DefaultInfo{Name: "alice"}}}
 
 	// when empty, record is stored
 	cache.set("foo", record1, time.Hour)
 	if result, ok := cache.get("foo"); !ok || result != record1 {
-		t.Errorf("Expected %#v, true, got %#v, %v", record1, ok)
+		t.Errorf("Expected %#v, true, got %#v, %v", record1, result, ok)
 	}
 
 	// newer record overrides
 	cache.set("foo", record2, time.Hour)
 	if result, ok := cache.get("foo"); !ok || result != record2 {
-		t.Errorf("Expected %#v, true, got %#v, %v", record2, ok)
+		t.Errorf("Expected %#v, true, got %#v, %v", record2, result, ok)
 	}
 
 	// removing the current value removes

@@ -17,12 +17,13 @@ limitations under the License.
 package cloud
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"time"
 
-	"github.com/golang/glog"
-
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -34,12 +35,50 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	clientretry "k8s.io/client-go/util/retry"
-	nodeutilv1 "k8s.io/kubernetes/pkg/api/v1/node"
-	"k8s.io/kubernetes/pkg/cloudprovider"
+	cloudprovider "k8s.io/cloud-provider"
+	cloudnodeutil "k8s.io/cloud-provider/node/helpers"
+	"k8s.io/klog"
 	kubeletapis "k8s.io/kubernetes/pkg/kubelet/apis"
+	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
 	nodeutil "k8s.io/kubernetes/pkg/util/node"
-	"k8s.io/kubernetes/plugin/pkg/scheduler/algorithm"
 )
+
+// labelReconcileInfo lists Node labels to reconcile, and how to reconcile them.
+// primaryKey and secondaryKey are keys of labels to reconcile.
+//   - If both keys exist, but their values don't match. Use the value from the
+//   primaryKey as the source of truth to reconcile.
+//   - If ensureSecondaryExists is true, and the secondaryKey does not
+//   exist, secondaryKey will be added with the value of the primaryKey.
+var labelReconcileInfo = []struct {
+	primaryKey            string
+	secondaryKey          string
+	ensureSecondaryExists bool
+}{
+	{
+		// Reconcile the beta and the GA zone label using the beta label as
+		// the source of truth
+		// TODO: switch the primary key to GA labels in v1.21
+		primaryKey:            v1.LabelZoneFailureDomain,
+		secondaryKey:          v1.LabelZoneFailureDomainStable,
+		ensureSecondaryExists: true,
+	},
+	{
+		// Reconcile the beta and the stable region label using the beta label as
+		// the source of truth
+		// TODO: switch the primary key to GA labels in v1.21
+		primaryKey:            v1.LabelZoneRegion,
+		secondaryKey:          v1.LabelZoneRegionStable,
+		ensureSecondaryExists: true,
+	},
+	{
+		// Reconcile the beta and the stable instance-type label using the beta label as
+		// the source of truth
+		// TODO: switch the primary key to GA labels in v1.21
+		primaryKey:            v1.LabelInstanceType,
+		secondaryKey:          v1.LabelInstanceTypeStable,
+		ensureSecondaryExists: true,
+	},
+}
 
 var UpdateNodeSpecBackoff = wait.Backoff{
 	Steps:    20,
@@ -54,38 +93,25 @@ type CloudNodeController struct {
 
 	cloud cloudprovider.Interface
 
-	// Value controlling NodeController monitoring period, i.e. how often does NodeController
-	// check node status posted from kubelet. This value should be lower than nodeMonitorGracePeriod
-	// set in controller-manager
-	nodeMonitorPeriod time.Duration
-
 	nodeStatusUpdateFrequency time.Duration
 }
-
-const (
-	// nodeStatusUpdateRetry controls the number of retries of writing NodeStatus update.
-	nodeStatusUpdateRetry = 5
-
-	// The amount of time the nodecontroller should sleep between retrying NodeStatus updates
-	retrySleepTime = 20 * time.Millisecond
-)
 
 // NewCloudNodeController creates a CloudNodeController object
 func NewCloudNodeController(
 	nodeInformer coreinformers.NodeInformer,
 	kubeClient clientset.Interface,
 	cloud cloudprovider.Interface,
-	nodeMonitorPeriod time.Duration,
-	nodeStatusUpdateFrequency time.Duration) *CloudNodeController {
+	nodeStatusUpdateFrequency time.Duration) (*CloudNodeController, error) {
 
 	eventBroadcaster := record.NewBroadcaster()
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "cloud-node-controller"})
-	eventBroadcaster.StartLogging(glog.Infof)
-	if kubeClient != nil {
-		glog.V(0).Infof("Sending events to api server.")
-		eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: v1core.New(kubeClient.CoreV1().RESTClient()).Events("")})
-	} else {
-		glog.V(0).Infof("No api server defined - no events will be sent to API server.")
+	eventBroadcaster.StartLogging(klog.Infof)
+
+	klog.Infof("Sending events to api server.")
+	eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
+
+	if _, ok := cloud.Instances(); !ok {
+		return nil, errors.New("cloud provider does not support instances")
 	}
 
 	cnc := &CloudNodeController{
@@ -93,20 +119,23 @@ func NewCloudNodeController(
 		kubeClient:                kubeClient,
 		recorder:                  recorder,
 		cloud:                     cloud,
-		nodeMonitorPeriod:         nodeMonitorPeriod,
 		nodeStatusUpdateFrequency: nodeStatusUpdateFrequency,
 	}
 
-	nodeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: cnc.AddCloudNode,
+	// Use shared informer to listen to add/update of nodes. Note that any nodes
+	// that exist before node controller starts will show up in the update method
+	cnc.nodeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { cnc.AddCloudNode(context.TODO(), obj) },
+		UpdateFunc: func(oldObj, newObj interface{}) { cnc.UpdateCloudNode(context.TODO(), oldObj, newObj) },
 	})
 
-	return cnc
+	return cnc, nil
 }
 
-// This controller deletes a node if kubelet is not reporting
-// and the node is gone from the cloud provider.
-func (cnc *CloudNodeController) Run() {
+// This controller updates newly registered nodes with information
+// from the cloud provider. This call is blocking so should be called
+// via a goroutine
+func (cnc *CloudNodeController) Run(stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 
 	// The following loops run communicate with the APIServer with a worst case complexity
@@ -114,14 +143,11 @@ func (cnc *CloudNodeController) Run() {
 	// very infrequently. DO NOT MODIFY this to perform frequent operations.
 
 	// Start a loop to periodically update the node addresses obtained from the cloud
-	go wait.Until(cnc.UpdateNodeStatus, cnc.nodeStatusUpdateFrequency, wait.NeverStop)
-
-	// Start a loop to periodically check if any nodes have been deleted from cloudprovider
-	go wait.Until(cnc.MonitorNode, cnc.nodeMonitorPeriod, wait.NeverStop)
+	wait.Until(func() { cnc.UpdateNodeStatus(context.TODO()) }, cnc.nodeStatusUpdateFrequency, stopCh)
 }
 
 // UpdateNodeStatus updates the node status, such as node addresses
-func (cnc *CloudNodeController) UpdateNodeStatus() {
+func (cnc *CloudNodeController) UpdateNodeStatus(ctx context.Context) {
 	instances, ok := cnc.cloud.Instances()
 	if !ok {
 		utilruntime.HandleError(fmt.Errorf("failed to get instances from cloud provider"))
@@ -130,43 +156,107 @@ func (cnc *CloudNodeController) UpdateNodeStatus() {
 
 	nodes, err := cnc.kubeClient.CoreV1().Nodes().List(metav1.ListOptions{ResourceVersion: "0"})
 	if err != nil {
-		glog.Errorf("Error monitoring node status: %v", err)
+		klog.Errorf("Error monitoring node status: %v", err)
 		return
 	}
 
 	for i := range nodes.Items {
-		cnc.updateNodeAddress(&nodes.Items[i], instances)
+		cnc.updateNodeAddress(ctx, &nodes.Items[i], instances)
+	}
+
+	for _, node := range nodes.Items {
+		err = cnc.reconcileNodeLabels(node.Name)
+		if err != nil {
+			klog.Errorf("Error reconciling node labels for node %q, err: %v", node.Name, err)
+		}
 	}
 }
 
+// reconcileNodeLabels reconciles node labels transitioning from beta to GA
+func (cnc *CloudNodeController) reconcileNodeLabels(nodeName string) error {
+	node, err := cnc.nodeInformer.Lister().Get(nodeName)
+	if err != nil {
+		// If node not found, just ignore it.
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+
+		return err
+	}
+
+	if node.Labels == nil {
+		// Nothing to reconcile.
+		return nil
+	}
+
+	labelsToUpdate := map[string]string{}
+	for _, r := range labelReconcileInfo {
+		primaryValue, primaryExists := node.Labels[r.primaryKey]
+		secondaryValue, secondaryExists := node.Labels[r.secondaryKey]
+
+		if !primaryExists {
+			// The primary label key does not exist. This should not happen
+			// within our supported version skew range, when no external
+			// components/factors modifying the node object. Ignore this case.
+			continue
+		}
+		if secondaryExists && primaryValue != secondaryValue {
+			// Secondary label exists, but not consistent with the primary
+			// label. Need to reconcile.
+			labelsToUpdate[r.secondaryKey] = primaryValue
+
+		} else if !secondaryExists && r.ensureSecondaryExists {
+			// Apply secondary label based on primary label.
+			labelsToUpdate[r.secondaryKey] = primaryValue
+		}
+	}
+
+	if len(labelsToUpdate) == 0 {
+		return nil
+	}
+
+	if !cloudnodeutil.AddOrUpdateLabelsOnNode(cnc.kubeClient, labelsToUpdate, node) {
+		return fmt.Errorf("failed update labels for node %+v", node)
+	}
+
+	return nil
+}
+
 // UpdateNodeAddress updates the nodeAddress of a single node
-func (cnc *CloudNodeController) updateNodeAddress(node *v1.Node, instances cloudprovider.Instances) {
+func (cnc *CloudNodeController) updateNodeAddress(ctx context.Context, node *v1.Node, instances cloudprovider.Instances) {
 	// Do not process nodes that are still tainted
 	cloudTaint := getCloudTaint(node.Spec.Taints)
 	if cloudTaint != nil {
-		glog.V(5).Infof("This node %s is still tainted. Will not process.", node.Name)
+		klog.V(5).Infof("This node %s is still tainted. Will not process.", node.Name)
 		return
 	}
 	// Node that isn't present according to the cloud provider shouldn't have its address updated
-	exists, err := ensureNodeExistsByProviderIDOrExternalID(instances, node)
+	exists, err := ensureNodeExistsByProviderID(ctx, instances, node)
 	if err != nil {
 		// Continue to update node address when not sure the node is not exists
-		glog.Errorf("%v", err)
+		klog.Errorf("%v", err)
 	} else if !exists {
-		glog.V(4).Infof("The node %s is no longer present according to the cloud provider, do not process.", node.Name)
+		klog.V(4).Infof("The node %s is no longer present according to the cloud provider, do not process.", node.Name)
 		return
 	}
 
-	nodeAddresses, err := getNodeAddressesByProviderIDOrName(instances, node)
+	nodeAddresses, err := getNodeAddressesByProviderIDOrName(ctx, instances, node)
 	if err != nil {
-		glog.Errorf("%v", err)
+		klog.Errorf("Error getting node addresses for node %q: %v", node.Name, err)
 		return
 	}
+
+	if len(nodeAddresses) == 0 {
+		klog.V(5).Infof("Skipping node address update for node %q since cloud provider did not return any", node.Name)
+		return
+	}
+
 	// Check if a hostname address exists in the cloud provided addresses
 	hostnameExists := false
 	for i := range nodeAddresses {
 		if nodeAddresses[i].Type == v1.NodeHostName {
 			hostnameExists = true
+			break
 		}
 	}
 	// If hostname was not present in cloud provided addresses, use the hostname
@@ -182,186 +272,141 @@ func (cnc *CloudNodeController) updateNodeAddress(node *v1.Node, instances cloud
 	// it can be found in the cloud as well (consistent with the behaviour in kubelet)
 	if nodeIP, ok := ensureNodeProvidedIPExists(node, nodeAddresses); ok {
 		if nodeIP == nil {
-			glog.Errorf("Specified Node IP not found in cloudprovider")
+			klog.Errorf("Specified Node IP not found in cloudprovider for node %q", node.Name)
 			return
 		}
-		nodeAddresses = []v1.NodeAddress{*nodeIP}
+	}
+	if !nodeAddressesChangeDetected(node.Status.Addresses, nodeAddresses) {
+		return
 	}
 	newNode := node.DeepCopy()
 	newNode.Status.Addresses = nodeAddresses
-	if !nodeAddressesChangeDetected(node.Status.Addresses, newNode.Status.Addresses) {
-		return
-	}
-	_, err = nodeutil.PatchNodeStatus(cnc.kubeClient.CoreV1(), types.NodeName(node.Name), node, newNode)
+	_, _, err = nodeutil.PatchNodeStatus(cnc.kubeClient.CoreV1(), types.NodeName(node.Name), node, newNode)
 	if err != nil {
-		glog.Errorf("Error patching node with cloud ip addresses = [%v]", err)
+		klog.Errorf("Error patching node with cloud ip addresses = [%v]", err)
 	}
 }
 
-// Monitor node queries the cloudprovider for non-ready nodes and deletes them
-// if they cannot be found in the cloud provider
-func (cnc *CloudNodeController) MonitorNode() {
-	instances, ok := cnc.cloud.Instances()
+func (cnc *CloudNodeController) UpdateCloudNode(ctx context.Context, _, newObj interface{}) {
+	node, ok := newObj.(*v1.Node)
 	if !ok {
-		utilruntime.HandleError(fmt.Errorf("failed to get instances from cloud provider"))
-		return
-	}
-
-	nodes, err := cnc.kubeClient.CoreV1().Nodes().List(metav1.ListOptions{ResourceVersion: "0"})
-	if err != nil {
-		glog.Errorf("Error monitoring node status: %v", err)
-		return
-	}
-
-	for i := range nodes.Items {
-		var currentReadyCondition *v1.NodeCondition
-		node := &nodes.Items[i]
-		// Try to get the current node status
-		// If node status is empty, then kubelet has not posted ready status yet. In this case, process next node
-		for rep := 0; rep < nodeStatusUpdateRetry; rep++ {
-			_, currentReadyCondition = nodeutilv1.GetNodeCondition(&node.Status, v1.NodeReady)
-			if currentReadyCondition != nil {
-				break
-			}
-			name := node.Name
-			node, err = cnc.kubeClient.CoreV1().Nodes().Get(name, metav1.GetOptions{})
-			if err != nil {
-				glog.Errorf("Failed while getting a Node to retry updating NodeStatus. Probably Node %s was deleted.", name)
-				break
-			}
-			time.Sleep(retrySleepTime)
-		}
-		if currentReadyCondition == nil {
-			glog.Errorf("Update status of Node %v from CloudNodeController exceeds retry count or the Node was deleted.", node.Name)
-			continue
-		}
-		// If the known node status says that Node is NotReady, then check if the node has been removed
-		// from the cloud provider. If node cannot be found in cloudprovider, then delete the node immediately
-		if currentReadyCondition != nil {
-			if currentReadyCondition.Status != v1.ConditionTrue {
-				// Check with the cloud provider to see if the node still exists. If it
-				// doesn't, delete the node immediately.
-				exists, err := ensureNodeExistsByProviderIDOrExternalID(instances, node)
-				if err != nil {
-					glog.Errorf("Error getting data for node %s from cloud: %v", node.Name, err)
-					continue
-				}
-
-				if exists {
-					// Continue checking the remaining nodes since the current one is fine.
-					continue
-				}
-
-				glog.V(2).Infof("Deleting node since it is no longer present in cloud provider: %s", node.Name)
-
-				ref := &v1.ObjectReference{
-					Kind:      "Node",
-					Name:      node.Name,
-					UID:       types.UID(node.UID),
-					Namespace: "",
-				}
-				glog.V(2).Infof("Recording %s event message for node %s", "DeletingNode", node.Name)
-
-				cnc.recorder.Eventf(ref, v1.EventTypeNormal, fmt.Sprintf("Deleting Node %v because it's not present according to cloud provider", node.Name), "Node %s event: %s", node.Name, "DeletingNode")
-
-				go func(nodeName string) {
-					defer utilruntime.HandleCrash()
-					if err := cnc.kubeClient.CoreV1().Nodes().Delete(nodeName, nil); err != nil {
-						glog.Errorf("unable to delete node %q: %v", nodeName, err)
-					}
-				}(node.Name)
-
-			}
-		}
-	}
-}
-
-// This processes nodes that were added into the cluster, and cloud initialize them if appropriate
-func (cnc *CloudNodeController) AddCloudNode(obj interface{}) {
-	node := obj.(*v1.Node)
-
-	instances, ok := cnc.cloud.Instances()
-	if !ok {
-		utilruntime.HandleError(fmt.Errorf("failed to get instances from cloud provider"))
+		utilruntime.HandleError(fmt.Errorf("unexpected object type: %v", newObj))
 		return
 	}
 
 	cloudTaint := getCloudTaint(node.Spec.Taints)
 	if cloudTaint == nil {
-		glog.V(2).Infof("This node %s is registered without the cloud taint. Will not process.", node.Name)
+		// The node has already been initialized so nothing to do.
+		return
+	}
+
+	cnc.initializeNode(ctx, node)
+}
+
+// AddCloudNode handles initializing new nodes registered with the cloud taint.
+func (cnc *CloudNodeController) AddCloudNode(ctx context.Context, obj interface{}) {
+	node := obj.(*v1.Node)
+
+	cloudTaint := getCloudTaint(node.Spec.Taints)
+	if cloudTaint == nil {
+		klog.V(2).Infof("This node %s is registered without the cloud taint. Will not process.", node.Name)
+		return
+	}
+
+	cnc.initializeNode(ctx, node)
+}
+
+// This processes nodes that were added into the cluster, and cloud initialize them if appropriate
+func (cnc *CloudNodeController) initializeNode(ctx context.Context, node *v1.Node) {
+
+	instances, ok := cnc.cloud.Instances()
+	if !ok {
+		utilruntime.HandleError(fmt.Errorf("failed to get instances from cloud provider"))
 		return
 	}
 
 	err := clientretry.RetryOnConflict(UpdateNodeSpecBackoff, func() error {
+		// TODO(wlan0): Move this logic to the route controller using the node taint instead of condition
+		// Since there are node taints, do we still need this?
+		// This condition marks the node as unusable until routes are initialized in the cloud provider
+		if cnc.cloud.ProviderName() == "gce" {
+			if err := cloudnodeutil.SetNodeCondition(cnc.kubeClient, types.NodeName(node.Name), v1.NodeCondition{
+				Type:               v1.NodeNetworkUnavailable,
+				Status:             v1.ConditionTrue,
+				Reason:             "NoRouteCreated",
+				Message:            "Node created without a route",
+				LastTransitionTime: metav1.Now(),
+			}); err != nil {
+				return err
+			}
+		}
+
 		curNode, err := cnc.kubeClient.CoreV1().Nodes().Get(node.Name, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
 
+		cloudTaint := getCloudTaint(curNode.Spec.Taints)
+		if cloudTaint == nil {
+			// Node object received from event had the cloud taint but was outdated,
+			// the node has actually already been initialized.
+			return nil
+		}
+
 		if curNode.Spec.ProviderID == "" {
-			providerID, err := cloudprovider.GetInstanceProviderID(cnc.cloud, types.NodeName(curNode.Name))
+			providerID, err := cloudprovider.GetInstanceProviderID(ctx, cnc.cloud, types.NodeName(curNode.Name))
 			if err == nil {
 				curNode.Spec.ProviderID = providerID
 			} else {
 				// we should attempt to set providerID on curNode, but
 				// we can continue if we fail since we will attempt to set
 				// node addresses given the node name in getNodeAddressesByProviderIDOrName
-				glog.Errorf("failed to set node provider id: %v", err)
+				klog.Errorf("failed to set node provider id: %v", err)
 			}
 		}
 
-		nodeAddresses, err := getNodeAddressesByProviderIDOrName(instances, curNode)
+		nodeAddresses, err := getNodeAddressesByProviderIDOrName(ctx, instances, curNode)
 		if err != nil {
-			glog.Errorf("%v", err)
-			return nil
+			return err
 		}
 
 		// If user provided an IP address, ensure that IP address is found
 		// in the cloud provider before removing the taint on the node
 		if nodeIP, ok := ensureNodeProvidedIPExists(curNode, nodeAddresses); ok {
 			if nodeIP == nil {
-				glog.Errorf("failed to get specified nodeIP in cloudprovider")
-				return nil
+				return errors.New("failed to find kubelet node IP from cloud provider")
 			}
 		}
 
-		if instanceType, err := getInstanceTypeByProviderIDOrName(instances, curNode); err != nil {
-			glog.Errorf("%v", err)
+		if instanceType, err := getInstanceTypeByProviderIDOrName(ctx, instances, curNode); err != nil {
 			return err
 		} else if instanceType != "" {
-			glog.V(2).Infof("Adding node label from cloud provider: %s=%s", kubeletapis.LabelInstanceType, instanceType)
-			curNode.ObjectMeta.Labels[kubeletapis.LabelInstanceType] = instanceType
-		}
-
-		// TODO(wlan0): Move this logic to the route controller using the node taint instead of condition
-		// Since there are node taints, do we still need this?
-		// This condition marks the node as unusable until routes are initialized in the cloud provider
-		if cnc.cloud.ProviderName() == "gce" {
-			curNode.Status.Conditions = append(node.Status.Conditions, v1.NodeCondition{
-				Type:               v1.NodeNetworkUnavailable,
-				Status:             v1.ConditionTrue,
-				Reason:             "NoRouteCreated",
-				Message:            "Node created without a route",
-				LastTransitionTime: metav1.Now(),
-			})
+			klog.V(2).Infof("Adding node label from cloud provider: %s=%s", v1.LabelInstanceType, instanceType)
+			curNode.ObjectMeta.Labels[v1.LabelInstanceType] = instanceType
+			klog.V(2).Infof("Adding node label from cloud provider: %s=%s", v1.LabelInstanceTypeStable, instanceType)
+			curNode.ObjectMeta.Labels[v1.LabelInstanceTypeStable] = instanceType
 		}
 
 		if zones, ok := cnc.cloud.Zones(); ok {
-			zone, err := getZoneByProviderIDOrName(zones, curNode)
+			zone, err := getZoneByProviderIDOrName(ctx, zones, curNode)
 			if err != nil {
 				return fmt.Errorf("failed to get zone from cloud provider: %v", err)
 			}
 			if zone.FailureDomain != "" {
-				glog.V(2).Infof("Adding node label from cloud provider: %s=%s", kubeletapis.LabelZoneFailureDomain, zone.FailureDomain)
-				curNode.ObjectMeta.Labels[kubeletapis.LabelZoneFailureDomain] = zone.FailureDomain
+				klog.V(2).Infof("Adding node label from cloud provider: %s=%s", v1.LabelZoneFailureDomain, zone.FailureDomain)
+				curNode.ObjectMeta.Labels[v1.LabelZoneFailureDomain] = zone.FailureDomain
+				klog.V(2).Infof("Adding node label from cloud provider: %s=%s", v1.LabelZoneFailureDomainStable, zone.FailureDomain)
+				curNode.ObjectMeta.Labels[v1.LabelZoneFailureDomainStable] = zone.FailureDomain
 			}
 			if zone.Region != "" {
-				glog.V(2).Infof("Adding node label from cloud provider: %s=%s", kubeletapis.LabelZoneRegion, zone.Region)
-				curNode.ObjectMeta.Labels[kubeletapis.LabelZoneRegion] = zone.Region
+				klog.V(2).Infof("Adding node label from cloud provider: %s=%s", v1.LabelZoneRegion, zone.Region)
+				curNode.ObjectMeta.Labels[v1.LabelZoneRegion] = zone.Region
+				klog.V(2).Infof("Adding node label from cloud provider: %s=%s", v1.LabelZoneRegionStable, zone.Region)
+				curNode.ObjectMeta.Labels[v1.LabelZoneRegionStable] = zone.Region
 			}
 		}
 
-		curNode.Spec.Taints = excludeTaintFromList(curNode.Spec.Taints, *cloudTaint)
+		curNode.Spec.Taints = excludeCloudTaint(curNode.Spec.Taints)
 
 		_, err = cnc.kubeClient.CoreV1().Nodes().Update(curNode)
 		if err != nil {
@@ -369,30 +414,30 @@ func (cnc *CloudNodeController) AddCloudNode(obj interface{}) {
 		}
 		// After adding, call UpdateNodeAddress to set the CloudProvider provided IPAddresses
 		// So that users do not see any significant delay in IP addresses being filled into the node
-		cnc.updateNodeAddress(curNode, instances)
+		cnc.updateNodeAddress(ctx, curNode, instances)
+
+		klog.Infof("Successfully initialized node %s with cloud provider", node.Name)
 		return nil
 	})
 	if err != nil {
 		utilruntime.HandleError(err)
 		return
 	}
-
-	glog.Infof("Successfully initialized node %s with cloud provider", node.Name)
 }
 
 func getCloudTaint(taints []v1.Taint) *v1.Taint {
 	for _, taint := range taints {
-		if taint.Key == algorithm.TaintExternalCloudProvider {
+		if taint.Key == schedulerapi.TaintExternalCloudProvider {
 			return &taint
 		}
 	}
 	return nil
 }
 
-func excludeTaintFromList(taints []v1.Taint, toExclude v1.Taint) []v1.Taint {
+func excludeCloudTaint(taints []v1.Taint) []v1.Taint {
 	newTaints := []v1.Taint{}
 	for _, taint := range taints {
-		if toExclude.MatchTaint(&taint) {
+		if taint.Key == schedulerapi.TaintExternalCloudProvider {
 			continue
 		}
 		newTaints = append(newTaints, taint)
@@ -400,32 +445,36 @@ func excludeTaintFromList(taints []v1.Taint, toExclude v1.Taint) []v1.Taint {
 	return newTaints
 }
 
-// ensureNodeExistsByProviderIDOrExternalID first checks if the instance exists by the provider id and then by calling external id with node name
-func ensureNodeExistsByProviderIDOrExternalID(instances cloudprovider.Instances, node *v1.Node) (bool, error) {
-	exists, err := instances.InstanceExistsByProviderID(node.Spec.ProviderID)
-	if err != nil {
-		providerIDErr := err
-		_, err = instances.ExternalID(types.NodeName(node.Name))
-		if err == nil {
-			return true, nil
+// ensureNodeExistsByProviderID checks if the instance exists by the provider id,
+// If provider id in spec is empty it calls instanceId with node name to get provider id
+func ensureNodeExistsByProviderID(ctx context.Context, instances cloudprovider.Instances, node *v1.Node) (bool, error) {
+	providerID := node.Spec.ProviderID
+	if providerID == "" {
+		var err error
+		providerID, err = instances.InstanceID(ctx, types.NodeName(node.Name))
+		if err != nil {
+			if err == cloudprovider.InstanceNotFound {
+				return false, nil
+			}
+			return false, err
 		}
-		if err == cloudprovider.InstanceNotFound {
+
+		if providerID == "" {
+			klog.Warningf("Cannot find valid providerID for node name %q, assuming non existence", node.Name)
 			return false, nil
 		}
-
-		return false, fmt.Errorf("InstanceExistsByProviderID: Error fetching by providerID: %v Error fetching by NodeName: %v", providerIDErr, err)
 	}
 
-	return exists, nil
+	return instances.InstanceExistsByProviderID(ctx, providerID)
 }
 
-func getNodeAddressesByProviderIDOrName(instances cloudprovider.Instances, node *v1.Node) ([]v1.NodeAddress, error) {
-	nodeAddresses, err := instances.NodeAddressesByProviderID(node.Spec.ProviderID)
+func getNodeAddressesByProviderIDOrName(ctx context.Context, instances cloudprovider.Instances, node *v1.Node) ([]v1.NodeAddress, error) {
+	nodeAddresses, err := instances.NodeAddressesByProviderID(ctx, node.Spec.ProviderID)
 	if err != nil {
 		providerIDErr := err
-		nodeAddresses, err = instances.NodeAddresses(types.NodeName(node.Name))
+		nodeAddresses, err = instances.NodeAddresses(ctx, types.NodeName(node.Name))
 		if err != nil {
-			return nil, fmt.Errorf("NodeAddress: Error fetching by providerID: %v Error fetching by NodeName: %v", providerIDErr, err)
+			return nil, fmt.Errorf("error fetching node by provider ID: %v, and error by node name: %v", providerIDErr, err)
 		}
 	}
 	return nodeAddresses, nil
@@ -436,15 +485,13 @@ func nodeAddressesChangeDetected(addressSet1, addressSet2 []v1.NodeAddress) bool
 		return true
 	}
 	addressMap1 := map[v1.NodeAddressType]string{}
-	addressMap2 := map[v1.NodeAddressType]string{}
 
 	for i := range addressSet1 {
 		addressMap1[addressSet1[i].Type] = addressSet1[i].Address
-		addressMap2[addressSet2[i].Type] = addressSet2[i].Address
 	}
 
-	for k, v := range addressMap1 {
-		if addressMap2[k] != v {
+	for _, v := range addressSet2 {
+		if addressMap1[v.Type] != v.Address {
 			return true
 		}
 	}
@@ -466,11 +513,11 @@ func ensureNodeProvidedIPExists(node *v1.Node, nodeAddresses []v1.NodeAddress) (
 	return nodeIP, nodeIPExists
 }
 
-func getInstanceTypeByProviderIDOrName(instances cloudprovider.Instances, node *v1.Node) (string, error) {
-	instanceType, err := instances.InstanceTypeByProviderID(node.Spec.ProviderID)
+func getInstanceTypeByProviderIDOrName(ctx context.Context, instances cloudprovider.Instances, node *v1.Node) (string, error) {
+	instanceType, err := instances.InstanceTypeByProviderID(ctx, node.Spec.ProviderID)
 	if err != nil {
 		providerIDErr := err
-		instanceType, err = instances.InstanceType(types.NodeName(node.Name))
+		instanceType, err = instances.InstanceType(ctx, types.NodeName(node.Name))
 		if err != nil {
 			return "", fmt.Errorf("InstanceType: Error fetching by providerID: %v Error fetching by NodeName: %v", providerIDErr, err)
 		}
@@ -480,11 +527,11 @@ func getInstanceTypeByProviderIDOrName(instances cloudprovider.Instances, node *
 
 // getZoneByProviderIDorName will attempt to get the zone of node using its providerID
 // then it's name. If both attempts fail, an error is returned
-func getZoneByProviderIDOrName(zones cloudprovider.Zones, node *v1.Node) (cloudprovider.Zone, error) {
-	zone, err := zones.GetZoneByProviderID(node.Spec.ProviderID)
+func getZoneByProviderIDOrName(ctx context.Context, zones cloudprovider.Zones, node *v1.Node) (cloudprovider.Zone, error) {
+	zone, err := zones.GetZoneByProviderID(ctx, node.Spec.ProviderID)
 	if err != nil {
 		providerIDErr := err
-		zone, err = zones.GetZoneByNodeName(types.NodeName(node.Name))
+		zone, err = zones.GetZoneByNodeName(ctx, types.NodeName(node.Name))
 		if err != nil {
 			return cloudprovider.Zone{}, fmt.Errorf("Zone: Error fetching by providerID: %v Error fetching by NodeName: %v", providerIDErr, err)
 		}

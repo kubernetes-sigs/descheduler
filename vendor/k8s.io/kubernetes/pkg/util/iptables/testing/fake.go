@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 
 	"k8s.io/kubernetes/pkg/util/iptables"
 )
@@ -33,21 +34,26 @@ const (
 	Reject      = "REJECT"
 	ToDest      = "--to-destination "
 	Recent      = "recent "
+	MatchSet    = "--match-set "
+	SrcType     = "--src-type "
+	Masquerade  = "MASQUERADE "
 )
 
 type Rule map[string]string
 
 // no-op implementation of iptables Interface
 type FakeIPTables struct {
-	Lines []byte
+	hasRandomFully bool
+	Lines          []byte
 }
 
 func NewFake() *FakeIPTables {
 	return &FakeIPTables{}
 }
 
-func (*FakeIPTables) GetVersion() (string, error) {
-	return "0.0.0", nil
+func (f *FakeIPTables) SetHasRandomFully(can bool) *FakeIPTables {
+	f.hasRandomFully = can
+	return f
 }
 
 func (*FakeIPTables) EnsureChain(table iptables.Table, chain iptables.Chain) (bool, error) {
@@ -93,12 +99,12 @@ func (f *FakeIPTables) RestoreAll(data []byte, flush iptables.FlushFlag, counter
 	f.Lines = data
 	return nil
 }
-func (*FakeIPTables) AddReloadFunc(reloadFunc func()) {}
 
-func (*FakeIPTables) Destroy() {}
+func (f *FakeIPTables) Monitor(canary iptables.Chain, tables []iptables.Table, reloadFunc func(), interval time.Duration, stopCh <-chan struct{}) {
+}
 
-func getToken(line, seperator string) string {
-	tokens := strings.Split(line, seperator)
+func getToken(line, separator string) string {
+	tokens := strings.Split(line, separator)
 	if len(tokens) == 2 {
 		return strings.Split(tokens[1], " ")[0]
 	}
@@ -112,7 +118,7 @@ func (f *FakeIPTables) GetRules(chainName string) (rules []Rule) {
 	for _, l := range strings.Split(string(f.Lines), "\n") {
 		if strings.Contains(l, fmt.Sprintf("-A %v", chainName)) {
 			newRule := Rule(map[string]string{})
-			for _, arg := range []string{Destination, Source, DPort, Protocol, Jump, ToDest, Recent} {
+			for _, arg := range []string{Destination, Source, DPort, Protocol, Jump, ToDest, Recent, MatchSet, SrcType, Masquerade} {
 				tok := getToken(l, arg)
 				if tok != "" {
 					newRule[arg] = tok
@@ -122,6 +128,10 @@ func (f *FakeIPTables) GetRules(chainName string) (rules []Rule) {
 		}
 	}
 	return
+}
+
+func (f *FakeIPTables) HasRandomFully() bool {
+	return f.hasRandomFully
 }
 
 var _ = iptables.Interface(&FakeIPTables{})

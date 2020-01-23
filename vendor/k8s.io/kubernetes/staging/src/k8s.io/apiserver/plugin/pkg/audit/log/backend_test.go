@@ -18,39 +18,27 @@ package log
 
 import (
 	"bytes"
-	"fmt"
 	"reflect"
 	"regexp"
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 
-	"k8s.io/apimachinery/pkg/apimachinery/announced"
-	"k8s.io/apimachinery/pkg/apimachinery/registered"
+	authnv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	auditinternal "k8s.io/apiserver/pkg/apis/audit"
 	"k8s.io/apiserver/pkg/apis/audit/install"
+	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 	auditv1beta1 "k8s.io/apiserver/pkg/apis/audit/v1beta1"
 	"k8s.io/apiserver/pkg/audit"
 )
 
-// NOTE: Copied from webhook backend to register auditv1beta1 to scheme
-var (
-	groupFactoryRegistry = make(announced.APIGroupFactoryRegistry)
-	registry             = registered.NewOrDie("")
-)
-
 func init() {
-	allGVs := []schema.GroupVersion{auditv1beta1.SchemeGroupVersion}
-	registry.RegisterVersions(allGVs)
-	if err := registry.EnableVersions(allGVs...); err != nil {
-		panic(fmt.Sprintf("failed to enable version %v", allGVs))
-	}
-	install.Install(groupFactoryRegistry, registry, audit.Scheme)
+	install.Install(audit.Scheme)
 }
 
 func TestLogEventsLegacy(t *testing.T) {
@@ -60,7 +48,7 @@ func TestLogEventsLegacy(t *testing.T) {
 	}{
 		{
 			&auditinternal.Event{
-				AuditID: types.UID(uuid.NewRandom().String()),
+				AuditID: types.UID(uuid.New().String()),
 			},
 			`[\d\:\-\.\+TZ]+ AUDIT: id="[\w-]+" stage="" ip="<unknown>" method="" user="<none>" groups="<none>" as="<self>" asgroups="<lookup>" namespace="<none>" uri="" response="<deferred>"`,
 		},
@@ -74,10 +62,10 @@ func TestLogEventsLegacy(t *testing.T) {
 					"127.0.0.1",
 				},
 				RequestReceivedTimestamp: metav1.NewMicroTime(time.Now()),
-				AuditID:                  types.UID(uuid.NewRandom().String()),
+				AuditID:                  types.UID(uuid.New().String()),
 				Stage:                    auditinternal.StageRequestReceived,
 				Verb:                     "get",
-				User: auditinternal.UserInfo{
+				User: authnv1.UserInfo{
 					Username: "admin",
 					Groups: []string{
 						"system:masters",
@@ -92,7 +80,7 @@ func TestLogEventsLegacy(t *testing.T) {
 		},
 		{
 			&auditinternal.Event{
-				AuditID: types.UID(uuid.NewRandom().String()),
+				AuditID: types.UID(uuid.New().String()),
 				Level:   auditinternal.LevelMetadata,
 				ObjectRef: &auditinternal.ObjectReference{
 					Resource:    "foo",
@@ -104,7 +92,7 @@ func TestLogEventsLegacy(t *testing.T) {
 		},
 	} {
 		var buf bytes.Buffer
-		backend := NewBackend(&buf, FormatLegacy, auditv1beta1.SchemeGroupVersion)
+		backend := NewBackend(&buf, FormatLegacy, auditv1.SchemeGroupVersion)
 		backend.ProcessEvents(test.event)
 		match, err := regexp.MatchString(test.expected, buf.String())
 		if err != nil {
@@ -120,7 +108,7 @@ func TestLogEventsLegacy(t *testing.T) {
 func TestLogEventsJson(t *testing.T) {
 	for _, event := range []*auditinternal.Event{
 		{
-			AuditID: types.UID(uuid.NewRandom().String()),
+			AuditID: types.UID(uuid.New().String()),
 		},
 		{
 			ResponseStatus: &metav1.Status{
@@ -132,10 +120,10 @@ func TestLogEventsJson(t *testing.T) {
 			},
 			RequestReceivedTimestamp: metav1.NewMicroTime(time.Now().Truncate(time.Microsecond)),
 			StageTimestamp:           metav1.NewMicroTime(time.Now().Truncate(time.Microsecond)),
-			AuditID:                  types.UID(uuid.NewRandom().String()),
+			AuditID:                  types.UID(uuid.New().String()),
 			Stage:                    auditinternal.StageRequestReceived,
 			Verb:                     "get",
-			User: auditinternal.UserInfo{
+			User: authnv1.UserInfo{
 				Username: "admin",
 				Groups: []string{
 					"system:masters",
@@ -147,7 +135,7 @@ func TestLogEventsJson(t *testing.T) {
 			},
 		},
 		{
-			AuditID: types.UID(uuid.NewRandom().String()),
+			AuditID: types.UID(uuid.New().String()),
 			Level:   auditinternal.LevelMetadata,
 			ObjectRef: &auditinternal.ObjectReference{
 				Resource:    "foo",
@@ -156,18 +144,21 @@ func TestLogEventsJson(t *testing.T) {
 			},
 		},
 	} {
-		var buf bytes.Buffer
-		backend := NewBackend(&buf, FormatJson, auditv1beta1.SchemeGroupVersion)
-		backend.ProcessEvents(event)
-		// decode events back and compare with the original one.
-		result := &auditinternal.Event{}
-		decoder := audit.Codecs.UniversalDecoder(auditv1beta1.SchemeGroupVersion)
-		if err := runtime.DecodeInto(decoder, buf.Bytes(), result); err != nil {
-			t.Errorf("failed decoding buf: %s", buf.String())
-			continue
-		}
-		if !reflect.DeepEqual(event, result) {
-			t.Errorf("The result event should be the same with the original one, \noriginal: \n%#v\n result: \n%#v", event, result)
+		versions := []schema.GroupVersion{auditv1.SchemeGroupVersion, auditv1beta1.SchemeGroupVersion}
+		for _, version := range versions {
+			var buf bytes.Buffer
+			backend := NewBackend(&buf, FormatJson, version)
+			backend.ProcessEvents(event)
+			// decode events back and compare with the original one.
+			result := &auditinternal.Event{}
+			decoder := audit.Codecs.UniversalDecoder(version)
+			if err := runtime.DecodeInto(decoder, buf.Bytes(), result); err != nil {
+				t.Errorf("failed decoding buf: %s, apiVersion: %s", buf.String(), version)
+				continue
+			}
+			if !reflect.DeepEqual(event, result) {
+				t.Errorf("The result event should be the same with the original one, \noriginal: \n%#v\n result: \n%#v, apiVersion: %s", event, result, version)
+			}
 		}
 	}
 }

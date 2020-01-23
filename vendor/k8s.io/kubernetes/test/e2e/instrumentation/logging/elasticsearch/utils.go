@@ -26,6 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/test/e2e/framework"
+	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
+	e2eservice "k8s.io/kubernetes/test/e2e/framework/service"
 	"k8s.io/kubernetes/test/e2e/instrumentation/logging/utils"
 )
 
@@ -55,7 +57,7 @@ func (p *esLogProvider) Init() error {
 	f := p.Framework
 	// Check for the existence of the Elasticsearch service.
 	framework.Logf("Checking the Elasticsearch service exists.")
-	s := f.ClientSet.Core().Services(api.NamespaceSystem)
+	s := f.ClientSet.CoreV1().Services(api.NamespaceSystem)
 	// Make a few attempts to connect. This makes the test robust against
 	// being run as the first e2e test just after the e2e cluster has been created.
 	var err error
@@ -73,12 +75,12 @@ func (p *esLogProvider) Init() error {
 	framework.Logf("Checking to make sure the Elasticsearch pods are running")
 	labelSelector := fields.SelectorFromSet(fields.Set(map[string]string{"k8s-app": "elasticsearch-logging"})).String()
 	options := meta_v1.ListOptions{LabelSelector: labelSelector}
-	pods, err := f.ClientSet.Core().Pods(api.NamespaceSystem).List(options)
+	pods, err := f.ClientSet.CoreV1().Pods(api.NamespaceSystem).List(options)
 	if err != nil {
 		return err
 	}
 	for _, pod := range pods.Items {
-		err = framework.WaitForPodRunningInNamespace(f.ClientSet, &pod)
+		err = e2epod.WaitForPodRunningInNamespace(f.ClientSet, &pod)
 		if err != nil {
 			return err
 		}
@@ -90,7 +92,7 @@ func (p *esLogProvider) Init() error {
 	err = nil
 	var body []byte
 	for start := time.Now(); time.Since(start) < esRetryTimeout; time.Sleep(esRetryDelay) {
-		proxyRequest, errProxy := framework.GetServicesProxyRequest(f.ClientSet, f.ClientSet.Core().RESTClient().Get())
+		proxyRequest, errProxy := e2eservice.GetServicesProxyRequest(f.ClientSet, f.ClientSet.CoreV1().RESTClient().Get())
 		if errProxy != nil {
 			framework.Logf("After %v failed to get services proxy request: %v", time.Since(start), errProxy)
 			continue
@@ -124,7 +126,7 @@ func (p *esLogProvider) Init() error {
 	framework.Logf("Checking health of Elasticsearch service.")
 	healthy := false
 	for start := time.Now(); time.Since(start) < esRetryTimeout; time.Sleep(esRetryDelay) {
-		proxyRequest, errProxy := framework.GetServicesProxyRequest(f.ClientSet, f.ClientSet.Core().RESTClient().Get())
+		proxyRequest, errProxy := e2eservice.GetServicesProxyRequest(f.ClientSet, f.ClientSet.CoreV1().RESTClient().Get())
 		if errProxy != nil {
 			framework.Logf("After %v failed to get services proxy request: %v", time.Since(start), errProxy)
 			continue
@@ -172,7 +174,7 @@ func (p *esLogProvider) Cleanup() {
 func (p *esLogProvider) ReadEntries(name string) []utils.LogEntry {
 	f := p.Framework
 
-	proxyRequest, errProxy := framework.GetServicesProxyRequest(f.ClientSet, f.ClientSet.Core().RESTClient().Get())
+	proxyRequest, errProxy := e2eservice.GetServicesProxyRequest(f.ClientSet, f.ClientSet.CoreV1().RESTClient().Get())
 	if errProxy != nil {
 		framework.Logf("Failed to get services proxy request: %v", errProxy)
 		return nil

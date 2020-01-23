@@ -1,3 +1,5 @@
+# See the OWNERS docs at https://go.k8s.io/owners
+
 reviewers:
 - thockin
 - lavalamp
@@ -13,8 +15,6 @@ reviewers:
 - eparis
 - soltysh
 - madhusudancs
-- markturansky
 - mml
 - david-mcmahon
-- ericchiang
 - jianhuiz

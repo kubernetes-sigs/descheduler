@@ -17,9 +17,7 @@ limitations under the License.
 package pod
 
 import (
-	"strings"
-
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	clientset "k8s.io/client-go/kubernetes"
@@ -28,49 +26,28 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/types"
 )
 
-// checkLatencySensitiveResourcesForAContainer checks if there are any latency sensitive resources like GPUs.
-func checkLatencySensitiveResourcesForAContainer(rl v1.ResourceList) bool {
-	if rl == nil {
-		return false
-	}
-	for rName := range rl {
-		if rName == v1.ResourceNvidiaGPU {
-			return true
-		}
-		// TODO: Add support for other high value resources like hugepages etc. once kube is rebased to 1.8.
-	}
-	return false
-}
-
-// IsLatencySensitivePod checks if a pod consumes high value devices like GPUs, hugepages or when cpu pinning enabled.
-func IsLatencySensitivePod(pod *v1.Pod) bool {
-	for _, container := range pod.Spec.Containers {
-		resourceList := container.Resources.Requests
-		if checkLatencySensitiveResourcesForAContainer(resourceList) {
-			return true
-		}
-	}
-	return false
-}
+const (
+	evictPodAnnotationKey = "descheduler.alpha.kubernetes.io/evict"
+)
 
 // IsEvictable checks if a pod is evictable or not.
-func IsEvictable(pod *v1.Pod) bool {
+func IsEvictable(pod *v1.Pod, evictLocalStoragePods bool) bool {
 	ownerRefList := OwnerRef(pod)
-	if IsMirrorPod(pod) || IsPodWithLocalStorage(pod) || len(ownerRefList) == 0 || IsDaemonsetPod(ownerRefList) || IsCriticalPod(pod) {
+	if !HaveEvictAnnotation(pod) && (IsMirrorPod(pod) || (!evictLocalStoragePods && IsPodWithLocalStorage(pod)) || len(ownerRefList) == 0 || IsDaemonsetPod(ownerRefList) || IsCriticalPod(pod)) {
 		return false
 	}
 	return true
 }
 
 // ListEvictablePodsOnNode returns the list of evictable pods on node.
-func ListEvictablePodsOnNode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, error) {
+func ListEvictablePodsOnNode(client clientset.Interface, node *v1.Node, evictLocalStoragePods bool) ([]*v1.Pod, error) {
 	pods, err := ListPodsOnANode(client, node)
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
 	evictablePods := make([]*v1.Pod, 0)
 	for _, pod := range pods {
-		if !IsEvictable(pod) {
+		if !IsEvictable(pod, evictLocalStoragePods) {
 			continue
 		} else {
 			evictablePods = append(evictablePods, pod)
@@ -99,20 +76,7 @@ func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, erro
 }
 
 func IsCriticalPod(pod *v1.Pod) bool {
-	return IsCritical(pod.Namespace, pod.Annotations)
-}
-
-func IsCritical(ns string, annotations map[string]string) bool {
-	// Critical pods are restricted to "kube-system" and "openshift-*" namespaces as of now.
-	// for openshift-* namespaces, see: https://github.com/openshift/origin/pull/19104
-	if ns != api.NamespaceSystem && !strings.HasPrefix(ns, "openshift-") {
-		return false
-	}
-	val, ok := annotations[types.CriticalPodAnnotationKey]
-	if ok && val == "" {
-		return true
-	}
-	return false
+	return types.IsCriticalPod(pod)
 }
 
 func IsBestEffortPod(pod *v1.Pod) bool {
@@ -139,6 +103,12 @@ func IsDaemonsetPod(ownerRefList []metav1.OwnerReference) bool {
 // IsMirrorPod checks whether the pod is a mirror pod.
 func IsMirrorPod(pod *v1.Pod) bool {
 	_, found := pod.ObjectMeta.Annotations[types.ConfigMirrorAnnotationKey]
+	return found
+}
+
+// HaveEvictAnnotation checks if the pod have evict annotation
+func HaveEvictAnnotation(pod *v1.Pod) bool {
+	_, found := pod.ObjectMeta.Annotations[evictPodAnnotationKey]
 	return found
 }
 

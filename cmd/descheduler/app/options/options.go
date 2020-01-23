@@ -22,7 +22,6 @@ import (
 
 	// install the componentconfig api so we get its defaulting and conversion functions
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
-	_ "sigs.k8s.io/descheduler/pkg/apis/componentconfig/install"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
 	deschedulerscheme "sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 
@@ -57,4 +56,6 @@ func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&rs.NodeSelector, "node-selector", rs.NodeSelector, "Selector (label query) to filter on, supports '=', '==', and '!='.(e.g. -l key1=value1,key2=value2)")
 	// max-no-pods-to-evict limits the maximum number of pods to be evicted per node by descheduler.
 	fs.IntVar(&rs.MaxNoOfPodsToEvictPerNode, "max-pods-to-evict-per-node", rs.MaxNoOfPodsToEvictPerNode, "Limits the maximum number of pods to be evicted per node by descheduler")
+	// evict-local-storage-pods allows eviction of pods that are using local storage. This is false by default.
+	fs.BoolVar(&rs.EvictLocalStoragePods, "evict-local-storage-pods", rs.EvictLocalStoragePods, "Enables evicting pods using local storage by descheduler")
 }

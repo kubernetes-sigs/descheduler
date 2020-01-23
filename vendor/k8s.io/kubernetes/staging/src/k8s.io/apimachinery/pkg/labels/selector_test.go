@@ -573,3 +573,138 @@ func TestAdd(t *testing.T) {
 		}
 	}
 }
+
+func TestSafeSort(t *testing.T) {
+	tests := []struct {
+		name   string
+		in     []string
+		inCopy []string
+		want   []string
+	}{
+		{
+			name:   "nil strings",
+			in:     nil,
+			inCopy: nil,
+			want:   nil,
+		},
+		{
+			name:   "ordered strings",
+			in:     []string{"bar", "foo"},
+			inCopy: []string{"bar", "foo"},
+			want:   []string{"bar", "foo"},
+		},
+		{
+			name:   "unordered strings",
+			in:     []string{"foo", "bar"},
+			inCopy: []string{"foo", "bar"},
+			want:   []string{"bar", "foo"},
+		},
+		{
+			name:   "duplicated strings",
+			in:     []string{"foo", "bar", "foo", "bar"},
+			inCopy: []string{"foo", "bar", "foo", "bar"},
+			want:   []string{"bar", "bar", "foo", "foo"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := safeSort(tt.in); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("safeSort() = %v, want %v", got, tt.want)
+			}
+			if !reflect.DeepEqual(tt.in, tt.inCopy) {
+				t.Errorf("after safeSort(), input = %v, want %v", tt.in, tt.inCopy)
+			}
+		})
+	}
+}
+
+func BenchmarkSelectorFromValidatedSet(b *testing.B) {
+	set := map[string]string{
+		"foo": "foo",
+		"bar": "bar",
+	}
+
+	for i := 0; i < b.N; i++ {
+		if SelectorFromValidatedSet(set).Empty() {
+			b.Errorf("Unexpected selector")
+		}
+	}
+}
+
+func TestRequiresExactMatch(t *testing.T) {
+	testCases := []struct {
+		name          string
+		sel           Selector
+		label         string
+		expectedFound bool
+		expectedValue string
+	}{
+		{
+			name:          "keyInOperatorExactMatch",
+			sel:           internalSelector{Requirement{"key", selection.In, []string{"value"}}},
+			label:         "key",
+			expectedFound: true,
+			expectedValue: "value",
+		},
+		{
+			name:          "keyInOperatorNotExactMatch",
+			sel:           internalSelector{Requirement{"key", selection.In, []string{"value", "value2"}}},
+			label:         "key",
+			expectedFound: false,
+			expectedValue: "",
+		},
+		{
+			name: "keyInOperatorNotExactMatch",
+			sel: internalSelector{
+				Requirement{"key", selection.In, []string{"value", "value1"}},
+				Requirement{"key2", selection.In, []string{"value2"}},
+			},
+			label:         "key2",
+			expectedFound: true,
+			expectedValue: "value2",
+		},
+		{
+			name:          "keyEqualOperatorExactMatch",
+			sel:           internalSelector{Requirement{"key", selection.Equals, []string{"value"}}},
+			label:         "key",
+			expectedFound: true,
+			expectedValue: "value",
+		},
+		{
+			name:          "keyDoubleEqualOperatorExactMatch",
+			sel:           internalSelector{Requirement{"key", selection.DoubleEquals, []string{"value"}}},
+			label:         "key",
+			expectedFound: true,
+			expectedValue: "value",
+		},
+		{
+			name:          "keyNotEqualOperatorExactMatch",
+			sel:           internalSelector{Requirement{"key", selection.NotEquals, []string{"value"}}},
+			label:         "key",
+			expectedFound: false,
+			expectedValue: "",
+		},
+		{
+			name: "keyEqualOperatorExactMatchFirst",
+			sel: internalSelector{
+				Requirement{"key", selection.In, []string{"value"}},
+				Requirement{"key2", selection.In, []string{"value2"}},
+			},
+			label:         "key",
+			expectedFound: true,
+			expectedValue: "value",
+		},
+	}
+	for _, ts := range testCases {
+		t.Run(ts.name, func(t *testing.T) {
+			value, found := ts.sel.RequiresExactMatch(ts.label)
+			if found != ts.expectedFound {
+				t.Errorf("Expected match %v, found %v", ts.expectedFound, found)
+			}
+			if found && value != ts.expectedValue {
+				t.Errorf("Expected value %v, found %v", ts.expectedValue, value)
+			}
+
+		})
+	}
+}

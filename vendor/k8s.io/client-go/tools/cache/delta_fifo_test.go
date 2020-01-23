@@ -51,7 +51,7 @@ func (kl keyLookupFunc) GetByKey(key string) (interface{}, bool, error) {
 }
 
 func TestDeltaFIFO_basic(t *testing.T) {
-	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil, nil)
+	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil)
 	const amount = 500
 	go func() {
 		for i := 0; i < amount; i++ {
@@ -85,8 +85,35 @@ func TestDeltaFIFO_basic(t *testing.T) {
 	}
 }
 
+// TestDeltaFIFO_replaceWithDeleteDeltaIn tests that a `Sync` delta for an
+// object `O` with ID `X` is added when .Replace is called and `O` is among the
+// replacement objects even if the DeltaFIFO already stores in terminal position
+// a delta of type `Delete` for ID `X`. Not adding the `Sync` delta causes
+// SharedIndexInformers to miss `O`'s create notification, see https://github.com/kubernetes/kubernetes/issues/83810
+// for more details.
+func TestDeltaFIFO_replaceWithDeleteDeltaIn(t *testing.T) {
+	oldObj := mkFifoObj("foo", 1)
+	newObj := mkFifoObj("foo", 2)
+
+	f := NewDeltaFIFO(testFifoObjectKeyFunc, keyLookupFunc(func() []testFifoObject {
+		return []testFifoObject{oldObj}
+	}))
+
+	f.Delete(oldObj)
+	f.Replace([]interface{}{newObj}, "")
+
+	actualDeltas := Pop(f)
+	expectedDeltas := Deltas{
+		Delta{Type: Deleted, Object: oldObj},
+		Delta{Type: Sync, Object: newObj},
+	}
+	if !reflect.DeepEqual(expectedDeltas, actualDeltas) {
+		t.Errorf("expected %#v, got %#v", expectedDeltas, actualDeltas)
+	}
+}
+
 func TestDeltaFIFO_requeueOnPop(t *testing.T) {
-	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil, nil)
+	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil)
 
 	f.Add(mkFifoObj("foo", 10))
 	_, err := f.Pop(func(obj interface{}) error {
@@ -129,43 +156,8 @@ func TestDeltaFIFO_requeueOnPop(t *testing.T) {
 	}
 }
 
-func TestDeltaFIFO_compressorWorks(t *testing.T) {
-	oldestTypes := []DeltaType{}
-	f := NewDeltaFIFO(
-		testFifoObjectKeyFunc,
-		// This function just keeps the most recent delta
-		// and puts deleted ones in the list.
-		DeltaCompressorFunc(func(d Deltas) Deltas {
-			if n := len(d); n > 1 {
-				oldestTypes = append(oldestTypes, d[0].Type)
-				d = d[1:]
-			}
-			return d
-		}),
-		nil,
-	)
-	if f.HasSynced() {
-		t.Errorf("Expected HasSynced to be false before completion of initial population")
-	}
-	f.Add(mkFifoObj("foo", 10))
-	f.Update(mkFifoObj("foo", 12))
-	f.Replace([]interface{}{mkFifoObj("foo", 20)}, "0")
-	f.Delete(mkFifoObj("foo", 22))
-	f.Add(mkFifoObj("foo", 25)) // flush the last one out
-	expect := []DeltaType{Added, Updated, Sync, Deleted}
-	if e, a := expect, oldestTypes; !reflect.DeepEqual(e, a) {
-		t.Errorf("Expected %#v, got %#v", e, a)
-	}
-	if e, a := (Deltas{{Added, mkFifoObj("foo", 25)}}), Pop(f).(Deltas); !reflect.DeepEqual(e, a) {
-		t.Fatalf("Expected %#v, got %#v", e, a)
-	}
-	if !f.HasSynced() {
-		t.Errorf("Expected HasSynced to be true after completion of initial population")
-	}
-}
-
 func TestDeltaFIFO_addUpdate(t *testing.T) {
-	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil, nil)
+	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil)
 	f.Add(mkFifoObj("foo", 10))
 	f.Update(mkFifoObj("foo", 12))
 	f.Delete(mkFifoObj("foo", 15))
@@ -203,7 +195,7 @@ func TestDeltaFIFO_addUpdate(t *testing.T) {
 }
 
 func TestDeltaFIFO_enqueueingNoLister(t *testing.T) {
-	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil, nil)
+	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil)
 	f.Add(mkFifoObj("foo", 10))
 	f.Update(mkFifoObj("bar", 15))
 	f.Add(mkFifoObj("qux", 17))
@@ -226,7 +218,6 @@ func TestDeltaFIFO_enqueueingNoLister(t *testing.T) {
 func TestDeltaFIFO_enqueueingWithLister(t *testing.T) {
 	f := NewDeltaFIFO(
 		testFifoObjectKeyFunc,
-		nil,
 		keyLookupFunc(func() []testFifoObject {
 			return []testFifoObject{mkFifoObj("foo", 5), mkFifoObj("bar", 6), mkFifoObj("baz", 7)}
 		}),
@@ -249,7 +240,7 @@ func TestDeltaFIFO_enqueueingWithLister(t *testing.T) {
 }
 
 func TestDeltaFIFO_addReplace(t *testing.T) {
-	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil, nil)
+	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil)
 	f.Add(mkFifoObj("foo", 10))
 	f.Replace([]interface{}{mkFifoObj("foo", 15)}, "0")
 	got := make(chan testFifoObject, 2)
@@ -277,7 +268,6 @@ func TestDeltaFIFO_addReplace(t *testing.T) {
 func TestDeltaFIFO_ResyncNonExisting(t *testing.T) {
 	f := NewDeltaFIFO(
 		testFifoObjectKeyFunc,
-		nil,
 		keyLookupFunc(func() []testFifoObject {
 			return []testFifoObject{mkFifoObj("foo", 5)}
 		}),
@@ -297,7 +287,6 @@ func TestDeltaFIFO_ResyncNonExisting(t *testing.T) {
 func TestDeltaFIFO_DeleteExistingNonPropagated(t *testing.T) {
 	f := NewDeltaFIFO(
 		testFifoObjectKeyFunc,
-		nil,
 		keyLookupFunc(func() []testFifoObject {
 			return []testFifoObject{}
 		}),
@@ -317,7 +306,6 @@ func TestDeltaFIFO_DeleteExistingNonPropagated(t *testing.T) {
 func TestDeltaFIFO_ReplaceMakesDeletions(t *testing.T) {
 	f := NewDeltaFIFO(
 		testFifoObjectKeyFunc,
-		nil,
 		keyLookupFunc(func() []testFifoObject {
 			return []testFifoObject{mkFifoObj("foo", 5), mkFifoObj("bar", 6), mkFifoObj("baz", 7)}
 		}),
@@ -344,7 +332,6 @@ func TestDeltaFIFO_ReplaceMakesDeletions(t *testing.T) {
 func TestDeltaFIFO_UpdateResyncRace(t *testing.T) {
 	f := NewDeltaFIFO(
 		testFifoObjectKeyFunc,
-		nil,
 		keyLookupFunc(func() []testFifoObject {
 			return []testFifoObject{mkFifoObj("foo", 5)}
 		}),
@@ -367,7 +354,6 @@ func TestDeltaFIFO_UpdateResyncRace(t *testing.T) {
 func TestDeltaFIFO_HasSyncedCorrectOnDeletion(t *testing.T) {
 	f := NewDeltaFIFO(
 		testFifoObjectKeyFunc,
-		nil,
 		keyLookupFunc(func() []testFifoObject {
 			return []testFifoObject{mkFifoObj("foo", 5), mkFifoObj("bar", 6), mkFifoObj("baz", 7)}
 		}),
@@ -379,6 +365,7 @@ func TestDeltaFIFO_HasSyncedCorrectOnDeletion(t *testing.T) {
 		// Since "bar" didn't have a delete event and wasn't in the Replace list
 		// it should get a tombstone key with the right Obj.
 		{{Deleted, DeletedFinalStateUnknown{Key: "bar", Obj: mkFifoObj("bar", 6)}}},
+		{{Deleted, DeletedFinalStateUnknown{Key: "baz", Obj: mkFifoObj("baz", 7)}}},
 	}
 
 	for _, expected := range expectedList {
@@ -390,13 +377,13 @@ func TestDeltaFIFO_HasSyncedCorrectOnDeletion(t *testing.T) {
 			t.Errorf("Expected %#v, got %#v", e, a)
 		}
 	}
-	if f.HasSynced() {
+	if !f.HasSynced() {
 		t.Errorf("Expected HasSynced to be true")
 	}
 }
 
 func TestDeltaFIFO_detectLineJumpers(t *testing.T) {
-	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil, nil)
+	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil)
 
 	f.Add(mkFifoObj("foo", 10))
 	f.Add(mkFifoObj("bar", 1))
@@ -424,7 +411,7 @@ func TestDeltaFIFO_detectLineJumpers(t *testing.T) {
 }
 
 func TestDeltaFIFO_addIfNotPresent(t *testing.T) {
-	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil, nil)
+	f := NewDeltaFIFO(testFifoObjectKeyFunc, nil)
 
 	f.Add(mkFifoObj("b", 3))
 	b3 := Pop(f)
@@ -521,7 +508,7 @@ func TestDeltaFIFO_HasSynced(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		f := NewDeltaFIFO(testFifoObjectKeyFunc, nil, nil)
+		f := NewDeltaFIFO(testFifoObjectKeyFunc, nil)
 
 		for _, action := range test.actions {
 			action(f)

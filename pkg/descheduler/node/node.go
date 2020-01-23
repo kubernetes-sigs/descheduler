@@ -19,7 +19,6 @@ package node
 import (
 	"time"
 
-	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -27,6 +26,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -48,9 +48,9 @@ func ReadyNodes(client clientset.Interface, nodeSelector string, stopChannel <-c
 	}
 
 	if len(nodes) == 0 {
-		glog.V(2).Infof("node lister returned empty list, now fetch directly")
+		klog.V(2).Infof("node lister returned empty list, now fetch directly")
 
-		nItems, err := client.Core().Nodes().List(metav1.ListOptions{LabelSelector: nodeSelector})
+		nItems, err := client.CoreV1().Nodes().List(metav1.ListOptions{LabelSelector: nodeSelector})
 		if err != nil {
 			return []*v1.Node{}, err
 		}
@@ -78,7 +78,7 @@ func GetNodeLister(client clientset.Interface, stopChannel <-chan struct{}) core
 	if stopChannel == nil {
 		return nil
 	}
-	listWatcher := cache.NewListWatchFromClient(client.Core().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
+	listWatcher := cache.NewListWatchFromClient(client.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
 	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	nodeLister := corelisters.NewNodeLister(store)
 	reflector := cache.NewReflector(listWatcher, &v1.Node{}, store, time.Hour)
@@ -99,19 +99,19 @@ func IsReady(node *v1.Node) bool {
 		// - NodeOutOfDisk condition status is ConditionFalse,
 		// - NodeNetworkUnavailable condition status is ConditionFalse.
 		if cond.Type == v1.NodeReady && cond.Status != v1.ConditionTrue {
-			glog.V(1).Infof("Ignoring node %v with %v condition status %v", node.Name, cond.Type, cond.Status)
+			klog.V(1).Infof("Ignoring node %v with %v condition status %v", node.Name, cond.Type, cond.Status)
 			return false
 		} /*else if cond.Type == v1.NodeOutOfDisk && cond.Status != v1.ConditionFalse {
-			glog.V(4).Infof("Ignoring node %v with %v condition status %v", node.Name, cond.Type, cond.Status)
+			klog.V(4).Infof("Ignoring node %v with %v condition status %v", node.Name, cond.Type, cond.Status)
 			return false
 		} else if cond.Type == v1.NodeNetworkUnavailable && cond.Status != v1.ConditionFalse {
-			glog.V(4).Infof("Ignoring node %v with %v condition status %v", node.Name, cond.Type, cond.Status)
+			klog.V(4).Infof("Ignoring node %v with %v condition status %v", node.Name, cond.Type, cond.Status)
 			return false
 		}*/
 	}
 	// Ignore nodes that are marked unschedulable
 	/*if node.Spec.Unschedulable {
-		glog.V(4).Infof("Ignoring node %v since it is unschedulable", node.Name)
+		klog.V(4).Infof("Ignoring node %v since it is unschedulable", node.Name)
 		return false
 	}*/
 	return true
@@ -120,10 +120,7 @@ func IsReady(node *v1.Node) bool {
 // IsNodeUschedulable checks if the node is unschedulable. This is helper function to check only in case of
 // underutilized node so that they won't be accounted for.
 func IsNodeUschedulable(node *v1.Node) bool {
-	if node.Spec.Unschedulable {
-		return true
-	}
-	return false
+	return node.Spec.Unschedulable
 }
 
 // PodFitsAnyNode checks if the given pod fits any of the given nodes, based on
@@ -138,7 +135,7 @@ func PodFitsAnyNode(pod *v1.Pod, nodes []*v1.Node) bool {
 		}
 		if ok {
 			if !IsNodeUschedulable(node) {
-				glog.V(2).Infof("Pod %v can possibly be scheduled on %v", pod.Name, node.Name)
+				klog.V(2).Infof("Pod %v can possibly be scheduled on %v", pod.Name, node.Name)
 				return true
 			}
 			return false
@@ -153,15 +150,15 @@ func PodFitsCurrentNode(pod *v1.Pod, node *v1.Node) bool {
 	ok, err := utils.PodMatchNodeSelector(pod, node)
 
 	if err != nil {
-		glog.Error(err)
+		klog.Error(err)
 		return false
 	}
 
 	if !ok {
-		glog.V(1).Infof("Pod %v does not fit on node %v", pod.Name, node.Name)
+		klog.V(1).Infof("Pod %v does not fit on node %v", pod.Name, node.Name)
 		return false
 	}
 
-	glog.V(3).Infof("Pod %v fits on node %v", pod.Name, node.Name)
+	klog.V(3).Infof("Pod %v fits on node %v", pod.Name, node.Name)
 	return true
 }

@@ -17,90 +17,52 @@ limitations under the License.
 package benchmark
 
 import (
-	"net/http"
-	"net/http/httptest"
-
-	"github.com/golang/glog"
-	"k8s.io/api/core/v1"
-	"k8s.io/client-go/informers"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
-	clientv1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	restclient "k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/record"
-	"k8s.io/kubernetes/pkg/api/legacyscheme"
-	"k8s.io/kubernetes/pkg/api/testapi"
-	"k8s.io/kubernetes/plugin/pkg/scheduler"
-	_ "k8s.io/kubernetes/plugin/pkg/scheduler/algorithmprovider"
-	"k8s.io/kubernetes/plugin/pkg/scheduler/factory"
-	"k8s.io/kubernetes/test/integration/framework"
+	"k8s.io/kubernetes/test/integration/util"
 )
-
-const enableEquivalenceCache = true
 
 // mustSetupScheduler starts the following components:
 // - k8s api server (a.k.a. master)
 // - scheduler
-// It returns scheduler config factory and destroyFunc which should be used to
+// It returns clientset and destroyFunc which should be used to
 // remove resources after finished.
 // Notes on rate limiter:
 //   - client rate limit is set to 5000.
-func mustSetupScheduler() (schedulerConfigurator scheduler.Configurator, destroyFunc func()) {
-
-	h := &framework.MasterHolder{Initialized: make(chan struct{})}
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		<-h.Initialized
-		h.M.GenericAPIServer.Handler.ServeHTTP(w, req)
-	}))
-
-	framework.RunAMasterUsingServer(framework.NewIntegrationTestMasterConfig(), s, h)
-
+func mustSetupScheduler() (util.ShutdownFunc, coreinformers.PodInformer, clientset.Interface) {
+	apiURL, apiShutdown := util.StartApiserver()
 	clientSet := clientset.NewForConfigOrDie(&restclient.Config{
-		Host:          s.URL,
-		ContentConfig: restclient.ContentConfig{GroupVersion: testapi.Groups[v1.GroupName].GroupVersion()},
+		Host:          apiURL,
+		ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}},
 		QPS:           5000.0,
 		Burst:         5000,
 	})
+	_, podInformer, schedulerShutdown := util.StartScheduler(clientSet)
 
-	informerFactory := informers.NewSharedInformerFactory(clientSet, 0)
+	shutdownFunc := func() {
+		schedulerShutdown()
+		apiShutdown()
+	}
 
-	schedulerConfigurator = factory.NewConfigFactory(
-		v1.DefaultSchedulerName,
-		clientSet,
-		informerFactory.Core().V1().Nodes(),
-		informerFactory.Core().V1().Pods(),
-		informerFactory.Core().V1().PersistentVolumes(),
-		informerFactory.Core().V1().PersistentVolumeClaims(),
-		informerFactory.Core().V1().ReplicationControllers(),
-		informerFactory.Extensions().V1beta1().ReplicaSets(),
-		informerFactory.Apps().V1beta1().StatefulSets(),
-		informerFactory.Core().V1().Services(),
-		informerFactory.Policy().V1beta1().PodDisruptionBudgets(),
-		informerFactory.Storage().V1().StorageClasses(),
-		v1.DefaultHardPodAffinitySymmetricWeight,
-		enableEquivalenceCache,
-	)
+	return shutdownFunc, podInformer, clientSet
+}
 
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartRecordingToSink(&clientv1core.EventSinkImpl{Interface: clientv1core.New(clientSet.CoreV1().RESTClient()).Events("")})
-
-	sched, err := scheduler.NewFromConfigurator(schedulerConfigurator, func(conf *scheduler.Config) {
-		conf.Recorder = eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "scheduler"})
-	})
+func getScheduledPods(podInformer coreinformers.PodInformer) ([]*v1.Pod, error) {
+	pods, err := podInformer.Lister().List(labels.Everything())
 	if err != nil {
-		glog.Fatalf("Error creating scheduler: %v", err)
+		return nil, err
 	}
 
-	stop := make(chan struct{})
-	informerFactory.Start(stop)
-
-	sched.Run()
-
-	destroyFunc = func() {
-		glog.Infof("destroying")
-		sched.StopEverything()
-		close(stop)
-		s.Close()
-		glog.Infof("destroyed")
+	scheduled := make([]*v1.Pod, 0, len(pods))
+	for i := range pods {
+		pod := pods[i]
+		if len(pod.Spec.NodeName) > 0 {
+			scheduled = append(scheduled, pod)
+		}
 	}
-	return
+	return scheduled, nil
 }

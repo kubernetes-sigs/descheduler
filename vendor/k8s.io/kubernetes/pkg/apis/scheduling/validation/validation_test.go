@@ -22,9 +22,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/kubernetes/pkg/apis/scheduling"
+	schedulingapiv1 "k8s.io/kubernetes/pkg/apis/scheduling/v1"
 )
 
 func TestValidatePriorityClass(t *testing.T) {
+	spcs := schedulingapiv1.SystemPriorityClasses()
 	successCases := map[string]scheduling.PriorityClass{
 		"no description": {
 			ObjectMeta: metav1.ObjectMeta{Name: "tier1", Namespace: ""},
@@ -35,6 +37,12 @@ func TestValidatePriorityClass(t *testing.T) {
 			Value:         200,
 			GlobalDefault: false,
 			Description:   "Used for the highest priority pods.",
+		},
+		"system node critical": {
+			ObjectMeta:    metav1.ObjectMeta{Name: spcs[0].Name, Namespace: ""},
+			Value:         spcs[0].Value,
+			GlobalDefault: spcs[0].GlobalDefault,
+			Description:   "system priority class 0",
 		},
 	}
 
@@ -52,6 +60,16 @@ func TestValidatePriorityClass(t *testing.T) {
 		"invalid name": {
 			ObjectMeta: metav1.ObjectMeta{Name: "tier&1", Namespace: ""},
 			Value:      100,
+		},
+		"incorrect system class name": {
+			ObjectMeta:    metav1.ObjectMeta{Name: spcs[0].Name, Namespace: ""},
+			Value:         0,
+			GlobalDefault: spcs[0].GlobalDefault,
+		},
+		"incorrect system class value": {
+			ObjectMeta:    metav1.ObjectMeta{Name: "system-something", Namespace: ""},
+			Value:         spcs[0].Value,
+			GlobalDefault: spcs[0].GlobalDefault,
 		},
 	}
 

@@ -1,7 +1,7 @@
-FROM registry.svc.ci.openshift.org/openshift/release:golang-1.10 AS builder
+FROM registry.svc.ci.openshift.org/openshift/release:golang-1.13 AS builder
 WORKDIR /go/src/sigs.k8s.io/descheduler
 COPY . .
-RUN make build
+RUN make build WHAT=cmd/descheduler
 
 FROM registry.svc.ci.openshift.org/openshift/origin-v4.0:base
 COPY --from=builder /go/src/sigs.k8s.io/descheduler/_output/local/bin/linux/amd64/descheduler /usr/bin/

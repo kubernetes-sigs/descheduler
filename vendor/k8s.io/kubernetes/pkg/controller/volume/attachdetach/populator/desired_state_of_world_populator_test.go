@@ -25,10 +25,12 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	csitrans "k8s.io/csi-translation-lib"
 	"k8s.io/kubernetes/pkg/controller"
 	"k8s.io/kubernetes/pkg/controller/volume/attachdetach/cache"
+	"k8s.io/kubernetes/pkg/volume/csimigration"
 	volumetesting "k8s.io/kubernetes/pkg/volume/testing"
-	"k8s.io/kubernetes/pkg/volume/util/volumehelper"
+	"k8s.io/kubernetes/pkg/volume/util"
 )
 
 func TestFindAndAddActivePods_FindAndRemoveDeletedPods(t *testing.T) {
@@ -66,21 +68,24 @@ func TestFindAndAddActivePods_FindAndRemoveDeletedPods(t *testing.T) {
 
 	fakePodInformer.Informer().GetStore().Add(pod)
 
-	podName := volumehelper.GetUniquePodName(pod)
+	podName := util.GetUniquePodName(pod)
 
-	generatedVolumeName := "fake-plugin/" + pod.Spec.Volumes[0].Name
+	generatedVolumeName := "fake-plugin/" + pod.Spec.Volumes[0].GCEPersistentDisk.PDName
 
 	pvcLister := fakeInformerFactory.Core().V1().PersistentVolumeClaims().Lister()
 	pvLister := fakeInformerFactory.Core().V1().PersistentVolumes().Lister()
 
+	csiTranslator := csitrans.New()
 	dswp := &desiredStateOfWorldPopulator{
-		loopSleepDuration:     100 * time.Millisecond,
-		listPodsRetryDuration: 3 * time.Second,
-		desiredStateOfWorld:   fakesDSW,
-		volumePluginMgr:       fakeVolumePluginMgr,
-		podLister:             fakePodInformer.Lister(),
-		pvcLister:             pvcLister,
-		pvLister:              pvLister,
+		loopSleepDuration:        100 * time.Millisecond,
+		listPodsRetryDuration:    3 * time.Second,
+		desiredStateOfWorld:      fakesDSW,
+		volumePluginMgr:          fakeVolumePluginMgr,
+		podLister:                fakePodInformer.Lister(),
+		pvcLister:                pvcLister,
+		pvLister:                 pvLister,
+		csiMigratedPluginManager: csimigration.NewPluginManager(csiTranslator),
+		intreeToCSITranslator:    csiTranslator,
 	}
 
 	//add the given node to the list of nodes managed by dsw

@@ -18,6 +18,8 @@ package framework
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -27,27 +29,51 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/kubernetes/pkg/util/system"
+	kubeletstatsv1alpha1 "k8s.io/kubernetes/pkg/kubelet/apis/stats/v1alpha1"
+	"k8s.io/kubernetes/pkg/master/ports"
+	"k8s.io/kubernetes/test/e2e/system"
 )
 
+// ResourceConstraint is a struct to hold constraints.
 type ResourceConstraint struct {
 	CPUConstraint    float64
 	MemoryConstraint uint64
 }
 
+// SingleContainerSummary is a struct to hold single container summary.
 type SingleContainerSummary struct {
 	Name string
-	Cpu  float64
+	CPU  float64
 	Mem  uint64
 }
 
+// ContainerResourceUsage is a structure for gathering container resource usage.
+type ContainerResourceUsage struct {
+	Name                    string
+	Timestamp               time.Time
+	CPUUsageInCores         float64
+	MemoryUsageInBytes      uint64
+	MemoryWorkingSetInBytes uint64
+	MemoryRSSInBytes        uint64
+	// The interval used to calculate CPUUsageInCores.
+	CPUInterval time.Duration
+}
+
+// ResourceUsagePerContainer is map of ContainerResourceUsage
+type ResourceUsagePerContainer map[string]*ContainerResourceUsage
+
+// ResourceUsageSummary is a struct to hold resource usage summary.
 // we can't have int here, as JSON does not accept integer keys.
 type ResourceUsageSummary map[string][]SingleContainerSummary
 
+// NoCPUConstraint is the number of constraint for CPU.
+const NoCPUConstraint = math.MaxFloat64
+
+// PrintHumanReadable prints resource usage summary in human readable.
 func (s *ResourceUsageSummary) PrintHumanReadable() string {
 	buf := &bytes.Buffer{}
 	w := tabwriter.NewWriter(buf, 1, 0, 1, ' ', 0)
@@ -55,19 +81,33 @@ func (s *ResourceUsageSummary) PrintHumanReadable() string {
 		buf.WriteString(fmt.Sprintf("%v percentile:\n", perc))
 		fmt.Fprintf(w, "container\tcpu(cores)\tmemory(MB)\n")
 		for _, summary := range summaries {
-			fmt.Fprintf(w, "%q\t%.3f\t%.2f\n", summary.Name, summary.Cpu, float64(summary.Mem)/(1024*1024))
+			fmt.Fprintf(w, "%q\t%.3f\t%.2f\n", summary.Name, summary.CPU, float64(summary.Mem)/(1024*1024))
 		}
 		w.Flush()
 	}
 	return buf.String()
 }
 
+// PrintJSON prints resource usage summary in JSON.
 func (s *ResourceUsageSummary) PrintJSON() string {
 	return PrettyPrintJSON(*s)
 }
 
+// SummaryKind returns string of ResourceUsageSummary
 func (s *ResourceUsageSummary) SummaryKind() string {
 	return "ResourceUsageSummary"
+}
+
+type uint64arr []uint64
+
+func (a uint64arr) Len() int           { return len(a) }
+func (a uint64arr) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a uint64arr) Less(i, j int) bool { return a[i] < a[j] }
+
+type usageDataPerContainer struct {
+	cpuData        []float64
+	memUseData     []uint64
+	memWorkSetData []uint64
 }
 
 func computePercentiles(timeSeries []ResourceUsagePerContainer, percentilesToCompute []int) map[int]ResourceUsagePerContainer {
@@ -149,7 +189,7 @@ func (w *resourceGatherWorker) singleProbe() {
 		}
 		for k, v := range kubemarkData {
 			data[k] = &ContainerResourceUsage{
-				Name: v.Name,
+				Name:                    v.Name,
 				MemoryWorkingSetInBytes: v.MemoryWorkingSetInBytes,
 				CPUUsageInCores:         v.CPUUsageInCores,
 			}
@@ -168,6 +208,115 @@ func (w *resourceGatherWorker) singleProbe() {
 		}
 	}
 	w.dataSeries = append(w.dataSeries, data)
+}
+
+// getOneTimeResourceUsageOnNode queries the node's /stats/summary endpoint
+// and returns the resource usage of all containerNames for the past
+// cpuInterval.
+// The acceptable range of the interval is 2s~120s. Be warned that as the
+// interval (and #containers) increases, the size of kubelet's response
+// could be significant. E.g., the 60s interval stats for ~20 containers is
+// ~1.5MB. Don't hammer the node with frequent, heavy requests.
+//
+// cadvisor records cumulative cpu usage in nanoseconds, so we need to have two
+// stats points to compute the cpu usage over the interval. Assuming cadvisor
+// polls every second, we'd need to get N stats points for N-second interval.
+// Note that this is an approximation and may not be accurate, hence we also
+// write the actual interval used for calculation (based on the timestamps of
+// the stats points in ContainerResourceUsage.CPUInterval.
+//
+// containerNames is a function returning a collection of container names in which
+// user is interested in.
+func getOneTimeResourceUsageOnNode(
+	c clientset.Interface,
+	nodeName string,
+	cpuInterval time.Duration,
+	containerNames func() []string,
+) (ResourceUsagePerContainer, error) {
+	const (
+		// cadvisor records stats about every second.
+		cadvisorStatsPollingIntervalInSeconds float64 = 1.0
+		// cadvisor caches up to 2 minutes of stats (configured by kubelet).
+		maxNumStatsToRequest int = 120
+	)
+
+	numStats := int(float64(cpuInterval.Seconds()) / cadvisorStatsPollingIntervalInSeconds)
+	if numStats < 2 || numStats > maxNumStatsToRequest {
+		return nil, fmt.Errorf("numStats needs to be > 1 and < %d", maxNumStatsToRequest)
+	}
+	// Get information of all containers on the node.
+	summary, err := getStatsSummary(c, nodeName)
+	if err != nil {
+		return nil, err
+	}
+
+	f := func(name string, newStats *kubeletstatsv1alpha1.ContainerStats) *ContainerResourceUsage {
+		if newStats == nil || newStats.CPU == nil || newStats.Memory == nil {
+			return nil
+		}
+		return &ContainerResourceUsage{
+			Name:                    name,
+			Timestamp:               newStats.StartTime.Time,
+			CPUUsageInCores:         float64(removeUint64Ptr(newStats.CPU.UsageNanoCores)) / 1000000000,
+			MemoryUsageInBytes:      removeUint64Ptr(newStats.Memory.UsageBytes),
+			MemoryWorkingSetInBytes: removeUint64Ptr(newStats.Memory.WorkingSetBytes),
+			MemoryRSSInBytes:        removeUint64Ptr(newStats.Memory.RSSBytes),
+			CPUInterval:             0,
+		}
+	}
+	// Process container infos that are relevant to us.
+	containers := containerNames()
+	usageMap := make(ResourceUsagePerContainer, len(containers))
+	for _, pod := range summary.Pods {
+		for _, container := range pod.Containers {
+			isInteresting := false
+			for _, interestingContainerName := range containers {
+				if container.Name == interestingContainerName {
+					isInteresting = true
+					break
+				}
+			}
+			if !isInteresting {
+				continue
+			}
+			if usage := f(pod.PodRef.Name+"/"+container.Name, &container); usage != nil {
+				usageMap[pod.PodRef.Name+"/"+container.Name] = usage
+			}
+		}
+	}
+	return usageMap, nil
+}
+
+// getStatsSummary contacts kubelet for the container information.
+func getStatsSummary(c clientset.Interface, nodeName string) (*kubeletstatsv1alpha1.Summary, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), SingleCallTimeout)
+	defer cancel()
+
+	data, err := c.CoreV1().RESTClient().Get().
+		Context(ctx).
+		Resource("nodes").
+		SubResource("proxy").
+		Name(fmt.Sprintf("%v:%v", nodeName, ports.KubeletPort)).
+		Suffix("stats/summary").
+		Do().Raw()
+
+	if err != nil {
+		return nil, err
+	}
+
+	summary := kubeletstatsv1alpha1.Summary{}
+	err = json.Unmarshal(data, &summary)
+	if err != nil {
+		return nil, err
+	}
+	return &summary, nil
+}
+
+func removeUint64Ptr(ptr *uint64) uint64 {
+	if ptr == nil {
+		return 0
+	}
+	return *ptr
 }
 
 func (w *resourceGatherWorker) gather(initialSleep time.Duration) {
@@ -191,7 +340,8 @@ func (w *resourceGatherWorker) gather(initialSleep time.Duration) {
 	}
 }
 
-type containerResourceGatherer struct {
+// ContainerResourceGatherer is a struct for gathering container resource.
+type ContainerResourceGatherer struct {
 	client       clientset.Interface
 	stopCh       chan struct{}
 	workers      []resourceGatherWorker
@@ -200,16 +350,30 @@ type containerResourceGatherer struct {
 	options      ResourceGathererOptions
 }
 
+// ResourceGathererOptions is a struct to hold options for resource.
 type ResourceGathererOptions struct {
 	InKubemark                  bool
-	MasterOnly                  bool
+	Nodes                       NodesSet
 	ResourceDataGatheringPeriod time.Duration
 	ProbeDuration               time.Duration
 	PrintVerboseLogs            bool
 }
 
-func NewResourceUsageGatherer(c clientset.Interface, options ResourceGathererOptions, pods *v1.PodList) (*containerResourceGatherer, error) {
-	g := containerResourceGatherer{
+// NodesSet is a value of nodes set.
+type NodesSet int
+
+const (
+	// AllNodes means all containers on all nodes.
+	AllNodes NodesSet = 0
+	// MasterNodes means all containers on Master nodes only.
+	MasterNodes NodesSet = 1
+	// MasterAndDNSNodes means all containers on Master nodes and DNS containers on other nodes.
+	MasterAndDNSNodes NodesSet = 2
+)
+
+// NewResourceUsageGatherer returns a new ContainerResourceGatherer.
+func NewResourceUsageGatherer(c clientset.Interface, options ResourceGathererOptions, pods *v1.PodList) (*ContainerResourceGatherer, error) {
+	g := ContainerResourceGatherer{
 		client:       c,
 		stopCh:       make(chan struct{}),
 		containerIDs: make([]string, 0),
@@ -227,48 +391,59 @@ func NewResourceUsageGatherer(c clientset.Interface, options ResourceGathererOpt
 			probeDuration:               options.ProbeDuration,
 			printVerboseLogs:            options.PrintVerboseLogs,
 		})
-	} else {
-		// Tracks kube-system pods if no valid PodList is passed in.
-		var err error
-		if pods == nil {
-			pods, err = c.CoreV1().Pods("kube-system").List(metav1.ListOptions{})
-			if err != nil {
-				Logf("Error while listing Pods: %v", err)
-				return nil, err
-			}
-		}
-		for _, pod := range pods.Items {
-			for _, container := range pod.Status.InitContainerStatuses {
-				g.containerIDs = append(g.containerIDs, container.Name)
-			}
-			for _, container := range pod.Status.ContainerStatuses {
-				g.containerIDs = append(g.containerIDs, container.Name)
-			}
-		}
-		nodeList, err := c.CoreV1().Nodes().List(metav1.ListOptions{})
+		return &g, nil
+	}
+
+	// Tracks kube-system pods if no valid PodList is passed in.
+	var err error
+	if pods == nil {
+		pods, err = c.CoreV1().Pods("kube-system").List(metav1.ListOptions{})
 		if err != nil {
-			Logf("Error while listing Nodes: %v", err)
+			Logf("Error while listing Pods: %v", err)
 			return nil, err
 		}
+	}
+	dnsNodes := make(map[string]bool)
+	for _, pod := range pods.Items {
+		if (options.Nodes == MasterNodes) && !system.DeprecatedMightBeMasterNode(pod.Spec.NodeName) {
+			continue
+		}
+		if (options.Nodes == MasterAndDNSNodes) && !system.DeprecatedMightBeMasterNode(pod.Spec.NodeName) && pod.Labels["k8s-app"] != "kube-dns" {
+			continue
+		}
+		for _, container := range pod.Status.InitContainerStatuses {
+			g.containerIDs = append(g.containerIDs, container.Name)
+		}
+		for _, container := range pod.Status.ContainerStatuses {
+			g.containerIDs = append(g.containerIDs, container.Name)
+		}
+		if options.Nodes == MasterAndDNSNodes {
+			dnsNodes[pod.Spec.NodeName] = true
+		}
+	}
+	nodeList, err := c.CoreV1().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		Logf("Error while listing Nodes: %v", err)
+		return nil, err
+	}
 
-		for _, node := range nodeList.Items {
-			if !options.MasterOnly || system.IsMasterNode(node.Name) {
-				g.workerWg.Add(1)
-				g.workers = append(g.workers, resourceGatherWorker{
-					c:                           c,
-					nodeName:                    node.Name,
-					wg:                          &g.workerWg,
-					containerIDs:                g.containerIDs,
-					stopCh:                      g.stopCh,
-					finished:                    false,
-					inKubemark:                  false,
-					resourceDataGatheringPeriod: options.ResourceDataGatheringPeriod,
-					probeDuration:               options.ProbeDuration,
-					printVerboseLogs:            options.PrintVerboseLogs,
-				})
-				if options.MasterOnly {
-					break
-				}
+	for _, node := range nodeList.Items {
+		if options.Nodes == AllNodes || system.DeprecatedMightBeMasterNode(node.Name) || dnsNodes[node.Name] {
+			g.workerWg.Add(1)
+			g.workers = append(g.workers, resourceGatherWorker{
+				c:                           c,
+				nodeName:                    node.Name,
+				wg:                          &g.workerWg,
+				containerIDs:                g.containerIDs,
+				stopCh:                      g.stopCh,
+				finished:                    false,
+				inKubemark:                  false,
+				resourceDataGatheringPeriod: options.ResourceDataGatheringPeriod,
+				probeDuration:               options.ProbeDuration,
+				printVerboseLogs:            options.PrintVerboseLogs,
+			})
+			if options.Nodes == MasterNodes {
+				break
 			}
 		}
 	}
@@ -277,7 +452,7 @@ func NewResourceUsageGatherer(c clientset.Interface, options ResourceGathererOpt
 
 // StartGatheringData starts a stat gathering worker blocks for each node to track,
 // and blocks until StopAndSummarize is called.
-func (g *containerResourceGatherer) StartGatheringData() {
+func (g *ContainerResourceGatherer) StartGatheringData() {
 	if len(g.workers) == 0 {
 		return
 	}
@@ -294,10 +469,10 @@ func (g *containerResourceGatherer) StartGatheringData() {
 // generates resource summary for the passed-in percentiles, and returns the summary.
 // It returns an error if the resource usage at any percentile is beyond the
 // specified resource constraints.
-func (g *containerResourceGatherer) StopAndSummarize(percentiles []int, constraints map[string]ResourceConstraint) (*ResourceUsageSummary, error) {
+func (g *ContainerResourceGatherer) StopAndSummarize(percentiles []int, constraints map[string]ResourceConstraint) (*ResourceUsageSummary, error) {
 	close(g.stopCh)
 	Logf("Closed stop channel. Waiting for %v workers", len(g.workers))
-	finished := make(chan struct{})
+	finished := make(chan struct{}, 1)
 	go func() {
 		g.workerWg.Wait()
 		finished <- struct{}{}
@@ -340,35 +515,39 @@ func (g *containerResourceGatherer) StopAndSummarize(percentiles []int, constrai
 			usage := data[perc][name]
 			summary[strconv.Itoa(perc)] = append(summary[strconv.Itoa(perc)], SingleContainerSummary{
 				Name: name,
-				Cpu:  usage.CPUUsageInCores,
+				CPU:  usage.CPUUsageInCores,
 				Mem:  usage.MemoryWorkingSetInBytes,
 			})
+
 			// Verifying 99th percentile of resource usage
-			if perc == 99 {
-				// Name has a form: <pod_name>/<container_name>
-				containerName := strings.Split(name, "/")[1]
-				if constraint, ok := constraints[containerName]; ok {
-					if usage.CPUUsageInCores > constraint.CPUConstraint {
-						violatedConstraints = append(
-							violatedConstraints,
-							fmt.Sprintf("Container %v is using %v/%v CPU",
-								name,
-								usage.CPUUsageInCores,
-								constraint.CPUConstraint,
-							),
-						)
-					}
-					if usage.MemoryWorkingSetInBytes > constraint.MemoryConstraint {
-						violatedConstraints = append(
-							violatedConstraints,
-							fmt.Sprintf("Container %v is using %v/%v MB of memory",
-								name,
-								float64(usage.MemoryWorkingSetInBytes)/(1024*1024),
-								float64(constraint.MemoryConstraint)/(1024*1024),
-							),
-						)
-					}
-				}
+			if perc != 99 {
+				continue
+			}
+			// Name has a form: <pod_name>/<container_name>
+			containerName := strings.Split(name, "/")[1]
+			constraint, ok := constraints[containerName]
+			if !ok {
+				continue
+			}
+			if usage.CPUUsageInCores > constraint.CPUConstraint {
+				violatedConstraints = append(
+					violatedConstraints,
+					fmt.Sprintf("Container %v is using %v/%v CPU",
+						name,
+						usage.CPUUsageInCores,
+						constraint.CPUConstraint,
+					),
+				)
+			}
+			if usage.MemoryWorkingSetInBytes > constraint.MemoryConstraint {
+				violatedConstraints = append(
+					violatedConstraints,
+					fmt.Sprintf("Container %v is using %v/%v MB of memory",
+						name,
+						float64(usage.MemoryWorkingSetInBytes)/(1024*1024),
+						float64(constraint.MemoryConstraint)/(1024*1024),
+					),
+				)
 			}
 		}
 	}

@@ -42,6 +42,8 @@ type Config struct {
 	DisplayName      string
 	Password         string
 	Description      string
+	SidType          uint32 // one of SERVICE_SID_TYPE, the type of sid to use for the service
+	DelayedAutoStart bool   // the service is started after other auto-start services are started plus a short delay
 }
 
 func toString(p *uint16) string {
@@ -88,22 +90,20 @@ func (s *Service) Config() (Config, error) {
 		}
 	}
 
-	var p2 *windows.SERVICE_DESCRIPTION
-	n = uint32(1024)
-	for {
-		b := make([]byte, n)
-		p2 = (*windows.SERVICE_DESCRIPTION)(unsafe.Pointer(&b[0]))
-		err := windows.QueryServiceConfig2(s.Handle,
-			windows.SERVICE_CONFIG_DESCRIPTION, &b[0], n, &n)
-		if err == nil {
-			break
-		}
-		if err.(syscall.Errno) != syscall.ERROR_INSUFFICIENT_BUFFER {
-			return Config{}, err
-		}
-		if n <= uint32(len(b)) {
-			return Config{}, err
-		}
+	b, err := s.queryServiceConfig2(windows.SERVICE_CONFIG_DESCRIPTION)
+	if err != nil {
+		return Config{}, err
+	}
+	p2 := (*windows.SERVICE_DESCRIPTION)(unsafe.Pointer(&b[0]))
+
+	b, err = s.queryServiceConfig2(windows.SERVICE_CONFIG_DELAYED_AUTO_START_INFO)
+	if err != nil {
+		return Config{}, err
+	}
+	p3 := (*windows.SERVICE_DELAYED_AUTO_START_INFO)(unsafe.Pointer(&b[0]))
+	delayedStart := false
+	if p3.IsDelayedAutoStartUp != 0 {
+		delayedStart = true
 	}
 
 	return Config{
@@ -117,13 +117,27 @@ func (s *Service) Config() (Config, error) {
 		ServiceStartName: toString(p.ServiceStartName),
 		DisplayName:      toString(p.DisplayName),
 		Description:      toString(p2.Description),
+		DelayedAutoStart: delayedStart,
 	}, nil
 }
 
 func updateDescription(handle windows.Handle, desc string) error {
-	d := windows.SERVICE_DESCRIPTION{toPtr(desc)}
+	d := windows.SERVICE_DESCRIPTION{Description: toPtr(desc)}
 	return windows.ChangeServiceConfig2(handle,
 		windows.SERVICE_CONFIG_DESCRIPTION, (*byte)(unsafe.Pointer(&d)))
+}
+
+func updateSidType(handle windows.Handle, sidType uint32) error {
+	return windows.ChangeServiceConfig2(handle, windows.SERVICE_CONFIG_SERVICE_SID_INFO, (*byte)(unsafe.Pointer(&sidType)))
+}
+
+func updateStartUp(handle windows.Handle, isDelayed bool) error {
+	var d windows.SERVICE_DELAYED_AUTO_START_INFO
+	if isDelayed {
+		d.IsDelayedAutoStartUp = 1
+	}
+	return windows.ChangeServiceConfig2(handle,
+		windows.SERVICE_CONFIG_DELAYED_AUTO_START_INFO, (*byte)(unsafe.Pointer(&d)))
 }
 
 // UpdateConfig updates service s configuration parameters.
@@ -135,5 +149,33 @@ func (s *Service) UpdateConfig(c Config) error {
 	if err != nil {
 		return err
 	}
+	err = updateSidType(s.Handle, c.SidType)
+	if err != nil {
+		return err
+	}
+
+	err = updateStartUp(s.Handle, c.DelayedAutoStart)
+	if err != nil {
+		return err
+	}
+
 	return updateDescription(s.Handle, c.Description)
+}
+
+// queryServiceConfig2 calls Windows QueryServiceConfig2 with infoLevel parameter and returns retrieved service configuration information.
+func (s *Service) queryServiceConfig2(infoLevel uint32) ([]byte, error) {
+	n := uint32(1024)
+	for {
+		b := make([]byte, n)
+		err := windows.QueryServiceConfig2(s.Handle, infoLevel, &b[0], n, &n)
+		if err == nil {
+			return b, nil
+		}
+		if err.(syscall.Errno) != syscall.ERROR_INSUFFICIENT_BUFFER {
+			return nil, err
+		}
+		if n <= uint32(len(b)) {
+			return nil, err
+		}
+	}
 }

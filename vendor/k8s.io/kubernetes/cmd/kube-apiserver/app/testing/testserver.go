@@ -21,22 +21,36 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
-	"testing"
+	"path"
+	"runtime"
 	"time"
 
-	pflag "github.com/spf13/pflag"
+	"github.com/spf13/pflag"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apiserver/pkg/registry/generic/registry"
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
+	"k8s.io/client-go/util/cert"
 	"k8s.io/kubernetes/cmd/kube-apiserver/app"
 	"k8s.io/kubernetes/cmd/kube-apiserver/app/options"
+	testutil "k8s.io/kubernetes/test/utils"
 )
 
 // TearDownFunc is to be called to tear down a test server.
 type TearDownFunc func()
+
+// TestServerInstanceOptions Instance options the TestServer
+type TestServerInstanceOptions struct {
+	// DisableStorageCleanup Disable the automatic storage cleanup
+	DisableStorageCleanup bool
+
+	// Enable cert-auth for the kube-apiserver
+	EnableCertAuth bool
+}
 
 // TestServer return values supplied by kube-test-ApiServer
 type TestServer struct {
@@ -46,22 +60,44 @@ type TestServer struct {
 	TmpDir       string                    // Temp Dir used, by the apiserver
 }
 
+// Logger allows t.Testing and b.Testing to be passed to StartTestServer and StartTestServerOrDie
+type Logger interface {
+	Errorf(format string, args ...interface{})
+	Fatalf(format string, args ...interface{})
+	Logf(format string, args ...interface{})
+}
+
+// NewDefaultTestServerOptions Default options for TestServer instances
+func NewDefaultTestServerOptions() *TestServerInstanceOptions {
+	return &TestServerInstanceOptions{
+		DisableStorageCleanup: false,
+		EnableCertAuth:        true,
+	}
+}
+
 // StartTestServer starts a etcd server and kube-apiserver. A rest client config and a tear-down func,
 // and location of the tmpdir are returned.
 //
-// Note: we return a tear-down func instead of a stop channel because the later will leak temporariy
-// 		 files that becaues Golang testing's call to os.Exit will not give a stop channel go routine
-// 		 enough time to remove temporariy files.
-func StartTestServer(t *testing.T, customFlags []string, storageConfig *storagebackend.Config) (result TestServer, err error) {
+// Note: we return a tear-down func instead of a stop channel because the later will leak temporary
+// 		 files that because Golang testing's call to os.Exit will not give a stop channel go routine
+// 		 enough time to remove temporary files.
+func StartTestServer(t Logger, instanceOptions *TestServerInstanceOptions, customFlags []string, storageConfig *storagebackend.Config) (result TestServer, err error) {
+	if instanceOptions == nil {
+		instanceOptions = NewDefaultTestServerOptions()
+	}
 
 	// TODO : Remove TrackStorageCleanup below when PR
 	// https://github.com/kubernetes/kubernetes/pull/50690
 	// merges as that shuts down storage properly
-	registry.TrackStorageCleanup()
+	if !instanceOptions.DisableStorageCleanup {
+		registry.TrackStorageCleanup()
+	}
 
 	stopCh := make(chan struct{})
 	tearDown := func() {
-		registry.CleanupStorage()
+		if !instanceOptions.DisableStorageCleanup {
+			registry.CleanupStorage()
+		}
 		close(stopCh)
 		if len(result.TmpDir) != 0 {
 			os.RemoveAll(result.TmpDir)
@@ -81,41 +117,99 @@ func StartTestServer(t *testing.T, customFlags []string, storageConfig *storageb
 	fs := pflag.NewFlagSet("test", pflag.PanicOnError)
 
 	s := options.NewServerRunOptions()
-	s.AddFlags(fs)
-
+	for _, f := range s.Flags().FlagSets {
+		fs.AddFlagSet(f)
+	}
 	s.InsecureServing.BindPort = 0
 
-	s.SecureServing.Listener, s.SecureServing.BindPort, err = createListenerOnFreePort()
+	s.SecureServing.Listener, s.SecureServing.BindPort, err = createLocalhostListenerOnFreePort()
 	if err != nil {
 		return result, fmt.Errorf("failed to create listener: %v", err)
 	}
 	s.SecureServing.ServerCert.CertDirectory = result.TmpDir
-	s.ServiceClusterIPRange.IP = net.IPv4(10, 0, 0, 0)
-	s.ServiceClusterIPRange.Mask = net.CIDRMask(16, 32)
+
+	if instanceOptions.EnableCertAuth {
+		// create certificates for aggregation and client-cert auth
+		proxySigningKey, err := testutil.NewPrivateKey()
+		if err != nil {
+			return result, err
+		}
+		proxySigningCert, err := cert.NewSelfSignedCACert(cert.Config{CommonName: "front-proxy-ca"}, proxySigningKey)
+		if err != nil {
+			return result, err
+		}
+		proxyCACertFile := path.Join(s.SecureServing.ServerCert.CertDirectory, "proxy-ca.crt")
+		if err := ioutil.WriteFile(proxyCACertFile, testutil.EncodeCertPEM(proxySigningCert), 0644); err != nil {
+			return result, err
+		}
+		s.Authentication.RequestHeader.ClientCAFile = proxyCACertFile
+		clientSigningKey, err := testutil.NewPrivateKey()
+		if err != nil {
+			return result, err
+		}
+		clientSigningCert, err := cert.NewSelfSignedCACert(cert.Config{CommonName: "client-ca"}, clientSigningKey)
+		if err != nil {
+			return result, err
+		}
+		clientCACertFile := path.Join(s.SecureServing.ServerCert.CertDirectory, "client-ca.crt")
+		if err := ioutil.WriteFile(clientCACertFile, testutil.EncodeCertPEM(clientSigningCert), 0644); err != nil {
+			return result, err
+		}
+		s.Authentication.ClientCert.ClientCA = clientCACertFile
+	}
+
+	s.SecureServing.ExternalAddress = s.SecureServing.Listener.Addr().(*net.TCPAddr).IP // use listener addr although it is a loopback device
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		return result, fmt.Errorf("failed to get current file")
+	}
+	s.SecureServing.ServerCert.FixtureDirectory = path.Join(path.Dir(thisFile), "testdata")
+
+	s.ServiceClusterIPRanges = "10.0.0.0/16"
 	s.Etcd.StorageConfig = *storageConfig
 	s.APIEnablement.RuntimeConfig.Set("api/all=true")
 
-	fs.Parse(customFlags)
+	if err := fs.Parse(customFlags); err != nil {
+		return result, err
+	}
+	completedOptions, err := app.Complete(s)
+	if err != nil {
+		return result, fmt.Errorf("failed to set default ServerRunOptions: %v", err)
+	}
 
+	t.Logf("runtime-config=%v", completedOptions.APIEnablement.RuntimeConfig)
 	t.Logf("Starting kube-apiserver on port %d...", s.SecureServing.BindPort)
-	server, err := app.CreateServerChain(s, stopCh)
+	server, err := app.CreateServerChain(completedOptions, stopCh)
 	if err != nil {
 		return result, fmt.Errorf("failed to create server chain: %v", err)
-
 	}
+
+	errCh := make(chan error)
 	go func(stopCh <-chan struct{}) {
-		if err := server.PrepareRun().Run(stopCh); err != nil {
-			t.Errorf("kube-apiserver failed run: %v", err)
+		prepared, err := server.PrepareRun()
+		if err != nil {
+			errCh <- err
+		} else if err := prepared.Run(stopCh); err != nil {
+			errCh <- err
 		}
 	}(stopCh)
 
 	t.Logf("Waiting for /healthz to be ok...")
 
-	client, err := kubernetes.NewForConfig(server.LoopbackClientConfig)
+	client, err := kubernetes.NewForConfig(server.GenericAPIServer.LoopbackClientConfig)
 	if err != nil {
 		return result, fmt.Errorf("failed to create a client: %v", err)
 	}
+
+	// wait until healthz endpoint returns ok
 	err = wait.Poll(100*time.Millisecond, 30*time.Second, func() (bool, error) {
+		select {
+		case err := <-errCh:
+			return false, err
+		default:
+		}
+
 		result := client.CoreV1().RESTClient().Get().AbsPath("/healthz").Do()
 		status := 0
 		result.StatusCode(&status)
@@ -128,8 +222,30 @@ func StartTestServer(t *testing.T, customFlags []string, storageConfig *storageb
 		return result, fmt.Errorf("failed to wait for /healthz to return ok: %v", err)
 	}
 
+	// wait until default namespace is created
+	err = wait.Poll(100*time.Millisecond, 30*time.Second, func() (bool, error) {
+		select {
+		case err := <-errCh:
+			return false, err
+		default:
+		}
+
+		if _, err := client.CoreV1().Namespaces().Get("default", metav1.GetOptions{}); err != nil {
+			if !errors.IsNotFound(err) {
+				t.Logf("Unable to get default namespace: %v", err)
+			}
+			return false, nil
+		}
+		return true, nil
+	})
+	if err != nil {
+		return result, fmt.Errorf("failed to wait for default namespace to be created: %v", err)
+	}
+
 	// from here the caller must call tearDown
-	result.ClientConfig = server.LoopbackClientConfig
+	result.ClientConfig = restclient.CopyConfig(server.GenericAPIServer.LoopbackClientConfig)
+	result.ClientConfig.QPS = 1000
+	result.ClientConfig.Burst = 10000
 	result.ServerOpts = s
 	result.TearDownFn = tearDown
 
@@ -137,9 +253,8 @@ func StartTestServer(t *testing.T, customFlags []string, storageConfig *storageb
 }
 
 // StartTestServerOrDie calls StartTestServer t.Fatal if it does not succeed.
-func StartTestServerOrDie(t *testing.T, flags []string, storageConfig *storagebackend.Config) *TestServer {
-
-	result, err := StartTestServer(t, flags, storageConfig)
+func StartTestServerOrDie(t Logger, instanceOptions *TestServerInstanceOptions, flags []string, storageConfig *storagebackend.Config) *TestServer {
+	result, err := StartTestServer(t, instanceOptions, flags, storageConfig)
 	if err == nil {
 		return &result
 	}
@@ -148,8 +263,8 @@ func StartTestServerOrDie(t *testing.T, flags []string, storageConfig *storageba
 	return nil
 }
 
-func createListenerOnFreePort() (net.Listener, int, error) {
-	ln, err := net.Listen("tcp", ":0")
+func createLocalhostListenerOnFreePort() (net.Listener, int, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, 0, err
 	}

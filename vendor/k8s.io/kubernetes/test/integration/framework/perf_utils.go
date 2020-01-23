@@ -21,22 +21,24 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
-	e2eframework "k8s.io/kubernetes/test/e2e/framework"
+	e2enode "k8s.io/kubernetes/test/e2e/framework/node"
 	testutils "k8s.io/kubernetes/test/utils"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
 )
 
 const (
 	retries = 5
 )
 
+// IntegrationTestNodePreparer holds configuration information for the test node preparer.
 type IntegrationTestNodePreparer struct {
 	client          clientset.Interface
 	countToStrategy []testutils.CountToStrategy
 	nodeNamePrefix  string
 }
 
+// NewIntegrationTestNodePreparer creates an IntegrationTestNodePreparer configured with defaults.
 func NewIntegrationTestNodePreparer(client clientset.Interface, countToStrategy []testutils.CountToStrategy, nodeNamePrefix string) testutils.TestNodePreparer {
 	return &IntegrationTestNodePreparer{
 		client:          client,
@@ -45,20 +47,17 @@ func NewIntegrationTestNodePreparer(client clientset.Interface, countToStrategy 
 	}
 }
 
+// PrepareNodes prepares countToStrategy test nodes.
 func (p *IntegrationTestNodePreparer) PrepareNodes() error {
 	numNodes := 0
 	for _, v := range p.countToStrategy {
 		numNodes += v.Count
 	}
 
-	glog.Infof("Making %d nodes", numNodes)
+	klog.Infof("Making %d nodes", numNodes)
 	baseNode := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: p.nodeNamePrefix,
-		},
-		Spec: v1.NodeSpec{
-			// TODO: investigate why this is needed.
-			ExternalID: "foo",
 		},
 		Status: v1.NodeStatus{
 			Capacity: v1.ResourceList{
@@ -73,19 +72,29 @@ func (p *IntegrationTestNodePreparer) PrepareNodes() error {
 		},
 	}
 	for i := 0; i < numNodes; i++ {
-		if _, err := p.client.CoreV1().Nodes().Create(baseNode); err != nil {
-			glog.Fatalf("Error creating node: %v", err)
+		var err error
+		for retry := 0; retry < retries; retry++ {
+			_, err = p.client.CoreV1().Nodes().Create(baseNode)
+			if err == nil || !testutils.IsRetryableAPIError(err) {
+				break
+			}
+		}
+		if err != nil {
+			klog.Fatalf("Error creating node: %v", err)
 		}
 	}
 
-	nodes := e2eframework.GetReadySchedulableNodesOrDie(p.client)
+	nodes, err := e2enode.GetReadySchedulableNodes(p.client)
+	if err != nil {
+		klog.Fatalf("Error listing nodes: %v", err)
+	}
 	index := 0
 	sum := 0
 	for _, v := range p.countToStrategy {
 		sum += v.Count
 		for ; index < sum; index++ {
 			if err := testutils.DoPrepareNode(p.client, &nodes.Items[index], v.Strategy); err != nil {
-				glog.Errorf("Aborting node preparation: %v", err)
+				klog.Errorf("Aborting node preparation: %v", err)
 				return err
 			}
 		}
@@ -93,11 +102,15 @@ func (p *IntegrationTestNodePreparer) PrepareNodes() error {
 	return nil
 }
 
+// CleanupNodes deletes existing test nodes.
 func (p *IntegrationTestNodePreparer) CleanupNodes() error {
-	nodes := e2eframework.GetReadySchedulableNodesOrDie(p.client)
+	nodes, err := e2enode.GetReadySchedulableNodes(p.client)
+	if err != nil {
+		klog.Fatalf("Error listing nodes: %v", err)
+	}
 	for i := range nodes.Items {
 		if err := p.client.CoreV1().Nodes().Delete(nodes.Items[i].Name, &metav1.DeleteOptions{}); err != nil {
-			glog.Errorf("Error while deleting Node: %v", err)
+			klog.Errorf("Error while deleting Node: %v", err)
 		}
 	}
 	return nil

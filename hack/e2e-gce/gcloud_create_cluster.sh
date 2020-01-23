@@ -10,7 +10,7 @@ master_uuid=$(uuid)
 node1_uuid=$(uuid)
 node2_uuid=$(uuid)
 kube_apiserver_port=6443
-kube_version=1.9.4
+kube_version=1.13.1
 
 DESCHEDULER_ROOT=$(dirname "${BASH_SOURCE}")/../../
 E2E_GCE_HOME=$DESCHEDULER_ROOT/hack/e2e-gce
@@ -36,10 +36,10 @@ create_cluster() {
 
 generate_kubeadm_instance_files() {
 	# TODO: Check if they have come up. awk $6 contains the state(RUNNING or not).
-	master_public_ip=$(gcloud compute instances list | grep $master_uuid|awk '{print $5}')
+	master_private_ip=$(gcloud compute instances list | grep $master_uuid|awk '{print $4}')
 	node1_public_ip=$(gcloud compute instances list | grep $node1_uuid|awk '{print $5}')
 	node2_public_ip=$(gcloud compute instances list | grep $node2_uuid|awk '{print $5}')
-	echo "kubeadm init --kubernetes-version=${kube_version} --apiserver-advertise-address=${master_public_ip}" --skip-preflight-checks --pod-network-cidr=10.96.0.0/12 > $E2E_GCE_HOME/kubeadm_install.sh
+	echo "kubeadm init --kubernetes-version=${kube_version} --apiserver-advertise-address=${master_private_ip}" --ignore-preflight-errors=all --pod-network-cidr=10.96.0.0/12 > $E2E_GCE_HOME/kubeadm_install.sh
 }
 
 

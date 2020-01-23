@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Copyright 2014 The Kubernetes Authors.
 #
@@ -24,7 +24,7 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-KUBE_ROOT=$(dirname "${BASH_SOURCE}")/..
+KUBE_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 
 if [ -f "${KUBE_ROOT}/cluster/env.sh" ]; then
   source "${KUBE_ROOT}/cluster/env.sh"
@@ -39,7 +39,7 @@ function kubectl_retry() {
   while ! "${KUBE_ROOT}/cluster/kubectl.sh" "$@"; do
     tries=$((tries-1))
     if [[ ${tries} -le 0 ]]; then
-      echo "('kubectl $@' failed, giving up)" >&2
+      echo "('kubectl $*' failed, giving up)" >&2
       return 1
     fi
     echo "(kubectl failed, will retry ${tries} times)" >&2
@@ -50,16 +50,21 @@ function kubectl_retry() {
 ALLOWED_NOTREADY_NODES="${ALLOWED_NOTREADY_NODES:-0}"
 CLUSTER_READY_ADDITIONAL_TIME_SECONDS="${CLUSTER_READY_ADDITIONAL_TIME_SECONDS:-30}"
 
-EXPECTED_NUM_NODES="${NUM_NODES}"
-
 if [[ "${KUBERNETES_PROVIDER:-}" == "gce" ]]; then
+  if [[ "${KUBE_CREATE_NODES}" == "true" ]]; then
+    EXPECTED_NUM_NODES="$(get-num-nodes)"
+  else
+    EXPECTED_NUM_NODES="0"
+  fi
   echo "Validating gce cluster, MULTIZONE=${MULTIZONE:-}"
   # In multizone mode we need to add instances for all nodes in the region.
   if [[ "${MULTIZONE:-}" == "true" ]]; then
-    EXPECTED_NUM_NODES=$(gcloud -q compute instances list --project="${PROJECT}" --format=[no-heading] \
-      --filter="name ~ '${NODE_INSTANCE_PREFIX}.*' AND zone:($(gcloud -q compute zones list --project="${PROJECT}" --filter=region=${REGION} --format=csv[no-heading]\(name\) | tr "\n" "," | sed  "s/,$//"))" | wc -l)
+    EXPECTED_NUM_NODES=$(gcloud -q compute instances list --project="${PROJECT}" --format="[no-heading]" \
+      --filter="(name ~ '${NODE_INSTANCE_PREFIX}.*' OR name ~ '${WINDOWS_NODE_INSTANCE_PREFIX}.*') AND zone:($(gcloud -q compute zones list --project="${PROJECT}" --filter=region="${REGION}" --format="csv[no-heading](name)" | tr "\n" "," | sed  "s/,$//"))" | wc -l)
     echo "Computing number of nodes, NODE_INSTANCE_PREFIX=${NODE_INSTANCE_PREFIX}, REGION=${REGION}, EXPECTED_NUM_NODES=${EXPECTED_NUM_NODES}"
   fi
+else
+  EXPECTED_NUM_NODES="${NUM_NODES}"
 fi
 
 if [[ "${REGISTER_MASTER_KUBELET:-}" == "true" ]]; then
@@ -97,18 +102,25 @@ while true; do
   # available and then get restarted as the kubelet configures the docker bridge.
   #
   # We are assigning the result of kubectl_retry get nodes operation to the res
-  # varaible in that way, to prevent stopping the whole script on an error.
-  node=$(kubectl_retry get nodes) && res="$?" || res="$?"
+  # variable in that way, to prevent stopping the whole script on an error.
+  #
+  # Bash command substitution $(kubectl_...) removes all trailing whitespaces
+  # which are important for line counting.
+  # Use trick from https://unix.stackexchange.com/a/383411 to avoid
+  # newline truncation.
+  node=$(kubectl_retry get nodes --no-headers; ret=$?; echo .; exit "$ret") && res="$?" || res="$?"
+  node="${node%.}"
   if [ "${res}" -ne "0" ]; then
     if [[ "${attempt}" -gt "${last_run:-$MAX_ATTEMPTS}" ]]; then
-      echo -e "${color_red} Failed to get nodes.${color_norm}"
+      echo -e "${color_red:-} Failed to get nodes.${color_norm:-}"
       exit 1
     else
       continue
     fi
   fi
-  found=$(($(echo "${node}" | wc -l) - 1))
-  ready=$(($(echo "${node}" | grep -v "NotReady" | wc -l ) - 1))
+  found=$(echo -n "${node}" | wc -l)
+  # Use grep || true so that empty result doesn't return nonzero exit code.
+  ready=$(echo -n "${node}" | grep -c -v "NotReady" || true)
 
   if (( "${found}" == "${EXPECTED_NUM_NODES}" )) && (( "${ready}" == "${EXPECTED_NUM_NODES}")); then
     break
@@ -122,11 +134,11 @@ while true; do
     break
   else
     if [[ "${REQUIRED_NUM_NODES}" -le "${ready}" ]]; then
-      echo -e "${color_green}Found ${REQUIRED_NUM_NODES} Nodes, allowing additional ${ADDITIONAL_ITERATIONS} iterations for other Nodes to join.${color_norm}"
+      echo -e "${color_green:-}Found ${REQUIRED_NUM_NODES} Nodes, allowing additional ${ADDITIONAL_ITERATIONS} iterations for other Nodes to join.${color_norm}"
       last_run="${last_run:-$((attempt + ADDITIONAL_ITERATIONS - 1))}"
     fi
     if [[ "${attempt}" -gt "${last_run:-$MAX_ATTEMPTS}" ]]; then
-      echo -e "${color_yellow}Detected ${ready} ready nodes, found ${found} nodes out of expected ${EXPECTED_NUM_NODES}. Your cluster may not be fully functional.${color_norm}"
+      echo -e "${color_yellow:-}Detected ${ready} ready nodes, found ${found} nodes out of expected ${EXPECTED_NUM_NODES}. Your cluster may not be fully functional.${color_norm}"
       kubectl_retry get nodes
       if [[ "${REQUIRED_NUM_NODES}" -gt "${ready}" ]]; then
         exit 1

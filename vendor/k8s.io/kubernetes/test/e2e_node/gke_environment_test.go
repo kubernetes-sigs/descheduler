@@ -27,9 +27,10 @@ import (
 	"strings"
 
 	"k8s.io/kubernetes/test/e2e/framework"
+	imageutils "k8s.io/kubernetes/test/utils/image"
 
 	"github.com/blang/semver"
-	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo"
 )
 
 // checkProcess checks whether there's a process whose command line contains
@@ -84,18 +85,26 @@ func checkIPTables() (err error) {
 // checkPublicGCR checks the access to the public Google Container Registry by
 // pulling the busybox image.
 func checkPublicGCR() error {
-	const image = "gcr.io/google-containers/busybox"
+	const image = "k8s.gcr.io/busybox"
 	output, err := runCommand("docker", "images", "-q", image)
+	if err != nil {
+		return err
+	}
+
 	if len(output) != 0 {
 		if _, err := runCommand("docker", "rmi", "-f", image); err != nil {
 			return err
 		}
 	}
 	output, err = runCommand("docker", "pull", image)
+	if err != nil {
+		return err
+	}
+
 	if len(output) == 0 {
 		return fmt.Errorf("failed to pull %s", image)
 	}
-	if _, err = runCommand("docker", "rmi", "-f", image); err != nil {
+	if _, err := runCommand("docker", "rmi", "-f", image); err != nil {
 		return err
 	}
 	return nil
@@ -139,10 +148,10 @@ func checkDockerConfig() error {
 		if _, err := os.Stat(bin); os.IsNotExist(err) {
 			continue
 		}
-		output, err := runCommand(bin)
-		if err != nil {
-			return err
-		}
+		// We don't check the return code because it's OK if the script returns
+		// a non-zero exit code just because the configs in the whitelist are
+		// missing.
+		output, _ := runCommand(bin)
 		for _, line := range strings.Split(output, "\n") {
 			if !strings.Contains(line, "missing") {
 				continue
@@ -170,7 +179,7 @@ func checkDockerConfig() error {
 // checkDockerNetworkClient checks client networking by pinging an external IP
 // address from a container.
 func checkDockerNetworkClient() error {
-	const imageName = "gcr.io/google-containers/busybox"
+	imageName := imageutils.GetE2EImage(imageutils.BusyBox)
 	output, err := runCommand("docker", "run", "--rm", imageName, "sh", "-c", "ping -w 5 -q google.com")
 	if err != nil {
 		return err
@@ -185,7 +194,7 @@ func checkDockerNetworkClient() error {
 // within a container and accessing it from outside.
 func checkDockerNetworkServer() error {
 	const (
-		imageName     = "gcr.io/google-containers/nginx:1.7.9"
+		imageName     = "k8s.gcr.io/nginx:1.7.9"
 		hostAddr      = "127.0.0.1"
 		hostPort      = "8088"
 		containerPort = "80"
@@ -310,12 +319,12 @@ func checkDockerStorageDriver() error {
 	return fmt.Errorf("failed to find storage driver")
 }
 
-var _ = framework.KubeDescribe("GKE system requirements [Conformance] [Feature:GKEEnv]", func() {
-	BeforeEach(func() {
+var _ = framework.KubeDescribe("GKE system requirements [NodeConformance][Feature:GKEEnv][NodeFeature:GKEEnv]", func() {
+	ginkgo.BeforeEach(func() {
 		framework.RunIfSystemSpecNameIs("gke")
 	})
 
-	It("The required processes should be running", func() {
+	ginkgo.It("The required processes should be running", func() {
 		cmdToProcessMap, err := getCmdToProcessMap()
 		framework.ExpectNoError(err)
 		for _, p := range []struct {
@@ -329,27 +338,27 @@ var _ = framework.KubeDescribe("GKE system requirements [Conformance] [Feature:G
 			framework.ExpectNoError(checkProcess(p.cmd, p.ppid, cmdToProcessMap))
 		}
 	})
-	It("The iptable rules should work (required by kube-proxy)", func() {
+	ginkgo.It("The iptable rules should work (required by kube-proxy)", func() {
 		framework.ExpectNoError(checkIPTables())
 	})
-	It("The GCR is accessible", func() {
+	ginkgo.It("The GCR is accessible", func() {
 		framework.ExpectNoError(checkPublicGCR())
 	})
-	It("The docker configuration validation should pass", func() {
+	ginkgo.It("The docker configuration validation should pass", func() {
 		framework.RunIfContainerRuntimeIs("docker")
 		framework.ExpectNoError(checkDockerConfig())
 	})
-	It("The docker container network should work", func() {
+	ginkgo.It("The docker container network should work", func() {
 		framework.RunIfContainerRuntimeIs("docker")
 		framework.ExpectNoError(checkDockerNetworkServer())
 		framework.ExpectNoError(checkDockerNetworkClient())
 	})
-	It("The docker daemon should support AppArmor and seccomp", func() {
+	ginkgo.It("The docker daemon should support AppArmor and seccomp", func() {
 		framework.RunIfContainerRuntimeIs("docker")
 		framework.ExpectNoError(checkDockerAppArmor())
 		framework.ExpectNoError(checkDockerSeccomp())
 	})
-	It("The docker storage driver should work", func() {
+	ginkgo.It("The docker storage driver should work", func() {
 		framework.Skipf("GKE does not currently require overlay")
 		framework.ExpectNoError(checkDockerStorageDriver())
 	})

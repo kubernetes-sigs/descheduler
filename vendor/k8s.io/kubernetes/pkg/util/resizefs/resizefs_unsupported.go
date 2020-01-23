@@ -21,7 +21,7 @@ package resizefs
 import (
 	"fmt"
 
-	"k8s.io/kubernetes/pkg/util/mount"
+	"k8s.io/utils/mount"
 )
 
 // ResizeFs Provides support for resizing file systems
@@ -35,6 +35,6 @@ func NewResizeFs(mounter *mount.SafeFormatAndMount) *ResizeFs {
 }
 
 // Resize perform resize of file system
-func (resizefs *ResizeFs) Resize(devicePath string) (bool, error) {
+func (resizefs *ResizeFs) Resize(devicePath string, deviceMountPath string) (bool, error) {
 	return false, fmt.Errorf("Resize is not supported for this build")
 }

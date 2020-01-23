@@ -19,11 +19,14 @@ package api
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 )
 
 var (
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	AddToScheme   = SchemeBuilder.AddToScheme
+	Scheme        = runtime.NewScheme()
 )
 
 // GroupName is the group name use in this package
@@ -31,6 +34,12 @@ const GroupName = "descheduler"
 
 // SchemeGroupVersion is group version used to register these objects
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
+
+func init() {
+	if err := addKnownTypes(scheme.Scheme); err != nil {
+		panic(err)
+	}
+}
 
 // Kind takes an unqualified kind and returns a Group qualified GroupKind
 func Kind(kind string) schema.GroupKind {

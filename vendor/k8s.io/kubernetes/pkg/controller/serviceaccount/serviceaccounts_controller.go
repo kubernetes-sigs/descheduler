@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang/glog"
 	"k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,8 +31,8 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/kubernetes/pkg/controller"
-	"k8s.io/kubernetes/pkg/util/metrics"
+	"k8s.io/component-base/metrics/prometheus/ratelimiter"
+	"k8s.io/klog"
 )
 
 // ServiceAccountsControllerOptions contains options for running a ServiceAccountsController
@@ -52,6 +51,7 @@ type ServiceAccountsControllerOptions struct {
 	NamespaceResync time.Duration
 }
 
+// DefaultServiceAccountsControllerOptions returns the default options for creating a ServiceAccountsController.
 func DefaultServiceAccountsControllerOptions() ServiceAccountsControllerOptions {
 	return ServiceAccountsControllerOptions{
 		ServiceAccounts: []v1.ServiceAccount{
@@ -65,24 +65,24 @@ func NewServiceAccountsController(saInformer coreinformers.ServiceAccountInforme
 	e := &ServiceAccountsController{
 		client:                  cl,
 		serviceAccountsToEnsure: options.ServiceAccounts,
-		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "serviceaccount"),
+		queue:                   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "serviceaccount"),
 	}
 	if cl != nil && cl.CoreV1().RESTClient().GetRateLimiter() != nil {
-		if err := metrics.RegisterMetricAndTrackRateLimiterUsage("serviceaccount_controller", cl.CoreV1().RESTClient().GetRateLimiter()); err != nil {
+		if err := ratelimiter.RegisterMetricAndTrackRateLimiterUsage("serviceaccount_controller", cl.CoreV1().RESTClient().GetRateLimiter()); err != nil {
 			return nil, err
 		}
 	}
 
-	saInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	saInformer.Informer().AddEventHandlerWithResyncPeriod(cache.ResourceEventHandlerFuncs{
 		DeleteFunc: e.serviceAccountDeleted,
-	})
+	}, options.ServiceAccountResync)
 	e.saLister = saInformer.Lister()
 	e.saListerSynced = saInformer.Informer().HasSynced
 
-	nsInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	nsInformer.Informer().AddEventHandlerWithResyncPeriod(cache.ResourceEventHandlerFuncs{
 		AddFunc:    e.namespaceAdded,
 		UpdateFunc: e.namespaceUpdated,
-	})
+	}, options.NamespaceResync)
 	e.nsLister = nsInformer.Lister()
 	e.nsListerSynced = nsInformer.Informer().HasSynced
 
@@ -108,14 +108,15 @@ type ServiceAccountsController struct {
 	queue workqueue.RateLimitingInterface
 }
 
+// Run runs the ServiceAccountsController blocks until receiving signal from stopCh.
 func (c *ServiceAccountsController) Run(workers int, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
 
-	glog.Infof("Starting service account controller")
-	defer glog.Infof("Shutting down service account controller")
+	klog.Infof("Starting service account controller")
+	defer klog.Infof("Shutting down service account controller")
 
-	if !controller.WaitForCacheSync("service account", stopCh, c.saListerSynced, c.nsListerSynced) {
+	if !cache.WaitForNamedCacheSync("service account", stopCh, c.saListerSynced, c.nsListerSynced) {
 		return
 	}
 
@@ -183,7 +184,7 @@ func (c *ServiceAccountsController) processNextWorkItem() bool {
 func (c *ServiceAccountsController) syncNamespace(key string) error {
 	startTime := time.Now()
 	defer func() {
-		glog.V(4).Infof("Finished syncing namespace %q (%v)", key, time.Now().Sub(startTime))
+		klog.V(4).Infof("Finished syncing namespace %q (%v)", key, time.Since(startTime))
 	}()
 
 	ns, err := c.nsLister.Get(key)
@@ -199,8 +200,7 @@ func (c *ServiceAccountsController) syncNamespace(key string) error {
 	}
 
 	createFailures := []error{}
-	for i := range c.serviceAccountsToEnsure {
-		sa := c.serviceAccountsToEnsure[i]
+	for _, sa := range c.serviceAccountsToEnsure {
 		switch _, err := c.saLister.ServiceAccounts(ns.Name).Get(sa.Name); {
 		case err == nil:
 			continue
@@ -213,7 +213,10 @@ func (c *ServiceAccountsController) syncNamespace(key string) error {
 		sa.Namespace = ns.Name
 
 		if _, err := c.client.CoreV1().ServiceAccounts(ns.Name).Create(&sa); err != nil && !apierrs.IsAlreadyExists(err) {
-			createFailures = append(createFailures, err)
+			// we can safely ignore terminating namespace errors
+			if !apierrs.HasStatusCause(err, v1.NamespaceTerminatingCause) {
+				createFailures = append(createFailures, err)
+			}
 		}
 	}
 

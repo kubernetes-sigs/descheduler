@@ -15,13 +15,13 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"golang.org/x/net/internal/nettest"
 )
+
+const defaultMaxOpenFiles = 256
 
 func TestLimitListener(t *testing.T) {
 	const max = 5
-	attempts := (nettest.MaxOpenFiles() - max) / 2
+	attempts := (maxOpenFiles() - max) / 2
 	if attempts > 256 { // maximum length of accept queue is 128 by default
 		attempts = 256
 	}
@@ -97,5 +97,51 @@ func TestLimitListenerError(t *testing.T) {
 	case <-donec:
 	case <-time.After(5 * time.Second):
 		t.Fatal("timeout. deadlock?")
+	}
+}
+
+func TestLimitListenerClose(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	ln = LimitListener(ln, 1)
+
+	doneCh := make(chan struct{})
+	defer close(doneCh)
+	go func() {
+		c, err := net.Dial("tcp", ln.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		<-doneCh
+	}()
+
+	c, err := ln.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	acceptDone := make(chan struct{})
+	go func() {
+		c, err := ln.Accept()
+		if err == nil {
+			c.Close()
+			t.Errorf("Unexpected successful Accept()")
+		}
+		close(acceptDone)
+	}()
+
+	// Wait a tiny bit to ensure the Accept() is blocking.
+	time.Sleep(10 * time.Millisecond)
+	ln.Close()
+
+	select {
+	case <-acceptDone:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("Accept() still blocking")
 	}
 }

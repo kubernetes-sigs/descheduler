@@ -1,0 +1,15 @@
+run:
+  deadline: 2m
+
+linters:
+  disable-all: true
+  enable:
+    - gofmt
+    - gosimple
+    - gocyclo
+    - misspell
+    - govet
+
+linters-settings:
+  goimports:
+local-prefixes: sigs.k8s.io/descheduler

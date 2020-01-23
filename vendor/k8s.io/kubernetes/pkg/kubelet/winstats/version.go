@@ -20,77 +20,63 @@ package winstats
 
 import (
 	"fmt"
-	"unsafe"
-
-	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
-// getCurrentVersionVal gets value of speficied key from registry.
-func getCurrentVersionVal(key string) (string, error) {
-	var h windows.Handle
-	if err := windows.RegOpenKeyEx(windows.HKEY_LOCAL_MACHINE,
-		windows.StringToUTF16Ptr(`SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\`),
-		0,
-		windows.KEY_READ,
-		&h); err != nil {
-		return "", err
-	}
-	defer windows.RegCloseKey(h)
-
-	var buf [128]uint16
-	var typ uint32
-	n := uint32(len(buf) * int(unsafe.Sizeof(buf[0]))) // api expects array of bytes, not uint16
-	if err := windows.RegQueryValueEx(h,
-		windows.StringToUTF16Ptr(key),
-		nil,
-		&typ,
-		(*byte)(unsafe.Pointer(&buf[0])),
-		&n); err != nil {
-		return "", err
-	}
-
-	return windows.UTF16ToString(buf[:]), nil
+//OSInfo is a convenience class for retrieving Windows OS information
+type OSInfo struct {
+	BuildNumber, ProductName        string
+	MajorVersion, MinorVersion, UBR uint64
 }
 
-// getVersionRevision gets revision from UBR registry.
-func getVersionRevision() (uint16, error) {
-	revisionString, err := getCurrentVersionVal("UBR")
+// GetOSInfo reads Windows version information from the registry
+func GetOSInfo() (*OSInfo, error) {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows NT\CurrentVersion`, registry.QUERY_VALUE)
 	if err != nil {
-		return 0, err
+		return nil, err
+	}
+	defer k.Close()
+
+	buildNumber, _, err := k.GetStringValue("CurrentBuildNumber")
+	if err != nil {
+		return nil, err
 	}
 
-	revision, err := windows.UTF16FromString(revisionString)
+	majorVersionNumber, _, err := k.GetIntegerValue("CurrentMajorVersionNumber")
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	return revision[0], nil
+	minorVersionNumber, _, err := k.GetIntegerValue("CurrentMinorVersionNumber")
+	if err != nil {
+		return nil, err
+	}
+
+	revision, _, err := k.GetIntegerValue("UBR")
+	if err != nil {
+		return nil, err
+	}
+
+	productName, _, err := k.GetStringValue("ProductName")
+	if err != nil {
+		return nil, nil
+	}
+
+	return &OSInfo{
+		BuildNumber:  buildNumber,
+		ProductName:  productName,
+		MajorVersion: majorVersionNumber,
+		MinorVersion: minorVersionNumber,
+		UBR:          revision,
+	}, nil
 }
 
-// getKernelVersion gets the version of windows kernel.
-func getKernelVersion() (string, error) {
-	ver, err := windows.GetVersion()
-	if err != nil {
-		return "", err
-	}
-
-	revision, err := getVersionRevision()
-	if err != nil {
-		return "", err
-	}
-
-	major := ver & 0xFF
-	minor := (ver >> 8) & 0xFF
-	build := (ver >> 16) & 0xFFFF
-	return fmt.Sprintf("%d.%d.%05d.%d\n", major, minor, build, revision), nil
+//GetPatchVersion returns full OS version with patch
+func (o *OSInfo) GetPatchVersion() string {
+	return fmt.Sprintf("%d.%d.%s.%d", o.MajorVersion, o.MinorVersion, o.BuildNumber, o.UBR)
 }
 
-// getOSImageVersion gets the osImage name and version.
-func getOSImageVersion() (string, error) {
-	productName, err := getCurrentVersionVal("ProductName")
-	if err != nil {
-		return "", nil
-	}
-
-	return productName, nil
+//GetBuild returns OS version upto build number
+func (o *OSInfo) GetBuild() string {
+	return fmt.Sprintf("%d.%d.%s", o.MajorVersion, o.MinorVersion, o.BuildNumber)
 }
