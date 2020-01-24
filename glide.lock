@@ -1,5 +1,5 @@
-hash: 20c321631a99e15eafc7907de7b335f1874c451cef023c2159badbcf138c05d7
-updated: 2019-12-12T11:02:04.692422-05:00
+hash: 5479c30a02c29fa0995ac20ee5dbc3987ff2a361d1b8ba772995b7119e225eeb
+updated: 2020-01-24T18:50:34.703477-05:00
 imports:
 - name: cloud.google.com/go
   version: 8c41231e01b2085512d98153bcffb847ff9b4b9f
@@ -20,11 +20,6 @@ imports:
   - spew
 - name: github.com/dgrijalva/jwt-go
   version: 06ea1031745cb8b3dab3f6a236daf2b0aa468b7e
-- name: github.com/docker/distribution
-  version: 16128bbac47f75050e82f7e91b04df33775e0c23
-  subpackages:
-  - digestset
-  - reference
 - name: github.com/evanphx/json-patch
   version: 5858425f75500d40c52783dce87d085a483ce135
 - name: github.com/gogo/protobuf
@@ -83,8 +78,6 @@ imports:
   version: bacd9c7ef1dd9b15be4a9909b8ac7a4e313eec94
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
-- name: github.com/opencontainers/go-digest
-  version: ac19fd6e7483ff933754af248d80be865e543d22
 - name: github.com/spf13/cobra
   version: 67fc4837d267bc9bfd6e47f77783fcc3dffc68de
 - name: github.com/spf13/pflag
@@ -144,8 +137,6 @@ imports:
 - name: k8s.io/api
   version: 4c9a86741a7ab3890dd9e0777e85d8eee48bf59c
   subpackages:
-  - admission/v1
-  - admission/v1beta1
   - admissionregistration/v1
   - admissionregistration/v1beta1
   - apps/v1
@@ -171,7 +162,6 @@ imports:
   - events/v1beta1
   - extensions/v1beta1
   - flowcontrol/v1alpha1
-  - imagepolicy/v1alpha1
   - networking/v1
   - networking/v1beta1
   - node/v1alpha1
@@ -189,8 +179,6 @@ imports:
   - storage/v1beta1
 - name: k8s.io/apiextensions-apiserver
   version: ea07e0496fdfc3befebe481bd6f850febc41cdae
-  subpackages:
-  - pkg/features
 - name: k8s.io/apimachinery
   version: 79c2a76c473a20cdc4ce59cae4b72529b5d9d16b
   subpackages:
@@ -239,7 +227,6 @@ imports:
 - name: k8s.io/apiserver
   version: b79eb8a53681ea45917adf091f05f4c862cadd67
   subpackages:
-  - pkg/features
   - pkg/util/feature
 - name: k8s.io/client-go
   version: c68b62b1efa14564a47d67c07f013dc3553937b9
@@ -379,112 +366,11 @@ imports:
   version: 30be4d16710ac61bce31eb28a01054596fe6a9f1
   subpackages:
   - pkg/util/proto
-- name: k8s.io/kubernetes
-  version: 512f09638c517ad6375070af15af905ac00051a7
-  subpackages:
-  - pkg/api/legacyscheme
-  - pkg/api/testapi
-  - pkg/api/v1/resource
-  - pkg/apis/admission
-  - pkg/apis/admission/install
-  - pkg/apis/admission/v1
-  - pkg/apis/admission/v1beta1
-  - pkg/apis/admissionregistration
-  - pkg/apis/admissionregistration/install
-  - pkg/apis/admissionregistration/v1
-  - pkg/apis/admissionregistration/v1beta1
-  - pkg/apis/apps
-  - pkg/apis/apps/install
-  - pkg/apis/apps/v1
-  - pkg/apis/apps/v1beta1
-  - pkg/apis/apps/v1beta2
-  - pkg/apis/auditregistration
-  - pkg/apis/auditregistration/install
-  - pkg/apis/auditregistration/v1alpha1
-  - pkg/apis/authentication
-  - pkg/apis/authentication/install
-  - pkg/apis/authentication/v1
-  - pkg/apis/authentication/v1beta1
-  - pkg/apis/authorization
-  - pkg/apis/authorization/install
-  - pkg/apis/authorization/v1
-  - pkg/apis/authorization/v1beta1
-  - pkg/apis/autoscaling
-  - pkg/apis/autoscaling/install
-  - pkg/apis/autoscaling/v1
-  - pkg/apis/autoscaling/v2beta1
-  - pkg/apis/autoscaling/v2beta2
-  - pkg/apis/batch
-  - pkg/apis/batch/install
-  - pkg/apis/batch/v1
-  - pkg/apis/batch/v1beta1
-  - pkg/apis/batch/v2alpha1
-  - pkg/apis/certificates
-  - pkg/apis/certificates/install
-  - pkg/apis/certificates/v1beta1
-  - pkg/apis/coordination
-  - pkg/apis/coordination/install
-  - pkg/apis/coordination/v1
-  - pkg/apis/coordination/v1beta1
-  - pkg/apis/core
-  - pkg/apis/core/helper
-  - pkg/apis/core/install
-  - pkg/apis/core/v1
-  - pkg/apis/core/v1/helper
-  - pkg/apis/core/v1/helper/qos
-  - pkg/apis/discovery
-  - pkg/apis/discovery/install
-  - pkg/apis/discovery/v1alpha1
-  - pkg/apis/discovery/v1beta1
-  - pkg/apis/events
-  - pkg/apis/events/install
-  - pkg/apis/events/v1beta1
-  - pkg/apis/extensions
-  - pkg/apis/extensions/install
-  - pkg/apis/extensions/v1beta1
-  - pkg/apis/imagepolicy
-  - pkg/apis/imagepolicy/install
-  - pkg/apis/imagepolicy/v1alpha1
-  - pkg/apis/networking
-  - pkg/apis/networking/install
-  - pkg/apis/networking/v1
-  - pkg/apis/networking/v1beta1
-  - pkg/apis/node
-  - pkg/apis/node/install
-  - pkg/apis/node/v1alpha1
-  - pkg/apis/node/v1beta1
-  - pkg/apis/policy
-  - pkg/apis/policy/install
-  - pkg/apis/policy/v1beta1
-  - pkg/apis/rbac
-  - pkg/apis/rbac/install
-  - pkg/apis/rbac/v1
-  - pkg/apis/rbac/v1alpha1
-  - pkg/apis/rbac/v1beta1
-  - pkg/apis/scheduling
-  - pkg/apis/scheduling/install
-  - pkg/apis/scheduling/v1
-  - pkg/apis/scheduling/v1alpha1
-  - pkg/apis/scheduling/v1beta1
-  - pkg/apis/settings
-  - pkg/apis/settings/install
-  - pkg/apis/settings/v1alpha1
-  - pkg/apis/storage
-  - pkg/apis/storage/install
-  - pkg/apis/storage/v1
-  - pkg/apis/storage/v1alpha1
-  - pkg/apis/storage/v1beta1
-  - pkg/features
-  - pkg/kubelet/types
-  - pkg/scheduler/algorithm/priorities/util
-  - pkg/util/parsers
 - name: k8s.io/utils
   version: e782cd3c129fc98ee807f3c889c0f26eb7c9daf5
   subpackages:
   - buffer
   - integer
-  - net
-  - pointer
   - trace
 - name: sigs.k8s.io/yaml
   version: fd68e9863619f6ec2fdd8625fe1f02e7c877e480
