@@ -21,9 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	clientset "k8s.io/client-go/kubernetes"
-	api "k8s.io/kubernetes/pkg/apis/core"
-	"k8s.io/kubernetes/pkg/apis/core/v1/helper/qos"
-	"k8s.io/kubernetes/pkg/kubelet/types"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 const (
@@ -57,7 +55,7 @@ func ListEvictablePodsOnNode(client clientset.Interface, node *v1.Node, evictLoc
 }
 
 func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, error) {
-	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + node.Name + ",status.phase!=" + string(api.PodSucceeded) + ",status.phase!=" + string(api.PodFailed))
+	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + node.Name + ",status.phase!=" + string(v1.PodSucceeded) + ",status.phase!=" + string(v1.PodFailed))
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
@@ -76,19 +74,19 @@ func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, erro
 }
 
 func IsCriticalPod(pod *v1.Pod) bool {
-	return types.IsCriticalPod(pod)
+	return utils.IsCriticalPod(pod)
 }
 
 func IsBestEffortPod(pod *v1.Pod) bool {
-	return qos.GetPodQOS(pod) == v1.PodQOSBestEffort
+	return utils.GetPodQOS(pod) == v1.PodQOSBestEffort
 }
 
 func IsBurstablePod(pod *v1.Pod) bool {
-	return qos.GetPodQOS(pod) == v1.PodQOSBurstable
+	return utils.GetPodQOS(pod) == v1.PodQOSBurstable
 }
 
 func IsGuaranteedPod(pod *v1.Pod) bool {
-	return qos.GetPodQOS(pod) == v1.PodQOSGuaranteed
+	return utils.GetPodQOS(pod) == v1.PodQOSGuaranteed
 }
 
 func IsDaemonsetPod(ownerRefList []metav1.OwnerReference) bool {
@@ -102,8 +100,7 @@ func IsDaemonsetPod(ownerRefList []metav1.OwnerReference) bool {
 
 // IsMirrorPod checks whether the pod is a mirror pod.
 func IsMirrorPod(pod *v1.Pod) bool {
-	_, found := pod.ObjectMeta.Annotations[types.ConfigMirrorAnnotationKey]
-	return found
+	return utils.IsMirrorPod(pod)
 }
 
 // HaveEvictAnnotation checks if the pod have evict annotation

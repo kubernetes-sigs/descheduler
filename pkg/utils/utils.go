@@ -15,3 +15,21 @@ limitations under the License.
 */
 
 package utils
+
+import v1 "k8s.io/api/core/v1"
+
+// This file contains the datastructures, types & functions needed by all the strategies so that we don't have
+// to compute them again in each strategy.
+
+// NodePodEvictedCount keeps count of pods evicted on node. This is used in conjunction with strategies to
+type NodePodEvictedCount map[*v1.Node]int
+
+// InitializeNodePodCount initializes the nodePodCount.
+func InitializeNodePodCount(nodeList []*v1.Node) NodePodEvictedCount {
+	var nodePodCount = make(NodePodEvictedCount)
+	for _, node := range nodeList {
+		// Initialize podsEvicted till now with 0.
+		nodePodCount[node] = 0
+	}
+	return nodePodCount
+}
