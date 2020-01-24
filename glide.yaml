@@ -10,8 +10,6 @@ import:
   version: kubernetes-1.17.0
 - package: k8s.io/apimachinery
   version: kubernetes-1.17.0
-- package: k8s.io/kubernetes
-  version: release-1.17
 - package: k8s.io/code-generator
   version: kubernetes-1.17.0
 - package: k8s.io/gengo
