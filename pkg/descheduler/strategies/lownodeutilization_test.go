@@ -28,6 +28,7 @@ import (
 	core "k8s.io/client-go/testing"
 	"reflect"
 	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -116,7 +117,7 @@ func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
 	if len(lowNodes) != 1 {
 		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
 	}
-	npe := nodePodEvictedCount{}
+	npe := utils.NodePodEvictedCount{}
 	npe[n1] = 0
 	npe[n2] = 0
 	npe[n3] = 0
@@ -221,7 +222,7 @@ func TestLowNodeUtilizationWithPriorities(t *testing.T) {
 	if len(lowNodes) != 1 {
 		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
 	}
-	npe := nodePodEvictedCount{}
+	npe := utils.NodePodEvictedCount{}
 	npe[n1] = 0
 	npe[n2] = 0
 	npe[n3] = 0
