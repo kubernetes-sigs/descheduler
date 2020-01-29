@@ -48,7 +48,7 @@ func NewDeschedulerServer() *DeschedulerServer {
 
 // AddFlags adds flags for a specific SchedulerServer to the specified FlagSet
 func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
-	fs.DurationVar(&rs.DeschedulingInterval, "descheduling-interval", rs.DeschedulingInterval, "time interval between two consecutive descheduler executions")
+	fs.DurationVar(&rs.DeschedulingInterval, "descheduling-interval", rs.DeschedulingInterval, "Time interval between two consecutive descheduler executions. Setting this value instructs the descheduler to run in a continuous loop at the interval specified.")
 	fs.StringVar(&rs.KubeconfigFile, "kubeconfig", rs.KubeconfigFile, "File with  kube configuration.")
 	fs.StringVar(&rs.PolicyConfigFile, "policy-config-file", rs.PolicyConfigFile, "File with descheduler policy configuration.")
 	fs.BoolVar(&rs.DryRun, "dry-run", rs.DryRun, "execute descheduler in dry run mode.")
