@@ -21,7 +21,9 @@ import (
 
 	"k8s.io/klog"
 
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
+	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -29,7 +31,6 @@ import (
 )
 
 func Run(rs *options.DeschedulerServer) error {
-
 	rsclient, err := client.CreateClient(rs.KubeconfigFile)
 	if err != nil {
 		return err
@@ -44,6 +45,10 @@ func Run(rs *options.DeschedulerServer) error {
 		return fmt.Errorf("deschedulerPolicy is nil")
 	}
 
+	return RunDeschedulerStrategies(rs, deschedulerPolicy)
+}
+
+func RunDeschedulerStrategies(rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy) error {
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(rs.Client)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		return err
@@ -61,10 +66,18 @@ func Run(rs *options.DeschedulerServer) error {
 	}
 
 	nodePodCount := strategies.InitializeNodePodCount(nodes)
-	strategies.RemoveDuplicatePods(rs, deschedulerPolicy.Strategies["RemoveDuplicates"], evictionPolicyGroupVersion, nodes, nodePodCount)
-	strategies.LowNodeUtilization(rs, deschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes, nodePodCount)
-	strategies.RemovePodsViolatingInterPodAntiAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingInterPodAntiAffinity"], evictionPolicyGroupVersion, nodes, nodePodCount)
-	strategies.RemovePodsViolatingNodeAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingNodeAffinity"], evictionPolicyGroupVersion, nodes, nodePodCount)
-	strategies.RemovePodsViolatingNodeTaints(rs, deschedulerPolicy.Strategies["RemovePodsViolatingNodeTaints"], evictionPolicyGroupVersion, nodes, nodePodCount)
+	wait.Until(func() {
+		strategies.RemoveDuplicatePods(rs, deschedulerPolicy.Strategies["RemoveDuplicates"], evictionPolicyGroupVersion, nodes, nodePodCount)
+		strategies.LowNodeUtilization(rs, deschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes, nodePodCount)
+		strategies.RemovePodsViolatingInterPodAntiAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingInterPodAntiAffinity"], evictionPolicyGroupVersion, nodes, nodePodCount)
+		strategies.RemovePodsViolatingNodeAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingNodeAffinity"], evictionPolicyGroupVersion, nodes, nodePodCount)
+		strategies.RemovePodsViolatingNodeTaints(rs, deschedulerPolicy.Strategies["RemovePodsViolatingNodeTaints"], evictionPolicyGroupVersion, nodes, nodePodCount)
+
+		// If there was no interval specified, send a signal to the stopChannel to end the wait.Until loop after 1 iteration
+		if rs.DeschedulingInterval.Seconds() == 0 {
+			close(stopChannel)
+		}
+	}, rs.DeschedulingInterval, stopChannel)
+
 	return nil
 }
