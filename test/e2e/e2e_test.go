@@ -28,7 +28,9 @@ import (
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/api/testapi"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
+	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/descheduler"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -155,6 +157,35 @@ func TestE2E(t *testing.T) {
 		t.Errorf("Error creating deployment %v", err)
 	}
 	evictPods(t, clientSet, nodeList, rc)
+}
+
+func TestDeschedulingInterval(t *testing.T) {
+	clientSet, err := client.CreateClient("/tmp/admin.conf")
+	if err != nil {
+		t.Errorf("Error during client creation with %v", err)
+	}
+
+	// By default, the DeschedulingInterval param should be set to 0, meaning Descheduler only runs once then exits
+	s := options.NewDeschedulerServer()
+	s.Client = clientSet
+
+	deschedulerPolicy := &api.DeschedulerPolicy{}
+
+	c := make(chan bool)
+	go func() {
+		err := descheduler.RunDeschedulerStrategies(s, deschedulerPolicy)
+		if err != nil {
+			t.Errorf("Error running descheduler strategies: %+v", err)
+		}
+		c <- true
+	}()
+
+	select {
+	case <-c:
+		// successfully returned
+	case <-time.After(3 * time.Minute):
+		t.Errorf("descheduler.Run timed out even without descheduling-interval set")
+	}
 }
 
 func evictPods(t *testing.T, clientSet clientset.Interface, nodeList *v1.NodeList, rc *v1.ReplicationController) {
