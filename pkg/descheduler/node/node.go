@@ -117,9 +117,9 @@ func IsReady(node *v1.Node) bool {
 	return true
 }
 
-// IsNodeUschedulable checks if the node is unschedulable. This is helper function to check only in case of
+// IsNodeUnschedulable checks if the node is unschedulable. This is helper function to check only in case of
 // underutilized node so that they won't be accounted for.
-func IsNodeUschedulable(node *v1.Node) bool {
+func IsNodeUnschedulable(node *v1.Node) bool {
 	return node.Spec.Unschedulable
 }
 
@@ -134,7 +134,7 @@ func PodFitsAnyNode(pod *v1.Pod, nodes []*v1.Node) bool {
 			continue
 		}
 		if ok {
-			if !IsNodeUschedulable(node) {
+			if !IsNodeUnschedulable(node) {
 				klog.V(2).Infof("Pod %v can possibly be scheduled on %v", pod.Name, node.Name)
 				return true
 			}
