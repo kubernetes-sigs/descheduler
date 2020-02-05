@@ -26,8 +26,6 @@ but relies on the default scheduler for that.
 
 ## Build and Run
 
-- Checkout the repo into your $GOPATH directory under src/github.com/kubernetes-incubator/descheduler
-
 Build descheduler:
 
 ```sh
