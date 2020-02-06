@@ -53,7 +53,7 @@ func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, 
 				klog.V(1).Infof("%#v", creator)
 				// i = 0 does not evict the first pod
 				for i := 1; i < len(pods); i++ {
-					if maxPodsToEvict > 0 && nodepodCount[node]+1 > maxPodsToEvict {
+					if nodepodCount[node]+1 > maxPodsToEvict {
 						break
 					}
 					success, err := evictions.EvictPod(client, pods[i], policyGroupVersion, dryRun)
