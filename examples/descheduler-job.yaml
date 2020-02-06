@@ -5,7 +5,7 @@ metadata:
   name: descheduler-job
   namespace: kube-system
 spec:
-  schedule: "*/1 * * * *"
+  schedule: "*/30 * * * *"
   jobTemplate:
     spec:
       template:
