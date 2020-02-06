@@ -38,7 +38,7 @@ JUNIT_REPORT ?= true
 #   make all
 #   make all WHAT=cmd/oc GOFLAGS=-v
 all build:
-	hack/build-go.sh $(WHAT) $(GOFLAGS)
+	GOFLAGS="$(GOFLAGS)" hack/build-go.sh $(WHAT)
 .PHONY: all build
 
 # Run core verification and all self contained tests.
