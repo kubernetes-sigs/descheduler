@@ -1,0 +1,35 @@
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: descheduler-deployment
+  namespace: kube-system
+  labels:
+    name: descheduler-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      name: descheduler-deployment
+      labels:
+        name: desheduler-deployment
+    spec:
+      priorityClassName: system-cluster-critical
+      containers:
+        - name: descheduler
+          image: registry.grofer.io/infra/descheduler:master
+          volumeMounts:
+            - mountPath: /policy-dir
+              name: policy-volume
+          command: ["/bin/descheduler"]
+          args:
+           - --policy-config-file=/policy-dir/policy.yaml
+           - --v=1
+           - --node-selector
+           - team=infra,team!=infra-large,team!=airflow,team!=jhub
+      restartPolicy: "Always"
+      serviceAccountName: descheduler-sa
+      volumes:
+        - name: policy-volume
+          configMap:
+            name: descheduler-policy-configmap

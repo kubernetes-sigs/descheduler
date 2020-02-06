@@ -11,7 +11,7 @@ rules:
     resources: ["pods"]
     verbs: ["get", "watch", "list", "delete"]
   - apiGroups: [""]
-    resources: ["pods/eviction"]
+    resources: ["pods/eviction", "events"]
     verbs: ["create"]
 ---
 apiVersion: v1

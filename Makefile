@@ -28,7 +28,7 @@ HAS_GOLANGCI := $(shell which golangci-lint)
 # REGISTRY is the container registry to push
 # into. The default is to push to the staging
 # registry, not production.
-REGISTRY?=gcr.io/k8s-staging-descheduler
+REGISTRY?=registry.grofer.io/infra/
 
 # IMAGE is the image name of descheduler
 IMAGE:=descheduler:$(VERSION)

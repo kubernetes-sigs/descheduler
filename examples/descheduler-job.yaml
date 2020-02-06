@@ -1,27 +1,31 @@
 ---
-apiVersion: batch/v1
-kind: Job
+apiVersion: batch/v1beta1
+kind: CronJob
 metadata:
   name: descheduler-job
   namespace: kube-system
 spec:
-  parallelism: 1
-  completions: 1
-  template:
-    metadata:
-      name: descheduler-pod
+  schedule: "*/1 * * * *"
+  jobTemplate:
     spec:
-      priorityClassName: system-cluster-critical
-      containers:
-        - name: descheduler
-          image: docker.io/aveshagarwal/descheduler:0.9.0
-          volumeMounts:
-            - mountPath: /policy-dir
-              name: policy-volume
-          command: ["/bin/descheduler",  "--policy-config-file", "/policy-dir/policy.yaml", "-v", "1"]
-      restartPolicy: "Never"
-      serviceAccountName: descheduler-sa
-      volumes:
-        - name: policy-volume
-          configMap:
-            name: descheduler-policy-configmap
+      template:
+        spec:
+          priorityClassName: system-cluster-critical
+          containers:
+            - name: descheduler
+              image: registry.grofer.io/infra/descheduler:master
+              volumeMounts:
+                - mountPath: /policy-dir
+                  name: policy-volume
+              command: ["/bin/descheduler"]
+              args:
+               - --policy-config-file=/policy-dir/policy.yaml
+               - --v=1
+               - --node-selector
+               - team!=infra,team!=infra-large,team!=airflow,team!=jhub
+          restartPolicy: "Never"
+          serviceAccountName: descheduler-sa
+          volumes:
+            - name: policy-volume
+              configMap:
+                name: descheduler-policy-configmap
