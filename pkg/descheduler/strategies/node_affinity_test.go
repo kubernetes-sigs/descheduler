@@ -25,6 +25,7 @@ import (
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -92,7 +93,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		pods                    []v1.Pod
 		strategy                api.DeschedulerStrategy
 		expectedEvictedPodCount int
-		npe                     nodePodEvictedCount
+		npe                     utils.NodePodEvictedCount
 		maxPodsToEvict          int
 	}{
 		{
@@ -108,7 +109,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			expectedEvictedPodCount: 0,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
+			npe:                     utils.NodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
 			maxPodsToEvict:          0,
 		},
 		{
@@ -124,7 +125,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			expectedEvictedPodCount: 0,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
+			npe:                     utils.NodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
 			maxPodsToEvict:          0,
 		},
 		{
@@ -133,7 +134,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			expectedEvictedPodCount: 0,
 			pods:                    addPodsToNode(nodeWithLabels),
 			nodes:                   []*v1.Node{nodeWithLabels},
-			npe:                     nodePodEvictedCount{nodeWithLabels: 0},
+			npe:                     utils.NodePodEvictedCount{nodeWithLabels: 0},
 			maxPodsToEvict:          0,
 		},
 		{
@@ -142,7 +143,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
+			npe:                     utils.NodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
 			maxPodsToEvict:          0,
 		},
 		{
@@ -151,7 +152,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
+			npe:                     utils.NodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
 			maxPodsToEvict:          1,
 		},
 		{
@@ -160,7 +161,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, unschedulableNodeWithLabels},
-			npe:                     nodePodEvictedCount{nodeWithoutLabels: 0, unschedulableNodeWithLabels: 0},
+			npe:                     utils.NodePodEvictedCount{nodeWithoutLabels: 0, unschedulableNodeWithLabels: 0},
 			maxPodsToEvict:          0,
 		},
 	}

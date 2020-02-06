@@ -26,7 +26,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
-	"k8s.io/kubernetes/pkg/api/testapi"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
@@ -36,6 +35,7 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func MakePodSpec() v1.PodSpec {
@@ -72,7 +72,7 @@ func RcByNameContainer(name string, replicas int32, labels map[string]string, gr
 	return &v1.ReplicationController{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ReplicationController",
-			APIVersion: testapi.Groups[v1.GroupName].GroupVersion().String(),
+			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -116,7 +116,7 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface) {
 	nodeUtilizationStrategyParams := deschedulerapi.StrategyParameters{NodeResourceUtilizationThresholds: nodeUtilizationThresholds}
 	lowNodeUtilizationStrategy := deschedulerapi.DeschedulerStrategy{Enabled: true, Params: nodeUtilizationStrategyParams}
 	ds := &options.DeschedulerServer{Client: clientset}
-	nodePodCount := strategies.InitializeNodePodCount(nodes)
+	nodePodCount := utils.InitializeNodePodCount(nodes)
 	strategies.LowNodeUtilization(ds, lowNodeUtilizationStrategy, evictionPolicyGroupVersion, nodes, nodePodCount)
 	time.Sleep(10 * time.Second)
 }

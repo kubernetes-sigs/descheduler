@@ -28,6 +28,7 @@ import (
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func Run(rs *options.DeschedulerServer) error {
@@ -65,7 +66,7 @@ func RunDeschedulerStrategies(rs *options.DeschedulerServer, deschedulerPolicy *
 		return nil
 	}
 
-	nodePodCount := strategies.InitializeNodePodCount(nodes)
+	nodePodCount := utils.InitializeNodePodCount(nodes)
 	wait.Until(func() {
 		strategies.RemoveDuplicatePods(rs, deschedulerPolicy.Strategies["RemoveDuplicates"], evictionPolicyGroupVersion, nodes, nodePodCount)
 		strategies.LowNodeUtilization(rs, deschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes, nodePodCount)
