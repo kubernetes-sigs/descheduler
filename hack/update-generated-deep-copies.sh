@@ -1,7 +1,7 @@
 #!/bin/bash
 source "$(dirname "${BASH_SOURCE}")/lib/init.sh"
 
-go build -o "${OS_OUTPUT_BINPATH}/deepcopy-gen" "${PRJ_PREFIX}/vendor/k8s.io/code-generator/cmd/deepcopy-gen"
+go build -o "${OS_OUTPUT_BINPATH}/deepcopy-gen" "k8s.io/code-generator/cmd/deepcopy-gen"
 
 ${OS_OUTPUT_BINPATH}/deepcopy-gen \
                 --go-header-file "hack/boilerplate/boilerplate.go.txt" \
