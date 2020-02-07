@@ -65,6 +65,30 @@ func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strateg
 				}
 				evictedPodCount += nodepodCount[node]
 			}
+		case "preferredDuringSchedulingIgnoredDuringExecution":
+			for _, node := range nodes {
+				klog.V(1).Infof("Processing node: %#v\n", node.Name)
+
+				pods, err := podutil.ListEvictablePodsOnNode(ds.Client, node, evictLocalStoragePods)
+				if err != nil {
+					klog.Errorf("failed to get pods from %v: %v", node.Name, err)
+				}
+
+				for _, pod := range pods {
+					if maxPodsToEvict > 0 && nodepodCount[node]+1 > maxPodsToEvict {
+						break
+					}
+					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution != nil {
+
+						if !nodeutil.PodFitsCurrentNode(pod, node) && nodeutil.PodFitsAnyNode(pod, nodes) {
+							klog.V(1).Infof("Evicting pod: %v", pod.Name)
+							evictions.EvictPod(ds.Client, pod, evictionPolicyGroupVersion, ds.DryRun)
+							nodepodCount[node]++
+						}
+					}
+				}
+				evictedPodCount += nodepodCount[node]
+			}
 		default:
 			klog.Errorf("invalid nodeAffinityType: %v", nodeAffinity)
 			return evictedPodCount
