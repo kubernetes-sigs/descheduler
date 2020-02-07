@@ -70,7 +70,8 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	// The following 4 pods won't get evicted.
 	// A Critical Pod.
 	p7.Namespace = "kube-system"
-	p7.Annotations = test.GetCriticalPodAnnotation()
+	priority := utils.SystemCriticalPriority
+	p7.Spec.Priority = &priority
 
 	// A daemonset.
 	p8.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()

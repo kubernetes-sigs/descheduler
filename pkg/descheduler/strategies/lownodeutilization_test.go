@@ -21,12 +21,13 @@ import (
 	"strings"
 	"testing"
 
+	"reflect"
+
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"reflect"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
@@ -81,7 +82,8 @@ func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
 	p7.Annotations = test.GetMirrorPodAnnotation()
 	// A Critical Pod.
 	p8.Namespace = "kube-system"
-	p8.Annotations = test.GetCriticalPodAnnotation()
+	priority := utils.SystemCriticalPriority
+	p8.Spec.Priority = &priority
 	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
 	p9.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	fakeClient := &fake.Clientset{}
@@ -186,7 +188,8 @@ func TestLowNodeUtilizationWithPriorities(t *testing.T) {
 	p7.Annotations = test.GetMirrorPodAnnotation()
 	// A Critical Pod.
 	p8.Namespace = "kube-system"
-	p8.Annotations = test.GetCriticalPodAnnotation()
+	priority := utils.SystemCriticalPriority
+	p8.Spec.Priority = &priority
 	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
 	p9.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	fakeClient := &fake.Clientset{}
