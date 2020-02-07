@@ -84,14 +84,6 @@ func GetDaemonSetOwnerRefList() []metav1.OwnerReference {
 	return ownerRefList
 }
 
-// GetCriticalPodAnnotation returns the annotation needed for critical pod.
-func GetCriticalPodAnnotation() map[string]string {
-	return map[string]string{
-		"kubernetes.io/created-by":                   "{\"kind\":\"SerializedReference\",\"apiVersion\":\"v1\",\"reference\":{\"kind\":\"Pod\"}}",
-		"scheduler.alpha.kubernetes.io/critical-pod": "",
-	}
-}
-
 // BuildTestNode creates a node with specified capacity.
 func BuildTestNode(name string, millicpu int64, mem int64, pods int64) *v1.Node {
 	node := &v1.Node{

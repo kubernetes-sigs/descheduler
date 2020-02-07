@@ -85,7 +85,8 @@ func TestFindDuplicatePods(t *testing.T) {
 	p6.Annotations = test.GetMirrorPodAnnotation()
 
 	// A Critical Pod.
-	p7.Annotations = test.GetCriticalPodAnnotation()
+	priority := utils.SystemCriticalPriority
+	p7.Spec.Priority = &priority
 
 	testCases := []struct {
 		description             string
