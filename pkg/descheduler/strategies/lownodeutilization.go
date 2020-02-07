@@ -137,7 +137,7 @@ func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThr
 		nuMap := NodeUsageMap{node, usage, allPods, nonRemovablePods, bePods, bPods, gPods}
 
 		// Check if node is underutilized and if we can schedule pods on it.
-		if !nodeutil.IsNodeUschedulable(node) && IsNodeWithLowUtilization(usage, thresholds) {
+		if !nodeutil.IsNodeUnschedulable(node) && IsNodeWithLowUtilization(usage, thresholds) {
 			klog.V(2).Infof("Node %#v is under utilized with usage: %#v", node.Name, usage)
 			lowNodes = append(lowNodes, nuMap)
 		} else if IsNodeAboveTargetUtilization(usage, targetThresholds) {

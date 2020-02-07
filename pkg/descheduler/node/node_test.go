@@ -69,7 +69,7 @@ func TestReadyNodesWithNodeSelector(t *testing.T) {
 	}
 }
 
-func TestIsNodeUschedulable(t *testing.T) {
+func TestIsNodeUnschedulable(t *testing.T) {
 	tests := []struct {
 		description     string
 		node            *v1.Node
@@ -91,7 +91,7 @@ func TestIsNodeUschedulable(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		actualUnSchedulable := IsNodeUschedulable(test.node)
+		actualUnSchedulable := IsNodeUnschedulable(test.node)
 		if actualUnSchedulable != test.IsUnSchedulable {
 			t.Errorf("Test %#v failed", test.description)
 		}
