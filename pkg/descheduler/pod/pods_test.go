@@ -17,11 +17,11 @@ limitations under the License.
 package pod
 
 import (
-	"sigs.k8s.io/descheduler/pkg/utils"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -150,15 +150,19 @@ func TestIsEvictable(t *testing.T) {
 		}, {
 			pod: test.BuildTestPod("p12", 400, 0, n1.Name),
 			runBefore: func(pod *v1.Pod) {
-				pod.Annotations = test.GetCriticalPodAnnotation()
+				priority := utils.SystemCriticalPriority
+				pod.Spec.Priority = &priority
 			},
 			evictLocalStoragePods: false,
 			result:                false,
 		}, {
 			pod: test.BuildTestPod("p13", 400, 0, n1.Name),
 			runBefore: func(pod *v1.Pod) {
-				pod.Annotations = test.GetCriticalPodAnnotation()
-				pod.Annotations["descheduler.alpha.kubernetes.io/evict"] = "true"
+				priority := utils.SystemCriticalPriority
+				pod.Spec.Priority = &priority
+				pod.Annotations = map[string]string{
+					"descheduler.alpha.kubernetes.io/evict": "true",
+				}
 			},
 			evictLocalStoragePods: false,
 			result:                true,
@@ -208,7 +212,8 @@ func TestPodTypes(t *testing.T) {
 	p4.Annotations = test.GetMirrorPodAnnotation()
 	// A Critical Pod.
 	p5.Namespace = "kube-system"
-	p5.Annotations = test.GetCriticalPodAnnotation()
+	priority := utils.SystemCriticalPriority
+	p5.Spec.Priority = &priority
 	systemCriticalPriority := utils.SystemCriticalPriority
 	p5.Spec.Priority = &systemCriticalPriority
 	if !IsMirrorPod(p4) {
