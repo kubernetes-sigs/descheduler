@@ -63,7 +63,7 @@ func podMatchesNodeLabels(pod *v1.Pod, node *v1.Node) bool {
 	if affinity != nil && affinity.NodeAffinity != nil {
 		nodeAffinity := affinity.NodeAffinity
 		// if no required NodeAffinity requirements, will do no-op, means select all nodes.
-		if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
+		if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil && nodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution == nil {
 			return true
 		}
 
@@ -72,6 +72,16 @@ func podMatchesNodeLabels(pod *v1.Pod, node *v1.Node) bool {
 			nodeSelectorTerms := nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
 			klog.V(10).Infof("Match for RequiredDuringSchedulingIgnoredDuringExecution node selector terms %+v", nodeSelectorTerms)
 			return nodeMatchesNodeSelectorTerms(node, nodeSelectorTerms)
+		}
+
+		// Match node selector for preferredDuringSchedulingIgnoredDuringExecution.
+		if nodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution != nil {
+			nodeSelectorTerms := make([]v1.NodeSelectorTerm, len(nodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution))
+			for i, rule := range nodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+				nodeSelectorTerms[i] = rule.Preference
+				klog.V(10).Infof("Match for PreferredDuringSchedulingIgnoredDuringExecution node selector terms %+v", nodeSelectorTerms)
+			}
+			return nodeMatchesNodeSelectorTerms(node, nodeSelectorTerms);
 		}
 	}
 	return true
