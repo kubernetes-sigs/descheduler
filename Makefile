@@ -69,10 +69,11 @@ test-e2e:
 	./test/run-e2e-tests.sh
 
 gen:
-	./hack/update-codecgen.sh
 	./hack/update-generated-conversions.sh
 	./hack/update-generated-deep-copies.sh
 	./hack/update-generated-defaulters.sh
+	#undo go mod changes caused by above.
+	go mod tidy
 lint:
 ifndef HAS_GOLANGCI
 	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(GOPATH)/bin ${GOLANGCI_VERSION}
