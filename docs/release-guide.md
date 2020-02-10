@@ -1,4 +1,4 @@
-# Release process
+# Release Guide
 
 ## Semi-automatic
 
