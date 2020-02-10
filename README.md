@@ -24,63 +24,32 @@ Descheduler, based on its policy, finds pods that can be moved and evicts them. 
 note, in current implementation, descheduler does not schedule replacement of evicted pods
 but relies on the default scheduler for that.
 
-## Build and Run
+## Quick Start
 
-- Checkout the repo into your $GOPATH directory under src/sigs.k8s.io/descheduler
+The descheduler can be run as a Job or CronJob inside of a k8s cluster. It has the
+advantage of being able to be run multiple times without needing user intervention.
+The descheduler pod is run as a critical pod in the `kube-system` namespace to avoid
+being evicted by itself or by the kubelet.
 
-Build descheduler:
-
-```sh
-$ make
-```
-
-and run descheduler:
-
-```sh
-$ ./_output/bin/descheduler --kubeconfig <path to kubeconfig> --policy-config-file <path-to-policy-file>
-```
-
-If you want more information about what descheduler is doing add `-v 1` to the command line
-
-For more information about available options run:
-```
-$ ./_output/bin/descheduler --help
-```
-
-## Running Descheduler as a Job or CronJob
-
-The descheduler can be run as a job or cronjob inside of a pod. It has the advantage of
-being able to be run multiple times without needing user intervention.
-The descheduler pod is run as a critical pod to avoid being evicted by itself,
-or by the kubelet due to an eviction event. Since critical pods are created in the
-`kube-system` namespace, the descheduler job and its pod will also be created
-in the `kube-system` namespace.
-
-### Setup RBAC
-
-To give necessary permissions for the descheduler to work in a pod.
+### Run As A Job
 
 ```
-$ kubectl create -f kubernetes/rbac.yaml
+kubectl create -f kubernetes/rbac.yaml
+kubectl create -f kubernetes/configmap.yaml
+kubectl create -f kubernetes/job.yaml
 ```
 
-### Create a configmap to store descheduler policy
+### Run As A CronJob
 
 ```
-$ kubectl create -f kubernetes/configmap.yaml
+kubectl create -f kubernetes/rbac.yaml
+kubectl create -f kubernetes/configmap.yaml
+kubectl create -f kubernetes/cronjob.yaml
 ```
 
-### Create a Job or CronJob
+## User Guide
 
-As a Job.
-```
-$ kubectl create -f kubernetes/job.yaml
-```
-
-Or as a CronJob.
-```
-$ kubectl create -f kubernetes/cronjob.yaml
-```
+See the [user guide](docs/user-guide.md) in the `/docs` directory.
 
 ## Policy and Strategies
 
@@ -208,6 +177,49 @@ Users should know how and if the pod will be recreated.
 Pods subject to a Pod Disruption Budget(PDB) are not evicted if descheduling violates its PDB. The pods
 are evicted by using the eviction subresource to handle PDB.
 
+## Compatibility Matrix
+
+Descheduler  | supported Kubernetes version
+-------------|-----------------------------
+v0.10        | v1.17
+v0.4-v0.9    | v1.9+
+v0.1-v0.3    | v1.7-v1.8
+
+
+## Getting Involved and Contributing
+
+Are you interested in contributing to descheduler? We, the
+maintainers and community, would love your suggestions, contributions, and help!
+Also, the maintainers can be contacted at any time to learn more about how to get
+involved.
+
+To get started writing code see the [contributor guide](docs/contributor-guide.md) in the `/docs` directory.
+
+In the interest of getting more new people involved we tag issues with
+[`good first issue`][good_first_issue].
+These are typically issues that have smaller scope but are good ways to start
+to get acquainted with the codebase.
+
+We also encourage ALL active community participants to act as if they are
+maintainers, even if you don't have "official" write permissions. This is a
+community effort, we are here to serve the Kubernetes community. If you have an
+active interest and you want to get involved, you have real power! Don't assume
+that the only people who can get things done around here are the "maintainers".
+
+We also would love to add more "official" maintainers, so show us what you can
+do!
+
+This repository uses the Kubernetes bots. See a full list of the commands [here][prow].
+
+### Communicating With Contributors
+
+You can reach the contributors of this project at:
+
+- [Slack channel](https://kubernetes.slack.com/messages/sig-scheduling)
+- [Mailing list](https://groups.google.com/forum/#!forum/kubernetes-sig-scheduling)
+
+Learn how to engage with the Kubernetes community on the [community page](http://kubernetes.io/community/).
+
 ## Roadmap
 
 This roadmap is not in any particular order.
@@ -219,23 +231,6 @@ This roadmap is not in any particular order.
 * Integration with metrics providers for obtaining real load metrics
 * Consideration of Kubernetes's scheduler's predicates
 
-
-## Compatibility Matrix
-
-Descheduler  | supported Kubernetes version
--------------|-----------------------------
-v0.10        | v1.17
-v0.4-v0.9    | v1.9+
-v0.1-v0.3    | v1.7-v1.8
-
-## Community, discussion, contribution, and support
-
-Learn how to engage with the Kubernetes community on the [community page](http://kubernetes.io/community/).
-
-You can reach the maintainers of this project at:
-
-- [Slack channel](https://kubernetes.slack.com/messages/sig-scheduling)
-- [Mailing list](https://groups.google.com/forum/#!forum/kubernetes-sig-scheduling)
 
 ### Code of conduct
 
