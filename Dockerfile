@@ -19,7 +19,7 @@ RUN make
 
 FROM scratch
 
-MAINTAINER Avesh Agarwal <avagarwa@redhat.com>
+MAINTAINER Avesh Agarwal <avesh.ncsu@gmail.com>
 
 COPY --from=0 /go/src/sigs.k8s.io/descheduler/_output/bin/descheduler /bin/descheduler
 
