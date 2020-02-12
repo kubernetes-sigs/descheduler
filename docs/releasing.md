@@ -33,6 +33,11 @@ List descheduler image tags in the staging registry.
 gcloud container images list-tags gcr.io/k8s-staging-descheduler/descheduler
 ```
 
+Get SHA256 hash for a specific image in the staging registry.
+```
+gcloud container images describe gcr.io/k8s-staging-descheduler/descheduler:v20200206-0.9.0-94-ge2a23f284
+```
+
 Pull image from the staging registry.
 ```
 docker pull gcr.io/k8s-staging-descheduler/descheduler:v20200206-0.9.0-94-ge2a23f284
