@@ -4,19 +4,23 @@ language: go
 
 go:
   - 1.13.x
+env:
+  - K8S_VERSION=v1.17.0
+  - K8S_VERSION=v1.16.4
+  - K8S_VERSION=v1.15.7
 services:
   - docker
 before_script:
-  - curl -Lo kubectl \https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
-  - wget https://github.com/kubernetes-sigs/kind/releases/download/v0.6.1/kind-linux-amd64
+  - curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/${K8S_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+  - wget https://github.com/kubernetes-sigs/kind/releases/download/v0.7.0/kind-linux-amd64
   - chmod +x kind-linux-amd64
   - mv kind-linux-amd64 kind
   - export PATH=$PATH:$PWD
-  - kind create cluster --config=$TRAVIS_BUILD_DIR/hack/kind_config.yaml
+  - kind create cluster --image kindest/node:${K8S_VERSION} --config=$TRAVIS_BUILD_DIR/hack/kind_config.yaml
   - export KUBECONFIG="$(kind get kubeconfig-path)"
   - docker pull kubernetes/pause
   - kind load docker-image kubernetes/pause
-  - cp "$(kind get kubeconfig-path --name="kind")" /tmp/admin.conf
+  - kind get kubeconfig > /tmp/admin.conf
 script:
 - mkdir -p ~/gopath/src/sigs.k8s.io/
 - mv ~/gopath/src/github.com/kubernetes-sigs/descheduler ~/gopath/src/sigs.k8s.io/.
