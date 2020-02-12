@@ -13,7 +13,7 @@
 # limitations under the License.
 FROM scratch
 
-MAINTAINER Avesh Agarwal <avagarwa@redhat.com>
+MAINTAINER Avesh Agarwal <avesh.ncsu@gmail.com>
 
 COPY _output/bin/descheduler /bin/descheduler
 
