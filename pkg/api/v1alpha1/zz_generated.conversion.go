@@ -183,9 +183,7 @@ func Convert_api_PodsHavingTooManyRestarts_To_v1alpha1_PodsHavingTooManyRestarts
 }
 
 func autoConvert_v1alpha1_StrategyParameters_To_api_StrategyParameters(in *StrategyParameters, out *api.StrategyParameters, s conversion.Scope) error {
-	if err := Convert_v1alpha1_NodeResourceUtilizationThresholds_To_api_NodeResourceUtilizationThresholds(&in.NodeResourceUtilizationThresholds, &out.NodeResourceUtilizationThresholds, s); err != nil {
-		return err
-	}
+	out.NodeResourceUtilizationThresholds = (*api.NodeResourceUtilizationThresholds)(unsafe.Pointer(in.NodeResourceUtilizationThresholds))
 	out.NodeAffinityType = *(*[]string)(unsafe.Pointer(&in.NodeAffinityType))
 	if err := Convert_v1alpha1_PodsHavingTooManyRestarts_To_api_PodsHavingTooManyRestarts(&in.PodsHavingTooManyRestarts, &out.PodsHavingTooManyRestarts, s); err != nil {
 		return err
@@ -199,9 +197,7 @@ func Convert_v1alpha1_StrategyParameters_To_api_StrategyParameters(in *StrategyP
 }
 
 func autoConvert_api_StrategyParameters_To_v1alpha1_StrategyParameters(in *api.StrategyParameters, out *StrategyParameters, s conversion.Scope) error {
-	if err := Convert_api_NodeResourceUtilizationThresholds_To_v1alpha1_NodeResourceUtilizationThresholds(&in.NodeResourceUtilizationThresholds, &out.NodeResourceUtilizationThresholds, s); err != nil {
-		return err
-	}
+	out.NodeResourceUtilizationThresholds = (*NodeResourceUtilizationThresholds)(unsafe.Pointer(in.NodeResourceUtilizationThresholds))
 	out.NodeAffinityType = *(*[]string)(unsafe.Pointer(&in.NodeAffinityType))
 	if err := Convert_api_PodsHavingTooManyRestarts_To_v1alpha1_PodsHavingTooManyRestarts(&in.PodsHavingTooManyRestarts, &out.PodsHavingTooManyRestarts, s); err != nil {
 		return err

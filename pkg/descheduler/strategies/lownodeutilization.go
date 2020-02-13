@@ -46,6 +46,10 @@ func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerS
 	}
 	// todo: move to config validation?
 	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
+	if strategy.Params.NodeResourceUtilizationThresholds == nil {
+		klog.V(1).Infof("NodeResourceUtilizationThresholds not set")
+		return
+	}
 
 	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
 	if !validateThresholds(thresholds) {
