@@ -1,24 +1,42 @@
-## Contributor Guide
+# Contributor Guide
 
-### Build and Run
+## Required Tools
 
-- Checkout the repo into your $GOPATH directory under src/sigs.k8s.io/descheduler
+- [Git](https://git-scm.com/downloads)
+- [Go 1.13+](https://golang.org/dl/)
+- [Docker](https://docs.docker.com/install/)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl)
+- [kind](https://kind.sigs.k8s.io/)
 
-Build descheduler:
+## Build and Run
 
+Build descheduler.
 ```sh
-$ make
+cd $GOPATH/src/sigs.k8s.io
+git clone https://github.com/kubernetes-sigs/descheduler.git
+cd descheduler
+make
 ```
 
-and run descheduler:
-
+Run descheduler.
 ```sh
-$ ./_output/bin/descheduler --kubeconfig <path to kubeconfig> --policy-config-file <path-to-policy-file>
+./_output/bin/descheduler --kubeconfig <path to kubeconfig> --policy-config-file <path-to-policy-file> --v 1
 ```
 
-If you want more information about what descheduler is doing add `-v 1` to the command line
+View all CLI options.
+```
+./_output/bin/descheduler --help
+```
 
-For more information about available options run:
+## Run Tests
 ```
-$ ./_output/bin/descheduler --help
+GOOS=linux make dev-image
+kind create cluster --config hack/kind_config.yaml
+kind load docker-image <image name>
+kind get kubeconfig > /tmp/admin.conf
+make test-unit
+make test-e2e
 ```
+
+### Miscellaneous
+See the [hack directory](https://github.com/kubernetes-sigs/descheduler/tree/master/hack) for additional tools and scripts used for developing the descheduler.
