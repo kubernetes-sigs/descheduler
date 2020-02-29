@@ -11,7 +11,7 @@ pod can or can not be scheduled, are guided by its configurable policy which com
 rules, called predicates and priorities. The scheduler's decisions are influenced by its view of
 a Kubernetes cluster at that point of time when a new pod appears for scheduling.
 As Kubernetes clusters are very dynamic and their state changes over time, there may be desire
-to move already running pods to some other nodes for various reasons.
+to move already running pods to some other nodes for various reasons:
 
 * Some nodes are under or over utilized.
 * The original scheduling decision does not hold true any more, as taints or labels are added to
@@ -67,7 +67,7 @@ those duplicate pods are evicted for better spreading of pods in a cluster. This
 if some nodes went down due to whatever reasons, and pods on them were moved to other nodes leading to
 more than one pod associated with a RS or RC, for example, running on the same node. Once the failed nodes
 are ready again, this strategy could be enabled to evict those duplicate pods. Currently, there are no
-parameters associated with this strategy. To disable this strategy, the policy should look like this.
+parameters associated with this strategy. To disable this strategy, the policy should look like:
 
 ```
 apiVersion: "descheduler/v1alpha1"
@@ -83,7 +83,7 @@ This strategy finds nodes that are under utilized and evicts pods, if possible, 
 in the hope that recreation of evicted pods will be scheduled on these underutilized nodes. The
 parameters of this strategy are configured under `nodeResourceUtilizationThresholds`.
 
-The under utilization of nodes is determined by a configurable threshold, `thresholds`. The threshold
+The under utilization of nodes is determined by a configurable threshold `thresholds`. The threshold
 `thresholds` can be configured for cpu, memory, and number of pods in terms of percentage. If a node's
 usage is below threshold for all (cpu, memory, and number of pods), the node is considered underutilized.
 Currently, pods request resource requirements are considered for computing node resource utilization.
@@ -94,7 +94,7 @@ considered appropriately utilized and is not considered for eviction. The thresh
 can be configured for cpu, memory, and number of pods too in terms of percentage.
 
 These thresholds, `thresholds` and `targetThresholds`, could be tuned as per your cluster requirements.
-Here is an example of a policy for this strategy.
+Here is an example of a policy for this strategy:
 
 ```
 apiVersion: "descheduler/v1alpha1"
@@ -121,7 +121,12 @@ under utilized frequently or for a short period of time. By default, `numberOfNo
 
 ### RemovePodsViolatingInterPodAntiAffinity
 
-This strategy makes sure that pods violating interpod anti-affinity are removed from nodes. For example, if there is podA on a node and podB and podC(running on the same node) have antiaffinity rules which prohibit them to run on the same node, then podA will be evicted from the node so that podB and podC could run. This issue could happen, when the anti-affinity rules for pods B,C are created when they are already running on node. Currently, there are no parameters associated with this strategy. To disable this strategy, the policy should look like this.
+This strategy makes sure that pods violating interpod anti-affinity are removed from nodes. For example,
+if there is podA on a node and podB and podC (running on the same node) have anti-affinity rules which prohibit
+them to run on the same node, then podA will be evicted from the node so that podB and podC could run. This
+issue could happen, when the anti-affinity rules for pods B,C are created when they are already running on
+node. Currently, there are no parameters associated with this strategy. To disable this strategy, the
+policy should look like:
 
 ```
 apiVersion: "descheduler/v1alpha1"
@@ -133,7 +138,11 @@ strategies:
 
 ### RemovePodsViolatingNodeAffinity
 
-This strategy makes sure that pods violating node affinity are removed from nodes. For example, there is podA that was scheduled on nodeA which satisfied the node affinity rule `requiredDuringSchedulingIgnoredDuringExecution` at the time of scheduling, but over time nodeA no longer satisfies the rule, then if another node nodeB is available that satisfies the node affinity rule, then podA will be evicted from nodeA. The policy file should like this.
+This strategy makes sure that pods violating node affinity are removed from nodes. For example, there is
+podA that was scheduled on nodeA which satisfied the node affinity rule `requiredDuringSchedulingIgnoredDuringExecution`
+at the time of scheduling, but over time nodeA no longer satisfies the rule, then if another node nodeB
+is available that satisfies the node affinity rule, then podA will be evicted from nodeA. The policy file
+should looks like:
 
 ```
 apiVersion: "descheduler/v1alpha1"
@@ -148,7 +157,10 @@ strategies:
 
 ### RemovePodsViolatingNodeTaints
 
-This strategy makes sure that pods violating NoSchedule taints on nodes are removed. For example there is a pod "podA" with a toleration to tolerate a taint ``key=value:NoSchedule`` scheduled and running on the tainted node. If the node's taint is subsequently updated/removed, taint is no longer satisfied by its pods' tolerations and will be evicted. The policy file should look like this.
+This strategy makes sure that pods violating NoSchedule taints on nodes are removed. For example there is a
+pod "podA" with a toleration to tolerate a taint ``key=value:NoSchedule`` scheduled and running on the tainted
+node. If the node's taint is subsequently updated/removed, taint is no longer satisfied by its pods' tolerations
+and will be evicted. The policy file should look like:
 
 ````
 apiVersion: "descheduler/v1alpha1"
@@ -160,7 +172,7 @@ strategies:
 
 ## Pod Evictions
 
-When the descheduler decides to evict pods from a node, it employs the following general mechanism.
+When the descheduler decides to evict pods from a node, it employs the following general mechanism:
 
 * [Critical pods](https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/) (with priorityClassName set to system-cluster-critical or system-node-critical) are never evicted.
 * Pods (static or mirrored pods or stand alone pods) not part of an RC, RS, Deployment or Job are
@@ -169,8 +181,8 @@ never evicted because these pods won't be recreated.
 * Pods with local storage are never evicted.
 * Best efforts pods are evicted before burstable and guaranteed pods.
 * All types of pods with the annotation descheduler.alpha.kubernetes.io/evict are evicted. This 
-annotation is used to override checks which prevent eviction and users can select which pod is evicted. 
-Users should know how and if the pod will be recreated.
+  annotation is used to override checks which prevent eviction and users can select which pod is evicted.
+  Users should know how and if the pod will be recreated.
 
 ### Pod Disruption Budget (PDB)
 
