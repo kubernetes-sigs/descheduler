@@ -24,6 +24,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/informers"
+	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
@@ -93,7 +95,7 @@ func RcByNameContainer(name string, replicas int32, labels map[string]string, gr
 }
 
 // startEndToEndForLowNodeUtilization tests the lownode utilization strategy.
-func startEndToEndForLowNodeUtilization(clientset clientset.Interface) {
+func startEndToEndForLowNodeUtilization(clientset clientset.Interface, nodeInformer coreinformers.NodeInformer) {
 	var thresholds = make(deschedulerapi.ResourceThresholds)
 	var targetThresholds = make(deschedulerapi.ResourceThresholds)
 	thresholds[v1.ResourceMemory] = 20
@@ -108,7 +110,7 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface) {
 		klog.Fatalf("%v", err)
 	}
 	stopChannel := make(chan struct{})
-	nodes, err := nodeutil.ReadyNodes(clientset, "", stopChannel)
+	nodes, err := nodeutil.ReadyNodes(clientset, nodeInformer, "", stopChannel)
 	if err != nil {
 		klog.Fatalf("%v", err)
 	}
@@ -132,6 +134,14 @@ func TestE2E(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error listing node with %v", err)
 	}
+	sharedInformerFactory := informers.NewSharedInformerFactory(clientSet, 0)
+	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
+
+	stopChannel := make(chan struct{}, 0)
+	sharedInformerFactory.Start(stopChannel)
+	sharedInformerFactory.WaitForCacheSync(stopChannel)
+	defer close(stopChannel)
+
 	// Assumption: We would have 3 node cluster by now. Kubeadm brings all the master components onto master node.
 	// So, the last node would have least utilization.
 	rc := RcByNameContainer("test-rc", int32(15), map[string]string{"test": "app"}, nil)
@@ -139,7 +149,7 @@ func TestE2E(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
-	evictPods(t, clientSet, nodeList, rc)
+	evictPods(t, clientSet, nodeInformer, nodeList, rc)
 
 	rc.Spec.Template.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 	rc.Spec.Replicas = func(i int32) *int32 { return &i }(15)
@@ -156,7 +166,7 @@ func TestE2E(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
-	evictPods(t, clientSet, nodeList, rc)
+	evictPods(t, clientSet, nodeInformer, nodeList, rc)
 }
 
 func TestDeschedulingInterval(t *testing.T) {
@@ -173,8 +183,13 @@ func TestDeschedulingInterval(t *testing.T) {
 
 	c := make(chan bool)
 	go func() {
-		err := descheduler.RunDeschedulerStrategies(s, deschedulerPolicy)
-		if err != nil {
+		evictionPolicyGroupVersion, err := eutils.SupportEviction(s.Client)
+		if err != nil || len(evictionPolicyGroupVersion) == 0 {
+			t.Errorf("Error when checking support for eviction: %v", err)
+		}
+
+		stopChannel := make(chan struct{})
+		if err := descheduler.RunDeschedulerStrategies(s, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel); err != nil {
 			t.Errorf("Error running descheduler strategies: %+v", err)
 		}
 		c <- true
@@ -188,7 +203,7 @@ func TestDeschedulingInterval(t *testing.T) {
 	}
 }
 
-func evictPods(t *testing.T, clientSet clientset.Interface, nodeList *v1.NodeList, rc *v1.ReplicationController) {
+func evictPods(t *testing.T, clientSet clientset.Interface, nodeInformer coreinformers.NodeInformer, nodeList *v1.NodeList, rc *v1.ReplicationController) {
 	var leastLoadedNode v1.Node
 	podsBefore := math.MaxInt16
 	for i := range nodeList.Items {
@@ -208,7 +223,7 @@ func evictPods(t *testing.T, clientSet clientset.Interface, nodeList *v1.NodeLis
 		}
 	}
 	t.Log("Eviction of pods starting")
-	startEndToEndForLowNodeUtilization(clientSet)
+	startEndToEndForLowNodeUtilization(clientSet, nodeInformer)
 	podsOnleastUtilizedNode, err := podutil.ListEvictablePodsOnNode(clientSet, &leastLoadedNode, true)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
