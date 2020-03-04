@@ -124,7 +124,7 @@ under utilized frequently or for a short period of time. By default, `numberOfNo
 This strategy makes sure that pods violating interpod anti-affinity are removed from nodes. For example,
 if there is podA on a node and podB and podC (running on the same node) have anti-affinity rules which prohibit
 them to run on the same node, then podA will be evicted from the node so that podB and podC could run. This
-issue could happen, when the anti-affinity rules for pods B,C are created when they are already running on
+issue could happen, when the anti-affinity rules for podB and podC are created when they are already running on
 node. Currently, there are no parameters associated with this strategy. To disable this strategy, the
 policy should look like:
 
@@ -142,7 +142,7 @@ This strategy makes sure that pods violating node affinity are removed from node
 podA that was scheduled on nodeA which satisfied the node affinity rule `requiredDuringSchedulingIgnoredDuringExecution`
 at the time of scheduling, but over time nodeA no longer satisfies the rule, then if another node nodeB
 is available that satisfies the node affinity rule, then podA will be evicted from nodeA. The policy file
-should looks like:
+should look like:
 
 ```
 apiVersion: "descheduler/v1alpha1"
