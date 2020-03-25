@@ -21,16 +21,16 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/utils"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
-	priorityutil "k8s.io/kubernetes/pkg/scheduler/algorithm/priorities/util"
 )
 
 // RemovePodsViolatingInterPodAntiAffinity with elimination strategy
-func RemovePodsViolatingInterPodAntiAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node, nodePodCount nodePodEvictedCount) {
+func RemovePodsViolatingInterPodAntiAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node, nodePodCount utils.NodePodEvictedCount) {
 	if !strategy.Enabled {
 		return
 	}
@@ -38,7 +38,7 @@ func RemovePodsViolatingInterPodAntiAffinity(ds *options.DeschedulerServer, stra
 }
 
 // removePodsWithAffinityRules evicts pods on the node which are having a pod affinity rules.
-func removePodsWithAffinityRules(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodePodCount nodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
+func removePodsWithAffinityRules(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodePodCount utils.NodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
 	podsEvicted := 0
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
@@ -77,14 +77,14 @@ func checkPodsWithAntiAffinityExist(pod *v1.Pod, pods []*v1.Pod) bool {
 	affinity := pod.Spec.Affinity
 	if affinity != nil && affinity.PodAntiAffinity != nil {
 		for _, term := range getPodAntiAffinityTerms(affinity.PodAntiAffinity) {
-			namespaces := priorityutil.GetNamespacesFromPodAffinityTerm(pod, &term)
+			namespaces := utils.GetNamespacesFromPodAffinityTerm(pod, &term)
 			selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
 			if err != nil {
 				klog.Infof("%v", err)
 				return false
 			}
 			for _, existingPod := range pods {
-				if existingPod.Name != pod.Name && priorityutil.PodMatchesTermsNamespaceAndSelector(existingPod, namespaces, selector) {
+				if existingPod.Name != pod.Name && utils.PodMatchesTermsNamespaceAndSelector(existingPod, namespaces, selector) {
 					return true
 				}
 			}

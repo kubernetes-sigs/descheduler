@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-FROM golang:1.13.5
+FROM golang:1.13.8
 
 WORKDIR /go/src/sigs.k8s.io/descheduler
 COPY . .
@@ -19,7 +19,7 @@ RUN make
 
 FROM scratch
 
-MAINTAINER Avesh Agarwal <avagarwa@redhat.com>
+MAINTAINER Avesh Agarwal <avesh.ncsu@gmail.com>
 
 COPY --from=0 /go/src/sigs.k8s.io/descheduler/_output/bin/descheduler /bin/descheduler
 

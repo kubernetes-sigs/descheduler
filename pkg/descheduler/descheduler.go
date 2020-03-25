@@ -22,12 +22,14 @@ import (
 	"k8s.io/klog"
 
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/informers"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func Run(rs *options.DeschedulerServer) error {
@@ -45,28 +47,38 @@ func Run(rs *options.DeschedulerServer) error {
 		return fmt.Errorf("deschedulerPolicy is nil")
 	}
 
-	return RunDeschedulerStrategies(rs, deschedulerPolicy)
-}
-
-func RunDeschedulerStrategies(rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy) error {
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(rs.Client)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		return err
 	}
 
 	stopChannel := make(chan struct{})
-	nodes, err := nodeutil.ReadyNodes(rs.Client, rs.NodeSelector, stopChannel)
-	if err != nil {
-		return err
-	}
+	return RunDeschedulerStrategies(rs, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel)
+}
 
-	if len(nodes) <= 1 {
-		klog.V(1).Infof("The cluster size is 0 or 1 meaning eviction causes service disruption or degradation. So aborting..")
-		return nil
-	}
+func RunDeschedulerStrategies(rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, stopChannel chan struct{}) error {
+	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
+	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
 
-	nodePodCount := strategies.InitializeNodePodCount(nodes)
+	sharedInformerFactory.Start(stopChannel)
+	sharedInformerFactory.WaitForCacheSync(stopChannel)
+
 	wait.Until(func() {
+		nodes, err := nodeutil.ReadyNodes(rs.Client, nodeInformer, rs.NodeSelector, stopChannel)
+		if err != nil {
+			klog.V(1).Infof("Unable to get ready nodes: %v", err)
+			close(stopChannel)
+			return
+		}
+
+		if len(nodes) <= 1 {
+			klog.V(1).Infof("The cluster size is 0 or 1 meaning eviction causes service disruption or degradation. So aborting..")
+			close(stopChannel)
+			return
+		}
+
+		nodePodCount := utils.InitializeNodePodCount(nodes)
+
 		strategies.RemoveDuplicatePods(rs, deschedulerPolicy.Strategies["RemoveDuplicates"], evictionPolicyGroupVersion, nodes, nodePodCount)
 		strategies.LowNodeUtilization(rs, deschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes, nodePodCount)
 		strategies.RemovePodsViolatingInterPodAntiAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingInterPodAntiAffinity"], evictionPolicyGroupVersion, nodes, nodePodCount)
