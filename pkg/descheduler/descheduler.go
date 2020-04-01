@@ -90,6 +90,7 @@ func RunDeschedulerStrategies(rs *options.DeschedulerServer, deschedulerPolicy *
 		strategies.RemovePodsViolatingInterPodAntiAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingInterPodAntiAffinity"], nodes, podEvictor)
 		strategies.RemovePodsViolatingNodeAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingNodeAffinity"], nodes, podEvictor)
 		strategies.RemovePodsViolatingNodeTaints(rs, deschedulerPolicy.Strategies["RemovePodsViolatingNodeTaints"], nodes, podEvictor)
+		strategies.RemovePodsHavingTooManyRestarts(rs, deschedulerPolicy.Strategies["RemovePodsHavingTooManyRestarts"], nodes, podEvictor)
 
 		// If there was no interval specified, send a signal to the stopChannel to end the wait.Until loop after 1 iteration
 		if rs.DeschedulingInterval.Seconds() == 0 {
