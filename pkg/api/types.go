@@ -48,6 +48,7 @@ type DeschedulerStrategy struct {
 type StrategyParameters struct {
 	NodeResourceUtilizationThresholds NodeResourceUtilizationThresholds
 	NodeAffinityType                  []string
+	PodsHavingTooManyRestarts         PodsHavingTooManyRestarts
 }
 
 type Percentage float64
@@ -57,4 +58,9 @@ type NodeResourceUtilizationThresholds struct {
 	Thresholds       ResourceThresholds
 	TargetThresholds ResourceThresholds
 	NumberOfNodes    int
+}
+
+type PodsHavingTooManyRestarts struct {
+	PodRestartThreshold     int32
+	IncludingInitContainers bool
 }
