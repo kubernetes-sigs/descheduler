@@ -17,34 +17,27 @@ limitations under the License.
 package node
 
 import (
-	"time"
-
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
+	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
-	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 // ReadyNodes returns ready nodes irrespective of whether they are
 // schedulable or not.
-func ReadyNodes(client clientset.Interface, nodeSelector string, stopChannel <-chan struct{}) ([]*v1.Node, error) {
+func ReadyNodes(client clientset.Interface, nodeInformer coreinformers.NodeInformer, nodeSelector string, stopChannel <-chan struct{}) ([]*v1.Node, error) {
 	ns, err := labels.Parse(nodeSelector)
 	if err != nil {
 		return []*v1.Node{}, err
 	}
 
 	var nodes []*v1.Node
-	nl := GetNodeLister(client, stopChannel)
-	if nl != nil {
-		// err is defined above
-		if nodes, err = nl.List(ns); err != nil {
-			return []*v1.Node{}, err
-		}
+	// err is defined above
+	if nodes, err = nodeInformer.Lister().List(ns); err != nil {
+		return []*v1.Node{}, err
 	}
 
 	if len(nodes) == 0 {
@@ -74,22 +67,6 @@ func ReadyNodes(client clientset.Interface, nodeSelector string, stopChannel <-c
 	return readyNodes, nil
 }
 
-func GetNodeLister(client clientset.Interface, stopChannel <-chan struct{}) corelisters.NodeLister {
-	if stopChannel == nil {
-		return nil
-	}
-	listWatcher := cache.NewListWatchFromClient(client.CoreV1().RESTClient(), "nodes", v1.NamespaceAll, fields.Everything())
-	store := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
-	nodeLister := corelisters.NewNodeLister(store)
-	reflector := cache.NewReflector(listWatcher, &v1.Node{}, store, time.Hour)
-	go reflector.Run(stopChannel)
-
-	// To give some time so that listing works, chosen randomly
-	time.Sleep(100 * time.Millisecond)
-
-	return nodeLister
-}
-
 // IsReady checks if the descheduler could run against given node.
 func IsReady(node *v1.Node) bool {
 	for i := range node.Status.Conditions {
@@ -117,9 +94,9 @@ func IsReady(node *v1.Node) bool {
 	return true
 }
 
-// IsNodeUschedulable checks if the node is unschedulable. This is helper function to check only in case of
+// IsNodeUnschedulable checks if the node is unschedulable. This is helper function to check only in case of
 // underutilized node so that they won't be accounted for.
-func IsNodeUschedulable(node *v1.Node) bool {
+func IsNodeUnschedulable(node *v1.Node) bool {
 	return node.Spec.Unschedulable
 }
 
@@ -134,7 +111,7 @@ func PodFitsAnyNode(pod *v1.Pod, nodes []*v1.Node) bool {
 			continue
 		}
 		if ok {
-			if !IsNodeUschedulable(node) {
+			if !IsNodeUnschedulable(node) {
 				klog.V(2).Infof("Pod %v can possibly be scheduled on %v", pod.Name, node.Name)
 				return true
 			}

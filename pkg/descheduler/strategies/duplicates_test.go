@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -84,7 +85,8 @@ func TestFindDuplicatePods(t *testing.T) {
 	p6.Annotations = test.GetMirrorPodAnnotation()
 
 	// A Critical Pod.
-	p7.Annotations = test.GetCriticalPodAnnotation()
+	priority := utils.SystemCriticalPriority
+	p7.Spec.Priority = &priority
 
 	testCases := []struct {
 		description             string
@@ -126,7 +128,7 @@ func TestFindDuplicatePods(t *testing.T) {
 
 	for _, testCase := range testCases {
 
-		npe := nodePodEvictedCount{}
+		npe := utils.NodePodEvictedCount{}
 		npe[node] = 0
 		fakeClient := &fake.Clientset{}
 		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {

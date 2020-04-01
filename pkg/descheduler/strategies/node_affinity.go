@@ -19,6 +19,7 @@ package strategies
 import (
 	"k8s.io/api/core/v1"
 	"k8s.io/klog"
+	"sigs.k8s.io/descheduler/pkg/utils"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -27,11 +28,11 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
-func RemovePodsViolatingNodeAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodePodCount nodePodEvictedCount) {
+func RemovePodsViolatingNodeAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodePodCount utils.NodePodEvictedCount) {
 	removePodsViolatingNodeAffinityCount(ds, strategy, evictionPolicyGroupVersion, nodes, nodePodCount, ds.MaxNoOfPodsToEvictPerNode, ds.EvictLocalStoragePods)
 }
 
-func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodepodCount nodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
+func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodepodCount utils.NodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
 	evictedPodCount := 0
 	if !strategy.Enabled {
 		return evictedPodCount

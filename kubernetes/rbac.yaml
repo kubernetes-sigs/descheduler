@@ -6,6 +6,9 @@ metadata:
   namespace: kube-system
 rules:
 - apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "update"]
+- apiGroups: [""]
   resources: ["nodes"]
   verbs: ["get", "watch", "list"]
 - apiGroups: [""]
