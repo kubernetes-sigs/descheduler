@@ -110,12 +110,9 @@ func PodFitsAnyNode(pod *v1.Pod, nodes []*v1.Node) bool {
 		if err != nil || !ok {
 			continue
 		}
-		if ok {
-			if !IsNodeUnschedulable(node) {
-				klog.V(2).Infof("Pod %v can possibly be scheduled on %v", pod.Name, node.Name)
-				return true
-			}
-			return false
+		if !IsNodeUnschedulable(node) {
+			klog.V(2).Infof("Pod %v can possibly be scheduled on %v", pod.Name, node.Name)
+			return true
 		}
 	}
 	return false
