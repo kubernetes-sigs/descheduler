@@ -1,4 +1,6 @@
-# Copyright 2017 The Kubernetes Authors.
+#!/bin/bash
+
+# Copyright 2020 The Kubernetes Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,16 +13,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-FROM golang:1.13.9
 
-WORKDIR /go/src/sigs.k8s.io/descheduler
-COPY . .
-RUN make
 
-FROM scratch
+source "$(dirname "${BASH_SOURCE}")/lib/init.sh"
 
-MAINTAINER Avesh Agarwal <avesh.ncsu@gmail.com>
-
-COPY --from=0 /go/src/sigs.k8s.io/descheduler/_output/bin/descheduler /bin/descheduler
-
-CMD ["/bin/descheduler", "--help"]
+go mod tidy
+go mod vendor

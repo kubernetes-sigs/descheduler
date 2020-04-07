@@ -253,6 +253,49 @@ func TestPodFitsAnyNode(t *testing.T) {
 			success: true,
 		},
 		{
+			description: "Pod expected to fit one of the nodes (error node first)",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      nodeLabelKey,
+												Operator: "In",
+												Values: []string{
+													nodeLabelValue,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			nodes: []*v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							nodeLabelKey: "no",
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							nodeLabelKey: nodeLabelValue,
+						},
+					},
+				},
+			},
+			success: true,
+		},
+		{
 			description: "Pod expected to fit none of the nodes",
 			pod: &v1.Pod{
 				Spec: v1.PodSpec{
