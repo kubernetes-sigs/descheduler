@@ -129,7 +129,7 @@ func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
 	npe[n1] = 0
 	npe[n2] = 0
 	npe[n3] = 0
-	podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, targetThresholds, false, 3, npe)
+	podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, targetThresholds, false, 3, false, npe)
 	if expectedPodsEvicted != podsEvicted {
 		t.Errorf("Expected %#v pods to be evicted but %#v got evicted", expectedPodsEvicted, podsEvicted)
 	}
@@ -235,7 +235,7 @@ func TestLowNodeUtilizationWithPriorities(t *testing.T) {
 	npe[n1] = 0
 	npe[n2] = 0
 	npe[n3] = 0
-	podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, targetThresholds, false, 3, npe)
+	podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, targetThresholds, false, 3, false, npe)
 	if expectedPodsEvicted != podsEvicted {
 		t.Errorf("Expected %#v pods to be evicted but %#v got evicted", expectedPodsEvicted, podsEvicted)
 	}
