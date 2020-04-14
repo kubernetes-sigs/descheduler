@@ -11,3 +11,4 @@ approvers:
   - damemi
   - soltysh
   - ingvagabund
+component: "kube-scheduler"
