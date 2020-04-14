@@ -42,17 +42,17 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int) *v1.Pod {
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 
-	node1 := test.BuildTestNode("n1", 2000, 3000, 10)
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	node1 = addTaintsToNode(node1, "testTaint", "test", []int{1})
-	node2 := test.BuildTestNode("n2", 2000, 3000, 10)
+	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 	node1 = addTaintsToNode(node2, "testingTaint", "testing", []int{1})
 
-	p1 := test.BuildTestPod("p1", 100, 0, node1.Name)
-	p2 := test.BuildTestPod("p2", 100, 0, node1.Name)
-	p3 := test.BuildTestPod("p3", 100, 0, node1.Name)
-	p4 := test.BuildTestPod("p4", 100, 0, node1.Name)
-	p5 := test.BuildTestPod("p5", 100, 0, node1.Name)
-	p6 := test.BuildTestPod("p6", 100, 0, node1.Name)
+	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
+	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, nil)
+	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, nil)
+	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, nil)
+	p5 := test.BuildTestPod("p5", 100, 0, node1.Name, nil)
+	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, nil)
 
 	p1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -60,11 +60,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p4.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p5.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p7 := test.BuildTestPod("p7", 100, 0, node2.Name)
-	p8 := test.BuildTestPod("p8", 100, 0, node2.Name)
-	p9 := test.BuildTestPod("p9", 100, 0, node2.Name)
-	p10 := test.BuildTestPod("p10", 100, 0, node2.Name)
-	p11 := test.BuildTestPod("p11", 100, 0, node2.Name)
+	p7 := test.BuildTestPod("p7", 100, 0, node2.Name, nil)
+	p8 := test.BuildTestPod("p8", 100, 0, node2.Name, nil)
+	p9 := test.BuildTestPod("p9", 100, 0, node2.Name, nil)
+	p10 := test.BuildTestPod("p10", 100, 0, node2.Name, nil)
+	p11 := test.BuildTestPod("p11", 100, 0, node2.Name, nil)
 	p11.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
 	// The following 4 pods won't get evicted.

@@ -27,14 +27,14 @@ import (
 )
 
 func TestReadyNodes(t *testing.T) {
-	node1 := test.BuildTestNode("node2", 1000, 2000, 9)
-	node2 := test.BuildTestNode("node3", 1000, 2000, 9)
+	node1 := test.BuildTestNode("node2", 1000, 2000, 9, nil)
+	node2 := test.BuildTestNode("node3", 1000, 2000, 9, nil)
 	node2.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeMemoryPressure, Status: v1.ConditionTrue}}
-	node3 := test.BuildTestNode("node4", 1000, 2000, 9)
+	node3 := test.BuildTestNode("node4", 1000, 2000, 9, nil)
 	node3.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeNetworkUnavailable, Status: v1.ConditionTrue}}
-	node4 := test.BuildTestNode("node5", 1000, 2000, 9)
+	node4 := test.BuildTestNode("node5", 1000, 2000, 9, nil)
 	node4.Spec.Unschedulable = true
-	node5 := test.BuildTestNode("node6", 1000, 2000, 9)
+	node5 := test.BuildTestNode("node6", 1000, 2000, 9, nil)
 	node5.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeReady, Status: v1.ConditionFalse}}
 
 	if !IsReady(node1) {
@@ -56,9 +56,9 @@ func TestReadyNodes(t *testing.T) {
 }
 
 func TestReadyNodesWithNodeSelector(t *testing.T) {
-	node1 := test.BuildTestNode("node1", 1000, 2000, 9)
+	node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
 	node1.Labels = map[string]string{"type": "compute"}
-	node2 := test.BuildTestNode("node2", 1000, 2000, 9)
+	node2 := test.BuildTestNode("node2", 1000, 2000, 9, nil)
 	node2.Labels = map[string]string{"type": "infra"}
 
 	fakeClient := fake.NewSimpleClientset(node1, node2)

@@ -25,7 +25,7 @@ import (
 )
 
 // BuildTestPod creates a test pod with given parameters.
-func BuildTestPod(name string, cpu int64, memory int64, nodeName string) *v1.Pod {
+func BuildTestPod(name string, cpu int64, memory int64, nodeName string, apply func(*v1.Pod)) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
@@ -50,7 +50,9 @@ func BuildTestPod(name string, cpu int64, memory int64, nodeName string) *v1.Pod
 	if memory >= 0 {
 		pod.Spec.Containers[0].Resources.Requests[v1.ResourceMemory] = *resource.NewQuantity(memory, resource.DecimalSI)
 	}
-
+	if apply != nil {
+		apply(pod)
+	}
 	return pod
 }
 
@@ -85,7 +87,7 @@ func GetDaemonSetOwnerRefList() []metav1.OwnerReference {
 }
 
 // BuildTestNode creates a node with specified capacity.
-func BuildTestNode(name string, millicpu int64, mem int64, pods int64) *v1.Node {
+func BuildTestNode(name string, millicpu int64, mem int64, pods int64, apply func(*v1.Node)) *v1.Node {
 	node := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:     name,
@@ -108,6 +110,9 @@ func BuildTestNode(name string, millicpu int64, mem int64, pods int64) *v1.Node 
 				{Type: v1.NodeReady, Status: v1.ConditionTrue},
 			},
 		},
+	}
+	if apply != nil {
+		apply(node)
 	}
 	return node
 }
