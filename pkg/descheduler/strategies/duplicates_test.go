@@ -30,23 +30,23 @@ import (
 
 func TestFindDuplicatePods(t *testing.T) {
 	// first setup pods
-	node := test.BuildTestNode("n1", 2000, 3000, 10)
-	p1 := test.BuildTestPod("p1", 100, 0, node.Name)
+	node := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	p1 := test.BuildTestPod("p1", 100, 0, node.Name, nil)
 	p1.Namespace = "dev"
-	p2 := test.BuildTestPod("p2", 100, 0, node.Name)
+	p2 := test.BuildTestPod("p2", 100, 0, node.Name, nil)
 	p2.Namespace = "dev"
-	p3 := test.BuildTestPod("p3", 100, 0, node.Name)
+	p3 := test.BuildTestPod("p3", 100, 0, node.Name, nil)
 	p3.Namespace = "dev"
-	p4 := test.BuildTestPod("p4", 100, 0, node.Name)
-	p5 := test.BuildTestPod("p5", 100, 0, node.Name)
-	p6 := test.BuildTestPod("p6", 100, 0, node.Name)
-	p7 := test.BuildTestPod("p7", 100, 0, node.Name)
+	p4 := test.BuildTestPod("p4", 100, 0, node.Name, nil)
+	p5 := test.BuildTestPod("p5", 100, 0, node.Name, nil)
+	p6 := test.BuildTestPod("p6", 100, 0, node.Name, nil)
+	p7 := test.BuildTestPod("p7", 100, 0, node.Name, nil)
 	p7.Namespace = "kube-system"
-	p8 := test.BuildTestPod("p8", 100, 0, node.Name)
+	p8 := test.BuildTestPod("p8", 100, 0, node.Name, nil)
 	p8.Namespace = "test"
-	p9 := test.BuildTestPod("p9", 100, 0, node.Name)
+	p9 := test.BuildTestPod("p9", 100, 0, node.Name, nil)
 	p9.Namespace = "test"
-	p10 := test.BuildTestPod("p10", 100, 0, node.Name)
+	p10 := test.BuildTestPod("p10", 100, 0, node.Name, nil)
 	p10.Namespace = "test"
 
 	// ### Evictable Pods ###

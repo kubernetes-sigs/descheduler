@@ -16,10 +16,10 @@ import (
 )
 
 func TestTaintsUpdated(t *testing.T) {
-	n1 := test.BuildTestNode("n1", 2000, 3000, 10)
-	n2 := test.BuildTestNode("n2", 2000, 3000, 10)
+	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 
-	p1 := test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name)
+	p1 := test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, nil)
 	p1.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
 		{},
 	}

@@ -42,17 +42,17 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 
 	nodeLabelKey := "kubernetes.io/desiredNode"
 	nodeLabelValue := "yes"
-	nodeWithLabels := test.BuildTestNode("nodeWithLabels", 2000, 3000, 10)
+	nodeWithLabels := test.BuildTestNode("nodeWithLabels", 2000, 3000, 10, nil)
 	nodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
 
-	nodeWithoutLabels := test.BuildTestNode("nodeWithoutLabels", 2000, 3000, 10)
+	nodeWithoutLabels := test.BuildTestNode("nodeWithoutLabels", 2000, 3000, 10, nil)
 
-	unschedulableNodeWithLabels := test.BuildTestNode("unschedulableNodeWithLabels", 2000, 3000, 10)
+	unschedulableNodeWithLabels := test.BuildTestNode("unschedulableNodeWithLabels", 2000, 3000, 10, nil)
 	nodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
 	unschedulableNodeWithLabels.Spec.Unschedulable = true
 
 	addPodsToNode := func(node *v1.Node) []v1.Pod {
-		podWithNodeAffinity := test.BuildTestPod("podWithNodeAffinity", 100, 0, node.Name)
+		podWithNodeAffinity := test.BuildTestPod("podWithNodeAffinity", 100, 0, node.Name, nil)
 		podWithNodeAffinity.Spec.Affinity = &v1.Affinity{
 			NodeAffinity: &v1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
@@ -73,8 +73,8 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			},
 		}
 
-		pod1 := test.BuildTestPod("pod1", 100, 0, node.Name)
-		pod2 := test.BuildTestPod("pod2", 100, 0, node.Name)
+		pod1 := test.BuildTestPod("pod1", 100, 0, node.Name, nil)
+		pod2 := test.BuildTestPod("pod2", 100, 0, node.Name, nil)
 
 		podWithNodeAffinity.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 		pod1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
