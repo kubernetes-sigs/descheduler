@@ -138,11 +138,23 @@ strategies:
 
 ### RemovePodsViolatingNodeAffinity
 
-This strategy makes sure that pods violating node affinity are removed from nodes. For example, there is
-podA that was scheduled on nodeA which satisfied the node affinity rule `requiredDuringSchedulingIgnoredDuringExecution`
-at the time of scheduling, but over time nodeA no longer satisfies the rule, then if another node nodeB
-is available that satisfies the node affinity rule, then podA will be evicted from nodeA. The policy file
-should look like:
+This strategy makes sure all pods violating
+[node affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#node-affinity)
+are eventually removed from nodes. Node affinity rules allow a pod to specify
+`requiredDuringSchedulingIgnoredDuringExecution` type, which tells the scheduler
+to respect node affinity when scheduling the pod but kubelet to ignore
+in case node changes over time and no longer respects the affinity.
+When enabled, the strategy serves as a temporary implementation
+of `requiredDuringSchedulingRequiredDuringExecution` and evicts pod for kubelet
+that no longer respects node affinity.
+
+For example, there is podA scheduled on nodeA which satisfies the node
+affinity rule `requiredDuringSchedulingIgnoredDuringExecution` at the time
+of scheduling. Over time nodeA stops to satisfy the rule. When the strategy gets
+executed and there is another node available that satisfies the node affinity rule,
+podA gets evicted from nodeA.
+
+The policy file should look like:
 
 ```
 apiVersion: "descheduler/v1alpha1"
@@ -180,7 +192,7 @@ never evicted because these pods won't be recreated.
 * Pods associated with DaemonSets are never evicted.
 * Pods with local storage are never evicted.
 * Best efforts pods are evicted before burstable and guaranteed pods.
-* All types of pods with the annotation descheduler.alpha.kubernetes.io/evict are evicted. This 
+* All types of pods with the annotation descheduler.alpha.kubernetes.io/evict are evicted. This
   annotation is used to override checks which prevent eviction and users can select which pod is evicted.
   Users should know how and if the pod will be recreated.
 
