@@ -102,18 +102,11 @@ func allTaintsTolerated(taints []v1.Taint, tolerations []v1.Toleration) bool {
 	if len(taints) == 0 {
 		return true
 	}
-	if len(tolerations) == 0 && len(taints) > 0 {
+	if len(tolerations) == 0 {
 		return false
 	}
 	for i := range taints {
-		tolerated := false
-		for j := range tolerations {
-			if tolerations[j].ToleratesTaint(&taints[i]) {
-				tolerated = true
-				break
-			}
-		}
-		if !tolerated {
+		if !utils.TolerationsTolerateTaint(tolerations, &taints[i]) {
 			return false
 		}
 	}
