@@ -73,42 +73,13 @@ func deletePodsViolatingNodeTaints(client clientset.Interface, policyGroupVersio
 
 // checkPodsSatisfyTolerations checks if the node's taints (NoSchedule) are still satisfied by pods' tolerations.
 func checkPodsSatisfyTolerations(pod *v1.Pod, node *v1.Node) bool {
-	tolerations := pod.Spec.Tolerations
-	taints := node.Spec.Taints
-	if len(taints) == 0 {
-		return true
-	}
-	noScheduleTaints := getNoScheduleTaints(taints)
-	if !allTaintsTolerated(noScheduleTaints, tolerations) {
+	if !utils.TolerationsTolerateTaintsWithFilter(
+		pod.Spec.Tolerations,
+		node.Spec.Taints,
+		func(taint *v1.Taint) bool { return taint.Effect == v1.TaintEffectNoSchedule },
+	) {
 		klog.V(2).Infof("Not all taints are tolerated after update for Pod %v on node %v", pod.Name, node.Name)
 		return false
-	}
-	return true
-}
-
-// getNoScheduleTaints return a slice of NoSchedule taints from the a slice of taints that it receives.
-func getNoScheduleTaints(taints []v1.Taint) []v1.Taint {
-	result := []v1.Taint{}
-	for i := range taints {
-		if taints[i].Effect == v1.TaintEffectNoSchedule {
-			result = append(result, taints[i])
-		}
-	}
-	return result
-}
-
-// allTaintsTolerated returns true if all are tolerated, or false otherwise.
-func allTaintsTolerated(taints []v1.Taint, tolerations []v1.Toleration) bool {
-	if len(taints) == 0 {
-		return true
-	}
-	if len(tolerations) == 0 {
-		return false
-	}
-	for i := range taints {
-		if !utils.TolerationsTolerateTaint(tolerations, &taints[i]) {
-			return false
-		}
 	}
 	return true
 }
