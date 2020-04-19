@@ -29,11 +29,11 @@ import (
 )
 
 func TestPodAntiAffinity(t *testing.T) {
-	node := test.BuildTestNode("n1", 2000, 3000, 10)
-	p1 := test.BuildTestPod("p1", 100, 0, node.Name)
-	p2 := test.BuildTestPod("p2", 100, 0, node.Name)
-	p3 := test.BuildTestPod("p3", 100, 0, node.Name)
-	p4 := test.BuildTestPod("p4", 100, 0, node.Name)
+	node := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	p1 := test.BuildTestPod("p1", 100, 0, node.Name, nil)
+	p2 := test.BuildTestPod("p2", 100, 0, node.Name, nil)
+	p3 := test.BuildTestPod("p3", 100, 0, node.Name, nil)
+	p4 := test.BuildTestPod("p4", 100, 0, node.Name, nil)
 	p2.Labels = map[string]string{"foo": "bar"}
 	p1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
