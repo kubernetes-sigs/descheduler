@@ -97,24 +97,6 @@ func getNoScheduleTaints(taints []v1.Taint) []v1.Taint {
 	return result
 }
 
-//toleratesTaint returns true if a toleration tolerates a taint, or false otherwise
-func toleratesTaint(toleration *v1.Toleration, taint *v1.Taint) bool {
-
-	if (len(toleration.Key) > 0 && toleration.Key != taint.Key) ||
-		(len(toleration.Effect) > 0 && toleration.Effect != taint.Effect) {
-		return false
-	}
-	switch toleration.Operator {
-	// empty operator means Equal
-	case "", TolerationOpEqual:
-		return toleration.Value == taint.Value
-	case TolerationOpExists:
-		return true
-	default:
-		return false
-	}
-}
-
 // allTaintsTolerated returns true if all are tolerated, or false otherwise.
 func allTaintsTolerated(taints []v1.Taint, tolerations []v1.Toleration) bool {
 	if len(taints) == 0 {
@@ -126,7 +108,7 @@ func allTaintsTolerated(taints []v1.Taint, tolerations []v1.Toleration) bool {
 	for i := range taints {
 		tolerated := false
 		for j := range tolerations {
-			if toleratesTaint(&tolerations[j], &taints[i]) {
+			if tolerations[j].ToleratesTaint(&taints[i]) {
 				tolerated = true
 				break
 			}

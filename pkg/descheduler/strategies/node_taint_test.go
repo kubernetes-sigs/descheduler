@@ -272,7 +272,7 @@ func TestToleratesTaint(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		if tolerated := toleratesTaint(&tc.toleration, &tc.taint); tc.expectTolerated != tolerated {
+		if tolerated := tc.toleration.ToleratesTaint(&tc.taint); tc.expectTolerated != tolerated {
 			t.Errorf("[%s] expect %v, got %v: toleration %+v, taint %s", tc.description, tc.expectTolerated, tolerated, tc.toleration, tc.taint.ToString())
 		}
 	}
