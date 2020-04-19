@@ -277,22 +277,3 @@ func TestToleratesTaint(t *testing.T) {
 		}
 	}
 }
-
-func TestFilterNoExecuteTaints(t *testing.T) {
-	taints := []v1.Taint{
-		{
-			Key:    "one",
-			Value:  "one",
-			Effect: v1.TaintEffectNoExecute,
-		},
-		{
-			Key:    "two",
-			Value:  "two",
-			Effect: v1.TaintEffectNoSchedule,
-		},
-	}
-	taints = getNoScheduleTaints(taints)
-	if len(taints) != 1 || taints[0].Key != "two" {
-		t.Errorf("Filtering doesn't work. Got %v", taints)
-	}
-}
