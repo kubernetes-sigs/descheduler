@@ -188,7 +188,7 @@ func TestToleratesTaint(t *testing.T) {
 			description: "toleration and taint have the same key and effect, and operator is Exists, and taint has no value, expect tolerated",
 			toleration: v1.Toleration{
 				Key:      "foo",
-				Operator: TolerationOpExists,
+				Operator: v1.TolerationOpExists,
 				Effect:   v1.TaintEffectNoSchedule,
 			},
 			taint: v1.Taint{
@@ -201,7 +201,7 @@ func TestToleratesTaint(t *testing.T) {
 			description: "toleration and taint have the same key and effect, and operator is Exists, and taint has some value, expect tolerated",
 			toleration: v1.Toleration{
 				Key:      "foo",
-				Operator: TolerationOpExists,
+				Operator: v1.TolerationOpExists,
 				Effect:   v1.TaintEffectNoSchedule,
 			},
 			taint: v1.Taint{
@@ -215,7 +215,7 @@ func TestToleratesTaint(t *testing.T) {
 			description: "toleration and taint have the same effect, toleration has empty key and operator is Exists, means match all taints, expect tolerated",
 			toleration: v1.Toleration{
 				Key:      "",
-				Operator: TolerationOpExists,
+				Operator: v1.TolerationOpExists,
 				Effect:   v1.TaintEffectNoSchedule,
 			},
 			taint: v1.Taint{
@@ -229,7 +229,7 @@ func TestToleratesTaint(t *testing.T) {
 			description: "toleration and taint have the same key, effect and value, and operator is Equal, expect tolerated",
 			toleration: v1.Toleration{
 				Key:      "foo",
-				Operator: TolerationOpEqual,
+				Operator: v1.TolerationOpEqual,
 				Value:    "bar",
 				Effect:   v1.TaintEffectNoSchedule,
 			},
@@ -244,7 +244,7 @@ func TestToleratesTaint(t *testing.T) {
 			description: "toleration and taint have the same key and effect, but different values, and operator is Equal, expect not tolerated",
 			toleration: v1.Toleration{
 				Key:      "foo",
-				Operator: TolerationOpEqual,
+				Operator: v1.TolerationOpEqual,
 				Value:    "value1",
 				Effect:   v1.TaintEffectNoSchedule,
 			},
@@ -259,7 +259,7 @@ func TestToleratesTaint(t *testing.T) {
 			description: "toleration and taint have the same key and value, but different effects, and operator is Equal, expect not tolerated",
 			toleration: v1.Toleration{
 				Key:      "foo",
-				Operator: TolerationOpEqual,
+				Operator: v1.TolerationOpEqual,
 				Value:    "bar",
 				Effect:   v1.TaintEffectNoSchedule,
 			},

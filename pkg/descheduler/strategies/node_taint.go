@@ -28,11 +28,6 @@ import (
 	"k8s.io/klog"
 )
 
-const (
-	TolerationOpExists v1.TolerationOperator = "Exists"
-	TolerationOpEqual  v1.TolerationOperator = "Equal"
-)
-
 // RemovePodsViolatingNodeTaints with elimination strategy
 func RemovePodsViolatingNodeTaints(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node, nodePodCount utils.NodePodEvictedCount) {
 	if !strategy.Enabled {
@@ -56,7 +51,12 @@ func deletePodsViolatingNodeTaints(client clientset.Interface, policyGroupVersio
 			if maxPodsToEvict > 0 && nodePodCount[node]+1 > maxPodsToEvict {
 				break
 			}
-			if !checkPodsSatisfyTolerations(pods[i], node) {
+			if !utils.TolerationsTolerateTaintsWithFilter(
+				pods[i].Spec.Tolerations,
+				node.Spec.Taints,
+				func(taint *v1.Taint) bool { return taint.Effect == v1.TaintEffectNoSchedule },
+			) {
+				klog.V(2).Infof("Not all taints with NoSchedule effect are tolerated after update for pod %v on node %v", pods[i].Name, node.Name)
 				success, err := evictions.EvictPod(client, pods[i], policyGroupVersion, dryRun)
 				if !success {
 					klog.Errorf("Error when evicting pod: %#v (%#v)\n", pods[i].Name, err)
@@ -69,17 +69,4 @@ func deletePodsViolatingNodeTaints(client clientset.Interface, policyGroupVersio
 		podsEvicted += nodePodCount[node]
 	}
 	return podsEvicted
-}
-
-// checkPodsSatisfyTolerations checks if the node's taints (NoSchedule) are still satisfied by pods' tolerations.
-func checkPodsSatisfyTolerations(pod *v1.Pod, node *v1.Node) bool {
-	if !utils.TolerationsTolerateTaintsWithFilter(
-		pod.Spec.Tolerations,
-		node.Spec.Taints,
-		func(taint *v1.Taint) bool { return taint.Effect == v1.TaintEffectNoSchedule },
-	) {
-		klog.V(2).Infof("Not all taints are tolerated after update for Pod %v on node %v", pod.Name, node.Name)
-		return false
-	}
-	return true
 }
