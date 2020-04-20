@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -341,10 +342,8 @@ func TestLowNodeUtilization(t *testing.T) {
 			}
 
 			var nodes []*v1.Node
-			npe := utils.NodePodEvictedCount{}
 			for _, node := range test.nodes {
 				nodes = append(nodes, node)
-				npe[node] = 0
 			}
 
 			npm := createNodePodsMap(fakeClient, nodes)
@@ -352,7 +351,16 @@ func TestLowNodeUtilization(t *testing.T) {
 			if len(lowNodes) != 1 {
 				t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
 			}
-			podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, test.targetThresholds, false, test.expectedPodsEvicted, false, npe)
+			podEvictor := evictions.NewPodEvictor(
+				fakeClient,
+				"v1",
+				false,
+				test.expectedPodsEvicted,
+				nodes,
+			)
+
+			evictPodsFromTargetNodes(targetNodes, lowNodes, test.targetThresholds, false, podEvictor)
+			podsEvicted := podEvictor.TotalEvicted()
 			if test.expectedPodsEvicted != podsEvicted {
 				t.Errorf("Expected %#v pods to be evicted but %#v got evicted", test.expectedPodsEvicted, podsEvicted)
 			}
@@ -622,8 +630,15 @@ func TestWithTaints(t *testing.T) {
 				},
 			}
 
-			nodePodCount := utils.InitializeNodePodCount(item.nodes)
-			LowNodeUtilization(ds, strategy, "policy/v1", item.nodes, nodePodCount)
+			podEvictor := evictions.NewPodEvictor(
+				&fake.Clientset{Fake: *fakePtr},
+				"policy/v1",
+				ds.DryRun,
+				item.evictionsExpected,
+				item.nodes,
+			)
+
+			LowNodeUtilization(ds, strategy, item.nodes, podEvictor)
 
 			if item.evictionsExpected != evictionCounter {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, evictionCounter)

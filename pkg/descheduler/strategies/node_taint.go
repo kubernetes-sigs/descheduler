@@ -29,44 +29,34 @@ import (
 )
 
 // RemovePodsViolatingNodeTaints with elimination strategy
-func RemovePodsViolatingNodeTaints(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, policyGroupVersion string, nodes []*v1.Node, nodePodCount utils.NodePodEvictedCount) {
+func RemovePodsViolatingNodeTaints(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	if !strategy.Enabled {
 		return
 	}
-	deletePodsViolatingNodeTaints(ds.Client, policyGroupVersion, nodes, ds.DryRun, nodePodCount, ds.MaxNoOfPodsToEvictPerNode, ds.EvictLocalStoragePods)
+	deletePodsViolatingNodeTaints(ds.Client, nodes, ds.EvictLocalStoragePods, podEvictor)
 }
 
 // deletePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
-func deletePodsViolatingNodeTaints(client clientset.Interface, policyGroupVersion string, nodes []*v1.Node, dryRun bool, nodePodCount utils.NodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
-	podsEvicted := 0
+func deletePodsViolatingNodeTaints(client clientset.Interface, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
 		pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
 		if err != nil {
 			//no pods evicted as error encountered retrieving evictable Pods
-			return 0
+			return
 		}
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
-			if maxPodsToEvict > 0 && nodePodCount[node]+1 > maxPodsToEvict {
-				break
-			}
 			if !utils.TolerationsTolerateTaintsWithFilter(
 				pods[i].Spec.Tolerations,
 				node.Spec.Taints,
 				func(taint *v1.Taint) bool { return taint.Effect == v1.TaintEffectNoSchedule },
 			) {
 				klog.V(2).Infof("Not all taints with NoSchedule effect are tolerated after update for pod %v on node %v", pods[i].Name, node.Name)
-				success, err := evictions.EvictPod(client, pods[i], policyGroupVersion, dryRun)
-				if !success {
-					klog.Errorf("Error when evicting pod: %#v (%#v)\n", pods[i].Name, err)
-				} else {
-					nodePodCount[node]++
-					klog.V(1).Infof("Evicted pod: %#v (%#v)", pods[i].Name, err)
+				if _, err := podEvictor.EvictPod(pods[i], node); err != nil {
+					break
 				}
 			}
 		}
-		podsEvicted += nodePodCount[node]
 	}
-	return podsEvicted
 }
