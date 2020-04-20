@@ -25,7 +25,8 @@ import (
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/utils"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -93,7 +94,6 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		pods                    []v1.Pod
 		strategy                api.DeschedulerStrategy
 		expectedEvictedPodCount int
-		npe                     utils.NodePodEvictedCount
 		maxPodsToEvict          int
 	}{
 		{
@@ -109,7 +109,6 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			expectedEvictedPodCount: 0,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			npe:                     utils.NodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
 			maxPodsToEvict:          0,
 		},
 		{
@@ -125,7 +124,6 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			expectedEvictedPodCount: 0,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			npe:                     utils.NodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
 			maxPodsToEvict:          0,
 		},
 		{
@@ -134,7 +132,6 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			expectedEvictedPodCount: 0,
 			pods:                    addPodsToNode(nodeWithLabels),
 			nodes:                   []*v1.Node{nodeWithLabels},
-			npe:                     utils.NodePodEvictedCount{nodeWithLabels: 0},
 			maxPodsToEvict:          0,
 		},
 		{
@@ -143,7 +140,6 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			npe:                     utils.NodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
 			maxPodsToEvict:          0,
 		},
 		{
@@ -152,7 +148,6 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			npe:                     utils.NodePodEvictedCount{nodeWithoutLabels: 0, nodeWithLabels: 0},
 			maxPodsToEvict:          1,
 		},
 		{
@@ -161,7 +156,6 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, unschedulableNodeWithLabels},
-			npe:                     utils.NodePodEvictedCount{nodeWithoutLabels: 0, unschedulableNodeWithLabels: 0},
 			maxPodsToEvict:          0,
 		},
 	}
@@ -175,9 +169,21 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 
 		ds := options.DeschedulerServer{
 			Client: fakeClient,
+			DeschedulerConfiguration: componentconfig.DeschedulerConfiguration{
+				EvictLocalStoragePods: false,
+			},
 		}
 
-		actualEvictedPodCount := removePodsViolatingNodeAffinityCount(&ds, tc.strategy, "v1", tc.nodes, tc.npe, tc.maxPodsToEvict, false)
+		podEvictor := evictions.NewPodEvictor(
+			fakeClient,
+			"v1",
+			ds.DryRun,
+			tc.maxPodsToEvict,
+			tc.nodes,
+		)
+
+		RemovePodsViolatingNodeAffinity(&ds, tc.strategy, tc.nodes, podEvictor)
+		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)
 		}
