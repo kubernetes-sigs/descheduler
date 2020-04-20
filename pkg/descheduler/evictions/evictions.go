@@ -32,6 +32,72 @@ import (
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 )
 
+// nodePodEvictedCount keeps count of pods evicted on node
+type nodePodEvictedCount map[*v1.Node]int
+
+type PodEvictor struct {
+	client             clientset.Interface
+	policyGroupVersion string
+	dryRun             bool
+	maxPodsToEvict     int
+	nodepodCount       nodePodEvictedCount
+}
+
+func NewPodEvictor(
+	client clientset.Interface,
+	policyGroupVersion string,
+	dryRun bool,
+	maxPodsToEvict int,
+	nodes []*v1.Node,
+) *PodEvictor {
+	var nodePodCount = make(nodePodEvictedCount)
+	for _, node := range nodes {
+		// Initialize podsEvicted till now with 0.
+		nodePodCount[node] = 0
+	}
+
+	return &PodEvictor{
+		client:             client,
+		policyGroupVersion: policyGroupVersion,
+		dryRun:             dryRun,
+		maxPodsToEvict:     maxPodsToEvict,
+		nodepodCount:       nodePodCount,
+	}
+}
+
+// NodeEvicted gives a number of pods evicted for node
+func (pe *PodEvictor) NodeEvicted(node *v1.Node) int {
+	return pe.nodepodCount[node]
+}
+
+// TotalEvicted gives a number of pods evicted through all nodes
+func (pe *PodEvictor) TotalEvicted() int {
+	var total int
+	for _, count := range pe.nodepodCount {
+		total += count
+	}
+	return total
+}
+
+// EvictPod returns non-nil error only when evicting a pod on a node is not
+// possible (due to maxPodsToEvict constraint). Success is true when the pod
+// is evicted on the server side.
+func (pe *PodEvictor) EvictPod(pod *v1.Pod, node *v1.Node) (success bool, err error) {
+	if pe.maxPodsToEvict > 0 && pe.nodepodCount[node]+1 > pe.maxPodsToEvict {
+		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", pe.maxPodsToEvict, node.Name)
+	}
+
+	success, err = EvictPod(pe.client, pod, pe.policyGroupVersion, pe.dryRun)
+	if success {
+		pe.nodepodCount[node]++
+		klog.V(1).Infof("Evicted pod: %#v (%#v)", pod.Name, err)
+		return success, nil
+	}
+	// err is used only for logging purposes
+	klog.Errorf("Error when evicting pod: %#v (%#v)", pod.Name, err)
+	return false, nil
+}
+
 func EvictPod(client clientset.Interface, pod *v1.Pod, policyGroupVersion string, dryRun bool) (bool, error) {
 	if dryRun {
 		return true, nil
@@ -58,11 +124,12 @@ func EvictPod(client clientset.Interface, pod *v1.Pod, policyGroupVersion string
 		r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
 		r.Event(pod, v1.EventTypeNormal, "Descheduled", "pod evicted by sigs.k8s.io/descheduler")
 		return true, nil
-	} else if apierrors.IsTooManyRequests(err) {
-		return false, fmt.Errorf("error when evicting pod (ignoring) %q: %v", pod.Name, err)
-	} else if apierrors.IsNotFound(err) {
-		return true, fmt.Errorf("pod not found when evicting %q: %v", pod.Name, err)
-	} else {
-		return false, err
 	}
+	if apierrors.IsTooManyRequests(err) {
+		return false, fmt.Errorf("error when evicting pod (ignoring) %q: %v", pod.Name, err)
+	}
+	if apierrors.IsNotFound(err) {
+		return false, fmt.Errorf("pod not found when evicting %q: %v", pod.Name, err)
+	}
+	return false, err
 }
