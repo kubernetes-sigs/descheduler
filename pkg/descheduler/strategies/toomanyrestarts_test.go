@@ -20,14 +20,13 @@ import (
 	"testing"
 
 	"fmt"
+
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -91,15 +90,6 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			},
 		}
 	}
-
-	node := test.BuildTestNode("node1", 2000, 3000, 10, nil)
-	pods := initPods(node)
-
-	fakeClient := &fake.Clientset{}
-
-	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		return true, &v1.PodList{Items: pods}, nil
-	})
 
 	tests := []struct {
 		description             string
@@ -165,13 +155,13 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		node := test.BuildTestNode("node1", 2000, 3000, 10, nil)
+		pods := initPods(node)
 
-		ds := options.DeschedulerServer{
-			DeschedulerConfiguration: componentconfig.DeschedulerConfiguration{
-				MaxNoOfPodsToEvictPerNode: tc.maxPodsToEvict,
-			},
-			Client: fakeClient,
-		}
+		fakeClient := &fake.Clientset{}
+		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+			return true, &v1.PodList{Items: pods}, nil
+		})
 
 		podEvictor := evictions.NewPodEvictor(
 			fakeClient,
@@ -181,7 +171,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			[]*v1.Node{node},
 		)
 
-		removePodsHavingTooManyRestarts(&ds, tc.strategy, []*v1.Node{node}, podEvictor, ds.EvictLocalStoragePods)
+		RemovePodsHavingTooManyRestarts(fakeClient, tc.strategy, []*v1.Node{node}, false, podEvictor)
 		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)

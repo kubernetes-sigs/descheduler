@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
@@ -170,7 +171,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			tc.nodes,
 		)
 
-		deletePodsViolatingNodeTaints(fakeClient, tc.nodes, tc.evictLocalStoragePods, podEvictor)
+		RemovePodsViolatingNodeTaints(fakeClient, api.DeschedulerStrategy{}, tc.nodes, tc.evictLocalStoragePods, podEvictor)
 		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)

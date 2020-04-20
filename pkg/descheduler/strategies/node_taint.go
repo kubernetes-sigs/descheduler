@@ -17,7 +17,6 @@ limitations under the License.
 package strategies
 
 import (
-	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -28,16 +27,8 @@ import (
 	"k8s.io/klog"
 )
 
-// RemovePodsViolatingNodeTaints with elimination strategy
-func RemovePodsViolatingNodeTaints(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
-	if !strategy.Enabled {
-		return
-	}
-	deletePodsViolatingNodeTaints(ds.Client, nodes, ds.EvictLocalStoragePods, podEvictor)
-}
-
-// deletePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
-func deletePodsViolatingNodeTaints(client clientset.Interface, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
+// RemovePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
+func RemovePodsViolatingNodeTaints(client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
 		pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
