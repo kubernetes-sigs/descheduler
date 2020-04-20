@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
@@ -143,7 +144,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			[]*v1.Node{node},
 		)
 
-		deleteDuplicatePods(fakeClient, []*v1.Node{node}, false, podEvictor)
+		RemoveDuplicatePods(fakeClient, api.DeschedulerStrategy{}, []*v1.Node{node}, false, podEvictor)
 		podsEvicted := podEvictor.TotalEvicted()
 		if podsEvicted != testCase.expectedEvictedPodCount {
 			t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)

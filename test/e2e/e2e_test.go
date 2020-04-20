@@ -125,17 +125,15 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface, nodeInfor
 		},
 	}
 
-	ds := &options.DeschedulerServer{Client: clientset}
-
 	podEvictor := evictions.NewPodEvictor(
-		ds.Client,
+		clientset,
 		evictionPolicyGroupVersion,
-		ds.DryRun,
-		ds.MaxNoOfPodsToEvictPerNode,
+		false,
+		0,
 		nodes,
 	)
 
-	strategies.LowNodeUtilization(ds, lowNodeUtilizationStrategy, nodes, podEvictor)
+	strategies.LowNodeUtilization(clientset, lowNodeUtilizationStrategy, nodes, false, podEvictor)
 	time.Sleep(10 * time.Second)
 }
 

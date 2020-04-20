@@ -33,9 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
@@ -623,22 +621,15 @@ func TestWithTaints(t *testing.T) {
 				return true, nil, nil
 			})
 
-			ds := &options.DeschedulerServer{
-				Client: &fake.Clientset{Fake: *fakePtr},
-				DeschedulerConfiguration: componentconfig.DeschedulerConfiguration{
-					EvictLocalStoragePods: false,
-				},
-			}
-
 			podEvictor := evictions.NewPodEvictor(
 				&fake.Clientset{Fake: *fakePtr},
 				"policy/v1",
-				ds.DryRun,
+				false,
 				item.evictionsExpected,
 				item.nodes,
 			)
 
-			LowNodeUtilization(ds, strategy, item.nodes, podEvictor)
+			LowNodeUtilization(&fake.Clientset{Fake: *fakePtr}, strategy, item.nodes, false, podEvictor)
 
 			if item.evictionsExpected != evictionCounter {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, evictionCounter)
