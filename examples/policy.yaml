@@ -4,9 +4,9 @@ strategies:
   "RemoveDuplicates":
      enabled: true
   "RemovePodsViolatingInterPodAntiAffinity":
-     enabled: true
+     enabled: false
   "LowNodeUtilization":
-     enabled: true
+     enabled: false
      params:
        nodeResourceUtilizationThresholds:
          thresholds:

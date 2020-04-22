@@ -17,12 +17,14 @@ limitations under the License.
 package strategies
 
 import (
+	"fmt"
 	"strings"
 
 	"k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -50,8 +52,17 @@ func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, 
 		klog.V(1).Infof("Processing node: %#v", node.Name)
 		dpm := ListDuplicatePodsOnANode(client, node, evictLocalStoragePods)
 		for creator, pods := range dpm {
+			nReplicas, err := getReadyReplicasForOwnerRef(client, creator)
+			if err != nil {
+				klog.Errorf("Error getting the number of replicas: %v", err)
+				continue
+			}
+			if int(nReplicas) >= len(nodes) {
+				klog.V(1).Infof("%#v with replicas %d , skipping", creator, nReplicas)
+				continue
+			}
 			if len(pods) > 1 {
-				klog.V(1).Infof("%#v", creator)
+				klog.V(1).Infof("%#v with replicas %d", creator, nReplicas)
 				// i = 0 does not evict the first pod
 				for i := 1; i < len(pods); i++ {
 					if maxPodsToEvict > 0 && nodepodCount[node]+1 > maxPodsToEvict {
@@ -63,6 +74,7 @@ func deleteDuplicatePods(client clientset.Interface, policyGroupVersion string, 
 					} else {
 						nodepodCount[node]++
 						klog.V(1).Infof("Evicted pod: %#v (%#v)", pods[i].Name, err)
+						break
 					}
 				}
 			}
@@ -94,4 +106,27 @@ func FindDuplicatePods(pods []*v1.Pod) DuplicatePodsMap {
 		}
 	}
 	return dpm
+}
+
+func getReadyReplicasForOwnerRef(client clientset.Interface, ownerRef string) (int32, error) {
+	parts := strings.Split(ownerRef, "/")
+	ns := parts[0]
+	kind := parts[1]
+	name := parts[2]
+	switch kind {
+	case "ReplicaSet":
+		if rs, err := client.AppsV1().ReplicaSets(ns).Get(name, metav1.GetOptions{}); err == nil {
+			return rs.Status.ReadyReplicas, nil
+		} else {
+			return -1, err
+		}
+	case "ReplicationController":
+		if rc, err := client.CoreV1().ReplicationControllers(ns).Get(name, metav1.GetOptions{}); err == nil {
+			return rc.Status.ReadyReplicas, nil
+		} else {
+			return -1, err
+		}
+	default:
+		return -1, fmt.Errorf("pod owned by %s / %s - not managing", kind, name)
+	}
 }
