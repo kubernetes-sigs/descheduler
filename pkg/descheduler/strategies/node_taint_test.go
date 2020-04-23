@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -99,7 +100,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		nodes                   []*v1.Node
 		pods                    []v1.Pod
 		evictLocalStoragePods   bool
-		npe                     utils.NodePodEvictedCount
 		maxPodsToEvict          int
 		expectedEvictedPodCount int
 	}{
@@ -109,7 +109,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p1, *p2, *p3},
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
-			npe:                     utils.NodePodEvictedCount{node1: 0},
 			maxPodsToEvict:          0,
 			expectedEvictedPodCount: 1, //p2 gets evicted
 		},
@@ -118,7 +117,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p1, *p3, *p4},
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
-			npe:                     utils.NodePodEvictedCount{node1: 0},
 			maxPodsToEvict:          0,
 			expectedEvictedPodCount: 1, //p4 gets evicted
 		},
@@ -127,7 +125,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p1, *p5, *p6},
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
-			npe:                     utils.NodePodEvictedCount{node1: 0},
 			maxPodsToEvict:          1,
 			expectedEvictedPodCount: 1, //p5 or p6 gets evicted
 		},
@@ -136,7 +133,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p7, *p8, *p9, *p10},
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   false,
-			npe:                     utils.NodePodEvictedCount{node2: 0},
 			maxPodsToEvict:          0,
 			expectedEvictedPodCount: 0,
 		},
@@ -145,7 +141,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p7, *p8, *p9, *p10},
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   true,
-			npe:                     utils.NodePodEvictedCount{node2: 0},
 			maxPodsToEvict:          0,
 			expectedEvictedPodCount: 1,
 		},
@@ -154,7 +149,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p7, *p8, *p10, *p11},
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   false,
-			npe:                     utils.NodePodEvictedCount{node2: 0},
 			maxPodsToEvict:          0,
 			expectedEvictedPodCount: 1,
 		},
@@ -168,7 +162,16 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			return true, &v1.PodList{Items: tc.pods}, nil
 		})
 
-		actualEvictedPodCount := deletePodsViolatingNodeTaints(fakeClient, "v1", tc.nodes, false, tc.npe, tc.maxPodsToEvict, tc.evictLocalStoragePods)
+		podEvictor := evictions.NewPodEvictor(
+			fakeClient,
+			"v1",
+			false,
+			tc.maxPodsToEvict,
+			tc.nodes,
+		)
+
+		deletePodsViolatingNodeTaints(fakeClient, tc.nodes, tc.evictLocalStoragePods, podEvictor)
+		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)
 		}

@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -127,9 +128,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-
-		npe := utils.NodePodEvictedCount{}
-		npe[node] = 0
 		fakeClient := &fake.Clientset{}
 		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 			return true, &v1.PodList{Items: testCase.pods}, nil
@@ -137,7 +135,16 @@ func TestFindDuplicatePods(t *testing.T) {
 		fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 			return true, node, nil
 		})
-		podsEvicted := deleteDuplicatePods(fakeClient, "v1", []*v1.Node{node}, false, npe, testCase.maxPodsToEvict, false)
+		podEvictor := evictions.NewPodEvictor(
+			fakeClient,
+			"v1",
+			false,
+			testCase.maxPodsToEvict,
+			[]*v1.Node{node},
+		)
+
+		deleteDuplicatePods(fakeClient, []*v1.Node{node}, false, podEvictor)
+		podsEvicted := podEvictor.TotalEvicted()
 		if podsEvicted != testCase.expectedEvictedPodCount {
 			t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)
 		}
