@@ -182,6 +182,22 @@ strategies:
     enabled: true
 ````
 
+### RemovePodsHavingTooManyRestarts
+
+This strategy makes sure that pods having too many restarts are removed from nodes. For example a pod with EBS/PD that can't get the volume/disk attached to the instance, then the pod should be re-scheduled to other nodes.
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "RemovePodsHavingTooManyRestarts":
+     enabled: true
+     params:
+       podsHavingTooManyRestarts:
+         podRestartThreshold: 100
+         includingInitContainers: true
+```
+
 ## Pod Evictions
 
 When the descheduler decides to evict pods from a node, it employs the following general mechanism:

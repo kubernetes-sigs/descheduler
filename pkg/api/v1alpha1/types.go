@@ -48,6 +48,7 @@ type DeschedulerStrategy struct {
 type StrategyParameters struct {
 	NodeResourceUtilizationThresholds NodeResourceUtilizationThresholds `json:"nodeResourceUtilizationThresholds,omitempty"`
 	NodeAffinityType                  []string                          `json:"nodeAffinityType,omitempty"`
+	PodsHavingTooManyRestarts         PodsHavingTooManyRestarts         `json:"podsHavingTooManyRestarts,omitempty"`
 }
 
 type Percentage float64
@@ -57,4 +58,9 @@ type NodeResourceUtilizationThresholds struct {
 	Thresholds       ResourceThresholds `json:"thresholds,omitempty"`
 	TargetThresholds ResourceThresholds `json:"targetThresholds,omitempty"`
 	NumberOfNodes    int                `json:"numberOfNodes,omitempty"`
+}
+
+type PodsHavingTooManyRestarts struct {
+	PodRestartThreshold     int32 `json:"podRestartThreshold,omitempty"`
+	IncludingInitContainers bool  `json:"includingInitContainers,omitempty"`
 }
