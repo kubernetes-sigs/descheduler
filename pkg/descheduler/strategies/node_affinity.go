@@ -18,24 +18,16 @@ package strategies
 
 import (
 	"k8s.io/api/core/v1"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 
-	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
-func RemovePodsViolatingNodeAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
-	if !strategy.Enabled {
-		return
-	}
-
-	removePodsViolatingNodeAffinityCount(ds, strategy, nodes, ds.EvictLocalStoragePods, podEvictor)
-}
-
-func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
+func RemovePodsViolatingNodeAffinity(client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
 	for _, nodeAffinity := range strategy.Params.NodeAffinityType {
 		klog.V(2).Infof("Executing for nodeAffinityType: %v", nodeAffinity)
 
@@ -44,7 +36,7 @@ func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strateg
 			for _, node := range nodes {
 				klog.V(1).Infof("Processing node: %#v\n", node.Name)
 
-				pods, err := podutil.ListEvictablePodsOnNode(ds.Client, node, evictLocalStoragePods)
+				pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
 				if err != nil {
 					klog.Errorf("failed to get pods from %v: %v", node.Name, err)
 				}
