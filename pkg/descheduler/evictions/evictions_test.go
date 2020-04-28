@@ -17,17 +17,18 @@ limitations under the License.
 package evictions
 
 import (
+	"testing"
+
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/test"
-	"testing"
 )
 
 func TestEvictPod(t *testing.T) {
-	node1 := test.BuildTestNode("node1", 1000, 2000, 9)
-	pod1 := test.BuildTestPod("p1", 400, 0, "node1")
+	node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
+	pod1 := test.BuildTestPod("p1", 400, 0, "node1", nil)
 	tests := []struct {
 		description string
 		node        *v1.Node
@@ -46,7 +47,7 @@ func TestEvictPod(t *testing.T) {
 			description: "test pod eviction - pod absent",
 			node:        node1,
 			pod:         pod1,
-			pods:        []v1.Pod{*test.BuildTestPod("p2", 400, 0, "node1"), *test.BuildTestPod("p3", 450, 0, "node1")},
+			pods:        []v1.Pod{*test.BuildTestPod("p2", 400, 0, "node1", nil), *test.BuildTestPod("p3", 450, 0, "node1", nil)},
 			want:        true,
 		},
 	}

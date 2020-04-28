@@ -19,6 +19,8 @@ package descheduler
 import (
 	"fmt"
 
+	"k8s.io/api/core/v1"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -26,10 +28,10 @@ import (
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func Run(rs *options.DeschedulerServer) error {
@@ -56,12 +58,23 @@ func Run(rs *options.DeschedulerServer) error {
 	return RunDeschedulerStrategies(rs, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel)
 }
 
+type strategyFunction func(client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor)
+
 func RunDeschedulerStrategies(rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, stopChannel chan struct{}) error {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
 	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
 
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
+
+	strategyFuncs := map[string]strategyFunction{
+		"RemoveDuplicates":                        strategies.RemoveDuplicatePods,
+		"LowNodeUtilization":                      strategies.LowNodeUtilization,
+		"RemovePodsViolatingInterPodAntiAffinity": strategies.RemovePodsViolatingInterPodAntiAffinity,
+		"RemovePodsViolatingNodeAffinity":         strategies.RemovePodsViolatingNodeAffinity,
+		"RemovePodsViolatingNodeTaints":           strategies.RemovePodsViolatingNodeTaints,
+		"RemovePodsHavingTooManyRestarts":         strategies.RemovePodsHavingTooManyRestarts,
+	}
 
 	wait.Until(func() {
 		nodes, err := nodeutil.ReadyNodes(rs.Client, nodeInformer, rs.NodeSelector, stopChannel)
@@ -77,13 +90,19 @@ func RunDeschedulerStrategies(rs *options.DeschedulerServer, deschedulerPolicy *
 			return
 		}
 
-		nodePodCount := utils.InitializeNodePodCount(nodes)
+		podEvictor := evictions.NewPodEvictor(
+			rs.Client,
+			evictionPolicyGroupVersion,
+			rs.DryRun,
+			rs.MaxNoOfPodsToEvictPerNode,
+			nodes,
+		)
 
-		strategies.RemoveDuplicatePods(rs, deschedulerPolicy.Strategies["RemoveDuplicates"], evictionPolicyGroupVersion, nodes, nodePodCount)
-		strategies.LowNodeUtilization(rs, deschedulerPolicy.Strategies["LowNodeUtilization"], evictionPolicyGroupVersion, nodes, nodePodCount)
-		strategies.RemovePodsViolatingInterPodAntiAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingInterPodAntiAffinity"], evictionPolicyGroupVersion, nodes, nodePodCount)
-		strategies.RemovePodsViolatingNodeAffinity(rs, deschedulerPolicy.Strategies["RemovePodsViolatingNodeAffinity"], evictionPolicyGroupVersion, nodes, nodePodCount)
-		strategies.RemovePodsViolatingNodeTaints(rs, deschedulerPolicy.Strategies["RemovePodsViolatingNodeTaints"], evictionPolicyGroupVersion, nodes, nodePodCount)
+		for name, f := range strategyFuncs {
+			if strategy := deschedulerPolicy.Strategies[api.StrategyName(name)]; strategy.Enabled {
+				f(rs.Client, strategy, nodes, rs.EvictLocalStoragePods, podEvictor)
+			}
+		}
 
 		// If there was no interval specified, send a signal to the stopChannel to end the wait.Until loop after 1 iteration
 		if rs.DeschedulingInterval.Seconds() == 0 {

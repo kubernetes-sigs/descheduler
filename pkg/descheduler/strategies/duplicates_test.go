@@ -24,29 +24,31 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
 
 func TestFindDuplicatePods(t *testing.T) {
 	// first setup pods
-	node := test.BuildTestNode("n1", 2000, 3000, 10)
-	p1 := test.BuildTestPod("p1", 100, 0, node.Name)
+	node := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	p1 := test.BuildTestPod("p1", 100, 0, node.Name, nil)
 	p1.Namespace = "dev"
-	p2 := test.BuildTestPod("p2", 100, 0, node.Name)
+	p2 := test.BuildTestPod("p2", 100, 0, node.Name, nil)
 	p2.Namespace = "dev"
-	p3 := test.BuildTestPod("p3", 100, 0, node.Name)
+	p3 := test.BuildTestPod("p3", 100, 0, node.Name, nil)
 	p3.Namespace = "dev"
-	p4 := test.BuildTestPod("p4", 100, 0, node.Name)
-	p5 := test.BuildTestPod("p5", 100, 0, node.Name)
-	p6 := test.BuildTestPod("p6", 100, 0, node.Name)
-	p7 := test.BuildTestPod("p7", 100, 0, node.Name)
+	p4 := test.BuildTestPod("p4", 100, 0, node.Name, nil)
+	p5 := test.BuildTestPod("p5", 100, 0, node.Name, nil)
+	p6 := test.BuildTestPod("p6", 100, 0, node.Name, nil)
+	p7 := test.BuildTestPod("p7", 100, 0, node.Name, nil)
 	p7.Namespace = "kube-system"
-	p8 := test.BuildTestPod("p8", 100, 0, node.Name)
+	p8 := test.BuildTestPod("p8", 100, 0, node.Name, nil)
 	p8.Namespace = "test"
-	p9 := test.BuildTestPod("p9", 100, 0, node.Name)
+	p9 := test.BuildTestPod("p9", 100, 0, node.Name, nil)
 	p9.Namespace = "test"
-	p10 := test.BuildTestPod("p10", 100, 0, node.Name)
+	p10 := test.BuildTestPod("p10", 100, 0, node.Name, nil)
 	p10.Namespace = "test"
 
 	// ### Evictable Pods ###
@@ -127,9 +129,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-
-		npe := utils.NodePodEvictedCount{}
-		npe[node] = 0
 		fakeClient := &fake.Clientset{}
 		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 			return true, &v1.PodList{Items: testCase.pods}, nil
@@ -137,7 +136,16 @@ func TestFindDuplicatePods(t *testing.T) {
 		fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 			return true, node, nil
 		})
-		podsEvicted := deleteDuplicatePods(fakeClient, "v1", []*v1.Node{node}, false, npe, testCase.maxPodsToEvict, false)
+		podEvictor := evictions.NewPodEvictor(
+			fakeClient,
+			"v1",
+			false,
+			testCase.maxPodsToEvict,
+			[]*v1.Node{node},
+		)
+
+		RemoveDuplicatePods(fakeClient, api.DeschedulerStrategy{}, []*v1.Node{node}, false, podEvictor)
+		podsEvicted := podEvictor.TotalEvicted()
 		if podsEvicted != testCase.expectedEvictedPodCount {
 			t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)
 		}

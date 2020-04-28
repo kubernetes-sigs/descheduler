@@ -24,6 +24,7 @@ import (
 	"reflect"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/policy/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -32,246 +33,370 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
 
-// TODO: Make this table driven.
-func TestLowNodeUtilizationWithoutPriority(t *testing.T) {
-	var thresholds = make(api.ResourceThresholds)
-	var targetThresholds = make(api.ResourceThresholds)
-	thresholds[v1.ResourceCPU] = 30
-	thresholds[v1.ResourcePods] = 30
-	targetThresholds[v1.ResourceCPU] = 50
-	targetThresholds[v1.ResourcePods] = 50
+var (
+	lowPriority  = int32(0)
+	highPriority = int32(10000)
+)
 
-	n1 := test.BuildTestNode("n1", 4000, 3000, 9)
-	n2 := test.BuildTestNode("n2", 4000, 3000, 10)
-	n3 := test.BuildTestNode("n3", 4000, 3000, 10)
-	// Making n3 node unschedulable so that it won't counted in lowUtilized nodes list.
-	n3.Spec.Unschedulable = true
-	p1 := test.BuildTestPod("p1", 400, 0, n1.Name)
-	p2 := test.BuildTestPod("p2", 400, 0, n1.Name)
-	p3 := test.BuildTestPod("p3", 400, 0, n1.Name)
-	p4 := test.BuildTestPod("p4", 400, 0, n1.Name)
-	p5 := test.BuildTestPod("p5", 400, 0, n1.Name)
+func setRSOwnerRef(pod *v1.Pod)          { pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList() }
+func setDSOwnerRef(pod *v1.Pod)          { pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList() }
+func setNormalOwnerRef(pod *v1.Pod)      { pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList() }
+func setHighPriority(pod *v1.Pod)        { pod.Spec.Priority = &highPriority }
+func setLowPriority(pod *v1.Pod)         { pod.Spec.Priority = &lowPriority }
+func setNodeUnschedulable(node *v1.Node) { node.Spec.Unschedulable = true }
 
-	// These won't be evicted.
-	p6 := test.BuildTestPod("p6", 400, 0, n1.Name)
-	p7 := test.BuildTestPod("p7", 400, 0, n1.Name)
-	p8 := test.BuildTestPod("p8", 400, 0, n1.Name)
-
-	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-	p2.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-	p3.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-	p4.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-	p5.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-	// The following 4 pods won't get evicted.
-	// A daemonset.
-	p6.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
-	// A pod with local storage.
-	p7.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p7.Spec.Volumes = []v1.Volume{
-		{
-			Name: "sample",
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
-			},
-		},
-	}
-	// A Mirror Pod.
-	p7.Annotations = test.GetMirrorPodAnnotation()
-	// A Critical Pod.
-	p8.Namespace = "kube-system"
-	priority := utils.SystemCriticalPriority
-	p8.Spec.Priority = &priority
-	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
-	p9.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-	fakeClient := &fake.Clientset{}
-	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		list := action.(core.ListAction)
-		fieldString := list.GetListRestrictions().Fields.String()
-		if strings.Contains(fieldString, "n1") {
-			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8}}, nil
-		}
-		if strings.Contains(fieldString, "n2") {
-			return true, &v1.PodList{Items: []v1.Pod{*p9}}, nil
-		}
-		if strings.Contains(fieldString, "n3") {
-			return true, &v1.PodList{Items: []v1.Pod{}}, nil
-		}
-		return true, nil, fmt.Errorf("Failed to list: %v", list)
-	})
-	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
-		getAction := action.(core.GetAction)
-		switch getAction.GetName() {
-		case n1.Name:
-			return true, n1, nil
-		case n2.Name:
-			return true, n2, nil
-		case n3.Name:
-			return true, n3, nil
-		}
-		return true, nil, fmt.Errorf("Wrong node: %v", getAction.GetName())
-	})
-	expectedPodsEvicted := 3
-	npm := createNodePodsMap(fakeClient, []*v1.Node{n1, n2, n3})
-	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds, false)
-	if len(lowNodes) != 1 {
-		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
-	}
-	npe := utils.NodePodEvictedCount{}
-	npe[n1] = 0
-	npe[n2] = 0
-	npe[n3] = 0
-	podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, targetThresholds, false, 3, npe)
-	if expectedPodsEvicted != podsEvicted {
-		t.Errorf("Expected %#v pods to be evicted but %#v got evicted", expectedPodsEvicted, podsEvicted)
-	}
-
+func makeBestEffortPod(pod *v1.Pod) {
+	pod.Spec.Containers[0].Resources.Requests = nil
+	pod.Spec.Containers[0].Resources.Requests = nil
+	pod.Spec.Containers[0].Resources.Limits = nil
+	pod.Spec.Containers[0].Resources.Limits = nil
 }
 
-// TODO: Make this table driven.
-func TestLowNodeUtilizationWithPriorities(t *testing.T) {
-	var thresholds = make(api.ResourceThresholds)
-	var targetThresholds = make(api.ResourceThresholds)
-	thresholds[v1.ResourceCPU] = 30
-	thresholds[v1.ResourcePods] = 30
-	targetThresholds[v1.ResourceCPU] = 50
-	targetThresholds[v1.ResourcePods] = 50
-	lowPriority := int32(0)
-	highPriority := int32(10000)
-	n1 := test.BuildTestNode("n1", 4000, 3000, 9)
-	n2 := test.BuildTestNode("n2", 4000, 3000, 10)
-	n3 := test.BuildTestNode("n3", 4000, 3000, 10)
-	// Making n3 node unschedulable so that it won't counted in lowUtilized nodes list.
-	n3.Spec.Unschedulable = true
-	p1 := test.BuildTestPod("p1", 400, 0, n1.Name)
-	p1.Spec.Priority = &highPriority
-	p2 := test.BuildTestPod("p2", 400, 0, n1.Name)
-	p2.Spec.Priority = &highPriority
-	p3 := test.BuildTestPod("p3", 400, 0, n1.Name)
-	p3.Spec.Priority = &highPriority
-	p4 := test.BuildTestPod("p4", 400, 0, n1.Name)
-	p4.Spec.Priority = &highPriority
-	p5 := test.BuildTestPod("p5", 400, 0, n1.Name)
-	p5.Spec.Priority = &lowPriority
+func makeBurstablePod(pod *v1.Pod) {
+	pod.Spec.Containers[0].Resources.Limits = nil
+	pod.Spec.Containers[0].Resources.Limits = nil
+}
 
-	// These won't be evicted.
-	p6 := test.BuildTestPod("p6", 400, 0, n1.Name)
-	p6.Spec.Priority = &highPriority
-	p7 := test.BuildTestPod("p7", 400, 0, n1.Name)
-	p7.Spec.Priority = &lowPriority
-	p8 := test.BuildTestPod("p8", 400, 0, n1.Name)
-	p8.Spec.Priority = &lowPriority
+func makeGuaranteedPod(pod *v1.Pod) {
+	pod.Spec.Containers[0].Resources.Limits[v1.ResourceCPU] = pod.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]
+	pod.Spec.Containers[0].Resources.Limits[v1.ResourceMemory] = pod.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]
+}
 
-	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-	p2.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-	p3.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-	p4.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-	p5.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-	// The following 4 pods won't get evicted.
-	// A daemonset.
-	p6.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
-	// A pod with local storage.
-	p7.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p7.Spec.Volumes = []v1.Volume{
+func TestLowNodeUtilization(t *testing.T) {
+	n1NodeName := "n1"
+	n2NodeName := "n2"
+	n3NodeName := "n3"
+
+	testCases := []struct {
+		name                         string
+		thresholds, targetThresholds api.ResourceThresholds
+		nodes                        map[string]*v1.Node
+		pods                         map[string]*v1.PodList
+		expectedPodsEvicted          int
+		evictedPods                  []string
+	}{
 		{
-			Name: "sample",
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+			name: "without priorities",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
 			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			nodes: map[string]*v1.Node{
+				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, setNodeUnschedulable),
+			},
+			pods: map[string]*v1.PodList{
+				n1NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p1", 400, 0, n1NodeName, setRSOwnerRef),
+						*test.BuildTestPod("p2", 400, 0, n1NodeName, setRSOwnerRef),
+						*test.BuildTestPod("p3", 400, 0, n1NodeName, setRSOwnerRef),
+						*test.BuildTestPod("p4", 400, 0, n1NodeName, setRSOwnerRef),
+						*test.BuildTestPod("p5", 400, 0, n1NodeName, setRSOwnerRef),
+						// These won't be evicted.
+						*test.BuildTestPod("p6", 400, 0, n1NodeName, setDSOwnerRef),
+						*test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod with local storage.
+							setNormalOwnerRef(pod)
+							pod.Spec.Volumes = []v1.Volume{
+								{
+									Name: "sample",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+										EmptyDir: &v1.EmptyDirVolumeSource{
+											SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									},
+								},
+							}
+							// A Mirror Pod.
+							pod.Annotations = test.GetMirrorPodAnnotation()
+						}),
+						*test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A Critical Pod.
+							pod.Namespace = "kube-system"
+							priority := utils.SystemCriticalPriority
+							pod.Spec.Priority = &priority
+						}),
+					},
+				},
+				n2NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p9", 400, 0, n1NodeName, setRSOwnerRef),
+					},
+				},
+				n3NodeName: {},
+			},
+			expectedPodsEvicted: 3,
+		},
+		{
+			name: "with priorities",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			nodes: map[string]*v1.Node{
+				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, setNodeUnschedulable),
+			},
+			pods: map[string]*v1.PodList{
+				n1NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p1", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							setRSOwnerRef(pod)
+							setHighPriority(pod)
+						}),
+						*test.BuildTestPod("p2", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							setRSOwnerRef(pod)
+							setHighPriority(pod)
+						}),
+						*test.BuildTestPod("p3", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							setRSOwnerRef(pod)
+							setHighPriority(pod)
+						}),
+						*test.BuildTestPod("p4", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							setRSOwnerRef(pod)
+							setHighPriority(pod)
+						}),
+						*test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							setRSOwnerRef(pod)
+							setLowPriority(pod)
+						}),
+						// These won't be evicted.
+						*test.BuildTestPod("p6", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							setDSOwnerRef(pod)
+							setHighPriority(pod)
+						}),
+						*test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod with local storage.
+							setNormalOwnerRef(pod)
+							setLowPriority(pod)
+							pod.Spec.Volumes = []v1.Volume{
+								{
+									Name: "sample",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+										EmptyDir: &v1.EmptyDirVolumeSource{
+											SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									},
+								},
+							}
+							// A Mirror Pod.
+							pod.Annotations = test.GetMirrorPodAnnotation()
+						}),
+						*test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A Critical Pod.
+							pod.Namespace = "kube-system"
+							priority := utils.SystemCriticalPriority
+							pod.Spec.Priority = &priority
+						}),
+					},
+				},
+				n2NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p9", 400, 0, n1NodeName, setRSOwnerRef),
+					},
+				},
+				n3NodeName: {},
+			},
+			expectedPodsEvicted: 3,
+		},
+		{
+			name: "without priorities evicting best-effort pods only",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			nodes: map[string]*v1.Node{
+				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, setNodeUnschedulable),
+			},
+			// All pods are assumed to be burstable (test.BuildTestNode always sets both cpu/memory resource requests to some value)
+			pods: map[string]*v1.PodList{
+				n1NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p1", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							setRSOwnerRef(pod)
+							makeBestEffortPod(pod)
+						}),
+						*test.BuildTestPod("p2", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							setRSOwnerRef(pod)
+							makeBestEffortPod(pod)
+						}),
+						*test.BuildTestPod("p3", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							setRSOwnerRef(pod)
+						}),
+						*test.BuildTestPod("p4", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							setRSOwnerRef(pod)
+							makeBestEffortPod(pod)
+						}),
+						*test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							setRSOwnerRef(pod)
+							makeBestEffortPod(pod)
+						}),
+						// These won't be evicted.
+						*test.BuildTestPod("p6", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							setDSOwnerRef(pod)
+						}),
+						*test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod with local storage.
+							setNormalOwnerRef(pod)
+							pod.Spec.Volumes = []v1.Volume{
+								{
+									Name: "sample",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+										EmptyDir: &v1.EmptyDirVolumeSource{
+											SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									},
+								},
+							}
+							// A Mirror Pod.
+							pod.Annotations = test.GetMirrorPodAnnotation()
+						}),
+						*test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A Critical Pod.
+							pod.Namespace = "kube-system"
+							priority := utils.SystemCriticalPriority
+							pod.Spec.Priority = &priority
+						}),
+					},
+				},
+				n2NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p9", 400, 0, n1NodeName, setRSOwnerRef),
+					},
+				},
+				n3NodeName: {},
+			},
+			expectedPodsEvicted: 4,
+			evictedPods:         []string{"p1", "p2", "p4", "p5"},
 		},
 	}
-	// A Mirror Pod.
-	p7.Annotations = test.GetMirrorPodAnnotation()
-	// A Critical Pod.
-	p8.Namespace = "kube-system"
-	priority := utils.SystemCriticalPriority
-	p8.Spec.Priority = &priority
-	p9 := test.BuildTestPod("p9", 400, 0, n1.Name)
-	p9.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-	fakeClient := &fake.Clientset{}
-	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		list := action.(core.ListAction)
-		fieldString := list.GetListRestrictions().Fields.String()
-		if strings.Contains(fieldString, "n1") {
-			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8}}, nil
-		}
-		if strings.Contains(fieldString, "n2") {
-			return true, &v1.PodList{Items: []v1.Pod{*p9}}, nil
-		}
-		if strings.Contains(fieldString, "n3") {
-			return true, &v1.PodList{Items: []v1.Pod{}}, nil
-		}
-		return true, nil, fmt.Errorf("Failed to list: %v", list)
-	})
-	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
-		getAction := action.(core.GetAction)
-		switch getAction.GetName() {
-		case n1.Name:
-			return true, n1, nil
-		case n2.Name:
-			return true, n2, nil
-		case n3.Name:
-			return true, n3, nil
-		}
-		return true, nil, fmt.Errorf("Wrong node: %v", getAction.GetName())
-	})
-	expectedPodsEvicted := 3
-	npm := createNodePodsMap(fakeClient, []*v1.Node{n1, n2, n3})
-	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds, false)
-	if len(lowNodes) != 1 {
-		t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
-	}
-	npe := utils.NodePodEvictedCount{}
-	npe[n1] = 0
-	npe[n2] = 0
-	npe[n3] = 0
-	podsEvicted := evictPodsFromTargetNodes(fakeClient, "v1", targetNodes, lowNodes, targetThresholds, false, 3, npe)
-	if expectedPodsEvicted != podsEvicted {
-		t.Errorf("Expected %#v pods to be evicted but %#v got evicted", expectedPodsEvicted, podsEvicted)
-	}
 
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			fakeClient := &fake.Clientset{}
+			fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+				list := action.(core.ListAction)
+				fieldString := list.GetListRestrictions().Fields.String()
+				if strings.Contains(fieldString, n1NodeName) {
+					return true, test.pods[n1NodeName], nil
+				}
+				if strings.Contains(fieldString, n2NodeName) {
+					return true, test.pods[n2NodeName], nil
+				}
+				if strings.Contains(fieldString, n3NodeName) {
+					return true, test.pods[n3NodeName], nil
+				}
+				return true, nil, fmt.Errorf("Failed to list: %v", list)
+			})
+			fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
+				getAction := action.(core.GetAction)
+				if node, exists := test.nodes[getAction.GetName()]; exists {
+					return true, node, nil
+				}
+				return true, nil, fmt.Errorf("Wrong node: %v", getAction.GetName())
+			})
+			podsForEviction := make(map[string]struct{})
+			for _, pod := range test.evictedPods {
+				podsForEviction[pod] = struct{}{}
+			}
+
+			evictionFailed := false
+			if len(test.evictedPods) > 0 {
+				fakeClient.Fake.AddReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+					getAction := action.(core.CreateAction)
+					obj := getAction.GetObject()
+					if eviction, ok := obj.(*v1beta1.Eviction); ok {
+						if _, exists := podsForEviction[eviction.Name]; exists {
+							return true, obj, nil
+						}
+						evictionFailed = true
+						return true, nil, fmt.Errorf("pod %q was unexpectedly evicted", eviction.Name)
+					}
+					return true, obj, nil
+				})
+			}
+
+			var nodes []*v1.Node
+			for _, node := range test.nodes {
+				nodes = append(nodes, node)
+			}
+
+			npm := createNodePodsMap(fakeClient, nodes)
+			lowNodes, targetNodes := classifyNodes(npm, test.thresholds, test.targetThresholds, false)
+			if len(lowNodes) != 1 {
+				t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
+			}
+			podEvictor := evictions.NewPodEvictor(
+				fakeClient,
+				"v1",
+				false,
+				test.expectedPodsEvicted,
+				nodes,
+			)
+
+			evictPodsFromTargetNodes(targetNodes, lowNodes, test.targetThresholds, false, podEvictor)
+			podsEvicted := podEvictor.TotalEvicted()
+			if test.expectedPodsEvicted != podsEvicted {
+				t.Errorf("Expected %#v pods to be evicted but %#v got evicted", test.expectedPodsEvicted, podsEvicted)
+			}
+			if evictionFailed {
+				t.Errorf("Pod evictions failed unexpectedly")
+			}
+		})
+	}
 }
 
 func TestSortPodsByPriority(t *testing.T) {
-	n1 := test.BuildTestNode("n1", 4000, 3000, 9)
-	lowPriority := int32(0)
-	highPriority := int32(10000)
-	p1 := test.BuildTestPod("p1", 400, 0, n1.Name)
-	p1.Spec.Priority = &lowPriority
+	n1 := test.BuildTestNode("n1", 4000, 3000, 9, nil)
+
+	p1 := test.BuildTestPod("p1", 400, 0, n1.Name, setLowPriority)
 
 	// BestEffort
-	p2 := test.BuildTestPod("p2", 400, 0, n1.Name)
-	p2.Spec.Priority = &highPriority
-
-	p2.Spec.Containers[0].Resources.Requests = nil
-	p2.Spec.Containers[0].Resources.Limits = nil
+	p2 := test.BuildTestPod("p2", 400, 0, n1.Name, func(pod *v1.Pod) {
+		setHighPriority(pod)
+		makeBestEffortPod(pod)
+	})
 
 	// Burstable
-	p3 := test.BuildTestPod("p3", 400, 0, n1.Name)
-	p3.Spec.Priority = &highPriority
+	p3 := test.BuildTestPod("p3", 400, 0, n1.Name, func(pod *v1.Pod) {
+		setHighPriority(pod)
+		makeBurstablePod(pod)
+	})
 
 	// Guaranteed
-	p4 := test.BuildTestPod("p4", 400, 100, n1.Name)
-	p4.Spec.Priority = &highPriority
-	p4.Spec.Containers[0].Resources.Limits[v1.ResourceCPU] = *resource.NewMilliQuantity(400, resource.DecimalSI)
-	p4.Spec.Containers[0].Resources.Limits[v1.ResourceMemory] = *resource.NewQuantity(100, resource.DecimalSI)
+	p4 := test.BuildTestPod("p4", 400, 100, n1.Name, func(pod *v1.Pod) {
+		setHighPriority(pod)
+		makeGuaranteedPod(pod)
+	})
 
 	// Best effort with nil priorities.
-	p5 := test.BuildTestPod("p5", 400, 100, n1.Name)
+	p5 := test.BuildTestPod("p5", 400, 100, n1.Name, makeBestEffortPod)
 	p5.Spec.Priority = nil
-	p6 := test.BuildTestPod("p6", 400, 100, n1.Name)
-	p6.Spec.Containers[0].Resources.Limits[v1.ResourceCPU] = *resource.NewMilliQuantity(400, resource.DecimalSI)
-	p6.Spec.Containers[0].Resources.Limits[v1.ResourceMemory] = *resource.NewQuantity(100, resource.DecimalSI)
+
+	p6 := test.BuildTestPod("p6", 400, 100, n1.Name, makeGuaranteedPod)
 	p6.Spec.Priority = nil
 
 	podList := []*v1.Pod{p4, p3, p2, p1, p6, p5}
@@ -382,7 +507,7 @@ func TestWithTaints(t *testing.T) {
 	strategy := api.DeschedulerStrategy{
 		Enabled: true,
 		Params: api.StrategyParameters{
-			NodeResourceUtilizationThresholds: api.NodeResourceUtilizationThresholds{
+			NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
 				Thresholds: api.ResourceThresholds{
 					v1.ResourcePods: 20,
 				},
@@ -393,9 +518,9 @@ func TestWithTaints(t *testing.T) {
 		},
 	}
 
-	n1 := test.BuildTestNode("n1", 2000, 3000, 10)
-	n2 := test.BuildTestNode("n2", 1000, 3000, 10)
-	n3 := test.BuildTestNode("n3", 1000, 3000, 10)
+	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	n2 := test.BuildTestNode("n2", 1000, 3000, 10, nil)
+	n3 := test.BuildTestNode("n3", 1000, 3000, 10, nil)
 	n3withTaints := n3.DeepCopy()
 	n3withTaints.Spec.Taints = []v1.Taint{
 		{
@@ -405,7 +530,7 @@ func TestWithTaints(t *testing.T) {
 		},
 	}
 
-	podThatToleratesTaint := test.BuildTestPod("tolerate_pod", 200, 0, n1.Name)
+	podThatToleratesTaint := test.BuildTestPod("tolerate_pod", 200, 0, n1.Name, setRSOwnerRef)
 	podThatToleratesTaint.Spec.Tolerations = []v1.Toleration{
 		{
 			Key:   "key",
@@ -424,16 +549,16 @@ func TestWithTaints(t *testing.T) {
 			nodes: []*v1.Node{n1, n2, n3},
 			pods: []*v1.Pod{
 				//Node 1 pods
-				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_8_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_8_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
 				// Node 2 pods
-				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n2.Name), 200, 0, n2.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n2.Name), 200, 0, n2.Name, setRSOwnerRef),
 			},
 			evictionsExpected: 1,
 		},
@@ -442,16 +567,16 @@ func TestWithTaints(t *testing.T) {
 			nodes: []*v1.Node{n1, n3withTaints},
 			pods: []*v1.Pod{
 				//Node 1 pods
-				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_8_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_8_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
 				// Node 3 pods
-				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n3withTaints.Name), 200, 0, n3withTaints.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n3withTaints.Name), 200, 0, n3withTaints.Name, setRSOwnerRef),
 			},
 			evictionsExpected: 0,
 		},
@@ -460,16 +585,16 @@ func TestWithTaints(t *testing.T) {
 			nodes: []*v1.Node{n1, n3withTaints},
 			pods: []*v1.Pod{
 				//Node 1 pods
-				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name),
-				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
 				podThatToleratesTaint,
 				// Node 3 pods
-				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n3withTaints.Name), 200, 0, n3withTaints.Name),
+				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n3withTaints.Name), 200, 0, n3withTaints.Name, setRSOwnerRef),
 			},
 			evictionsExpected: 1,
 		},
@@ -483,7 +608,6 @@ func TestWithTaints(t *testing.T) {
 			}
 
 			for _, pod := range item.pods {
-				pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 				objs = append(objs, pod)
 			}
 
@@ -497,15 +621,15 @@ func TestWithTaints(t *testing.T) {
 				return true, nil, nil
 			})
 
-			ds := &options.DeschedulerServer{
-				Client: &fake.Clientset{Fake: *fakePtr},
-				DeschedulerConfiguration: componentconfig.DeschedulerConfiguration{
-					EvictLocalStoragePods: false,
-				},
-			}
+			podEvictor := evictions.NewPodEvictor(
+				&fake.Clientset{Fake: *fakePtr},
+				"policy/v1",
+				false,
+				item.evictionsExpected,
+				item.nodes,
+			)
 
-			nodePodCount := utils.InitializeNodePodCount(item.nodes)
-			LowNodeUtilization(ds, strategy, "policy/v1", item.nodes, nodePodCount)
+			LowNodeUtilization(&fake.Clientset{Fake: *fakePtr}, strategy, item.nodes, false, podEvictor)
 
 			if item.evictionsExpected != evictionCounter {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, evictionCounter)

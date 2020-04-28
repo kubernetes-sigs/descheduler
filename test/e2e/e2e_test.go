@@ -33,11 +33,11 @@ import (
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func MakePodSpec() v1.PodSpec {
@@ -114,12 +114,26 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface, nodeInfor
 	if err != nil {
 		klog.Fatalf("%v", err)
 	}
-	nodeUtilizationThresholds := deschedulerapi.NodeResourceUtilizationThresholds{Thresholds: thresholds, TargetThresholds: targetThresholds}
-	nodeUtilizationStrategyParams := deschedulerapi.StrategyParameters{NodeResourceUtilizationThresholds: nodeUtilizationThresholds}
-	lowNodeUtilizationStrategy := deschedulerapi.DeschedulerStrategy{Enabled: true, Params: nodeUtilizationStrategyParams}
-	ds := &options.DeschedulerServer{Client: clientset}
-	nodePodCount := utils.InitializeNodePodCount(nodes)
-	strategies.LowNodeUtilization(ds, lowNodeUtilizationStrategy, evictionPolicyGroupVersion, nodes, nodePodCount)
+
+	lowNodeUtilizationStrategy := deschedulerapi.DeschedulerStrategy{
+		Enabled: true,
+		Params: deschedulerapi.StrategyParameters{
+			NodeResourceUtilizationThresholds: &deschedulerapi.NodeResourceUtilizationThresholds{
+				Thresholds:       thresholds,
+				TargetThresholds: targetThresholds,
+			},
+		},
+	}
+
+	podEvictor := evictions.NewPodEvictor(
+		clientset,
+		evictionPolicyGroupVersion,
+		false,
+		0,
+		nodes,
+	)
+
+	strategies.LowNodeUtilization(clientset, lowNodeUtilizationStrategy, nodes, false, podEvictor)
 	time.Sleep(10 * time.Second)
 }
 
