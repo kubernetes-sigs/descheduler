@@ -26,7 +26,7 @@ import (
 )
 
 func TestIsEvictable(t *testing.T) {
-	n1 := test.BuildTestNode("node1", 1000, 2000, 13)
+	n1 := test.BuildTestNode("node1", 1000, 2000, 13, nil)
 	type testCase struct {
 		pod                   *v1.Pod
 		runBefore             func(*v1.Pod)
@@ -36,14 +36,14 @@ func TestIsEvictable(t *testing.T) {
 
 	testCases := []testCase{
 		{
-			pod: test.BuildTestPod("p1", 400, 0, n1.Name),
+			pod: test.BuildTestPod("p1", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 			},
 			evictLocalStoragePods: false,
 			result:                true,
 		}, {
-			pod: test.BuildTestPod("p2", 400, 0, n1.Name),
+			pod: test.BuildTestPod("p2", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -51,14 +51,14 @@ func TestIsEvictable(t *testing.T) {
 			evictLocalStoragePods: false,
 			result:                true,
 		}, {
-			pod: test.BuildTestPod("p3", 400, 0, n1.Name),
+			pod: test.BuildTestPod("p3", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 			},
 			evictLocalStoragePods: false,
 			result:                true,
 		}, {
-			pod: test.BuildTestPod("p4", 400, 0, n1.Name),
+			pod: test.BuildTestPod("p4", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 				pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
@@ -66,7 +66,7 @@ func TestIsEvictable(t *testing.T) {
 			evictLocalStoragePods: false,
 			result:                true,
 		}, {
-			pod: test.BuildTestPod("p5", 400, 0, n1.Name),
+			pod: test.BuildTestPod("p5", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 				pod.Spec.Volumes = []v1.Volume{
@@ -83,7 +83,7 @@ func TestIsEvictable(t *testing.T) {
 			evictLocalStoragePods: false,
 			result:                false,
 		}, {
-			pod: test.BuildTestPod("p6", 400, 0, n1.Name),
+			pod: test.BuildTestPod("p6", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 				pod.Spec.Volumes = []v1.Volume{
@@ -100,7 +100,7 @@ func TestIsEvictable(t *testing.T) {
 			evictLocalStoragePods: true,
 			result:                true,
 		}, {
-			pod: test.BuildTestPod("p7", 400, 0, n1.Name),
+			pod: test.BuildTestPod("p7", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -118,14 +118,14 @@ func TestIsEvictable(t *testing.T) {
 			evictLocalStoragePods: false,
 			result:                true,
 		}, {
-			pod: test.BuildTestPod("p8", 400, 0, n1.Name),
+			pod: test.BuildTestPod("p8", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 			},
 			evictLocalStoragePods: false,
 			result:                false,
 		}, {
-			pod: test.BuildTestPod("p9", 400, 0, n1.Name),
+			pod: test.BuildTestPod("p9", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 				pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
@@ -133,14 +133,14 @@ func TestIsEvictable(t *testing.T) {
 			evictLocalStoragePods: false,
 			result:                true,
 		}, {
-			pod: test.BuildTestPod("p10", 400, 0, n1.Name),
+			pod: test.BuildTestPod("p10", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.Annotations = test.GetMirrorPodAnnotation()
 			},
 			evictLocalStoragePods: false,
 			result:                false,
 		}, {
-			pod: test.BuildTestPod("p11", 400, 0, n1.Name),
+			pod: test.BuildTestPod("p11", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.Annotations = test.GetMirrorPodAnnotation()
 				pod.Annotations["descheduler.alpha.kubernetes.io/evict"] = "true"
@@ -148,7 +148,7 @@ func TestIsEvictable(t *testing.T) {
 			evictLocalStoragePods: false,
 			result:                true,
 		}, {
-			pod: test.BuildTestPod("p12", 400, 0, n1.Name),
+			pod: test.BuildTestPod("p12", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				priority := utils.SystemCriticalPriority
 				pod.Spec.Priority = &priority
@@ -156,7 +156,7 @@ func TestIsEvictable(t *testing.T) {
 			evictLocalStoragePods: false,
 			result:                false,
 		}, {
-			pod: test.BuildTestPod("p13", 400, 0, n1.Name),
+			pod: test.BuildTestPod("p13", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				priority := utils.SystemCriticalPriority
 				pod.Spec.Priority = &priority
@@ -179,15 +179,15 @@ func TestIsEvictable(t *testing.T) {
 	}
 }
 func TestPodTypes(t *testing.T) {
-	n1 := test.BuildTestNode("node1", 1000, 2000, 9)
-	p1 := test.BuildTestPod("p1", 400, 0, n1.Name)
+	n1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
+	p1 := test.BuildTestPod("p1", 400, 0, n1.Name, nil)
 
 	// These won't be evicted.
-	p2 := test.BuildTestPod("p2", 400, 0, n1.Name)
-	p3 := test.BuildTestPod("p3", 400, 0, n1.Name)
-	p4 := test.BuildTestPod("p4", 400, 0, n1.Name)
-	p5 := test.BuildTestPod("p5", 400, 0, n1.Name)
-	p6 := test.BuildTestPod("p6", 400, 0, n1.Name)
+	p2 := test.BuildTestPod("p2", 400, 0, n1.Name, nil)
+	p3 := test.BuildTestPod("p3", 400, 0, n1.Name, nil)
+	p4 := test.BuildTestPod("p4", 400, 0, n1.Name, nil)
+	p5 := test.BuildTestPod("p5", 400, 0, n1.Name, nil)
+	p6 := test.BuildTestPod("p6", 400, 0, n1.Name, nil)
 
 	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 

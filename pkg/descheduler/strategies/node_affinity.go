@@ -18,26 +18,16 @@ package strategies
 
 import (
 	"k8s.io/api/core/v1"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
-	"sigs.k8s.io/descheduler/pkg/utils"
 
-	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
-func RemovePodsViolatingNodeAffinity(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodePodCount utils.NodePodEvictedCount) {
-	removePodsViolatingNodeAffinityCount(ds, strategy, evictionPolicyGroupVersion, nodes, nodePodCount, ds.MaxNoOfPodsToEvictPerNode, ds.EvictLocalStoragePods)
-}
-
-func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, evictionPolicyGroupVersion string, nodes []*v1.Node, nodepodCount utils.NodePodEvictedCount, maxPodsToEvict int, evictLocalStoragePods bool) int {
-	evictedPodCount := 0
-	if !strategy.Enabled {
-		return evictedPodCount
-	}
-
+func RemovePodsViolatingNodeAffinity(client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
 	for _, nodeAffinity := range strategy.Params.NodeAffinityType {
 		klog.V(2).Infof("Executing for nodeAffinityType: %v", nodeAffinity)
 
@@ -46,31 +36,25 @@ func removePodsViolatingNodeAffinityCount(ds *options.DeschedulerServer, strateg
 			for _, node := range nodes {
 				klog.V(1).Infof("Processing node: %#v\n", node.Name)
 
-				pods, err := podutil.ListEvictablePodsOnNode(ds.Client, node, evictLocalStoragePods)
+				pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
 				if err != nil {
 					klog.Errorf("failed to get pods from %v: %v", node.Name, err)
 				}
 
 				for _, pod := range pods {
-					if maxPodsToEvict > 0 && nodepodCount[node]+1 > maxPodsToEvict {
-						break
-					}
 					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-
 						if !nodeutil.PodFitsCurrentNode(pod, node) && nodeutil.PodFitsAnyNode(pod, nodes) {
 							klog.V(1).Infof("Evicting pod: %v", pod.Name)
-							evictions.EvictPod(ds.Client, pod, evictionPolicyGroupVersion, ds.DryRun)
-							nodepodCount[node]++
+							if _, err := podEvictor.EvictPod(pod, node); err != nil {
+								break
+							}
 						}
 					}
 				}
-				evictedPodCount += nodepodCount[node]
 			}
 		default:
 			klog.Errorf("invalid nodeAffinityType: %v", nodeAffinity)
-			return evictedPodCount
 		}
 	}
-	klog.V(1).Infof("Evicted %v pods", evictedPodCount)
-	return evictedPodCount
+	klog.V(1).Infof("Evicted %v pods", podEvictor.TotalEvicted())
 }

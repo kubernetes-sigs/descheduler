@@ -24,16 +24,17 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"sigs.k8s.io/descheduler/pkg/utils"
+	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/test"
 )
 
 func TestPodAntiAffinity(t *testing.T) {
-	node := test.BuildTestNode("n1", 2000, 3000, 10)
-	p1 := test.BuildTestPod("p1", 100, 0, node.Name)
-	p2 := test.BuildTestPod("p2", 100, 0, node.Name)
-	p3 := test.BuildTestPod("p3", 100, 0, node.Name)
-	p4 := test.BuildTestPod("p4", 100, 0, node.Name)
+	node := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	p1 := test.BuildTestPod("p1", 100, 0, node.Name, nil)
+	p2 := test.BuildTestPod("p2", 100, 0, node.Name, nil)
+	p3 := test.BuildTestPod("p3", 100, 0, node.Name, nil)
+	p4 := test.BuildTestPod("p4", 100, 0, node.Name, nil)
 	p2.Labels = map[string]string{"foo": "bar"}
 	p1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -45,26 +46,49 @@ func TestPodAntiAffinity(t *testing.T) {
 	setPodAntiAffinity(p3)
 	setPodAntiAffinity(p4)
 
-	// create fake client
-	fakeClient := &fake.Clientset{}
-	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4}}, nil
-	})
-	fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
-		return true, node, nil
-	})
-	npe := utils.NodePodEvictedCount{}
-	npe[node] = 0
-	expectedEvictedPodCount := 3
-	podsEvicted := removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, 0, false)
-	if podsEvicted != expectedEvictedPodCount {
-		t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, expectedEvictedPodCount)
+	tests := []struct {
+		description             string
+		maxPodsToEvict          int
+		pods                    []v1.Pod
+		expectedEvictedPodCount int
+	}{
+		{
+			description:             "Maximum pods to evict - 0",
+			maxPodsToEvict:          0,
+			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
+			expectedEvictedPodCount: 3,
+		},
+		{
+			description:             "Maximum pods to evict - 3",
+			maxPodsToEvict:          3,
+			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
+			expectedEvictedPodCount: 3,
+		},
 	}
-	npe[node] = 0
-	expectedEvictedPodCount = 1
-	podsEvicted = removePodsWithAffinityRules(fakeClient, "v1", []*v1.Node{node}, false, npe, 1, false)
-	if podsEvicted != expectedEvictedPodCount {
-		t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, expectedEvictedPodCount)
+
+	for _, test := range tests {
+		// create fake client
+		fakeClient := &fake.Clientset{}
+		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4}}, nil
+		})
+		fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
+			return true, node, nil
+		})
+
+		podEvictor := evictions.NewPodEvictor(
+			fakeClient,
+			"v1",
+			false,
+			test.maxPodsToEvict,
+			[]*v1.Node{node},
+		)
+
+		RemovePodsViolatingInterPodAntiAffinity(fakeClient, api.DeschedulerStrategy{}, []*v1.Node{node}, false, podEvictor)
+		podsEvicted := podEvictor.TotalEvicted()
+		if podsEvicted != test.expectedEvictedPodCount {
+			t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, test.expectedEvictedPodCount)
+		}
 	}
 }
 
