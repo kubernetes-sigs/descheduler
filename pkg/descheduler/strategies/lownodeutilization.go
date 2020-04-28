@@ -24,7 +24,6 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 
-	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -40,7 +39,7 @@ type NodeUsageMap struct {
 
 type NodePodsMap map[*v1.Node][]*v1.Pod
 
-func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+func LowNodeUtilization(client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
 	if !strategy.Enabled {
 		return
 	}
@@ -60,8 +59,8 @@ func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerS
 		return
 	}
 
-	npm := createNodePodsMap(ds.Client, nodes)
-	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds, ds.EvictLocalStoragePods)
+	npm := createNodePodsMap(client, nodes)
+	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds, evictLocalStoragePods)
 
 	klog.V(1).Infof("Criteria for a node under utilization: CPU: %v, Mem: %v, Pods: %v",
 		thresholds[v1.ResourceCPU], thresholds[v1.ResourceMemory], thresholds[v1.ResourcePods])
@@ -95,7 +94,7 @@ func LowNodeUtilization(ds *options.DeschedulerServer, strategy api.DeschedulerS
 		targetNodes,
 		lowNodes,
 		targetThresholds,
-		ds.EvictLocalStoragePods,
+		evictLocalStoragePods,
 		podEvictor)
 
 	klog.V(1).Infof("Total number of pods evicted: %v", podEvictor.TotalEvicted())

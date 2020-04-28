@@ -23,9 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -97,21 +95,6 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		maxPodsToEvict          int
 	}{
 		{
-			description: "Strategy disabled, should not evict any pods",
-			strategy: api.DeschedulerStrategy{
-				Enabled: false,
-				Params: api.StrategyParameters{
-					NodeAffinityType: []string{
-						"requiredDuringSchedulingIgnoredDuringExecution",
-					},
-				},
-			},
-			expectedEvictedPodCount: 0,
-			pods:                    addPodsToNode(nodeWithoutLabels),
-			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			maxPodsToEvict:          0,
-		},
-		{
 			description: "Invalid strategy type, should not evict any pods",
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
@@ -167,22 +150,15 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			return true, &v1.PodList{Items: tc.pods}, nil
 		})
 
-		ds := options.DeschedulerServer{
-			Client: fakeClient,
-			DeschedulerConfiguration: componentconfig.DeschedulerConfiguration{
-				EvictLocalStoragePods: false,
-			},
-		}
-
 		podEvictor := evictions.NewPodEvictor(
 			fakeClient,
 			"v1",
-			ds.DryRun,
+			false,
 			tc.maxPodsToEvict,
 			tc.nodes,
 		)
 
-		RemovePodsViolatingNodeAffinity(&ds, tc.strategy, tc.nodes, podEvictor)
+		RemovePodsViolatingNodeAffinity(fakeClient, tc.strategy, tc.nodes, false, podEvictor)
 		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)
