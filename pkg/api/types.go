@@ -46,7 +46,7 @@ type DeschedulerStrategy struct {
 
 // Only one of its members may be specified
 type StrategyParameters struct {
-	NodeResourceUtilizationThresholds NodeResourceUtilizationThresholds
+	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds
 	NodeAffinityType                  []string
 	PodsHavingTooManyRestarts         PodsHavingTooManyRestarts
 }
