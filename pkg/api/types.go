@@ -50,6 +50,7 @@ type StrategyParameters struct {
 	NodeAffinityType                  []string
 	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts
 	MaxPodLifeTimeSeconds             *uint
+	RemoveDuplicates                  *RemoveDuplicates
 }
 
 type Percentage float64
@@ -64,4 +65,8 @@ type NodeResourceUtilizationThresholds struct {
 type PodsHavingTooManyRestarts struct {
 	PodRestartThreshold     int32
 	IncludingInitContainers bool
+}
+
+type RemoveDuplicates struct {
+	ExcludeOwnerKinds []string
 }
