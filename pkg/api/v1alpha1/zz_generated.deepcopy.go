@@ -176,7 +176,11 @@ func (in *StrategyParameters) DeepCopyInto(out *StrategyParameters) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	out.PodsHavingTooManyRestarts = in.PodsHavingTooManyRestarts
+	if in.PodsHavingTooManyRestarts != nil {
+		in, out := &in.PodsHavingTooManyRestarts, &out.PodsHavingTooManyRestarts
+		*out = new(PodsHavingTooManyRestarts)
+		**out = **in
+	}
 	return
 }
 
