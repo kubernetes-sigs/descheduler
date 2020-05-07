@@ -54,9 +54,9 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 ## Policy and Strategies
 
 Descheduler's policy is configurable and includes strategies that can be enabled or disabled.
-Five strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`,
-`RemovePodsViolatingNodeAffinity`, and `RemovePodsViolatingNodeTaints` are currently implemented.
-As part of the policy, the parameters associated with the strategies can be configured too.
+Six strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`,
+`RemovePodsViolatingNodeAffinity`, `RemovePodsViolatingNodeTaints` and `RemovePodsHavingTooManyRestarts`
+are currently implemented. As part of the policy, the parameters associated with the strategies can be configured too.
 By default, all strategies are enabled.
 
 ### RemoveDuplicates
