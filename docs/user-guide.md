@@ -5,8 +5,10 @@ Starting with descheduler release v0.10.0 container images are available in thes
 * `eu.gcr.io/k8s-artifacts-prod/descheduler/descheduler`
 * `us.gcr.io/k8s-artifacts-prod/descheduler/descheduler`
 
+## Policy Configuration Examples
 The [examples](https://github.com/kubernetes-sigs/descheduler/tree/master/examples) directory has descheduler policy configuration examples.
 
+## CLI Options
 The descheduler has many CLI options that can be used to override its default behavior.
 ```
 descheduler --help
@@ -44,4 +46,45 @@ Flags:
       --vmodule moduleSpec               comma-separated list of pattern=N settings for file-filtered logging
 
 Use "descheduler [command] --help" for more information about a command.
+```
+
+## Production Use Cases
+This section contains descriptions of real world production use cases.
+
+### Balance Cluster By Pod Age
+When initially migrating applications from a static virtual machine infrastructure to a cloud native k8s
+infrastructure there can be a tendency to treat application pods like static virtual machines. One approach
+to help prevent developers and operators from treating pods like virtual machines is to ensure that pods
+only run for a fixed amount
+of time.
+
+The `PodLifeTime` strategy can be used to ensure that old pods are evicted. It is recommended to create a
+[pod disruption budget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/) for each
+application to ensure application availability.
+```
+descheduler -v=3 --evict-local-storage-pods --policy-config-file=pod-life-time.yml
+```
+
+This policy configuration file ensures that pods created more than 7 days ago are evicted.
+```
+---
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "LowNodeUtilization":
+    enabled: false
+  "RemoveDuplicates":
+    enabled: false
+  "RemovePodsViolatingInterPodAntiAffinity":
+    enabled: false
+  "RemovePodsViolatingNodeAffinity":
+    enabled: false
+  "RemovePodsViolatingNodeTaints":
+    enabled: false
+  "RemovePodsHavingTooManyRestarts":
+    enabled: false
+  "PodLifeTime":
+    enabled: true
+    params:
+      maxPodLifeTimeSeconds: 604800 # pods run for a maximum of 7 days
 ```
