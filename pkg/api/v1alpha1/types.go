@@ -17,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -49,6 +49,7 @@ type StrategyParameters struct {
 	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds `json:"nodeResourceUtilizationThresholds,omitempty"`
 	NodeAffinityType                  []string                           `json:"nodeAffinityType,omitempty"`
 	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts         `json:"podsHavingTooManyRestarts,omitempty"`
+	MaxPodLifeTimeSeconds             *uint                              `json:"maxPodLifeTimeSeconds,omitempty"`
 }
 
 type Percentage float64

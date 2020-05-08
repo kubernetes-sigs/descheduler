@@ -181,6 +181,11 @@ func (in *StrategyParameters) DeepCopyInto(out *StrategyParameters) {
 		*out = new(PodsHavingTooManyRestarts)
 		**out = **in
 	}
+	if in.MaxPodLifeTimeSeconds != nil {
+		in, out := &in.MaxPodLifeTimeSeconds, &out.MaxPodLifeTimeSeconds
+		*out = new(uint)
+		**out = **in
+	}
 	return
 }
 
