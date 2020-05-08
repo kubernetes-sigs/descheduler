@@ -74,6 +74,7 @@ func RunDeschedulerStrategies(rs *options.DeschedulerServer, deschedulerPolicy *
 		"RemovePodsViolatingNodeAffinity":         strategies.RemovePodsViolatingNodeAffinity,
 		"RemovePodsViolatingNodeTaints":           strategies.RemovePodsViolatingNodeTaints,
 		"RemovePodsHavingTooManyRestarts":         strategies.RemovePodsHavingTooManyRestarts,
+		"PodLifeTime":                             strategies.PodLifeTime,
 	}
 
 	wait.Until(func() {
