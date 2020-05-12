@@ -18,12 +18,13 @@ package strategies
 
 import (
 	"context"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 )
@@ -46,6 +47,7 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 			) {
 				klog.V(2).Infof("Not all taints with NoSchedule effect are tolerated after update for pod %v on node %v", pods[i].Name, node.Name)
 				if _, err := podEvictor.EvictPod(ctx, pods[i], node); err != nil {
+					klog.Errorf("Error evicting pod: (%#v)", err)
 					break
 				}
 			}

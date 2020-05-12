@@ -262,6 +262,7 @@ func evictPods(
 
 			success, err := podEvictor.EvictPod(ctx, pod, node)
 			if err != nil {
+				klog.Errorf("Error evicting pod: (%#v)", err)
 				break
 			}
 
