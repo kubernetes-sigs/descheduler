@@ -17,6 +17,7 @@ limitations under the License.
 package evictions
 
 import (
+	"context"
 	"testing"
 
 	"k8s.io/api/core/v1"
@@ -27,6 +28,7 @@ import (
 )
 
 func TestEvictPod(t *testing.T) {
+	ctx := context.Background()
 	node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
 	pod1 := test.BuildTestPod("p1", 400, 0, "node1", nil)
 	tests := []struct {
@@ -57,7 +59,7 @@ func TestEvictPod(t *testing.T) {
 		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 			return true, &v1.PodList{Items: test.pods}, nil
 		})
-		got, _ := EvictPod(fakeClient, test.pod, "v1", false)
+		got, _ := EvictPod(ctx, fakeClient, test.pod, "v1", false)
 		if got != test.want {
 			t.Errorf("Test error for Desc: %s. Expected %v pod eviction to be %v, got %v", test.description, test.pod.Name, test.want, got)
 		}

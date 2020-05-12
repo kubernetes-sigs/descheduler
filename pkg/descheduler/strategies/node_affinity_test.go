@@ -17,6 +17,7 @@ limitations under the License.
 package strategies
 
 import (
+	"context"
 	"testing"
 
 	"k8s.io/api/core/v1"
@@ -29,7 +30,7 @@ import (
 )
 
 func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
-
+	ctx := context.Background()
 	requiredDuringSchedulingIgnoredDuringExecutionStrategy := api.DeschedulerStrategy{
 		Enabled: true,
 		Params: api.StrategyParameters{
@@ -158,7 +159,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			tc.nodes,
 		)
 
-		RemovePodsViolatingNodeAffinity(fakeClient, tc.strategy, tc.nodes, false, podEvictor)
+		RemovePodsViolatingNodeAffinity(ctx, fakeClient, tc.strategy, tc.nodes, false, podEvictor)
 		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)

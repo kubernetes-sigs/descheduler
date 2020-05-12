@@ -17,6 +17,7 @@ limitations under the License.
 package node
 
 import (
+	"context"
 	"testing"
 
 	"k8s.io/api/core/v1"
@@ -56,6 +57,7 @@ func TestReadyNodes(t *testing.T) {
 }
 
 func TestReadyNodesWithNodeSelector(t *testing.T) {
+	ctx := context.Background()
 	node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
 	node1.Labels = map[string]string{"type": "compute"}
 	node2 := test.BuildTestNode("node2", 1000, 2000, 9, nil)
@@ -72,7 +74,7 @@ func TestReadyNodesWithNodeSelector(t *testing.T) {
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 	defer close(stopChannel)
 
-	nodes, _ := ReadyNodes(fakeClient, nodeInformer, nodeSelector, nil)
+	nodes, _ := ReadyNodes(ctx, fakeClient, nodeInformer, nodeSelector, nil)
 
 	if nodes[0].Name != "node1" {
 		t.Errorf("Expected node1, got %s", nodes[0].Name)
