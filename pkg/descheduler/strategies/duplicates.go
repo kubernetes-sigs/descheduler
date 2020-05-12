@@ -17,6 +17,7 @@ limitations under the License.
 package strategies
 
 import (
+	"context"
 	"strings"
 
 	"k8s.io/api/core/v1"
@@ -32,6 +33,7 @@ import (
 // A pod is said to be a duplicate of other if both of them are from same creator, kind and are within the same
 // namespace. As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
 func RemoveDuplicatePods(
+	ctx context.Context,
 	client clientset.Interface,
 	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
@@ -40,13 +42,13 @@ func RemoveDuplicatePods(
 ) {
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v", node.Name)
-		dpm := listDuplicatePodsOnANode(client, node, evictLocalStoragePods)
+		dpm := listDuplicatePodsOnANode(ctx, client, node, evictLocalStoragePods)
 		for creator, pods := range dpm {
 			if len(pods) > 1 {
 				klog.V(1).Infof("%#v", creator)
 				// i = 0 does not evict the first pod
 				for i := 1; i < len(pods); i++ {
-					if _, err := podEvictor.EvictPod(pods[i], node); err != nil {
+					if _, err := podEvictor.EvictPod(ctx, pods[i], node); err != nil {
 						break
 					}
 				}
@@ -59,8 +61,8 @@ func RemoveDuplicatePods(
 type duplicatePodsMap map[string][]*v1.Pod
 
 // listDuplicatePodsOnANode lists duplicate pods on a given node.
-func listDuplicatePodsOnANode(client clientset.Interface, node *v1.Node, evictLocalStoragePods bool) duplicatePodsMap {
-	pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
+func listDuplicatePodsOnANode(ctx context.Context, client clientset.Interface, node *v1.Node, evictLocalStoragePods bool) duplicatePodsMap {
+	pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, evictLocalStoragePods)
 	if err != nil {
 		return nil
 	}

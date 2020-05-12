@@ -17,6 +17,7 @@ limitations under the License.
 package descheduler
 
 import (
+	"context"
 	"fmt"
 
 	"k8s.io/api/core/v1"
@@ -35,6 +36,7 @@ import (
 )
 
 func Run(rs *options.DeschedulerServer) error {
+	ctx := context.Background()
 	rsclient, err := client.CreateClient(rs.KubeconfigFile)
 	if err != nil {
 		return err
@@ -55,12 +57,12 @@ func Run(rs *options.DeschedulerServer) error {
 	}
 
 	stopChannel := make(chan struct{})
-	return RunDeschedulerStrategies(rs, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel)
+	return RunDeschedulerStrategies(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel)
 }
 
-type strategyFunction func(client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor)
+type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor)
 
-func RunDeschedulerStrategies(rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, stopChannel chan struct{}) error {
+func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, stopChannel chan struct{}) error {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
 	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
 
@@ -74,10 +76,11 @@ func RunDeschedulerStrategies(rs *options.DeschedulerServer, deschedulerPolicy *
 		"RemovePodsViolatingNodeAffinity":         strategies.RemovePodsViolatingNodeAffinity,
 		"RemovePodsViolatingNodeTaints":           strategies.RemovePodsViolatingNodeTaints,
 		"RemovePodsHavingTooManyRestarts":         strategies.RemovePodsHavingTooManyRestarts,
+		"PodLifeTime":                             strategies.PodLifeTime,
 	}
 
 	wait.Until(func() {
-		nodes, err := nodeutil.ReadyNodes(rs.Client, nodeInformer, rs.NodeSelector, stopChannel)
+		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, rs.NodeSelector, stopChannel)
 		if err != nil {
 			klog.V(1).Infof("Unable to get ready nodes: %v", err)
 			close(stopChannel)
@@ -100,7 +103,7 @@ func RunDeschedulerStrategies(rs *options.DeschedulerServer, deschedulerPolicy *
 
 		for name, f := range strategyFuncs {
 			if strategy := deschedulerPolicy.Strategies[api.StrategyName(name)]; strategy.Enabled {
-				f(rs.Client, strategy, nodes, rs.EvictLocalStoragePods, podEvictor)
+				f(ctx, rs.Client, strategy, nodes, rs.EvictLocalStoragePods, podEvictor)
 			}
 		}
 
