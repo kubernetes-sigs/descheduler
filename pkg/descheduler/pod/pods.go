@@ -17,6 +17,7 @@ limitations under the License.
 package pod
 
 import (
+	"context"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -38,8 +39,8 @@ func IsEvictable(pod *v1.Pod, evictLocalStoragePods bool) bool {
 }
 
 // ListEvictablePodsOnNode returns the list of evictable pods on node.
-func ListEvictablePodsOnNode(client clientset.Interface, node *v1.Node, evictLocalStoragePods bool) ([]*v1.Pod, error) {
-	pods, err := ListPodsOnANode(client, node)
+func ListEvictablePodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, evictLocalStoragePods bool) ([]*v1.Pod, error) {
+	pods, err := ListPodsOnANode(ctx, client, node)
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
@@ -54,13 +55,13 @@ func ListEvictablePodsOnNode(client clientset.Interface, node *v1.Node, evictLoc
 	return evictablePods, nil
 }
 
-func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, error) {
+func ListPodsOnANode(ctx context.Context, client clientset.Interface, node *v1.Node) ([]*v1.Pod, error) {
 	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + node.Name + ",status.phase!=" + string(v1.PodSucceeded) + ",status.phase!=" + string(v1.PodFailed))
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
 
-	podList, err := client.CoreV1().Pods(v1.NamespaceAll).List(
+	podList, err := client.CoreV1().Pods(v1.NamespaceAll).List(ctx,
 		metav1.ListOptions{FieldSelector: fieldSelector.String()})
 	if err != nil {
 		return []*v1.Pod{}, err

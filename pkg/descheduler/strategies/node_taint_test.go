@@ -1,6 +1,7 @@
 package strategies
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -43,7 +44,7 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int) *v1.Pod {
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-
+	ctx := context.Background()
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	node1 = addTaintsToNode(node1, "testTaint", "test", []int{1})
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
@@ -171,7 +172,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			tc.nodes,
 		)
 
-		RemovePodsViolatingNodeTaints(fakeClient, api.DeschedulerStrategy{}, tc.nodes, tc.evictLocalStoragePods, podEvictor)
+		RemovePodsViolatingNodeTaints(ctx, fakeClient, api.DeschedulerStrategy{}, tc.nodes, tc.evictLocalStoragePods, podEvictor)
 		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)
