@@ -17,6 +17,7 @@ limitations under the License.
 package strategies
 
 import (
+	"context"
 	"testing"
 
 	"k8s.io/api/core/v1"
@@ -30,6 +31,7 @@ import (
 )
 
 func TestPodAntiAffinity(t *testing.T) {
+	ctx := context.Background()
 	node := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	p1 := test.BuildTestPod("p1", 100, 0, node.Name, nil)
 	p2 := test.BuildTestPod("p2", 100, 0, node.Name, nil)
@@ -84,7 +86,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			[]*v1.Node{node},
 		)
 
-		RemovePodsViolatingInterPodAntiAffinity(fakeClient, api.DeschedulerStrategy{}, []*v1.Node{node}, false, podEvictor)
+		RemovePodsViolatingInterPodAntiAffinity(ctx, fakeClient, api.DeschedulerStrategy{}, []*v1.Node{node}, false, podEvictor)
 		podsEvicted := podEvictor.TotalEvicted()
 		if podsEvicted != test.expectedEvictedPodCount {
 			t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, test.expectedEvictedPodCount)

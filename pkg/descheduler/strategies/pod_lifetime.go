@@ -17,6 +17,7 @@ limitations under the License.
 package strategies
 
 import (
+	"context"
 	v1 "k8s.io/api/core/v1"
 	v1meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -28,7 +29,7 @@ import (
 )
 
 // PodLifeTime evicts pods on nodes that were created more than strategy.Params.MaxPodLifeTimeSeconds seconds ago.
-func PodLifeTime(client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
+func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
 	if strategy.Params.MaxPodLifeTimeSeconds == nil {
 		klog.V(1).Infof("MaxPodLifeTimeSeconds not set")
 		return
@@ -36,9 +37,9 @@ func PodLifeTime(client clientset.Interface, strategy api.DeschedulerStrategy, n
 
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v", node.Name)
-		pods := listOldPodsOnNode(client, node, *strategy.Params.MaxPodLifeTimeSeconds, evictLocalStoragePods)
+		pods := listOldPodsOnNode(ctx, client, node, *strategy.Params.MaxPodLifeTimeSeconds, evictLocalStoragePods)
 		for _, pod := range pods {
-			success, err := podEvictor.EvictPod(pod, node)
+			success, err := podEvictor.EvictPod(ctx, pod, node)
 			if success {
 				klog.V(1).Infof("Evicted pod: %#v\n because it was created more than %v seconds ago", pod.Name, *strategy.Params.MaxPodLifeTimeSeconds)
 			}
@@ -51,8 +52,8 @@ func PodLifeTime(client clientset.Interface, strategy api.DeschedulerStrategy, n
 	}
 }
 
-func listOldPodsOnNode(client clientset.Interface, node *v1.Node, maxAge uint, evictLocalStoragePods bool) []*v1.Pod {
-	pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
+func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, maxAge uint, evictLocalStoragePods bool) []*v1.Pod {
+	pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, evictLocalStoragePods)
 	if err != nil {
 		return nil
 	}

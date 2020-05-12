@@ -17,6 +17,7 @@ limitations under the License.
 package strategies
 
 import (
+	"context"
 	"testing"
 
 	"k8s.io/api/core/v1"
@@ -31,6 +32,7 @@ import (
 )
 
 func TestFindDuplicatePods(t *testing.T) {
+	ctx := context.Background()
 	// first setup pods
 	node := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	p1 := test.BuildTestPod("p1", 100, 0, node.Name, nil)
@@ -144,7 +146,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			[]*v1.Node{node},
 		)
 
-		RemoveDuplicatePods(fakeClient, api.DeschedulerStrategy{}, []*v1.Node{node}, false, podEvictor)
+		RemoveDuplicatePods(ctx, fakeClient, api.DeschedulerStrategy{}, []*v1.Node{node}, false, podEvictor)
 		podsEvicted := podEvictor.TotalEvicted()
 		if podsEvicted != testCase.expectedEvictedPodCount {
 			t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)

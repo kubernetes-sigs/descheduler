@@ -1,6 +1,7 @@
 package descheduler
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -16,6 +17,7 @@ import (
 )
 
 func TestTaintsUpdated(t *testing.T) {
+	ctx := context.Background()
 	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 
@@ -40,7 +42,7 @@ func TestTaintsUpdated(t *testing.T) {
 	rs.Client = client
 	rs.DeschedulingInterval = 100 * time.Millisecond
 	go func() {
-		err := RunDeschedulerStrategies(rs, dp, "v1beta1", stopChannel)
+		err := RunDeschedulerStrategies(ctx, rs, dp, "v1beta1", stopChannel)
 		if err != nil {
 			t.Fatalf("Unable to run descheduler strategies: %v", err)
 		}
@@ -48,7 +50,7 @@ func TestTaintsUpdated(t *testing.T) {
 
 	// Wait for few cycles and then verify the only pod still exists
 	time.Sleep(300 * time.Millisecond)
-	pods, err := client.CoreV1().Pods(p1.Namespace).List(metav1.ListOptions{})
+	pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Unable to list pods: %v", err)
 	}
@@ -65,7 +67,7 @@ func TestTaintsUpdated(t *testing.T) {
 		},
 	}
 
-	if _, err := client.CoreV1().Nodes().Update(n1WithTaint); err != nil {
+	if _, err := client.CoreV1().Nodes().Update(ctx, n1WithTaint, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("Unable to update node: %v\n", err)
 	}
 
@@ -74,7 +76,7 @@ func TestTaintsUpdated(t *testing.T) {
 		//pods, err := client.CoreV1().Pods(p1.Namespace).Get(p1.Name, metav1.GetOptions{})
 		// List is better, it does not panic.
 		// Though once the pod is evicted, List starts to error with "can't assign or convert v1beta1.Eviction into v1.Pod"
-		pods, err := client.CoreV1().Pods(p1.Namespace).List(metav1.ListOptions{})
+		pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
 		if err == nil {
 			if len(pods.Items) > 0 {
 				return false, nil

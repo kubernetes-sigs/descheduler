@@ -17,6 +17,7 @@ limitations under the License.
 package strategies
 
 import (
+	"context"
 	"testing"
 
 	"fmt"
@@ -79,6 +80,7 @@ func initPods(node *v1.Node) []v1.Pod {
 }
 
 func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
+	ctx := context.Background()
 	createStrategy := func(enabled, includingInitContainers bool, restartThresholds int32) api.DeschedulerStrategy {
 		return api.DeschedulerStrategy{
 			Enabled: enabled,
@@ -171,7 +173,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			[]*v1.Node{node},
 		)
 
-		RemovePodsHavingTooManyRestarts(fakeClient, tc.strategy, []*v1.Node{node}, false, podEvictor)
+		RemovePodsHavingTooManyRestarts(ctx, fakeClient, tc.strategy, []*v1.Node{node}, false, podEvictor)
 		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)

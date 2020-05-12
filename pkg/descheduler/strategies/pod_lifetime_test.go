@@ -17,6 +17,7 @@ limitations under the License.
 package strategies
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 )
 
 func TestPodLifeTime(t *testing.T) {
+	ctx := context.Background()
 	node := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	olderPodCreationTime := metav1.NewTime(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
 	newerPodCreationTime := metav1.NewTime(time.Now())
@@ -157,7 +159,7 @@ func TestPodLifeTime(t *testing.T) {
 			[]*v1.Node{node},
 		)
 
-		PodLifeTime(fakeClient, tc.strategy, []*v1.Node{node}, false, podEvictor)
+		PodLifeTime(ctx, fakeClient, tc.strategy, []*v1.Node{node}, false, podEvictor)
 		podsEvicted := podEvictor.TotalEvicted()
 		if podsEvicted != tc.expectedEvictedPodCount {
 			t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.description, tc.expectedEvictedPodCount, podsEvicted)
