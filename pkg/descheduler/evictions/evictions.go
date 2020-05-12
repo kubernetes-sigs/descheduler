@@ -91,11 +91,11 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) 
 	success, err = EvictPod(ctx, pe.client, pod, pe.policyGroupVersion, pe.dryRun)
 	if success {
 		pe.nodepodCount[node]++
-		klog.V(1).Infof("Evicted pod: %#v (%#v)", pod.Name, err)
+		klog.V(1).Infof("Evicted pod: %#v in namespace %#v", pod.Name, pod.Namespace)
 		return success, nil
 	}
 	// err is used only for logging purposes
-	klog.Errorf("Error when evicting pod: %#v (%#v)", pod.Name, err)
+	klog.Errorf("Error evicting pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
 	return false, nil
 }
 
