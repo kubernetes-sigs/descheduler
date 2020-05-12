@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
@@ -95,7 +96,7 @@ func RcByNameContainer(name string, replicas int32, labels map[string]string, gr
 }
 
 // startEndToEndForLowNodeUtilization tests the lownode utilization strategy.
-func startEndToEndForLowNodeUtilization(clientset clientset.Interface, nodeInformer coreinformers.NodeInformer) {
+func startEndToEndForLowNodeUtilization(ctx context.Context, clientset clientset.Interface, nodeInformer coreinformers.NodeInformer) {
 	var thresholds = make(deschedulerapi.ResourceThresholds)
 	var targetThresholds = make(deschedulerapi.ResourceThresholds)
 	thresholds[v1.ResourceMemory] = 20
@@ -110,7 +111,7 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface, nodeInfor
 		klog.Fatalf("%v", err)
 	}
 	stopChannel := make(chan struct{})
-	nodes, err := nodeutil.ReadyNodes(clientset, nodeInformer, "", stopChannel)
+	nodes, err := nodeutil.ReadyNodes(ctx, clientset, nodeInformer, "", stopChannel)
 	if err != nil {
 		klog.Fatalf("%v", err)
 	}
@@ -133,18 +134,19 @@ func startEndToEndForLowNodeUtilization(clientset clientset.Interface, nodeInfor
 		nodes,
 	)
 
-	strategies.LowNodeUtilization(clientset, lowNodeUtilizationStrategy, nodes, false, podEvictor)
+	strategies.LowNodeUtilization(ctx, clientset, lowNodeUtilizationStrategy, nodes, false, podEvictor)
 	time.Sleep(10 * time.Second)
 }
 
 func TestE2E(t *testing.T) {
 	// If we have reached here, it means cluster would have been already setup and the kubeconfig file should
 	// be in /tmp directory as admin.conf.
+	ctx := context.Background()
 	clientSet, err := client.CreateClient("/tmp/admin.conf")
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
 	}
-	nodeList, err := clientSet.CoreV1().Nodes().List(metav1.ListOptions{})
+	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Error listing node with %v", err)
 	}
@@ -159,11 +161,11 @@ func TestE2E(t *testing.T) {
 	// Assumption: We would have 3 node cluster by now. Kubeadm brings all the master components onto master node.
 	// So, the last node would have least utilization.
 	rc := RcByNameContainer("test-rc", int32(15), map[string]string{"test": "app"}, nil)
-	_, err = clientSet.CoreV1().ReplicationControllers("default").Create(rc)
+	_, err = clientSet.CoreV1().ReplicationControllers("default").Create(ctx, rc, metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
-	evictPods(t, clientSet, nodeInformer, nodeList, rc)
+	evictPods(ctx, t, clientSet, nodeInformer, nodeList, rc)
 
 	rc.Spec.Template.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 	rc.Spec.Replicas = func(i int32) *int32 { return &i }(15)
@@ -176,14 +178,15 @@ func TestE2E(t *testing.T) {
 			},
 		},
 	}
-	_, err = clientSet.CoreV1().ReplicationControllers("default").Create(rc)
+	_, err = clientSet.CoreV1().ReplicationControllers("default").Create(ctx, rc, metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
-	evictPods(t, clientSet, nodeInformer, nodeList, rc)
+	evictPods(ctx, t, clientSet, nodeInformer, nodeList, rc)
 }
 
 func TestDeschedulingInterval(t *testing.T) {
+	ctx := context.Background()
 	clientSet, err := client.CreateClient("/tmp/admin.conf")
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
@@ -203,7 +206,7 @@ func TestDeschedulingInterval(t *testing.T) {
 		}
 
 		stopChannel := make(chan struct{})
-		if err := descheduler.RunDeschedulerStrategies(s, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel); err != nil {
+		if err := descheduler.RunDeschedulerStrategies(ctx, s, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel); err != nil {
 			t.Errorf("Error running descheduler strategies: %+v", err)
 		}
 		c <- true
@@ -217,7 +220,7 @@ func TestDeschedulingInterval(t *testing.T) {
 	}
 }
 
-func evictPods(t *testing.T, clientSet clientset.Interface, nodeInformer coreinformers.NodeInformer, nodeList *v1.NodeList, rc *v1.ReplicationController) {
+func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface, nodeInformer coreinformers.NodeInformer, nodeList *v1.NodeList, rc *v1.ReplicationController) {
 	var leastLoadedNode v1.Node
 	podsBefore := math.MaxInt16
 	for i := range nodeList.Items {
@@ -226,7 +229,7 @@ func evictPods(t *testing.T, clientSet clientset.Interface, nodeInformer coreinf
 			continue
 		}
 		// List all the pods on the current Node
-		podsOnANode, err := podutil.ListEvictablePodsOnNode(clientSet, &nodeList.Items[i], true)
+		podsOnANode, err := podutil.ListEvictablePodsOnNode(ctx, clientSet, &nodeList.Items[i], true)
 		if err != nil {
 			t.Errorf("Error listing pods on a node %v", err)
 		}
@@ -237,8 +240,8 @@ func evictPods(t *testing.T, clientSet clientset.Interface, nodeInformer coreinf
 		}
 	}
 	t.Log("Eviction of pods starting")
-	startEndToEndForLowNodeUtilization(clientSet, nodeInformer)
-	podsOnleastUtilizedNode, err := podutil.ListEvictablePodsOnNode(clientSet, &leastLoadedNode, true)
+	startEndToEndForLowNodeUtilization(ctx, clientSet, nodeInformer)
+	podsOnleastUtilizedNode, err := podutil.ListEvictablePodsOnNode(ctx, clientSet, &leastLoadedNode, true)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}
@@ -249,14 +252,14 @@ func evictPods(t *testing.T, clientSet clientset.Interface, nodeInformer coreinf
 
 	//set number of replicas to 0
 	rc.Spec.Replicas = func(i int32) *int32 { return &i }(0)
-	_, err = clientSet.CoreV1().ReplicationControllers("default").Update(rc)
+	_, err = clientSet.CoreV1().ReplicationControllers("default").Update(ctx, rc, metav1.UpdateOptions{})
 	if err != nil {
 		t.Errorf("Error updating replica controller %v", err)
 	}
 	allPodsDeleted := false
 	//wait 30 seconds until all pods are deleted
 	for i := 0; i < 6; i++ {
-		scale, _ := clientSet.CoreV1().ReplicationControllers("default").GetScale(rc.Name, metav1.GetOptions{})
+		scale, _ := clientSet.CoreV1().ReplicationControllers("default").GetScale(ctx, rc.Name, metav1.GetOptions{})
 		if scale.Spec.Replicas == 0 {
 			allPodsDeleted = true
 			break
@@ -268,7 +271,7 @@ func evictPods(t *testing.T, clientSet clientset.Interface, nodeInformer coreinf
 		t.Errorf("Deleting of rc pods took too long")
 	}
 
-	err = clientSet.CoreV1().ReplicationControllers("default").Delete(rc.Name, &metav1.DeleteOptions{})
+	err = clientSet.CoreV1().ReplicationControllers("default").Delete(ctx, rc.Name, metav1.DeleteOptions{})
 	if err != nil {
 		t.Errorf("Error deleting rc %v", err)
 	}

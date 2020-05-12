@@ -17,6 +17,7 @@ limitations under the License.
 package strategies
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -69,6 +70,7 @@ func makeGuaranteedPod(pod *v1.Pod) {
 }
 
 func TestLowNodeUtilization(t *testing.T) {
+	ctx := context.Background()
 	n1NodeName := "n1"
 	n2NodeName := "n2"
 	n3NodeName := "n3"
@@ -344,7 +346,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				nodes = append(nodes, node)
 			}
 
-			npm := createNodePodsMap(fakeClient, nodes)
+			npm := createNodePodsMap(ctx, fakeClient, nodes)
 			lowNodes, targetNodes := classifyNodes(npm, test.thresholds, test.targetThresholds, false)
 			if len(lowNodes) != 1 {
 				t.Errorf("After ignoring unschedulable nodes, expected only one node to be under utilized.")
@@ -357,7 +359,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				nodes,
 			)
 
-			evictPodsFromTargetNodes(targetNodes, lowNodes, test.targetThresholds, false, podEvictor)
+			evictPodsFromTargetNodes(ctx, targetNodes, lowNodes, test.targetThresholds, false, podEvictor)
 			podsEvicted := podEvictor.TotalEvicted()
 			if test.expectedPodsEvicted != podsEvicted {
 				t.Errorf("Expected %#v pods to be evicted but %#v got evicted", test.expectedPodsEvicted, podsEvicted)
@@ -504,6 +506,7 @@ func newFake(objects ...runtime.Object) *core.Fake {
 }
 
 func TestWithTaints(t *testing.T) {
+	ctx := context.Background()
 	strategy := api.DeschedulerStrategy{
 		Enabled: true,
 		Params: api.StrategyParameters{
@@ -629,7 +632,7 @@ func TestWithTaints(t *testing.T) {
 				item.nodes,
 			)
 
-			LowNodeUtilization(&fake.Clientset{Fake: *fakePtr}, strategy, item.nodes, false, podEvictor)
+			LowNodeUtilization(ctx, &fake.Clientset{Fake: *fakePtr}, strategy, item.nodes, false, podEvictor)
 
 			if item.evictionsExpected != evictionCounter {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, evictionCounter)

@@ -17,6 +17,7 @@ limitations under the License.
 package evictions
 
 import (
+	"context"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -82,12 +83,12 @@ func (pe *PodEvictor) TotalEvicted() int {
 // EvictPod returns non-nil error only when evicting a pod on a node is not
 // possible (due to maxPodsToEvict constraint). Success is true when the pod
 // is evicted on the server side.
-func (pe *PodEvictor) EvictPod(pod *v1.Pod, node *v1.Node) (success bool, err error) {
+func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) (success bool, err error) {
 	if pe.maxPodsToEvict > 0 && pe.nodepodCount[node]+1 > pe.maxPodsToEvict {
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", pe.maxPodsToEvict, node.Name)
 	}
 
-	success, err = EvictPod(pe.client, pod, pe.policyGroupVersion, pe.dryRun)
+	success, err = EvictPod(ctx, pe.client, pod, pe.policyGroupVersion, pe.dryRun)
 	if success {
 		pe.nodepodCount[node]++
 		klog.V(1).Infof("Evicted pod: %#v (%#v)", pod.Name, err)
@@ -98,7 +99,7 @@ func (pe *PodEvictor) EvictPod(pod *v1.Pod, node *v1.Node) (success bool, err er
 	return false, nil
 }
 
-func EvictPod(client clientset.Interface, pod *v1.Pod, policyGroupVersion string, dryRun bool) (bool, error) {
+func EvictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string, dryRun bool) (bool, error) {
 	if dryRun {
 		return true, nil
 	}
@@ -115,7 +116,7 @@ func EvictPod(client clientset.Interface, pod *v1.Pod, policyGroupVersion string
 		},
 		DeleteOptions: deleteOptions,
 	}
-	err := client.PolicyV1beta1().Evictions(eviction.Namespace).Evict(eviction)
+	err := client.PolicyV1beta1().Evictions(eviction.Namespace).Evict(ctx, eviction)
 
 	if err == nil {
 		eventBroadcaster := record.NewBroadcaster()

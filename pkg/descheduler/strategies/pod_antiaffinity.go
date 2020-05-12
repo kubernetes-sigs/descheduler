@@ -17,6 +17,7 @@ limitations under the License.
 package strategies
 
 import (
+	"context"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -29,17 +30,17 @@ import (
 )
 
 // RemovePodsViolatingInterPodAntiAffinity evicts pods on the node which are having a pod affinity rules.
-func RemovePodsViolatingInterPodAntiAffinity(client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
+func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
-		pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
+		pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, evictLocalStoragePods)
 		if err != nil {
 			return
 		}
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
 			if checkPodsWithAntiAffinityExist(pods[i], pods) {
-				success, err := podEvictor.EvictPod(pods[i], node)
+				success, err := podEvictor.EvictPod(ctx, pods[i], node)
 				if err != nil {
 					break
 				}
