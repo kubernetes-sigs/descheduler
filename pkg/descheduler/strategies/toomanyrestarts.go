@@ -18,7 +18,8 @@ package strategies
 
 import (
 	"context"
-	"k8s.io/api/core/v1"
+
+	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 
@@ -53,6 +54,7 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 				continue
 			}
 			if _, err := podEvictor.EvictPod(ctx, pods[i], node); err != nil {
+				klog.Errorf("Error evicting pod: (%#v)", err)
 				break
 			}
 		}
