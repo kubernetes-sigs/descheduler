@@ -5,9 +5,9 @@ language: go
 go:
   - 1.13.x
 env:
-  - K8S_VERSION=v1.17.0
-  - K8S_VERSION=v1.16.4
-  - K8S_VERSION=v1.15.7
+  - K8S_VERSION=v1.17.5
+  - K8S_VERSION=v1.16.9
+  - K8S_VERSION=v1.15.11
 services:
   - docker
 before_script:
