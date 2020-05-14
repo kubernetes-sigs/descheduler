@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+
 	v1 "k8s.io/api/core/v1"
 	v1meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -41,7 +42,7 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 		for _, pod := range pods {
 			success, err := podEvictor.EvictPod(ctx, pod, node)
 			if success {
-				klog.V(1).Infof("Evicted pod: %#v\n because it was created more than %v seconds ago", pod.Name, *strategy.Params.MaxPodLifeTimeSeconds)
+				klog.V(1).Infof("Evicted pod: %#v because it was created more than %v seconds ago", pod.Name, *strategy.Params.MaxPodLifeTimeSeconds)
 			}
 
 			if err != nil {
