@@ -83,25 +83,26 @@ func (pe *PodEvictor) TotalEvicted() int {
 // EvictPod returns non-nil error only when evicting a pod on a node is not
 // possible (due to maxPodsToEvict constraint). Success is true when the pod
 // is evicted on the server side.
-func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) (success bool, err error) {
+func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) (bool, error) {
 	if pe.maxPodsToEvict > 0 && pe.nodepodCount[node]+1 > pe.maxPodsToEvict {
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", pe.maxPodsToEvict, node.Name)
 	}
 
-	success, err = EvictPod(ctx, pe.client, pod, pe.policyGroupVersion, pe.dryRun)
-	if success {
-		pe.nodepodCount[node]++
-		klog.V(1).Infof("Evicted pod: %#v in namespace %#v", pod.Name, pod.Namespace)
-		return success, nil
+	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, pe.dryRun)
+	if err != nil {
+		// err is used only for logging purposes
+		klog.Errorf("Error evicting pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
+		return false, nil
 	}
-	// err is used only for logging purposes
-	klog.Errorf("Error evicting pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
-	return false, nil
+
+	pe.nodepodCount[node]++
+	klog.V(1).Infof("Evicted pod: %#v in namespace %#v", pod.Name, pod.Namespace)
+	return true, nil
 }
 
-func EvictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string, dryRun bool) (bool, error) {
+func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string, dryRun bool) error {
 	if dryRun {
-		return true, nil
+		return nil
 	}
 	deleteOptions := &metav1.DeleteOptions{}
 	// GracePeriodSeconds ?
@@ -124,13 +125,13 @@ func EvictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, poli
 		eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: client.CoreV1().Events(pod.Namespace)})
 		r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
 		r.Event(pod, v1.EventTypeNormal, "Descheduled", "pod evicted by sigs.k8s.io/descheduler")
-		return true, nil
+		return nil
 	}
 	if apierrors.IsTooManyRequests(err) {
-		return false, fmt.Errorf("error when evicting pod (ignoring) %q: %v", pod.Name, err)
+		return fmt.Errorf("error when evicting pod (ignoring) %q: %v", pod.Name, err)
 	}
 	if apierrors.IsNotFound(err) {
-		return false, fmt.Errorf("pod not found when evicting %q: %v", pod.Name, err)
+		return fmt.Errorf("pod not found when evicting %q: %v", pod.Name, err)
 	}
-	return false, err
+	return err
 }
