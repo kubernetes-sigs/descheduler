@@ -50,6 +50,7 @@ type StrategyParameters struct {
 	NodeAffinityType                  []string                           `json:"nodeAffinityType,omitempty"`
 	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts         `json:"podsHavingTooManyRestarts,omitempty"`
 	MaxPodLifeTimeSeconds             *uint                              `json:"maxPodLifeTimeSeconds,omitempty"`
+	RemoveDuplicates                  *RemoveDuplicates                  `json:"removeDuplicates,omitempty"`
 }
 
 type Percentage float64
@@ -64,4 +65,8 @@ type NodeResourceUtilizationThresholds struct {
 type PodsHavingTooManyRestarts struct {
 	PodRestartThreshold     int32 `json:"podRestartThreshold,omitempty"`
 	IncludingInitContainers bool  `json:"includingInitContainers,omitempty"`
+}
+
+type RemoveDuplicates struct {
+	ExcludeOwnerKinds []string `json:"excludeOwnerKinds,omitempty"`
 }

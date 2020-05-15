@@ -66,15 +66,21 @@ Replication Controller (RC), Deployment, or Job running on the same node. If the
 those duplicate pods are evicted for better spreading of pods in a cluster. This issue could happen
 if some nodes went down due to whatever reasons, and pods on them were moved to other nodes leading to
 more than one pod associated with a RS or RC, for example, running on the same node. Once the failed nodes
-are ready again, this strategy could be enabled to evict those duplicate pods. Currently, there are no
-parameters associated with this strategy. To disable this strategy, the policy should look like:
+are ready again, this strategy could be enabled to evict those duplicate pods.
+
+It provides one optional parameter, `ExcludeOwnerKinds`, which is a list of OwnerRef `Kind`s. If a pod
+has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
 
 ```
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
   "RemoveDuplicates":
-     enabled: false
+     enabled: true
+     params:
+       removeDuplicates:
+         excludeOwnerKinds:
+         - "ReplicaSet"
 ```
 
 ### LowNodeUtilization
