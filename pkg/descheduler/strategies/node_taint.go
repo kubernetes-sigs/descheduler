@@ -17,21 +17,23 @@ limitations under the License.
 package strategies
 
 import (
+	"context"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 )
 
 // RemovePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
-func RemovePodsViolatingNodeTaints(client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
+func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
-		pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
+		pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, evictLocalStoragePods)
 		if err != nil {
 			//no pods evicted as error encountered retrieving evictable Pods
 			return
@@ -44,7 +46,8 @@ func RemovePodsViolatingNodeTaints(client clientset.Interface, strategy api.Desc
 				func(taint *v1.Taint) bool { return taint.Effect == v1.TaintEffectNoSchedule },
 			) {
 				klog.V(2).Infof("Not all taints with NoSchedule effect are tolerated after update for pod %v on node %v", pods[i].Name, node.Name)
-				if _, err := podEvictor.EvictPod(pods[i], node); err != nil {
+				if _, err := podEvictor.EvictPod(ctx, pods[i], node); err != nil {
+					klog.Errorf("Error evicting pod: (%#v)", err)
 					break
 				}
 			}

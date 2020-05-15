@@ -17,7 +17,9 @@ limitations under the License.
 package strategies
 
 import (
-	"k8s.io/api/core/v1"
+	"context"
+
+	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 
@@ -29,13 +31,14 @@ import (
 // RemovePodsHavingTooManyRestarts removes the pods that have too many restarts on node.
 // There are too many cases leading this issue: Volume mount failed, app error due to nodes' different settings.
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
-func RemovePodsHavingTooManyRestarts(client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
-	if strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold < 1 {
+func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
+	if strategy.Params.PodsHavingTooManyRestarts == nil || strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold < 1 {
+		klog.V(1).Infof("PodsHavingTooManyRestarts thresholds not set")
 		return
 	}
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %s", node.Name)
-		pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
+		pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, evictLocalStoragePods)
 		if err != nil {
 			klog.Errorf("Error when list pods at node %s", node.Name)
 			continue
@@ -50,7 +53,8 @@ func RemovePodsHavingTooManyRestarts(client clientset.Interface, strategy api.De
 			} else if restarts < strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold {
 				continue
 			}
-			if _, err := podEvictor.EvictPod(pods[i], node); err != nil {
+			if _, err := podEvictor.EvictPod(ctx, pods[i], node); err != nil {
+				klog.Errorf("Error evicting pod: (%#v)", err)
 				break
 			}
 		}

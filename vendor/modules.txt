@@ -34,9 +34,9 @@ github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
 github.com/google/go-cmp/cmp/internal/function
 github.com/google/go-cmp/cmp/internal/value
-# github.com/google/gofuzz v1.0.0
+# github.com/google/gofuzz v1.1.0
 github.com/google/gofuzz
-# github.com/googleapis/gnostic v0.0.0-20170729233727-0c5108395e2d
+# github.com/googleapis/gnostic v0.1.0
 github.com/googleapis/gnostic/OpenAPIv2
 github.com/googleapis/gnostic/compiler
 github.com/googleapis/gnostic/extensions
@@ -65,7 +65,7 @@ github.com/modern-go/reflect2
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5
 github.com/spf13/pflag
-# golang.org/x/crypto v0.0.0-20190820162420-60c769a6c586
+# golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
 golang.org/x/crypto/ssh/terminal
 # golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
 golang.org/x/net/context
@@ -80,7 +80,7 @@ golang.org/x/oauth2/google
 golang.org/x/oauth2/internal
 golang.org/x/oauth2/jws
 golang.org/x/oauth2/jwt
-# golang.org/x/sys v0.0.0-20190826190057-c7b8b68b1456
+# golang.org/x/sys v0.0.0-20191022100944-742c48ecaeb7
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 # golang.org/x/text v0.3.2
@@ -105,7 +105,7 @@ google.golang.org/appengine/urlfetch
 gopkg.in/inf.v0
 # gopkg.in/yaml.v2 v2.2.8
 gopkg.in/yaml.v2
-# k8s.io/api v0.17.0
+# k8s.io/api v0.18.2
 k8s.io/api/admissionregistration/v1
 k8s.io/api/admissionregistration/v1beta1
 k8s.io/api/apps/v1
@@ -146,7 +146,7 @@ k8s.io/api/settings/v1alpha1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apimachinery v0.17.3-beta.0
+# k8s.io/apimachinery v0.18.2
 k8s.io/apimachinery/pkg/api/errors
 k8s.io/apimachinery/pkg/api/meta
 k8s.io/apimachinery/pkg/api/resource
@@ -189,9 +189,9 @@ k8s.io/apimachinery/pkg/version
 k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/json
 k8s.io/apimachinery/third_party/forked/golang/reflect
-# k8s.io/apiserver v0.17.0
+# k8s.io/apiserver v0.18.2
 k8s.io/apiserver/pkg/util/feature
-# k8s.io/client-go v0.17.0
+# k8s.io/client-go v0.18.2
 k8s.io/client-go/discovery
 k8s.io/client-go/discovery/fake
 k8s.io/client-go/informers
@@ -402,8 +402,8 @@ k8s.io/client-go/util/flowcontrol
 k8s.io/client-go/util/homedir
 k8s.io/client-go/util/jsonpath
 k8s.io/client-go/util/keyutil
-k8s.io/client-go/util/retry
-# k8s.io/component-base v0.17.0
+k8s.io/client-go/util/workqueue
+# k8s.io/component-base v0.18.2
 k8s.io/component-base/cli/flag
 k8s.io/component-base/featuregate
 k8s.io/component-base/logs
@@ -411,9 +411,11 @@ k8s.io/component-base/logs
 k8s.io/klog
 # k8s.io/kube-openapi v0.0.0-20200121204235-bf4fb3bd569c
 k8s.io/kube-openapi/pkg/util/proto
-# k8s.io/utils v0.0.0-20191114184206-e782cd3c129f
+# k8s.io/utils v0.0.0-20200324210504-a9aa75ae1b89
 k8s.io/utils/buffer
 k8s.io/utils/integer
 k8s.io/utils/trace
+# sigs.k8s.io/structured-merge-diff/v3 v3.0.0
+sigs.k8s.io/structured-merge-diff/v3/value
 # sigs.k8s.io/yaml v1.2.0
 sigs.k8s.io/yaml

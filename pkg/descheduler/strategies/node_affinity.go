@@ -17,7 +17,9 @@ limitations under the License.
 package strategies
 
 import (
-	"k8s.io/api/core/v1"
+	"context"
+
+	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 
@@ -27,7 +29,7 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
-func RemovePodsViolatingNodeAffinity(client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
+func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
 	for _, nodeAffinity := range strategy.Params.NodeAffinityType {
 		klog.V(2).Infof("Executing for nodeAffinityType: %v", nodeAffinity)
 
@@ -36,7 +38,7 @@ func RemovePodsViolatingNodeAffinity(client clientset.Interface, strategy api.De
 			for _, node := range nodes {
 				klog.V(1).Infof("Processing node: %#v\n", node.Name)
 
-				pods, err := podutil.ListEvictablePodsOnNode(client, node, evictLocalStoragePods)
+				pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, evictLocalStoragePods)
 				if err != nil {
 					klog.Errorf("failed to get pods from %v: %v", node.Name, err)
 				}
@@ -45,7 +47,8 @@ func RemovePodsViolatingNodeAffinity(client clientset.Interface, strategy api.De
 					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
 						if !nodeutil.PodFitsCurrentNode(pod, node) && nodeutil.PodFitsAnyNode(pod, nodes) {
 							klog.V(1).Infof("Evicting pod: %v", pod.Name)
-							if _, err := podEvictor.EvictPod(pod, node); err != nil {
+							if _, err := podEvictor.EvictPod(ctx, pod, node); err != nil {
+								klog.Errorf("Error evicting pod: (%#v)", err)
 								break
 							}
 						}

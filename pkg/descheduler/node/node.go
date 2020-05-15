@@ -17,6 +17,7 @@ limitations under the License.
 package node
 
 import (
+	"context"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -28,7 +29,7 @@ import (
 
 // ReadyNodes returns ready nodes irrespective of whether they are
 // schedulable or not.
-func ReadyNodes(client clientset.Interface, nodeInformer coreinformers.NodeInformer, nodeSelector string, stopChannel <-chan struct{}) ([]*v1.Node, error) {
+func ReadyNodes(ctx context.Context, client clientset.Interface, nodeInformer coreinformers.NodeInformer, nodeSelector string, stopChannel <-chan struct{}) ([]*v1.Node, error) {
 	ns, err := labels.Parse(nodeSelector)
 	if err != nil {
 		return []*v1.Node{}, err
@@ -43,7 +44,7 @@ func ReadyNodes(client clientset.Interface, nodeInformer coreinformers.NodeInfor
 	if len(nodes) == 0 {
 		klog.V(2).Infof("node lister returned empty list, now fetch directly")
 
-		nItems, err := client.CoreV1().Nodes().List(metav1.ListOptions{LabelSelector: nodeSelector})
+		nItems, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: nodeSelector})
 		if err != nil {
 			return []*v1.Node{}, err
 		}

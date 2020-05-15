@@ -17,6 +17,7 @@ limitations under the License.
 package strategies
 
 import (
+	"context"
 	"testing"
 
 	"k8s.io/api/core/v1"
@@ -31,6 +32,7 @@ import (
 )
 
 func TestFindDuplicatePods(t *testing.T) {
+	ctx := context.Background()
 	// first setup pods
 	node := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	p1 := test.BuildTestPod("p1", 100, 0, node.Name, nil)
@@ -50,6 +52,14 @@ func TestFindDuplicatePods(t *testing.T) {
 	p9.Namespace = "test"
 	p10 := test.BuildTestPod("p10", 100, 0, node.Name, nil)
 	p10.Namespace = "test"
+	p11 := test.BuildTestPod("p11", 100, 0, node.Name, nil)
+	p11.Namespace = "different-images"
+	p12 := test.BuildTestPod("p12", 100, 0, node.Name, nil)
+	p12.Namespace = "different-images"
+	p13 := test.BuildTestPod("p13", 100, 0, node.Name, nil)
+	p13.Namespace = "different-images"
+	p14 := test.BuildTestPod("p14", 100, 0, node.Name, nil)
+	p14.Namespace = "different-images"
 
 	// ### Evictable Pods ###
 
@@ -90,41 +100,88 @@ func TestFindDuplicatePods(t *testing.T) {
 	priority := utils.SystemCriticalPriority
 	p7.Spec.Priority = &priority
 
+	// Same owners, but different images
+	p11.Spec.Containers[0].Image = "foo"
+	p11.ObjectMeta.OwnerReferences = ownerRef1
+	p12.Spec.Containers[0].Image = "bar"
+	p12.ObjectMeta.OwnerReferences = ownerRef1
+
+	// Multiple containers
+	p13.ObjectMeta.OwnerReferences = ownerRef1
+	p13.Spec.Containers = append(p13.Spec.Containers, v1.Container{
+		Name:  "foo",
+		Image: "foo",
+	})
+
 	testCases := []struct {
 		description             string
 		maxPodsToEvict          int
 		pods                    []v1.Pod
 		expectedEvictedPodCount int
+		strategy                api.DeschedulerStrategy
 	}{
 		{
 			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet. 2 should be evicted.",
 			maxPodsToEvict:          5,
 			pods:                    []v1.Pod{*p1, *p2, *p3},
 			expectedEvictedPodCount: 2,
+			strategy:                api.DeschedulerStrategy{},
+		},
+		{
+			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet, but ReplicaSet kind is excluded. 0 should be evicted.",
+			maxPodsToEvict:          5,
+			pods:                    []v1.Pod{*p1, *p2, *p3},
+			expectedEvictedPodCount: 0,
+			strategy:                api.DeschedulerStrategy{Params: api.StrategyParameters{RemoveDuplicates: &api.RemoveDuplicates{ExcludeOwnerKinds: []string{"ReplicaSet"}}}},
 		},
 		{
 			description:             "Three Pods in the `test` Namespace, bound to same ReplicaSet. 2 should be evicted.",
 			maxPodsToEvict:          5,
 			pods:                    []v1.Pod{*p8, *p9, *p10},
 			expectedEvictedPodCount: 2,
+			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Three Pods in the `dev` Namespace, three Pods in the `test` Namespace. Bound to ReplicaSet with same name. 4 should be evicted.",
 			maxPodsToEvict:          5,
 			pods:                    []v1.Pod{*p1, *p2, *p3, *p8, *p9, *p10},
 			expectedEvictedPodCount: 4,
+			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Pods are: part of DaemonSet, with local storage, mirror pod annotation, critical pod annotation - none should be evicted.",
 			maxPodsToEvict:          2,
 			pods:                    []v1.Pod{*p4, *p5, *p6, *p7},
 			expectedEvictedPodCount: 0,
+			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Test all Pods: 4 should be evicted.",
 			maxPodsToEvict:          5,
 			pods:                    []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p9, *p10},
 			expectedEvictedPodCount: 4,
+			strategy:                api.DeschedulerStrategy{},
+		},
+		{
+			description:             "Pods with the same owner but different images should not be evicted",
+			maxPodsToEvict:          5,
+			pods:                    []v1.Pod{*p11, *p12},
+			expectedEvictedPodCount: 0,
+			strategy:                api.DeschedulerStrategy{},
+		},
+		{
+			description:             "Pods with multiple containers should not match themselves",
+			maxPodsToEvict:          5,
+			pods:                    []v1.Pod{*p13},
+			expectedEvictedPodCount: 0,
+			strategy:                api.DeschedulerStrategy{},
+		},
+		{
+			description:             "Pods with matching ownerrefs and at not all matching image should not trigger an eviction",
+			maxPodsToEvict:          5,
+			pods:                    []v1.Pod{*p11, *p13},
+			expectedEvictedPodCount: 0,
+			strategy:                api.DeschedulerStrategy{},
 		},
 	}
 
@@ -144,7 +201,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			[]*v1.Node{node},
 		)
 
-		RemoveDuplicatePods(fakeClient, api.DeschedulerStrategy{}, []*v1.Node{node}, false, podEvictor)
+		RemoveDuplicatePods(ctx, fakeClient, testCase.strategy, []*v1.Node{node}, false, podEvictor)
 		podsEvicted := podEvictor.TotalEvicted()
 		if podsEvicted != testCase.expectedEvictedPodCount {
 			t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)

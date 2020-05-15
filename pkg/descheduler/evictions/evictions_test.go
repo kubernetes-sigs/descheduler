@@ -17,9 +17,10 @@ limitations under the License.
 package evictions
 
 import (
+	"context"
 	"testing"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
@@ -27,6 +28,7 @@ import (
 )
 
 func TestEvictPod(t *testing.T) {
+	ctx := context.Background()
 	node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
 	pod1 := test.BuildTestPod("p1", 400, 0, "node1", nil)
 	tests := []struct {
@@ -34,21 +36,21 @@ func TestEvictPod(t *testing.T) {
 		node        *v1.Node
 		pod         *v1.Pod
 		pods        []v1.Pod
-		want        bool
+		want        error
 	}{
 		{
 			description: "test pod eviction - pod present",
 			node:        node1,
 			pod:         pod1,
 			pods:        []v1.Pod{*pod1},
-			want:        true,
+			want:        nil,
 		},
 		{
 			description: "test pod eviction - pod absent",
 			node:        node1,
 			pod:         pod1,
 			pods:        []v1.Pod{*test.BuildTestPod("p2", 400, 0, "node1", nil), *test.BuildTestPod("p3", 450, 0, "node1", nil)},
-			want:        true,
+			want:        nil,
 		},
 	}
 
@@ -57,7 +59,7 @@ func TestEvictPod(t *testing.T) {
 		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 			return true, &v1.PodList{Items: test.pods}, nil
 		})
-		got, _ := EvictPod(fakeClient, test.pod, "v1", false)
+		got := evictPod(ctx, fakeClient, test.pod, "v1", false)
 		if got != test.want {
 			t.Errorf("Test error for Desc: %s. Expected %v pod eviction to be %v, got %v", test.description, test.pod.Name, test.want, got)
 		}

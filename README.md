@@ -54,9 +54,9 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 ## Policy and Strategies
 
 Descheduler's policy is configurable and includes strategies that can be enabled or disabled.
-Five strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`,
-`RemovePodsViolatingNodeAffinity`, and `RemovePodsViolatingNodeTaints` are currently implemented.
-As part of the policy, the parameters associated with the strategies can be configured too.
+Seven strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`,
+`RemovePodsViolatingNodeAffinity`, `RemovePodsViolatingNodeTaints`, `RemovePodsHavingTooManyRestarts`, and `PodLifeTime`
+are currently implemented. As part of the policy, the parameters associated with the strategies can be configured too.
 By default, all strategies are enabled.
 
 ### RemoveDuplicates
@@ -66,15 +66,21 @@ Replication Controller (RC), Deployment, or Job running on the same node. If the
 those duplicate pods are evicted for better spreading of pods in a cluster. This issue could happen
 if some nodes went down due to whatever reasons, and pods on them were moved to other nodes leading to
 more than one pod associated with a RS or RC, for example, running on the same node. Once the failed nodes
-are ready again, this strategy could be enabled to evict those duplicate pods. Currently, there are no
-parameters associated with this strategy. To disable this strategy, the policy should look like:
+are ready again, this strategy could be enabled to evict those duplicate pods.
+
+It provides one optional parameter, `ExcludeOwnerKinds`, which is a list of OwnerRef `Kind`s. If a pod
+has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
 
 ```
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
   "RemoveDuplicates":
-     enabled: false
+     enabled: true
+     params:
+       removeDuplicates:
+         excludeOwnerKinds:
+         - "ReplicaSet"
 ```
 
 ### LowNodeUtilization
@@ -198,6 +204,21 @@ strategies:
          includingInitContainers: true
 ```
 
+### PodLifeTime
+
+This strategy evicts pods that are older than `.strategies.PodLifeTime.params.maxPodLifeTimeSeconds` The policy
+file should look like:
+
+````
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+        maxPodLifeTimeSeconds: 86400
+````
+
 ## Pod Evictions
 
 When the descheduler decides to evict pods from a node, it employs the following general mechanism:
@@ -265,7 +286,6 @@ Learn how to engage with the Kubernetes community on the [community page](http:/
 This roadmap is not in any particular order.
 
 * Consideration of pod affinity
-* Strategy to consider pod life time
 * Strategy to consider number of pending pods
 * Integration with cluster autoscaler
 * Integration with metrics providers for obtaining real load metrics

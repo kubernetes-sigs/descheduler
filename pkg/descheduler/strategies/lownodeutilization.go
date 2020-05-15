@@ -17,6 +17,7 @@ limitations under the License.
 package strategies
 
 import (
+	"context"
 	"sort"
 
 	v1 "k8s.io/api/core/v1"
@@ -39,7 +40,7 @@ type NodeUsageMap struct {
 
 type NodePodsMap map[*v1.Node][]*v1.Pod
 
-func LowNodeUtilization(client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
+func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
 	if !strategy.Enabled {
 		return
 	}
@@ -59,7 +60,7 @@ func LowNodeUtilization(client clientset.Interface, strategy api.DeschedulerStra
 		return
 	}
 
-	npm := createNodePodsMap(client, nodes)
+	npm := createNodePodsMap(ctx, client, nodes)
 	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds, evictLocalStoragePods)
 
 	klog.V(1).Infof("Criteria for a node under utilization: CPU: %v, Mem: %v, Pods: %v",
@@ -91,6 +92,7 @@ func LowNodeUtilization(client clientset.Interface, strategy api.DeschedulerStra
 	klog.V(1).Infof("Total number of nodes above target utilization: %v", len(targetNodes))
 
 	evictPodsFromTargetNodes(
+		ctx,
 		targetNodes,
 		lowNodes,
 		targetThresholds,
@@ -162,6 +164,7 @@ func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThr
 // evicts them based on QoS as fallback option.
 // TODO: @ravig Break this function into smaller functions.
 func evictPodsFromTargetNodes(
+	ctx context.Context,
 	targetNodes, lowNodes []NodeUsageMap,
 	targetThresholds api.ResourceThresholds,
 	evictLocalStoragePods bool,
@@ -217,24 +220,26 @@ func evictPodsFromTargetNodes(
 
 			// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 			sortPodsBasedOnPriority(evictablePods)
-			evictPods(evictablePods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
+			evictPods(ctx, evictablePods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
 		} else {
 			// TODO: Remove this when we support only priority.
 			//  Falling back to evicting pods based on priority.
 			klog.V(1).Infof("Evicting pods based on QoS")
 			klog.V(1).Infof("There are %v non-evictable pods on the node", len(nonRemovablePods))
 			// evict best effort pods
-			evictPods(bestEffortPods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
+			evictPods(ctx, bestEffortPods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
 			// evict burstable pods
-			evictPods(burstablePods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
+			evictPods(ctx, burstablePods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
 			// evict guaranteed pods
-			evictPods(guaranteedPods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
+			evictPods(ctx, guaranteedPods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
 		}
 		klog.V(1).Infof("%v pods evicted from node %#v with usage %v", podEvictor.NodeEvicted(node.node), node.node.Name, node.usage)
 	}
 }
 
-func evictPods(inputPods []*v1.Pod,
+func evictPods(
+	ctx context.Context,
+	inputPods []*v1.Pod,
 	targetThresholds api.ResourceThresholds,
 	nodeCapacity v1.ResourceList,
 	nodeUsage api.ResourceThresholds,
@@ -255,8 +260,9 @@ func evictPods(inputPods []*v1.Pod,
 			cUsage := utils.GetResourceRequest(pod, v1.ResourceCPU)
 			mUsage := utils.GetResourceRequest(pod, v1.ResourceMemory)
 
-			success, err := podEvictor.EvictPod(pod, node)
+			success, err := podEvictor.EvictPod(ctx, pod, node)
 			if err != nil {
+				klog.Errorf("Error evicting pod: (%#v)", err)
 				break
 			}
 
@@ -325,10 +331,10 @@ func sortPodsBasedOnPriority(evictablePods []*v1.Pod) {
 }
 
 // createNodePodsMap returns nodepodsmap with evictable pods on node.
-func createNodePodsMap(client clientset.Interface, nodes []*v1.Node) NodePodsMap {
+func createNodePodsMap(ctx context.Context, client clientset.Interface, nodes []*v1.Node) NodePodsMap {
 	npm := NodePodsMap{}
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(client, node)
+		pods, err := podutil.ListPodsOnANode(ctx, client, node)
 		if err != nil {
 			klog.Warningf("node %s will not be processed, error in accessing its pods (%#v)", node.Name, err)
 		} else {
