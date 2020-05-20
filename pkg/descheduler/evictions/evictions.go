@@ -96,7 +96,11 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) 
 	}
 
 	pe.nodepodCount[node]++
-	klog.V(1).Infof("Evicted pod: %#v in namespace %#v", pod.Name, pod.Namespace)
+	if pe.dryRun {
+		klog.V(1).Infof("Evicted pod in dry run mode: %#v in namespace %#v", pod.Name, pod.Namespace)
+	} else {
+		klog.V(1).Infof("Evicted pod: %#v in namespace %#v", pod.Name, pod.Namespace)
+	}
 	return true, nil
 }
 
