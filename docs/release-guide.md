@@ -27,6 +27,9 @@
 ## Notes
 See [post-descheduler-push-images dashboard](https://testgrid.k8s.io/sig-scheduling#post-descheduler-push-images) for staging registry image build job status.
 
+View the descheduler staging registry using [this URL](https://console.cloud.google.com/gcr/images/k8s-staging-descheduler/GLOBAL/descheduler) in a web browser
+or use the below `gcloud` commands.
+
 List images in staging registry.
 ```
 gcloud container images list --repository gcr.io/k8s-staging-descheduler
