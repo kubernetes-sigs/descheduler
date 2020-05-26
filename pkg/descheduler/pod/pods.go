@@ -18,11 +18,14 @@ package pod
 
 import (
 	"context"
+
+	"sigs.k8s.io/descheduler/pkg/utils"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 const (
@@ -30,12 +33,12 @@ const (
 )
 
 // IsEvictable checks if a pod is evictable or not.
-func IsEvictable(pod *v1.Pod, evictLocalStoragePods bool) bool {
+func IsEvictable(ctx context.Context, client clientset.Interface, pod *v1.Pod, evictLocalStoragePods bool) (bool, error) {
 	ownerRefList := OwnerRef(pod)
 	if !HaveEvictAnnotation(pod) && (IsMirrorPod(pod) || (!evictLocalStoragePods && IsPodWithLocalStorage(pod)) || len(ownerRefList) == 0 || IsDaemonsetPod(ownerRefList) || IsCriticalPod(pod)) {
-		return false
+		return false, nil
 	}
-	return true
+	return IsPDBAllowsEviction(ctx, client, pod)
 }
 
 // ListEvictablePodsOnNode returns the list of evictable pods on node.
@@ -46,7 +49,11 @@ func ListEvictablePodsOnNode(ctx context.Context, client clientset.Interface, no
 	}
 	evictablePods := make([]*v1.Pod, 0)
 	for _, pod := range pods {
-		if !IsEvictable(pod, evictLocalStoragePods) {
+		isEvictable, err := IsEvictable(ctx, client, pod, evictLocalStoragePods)
+		if err != nil {
+			return []*v1.Pod{}, err
+		}
+		if !isEvictable {
 			continue
 		} else {
 			evictablePods = append(evictablePods, pod)
@@ -123,4 +130,22 @@ func IsPodWithLocalStorage(pod *v1.Pod) bool {
 // OwnerRef returns the ownerRefList for the pod.
 func OwnerRef(pod *v1.Pod) []metav1.OwnerReference {
 	return pod.ObjectMeta.GetOwnerReferences()
+}
+
+// IsPDBAllowsEviction returns true when pod eviction is allowed by PDB
+func IsPDBAllowsEviction(ctx context.Context, client clientset.Interface, pod *v1.Pod) (bool, error) {
+	PDBList, err := client.PolicyV1beta1().PodDisruptionBudgets(pod.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false, err
+	}
+	for _, PDB := range PDBList.Items {
+		selector, err := metav1.LabelSelectorAsSelector(PDB.Spec.Selector)
+		if err != nil {
+			return false, err
+		}
+		if selector.Matches(labels.Set(pod.Labels)) && PDB.Status.DisruptionsAllowed < 1 {
+			return false, nil
+		}
+	}
+	return true, nil
 }

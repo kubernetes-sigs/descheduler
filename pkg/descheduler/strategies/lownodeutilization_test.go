@@ -19,10 +19,14 @@ package strategies
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
-	"reflect"
+	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	"sigs.k8s.io/descheduler/pkg/utils"
+	"sigs.k8s.io/descheduler/test"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/policy/v1beta1"
@@ -30,14 +34,10 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	"sigs.k8s.io/descheduler/pkg/utils"
-	"sigs.k8s.io/descheduler/test"
 )
 
 var (
@@ -359,7 +359,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				nodes,
 			)
 
-			evictPodsFromTargetNodes(ctx, targetNodes, lowNodes, test.targetThresholds, false, podEvictor)
+			evictPodsFromTargetNodes(ctx, &fake.Clientset{}, targetNodes, lowNodes, test.targetThresholds, false, podEvictor)
 			podsEvicted := podEvictor.TotalEvicted()
 			if test.expectedPodsEvicted != podsEvicted {
 				t.Errorf("Expected %#v pods to be evicted but %#v got evicted", test.expectedPodsEvicted, podsEvicted)

@@ -93,6 +93,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 
 	evictPodsFromTargetNodes(
 		ctx,
+		client,
 		targetNodes,
 		lowNodes,
 		targetThresholds,
@@ -165,6 +166,7 @@ func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThr
 // TODO: @ravig Break this function into smaller functions.
 func evictPodsFromTargetNodes(
 	ctx context.Context,
+	client clientset.Interface,
 	targetNodes, lowNodes []NodeUsageMap,
 	targetThresholds api.ResourceThresholds,
 	evictLocalStoragePods bool,
@@ -209,7 +211,10 @@ func evictPodsFromTargetNodes(
 		}
 		klog.V(3).Infof("evicting pods from node %#v with usage: %#v", node.node.Name, node.usage)
 
-		nonRemovablePods, bestEffortPods, burstablePods, guaranteedPods := classifyPods(node.allPods, evictLocalStoragePods)
+		nonRemovablePods, bestEffortPods, burstablePods, guaranteedPods, err := classifyPods(ctx, client, node.allPods, evictLocalStoragePods)
+		if err != nil {
+			klog.Warningf("Unable to classify pods: %s", err)
+		}
 		klog.V(2).Infof("allPods:%v, nonRemovablePods:%v, bestEffortPods:%v, burstablePods:%v, guaranteedPods:%v", len(node.allPods), len(nonRemovablePods), len(bestEffortPods), len(burstablePods), len(guaranteedPods))
 
 		// Check if one pod has priority, if yes, assume that all pods have priority and evict pods based on priority.
@@ -399,7 +404,7 @@ func nodeUtilization(node *v1.Node, pods []*v1.Pod, evictLocalStoragePods bool) 
 	}
 }
 
-func classifyPods(pods []*v1.Pod, evictLocalStoragePods bool) ([]*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod) {
+func classifyPods(ctx context.Context, client clientset.Interface, pods []*v1.Pod, evictLocalStoragePods bool) ([]*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod, error) {
 	var nonRemovablePods, bestEffortPods, burstablePods, guaranteedPods []*v1.Pod
 
 	// From https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/
@@ -413,7 +418,12 @@ func classifyPods(pods []*v1.Pod, evictLocalStoragePods bool) ([]*v1.Pod, []*v1.
 	// For a Pod to be given a QoS class of BestEffort, the Containers in the Pod must not have any memory or CPU limits or requests.
 
 	for _, pod := range pods {
-		if !podutil.IsEvictable(pod, evictLocalStoragePods) {
+		// Ignore error here
+		isEvictable, err := podutil.IsEvictable(ctx, client, pod, evictLocalStoragePods)
+		if err != nil {
+			return []*v1.Pod{}, []*v1.Pod{}, []*v1.Pod{}, []*v1.Pod{}, err
+		}
+		if !isEvictable {
 			nonRemovablePods = append(nonRemovablePods, pod)
 			continue
 		}
@@ -428,5 +438,5 @@ func classifyPods(pods []*v1.Pod, evictLocalStoragePods bool) ([]*v1.Pod, []*v1.
 		}
 	}
 
-	return nonRemovablePods, bestEffortPods, burstablePods, guaranteedPods
+	return nonRemovablePods, bestEffortPods, burstablePods, guaranteedPods, nil
 }

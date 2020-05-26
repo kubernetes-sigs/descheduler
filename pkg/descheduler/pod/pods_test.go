@@ -17,12 +17,18 @@ limitations under the License.
 package pod
 
 import (
+	"context"
 	"testing"
 
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/runtime"
+
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
+
+	v1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestIsEvictable(t *testing.T) {
@@ -30,6 +36,7 @@ func TestIsEvictable(t *testing.T) {
 	type testCase struct {
 		pod                   *v1.Pod
 		runBefore             func(*v1.Pod)
+		PDB                   *policyv1beta1.PodDisruptionBudget
 		evictLocalStoragePods bool
 		result                bool
 	}
@@ -171,11 +178,19 @@ func TestIsEvictable(t *testing.T) {
 
 	for _, test := range testCases {
 		test.runBefore(test.pod)
-		result := IsEvictable(test.pod, test.evictLocalStoragePods)
+		var fakeObjects []runtime.Object
+
+		if test.PDB != nil {
+			fakeObjects = append(fakeObjects, test.PDB)
+		}
+		fakeClient := fake.NewSimpleClientset(fakeObjects...)
+		result, err := IsEvictable(context.Background(), fakeClient, test.pod, test.evictLocalStoragePods)
+		if err != nil {
+			t.Errorf("IsEvictable should return nil error, but got: %s", err)
+		}
 		if result != test.result {
 			t.Errorf("IsEvictable should return for pod %s %t, but it returns %t", test.pod.Name, test.result, result)
 		}
-
 	}
 }
 func TestPodTypes(t *testing.T) {
