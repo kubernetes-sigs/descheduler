@@ -239,9 +239,17 @@ Pods subject to a Pod Disruption Budget(PDB) are not evicted if descheduling vio
 are evicted by using the eviction subresource to handle PDB.
 
 ## Compatibility Matrix
+The below compatibility matrix shows the k8s client package(client-go, apimachinery, etc) versions that descheduler
+is compiled with. At this time descheduler does not have a hard dependency to a specific k8s release. However a
+particular descheduler release is only tested against the three latest k8s minor versions. For example descheduler
+v0.18 should work with k8s v1.18, v1.17, and v1.16.
 
-Descheduler  | supported Kubernetes version
+Starting with descheduler release v0.18 the minor version of descheduler matches the minor version of the k8s client
+packages that it is compiled with.
+
+Descheduler  | Supported Kubernetes Version
 -------------|-----------------------------
+v0.18        | v1.18
 v0.10        | v1.17
 v0.4-v0.9    | v1.9+
 v0.1-v0.3    | v1.7-v1.8
