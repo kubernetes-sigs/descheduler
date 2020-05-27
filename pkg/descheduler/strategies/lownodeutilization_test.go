@@ -509,7 +509,7 @@ func TestWithTaints(t *testing.T) {
 	ctx := context.Background()
 	strategy := api.DeschedulerStrategy{
 		Enabled: true,
-		Params: api.StrategyParameters{
+		Params: &api.StrategyParameters{
 			NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
 				Thresholds: api.ResourceThresholds{
 					v1.ResourcePods: 20,
