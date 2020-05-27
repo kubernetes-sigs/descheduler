@@ -25,8 +25,8 @@ before_script:
 script:
 - mkdir -p ~/gopath/src/sigs.k8s.io/
 - mv ~/gopath/src/github.com/kubernetes-sigs/descheduler ~/gopath/src/sigs.k8s.io/.
-- hack/verify-gofmt.sh
-- hack/verify-vendor.sh
+- make verify-gofmt
+- make verify-vendor
 - make lint
 - make build
 - make test-unit
