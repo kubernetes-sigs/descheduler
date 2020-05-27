@@ -41,6 +41,8 @@ IMAGE_GCLOUD:=$(REGISTRY)/descheduler:$(VERSION)
 # In the future binaries can be uploaded to
 # GCS bucket gs://k8s-staging-descheduler.
 
+HAS_HELM := $(shell which helm)
+
 all: build
 
 build:
@@ -62,7 +64,7 @@ push: push-container-to-gcloud
 clean:
 	rm -rf _output
 
-verify: verify-gofmt verify-vendor lint
+verify: verify-gofmt verify-vendor lint lint-chart
 
 verify-gofmt:
 	./hack/verify-gofmt.sh
@@ -86,3 +88,9 @@ ifndef HAS_GOLANGCI
 	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b ./_output/bin ${GOLANGCI_VERSION}
 endif
 	./_output/bin/golangci-lint run
+
+lint-chart:
+ifndef HAS_HELM
+	curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 && chmod 700 ./get_helm.sh && ./get_helm.sh
+endif
+	helm lint ./charts/descheduler
