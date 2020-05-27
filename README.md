@@ -233,6 +233,8 @@ never evicted because these pods won't be recreated.
   annotation is used to override checks which prevent eviction and users can select which pod is evicted.
   Users should know how and if the pod will be recreated.
 
+Setting `--v=4` or greater on the Descheduler will log all reasons why any pod is not evictable.
+
 ### Pod Disruption Budget (PDB)
 
 Pods subject to a Pod Disruption Budget(PDB) are not evicted if descheduling violates its PDB. The pods
