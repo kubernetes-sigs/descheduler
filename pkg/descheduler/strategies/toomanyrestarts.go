@@ -32,7 +32,7 @@ import (
 // There are too many cases leading this issue: Volume mount failed, app error due to nodes' different settings.
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
 func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
-	if strategy.Params.PodsHavingTooManyRestarts == nil || strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold < 1 {
+	if strategy.Params == nil || strategy.Params.PodsHavingTooManyRestarts == nil || strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold < 1 {
 		klog.V(1).Infof("PodsHavingTooManyRestarts thresholds not set")
 		return
 	}

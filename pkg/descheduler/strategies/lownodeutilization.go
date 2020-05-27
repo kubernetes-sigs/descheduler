@@ -46,7 +46,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 	}
 	// todo: move to config validation?
 	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
-	if strategy.Params.NodeResourceUtilizationThresholds == nil {
+	if strategy.Params == nil || strategy.Params.NodeResourceUtilizationThresholds == nil {
 		klog.V(1).Infof("NodeResourceUtilizationThresholds not set")
 		return
 	}

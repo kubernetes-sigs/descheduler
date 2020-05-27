@@ -116,7 +116,7 @@ func listDuplicatePodsOnANode(ctx context.Context, client clientset.Interface, n
 }
 
 func hasExcludedOwnerRefKind(ownerRefs []metav1.OwnerReference, strategy api.DeschedulerStrategy) bool {
-	if strategy.Params.RemoveDuplicates == nil {
+	if strategy.Params == nil || strategy.Params.RemoveDuplicates == nil {
 		return false
 	}
 	exclude := sets.NewString(strategy.Params.RemoveDuplicates.ExcludeOwnerKinds...)
