@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "descheduler.fullname" . }}
+  labels:
+    {{- include "descheduler.labels" . | nindent 4 }}
+data:
+  policy.yaml: |
+    apiVersion: "descheduler/v1alpha1"
+    kind: "DeschedulerPolicy"
+{{ toYaml .Values.deschedulerPolicy | trim | indent 4 }}
