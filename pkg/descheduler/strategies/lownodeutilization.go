@@ -41,9 +41,6 @@ type NodeUsageMap struct {
 type NodePodsMap map[*v1.Node][]*v1.Pod
 
 func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
-	if !strategy.Enabled {
-		return
-	}
 	// todo: move to config validation?
 	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
 	if strategy.Params.NodeResourceUtilizationThresholds == nil {
