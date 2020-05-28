@@ -74,6 +74,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		"LowNodeUtilization":                      strategies.LowNodeUtilization,
 		"RemovePodsViolatingInterPodAntiAffinity": strategies.RemovePodsViolatingInterPodAntiAffinity,
 		"RemovePodsViolatingNodeAffinity":         strategies.RemovePodsViolatingNodeAffinity,
+		"RemovePodsViolatingNodeSelector":         strategies.RemovePodsViolatingNodeSelector,
 		"RemovePodsViolatingNodeTaints":           strategies.RemovePodsViolatingNodeTaints,
 		"RemovePodsHavingTooManyRestarts":         strategies.RemovePodsHavingTooManyRestarts,
 		"PodLifeTime":                             strategies.PodLifeTime,

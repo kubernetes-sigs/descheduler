@@ -54,10 +54,10 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 ## Policy and Strategies
 
 Descheduler's policy is configurable and includes strategies that can be enabled or disabled.
-Seven strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`,
-`RemovePodsViolatingNodeAffinity`, `RemovePodsViolatingNodeTaints`, `RemovePodsHavingTooManyRestarts`, and `PodLifeTime`
-are currently implemented. As part of the policy, the parameters associated with the strategies can be configured too.
-By default, all strategies are enabled.
+Eight strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`,
+`RemovePodsViolatingNodeAffinity`, `RemovePodsViolatingNodeSelector`, `RemovePodsViolatingNodeTaints`,
+`RemovePodsHavingTooManyRestarts`, and `PodLifeTime` are currently implemented. As part of the policy,
+the parameters associated with the strategies can be configured too. By default, all strategies are enabled.
 
 ### RemoveDuplicates
 
@@ -156,9 +156,10 @@ strategies:
 
 This strategy makes sure all pods violating
 [node affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#node-affinity)
-are eventually removed from nodes. Node affinity rules allow a pod to specify
-`requiredDuringSchedulingIgnoredDuringExecution` type, which tells the scheduler
-to respect node affinity when scheduling the pod but kubelet to ignore
+are eventually removed from nodes (for complementary eviction based on violation of `nodeSelector`
+constraints, see [RemovePodsViolatingNodeSelector](###RemovePodsViolatingNodeSelector) below).
+Node affinity rules allow a pod to specify `requiredDuringSchedulingIgnoredDuringExecution` type,
+which tells the scheduler to respect node affinity when scheduling the pod but kubelet to ignore
 in case node changes over time and no longer respects the affinity.
 When enabled, the strategy serves as a temporary implementation
 of `requiredDuringSchedulingRequiredDuringExecution` and evicts pod for kubelet
@@ -181,6 +182,25 @@ strategies:
     params:
       nodeAffinityType:
       - "requiredDuringSchedulingIgnoredDuringExecution"
+```
+
+### RemovePodsViolatingNodeSelector
+
+This strategy makes sure all pods violating
+[nodeSelector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector)
+constraints are eventually removed from nodes.
+
+As both `nodeSelector` and `nodeAffinity` provide mechanisms for constraining pods to nods with specific labels,
+it is recommended to use both eviction strategies when scanning for pods to evict on a label change basis.
+
+The policy file should look like:
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "RemovePodsViolatingNodeSelector":
+    enabled: true
 ```
 
 ### RemovePodsViolatingNodeTaints
