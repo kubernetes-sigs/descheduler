@@ -45,7 +45,7 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 
 				for _, pod := range pods {
 					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-						if !nodeutil.PodFitsCurrentNode(pod, node) && nodeutil.PodFitsAnyNode(pod, nodes) {
+						if !nodeutil.PodFitsCurrentNode(pod, node) && (nodeutil.PodFitsAnyNode(pod, nodes) || podEvictor.DegradationAllowed == true) {
 							klog.V(1).Infof("Evicting pod: %v", pod.Name)
 							if _, err := podEvictor.EvictPod(ctx, pod, node); err != nil {
 								klog.Errorf("Error evicting pod: (%#v)", err)

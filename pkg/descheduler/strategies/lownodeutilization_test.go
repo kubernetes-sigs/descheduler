@@ -355,6 +355,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				fakeClient,
 				"v1",
 				false,
+				false,
 				test.expectedPodsEvicted,
 				nodes,
 			)
@@ -627,6 +628,7 @@ func TestWithTaints(t *testing.T) {
 			podEvictor := evictions.NewPodEvictor(
 				&fake.Clientset{Fake: *fakePtr},
 				"policy/v1",
+				false,
 				false,
 				item.evictionsExpected,
 				item.nodes,

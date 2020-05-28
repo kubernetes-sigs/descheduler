@@ -197,6 +197,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			fakeClient,
 			"v1",
 			false,
+			false,
 			testCase.maxPodsToEvict,
 			[]*v1.Node{node},
 		)

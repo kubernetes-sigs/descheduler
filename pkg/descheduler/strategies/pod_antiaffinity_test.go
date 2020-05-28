@@ -82,6 +82,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			fakeClient,
 			"v1",
 			false,
+			false,
 			test.maxPodsToEvict,
 			[]*v1.Node{node},
 		)

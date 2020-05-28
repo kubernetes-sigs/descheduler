@@ -168,6 +168,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			fakeClient,
 			"v1",
 			false,
+			false,
 			tc.maxPodsToEvict,
 			tc.nodes,
 		)

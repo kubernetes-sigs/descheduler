@@ -130,6 +130,7 @@ func startEndToEndForLowNodeUtilization(ctx context.Context, clientset clientset
 		clientset,
 		evictionPolicyGroupVersion,
 		false,
+		false,
 		0,
 		nodes,
 	)

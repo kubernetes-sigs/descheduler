@@ -40,6 +40,9 @@ type DeschedulerConfiguration struct {
 	// Dry run
 	DryRun bool `json:"dryRun,omitempty"`
 
+	// Degradation allowed
+	DegradationAllowed bool `json:"degradationAllowed,omitempty"`
+
 	// Node selectors
 	NodeSelector string `json:"nodeSelector,omitempty"`
 

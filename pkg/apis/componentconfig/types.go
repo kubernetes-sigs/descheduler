@@ -40,6 +40,9 @@ type DeschedulerConfiguration struct {
 	// Dry run
 	DryRun bool
 
+	// Degradation allowed
+	DegradationAllowed bool
+
 	// Node selectors
 	NodeSelector string
 

@@ -87,7 +87,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			return
 		}
 
-		if len(nodes) <= 1 {
+		if len(nodes) <= 1 && rs.DegradationAllowed == false {
 			klog.V(1).Infof("The cluster size is 0 or 1 meaning eviction causes service disruption or degradation. So aborting..")
 			close(stopChannel)
 			return
@@ -97,6 +97,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			rs.Client,
 			evictionPolicyGroupVersion,
 			rs.DryRun,
+			rs.DegradationAllowed,
 			rs.MaxNoOfPodsToEvictPerNode,
 			nodes,
 		)

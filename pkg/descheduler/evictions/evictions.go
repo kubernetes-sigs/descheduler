@@ -40,6 +40,7 @@ type PodEvictor struct {
 	client             clientset.Interface
 	policyGroupVersion string
 	dryRun             bool
+	DegradationAllowed bool
 	maxPodsToEvict     int
 	nodepodCount       nodePodEvictedCount
 }
@@ -48,6 +49,7 @@ func NewPodEvictor(
 	client clientset.Interface,
 	policyGroupVersion string,
 	dryRun bool,
+	degradationAllowed bool,
 	maxPodsToEvict int,
 	nodes []*v1.Node,
 ) *PodEvictor {
@@ -61,6 +63,7 @@ func NewPodEvictor(
 		client:             client,
 		policyGroupVersion: policyGroupVersion,
 		dryRun:             dryRun,
+		DegradationAllowed: degradationAllowed,
 		maxPodsToEvict:     maxPodsToEvict,
 		nodepodCount:       nodePodCount,
 	}

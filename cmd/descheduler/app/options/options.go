@@ -52,6 +52,7 @@ func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&rs.KubeconfigFile, "kubeconfig", rs.KubeconfigFile, "File with  kube configuration.")
 	fs.StringVar(&rs.PolicyConfigFile, "policy-config-file", rs.PolicyConfigFile, "File with descheduler policy configuration.")
 	fs.BoolVar(&rs.DryRun, "dry-run", rs.DryRun, "execute descheduler in dry run mode.")
+	fs.BoolVar(&rs.DegradationAllowed, "degradation-allowed", rs.DegradationAllowed, "Allow descheduling of Pods that have no rescheduling candidates")
 	// node-selector query causes descheduler to run only on nodes that matches the node labels in the query
 	fs.StringVar(&rs.NodeSelector, "node-selector", rs.NodeSelector, "Selector (label query) to filter on, supports '=', '==', and '!='.(e.g. -l key1=value1,key2=value2)")
 	// max-no-pods-to-evict limits the maximum number of pods to be evicted per node by descheduler.

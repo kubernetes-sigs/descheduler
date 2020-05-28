@@ -169,6 +169,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			fakeClient,
 			"v1",
 			false,
+			false,
 			tc.maxPodsToEvict,
 			[]*v1.Node{node},
 		)
