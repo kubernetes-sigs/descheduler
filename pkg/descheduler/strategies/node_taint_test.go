@@ -172,7 +172,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			tc.nodes,
 		)
 
-		RemovePodsViolatingNodeTaints(ctx, fakeClient, api.DeschedulerStrategy{}, tc.nodes, tc.evictLocalStoragePods, podEvictor)
+		opts := Options{
+			EvictLocalStoragePods: tc.evictLocalStoragePods,
+		}
+
+		RemovePodsViolatingNodeTaints(ctx, fakeClient, api.DeschedulerStrategy{}, tc.nodes, opts, podEvictor)
 		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)

@@ -134,7 +134,11 @@ func startEndToEndForLowNodeUtilization(ctx context.Context, clientset clientset
 		nodes,
 	)
 
-	strategies.LowNodeUtilization(ctx, clientset, lowNodeUtilizationStrategy, nodes, false, podEvictor)
+	opts := strategies.Options{
+		EvictLocalStoragePods: false,
+	}
+
+	strategies.LowNodeUtilization(ctx, clientset, lowNodeUtilizationStrategy, nodes, opts, podEvictor)
 	time.Sleep(10 * time.Second)
 }
 

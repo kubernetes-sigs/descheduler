@@ -42,12 +42,12 @@ func RemoveDuplicatePods(
 	client clientset.Interface,
 	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
-	evictLocalStoragePods bool,
+	opts Options,
 	podEvictor *evictions.PodEvictor,
 ) {
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v", node.Name)
-		duplicatePods := listDuplicatePodsOnANode(ctx, client, node, strategy, evictLocalStoragePods)
+		duplicatePods := listDuplicatePodsOnANode(ctx, client, node, strategy, opts.EvictLocalStoragePods)
 		for _, pod := range duplicatePods {
 			if _, err := podEvictor.EvictPod(ctx, pod, node); err != nil {
 				klog.Errorf("Error evicting pod: (%#v)", err)

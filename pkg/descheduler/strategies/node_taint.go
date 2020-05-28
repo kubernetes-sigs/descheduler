@@ -30,10 +30,10 @@ import (
 )
 
 // RemovePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
-func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
+func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, opts Options, podEvictor *evictions.PodEvictor) {
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
-		pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, evictLocalStoragePods)
+		pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, opts.EvictLocalStoragePods)
 		if err != nil {
 			//no pods evicted as error encountered retrieving evictable Pods
 			return

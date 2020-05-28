@@ -425,7 +425,12 @@ func TestLowNodeUtilization(t *testing.T) {
 					},
 				},
 			}
-			LowNodeUtilization(ctx, fakeClient, strategy, nodes, false, podEvictor)
+
+			opts := Options{
+				EvictLocalStoragePods: false,
+			}
+
+			LowNodeUtilization(ctx, fakeClient, strategy, nodes, opts, podEvictor)
 
 			podsEvicted := podEvictor.TotalEvicted()
 			if test.expectedPodsEvicted != podsEvicted {
@@ -825,7 +830,11 @@ func TestWithTaints(t *testing.T) {
 				item.nodes,
 			)
 
-			LowNodeUtilization(ctx, &fake.Clientset{Fake: *fakePtr}, strategy, item.nodes, false, podEvictor)
+			opts := Options{
+				EvictLocalStoragePods: false,
+			}
+
+			LowNodeUtilization(ctx, &fake.Clientset{Fake: *fakePtr}, strategy, item.nodes, opts, podEvictor)
 
 			if item.evictionsExpected != evictionCounter {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, evictionCounter)

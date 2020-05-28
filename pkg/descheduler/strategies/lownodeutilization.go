@@ -46,7 +46,7 @@ const (
 	MaxResourcePercentage = 100
 )
 
-func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
+func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, opts Options, podEvictor *evictions.PodEvictor) {
 	// todo: move to config validation?
 	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
 	if strategy.Params == nil || strategy.Params.NodeResourceUtilizationThresholds == nil {
@@ -75,7 +75,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 	}
 
 	npm := createNodePodsMap(ctx, client, nodes)
-	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds, evictLocalStoragePods)
+	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds, opts.EvictLocalStoragePods)
 
 	klog.V(1).Infof("Criteria for a node under utilization: CPU: %v, Mem: %v, Pods: %v",
 		thresholds[v1.ResourceCPU], thresholds[v1.ResourceMemory], thresholds[v1.ResourcePods])
@@ -110,7 +110,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		targetNodes,
 		lowNodes,
 		targetThresholds,
-		evictLocalStoragePods,
+		opts.EvictLocalStoragePods,
 		podEvictor)
 
 	klog.V(1).Infof("Total number of pods evicted: %v", podEvictor.TotalEvicted())
