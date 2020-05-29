@@ -18,10 +18,13 @@ package pod
 
 import (
 	"context"
+	"fmt"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/util/errors"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/klog"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -31,8 +34,30 @@ const (
 
 // IsEvictable checks if a pod is evictable or not.
 func IsEvictable(pod *v1.Pod, evictLocalStoragePods bool) bool {
+	checkErrs := []error{}
+	if IsCriticalPod(pod) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is critical"))
+	}
+
 	ownerRefList := OwnerRef(pod)
-	if !HaveEvictAnnotation(pod) && (IsMirrorPod(pod) || (!evictLocalStoragePods && IsPodWithLocalStorage(pod)) || len(ownerRefList) == 0 || IsDaemonsetPod(ownerRefList) || IsCriticalPod(pod)) {
+	if IsDaemonsetPod(ownerRefList) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is a DaemonSet pod"))
+	}
+
+	if len(ownerRefList) == 0 {
+		checkErrs = append(checkErrs, fmt.Errorf("pod does not have any ownerrefs"))
+	}
+
+	if !evictLocalStoragePods && IsPodWithLocalStorage(pod) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod has local storage and descheduler is not configured with --evict-local-storage-pods"))
+	}
+
+	if IsMirrorPod(pod) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is a mirror pod"))
+	}
+
+	if len(checkErrs) > 0 && !HaveEvictAnnotation(pod) {
+		klog.V(4).Infof("Pod %s in namespace %s is not evictable: Pod lacks an eviction annotation and fails the following checks: %v", pod.Name, pod.Namespace, errors.NewAggregate(checkErrs).Error())
 		return false
 	}
 	return true
