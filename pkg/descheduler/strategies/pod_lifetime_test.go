@@ -97,7 +97,7 @@ func TestPodLifeTime(t *testing.T) {
 			description: "Two pods in the `dev` Namespace, 1 is new and 1 very is old. 1 should be evicted.",
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
-				Params: api.StrategyParameters{
+				Params: &api.StrategyParameters{
 					MaxPodLifeTimeSeconds: &maxLifeTime,
 				},
 			},
@@ -109,7 +109,7 @@ func TestPodLifeTime(t *testing.T) {
 			description: "Two pods in the `dev` Namespace, 2 are new and 0 are old. 0 should be evicted.",
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
-				Params: api.StrategyParameters{
+				Params: &api.StrategyParameters{
 					MaxPodLifeTimeSeconds: &maxLifeTime,
 				},
 			},
@@ -121,7 +121,7 @@ func TestPodLifeTime(t *testing.T) {
 			description: "Two pods in the `dev` Namespace, 1 created 605 seconds ago. 1 should be evicted.",
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
-				Params: api.StrategyParameters{
+				Params: &api.StrategyParameters{
 					MaxPodLifeTimeSeconds: &maxLifeTime,
 				},
 			},
@@ -133,7 +133,7 @@ func TestPodLifeTime(t *testing.T) {
 			description: "Two pods in the `dev` Namespace, 1 created 595 seconds ago. 0 should be evicted.",
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
-				Params: api.StrategyParameters{
+				Params: &api.StrategyParameters{
 					MaxPodLifeTimeSeconds: &maxLifeTime,
 				},
 			},

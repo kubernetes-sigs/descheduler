@@ -118,7 +118,7 @@ func startEndToEndForLowNodeUtilization(ctx context.Context, clientset clientset
 
 	lowNodeUtilizationStrategy := deschedulerapi.DeschedulerStrategy{
 		Enabled: true,
-		Params: deschedulerapi.StrategyParameters{
+		Params: &deschedulerapi.StrategyParameters{
 			NodeResourceUtilizationThresholds: &deschedulerapi.NodeResourceUtilizationThresholds{
 				Thresholds:       thresholds,
 				TargetThresholds: targetThresholds,
