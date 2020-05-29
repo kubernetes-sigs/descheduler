@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/options"
 	"testing"
 
 	"k8s.io/api/core/v1"
@@ -201,7 +202,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			[]*v1.Node{node},
 		)
 
-		opts := Options{
+		opts := options.Options{
 			EvictLocalStoragePods: false,
 		}
 

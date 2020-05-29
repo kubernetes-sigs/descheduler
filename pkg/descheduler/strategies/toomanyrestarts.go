@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/options"
 
 	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -31,14 +32,14 @@ import (
 // RemovePodsHavingTooManyRestarts removes the pods that have too many restarts on node.
 // There are too many cases leading this issue: Volume mount failed, app error due to nodes' different settings.
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
-func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, opts Options, podEvictor *evictions.PodEvictor) {
+func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, opts options.Options, podEvictor *evictions.PodEvictor) {
 	if strategy.Params == nil || strategy.Params.PodsHavingTooManyRestarts == nil || strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold < 1 {
 		klog.V(1).Infof("PodsHavingTooManyRestarts thresholds not set")
 		return
 	}
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %s", node.Name)
-		pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, opts.EvictLocalStoragePods)
+		pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, opts)
 		if err != nil {
 			klog.Errorf("Error when list pods at node %s", node.Name)
 			continue

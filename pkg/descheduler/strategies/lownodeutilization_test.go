@@ -19,6 +19,7 @@ package strategies
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/options"
 	"strings"
 	"testing"
 
@@ -426,7 +427,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 			}
 
-			opts := Options{
+			opts := options.Options{
 				EvictLocalStoragePods: false,
 			}
 
@@ -830,7 +831,7 @@ func TestWithTaints(t *testing.T) {
 				item.nodes,
 			)
 
-			opts := Options{
+			opts := options.Options{
 				EvictLocalStoragePods: false,
 			}
 

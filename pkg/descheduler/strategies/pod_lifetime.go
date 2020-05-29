@@ -22,6 +22,7 @@ import (
 	v1meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/options"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -29,7 +30,7 @@ import (
 )
 
 // PodLifeTime evicts pods on nodes that were created more than strategy.Params.MaxPodLifeTimeSeconds seconds ago.
-func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, opts Options, podEvictor *evictions.PodEvictor) {
+func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, opts options.Options, podEvictor *evictions.PodEvictor) {
 	if strategy.Params == nil || strategy.Params.MaxPodLifeTimeSeconds == nil {
 		klog.V(1).Infof("MaxPodLifeTimeSeconds not set")
 		return
@@ -37,7 +38,7 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v", node.Name)
-		pods := listOldPodsOnNode(ctx, client, node, *strategy.Params.MaxPodLifeTimeSeconds, opts.EvictLocalStoragePods)
+		pods := listOldPodsOnNode(ctx, client, node, *strategy.Params.MaxPodLifeTimeSeconds, opts)
 		for _, pod := range pods {
 			success, err := podEvictor.EvictPod(ctx, pod, node)
 			if success {
@@ -52,8 +53,8 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 	}
 }
 
-func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, maxAge uint, evictLocalStoragePods bool) []*v1.Pod {
-	pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, evictLocalStoragePods)
+func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, maxAge uint, opts options.Options) []*v1.Pod {
+	pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, opts)
 	if err != nil {
 		return nil
 	}

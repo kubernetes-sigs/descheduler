@@ -19,6 +19,7 @@ package descheduler
 import (
 	"context"
 	"fmt"
+	strategyopts "sigs.k8s.io/descheduler/pkg/descheduler/strategies/options"
 
 	"k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -60,7 +61,7 @@ func Run(rs *options.DeschedulerServer) error {
 	return RunDeschedulerStrategies(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel)
 }
 
-type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, opts strategies.Options, podEvictor *evictions.PodEvictor)
+type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, opts strategyopts.Options, podEvictor *evictions.PodEvictor)
 
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, stopChannel chan struct{}) error {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
@@ -101,7 +102,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			nodes,
 		)
 
-		opts := strategies.Options{
+		opts := strategyopts.Options{
 			EvictLocalStoragePods: rs.EvictLocalStoragePods,
 		}
 

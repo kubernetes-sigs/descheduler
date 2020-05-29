@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/options"
 	"testing"
 
 	"fmt"
@@ -173,7 +174,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			[]*v1.Node{node},
 		)
 
-		opts := Options{
+		opts := options.Options{
 			EvictLocalStoragePods: false,
 		}
 

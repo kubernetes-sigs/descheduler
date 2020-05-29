@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/options"
 	"testing"
 
 	"k8s.io/api/core/v1"
@@ -159,7 +160,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			tc.nodes,
 		)
 
-		opts := Options{
+		opts := options.Options{
 			EvictLocalStoragePods: false,
 		}
 

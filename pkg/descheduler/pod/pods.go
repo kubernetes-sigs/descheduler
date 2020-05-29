@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/errors"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/options"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -64,14 +65,14 @@ func IsEvictable(pod *v1.Pod, evictLocalStoragePods bool) bool {
 }
 
 // ListEvictablePodsOnNode returns the list of evictable pods on node.
-func ListEvictablePodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, evictLocalStoragePods bool) ([]*v1.Pod, error) {
+func ListEvictablePodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, opts options.Options) ([]*v1.Pod, error) {
 	pods, err := ListPodsOnANode(ctx, client, node)
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
 	evictablePods := make([]*v1.Pod, 0)
 	for _, pod := range pods {
-		if !IsEvictable(pod, evictLocalStoragePods) {
+		if !IsEvictable(pod, opts.EvictLocalStoragePods) {
 			continue
 		} else {
 			evictablePods = append(evictablePods, pod)

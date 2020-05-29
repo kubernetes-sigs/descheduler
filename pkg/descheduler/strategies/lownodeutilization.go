@@ -19,6 +19,7 @@ package strategies
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/options"
 	"sort"
 
 	v1 "k8s.io/api/core/v1"
@@ -46,7 +47,7 @@ const (
 	MaxResourcePercentage = 100
 )
 
-func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, opts Options, podEvictor *evictions.PodEvictor) {
+func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, opts options.Options, podEvictor *evictions.PodEvictor) {
 	// todo: move to config validation?
 	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
 	if strategy.Params == nil || strategy.Params.NodeResourceUtilizationThresholds == nil {

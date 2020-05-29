@@ -19,6 +19,7 @@ package e2e
 import (
 	"context"
 	"math"
+	strategyopts "sigs.k8s.io/descheduler/pkg/descheduler/strategies/options"
 	"testing"
 	"time"
 
@@ -134,7 +135,7 @@ func startEndToEndForLowNodeUtilization(ctx context.Context, clientset clientset
 		nodes,
 	)
 
-	opts := strategies.Options{
+	opts := strategyopts.Options{
 		EvictLocalStoragePods: false,
 	}
 
@@ -227,13 +228,17 @@ func TestDeschedulingInterval(t *testing.T) {
 func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface, nodeInformer coreinformers.NodeInformer, nodeList *v1.NodeList, rc *v1.ReplicationController) {
 	var leastLoadedNode v1.Node
 	podsBefore := math.MaxInt16
+	opts := strategyopts.Options{
+		EvictLocalStoragePods: true,
+	}
 	for i := range nodeList.Items {
 		// Skip the Master Node
 		if _, exist := nodeList.Items[i].Labels["node-role.kubernetes.io/master"]; exist {
 			continue
 		}
+
 		// List all the pods on the current Node
-		podsOnANode, err := podutil.ListEvictablePodsOnNode(ctx, clientSet, &nodeList.Items[i], true)
+		podsOnANode, err := podutil.ListEvictablePodsOnNode(ctx, clientSet, &nodeList.Items[i], opts)
 		if err != nil {
 			t.Errorf("Error listing pods on a node %v", err)
 		}
@@ -245,7 +250,7 @@ func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface,
 	}
 	t.Log("Eviction of pods starting")
 	startEndToEndForLowNodeUtilization(ctx, clientSet, nodeInformer)
-	podsOnleastUtilizedNode, err := podutil.ListEvictablePodsOnNode(ctx, clientSet, &leastLoadedNode, true)
+	podsOnleastUtilizedNode, err := podutil.ListEvictablePodsOnNode(ctx, clientSet, &leastLoadedNode, opts)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}

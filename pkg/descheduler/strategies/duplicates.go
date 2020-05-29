@@ -19,6 +19,7 @@ package strategies
 import (
 	"context"
 	"reflect"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/options"
 	"sort"
 	"strings"
 
@@ -42,12 +43,12 @@ func RemoveDuplicatePods(
 	client clientset.Interface,
 	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
-	opts Options,
+	opts options.Options,
 	podEvictor *evictions.PodEvictor,
 ) {
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v", node.Name)
-		duplicatePods := listDuplicatePodsOnANode(ctx, client, node, strategy, opts.EvictLocalStoragePods)
+		duplicatePods := listDuplicatePodsOnANode(ctx, client, node, strategy, opts)
 		for _, pod := range duplicatePods {
 			if _, err := podEvictor.EvictPod(ctx, pod, node); err != nil {
 				klog.Errorf("Error evicting pod: (%#v)", err)
@@ -59,8 +60,8 @@ func RemoveDuplicatePods(
 
 // listDuplicatePodsOnANode lists duplicate pods on a given node.
 // It checks for pods which have the same owner and have at least 1 container with the same image spec
-func listDuplicatePodsOnANode(ctx context.Context, client clientset.Interface, node *v1.Node, strategy api.DeschedulerStrategy, evictLocalStoragePods bool) []*v1.Pod {
-	pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, evictLocalStoragePods)
+func listDuplicatePodsOnANode(ctx context.Context, client clientset.Interface, node *v1.Node, strategy api.DeschedulerStrategy, opts options.Options) []*v1.Pod {
+	pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, opts)
 	if err != nil {
 		return nil
 	}
