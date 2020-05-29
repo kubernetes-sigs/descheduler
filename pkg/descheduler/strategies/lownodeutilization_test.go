@@ -418,7 +418,7 @@ func TestLowNodeUtilization(t *testing.T) {
 
 			strategy := api.DeschedulerStrategy{
 				Enabled: true,
-				Params: api.StrategyParameters{
+				Params: &api.StrategyParameters{
 					NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
 						Thresholds:       test.thresholds,
 						TargetThresholds: test.targetThresholds,
