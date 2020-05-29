@@ -62,6 +62,8 @@ push: push-container-to-gcloud
 clean:
 	rm -rf _output
 
+verify: verify-gofmt verify-vendor lint
+
 verify-gofmt:
 	./hack/verify-gofmt.sh
 
