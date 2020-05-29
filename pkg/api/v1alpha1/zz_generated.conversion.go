@@ -121,9 +121,7 @@ func Convert_api_DeschedulerPolicy_To_v1alpha1_DeschedulerPolicy(in *api.Desched
 func autoConvert_v1alpha1_DeschedulerStrategy_To_api_DeschedulerStrategy(in *DeschedulerStrategy, out *api.DeschedulerStrategy, s conversion.Scope) error {
 	out.Enabled = in.Enabled
 	out.Weight = in.Weight
-	if err := Convert_v1alpha1_StrategyParameters_To_api_StrategyParameters(&in.Params, &out.Params, s); err != nil {
-		return err
-	}
+	out.Params = (*api.StrategyParameters)(unsafe.Pointer(in.Params))
 	return nil
 }
 
@@ -135,9 +133,7 @@ func Convert_v1alpha1_DeschedulerStrategy_To_api_DeschedulerStrategy(in *Desched
 func autoConvert_api_DeschedulerStrategy_To_v1alpha1_DeschedulerStrategy(in *api.DeschedulerStrategy, out *DeschedulerStrategy, s conversion.Scope) error {
 	out.Enabled = in.Enabled
 	out.Weight = in.Weight
-	if err := Convert_api_StrategyParameters_To_v1alpha1_StrategyParameters(&in.Params, &out.Params, s); err != nil {
-		return err
-	}
+	out.Params = (*StrategyParameters)(unsafe.Pointer(in.Params))
 	return nil
 }
 

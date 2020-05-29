@@ -31,7 +31,7 @@ import (
 
 // PodLifeTime evicts pods on nodes that were created more than strategy.Params.MaxPodLifeTimeSeconds seconds ago.
 func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
-	if strategy.Params.MaxPodLifeTimeSeconds == nil {
+	if strategy.Params == nil || strategy.Params.MaxPodLifeTimeSeconds == nil {
 		klog.V(1).Infof("MaxPodLifeTimeSeconds not set")
 		return
 	}

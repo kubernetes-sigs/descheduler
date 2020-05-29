@@ -41,7 +41,7 @@ type DeschedulerStrategy struct {
 	Weight int
 
 	// Strategy parameters
-	Params StrategyParameters
+	Params *StrategyParameters
 }
 
 // Only one of its members may be specified
