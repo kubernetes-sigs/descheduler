@@ -23,7 +23,7 @@ LDFLAG_LOCATION=sigs.k8s.io/descheduler/cmd/descheduler/app
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitCommit=${COMMIT}"
 
 GOLANGCI_VERSION := v1.15.0
-HAS_GOLANGCI := $(shell which golangci-lint)
+HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint)
 
 # REGISTRY is the container registry to push
 # into. The default is to push to the staging
@@ -84,6 +84,6 @@ gen:
 	go mod tidy
 lint:
 ifndef HAS_GOLANGCI
-	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(GOPATH)/bin ${GOLANGCI_VERSION}
+	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b ./_output/bin ${GOLANGCI_VERSION}
 endif
-	golangci-lint run
+	./_output/bin/golangci-lint run
