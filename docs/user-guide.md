@@ -25,6 +25,7 @@ Available Commands:
 Flags:
       --add-dir-header                   If true, adds the file directory to the header
       --alsologtostderr                  log to standard error as well as files
+      --degradation-allowed              Allow descheduling of Pods that have no rescheduling candidates
       --descheduling-interval duration   Time interval between two consecutive descheduler executions. Setting this value instructs the descheduler to run in a continuous loop at the interval specified.
       --dry-run                          execute descheduler in dry run mode.
       --evict-local-storage-pods         Enables evicting pods using local storage by descheduler
