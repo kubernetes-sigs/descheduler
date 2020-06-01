@@ -60,7 +60,7 @@ func Run(rs *options.DeschedulerServer) error {
 	return RunDeschedulerStrategies(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel)
 }
 
-type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor)
+type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor)
 
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, stopChannel chan struct{}) error {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
@@ -99,11 +99,12 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			rs.DryRun,
 			rs.MaxNoOfPodsToEvictPerNode,
 			nodes,
+			rs.EvictLocalStoragePods,
 		)
 
 		for name, f := range strategyFuncs {
 			if strategy := deschedulerPolicy.Strategies[api.StrategyName(name)]; strategy.Enabled {
-				f(ctx, rs.Client, strategy, nodes, rs.EvictLocalStoragePods, podEvictor)
+				f(ctx, rs.Client, strategy, nodes, podEvictor)
 			}
 		}
 
