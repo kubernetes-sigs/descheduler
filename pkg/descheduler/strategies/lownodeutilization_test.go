@@ -414,6 +414,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				false,
 				test.expectedPodsEvicted,
 				nodes,
+				false,
 			)
 
 			strategy := api.DeschedulerStrategy{
@@ -425,7 +426,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					},
 				},
 			}
-			LowNodeUtilization(ctx, fakeClient, strategy, nodes, false, podEvictor)
+			LowNodeUtilization(ctx, fakeClient, strategy, nodes, podEvictor)
 
 			podsEvicted := podEvictor.TotalEvicted()
 			if test.expectedPodsEvicted != podsEvicted {
@@ -823,9 +824,10 @@ func TestWithTaints(t *testing.T) {
 				false,
 				item.evictionsExpected,
 				item.nodes,
+				false,
 			)
 
-			LowNodeUtilization(ctx, &fake.Clientset{Fake: *fakePtr}, strategy, item.nodes, false, podEvictor)
+			LowNodeUtilization(ctx, &fake.Clientset{Fake: *fakePtr}, strategy, item.nodes, podEvictor)
 
 			if item.evictionsExpected != evictionCounter {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, evictionCounter)
