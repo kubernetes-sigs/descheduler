@@ -87,6 +87,62 @@ func TestLowNodeUtilization(t *testing.T) {
 		evictedPods         []string
 	}{
 		{
+			name: "no evictable pods",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			nodes: map[string]*v1.Node{
+				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, setNodeUnschedulable),
+			},
+			pods: map[string]*v1.PodList{
+				n1NodeName: {
+					Items: []v1.Pod{
+						// These won't be evicted.
+						*test.BuildTestPod("p1", 400, 0, n1NodeName, setDSOwnerRef),
+						*test.BuildTestPod("p2", 400, 0, n1NodeName, setDSOwnerRef),
+						*test.BuildTestPod("p3", 400, 0, n1NodeName, setDSOwnerRef),
+						*test.BuildTestPod("p4", 400, 0, n1NodeName, setDSOwnerRef),
+						*test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod with local storage.
+							setNormalOwnerRef(pod)
+							pod.Spec.Volumes = []v1.Volume{
+								{
+									Name: "sample",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+										EmptyDir: &v1.EmptyDirVolumeSource{
+											SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									},
+								},
+							}
+							// A Mirror Pod.
+							pod.Annotations = test.GetMirrorPodAnnotation()
+						}),
+						*test.BuildTestPod("p6", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A Critical Pod.
+							pod.Namespace = "kube-system"
+							priority := utils.SystemCriticalPriority
+							pod.Spec.Priority = &priority
+						}),
+					},
+				},
+				n2NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p9", 400, 0, n1NodeName, setRSOwnerRef),
+					},
+				},
+				n3NodeName: {},
+			},
+			expectedPodsEvicted: 0,
+		},
+		{
 			name: "without priorities",
 			thresholds: api.ResourceThresholds{
 				v1.ResourceCPU:  30,
