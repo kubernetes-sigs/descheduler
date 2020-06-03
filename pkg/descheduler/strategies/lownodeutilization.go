@@ -33,19 +33,25 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+// NodeUsageMap stores a node's info, pods on it and its resource usage
 type NodeUsageMap struct {
 	node    *v1.Node
 	usage   api.ResourceThresholds
 	allPods []*v1.Pod
 }
 
+// NodePodsMap is a set of (node, pods) pairs
 type NodePodsMap map[*v1.Node][]*v1.Pod
 
 const (
+	// MinResourcePercentage is the minimum value of a resource's percentage
 	MinResourcePercentage = 0
+	// MaxResourcePercentage is the maximum value of a resource's percentage
 	MaxResourcePercentage = 100
 )
 
+// LowNodeUtilization evicts pods from overutilized nodes to underutilized nodes. Note that CPU/Memory requests are used
+// to calculate nodes' utilization and not the actual resource usage.
 func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
 	// todo: move to config validation?
 	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
@@ -170,10 +176,10 @@ func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThr
 			allPods: pods,
 		}
 		// Check if node is underutilized and if we can schedule pods on it.
-		if !nodeutil.IsNodeUnschedulable(node) && IsNodeWithLowUtilization(usage, thresholds) {
+		if !nodeutil.IsNodeUnschedulable(node) && isNodeWithLowUtilization(usage, thresholds) {
 			klog.V(2).Infof("Node %#v is under utilized with usage: %#v", node.Name, usage)
 			lowNodes = append(lowNodes, nuMap)
-		} else if IsNodeAboveTargetUtilization(usage, targetThresholds) {
+		} else if isNodeAboveTargetUtilization(usage, targetThresholds) {
 			klog.V(2).Infof("Node %#v is over utilized with usage: %#v", node.Name, usage)
 			targetNodes = append(targetNodes, nuMap)
 		} else {
@@ -194,7 +200,7 @@ func evictPodsFromTargetNodes(
 	podEvictor *evictions.PodEvictor,
 ) {
 
-	SortNodesByUsage(targetNodes)
+	sortNodesByUsage(targetNodes)
 
 	// upper bound on total number of pods/cpu/memory to be moved
 	var totalPods, totalCPU, totalMem float64
@@ -269,7 +275,7 @@ func evictPods(
 	podEvictor *evictions.PodEvictor,
 	node *v1.Node) {
 	// stop if node utilization drops below target threshold or any of required capacity (cpu, memory, pods) is moved
-	if IsNodeAboveTargetUtilization(nodeUsage, targetThresholds) && *totalPods > 0 && *totalCPU > 0 && *totalMem > 0 {
+	if isNodeAboveTargetUtilization(nodeUsage, targetThresholds) && *totalPods > 0 && *totalCPU > 0 && *totalMem > 0 {
 		onePodPercentage := api.Percentage((float64(1) * 100) / float64(nodeCapacity.Pods().Value()))
 		for _, pod := range inputPods {
 			if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
@@ -302,7 +308,7 @@ func evictPods(
 
 				klog.V(3).Infof("updated node usage: %#v", nodeUsage)
 				// check if node utilization drops below target threshold or any required capacity (cpu, memory, pods) is moved
-				if !IsNodeAboveTargetUtilization(nodeUsage, targetThresholds) || *totalPods <= 0 || *totalCPU <= 0 || *totalMem <= 0 {
+				if !isNodeAboveTargetUtilization(nodeUsage, targetThresholds) || *totalPods <= 0 || *totalCPU <= 0 || *totalMem <= 0 {
 					break
 				}
 			}
@@ -310,7 +316,8 @@ func evictPods(
 	}
 }
 
-func SortNodesByUsage(nodes []NodeUsageMap) {
+// sortNodesByUsage sorts nodes based on usage in descending order
+func sortNodesByUsage(nodes []NodeUsageMap) {
 	sort.Slice(nodes, func(i, j int) bool {
 		var ti, tj api.Percentage
 		for name, value := range nodes[i].usage {
@@ -364,7 +371,8 @@ func createNodePodsMap(ctx context.Context, client clientset.Interface, nodes []
 	return npm
 }
 
-func IsNodeAboveTargetUtilization(nodeThresholds api.ResourceThresholds, thresholds api.ResourceThresholds) bool {
+// isNodeAboveTargetUtilization checks if a node is overutilized
+func isNodeAboveTargetUtilization(nodeThresholds api.ResourceThresholds, thresholds api.ResourceThresholds) bool {
 	for name, nodeValue := range nodeThresholds {
 		if name == v1.ResourceCPU || name == v1.ResourceMemory || name == v1.ResourcePods {
 			if value, ok := thresholds[name]; !ok {
@@ -377,7 +385,8 @@ func IsNodeAboveTargetUtilization(nodeThresholds api.ResourceThresholds, thresho
 	return false
 }
 
-func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds api.ResourceThresholds) bool {
+// isNodeWithLowUtilization checks if a node is underutilized
+func isNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds api.ResourceThresholds) bool {
 	for name, nodeValue := range nodeThresholds {
 		if name == v1.ResourceCPU || name == v1.ResourceMemory || name == v1.ResourcePods {
 			if value, ok := thresholds[name]; !ok {

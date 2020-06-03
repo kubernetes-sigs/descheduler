@@ -29,6 +29,7 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
+// RemovePodsViolatingNodeAffinity evicts pods on nodes which violate node affinity
 func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
 	if strategy.Params == nil {
 		klog.V(1).Infof("NodeAffinityType not set")
