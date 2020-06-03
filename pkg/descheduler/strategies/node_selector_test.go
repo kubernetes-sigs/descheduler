@@ -37,7 +37,7 @@ func TestRemovePodsViolatingNodeSelector(t *testing.T) {
 	selectorStrategyWithDegradation := api.DeschedulerStrategy{
 		Enabled: true,
 		Params: &api.StrategyParameters{
-			NodeSelectionSettings: &api.NodeSelectionSettings{
+			NodeSelection: &api.NodeSelection{
 				DegradationAllowed: true,
 			},
 		},

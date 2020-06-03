@@ -32,10 +32,10 @@ func RemovePodsViolatingNodeSelector(ctx context.Context, client clientset.Inter
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
 
-		if strategy.Params == nil || strategy.Params.NodeSelectionSettings == nil {
+		if strategy.Params == nil || strategy.Params.NodeSelection == nil {
 			// Params are optional, assign a safe default
 			strategy.Params = &api.StrategyParameters{
-				NodeSelectionSettings: &api.NodeSelectionSettings{
+				NodeSelection: &api.NodeSelection{
 					DegradationAllowed: false,
 				},
 			}
@@ -48,7 +48,7 @@ func RemovePodsViolatingNodeSelector(ctx context.Context, client clientset.Inter
 
 		for _, pod := range pods {
 			if pod.Spec.NodeSelector != nil {
-				if !nodeutil.PodFitsCurrentNode(pod, node) && (nodeutil.PodFitsAnyNode(pod, nodes) || strategy.Params.NodeSelectionSettings.DegradationAllowed) {
+				if !nodeutil.PodFitsCurrentNode(pod, node) && (nodeutil.PodFitsAnyNode(pod, nodes) || strategy.Params.NodeSelection.DegradationAllowed) {
 					klog.V(1).Infof("Evicting pod: %v", pod.Name)
 					if _, err := podEvictor.EvictPod(ctx, pod, node); err != nil {
 						klog.Errorf("Error evicting pod: (%#v)", err)

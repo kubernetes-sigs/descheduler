@@ -8,6 +8,6 @@ strategies:
   "RemovePodsViolatingNodeAffinity":
     enabled: true
     params:
-      nodeSelectorSettings:
+      nodeSelection:
         nodeAffinityType:
         - "requiredDuringSchedulingIgnoredDuringExecution"

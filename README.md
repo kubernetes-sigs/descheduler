@@ -183,10 +183,13 @@ strategies:
   "RemovePodsViolatingNodeAffinity":
     enabled: true
     params:
-      nodeSelectorSettings:
+      nodeSelection:
         nodeAffinityType:
         - "requiredDuringSchedulingIgnoredDuringExecution"
 ```
+
+This strategy can optionally terminate nodes that no longer match the node affinity criteria, this is
+briefly explained in the [Degradation](###Degradation) section below.
 
 ### RemovePodsViolatingNodeSelector
 
@@ -206,6 +209,9 @@ strategies:
   "RemovePodsViolatingNodeSelector":
     enabled: true
 ```
+
+This strategy can optionally terminate nodes that no longer match the node selection criteria, this is
+briefly explained in the [Degradation](###Degradation) section below.
 
 ### RemovePodsViolatingNodeTaints
 
@@ -291,12 +297,12 @@ kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingNodeSelector":
     enabled: true
-    nodeSelectorSettings:
+    nodeSelection:
       degradationAllowed: true
   "RemovePodsViolatingNodeAffinity":
     enabled: true
     params:
-      nodeSelectorSettings:
+      nodeSelection:
         degradationAllowed: true
         nodeAffinityType:
         - "requiredDuringSchedulingIgnoredDuringExecution"

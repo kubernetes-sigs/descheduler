@@ -47,7 +47,7 @@ type DeschedulerStrategy struct {
 // Only one of its members may be specified
 type StrategyParameters struct {
 	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds
-	NodeSelectionSettings             *NodeSelectionSettings
+	NodeSelection                     *NodeSelection
 	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts
 	MaxPodLifeTimeSeconds             *uint
 	RemoveDuplicates                  *RemoveDuplicates
@@ -71,7 +71,7 @@ type RemoveDuplicates struct {
 	ExcludeOwnerKinds []string
 }
 
-type NodeSelectionSettings struct {
+type NodeSelection struct {
 	DegradationAllowed bool
 	NodeAffinityType   []string
 }
