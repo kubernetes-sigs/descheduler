@@ -3,8 +3,11 @@ kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingNodeSelector":
     enabled: true
+      nodeSelectorSettings:
+        degradationAllowed: true
   "RemovePodsViolatingNodeAffinity":
     enabled: true
     params:
-      nodeAffinityType:
-      - "requiredDuringSchedulingIgnoredDuringExecution"
+      nodeSelectorSettings:
+        nodeAffinityType:
+        - "requiredDuringSchedulingIgnoredDuringExecution"

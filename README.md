@@ -11,7 +11,7 @@ pod can or can not be scheduled, are guided by its configurable policy which com
 rules, called predicates and priorities. The scheduler's decisions are influenced by its view of
 a Kubernetes cluster at that point of time when a new pod appears for scheduling.
 As Kubernetes clusters are very dynamic and their state changes over time, there may be desire
-to move already running pods to some other nodes for various reasons:
+to move already running pods to some other nodes, or to allow the pods to be terminated outright:
 
 * Some nodes are under or over utilized.
 * The original scheduling decision does not hold true any more, as taints or labels are added to
@@ -20,9 +20,12 @@ or removed from nodes, pod/node affinity requirements are not satisfied any more
 * New nodes are added to clusters.
 
 Consequently, there might be several pods scheduled on less desired nodes in a cluster.
-Descheduler, based on its policy, finds pods that can be moved and evicts them. Please
-note, in current implementation, descheduler does not schedule replacement of evicted pods
-but relies on the default scheduler for that.
+Descheduler, based on its policy, finds pods that can be moved and evicts them. By default,
+Descheduler aims to ensure that there is no service degradation across the cluster. In the case
+where a pod is no longer runnable on a node and no suitable movement candidate can be found,
+Descheduler can also optionally terminate the problematic pod, when service degradation is allowed.
+Please note, in its current implementation, descheduler does not schedule replacements of evicted
+or terminated pods but instead relies on the default scheduler for that.
 
 ## Quick Start
 
@@ -180,8 +183,9 @@ strategies:
   "RemovePodsViolatingNodeAffinity":
     enabled: true
     params:
-      nodeAffinityType:
-      - "requiredDuringSchedulingIgnoredDuringExecution"
+      nodeSelectorSettings:
+        nodeAffinityType:
+        - "requiredDuringSchedulingIgnoredDuringExecution"
 ```
 
 ### RemovePodsViolatingNodeSelector
@@ -269,6 +273,34 @@ Setting `--v=4` or greater on the Descheduler will log all reasons why any pod i
 
 Pods subject to a Pod Disruption Budget(PDB) are not evicted if descheduling violates its PDB. The pods
 are evicted by using the eviction subresource to handle PDB.
+
+### Degradation
+
+By default, evictable Pods are only evicted if a suitable node can be found for rescheduling.
+This is done to ensure that in the case where no suitable candidate for rescheduling is found, the
+pod will continue to run on its current node without interruption.
+
+In certain cases, such as when a pod is scheduled based on labelling criteria which is no longer satisfied,
+it can be preferable (and, at times, essential) to terminate the running pod even if it does not have a
+rescheduling candidate. This behaviour can be enabled by configuring the `RemovePodsViolatingNodeSelector`
+or `RemovePodsViolatingNodeAffinity` eviction strategies to allow degradation:
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "RemovePodsViolatingNodeSelector":
+    enabled: true
+    nodeSelectorSettings:
+      degradationAllowed: true
+  "RemovePodsViolatingNodeAffinity":
+    enabled: true
+    params:
+      nodeSelectorSettings:
+        degradationAllowed: true
+        nodeAffinityType:
+        - "requiredDuringSchedulingIgnoredDuringExecution"
+```
 
 ## Compatibility Matrix
 The below compatibility matrix shows the k8s client package(client-go, apimachinery, etc) versions that descheduler

@@ -47,7 +47,7 @@ type DeschedulerStrategy struct {
 // Only one of its members may be specified
 type StrategyParameters struct {
 	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds `json:"nodeResourceUtilizationThresholds,omitempty"`
-	NodeAffinityType                  []string                           `json:"nodeAffinityType,omitempty"`
+	NodeSelectionSettings             *NodeSelectionSettings             `json:"nodeSelectionSettings,omitempty"`
 	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts         `json:"podsHavingTooManyRestarts,omitempty"`
 	MaxPodLifeTimeSeconds             *uint                              `json:"maxPodLifeTimeSeconds,omitempty"`
 	RemoveDuplicates                  *RemoveDuplicates                  `json:"removeDuplicates,omitempty"`
@@ -69,4 +69,9 @@ type PodsHavingTooManyRestarts struct {
 
 type RemoveDuplicates struct {
 	ExcludeOwnerKinds []string `json:"excludeOwnerKinds,omitempty"`
+}
+
+type NodeSelectionSettings struct {
+	DegradationAllowed bool     `json:"degradationAllowed,omitempty"`
+	NodeAffinityType   []string `json:"nodeAffinityType,omitempty"`
 }

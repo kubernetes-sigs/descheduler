@@ -34,8 +34,11 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	requiredDuringSchedulingIgnoredDuringExecutionStrategy := api.DeschedulerStrategy{
 		Enabled: true,
 		Params: &api.StrategyParameters{
-			NodeAffinityType: []string{
-				"requiredDuringSchedulingIgnoredDuringExecution",
+			NodeSelectionSettings: &api.NodeSelectionSettings{
+				DegradationAllowed: false,
+				NodeAffinityType:   []string{
+					"requiredDuringSchedulingIgnoredDuringExecution",
+				},
 			},
 		},
 	}
@@ -100,8 +103,11 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
 				Params: &api.StrategyParameters{
-					NodeAffinityType: []string{
-						"requiredDuringSchedulingRequiredDuringExecution",
+					NodeSelectionSettings: &api.NodeSelectionSettings{
+						DegradationAllowed: false,
+						NodeAffinityType: []string{
+							"requiredDuringSchedulingRequiredDuringExecution",
+						},
 					},
 				},
 			},

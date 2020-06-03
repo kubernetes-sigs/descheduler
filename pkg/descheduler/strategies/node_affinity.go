@@ -34,7 +34,7 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 		klog.V(1).Infof("NodeAffinityType not set")
 		return
 	}
-	for _, nodeAffinity := range strategy.Params.NodeAffinityType {
+	for _, nodeAffinity := range strategy.Params.NodeSelectionSettings.NodeAffinityType {
 		klog.V(2).Infof("Executing for nodeAffinityType: %v", nodeAffinity)
 
 		switch nodeAffinity {
@@ -49,7 +49,7 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 
 				for _, pod := range pods {
 					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-						if !nodeutil.PodFitsCurrentNode(pod, node) && nodeutil.PodFitsAnyNode(pod, nodes) {
+						if !nodeutil.PodFitsCurrentNode(pod, node) && (nodeutil.PodFitsAnyNode(pod, nodes) || strategy.Params.NodeSelectionSettings.DegradationAllowed) {
 							klog.V(1).Infof("Evicting pod: %v", pod.Name)
 							if _, err := podEvictor.EvictPod(ctx, pod, node); err != nil {
 								klog.Errorf("Error evicting pod: (%#v)", err)

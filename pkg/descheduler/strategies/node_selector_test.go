@@ -34,7 +34,17 @@ func TestRemovePodsViolatingNodeSelector(t *testing.T) {
 		Enabled: true,
 	}
 
+	selectorStrategyWithDegradation := api.DeschedulerStrategy{
+		Enabled: true,
+		Params: &api.StrategyParameters{
+			NodeSelectionSettings: &api.NodeSelectionSettings{
+				DegradationAllowed: true,
+			},
+		},
+	}
+
 	nodeLabelKey := "kubernetes.io/desiredNode"
+	incompatibleNodeLabelKey := "kubernetes.io/undesiredNode"
 	nodeLabelValue := "yes"
 	nodeWithLabels := test.BuildTestNode("nodeWithLabels", 2000, 3000, 10, nil)
 	nodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
@@ -51,17 +61,21 @@ func TestRemovePodsViolatingNodeSelector(t *testing.T) {
 			nodeLabelKey: nodeLabelValue,
 		}
 
-		pod1 := test.BuildTestPod("pod1", 100, 0, node.Name, nil)
-		pod2 := test.BuildTestPod("pod2", 100, 0, node.Name, nil)
+		podWithIncompatibleNodeSelector := test.BuildTestPod("podWithIncompatibleNodeSelector", 100, 0, node.Name, nil)
+		podWithIncompatibleNodeSelector.Spec.NodeSelector = map[string]string{
+			incompatibleNodeLabelKey: nodeLabelKey,
+		}
+
+		unlabelledPod := test.BuildTestPod("unlabelledPod", 100, 0, node.Name, nil)
 
 		podWithNodeSelector.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-		pod1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-		pod2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		podWithIncompatibleNodeSelector.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		unlabelledPod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
 		return []v1.Pod{
 			*podWithNodeSelector,
-			*pod1,
-			*pod2,
+			*podWithIncompatibleNodeSelector,
+			*unlabelledPod,
 		}
 	}
 
@@ -104,6 +118,14 @@ func TestRemovePodsViolatingNodeSelector(t *testing.T) {
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, unschedulableNodeWithLabels},
 			maxPodsToEvict:          0,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, no other node where pod fits is available, but degradation is enabled, should evict",
+			expectedEvictedPodCount: 1,
+			strategy:                selectorStrategyWithDegradation,
+			pods:                    addPodsToNode(nodeWithLabels),
+			nodes:                   []*v1.Node{nodeWithLabels, nodeWithoutLabels},
+			maxPodsToEvict:          1,
 		},
 	}
 
