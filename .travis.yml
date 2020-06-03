@@ -25,7 +25,4 @@ before_script:
 script:
 - mkdir -p ~/gopath/src/sigs.k8s.io/
 - mv ~/gopath/src/github.com/kubernetes-sigs/descheduler ~/gopath/src/sigs.k8s.io/.
-- make verify
-- make build
-- make test-unit
 - make test-e2e
