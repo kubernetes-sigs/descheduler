@@ -8,18 +8,16 @@ strategies:
   "LowNodeUtilization":
      enabled: true
      params:
-       nodeResourceUtilizationThresholds:
-         thresholds:
-           "cpu" : 20
-           "memory": 20
-           "pods": 20
-         targetThresholds:
-           "cpu" : 50
-           "memory": 50
-           "pods": 50
+       thresholds:
+         "cpu" : 20
+         "memory": 20
+         "pods": 20
+       targetThresholds:
+         "cpu" : 50
+         "memory": 50
+         "pods": 50
   "RemovePodsHavingTooManyRestarts":
      enabled: true
      params:
-       podsHavingTooManyRestarts:
-         podRestartThresholds: 100
-         includingInitContainers: true
+       podRestartThresholds: 100
+       includingInitContainers: true

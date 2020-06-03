@@ -78,9 +78,8 @@ strategies:
   "RemoveDuplicates":
      enabled: true
      params:
-       removeDuplicates:
-         excludeOwnerKinds:
-         - "ReplicaSet"
+       excludeOwnerKinds:
+       - "ReplicaSet"
 ```
 
 ### LowNodeUtilization
@@ -110,15 +109,14 @@ strategies:
   "LowNodeUtilization":
      enabled: true
      params:
-       nodeResourceUtilizationThresholds:
-         thresholds:
-           "cpu" : 20
-           "memory": 20
-           "pods": 20
-         targetThresholds:
-           "cpu" : 50
-           "memory": 50
-           "pods": 50
+       thresholds:
+         "cpu" : 20
+         "memory": 20
+         "pods": 20
+       targetThresholds:
+         "cpu" : 50
+         "memory": 50
+         "pods": 50
 ```
 
 Policy should pass the following validation checks:
@@ -209,9 +207,8 @@ strategies:
   "RemovePodsHavingTooManyRestarts":
      enabled: true
      params:
-       podsHavingTooManyRestarts:
-         podRestartThreshold: 100
-         includingInitContainers: true
+       podRestartThreshold: 100
+       includingInitContainers: true
 ```
 
 ### PodLifeTime

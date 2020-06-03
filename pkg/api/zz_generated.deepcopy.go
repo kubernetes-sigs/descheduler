@@ -196,25 +196,25 @@ func (in *StrategyParameters) DeepCopyInto(out *StrategyParameters) {
 		*out = new(NodeResourceUtilizationThresholds)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.NodeAffinityType != nil {
-		in, out := &in.NodeAffinityType, &out.NodeAffinityType
-		*out = make([]string, len(*in))
-		copy(*out, *in)
-	}
 	if in.PodsHavingTooManyRestarts != nil {
 		in, out := &in.PodsHavingTooManyRestarts, &out.PodsHavingTooManyRestarts
 		*out = new(PodsHavingTooManyRestarts)
-		**out = **in
-	}
-	if in.MaxPodLifeTimeSeconds != nil {
-		in, out := &in.MaxPodLifeTimeSeconds, &out.MaxPodLifeTimeSeconds
-		*out = new(uint)
 		**out = **in
 	}
 	if in.RemoveDuplicates != nil {
 		in, out := &in.RemoveDuplicates, &out.RemoveDuplicates
 		*out = new(RemoveDuplicates)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.NodeAffinityType != nil {
+		in, out := &in.NodeAffinityType, &out.NodeAffinityType
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
+	if in.MaxPodLifeTimeSeconds != nil {
+		in, out := &in.MaxPodLifeTimeSeconds, &out.MaxPodLifeTimeSeconds
+		*out = new(uint)
+		**out = **in
 	}
 	return
 }
