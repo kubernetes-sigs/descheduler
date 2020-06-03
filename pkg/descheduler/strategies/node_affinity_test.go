@@ -36,7 +36,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		Params: &api.StrategyParameters{
 			NodeSelectionSettings: &api.NodeSelectionSettings{
 				DegradationAllowed: false,
-				NodeAffinityType:   []string{
+				NodeAffinityType: []string{
 					"requiredDuringSchedulingIgnoredDuringExecution",
 				},
 			},
