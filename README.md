@@ -197,7 +197,7 @@ This strategy makes sure all pods violating
 [nodeSelector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector)
 constraints are eventually removed from nodes.
 
-As both `nodeSelector` and `nodeAffinity` provide mechanisms for constraining pods to nods with specific labels,
+As both `nodeSelector` and `nodeAffinity` provide mechanisms for constraining pods to nodes with specific labels,
 it is recommended to use both eviction strategies when scanning for pods to evict on a label change basis.
 
 The policy file should look like:
