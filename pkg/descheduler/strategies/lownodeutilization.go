@@ -237,6 +237,11 @@ func evictPodsFromTargetNodes(
 		nonRemovablePods, bestEffortPods, burstablePods, guaranteedPods := classifyPods(node.allPods, evictLocalStoragePods)
 		klog.V(2).Infof("allPods:%v, nonRemovablePods:%v, bestEffortPods:%v, burstablePods:%v, guaranteedPods:%v", len(node.allPods), len(nonRemovablePods), len(bestEffortPods), len(burstablePods), len(guaranteedPods))
 
+		if len(node.allPods) == len(nonRemovablePods) {
+			klog.V(1).Infof("all pods nonRemovable on node %#v, try next node", node.node.Name)
+			continue
+		}
+
 		// Check if one pod has priority, if yes, assume that all pods have priority and evict pods based on priority.
 		if node.allPods[0].Spec.Priority != nil {
 			klog.V(1).Infof("All pods have priority associated with them. Evicting pods based on priority")
