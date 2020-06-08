@@ -17,221 +17,53 @@ limitations under the License.
 package pod
 
 import (
+	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"sigs.k8s.io/descheduler/pkg/utils"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
+	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/test"
 )
 
-func TestIsEvictable(t *testing.T) {
-	n1 := test.BuildTestNode("node1", 1000, 2000, 13, nil)
-	type testCase struct {
-		pod                   *v1.Pod
-		runBefore             func(*v1.Pod)
-		evictLocalStoragePods bool
-		result                bool
-	}
-
-	testCases := []testCase{
+func TestListPodsOnANode(t *testing.T) {
+	testCases := []struct {
+		name             string
+		pods             map[string][]v1.Pod
+		node             *v1.Node
+		expectedPodCount int
+	}{
 		{
-			pod: test.BuildTestPod("p1", 400, 0, n1.Name, nil),
-			runBefore: func(pod *v1.Pod) {
-				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+			name: "test listing pods on a node",
+			pods: map[string][]v1.Pod{
+				"n1": {
+					*test.BuildTestPod("pod1", 100, 0, "n1", nil),
+					*test.BuildTestPod("pod2", 100, 0, "n1", nil),
+				},
+				"n2": {*test.BuildTestPod("pod3", 100, 0, "n2", nil)},
 			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
-			pod: test.BuildTestPod("p2", 400, 0, n1.Name, nil),
-			runBefore: func(pod *v1.Pod) {
-				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
-				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
-			pod: test.BuildTestPod("p3", 400, 0, n1.Name, nil),
-			runBefore: func(pod *v1.Pod) {
-				pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
-			pod: test.BuildTestPod("p4", 400, 0, n1.Name, nil),
-			runBefore: func(pod *v1.Pod) {
-				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
-				pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
-			pod: test.BuildTestPod("p5", 400, 0, n1.Name, nil),
-			runBefore: func(pod *v1.Pod) {
-				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-				pod.Spec.Volumes = []v1.Volume{
-					{
-						Name: "sample",
-						VolumeSource: v1.VolumeSource{
-							HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-							EmptyDir: &v1.EmptyDirVolumeSource{
-								SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
-						},
-					},
-				}
-			},
-			evictLocalStoragePods: false,
-			result:                false,
-		}, {
-			pod: test.BuildTestPod("p6", 400, 0, n1.Name, nil),
-			runBefore: func(pod *v1.Pod) {
-				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-				pod.Spec.Volumes = []v1.Volume{
-					{
-						Name: "sample",
-						VolumeSource: v1.VolumeSource{
-							HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-							EmptyDir: &v1.EmptyDirVolumeSource{
-								SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
-						},
-					},
-				}
-			},
-			evictLocalStoragePods: true,
-			result:                true,
-		}, {
-			pod: test.BuildTestPod("p7", 400, 0, n1.Name, nil),
-			runBefore: func(pod *v1.Pod) {
-				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
-				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-				pod.Spec.Volumes = []v1.Volume{
-					{
-						Name: "sample",
-						VolumeSource: v1.VolumeSource{
-							HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-							EmptyDir: &v1.EmptyDirVolumeSource{
-								SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
-						},
-					},
-				}
-			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
-			pod: test.BuildTestPod("p8", 400, 0, n1.Name, nil),
-			runBefore: func(pod *v1.Pod) {
-				pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
-			},
-			evictLocalStoragePods: false,
-			result:                false,
-		}, {
-			pod: test.BuildTestPod("p9", 400, 0, n1.Name, nil),
-			runBefore: func(pod *v1.Pod) {
-				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
-				pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
-			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
-			pod: test.BuildTestPod("p10", 400, 0, n1.Name, nil),
-			runBefore: func(pod *v1.Pod) {
-				pod.Annotations = test.GetMirrorPodAnnotation()
-			},
-			evictLocalStoragePods: false,
-			result:                false,
-		}, {
-			pod: test.BuildTestPod("p11", 400, 0, n1.Name, nil),
-			runBefore: func(pod *v1.Pod) {
-				pod.Annotations = test.GetMirrorPodAnnotation()
-				pod.Annotations["descheduler.alpha.kubernetes.io/evict"] = "true"
-			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
-			pod: test.BuildTestPod("p12", 400, 0, n1.Name, nil),
-			runBefore: func(pod *v1.Pod) {
-				priority := utils.SystemCriticalPriority
-				pod.Spec.Priority = &priority
-			},
-			evictLocalStoragePods: false,
-			result:                false,
-		}, {
-			pod: test.BuildTestPod("p13", 400, 0, n1.Name, nil),
-			runBefore: func(pod *v1.Pod) {
-				priority := utils.SystemCriticalPriority
-				pod.Spec.Priority = &priority
-				pod.Annotations = map[string]string{
-					"descheduler.alpha.kubernetes.io/evict": "true",
-				}
-			},
-			evictLocalStoragePods: false,
-			result:                true,
+			node:             test.BuildTestNode("n1", 2000, 3000, 10, nil),
+			expectedPodCount: 2,
 		},
 	}
-
-	for _, test := range testCases {
-		test.runBefore(test.pod)
-		result := IsEvictable(test.pod, test.evictLocalStoragePods)
-		if result != test.result {
-			t.Errorf("IsEvictable should return for pod %s %t, but it returns %t", test.pod.Name, test.result, result)
+	for _, testCase := range testCases {
+		fakeClient := &fake.Clientset{}
+		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+			list := action.(core.ListAction)
+			fieldString := list.GetListRestrictions().Fields.String()
+			if strings.Contains(fieldString, "n1") {
+				return true, &v1.PodList{Items: testCase.pods["n1"]}, nil
+			} else if strings.Contains(fieldString, "n2") {
+				return true, &v1.PodList{Items: testCase.pods["n2"]}, nil
+			}
+			return true, nil, fmt.Errorf("Failed to list: %v", list)
+		})
+		pods, _ := ListPodsOnANode(context.TODO(), fakeClient, testCase.node, nil)
+		if len(pods) != testCase.expectedPodCount {
+			t.Errorf("expected %v pods on node %v, got %+v", testCase.expectedPodCount, testCase.node.Name, len(pods))
 		}
-
 	}
-}
-func TestPodTypes(t *testing.T) {
-	n1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
-	p1 := test.BuildTestPod("p1", 400, 0, n1.Name, nil)
-
-	// These won't be evicted.
-	p2 := test.BuildTestPod("p2", 400, 0, n1.Name, nil)
-	p3 := test.BuildTestPod("p3", 400, 0, n1.Name, nil)
-	p4 := test.BuildTestPod("p4", 400, 0, n1.Name, nil)
-	p5 := test.BuildTestPod("p5", 400, 0, n1.Name, nil)
-	p6 := test.BuildTestPod("p6", 400, 0, n1.Name, nil)
-
-	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-
-	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
-	// The following 4 pods won't get evicted.
-	// A daemonset.
-	//p2.Annotations = test.GetDaemonSetAnnotation()
-	p2.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
-	// A pod with local storage.
-	p3.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p3.Spec.Volumes = []v1.Volume{
-		{
-			Name: "sample",
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
-			},
-		},
-	}
-	// A Mirror Pod.
-	p4.Annotations = test.GetMirrorPodAnnotation()
-	// A Critical Pod.
-	p5.Namespace = "kube-system"
-	priority := utils.SystemCriticalPriority
-	p5.Spec.Priority = &priority
-	systemCriticalPriority := utils.SystemCriticalPriority
-	p5.Spec.Priority = &systemCriticalPriority
-	if !IsMirrorPod(p4) {
-		t.Errorf("Expected p4 to be a mirror pod.")
-	}
-	if !IsCriticalPod(p5) {
-		t.Errorf("Expected p5 to be a critical pod.")
-	}
-	if !IsPodWithLocalStorage(p3) {
-		t.Errorf("Expected p3 to be a pod with local storage.")
-	}
-	ownerRefList := OwnerRef(p2)
-	if !IsDaemonsetPod(ownerRefList) {
-		t.Errorf("Expected p2 to be a daemonset pod.")
-	}
-	ownerRefList = OwnerRef(p1)
-	if IsDaemonsetPod(ownerRefList) || IsPodWithLocalStorage(p1) || IsCriticalPod(p1) || IsMirrorPod(p1) {
-		t.Errorf("Expected p1 to be a normal pod.")
-	}
-
 }
