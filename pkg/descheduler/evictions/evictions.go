@@ -24,24 +24,32 @@ import (
 	policy "k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/errors"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/utils"
 
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
+)
+
+const (
+	evictPodAnnotationKey = "descheduler.alpha.kubernetes.io/evict"
 )
 
 // nodePodEvictedCount keeps count of pods evicted on node
 type nodePodEvictedCount map[*v1.Node]int
 
 type PodEvictor struct {
-	client             clientset.Interface
-	policyGroupVersion string
-	dryRun             bool
-	maxPodsToEvict     int
-	nodepodCount       nodePodEvictedCount
+	client                clientset.Interface
+	policyGroupVersion    string
+	dryRun                bool
+	maxPodsToEvict        int
+	nodepodCount          nodePodEvictedCount
+	evictLocalStoragePods bool
 }
 
 func NewPodEvictor(
@@ -50,6 +58,7 @@ func NewPodEvictor(
 	dryRun bool,
 	maxPodsToEvict int,
 	nodes []*v1.Node,
+	evictLocalStoragePods bool,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
 	for _, node := range nodes {
@@ -58,12 +67,44 @@ func NewPodEvictor(
 	}
 
 	return &PodEvictor{
-		client:             client,
-		policyGroupVersion: policyGroupVersion,
-		dryRun:             dryRun,
-		maxPodsToEvict:     maxPodsToEvict,
-		nodepodCount:       nodePodCount,
+		client:                client,
+		policyGroupVersion:    policyGroupVersion,
+		dryRun:                dryRun,
+		maxPodsToEvict:        maxPodsToEvict,
+		nodepodCount:          nodePodCount,
+		evictLocalStoragePods: evictLocalStoragePods,
 	}
+}
+
+// IsEvictable checks if a pod is evictable or not.
+func (pe *PodEvictor) IsEvictable(pod *v1.Pod) bool {
+	checkErrs := []error{}
+	if IsCriticalPod(pod) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is critical"))
+	}
+
+	ownerRefList := podutil.OwnerRef(pod)
+	if IsDaemonsetPod(ownerRefList) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is a DaemonSet pod"))
+	}
+
+	if len(ownerRefList) == 0 {
+		checkErrs = append(checkErrs, fmt.Errorf("pod does not have any ownerrefs"))
+	}
+
+	if !pe.evictLocalStoragePods && IsPodWithLocalStorage(pod) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod has local storage and descheduler is not configured with --evict-local-storage-pods"))
+	}
+
+	if IsMirrorPod(pod) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is a mirror pod"))
+	}
+
+	if len(checkErrs) > 0 && !HaveEvictAnnotation(pod) {
+		klog.V(4).Infof("Pod %s in namespace %s is not evictable: Pod lacks an eviction annotation and fails the following checks: %v", pod.Name, pod.Namespace, errors.NewAggregate(checkErrs).Error())
+		return false
+	}
+	return true
 }
 
 // NodeEvicted gives a number of pods evicted for node
@@ -138,4 +179,38 @@ func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, poli
 		return fmt.Errorf("pod not found when evicting %q: %v", pod.Name, err)
 	}
 	return err
+}
+
+func IsCriticalPod(pod *v1.Pod) bool {
+	return utils.IsCriticalPod(pod)
+}
+
+func IsDaemonsetPod(ownerRefList []metav1.OwnerReference) bool {
+	for _, ownerRef := range ownerRefList {
+		if ownerRef.Kind == "DaemonSet" {
+			return true
+		}
+	}
+	return false
+}
+
+// IsMirrorPod checks whether the pod is a mirror pod.
+func IsMirrorPod(pod *v1.Pod) bool {
+	return utils.IsMirrorPod(pod)
+}
+
+// HaveEvictAnnotation checks if the pod have evict annotation
+func HaveEvictAnnotation(pod *v1.Pod) bool {
+	_, found := pod.ObjectMeta.Annotations[evictPodAnnotationKey]
+	return found
+}
+
+func IsPodWithLocalStorage(pod *v1.Pod) bool {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.HostPath != nil || volume.EmptyDir != nil {
+			return true
+		}
+	}
+
+	return false
 }

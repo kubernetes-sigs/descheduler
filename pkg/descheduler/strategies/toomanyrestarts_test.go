@@ -171,9 +171,10 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			false,
 			tc.maxPodsToEvict,
 			[]*v1.Node{node},
+			false,
 		)
 
-		RemovePodsHavingTooManyRestarts(ctx, fakeClient, tc.strategy, []*v1.Node{node}, false, podEvictor)
+		RemovePodsHavingTooManyRestarts(ctx, fakeClient, tc.strategy, []*v1.Node{node}, podEvictor)
 		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)
