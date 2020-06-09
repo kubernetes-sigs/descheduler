@@ -47,7 +47,6 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 				}
 
 				if success {
-					klog.V(1).Infof("Evicted pod: %#v\n because of existing anti-affinity", pods[i].Name)
 					// Since the current pod is evicted all other pods which have anti-affinity with this
 					// pod need not be evicted.
 					// Update pods.
