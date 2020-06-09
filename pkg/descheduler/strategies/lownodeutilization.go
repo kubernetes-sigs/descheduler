@@ -289,7 +289,7 @@ func evictPods(
 			cUsage := utils.GetResourceRequest(pod, v1.ResourceCPU)
 			mUsage := utils.GetResourceRequest(pod, v1.ResourceMemory)
 
-			success, err := podEvictor.EvictPod(ctx, pod, node)
+			success, err := podEvictor.EvictPod(ctx, pod, node, "LowNodeUtilization")
 			if err != nil {
 				klog.Errorf("Error evicting pod: (%#v)", err)
 				break
