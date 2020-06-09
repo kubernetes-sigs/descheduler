@@ -29,7 +29,12 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
-func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
+// RemovePodsViolatingNodeAffinity evicts pods on nodes which violate node affinity
+func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+	if strategy.Params == nil {
+		klog.V(1).Infof("NodeAffinityType not set")
+		return
+	}
 	for _, nodeAffinity := range strategy.Params.NodeAffinityType {
 		klog.V(2).Infof("Executing for nodeAffinityType: %v", nodeAffinity)
 
@@ -38,19 +43,21 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 			for _, node := range nodes {
 				klog.V(1).Infof("Processing node: %#v\n", node.Name)
 
-				pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, evictLocalStoragePods)
+				pods, err := podutil.ListPodsOnANode(ctx, client, node, func(pod *v1.Pod) bool {
+					return podEvictor.IsEvictable(pod) &&
+						!nodeutil.PodFitsCurrentNode(pod, node) &&
+						nodeutil.PodFitsAnyNode(pod, nodes)
+				})
 				if err != nil {
 					klog.Errorf("failed to get pods from %v: %v", node.Name, err)
 				}
 
 				for _, pod := range pods {
 					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-						if !nodeutil.PodFitsCurrentNode(pod, node) && nodeutil.PodFitsAnyNode(pod, nodes) {
-							klog.V(1).Infof("Evicting pod: %v", pod.Name)
-							if _, err := podEvictor.EvictPod(ctx, pod, node); err != nil {
-								klog.Errorf("Error evicting pod: (%#v)", err)
-								break
-							}
+						klog.V(1).Infof("Evicting pod: %v", pod.Name)
+						if _, err := podEvictor.EvictPod(ctx, pod, node, "NodeAffinity"); err != nil {
+							klog.Errorf("Error evicting pod: (%#v)", err)
+							break
 						}
 					}
 				}

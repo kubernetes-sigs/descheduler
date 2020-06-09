@@ -30,24 +30,23 @@ import (
 )
 
 // RemovePodsViolatingInterPodAntiAffinity evicts pods on the node which are having a pod affinity rules.
-func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
+func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
-		pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, evictLocalStoragePods)
+		pods, err := podutil.ListPodsOnANode(ctx, client, node, podEvictor.IsEvictable)
 		if err != nil {
 			return
 		}
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
 			if checkPodsWithAntiAffinityExist(pods[i], pods) {
-				success, err := podEvictor.EvictPod(ctx, pods[i], node)
+				success, err := podEvictor.EvictPod(ctx, pods[i], node, "InterPodAntiAffinity")
 				if err != nil {
 					klog.Errorf("Error evicting pod: (%#v)", err)
 					break
 				}
 
 				if success {
-					klog.V(1).Infof("Evicted pod: %#v\n because of existing anti-affinity", pods[i].Name)
 					// Since the current pod is evicted all other pods which have anti-affinity with this
 					// pod need not be evicted.
 					// Update pods.

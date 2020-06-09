@@ -95,7 +95,8 @@ usage is below threshold for all (cpu, memory, and number of pods), the node is 
 Currently, pods request resource requirements are considered for computing node resource utilization.
 
 There is another configurable threshold, `targetThresholds`, that is used to compute those potential nodes
-from where pods could be evicted. Any node, between the thresholds, `thresholds` and `targetThresholds` is
+from where pods could be evicted. If a node's usage is above targetThreshold for any (cpu, memory, or number of pods),
+the node is considered over utilized. Any node between the thresholds, `thresholds` and `targetThresholds` is
 considered appropriately utilized and is not considered for eviction. The threshold, `targetThresholds`,
 can be configured for cpu, memory, and number of pods too in terms of percentage.
 
@@ -119,6 +120,15 @@ strategies:
            "memory": 50
            "pods": 50
 ```
+
+Policy should pass the following validation checks:
+* Only three types of resources are supported: `cpu`, `memory` and `pods`.
+* `thresholds` or `targetThresholds` can not be nil and they must configure exactly the same types of resources.
+* The valid range of the resource's percentage value is \[0, 100\]
+* Percentage value of `thresholds` can not be greater than `targetThresholds` for the same resource.
+
+If any of the resource types is not specified, all its thresholds default to 100% to avoid nodes going
+from underutilized to overutilized.
 
 There is another parameter associated with the `LowNodeUtilization` strategy, called `numberOfNodes`.
 This parameter can be configured to activate the strategy only when the number of under utilized nodes
@@ -233,15 +243,25 @@ never evicted because these pods won't be recreated.
   annotation is used to override checks which prevent eviction and users can select which pod is evicted.
   Users should know how and if the pod will be recreated.
 
+Setting `--v=4` or greater on the Descheduler will log all reasons why any pod is not evictable.
+
 ### Pod Disruption Budget (PDB)
 
 Pods subject to a Pod Disruption Budget(PDB) are not evicted if descheduling violates its PDB. The pods
 are evicted by using the eviction subresource to handle PDB.
 
 ## Compatibility Matrix
+The below compatibility matrix shows the k8s client package(client-go, apimachinery, etc) versions that descheduler
+is compiled with. At this time descheduler does not have a hard dependency to a specific k8s release. However a
+particular descheduler release is only tested against the three latest k8s minor versions. For example descheduler
+v0.18 should work with k8s v1.18, v1.17, and v1.16.
 
-Descheduler  | supported Kubernetes version
+Starting with descheduler release v0.18 the minor version of descheduler matches the minor version of the k8s client
+packages that it is compiled with.
+
+Descheduler  | Supported Kubernetes Version
 -------------|-----------------------------
+v0.18        | v1.18
 v0.10        | v1.17
 v0.4-v0.9    | v1.9+
 v0.1-v0.3    | v1.7-v1.8

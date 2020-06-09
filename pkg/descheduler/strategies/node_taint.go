@@ -30,10 +30,10 @@ import (
 )
 
 // RemovePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
-func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
+func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
-		pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, evictLocalStoragePods)
+		pods, err := podutil.ListPodsOnANode(ctx, client, node, podEvictor.IsEvictable)
 		if err != nil {
 			//no pods evicted as error encountered retrieving evictable Pods
 			return
@@ -46,7 +46,7 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 				func(taint *v1.Taint) bool { return taint.Effect == v1.TaintEffectNoSchedule },
 			) {
 				klog.V(2).Infof("Not all taints with NoSchedule effect are tolerated after update for pod %v on node %v", pods[i].Name, node.Name)
-				if _, err := podEvictor.EvictPod(ctx, pods[i], node); err != nil {
+				if _, err := podEvictor.EvictPod(ctx, pods[i], node, "NodeTaint"); err != nil {
 					klog.Errorf("Error evicting pod: (%#v)", err)
 					break
 				}

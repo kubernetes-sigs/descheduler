@@ -130,10 +130,10 @@ func PodFitsCurrentNode(pod *v1.Pod, node *v1.Node) bool {
 	}
 
 	if !ok {
-		klog.V(1).Infof("Pod %v does not fit on node %v", pod.Name, node.Name)
+		klog.V(2).Infof("Pod %v does not fit on node %v", pod.Name, node.Name)
 		return false
 	}
 
-	klog.V(3).Infof("Pod %v fits on node %v", pod.Name, node.Name)
+	klog.V(2).Infof("Pod %v fits on node %v", pod.Name, node.Name)
 	return true
 }

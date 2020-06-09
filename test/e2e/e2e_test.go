@@ -29,6 +29,7 @@ import (
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
+
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
@@ -118,7 +119,7 @@ func startEndToEndForLowNodeUtilization(ctx context.Context, clientset clientset
 
 	lowNodeUtilizationStrategy := deschedulerapi.DeschedulerStrategy{
 		Enabled: true,
-		Params: deschedulerapi.StrategyParameters{
+		Params: &deschedulerapi.StrategyParameters{
 			NodeResourceUtilizationThresholds: &deschedulerapi.NodeResourceUtilizationThresholds{
 				Thresholds:       thresholds,
 				TargetThresholds: targetThresholds,
@@ -132,9 +133,10 @@ func startEndToEndForLowNodeUtilization(ctx context.Context, clientset clientset
 		false,
 		0,
 		nodes,
+		false,
 	)
 
-	strategies.LowNodeUtilization(ctx, clientset, lowNodeUtilizationStrategy, nodes, false, podEvictor)
+	strategies.LowNodeUtilization(ctx, clientset, lowNodeUtilizationStrategy, nodes, podEvictor)
 	time.Sleep(10 * time.Second)
 }
 
@@ -149,6 +151,11 @@ func TestE2E(t *testing.T) {
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Error listing node with %v", err)
+	}
+	var nodes []*v1.Node
+	for i := range nodeList.Items {
+		node := nodeList.Items[i]
+		nodes = append(nodes, &node)
 	}
 	sharedInformerFactory := informers.NewSharedInformerFactory(clientSet, 0)
 	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
@@ -165,7 +172,7 @@ func TestE2E(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
-	evictPods(ctx, t, clientSet, nodeInformer, nodeList, rc)
+	evictPods(ctx, t, clientSet, nodeInformer, nodes, rc)
 
 	rc.Spec.Template.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 	rc.Spec.Replicas = func(i int32) *int32 { return &i }(15)
@@ -182,7 +189,7 @@ func TestE2E(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
-	evictPods(ctx, t, clientSet, nodeInformer, nodeList, rc)
+	evictPods(ctx, t, clientSet, nodeInformer, nodes, rc)
 }
 
 func TestDeschedulingInterval(t *testing.T) {
@@ -220,28 +227,40 @@ func TestDeschedulingInterval(t *testing.T) {
 	}
 }
 
-func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface, nodeInformer coreinformers.NodeInformer, nodeList *v1.NodeList, rc *v1.ReplicationController) {
-	var leastLoadedNode v1.Node
+func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface, nodeInformer coreinformers.NodeInformer, nodeList []*v1.Node, rc *v1.ReplicationController) {
+	var leastLoadedNode *v1.Node
 	podsBefore := math.MaxInt16
-	for i := range nodeList.Items {
+	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
+	if err != nil || len(evictionPolicyGroupVersion) == 0 {
+		klog.Fatalf("%v", err)
+	}
+	podEvictor := evictions.NewPodEvictor(
+		clientSet,
+		evictionPolicyGroupVersion,
+		false,
+		0,
+		nodeList,
+		true,
+	)
+	for _, node := range nodeList {
 		// Skip the Master Node
-		if _, exist := nodeList.Items[i].Labels["node-role.kubernetes.io/master"]; exist {
+		if _, exist := node.Labels["node-role.kubernetes.io/master"]; exist {
 			continue
 		}
 		// List all the pods on the current Node
-		podsOnANode, err := podutil.ListEvictablePodsOnNode(ctx, clientSet, &nodeList.Items[i], true)
+		podsOnANode, err := podutil.ListPodsOnANode(ctx, clientSet, node, podEvictor.IsEvictable)
 		if err != nil {
 			t.Errorf("Error listing pods on a node %v", err)
 		}
 		// Update leastLoadedNode if necessary
 		if tmpLoads := len(podsOnANode); tmpLoads < podsBefore {
-			leastLoadedNode = nodeList.Items[i]
+			leastLoadedNode = node
 			podsBefore = tmpLoads
 		}
 	}
 	t.Log("Eviction of pods starting")
 	startEndToEndForLowNodeUtilization(ctx, clientSet, nodeInformer)
-	podsOnleastUtilizedNode, err := podutil.ListEvictablePodsOnNode(ctx, clientSet, &leastLoadedNode, true)
+	podsOnleastUtilizedNode, err := podutil.ListPodsOnANode(ctx, clientSet, leastLoadedNode, podEvictor.IsEvictable)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}

@@ -132,7 +132,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			maxPodsToEvict:          5,
 			pods:                    []v1.Pod{*p1, *p2, *p3},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{Params: api.StrategyParameters{RemoveDuplicates: &api.RemoveDuplicates{ExcludeOwnerKinds: []string{"ReplicaSet"}}}},
+			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{RemoveDuplicates: &api.RemoveDuplicates{ExcludeOwnerKinds: []string{"ReplicaSet"}}}},
 		},
 		{
 			description:             "Three Pods in the `test` Namespace, bound to same ReplicaSet. 2 should be evicted.",
@@ -199,9 +199,10 @@ func TestFindDuplicatePods(t *testing.T) {
 			false,
 			testCase.maxPodsToEvict,
 			[]*v1.Node{node},
+			false,
 		)
 
-		RemoveDuplicatePods(ctx, fakeClient, testCase.strategy, []*v1.Node{node}, false, podEvictor)
+		RemoveDuplicatePods(ctx, fakeClient, testCase.strategy, []*v1.Node{node}, podEvictor)
 		podsEvicted := podEvictor.TotalEvicted()
 		if podsEvicted != testCase.expectedEvictedPodCount {
 			t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)
