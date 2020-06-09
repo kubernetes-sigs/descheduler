@@ -101,7 +101,7 @@ func RemoveDuplicatePods(
 		}
 
 		for _, pod := range duplicatePods {
-			if _, err := podEvictor.EvictPod(ctx, pod, node); err != nil {
+			if _, err := podEvictor.EvictPod(ctx, pod, node, "RemoveDuplicatePods"); err != nil {
 				klog.Errorf("Error evicting pod: (%#v)", err)
 				break
 			}
