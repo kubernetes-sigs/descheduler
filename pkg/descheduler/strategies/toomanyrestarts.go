@@ -53,7 +53,7 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 			} else if restarts < strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold {
 				continue
 			}
-			if _, err := podEvictor.EvictPod(ctx, pods[i], node); err != nil {
+			if _, err := podEvictor.EvictPod(ctx, pods[i], node, "TooManyRestarts"); err != nil {
 				klog.Errorf("Error evicting pod: (%#v)", err)
 				break
 			}

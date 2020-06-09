@@ -19,6 +19,7 @@ package evictions
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1beta1"
@@ -124,7 +125,11 @@ func (pe *PodEvictor) TotalEvicted() int {
 // EvictPod returns non-nil error only when evicting a pod on a node is not
 // possible (due to maxPodsToEvict constraint). Success is true when the pod
 // is evicted on the server side.
-func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) (bool, error) {
+func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, reasons ...string) (bool, error) {
+	reason := ""
+	if len(reasons) > 0 {
+		reason = " (" + strings.Join(reasons, ", ") + ")"
+	}
 	if pe.maxPodsToEvict > 0 && pe.nodepodCount[node]+1 > pe.maxPodsToEvict {
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", pe.maxPodsToEvict, node.Name)
 	}
@@ -132,15 +137,15 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) 
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, pe.dryRun)
 	if err != nil {
 		// err is used only for logging purposes
-		klog.Errorf("Error evicting pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
+		klog.Errorf("Error evicting pod: %#v in namespace %#v%s: %#v", pod.Name, pod.Namespace, reason, err)
 		return false, nil
 	}
 
 	pe.nodepodCount[node]++
 	if pe.dryRun {
-		klog.V(1).Infof("Evicted pod in dry run mode: %#v in namespace %#v", pod.Name, pod.Namespace)
+		klog.V(1).Infof("Evicted pod in dry run mode: %#v in namespace %#v%s", pod.Name, pod.Namespace, reason)
 	} else {
-		klog.V(1).Infof("Evicted pod: %#v in namespace %#v", pod.Name, pod.Namespace)
+		klog.V(1).Infof("Evicted pod: %#v in namespace %#v%s", pod.Name, pod.Namespace, reason)
 	}
 	return true, nil
 }

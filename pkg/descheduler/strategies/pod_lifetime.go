@@ -40,7 +40,7 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 		klog.V(1).Infof("Processing node: %#v", node.Name)
 		pods := listOldPodsOnNode(ctx, client, node, *strategy.Params.MaxPodLifeTimeSeconds, podEvictor)
 		for _, pod := range pods {
-			success, err := podEvictor.EvictPod(ctx, pod, node)
+			success, err := podEvictor.EvictPod(ctx, pod, node, "PodLifeTime")
 			if success {
 				klog.V(1).Infof("Evicted pod: %#v because it was created more than %v seconds ago", pod.Name, *strategy.Params.MaxPodLifeTimeSeconds)
 			}
