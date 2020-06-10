@@ -126,7 +126,7 @@ func (pe *PodEvictor) TotalEvicted() int {
 // possible (due to maxPodsToEvict constraint). Success is true when the pod
 // is evicted on the server side.
 func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, reasons ...string) (bool, error) {
-	reason := ""
+	var reason string
 	if len(reasons) > 0 {
 		reason = " (" + strings.Join(reasons, ", ") + ")"
 	}
