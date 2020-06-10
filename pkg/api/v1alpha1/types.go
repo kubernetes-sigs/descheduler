@@ -41,7 +41,7 @@ type DeschedulerStrategy struct {
 	Weight int `json:"weight,omitempty"`
 
 	// Strategy parameters
-	Params StrategyParameters `json:"params,omitempty"`
+	Params *StrategyParameters `json:"params,omitempty"`
 }
 
 // Only one of its members may be specified

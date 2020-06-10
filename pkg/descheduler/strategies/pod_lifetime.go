@@ -30,17 +30,17 @@ import (
 )
 
 // PodLifeTime evicts pods on nodes that were created more than strategy.Params.MaxPodLifeTimeSeconds seconds ago.
-func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
-	if strategy.Params.MaxPodLifeTimeSeconds == nil {
+func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+	if strategy.Params == nil || strategy.Params.MaxPodLifeTimeSeconds == nil {
 		klog.V(1).Infof("MaxPodLifeTimeSeconds not set")
 		return
 	}
 
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v", node.Name)
-		pods := listOldPodsOnNode(ctx, client, node, *strategy.Params.MaxPodLifeTimeSeconds, evictLocalStoragePods)
+		pods := listOldPodsOnNode(ctx, client, node, *strategy.Params.MaxPodLifeTimeSeconds, podEvictor)
 		for _, pod := range pods {
-			success, err := podEvictor.EvictPod(ctx, pod, node)
+			success, err := podEvictor.EvictPod(ctx, pod, node, "PodLifeTime")
 			if success {
 				klog.V(1).Infof("Evicted pod: %#v because it was created more than %v seconds ago", pod.Name, *strategy.Params.MaxPodLifeTimeSeconds)
 			}
@@ -53,8 +53,8 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 	}
 }
 
-func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, maxAge uint, evictLocalStoragePods bool) []*v1.Pod {
-	pods, err := podutil.ListEvictablePodsOnNode(ctx, client, node, evictLocalStoragePods)
+func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, maxAge uint, evictor *evictions.PodEvictor) []*v1.Pod {
+	pods, err := podutil.ListPodsOnANode(ctx, client, node, evictor.IsEvictable)
 	if err != nil {
 		return nil
 	}

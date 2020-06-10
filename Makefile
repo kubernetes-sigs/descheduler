@@ -84,6 +84,14 @@ verify-commits:
 #   make test-unit
 #   make test-unit WHAT=pkg/build TESTFLAGS=-v
 
+verify: verify-gofmt verify-vendor lint
+
+verify-gofmt:
+	./hack/verify-gofmt.sh
+
+verify-vendor:
+	./hack/verify-vendor.sh
+
 test-unit:
 	GOTEST_FLAGS="$(TESTFLAGS)" hack/test-go.sh $(WHAT) $(TESTS)
 .PHONY: test-unit

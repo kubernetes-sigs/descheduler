@@ -97,7 +97,7 @@ func TestPodLifeTime(t *testing.T) {
 			description: "Two pods in the `dev` Namespace, 1 is new and 1 very is old. 1 should be evicted.",
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
-				Params: api.StrategyParameters{
+				Params: &api.StrategyParameters{
 					MaxPodLifeTimeSeconds: &maxLifeTime,
 				},
 			},
@@ -109,7 +109,7 @@ func TestPodLifeTime(t *testing.T) {
 			description: "Two pods in the `dev` Namespace, 2 are new and 0 are old. 0 should be evicted.",
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
-				Params: api.StrategyParameters{
+				Params: &api.StrategyParameters{
 					MaxPodLifeTimeSeconds: &maxLifeTime,
 				},
 			},
@@ -121,7 +121,7 @@ func TestPodLifeTime(t *testing.T) {
 			description: "Two pods in the `dev` Namespace, 1 created 605 seconds ago. 1 should be evicted.",
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
-				Params: api.StrategyParameters{
+				Params: &api.StrategyParameters{
 					MaxPodLifeTimeSeconds: &maxLifeTime,
 				},
 			},
@@ -133,7 +133,7 @@ func TestPodLifeTime(t *testing.T) {
 			description: "Two pods in the `dev` Namespace, 1 created 595 seconds ago. 0 should be evicted.",
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
-				Params: api.StrategyParameters{
+				Params: &api.StrategyParameters{
 					MaxPodLifeTimeSeconds: &maxLifeTime,
 				},
 			},
@@ -157,9 +157,10 @@ func TestPodLifeTime(t *testing.T) {
 			false,
 			tc.maxPodsToEvict,
 			[]*v1.Node{node},
+			false,
 		)
 
-		PodLifeTime(ctx, fakeClient, tc.strategy, []*v1.Node{node}, false, podEvictor)
+		PodLifeTime(ctx, fakeClient, tc.strategy, []*v1.Node{node}, podEvictor)
 		podsEvicted := podEvictor.TotalEvicted()
 		if podsEvicted != tc.expectedEvictedPodCount {
 			t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.description, tc.expectedEvictedPodCount, podsEvicted)

@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	v1 "k8s.io/api/core/v1"
@@ -32,36 +33,55 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+// NodeUsageMap stores a node's info, pods on it and its resource usage
 type NodeUsageMap struct {
 	node    *v1.Node
 	usage   api.ResourceThresholds
 	allPods []*v1.Pod
 }
 
+// NodePodsMap is a set of (node, pods) pairs
 type NodePodsMap map[*v1.Node][]*v1.Pod
 
-func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
-	if !strategy.Enabled {
-		return
-	}
+const (
+	// MinResourcePercentage is the minimum value of a resource's percentage
+	MinResourcePercentage = 0
+	// MaxResourcePercentage is the maximum value of a resource's percentage
+	MaxResourcePercentage = 100
+)
+
+// LowNodeUtilization evicts pods from overutilized nodes to underutilized nodes. Note that CPU/Memory requests are used
+// to calculate nodes' utilization and not the actual resource usage.
+func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	// todo: move to config validation?
 	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
-	if strategy.Params.NodeResourceUtilizationThresholds == nil {
+	if strategy.Params == nil || strategy.Params.NodeResourceUtilizationThresholds == nil {
 		klog.V(1).Infof("NodeResourceUtilizationThresholds not set")
 		return
 	}
 
 	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
-	if !validateThresholds(thresholds) {
+	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
+	if err := validateStrategyConfig(thresholds, targetThresholds); err != nil {
+		klog.Errorf("LowNodeUtilization config is not valid: %v", err)
 		return
 	}
-	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
-	if !validateTargetThresholds(targetThresholds) {
-		return
+	// check if Pods/CPU/Mem are set, if not, set them to 100
+	if _, ok := thresholds[v1.ResourcePods]; !ok {
+		thresholds[v1.ResourcePods] = MaxResourcePercentage
+		targetThresholds[v1.ResourcePods] = MaxResourcePercentage
+	}
+	if _, ok := thresholds[v1.ResourceCPU]; !ok {
+		thresholds[v1.ResourceCPU] = MaxResourcePercentage
+		targetThresholds[v1.ResourceCPU] = MaxResourcePercentage
+	}
+	if _, ok := thresholds[v1.ResourceMemory]; !ok {
+		thresholds[v1.ResourceMemory] = MaxResourcePercentage
+		targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
 	}
 
 	npm := createNodePodsMap(ctx, client, nodes)
-	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds, evictLocalStoragePods)
+	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds)
 
 	klog.V(1).Infof("Criteria for a node under utilization: CPU: %v, Mem: %v, Pods: %v",
 		thresholds[v1.ResourceCPU], thresholds[v1.ResourceMemory], thresholds[v1.ResourcePods])
@@ -96,61 +116,69 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		targetNodes,
 		lowNodes,
 		targetThresholds,
-		evictLocalStoragePods,
 		podEvictor)
 
 	klog.V(1).Infof("Total number of pods evicted: %v", podEvictor.TotalEvicted())
 }
 
-func validateThresholds(thresholds api.ResourceThresholds) bool {
-	if thresholds == nil || len(thresholds) == 0 {
-		klog.V(1).Infof("no resource threshold is configured")
-		return false
+// validateStrategyConfig checks if the strategy's config is valid
+func validateStrategyConfig(thresholds, targetThresholds api.ResourceThresholds) error {
+	// validate thresholds and targetThresholds config
+	if err := validateThresholds(thresholds); err != nil {
+		return fmt.Errorf("thresholds config is not valid: %v", err)
 	}
-	for name := range thresholds {
-		switch name {
-		case v1.ResourceCPU:
-			continue
-		case v1.ResourceMemory:
-			continue
-		case v1.ResourcePods:
-			continue
-		default:
-			klog.Errorf("only cpu, memory, or pods thresholds can be specified")
-			return false
+	if err := validateThresholds(targetThresholds); err != nil {
+		return fmt.Errorf("targetThresholds config is not valid: %v", err)
+	}
+
+	// validate if thresholds and targetThresholds have same resources configured
+	if len(thresholds) != len(targetThresholds) {
+		return fmt.Errorf("thresholds and targetThresholds configured different resources")
+	}
+	for resourceName, value := range thresholds {
+		if targetValue, ok := targetThresholds[resourceName]; !ok {
+			return fmt.Errorf("thresholds and targetThresholds configured different resources")
+		} else if value > targetValue {
+			return fmt.Errorf("thresholds' %v percentage is greater than targetThresholds'", resourceName)
 		}
 	}
-	return true
+	return nil
 }
 
-//This function could be merged into above once we are clear.
-func validateTargetThresholds(targetThresholds api.ResourceThresholds) bool {
-	if targetThresholds == nil {
-		klog.V(1).Infof("no target resource threshold is configured")
-		return false
-	} else if _, ok := targetThresholds[v1.ResourcePods]; !ok {
-		klog.V(1).Infof("no target resource threshold for pods is configured")
-		return false
+// validateThresholds checks if thresholds have valid resource name and resource percentage configured
+func validateThresholds(thresholds api.ResourceThresholds) error {
+	if thresholds == nil || len(thresholds) == 0 {
+		return fmt.Errorf("no resource threshold is configured")
 	}
-	return true
+	for name, percent := range thresholds {
+		switch name {
+		case v1.ResourceCPU, v1.ResourceMemory, v1.ResourcePods:
+			if percent < MinResourcePercentage || percent > MaxResourcePercentage {
+				return fmt.Errorf("%v threshold not in [%v, %v] range", name, MinResourcePercentage, MaxResourcePercentage)
+			}
+		default:
+			return fmt.Errorf("only cpu, memory, or pods thresholds can be specified")
+		}
+	}
+	return nil
 }
 
 // classifyNodes classifies the nodes into low-utilization or high-utilization nodes. If a node lies between
 // low and high thresholds, it is simply ignored.
-func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThresholds api.ResourceThresholds, evictLocalStoragePods bool) ([]NodeUsageMap, []NodeUsageMap) {
+func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThresholds api.ResourceThresholds) ([]NodeUsageMap, []NodeUsageMap) {
 	lowNodes, targetNodes := []NodeUsageMap{}, []NodeUsageMap{}
 	for node, pods := range npm {
-		usage := nodeUtilization(node, pods, evictLocalStoragePods)
+		usage := nodeUtilization(node, pods)
 		nuMap := NodeUsageMap{
 			node:    node,
 			usage:   usage,
 			allPods: pods,
 		}
 		// Check if node is underutilized and if we can schedule pods on it.
-		if !nodeutil.IsNodeUnschedulable(node) && IsNodeWithLowUtilization(usage, thresholds) {
+		if !nodeutil.IsNodeUnschedulable(node) && isNodeWithLowUtilization(usage, thresholds) {
 			klog.V(2).Infof("Node %#v is under utilized with usage: %#v", node.Name, usage)
 			lowNodes = append(lowNodes, nuMap)
-		} else if IsNodeAboveTargetUtilization(usage, targetThresholds) {
+		} else if isNodeAboveTargetUtilization(usage, targetThresholds) {
 			klog.V(2).Infof("Node %#v is over utilized with usage: %#v", node.Name, usage)
 			targetNodes = append(targetNodes, nuMap)
 		} else {
@@ -167,11 +195,10 @@ func evictPodsFromTargetNodes(
 	ctx context.Context,
 	targetNodes, lowNodes []NodeUsageMap,
 	targetThresholds api.ResourceThresholds,
-	evictLocalStoragePods bool,
 	podEvictor *evictions.PodEvictor,
 ) {
 
-	SortNodesByUsage(targetNodes)
+	sortNodesByUsage(targetNodes)
 
 	// upper bound on total number of pods/cpu/memory to be moved
 	var totalPods, totalCPU, totalMem float64
@@ -187,16 +214,12 @@ func evictPodsFromTargetNodes(
 		totalPods += ((float64(podsPercentage) * float64(nodeCapacity.Pods().Value())) / 100)
 
 		// totalCPU capacity to be moved
-		if _, ok := targetThresholds[v1.ResourceCPU]; ok {
-			cpuPercentage := targetThresholds[v1.ResourceCPU] - node.usage[v1.ResourceCPU]
-			totalCPU += ((float64(cpuPercentage) * float64(nodeCapacity.Cpu().MilliValue())) / 100)
-		}
+		cpuPercentage := targetThresholds[v1.ResourceCPU] - node.usage[v1.ResourceCPU]
+		totalCPU += ((float64(cpuPercentage) * float64(nodeCapacity.Cpu().MilliValue())) / 100)
 
 		// totalMem capacity to be moved
-		if _, ok := targetThresholds[v1.ResourceMemory]; ok {
-			memPercentage := targetThresholds[v1.ResourceMemory] - node.usage[v1.ResourceMemory]
-			totalMem += ((float64(memPercentage) * float64(nodeCapacity.Memory().Value())) / 100)
-		}
+		memPercentage := targetThresholds[v1.ResourceMemory] - node.usage[v1.ResourceMemory]
+		totalMem += ((float64(memPercentage) * float64(nodeCapacity.Memory().Value())) / 100)
 	}
 
 	klog.V(1).Infof("Total capacity to be moved: CPU:%v, Mem:%v, Pods:%v", totalCPU, totalMem, totalPods)
@@ -209,8 +232,13 @@ func evictPodsFromTargetNodes(
 		}
 		klog.V(3).Infof("evicting pods from node %#v with usage: %#v", node.node.Name, node.usage)
 
-		nonRemovablePods, bestEffortPods, burstablePods, guaranteedPods := classifyPods(node.allPods, evictLocalStoragePods)
+		nonRemovablePods, bestEffortPods, burstablePods, guaranteedPods := classifyPods(node.allPods, podEvictor)
 		klog.V(2).Infof("allPods:%v, nonRemovablePods:%v, bestEffortPods:%v, burstablePods:%v, guaranteedPods:%v", len(node.allPods), len(nonRemovablePods), len(bestEffortPods), len(burstablePods), len(guaranteedPods))
+
+		if len(node.allPods) == len(nonRemovablePods) {
+			klog.V(1).Infof("all pods nonRemovable on node %#v, try next node", node.node.Name)
+			continue
+		}
 
 		// Check if one pod has priority, if yes, assume that all pods have priority and evict pods based on priority.
 		if node.allPods[0].Spec.Priority != nil {
@@ -249,7 +277,8 @@ func evictPods(
 	taintsOfLowNodes map[string][]v1.Taint,
 	podEvictor *evictions.PodEvictor,
 	node *v1.Node) {
-	if IsNodeAboveTargetUtilization(nodeUsage, targetThresholds) && (*totalPods > 0 || *totalCPU > 0 || *totalMem > 0) {
+	// stop if node utilization drops below target threshold or any of required capacity (cpu, memory, pods) is moved
+	if isNodeAboveTargetUtilization(nodeUsage, targetThresholds) && *totalPods > 0 && *totalCPU > 0 && *totalMem > 0 {
 		onePodPercentage := api.Percentage((float64(1) * 100) / float64(nodeCapacity.Pods().Value()))
 		for _, pod := range inputPods {
 			if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
@@ -260,7 +289,7 @@ func evictPods(
 			cUsage := utils.GetResourceRequest(pod, v1.ResourceCPU)
 			mUsage := utils.GetResourceRequest(pod, v1.ResourceMemory)
 
-			success, err := podEvictor.EvictPod(ctx, pod, node)
+			success, err := podEvictor.EvictPod(ctx, pod, node, "LowNodeUtilization")
 			if err != nil {
 				klog.Errorf("Error evicting pod: (%#v)", err)
 				break
@@ -281,8 +310,8 @@ func evictPods(
 				nodeUsage[v1.ResourceMemory] -= api.Percentage(float64(mUsage) / float64(nodeCapacity.Memory().Value()) * 100)
 
 				klog.V(3).Infof("updated node usage: %#v", nodeUsage)
-				// check if node utilization drops below target threshold or required capacity (cpu, memory, pods) is moved
-				if !IsNodeAboveTargetUtilization(nodeUsage, targetThresholds) || (*totalPods <= 0 && *totalCPU <= 0 && *totalMem <= 0) {
+				// check if node utilization drops below target threshold or any required capacity (cpu, memory, pods) is moved
+				if !isNodeAboveTargetUtilization(nodeUsage, targetThresholds) || *totalPods <= 0 || *totalCPU <= 0 || *totalMem <= 0 {
 					break
 				}
 			}
@@ -290,7 +319,8 @@ func evictPods(
 	}
 }
 
-func SortNodesByUsage(nodes []NodeUsageMap) {
+// sortNodesByUsage sorts nodes based on usage in descending order
+func sortNodesByUsage(nodes []NodeUsageMap) {
 	sort.Slice(nodes, func(i, j int) bool {
 		var ti, tj api.Percentage
 		for name, value := range nodes[i].usage {
@@ -334,7 +364,7 @@ func sortPodsBasedOnPriority(evictablePods []*v1.Pod) {
 func createNodePodsMap(ctx context.Context, client clientset.Interface, nodes []*v1.Node) NodePodsMap {
 	npm := NodePodsMap{}
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(ctx, client, node)
+		pods, err := podutil.ListPodsOnANode(ctx, client, node, nil)
 		if err != nil {
 			klog.Warningf("node %s will not be processed, error in accessing its pods (%#v)", node.Name, err)
 		} else {
@@ -344,7 +374,8 @@ func createNodePodsMap(ctx context.Context, client clientset.Interface, nodes []
 	return npm
 }
 
-func IsNodeAboveTargetUtilization(nodeThresholds api.ResourceThresholds, thresholds api.ResourceThresholds) bool {
+// isNodeAboveTargetUtilization checks if a node is overutilized
+func isNodeAboveTargetUtilization(nodeThresholds api.ResourceThresholds, thresholds api.ResourceThresholds) bool {
 	for name, nodeValue := range nodeThresholds {
 		if name == v1.ResourceCPU || name == v1.ResourceMemory || name == v1.ResourcePods {
 			if value, ok := thresholds[name]; !ok {
@@ -357,7 +388,8 @@ func IsNodeAboveTargetUtilization(nodeThresholds api.ResourceThresholds, thresho
 	return false
 }
 
-func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds api.ResourceThresholds) bool {
+// isNodeWithLowUtilization checks if a node is underutilized
+func isNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds api.ResourceThresholds) bool {
 	for name, nodeValue := range nodeThresholds {
 		if name == v1.ResourceCPU || name == v1.ResourceMemory || name == v1.ResourcePods {
 			if value, ok := thresholds[name]; !ok {
@@ -370,7 +402,7 @@ func IsNodeWithLowUtilization(nodeThresholds api.ResourceThresholds, thresholds 
 	return true
 }
 
-func nodeUtilization(node *v1.Node, pods []*v1.Pod, evictLocalStoragePods bool) api.ResourceThresholds {
+func nodeUtilization(node *v1.Node, pods []*v1.Pod) api.ResourceThresholds {
 	totalReqs := map[v1.ResourceName]*resource.Quantity{
 		v1.ResourceCPU:    {},
 		v1.ResourceMemory: {},
@@ -399,7 +431,7 @@ func nodeUtilization(node *v1.Node, pods []*v1.Pod, evictLocalStoragePods bool) 
 	}
 }
 
-func classifyPods(pods []*v1.Pod, evictLocalStoragePods bool) ([]*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod) {
+func classifyPods(pods []*v1.Pod, evictor *evictions.PodEvictor) ([]*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod) {
 	var nonRemovablePods, bestEffortPods, burstablePods, guaranteedPods []*v1.Pod
 
 	// From https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/
@@ -413,7 +445,7 @@ func classifyPods(pods []*v1.Pod, evictLocalStoragePods bool) ([]*v1.Pod, []*v1.
 	// For a Pod to be given a QoS class of BestEffort, the Containers in the Pod must not have any memory or CPU limits or requests.
 
 	for _, pod := range pods {
-		if !podutil.IsEvictable(pod, evictLocalStoragePods) {
+		if !evictor.IsEvictable(pod) {
 			nonRemovablePods = append(nonRemovablePods, pod)
 			continue
 		}
