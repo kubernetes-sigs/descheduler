@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1alpha2
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
@@ -29,7 +29,7 @@ var (
 
 // GroupName is the group name used in this package
 const GroupName = "descheduler"
-const GroupVersion = "v1alpha1"
+const GroupVersion = "v1alpha2"
 
 // SchemeGroupVersion is group version used to register these objects
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: GroupVersion}

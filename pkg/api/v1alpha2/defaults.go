@@ -14,11 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// +k8s:deepcopy-gen=package,register
-// +k8s:conversion-gen=sigs.k8s.io/descheduler/pkg/api
-// +k8s:defaulter-gen=TypeMeta
+package v1alpha2
 
-// Package v1alpha1 is the v1alpha1 version of the descheduler API
-// +groupName=descheduler
+import "k8s.io/apimachinery/pkg/runtime"
 
-package v1alpha1 // import "sigs.k8s.io/descheduler/pkg/api/v1alpha1"
+func addDefaultingFuncs(scheme *runtime.Scheme) error {
+	return RegisterDefaults(scheme)
+}

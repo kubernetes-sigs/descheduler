@@ -1,5 +1,5 @@
 ---
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "LowNodeUtilization":

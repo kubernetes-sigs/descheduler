@@ -72,7 +72,7 @@ It provides one optional parameter, `ExcludeOwnerKinds`, which is a list of Owne
 has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
 
 ```
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "RemoveDuplicates":
@@ -103,7 +103,7 @@ These thresholds, `thresholds` and `targetThresholds`, could be tuned as per you
 Here is an example of a policy for this strategy:
 
 ```
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "LowNodeUtilization":
@@ -143,7 +143,7 @@ node. Currently, there are no parameters associated with this strategy. To disab
 policy should look like:
 
 ```
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingInterPodAntiAffinity":
@@ -171,7 +171,7 @@ podA gets evicted from nodeA.
 The policy file should look like:
 
 ```
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingNodeAffinity":
@@ -189,7 +189,7 @@ node. If the node's taint is subsequently updated/removed, taint is no longer sa
 and will be evicted. The policy file should look like:
 
 ````
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingNodeTaints":
@@ -201,7 +201,7 @@ strategies:
 This strategy makes sure that pods having too many restarts are removed from nodes. For example a pod with EBS/PD that can't get the volume/disk attached to the instance, then the pod should be re-scheduled to other nodes.
 
 ```
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsHavingTooManyRestarts":
@@ -217,7 +217,7 @@ This strategy evicts pods that are older than `.strategies.PodLifeTime.params.ma
 file should look like:
 
 ````
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "PodLifeTime":

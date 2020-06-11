@@ -5,5 +5,5 @@ go build -o "${OS_OUTPUT_BINPATH}/conversion-gen" "k8s.io/code-generator/cmd/con
 
 ${OS_OUTPUT_BINPATH}/conversion-gen \
 		--go-header-file "hack/boilerplate/boilerplate.go.txt" \
-		--input-dirs "${PRJ_PREFIX}/pkg/apis/componentconfig/v1alpha1,${PRJ_PREFIX}/pkg/api/v1alpha1" \
+		--input-dirs "${PRJ_PREFIX}/pkg/apis/componentconfig/v1alpha1,${PRJ_PREFIX}/pkg/api/v1alpha2" \
 		--output-file-base zz_generated.conversion

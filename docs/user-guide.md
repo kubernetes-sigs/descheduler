@@ -68,7 +68,7 @@ descheduler -v=3 --evict-local-storage-pods --policy-config-file=pod-life-time.y
 This policy configuration file ensures that pods created more than 7 days ago are evicted.
 ```
 ---
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "LowNodeUtilization":
