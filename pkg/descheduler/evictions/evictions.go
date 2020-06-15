@@ -126,7 +126,7 @@ func (pe *PodEvictor) TotalEvicted() int {
 // possible (due to maxPodsToEvict constraint). Success is true when the pod
 // is evicted on the server side.
 func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, reasons ...string) (bool, error) {
-	reason := ""
+	var reason string
 	if len(reasons) > 0 {
 		reason = " (" + strings.Join(reasons, ", ") + ")"
 	}
@@ -146,6 +146,11 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		klog.V(1).Infof("Evicted pod in dry run mode: %#v in namespace %#v%s", pod.Name, pod.Namespace, reason)
 	} else {
 		klog.V(1).Infof("Evicted pod: %#v in namespace %#v%s", pod.Name, pod.Namespace, reason)
+		eventBroadcaster := record.NewBroadcaster()
+		eventBroadcaster.StartLogging(klog.V(3).Infof)
+		eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: pe.client.CoreV1().Events(pod.Namespace)})
+		r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
+		r.Event(pod, v1.EventTypeNormal, "Descheduled", fmt.Sprintf("pod evicted by sigs.k8s.io/descheduler%s", reason))
 	}
 	return true, nil
 }
@@ -169,14 +174,6 @@ func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, poli
 	}
 	err := client.PolicyV1beta1().Evictions(eviction.Namespace).Evict(ctx, eviction)
 
-	if err == nil {
-		eventBroadcaster := record.NewBroadcaster()
-		eventBroadcaster.StartLogging(klog.V(3).Infof)
-		eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: client.CoreV1().Events(pod.Namespace)})
-		r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
-		r.Event(pod, v1.EventTypeNormal, "Descheduled", "pod evicted by sigs.k8s.io/descheduler")
-		return nil
-	}
 	if apierrors.IsTooManyRequests(err) {
 		return fmt.Errorf("error when evicting pod (ignoring) %q: %v", pod.Name, err)
 	}
