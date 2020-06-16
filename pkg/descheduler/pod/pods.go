@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	clientset "k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/descheduler/pkg/utils"
+	"sort"
 )
 
 // ListPodsOnANode lists all of the pods on a node
@@ -67,4 +68,28 @@ func IsBurstablePod(pod *v1.Pod) bool {
 
 func IsGuaranteedPod(pod *v1.Pod) bool {
 	return utils.GetPodQOS(pod) == v1.PodQOSGuaranteed
+}
+
+// SortPodsBasedOnPriorityLowToHigh sorts pods based on their priorities from low to high.
+// If pods have same priorities, they will be sorted by QoS in the following order:
+// BestEffort, Burstable, Guaranteed
+func SortPodsBasedOnPriorityLowToHigh(pods []*v1.Pod) {
+	sort.Slice(pods, func(i, j int) bool {
+		if pods[i].Spec.Priority == nil && pods[j].Spec.Priority != nil {
+			return true
+		}
+		if pods[j].Spec.Priority == nil && pods[i].Spec.Priority != nil {
+			return false
+		}
+		if (pods[j].Spec.Priority == nil && pods[i].Spec.Priority == nil) || (*pods[i].Spec.Priority == *pods[j].Spec.Priority) {
+			if IsBestEffortPod(pods[i]) {
+				return true
+			}
+			if IsBurstablePod(pods[i]) && IsGuaranteedPod(pods[j]) {
+				return true
+			}
+			return false
+		}
+		return *pods[i].Spec.Priority < *pods[j].Spec.Priority
+	})
 }

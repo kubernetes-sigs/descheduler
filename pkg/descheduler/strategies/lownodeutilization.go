@@ -247,7 +247,7 @@ func evictPodsFromTargetNodes(
 			evictablePods = append(append(burstablePods, bestEffortPods...), guaranteedPods...)
 
 			// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
-			sortPodsBasedOnPriority(evictablePods)
+			podutil.SortPodsBasedOnPriorityLowToHigh(evictablePods)
 			evictPods(ctx, evictablePods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
 		} else {
 			// TODO: Remove this when we support only priority.
@@ -335,28 +335,6 @@ func sortNodesByUsage(nodes []NodeUsageMap) {
 		}
 		// To return sorted in descending order
 		return ti > tj
-	})
-}
-
-// sortPodsBasedOnPriority sorts pods based on priority and if their priorities are equal, they are sorted based on QoS tiers.
-func sortPodsBasedOnPriority(evictablePods []*v1.Pod) {
-	sort.Slice(evictablePods, func(i, j int) bool {
-		if evictablePods[i].Spec.Priority == nil && evictablePods[j].Spec.Priority != nil {
-			return true
-		}
-		if evictablePods[j].Spec.Priority == nil && evictablePods[i].Spec.Priority != nil {
-			return false
-		}
-		if (evictablePods[j].Spec.Priority == nil && evictablePods[i].Spec.Priority == nil) || (*evictablePods[i].Spec.Priority == *evictablePods[j].Spec.Priority) {
-			if podutil.IsBestEffortPod(evictablePods[i]) {
-				return true
-			}
-			if podutil.IsBurstablePod(evictablePods[i]) && podutil.IsGuaranteedPod(evictablePods[j]) {
-				return true
-			}
-			return false
-		}
-		return *evictablePods[i].Spec.Priority < *evictablePods[j].Spec.Priority
 	})
 }
 

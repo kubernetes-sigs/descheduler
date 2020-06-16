@@ -238,7 +238,8 @@ When the descheduler decides to evict pods from a node, it employs the following
 never evicted because these pods won't be recreated.
 * Pods associated with DaemonSets are never evicted.
 * Pods with local storage are never evicted.
-* Best efforts pods are evicted before burstable and guaranteed pods.
+* In `LowNodeUtilization`, pods are evicted by their priority from low to high, and if they have same priority,
+best effort pods are evicted before burstable and guaranteed pods.
 * All types of pods with the annotation descheduler.alpha.kubernetes.io/evict are evicted. This
   annotation is used to override checks which prevent eviction and users can select which pod is evicted.
   Users should know how and if the pod will be recreated.
