@@ -37,16 +37,33 @@ func TestPodAntiAffinity(t *testing.T) {
 	p2 := test.BuildTestPod("p2", 100, 0, node.Name, nil)
 	p3 := test.BuildTestPod("p3", 100, 0, node.Name, nil)
 	p4 := test.BuildTestPod("p4", 100, 0, node.Name, nil)
+	p5 := test.BuildTestPod("p5", 100, 0, node.Name, nil)
+	p6 := test.BuildTestPod("p6", 100, 0, node.Name, nil)
+	p7 := test.BuildTestPod("p7", 100, 0, node.Name, nil)
 	p2.Labels = map[string]string{"foo": "bar"}
-	p1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p3.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p4.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	p5.Labels = map[string]string{"foo": "bar"}
+	p6.Labels = map[string]string{"foo": "bar"}
+	p7.Labels = map[string]string{"foo1": "bar1"}
+	test.SetNormalOwnerRef(p1)
+	test.SetNormalOwnerRef(p2)
+	test.SetNormalOwnerRef(p3)
+	test.SetNormalOwnerRef(p4)
+	test.SetNormalOwnerRef(p5)
+	test.SetNormalOwnerRef(p6)
+	test.SetNormalOwnerRef(p7)
 
 	// set pod anti affinity
-	setPodAntiAffinity(p1)
-	setPodAntiAffinity(p3)
-	setPodAntiAffinity(p4)
+	setPodAntiAffinity(p1, "foo", "bar")
+	setPodAntiAffinity(p3, "foo", "bar")
+	setPodAntiAffinity(p4, "foo", "bar")
+	setPodAntiAffinity(p5, "foo1", "bar1")
+	setPodAntiAffinity(p6, "foo1", "bar1")
+	setPodAntiAffinity(p7, "foo", "bar")
+
+	// set pod priority
+	test.SetPodPriority(p5, 100)
+	test.SetPodPriority(p6, 50)
+	test.SetPodPriority(p7, 0)
 
 	tests := []struct {
 		description             string
@@ -66,13 +83,19 @@ func TestPodAntiAffinity(t *testing.T) {
 			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
 			expectedEvictedPodCount: 3,
 		},
+		{
+			description:             "Evict only 1 pod after sorting",
+			maxPodsToEvict:          0,
+			pods:                    []v1.Pod{*p5, *p6, *p7},
+			expectedEvictedPodCount: 1,
+		},
 	}
 
 	for _, test := range tests {
 		// create fake client
 		fakeClient := &fake.Clientset{}
 		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-			return true, &v1.PodList{Items: []v1.Pod{*p1, *p2, *p3, *p4}}, nil
+			return true, &v1.PodList{Items: test.pods}, nil
 		})
 		fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 			return true, node, nil
@@ -95,7 +118,7 @@ func TestPodAntiAffinity(t *testing.T) {
 	}
 }
 
-func setPodAntiAffinity(inputPod *v1.Pod) {
+func setPodAntiAffinity(inputPod *v1.Pod, labelKey, labelValue string) {
 	inputPod.Spec.Affinity = &v1.Affinity{
 		PodAntiAffinity: &v1.PodAntiAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
@@ -103,9 +126,9 @@ func setPodAntiAffinity(inputPod *v1.Pod) {
 					LabelSelector: &metav1.LabelSelector{
 						MatchExpressions: []metav1.LabelSelectorRequirement{
 							{
-								Key:      "foo",
+								Key:      labelKey,
 								Operator: metav1.LabelSelectorOpIn,
-								Values:   []string{"bar"},
+								Values:   []string{labelValue},
 							},
 						},
 					},

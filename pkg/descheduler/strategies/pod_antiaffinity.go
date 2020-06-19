@@ -37,6 +37,8 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 		if err != nil {
 			return
 		}
+		// sort the evictable Pods based on priority, if there are multiple pods with same priority, they are sorted based on QoS tiers.
+		podutil.SortPodsBasedOnPriorityLowToHigh(pods)
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
 			if checkPodsWithAntiAffinityExist(pods[i], pods) {
