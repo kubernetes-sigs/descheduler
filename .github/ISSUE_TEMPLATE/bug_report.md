@@ -20,7 +20,7 @@ descheduler version:
 **Which descheduler CLI options are you using?**
 
 
-**Please provide a copy of your deschedler policy config file**
+**Please provide a copy of your descheduler policy config file**
 
 
 **What k8s version are you using (`kubectl version`)?**
