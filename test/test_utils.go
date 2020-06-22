@@ -116,3 +116,48 @@ func BuildTestNode(name string, millicpu int64, mem int64, pods int64, apply fun
 	}
 	return node
 }
+
+// MakeBestEffortPod makes the given pod a BestEffort pod
+func MakeBestEffortPod(pod *v1.Pod) {
+	pod.Spec.Containers[0].Resources.Requests = nil
+	pod.Spec.Containers[0].Resources.Requests = nil
+	pod.Spec.Containers[0].Resources.Limits = nil
+	pod.Spec.Containers[0].Resources.Limits = nil
+}
+
+// MakeBurstablePod makes the given pod a Burstable pod
+func MakeBurstablePod(pod *v1.Pod) {
+	pod.Spec.Containers[0].Resources.Limits = nil
+	pod.Spec.Containers[0].Resources.Limits = nil
+}
+
+// MakeGuaranteedPod makes the given pod an Guaranteed pod
+func MakeGuaranteedPod(pod *v1.Pod) {
+	pod.Spec.Containers[0].Resources.Limits[v1.ResourceCPU] = pod.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]
+	pod.Spec.Containers[0].Resources.Limits[v1.ResourceMemory] = pod.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]
+}
+
+// SetRSOwnerRef sets the given pod's owner to ReplicaSet
+func SetRSOwnerRef(pod *v1.Pod) {
+	pod.ObjectMeta.OwnerReferences = GetReplicaSetOwnerRefList()
+}
+
+// SetDSOwnerRef sets the given pod's owner to DaemonSet
+func SetDSOwnerRef(pod *v1.Pod) {
+	pod.ObjectMeta.OwnerReferences = GetDaemonSetOwnerRefList()
+}
+
+// SetNormalOwnerRef sets the given pod's owner to Pod
+func SetNormalOwnerRef(pod *v1.Pod) {
+	pod.ObjectMeta.OwnerReferences = GetNormalPodOwnerRefList()
+}
+
+// SetPodPriority sets the given pod's priority
+func SetPodPriority(pod *v1.Pod, priority int32) {
+	pod.Spec.Priority = &priority
+}
+
+// SetNodeUnschedulable sets the given node unschedulable
+func SetNodeUnschedulable(node *v1.Node) {
+	node.Spec.Unschedulable = true
+}
