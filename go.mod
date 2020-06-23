@@ -1,6 +1,6 @@
 module sigs.k8s.io/descheduler
 
-go 1.13
+go 1.14
 
 require (
 	github.com/spf13/cobra v0.0.5
@@ -9,6 +9,7 @@ require (
 	k8s.io/apimachinery v0.18.4
 	k8s.io/apiserver v0.18.4
 	k8s.io/client-go v0.18.4
+	k8s.io/code-generator v0.18.4
 	k8s.io/component-base v0.18.4
 	k8s.io/klog/v2 v2.0.0
 )
