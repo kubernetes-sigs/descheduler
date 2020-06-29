@@ -54,11 +54,9 @@ func TestLowNodeUtilization(t *testing.T) {
 		thresholds, targetThresholds api.ResourceThresholds
 		nodes                        map[string]*v1.Node
 		pods                         map[string]*v1.PodList
-		// TODO: divide expectedPodsEvicted into two params like other tests
-		// expectedPodsEvicted should be the result num of pods that this testCase expected but now it represents both
-		// MaxNoOfPodsToEvictPerNode and the test's expected result
-		expectedPodsEvicted int
-		evictedPods         []string
+		maxPodsToEvictPerNode        int
+		expectedPodsEvicted          int
+		evictedPods                  []string
 	}{
 		{
 			name: "no evictable pods",
@@ -114,7 +112,8 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n3NodeName: {},
 			},
-			expectedPodsEvicted: 0,
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   0,
 		},
 		{
 			name: "without priorities",
@@ -172,7 +171,8 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n3NodeName: {},
 			},
-			expectedPodsEvicted: 3,
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   4,
 		},
 		{
 			name: "without priorities stop when cpu capacity is depleted",
@@ -230,6 +230,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n3NodeName: {},
 			},
+			maxPodsToEvictPerNode: 0,
 			// 4 pods available for eviction based on v1.ResourcePods, only 3 pods can be evicted before cpu is depleted
 			expectedPodsEvicted: 3,
 		},
@@ -308,7 +309,8 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n3NodeName: {},
 			},
-			expectedPodsEvicted: 3,
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   4,
 		},
 		{
 			name: "without priorities evicting best-effort pods only",
@@ -383,8 +385,9 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n3NodeName: {},
 			},
-			expectedPodsEvicted: 4,
-			evictedPods:         []string{"p1", "p2", "p4", "p5"},
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   4,
+			evictedPods:           []string{"p1", "p2", "p4", "p5"},
 		},
 	}
 
@@ -442,7 +445,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				fakeClient,
 				"v1",
 				false,
-				test.expectedPodsEvicted,
+				test.maxPodsToEvictPerNode,
 				nodes,
 				false,
 			)
