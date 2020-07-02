@@ -18,6 +18,8 @@ package strategies
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -35,6 +37,8 @@ func TestFindDuplicatePods(t *testing.T) {
 	ctx := context.Background()
 	// first setup pods
 	node := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	replicationController := test.BuildTestReplicaController("replicationcontroller-1", 3)
+	replicaSet := test.BuildTestReplicaSet("replicaset-1", 3)
 	p1 := test.BuildTestPod("p1", 100, 0, node.Name, nil)
 	p1.Namespace = "dev"
 	p2 := test.BuildTestPod("p2", 100, 0, node.Name, nil)
@@ -221,13 +225,16 @@ func TestFindDuplicatePods(t *testing.T) {
 		fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 			return true, node, nil
 		})
-		// //TODO how to pass replicaas as int in reactor action
-		// fakeClient.Fake.AddReactor("get", "replicationcontrollers", func(action core.Action) (bool, runtime.Object, error) {
-		// 	return true, node, nil
-		// })
-		// fakeClient.Fake.AddReactor("get", "replicaset", func(action core.Action) (bool, runtime.Object, error) {
-		// 	return true, nil, nil
-		// })
+
+		fakeClient.Fake.AddReactor("get", "replicationcontrollers", func(action core.Action) (bool, runtime.Object, error) {
+			return true, replicationController, nil
+		})
+		fakeClient.Fake.AddReactor("get", "replicasets", func(action core.Action) (bool, runtime.Object, error) {
+			if strings.Contains(testCase.description, "managed by Replicaset") {
+				return true, replicaSet, nil
+			}
+			return true, nil, fmt.Errorf("not managed by replicaset")
+		})
 		podEvictor := evictions.NewPodEvictor(
 			fakeClient,
 			"v1",

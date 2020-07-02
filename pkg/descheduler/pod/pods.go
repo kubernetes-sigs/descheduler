@@ -18,6 +18,7 @@ package pod
 
 import (
 	"context"
+	"fmt"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -53,7 +54,7 @@ func ListPodsOnANode(ctx context.Context, client clientset.Interface, node *v1.N
 	return pods, nil
 }
 
-// GetPodOwnerReplicationCount returns the owner's replica count of the pod based on the owner reference
+// GetPodOwnerReplicationCount returns the pod owner's replica count
 func GetPodOwnerReplicationCount(ctx context.Context, client clientset.Interface, ownerRef metav1.OwnerReference) (int, error) {
 	switch ownerRef.Kind {
 	case "ReplicaSet":
