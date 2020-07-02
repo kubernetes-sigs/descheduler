@@ -44,6 +44,8 @@ func RemoveDuplicatePods(
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
 ) {
+	ownerReplicationCounter := make(map[string]int)
+	totalNodes := len(nodes)
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v", node.Name)
 		pods, err := podutil.ListPodsOnANode(ctx, client, node, podEvictor.IsEvictable)
@@ -67,11 +69,30 @@ func RemoveDuplicatePods(
 		// If any of the existing lists for that first key matches the current pod's list, the current pod is a duplicate.
 		// If not, then we add this pod's list to the list of lists for that key.
 		duplicateKeysMap := map[string][][]string{}
+	PodLoop:
 		for _, pod := range pods {
 			ownerRefList := podutil.OwnerRef(pod)
 			if hasExcludedOwnerRefKind(ownerRefList, strategy) {
 				continue
 			}
+			for _, ownerRef := range pod.OwnerReferences {
+				var err error
+				replicaCount, ok := ownerReplicationCounter[ownerRef.Name]
+				if !ok {
+					replicaCount, err = podutil.GetPodOwnerReplicationCount(ctx, client, ownerRef)
+					if err != nil {
+						klog.Errorf("Error retreiving owner replica count %s", ownerRef.Name)
+						continue
+					}
+					ownerReplicationCounter[ownerRef.Name] = replicaCount
+				}
+				// If required replicas of the managing owner is greater than available nodes, pods will be duplicated
+				// and shouldnt not be considered for eviction
+				if replicaCount > totalNodes {
+					continue PodLoop
+				}
+			}
+
 			podContainerKeys := make([]string, 0, len(ownerRefList)*len(pod.Spec.Containers))
 			for _, ownerRef := range ownerRefList {
 				for _, container := range pod.Spec.Containers {

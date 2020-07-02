@@ -20,7 +20,7 @@ import (
 	"context"
 	"testing"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
@@ -60,6 +60,10 @@ func TestFindDuplicatePods(t *testing.T) {
 	p13.Namespace = "different-images"
 	p14 := test.BuildTestPod("p14", 100, 0, node.Name, nil)
 	p14.Namespace = "different-images"
+	p15 := test.BuildTestPod("p15", 100, 0, node.Name, nil)
+	p16 := test.BuildTestPod("p16", 100, 0, node.Name, nil)
+	p17 := test.BuildTestPod("p17", 100, 0, node.Name, nil)
+	p18 := test.BuildTestPod("p18", 100, 0, node.Name, nil)
 
 	// ### Evictable Pods ###
 
@@ -112,6 +116,16 @@ func TestFindDuplicatePods(t *testing.T) {
 		Name:  "foo",
 		Image: "foo",
 	})
+
+	// Two Pods in the "default" Namespace in same node, bound to ReplicaSet which has replication factor 2. Should not be evicted.
+	rsOwnerRef := test.GetReplicaSetOwnerRefList()
+	p15.ObjectMeta.OwnerReferences = rsOwnerRef
+	p16.ObjectMeta.OwnerReferences = rsOwnerRef
+
+	// Two Pods in the "default" Namespace in same node, bound to ReplicationController which has replication factor 2. Should not be evicted.
+	rcOwnerRef := test.GetReplicationControllerOwnerRefList()
+	p17.ObjectMeta.OwnerReferences = rcOwnerRef
+	p18.ObjectMeta.OwnerReferences = rcOwnerRef
 
 	testCases := []struct {
 		description             string
@@ -183,6 +197,20 @@ func TestFindDuplicatePods(t *testing.T) {
 			expectedEvictedPodCount: 0,
 			strategy:                api.DeschedulerStrategy{},
 		},
+		{
+			description:             "Pods managed by Replicaset having replicas greater than available nodes should not trigger an eviction",
+			maxPodsToEvict:          5,
+			pods:                    []v1.Pod{*p15, *p16},
+			expectedEvictedPodCount: 0,
+			strategy:                api.DeschedulerStrategy{},
+		},
+		{
+			description:             "Pods managed by ReplicationController having replicas greater than available nodes should not trigger an eviction",
+			maxPodsToEvict:          5,
+			pods:                    []v1.Pod{*p17, *p18},
+			expectedEvictedPodCount: 0,
+			strategy:                api.DeschedulerStrategy{},
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -193,6 +221,13 @@ func TestFindDuplicatePods(t *testing.T) {
 		fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 			return true, node, nil
 		})
+		// //TODO how to pass replicaas as int in reactor action
+		// fakeClient.Fake.AddReactor("get", "replicationcontrollers", func(action core.Action) (bool, runtime.Object, error) {
+		// 	return true, node, nil
+		// })
+		// fakeClient.Fake.AddReactor("get", "replicaset", func(action core.Action) (bool, runtime.Object, error) {
+		// 	return true, nil, nil
+		// })
 		podEvictor := evictions.NewPodEvictor(
 			fakeClient,
 			"v1",
