@@ -75,12 +75,11 @@ func TestListPodsOnANode(t *testing.T) {
 }
 
 func TestGetPodOwnerReplicaSetReplicaCount(t *testing.T) {
-	t.SkipNow()
 	pod := test.BuildTestPod("pod1", 100, 0, "n1", nil)
 	replicasetName := "replicaset-1"
 	expectedReplicaCount := 3
 
-	test.BuildTestReplicaSet(replicasetName, 3)
+	rs := test.BuildTestReplicaSet(replicasetName, 3)
 	ownerRef1 := test.GetReplicaSetOwnerRefList()
 	pod.ObjectMeta.OwnerReferences = ownerRef1
 
@@ -89,8 +88,7 @@ func TestGetPodOwnerReplicaSetReplicaCount(t *testing.T) {
 		name := action.(core.GetAction)
 		fieldString := name.GetName()
 		if strings.Contains(fieldString, replicasetName) {
-			// how to return RC as runtime.Object ? pod.DeepCopy is just a placeholder
-			return true, pod.DeepCopy(), nil
+			return true, rs.DeepCopy(), nil
 		}
 		return true, nil, fmt.Errorf("Failed to get replicaset: %v", replicasetName)
 	})
@@ -101,12 +99,11 @@ func TestGetPodOwnerReplicaSetReplicaCount(t *testing.T) {
 }
 
 func TestGetPodOwnerReplicationControllerReplicaCount(t *testing.T) {
-	t.SkipNow()
 	pod := test.BuildTestPod("pod1", 100, 0, "n1", nil)
 	rcOwnerName := "replicationcontroller-1"
 	expectedReplicaCount := 3
 
-	test.BuildTestReplicaSet(rcOwnerName, 3)
+	rc := test.BuildTestReplicaController(rcOwnerName, 3)
 	ownerRef1 := test.GetReplicationControllerOwnerRefList()
 	pod.ObjectMeta.OwnerReferences = ownerRef1
 
@@ -115,8 +112,7 @@ func TestGetPodOwnerReplicationControllerReplicaCount(t *testing.T) {
 		name := action.(core.GetAction)
 		fieldString := name.GetName()
 		if strings.Contains(fieldString, rcOwnerName) {
-			// how to return RC as runtime.Object ? pod.DeepCopy is just a placeholder
-			return true, pod.DeepCopy(), nil
+			return true, rc.DeepCopy(), nil
 		}
 		return true, nil, fmt.Errorf("Failed to get replication controller: %v", rcOwnerName)
 	})
