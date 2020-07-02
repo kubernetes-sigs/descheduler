@@ -74,6 +74,58 @@ func TestListPodsOnANode(t *testing.T) {
 	}
 }
 
+func TestGetPodOwnerReplicaSetReplicaCount(t *testing.T) {
+	t.SkipNow()
+	pod := test.BuildTestPod("pod1", 100, 0, "n1", nil)
+	replicasetName := "replicaset-1"
+	expectedReplicaCount := 3
+
+	test.BuildTestReplicaSet(replicasetName, 3)
+	ownerRef1 := test.GetReplicaSetOwnerRefList()
+	pod.ObjectMeta.OwnerReferences = ownerRef1
+
+	fakeClient := &fake.Clientset{}
+	fakeClient.Fake.AddReactor("get", "replicasets", func(action core.Action) (bool, runtime.Object, error) {
+		name := action.(core.GetAction)
+		fieldString := name.GetName()
+		if strings.Contains(fieldString, replicasetName) {
+			// how to return RC as runtime.Object ? pod.DeepCopy is just a placeholder
+			return true, pod.DeepCopy(), nil
+		}
+		return true, nil, fmt.Errorf("Failed to get replicaset: %v", replicasetName)
+	})
+	actualReplicas, _ := GetPodOwnerReplicationCount(context.TODO(), fakeClient, pod.OwnerReferences[0])
+	if actualReplicas != expectedReplicaCount {
+		t.Errorf("expected %v replicas for pod owner %v, got %+v", expectedReplicaCount, replicasetName, actualReplicas)
+	}
+}
+
+func TestGetPodOwnerReplicationControllerReplicaCount(t *testing.T) {
+	t.SkipNow()
+	pod := test.BuildTestPod("pod1", 100, 0, "n1", nil)
+	rcOwnerName := "replicationcontroller-1"
+	expectedReplicaCount := 3
+
+	test.BuildTestReplicaSet(rcOwnerName, 3)
+	ownerRef1 := test.GetReplicationControllerOwnerRefList()
+	pod.ObjectMeta.OwnerReferences = ownerRef1
+
+	fakeClient := &fake.Clientset{}
+	fakeClient.Fake.AddReactor("get", "replicationcontrollers", func(action core.Action) (bool, runtime.Object, error) {
+		name := action.(core.GetAction)
+		fieldString := name.GetName()
+		if strings.Contains(fieldString, rcOwnerName) {
+			// how to return RC as runtime.Object ? pod.DeepCopy is just a placeholder
+			return true, pod.DeepCopy(), nil
+		}
+		return true, nil, fmt.Errorf("Failed to get replication controller: %v", rcOwnerName)
+	})
+	actualReplicas, _ := GetPodOwnerReplicationCount(context.TODO(), fakeClient, pod.OwnerReferences[0])
+	if actualReplicas != expectedReplicaCount {
+		t.Errorf("expected %v replicas for pod owner %v, got %+v", expectedReplicaCount, rcOwnerName, actualReplicas)
+	}
+}
+
 func TestSortPodsBasedOnPriorityLowToHigh(t *testing.T) {
 	n1 := test.BuildTestNode("n1", 4000, 3000, 9, nil)
 

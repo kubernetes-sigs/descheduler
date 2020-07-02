@@ -53,6 +53,26 @@ func ListPodsOnANode(ctx context.Context, client clientset.Interface, node *v1.N
 	return pods, nil
 }
 
+// GetPodOwnerReplicationCount returns the owner's replica count of the pod based on the owner reference
+func GetPodOwnerReplicationCount(ctx context.Context, client clientset.Interface, ownerRef metav1.OwnerReference) (int, error) {
+	switch ownerRef.Kind {
+	case "ReplicaSet":
+		owner, err := client.AppsV1().ReplicaSets(v1.NamespaceAll).Get(ctx, ownerRef.Name, metav1.GetOptions{})
+		if err != nil {
+			return 0, err
+		}
+		return int(owner.Status.Replicas), nil
+	case "ReplicationController":
+		owner, err := client.CoreV1().ReplicationControllers(v1.NamespaceAll).Get(ctx, ownerRef.Name, metav1.GetOptions{})
+		if err != nil {
+			return 0, err
+		}
+		return int(owner.Status.Replicas), nil
+	default:
+		return 0, fmt.Errorf("pod owned by owner %s kind %s non managed", ownerRef.Name, ownerRef.Kind)
+	}
+}
+
 // OwnerRef returns the ownerRefList for the pod.
 func OwnerRef(pod *v1.Pod) []metav1.OwnerReference {
 	return pod.ObjectMeta.GetOwnerReferences()

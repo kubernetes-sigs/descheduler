@@ -19,6 +19,7 @@ package test
 import (
 	"fmt"
 
+	apps "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,10 +73,45 @@ func GetNormalPodOwnerRefList() []metav1.OwnerReference {
 	return ownerRefList
 }
 
+// BuildTestReplicaController creates a test replication controller
+func BuildTestReplicaController(name string, replicas int) *v1.ReplicationController {
+	rc := &v1.ReplicationController{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      name,
+		},
+		Status: v1.ReplicationControllerStatus{
+			Replicas: int32(replicas),
+		},
+	}
+	return rc
+}
+
+// BuildTestReplicaSet creates a test replica set
+func BuildTestReplicaSet(name string, replicas int) *apps.ReplicaSet {
+	rs := &apps.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      name,
+		},
+		Status: apps.ReplicaSetStatus{
+			Replicas: int32(replicas),
+		},
+	}
+	return rs
+}
+
 // GetReplicaSetOwnerRefList returns the ownerRef needed for replicaset pod.
 func GetReplicaSetOwnerRefList() []metav1.OwnerReference {
 	ownerRefList := make([]metav1.OwnerReference, 0)
 	ownerRefList = append(ownerRefList, metav1.OwnerReference{Kind: "ReplicaSet", APIVersion: "v1", Name: "replicaset-1"})
+	return ownerRefList
+}
+
+// GetReplicationControllerOwnerRefList returns the ownerRef needed for replicationcontroller pod.
+func GetReplicationControllerOwnerRefList() []metav1.OwnerReference {
+	ownerRefList := make([]metav1.OwnerReference, 0)
+	ownerRefList = append(ownerRefList, metav1.OwnerReference{Kind: "ReplicationController", APIVersion: "v1", Name: "replicationcontroller-1"})
 	return ownerRefList
 }
 
