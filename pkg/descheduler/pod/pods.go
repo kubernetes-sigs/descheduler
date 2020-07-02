@@ -20,11 +20,14 @@ import (
 	"context"
 	"sort"
 
+	"fmt"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/utils"
+	"sort"
 )
 
 type Options struct {
@@ -128,6 +131,28 @@ func ListPodsOnANode(
 		pods = append(pods, &podList.Items[i])
 	}
 	return pods, nil
+}
+
+// GetPodOwnerReplicationCount returns the pod owner's replica count
+func GetPodOwnerReplicationCount(ctx context.Context, client clientset.Interface, ownerRef metav1.OwnerReference) (int, error) {
+	switch ownerRef.Kind {
+	case "ReplicaSet":
+		owner, err := client.AppsV1().ReplicaSets(v1.NamespaceAll).Get(ctx, ownerRef.Name, metav1.GetOptions{})
+		if err != nil {
+			return 0, err
+		}
+		return int(owner.Status.Replicas), nil
+	case "ReplicationController":
+		owner, err := client.CoreV1().ReplicationControllers(v1.NamespaceAll).Get(ctx, ownerRef.Name, metav1.GetOptions{})
+		if err != nil {
+			return 0, err
+		}
+		return int(owner.Status.Replicas), nil
+	default:
+		klog.V(4).Infof("pod is non managed by RS or RC - owner name %s kind %s", ownerRef.Name, ownerRef.Kind)
+		// Returning default value as 1 as its a single pod non managed by a rc or rs
+		return 1, nil
+	}
 }
 
 // OwnerRef returns the ownerRefList for the pod.

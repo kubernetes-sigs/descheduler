@@ -18,9 +18,10 @@ package strategies
 
 import (
 	"context"
+	"strings"
 	"testing"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
@@ -35,6 +36,9 @@ func TestFindDuplicatePods(t *testing.T) {
 	ctx := context.Background()
 	// first setup pods
 	node := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	replicationController := test.BuildTestReplicaController("replicationcontroller-1", 2)
+	replicaSet := test.BuildTestReplicaSet("replicaset-1", 1)
+	dualReplicasRs := test.BuildTestReplicaSet("replicaset-2", 2)
 	p1 := test.BuildTestPod("p1", 100, 0, node.Name, nil)
 	p1.Namespace = "dev"
 	p2 := test.BuildTestPod("p2", 100, 0, node.Name, nil)
@@ -60,17 +64,21 @@ func TestFindDuplicatePods(t *testing.T) {
 	p13.Namespace = "different-images"
 	p14 := test.BuildTestPod("p14", 100, 0, node.Name, nil)
 	p14.Namespace = "different-images"
+	p15 := test.BuildTestPod("p15", 100, 0, node.Name, nil)
+	p16 := test.BuildTestPod("p16", 100, 0, node.Name, nil)
+	p17 := test.BuildTestPod("p17", 100, 0, node.Name, nil)
+	p18 := test.BuildTestPod("p18", 100, 0, node.Name, nil)
 
 	// ### Evictable Pods ###
 
 	// Three Pods in the "default" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	ownerRef1 := test.GetReplicaSetOwnerRefList()
+	ownerRef1 := test.GetReplicaSetOwnerRefList("replicaset-1")
 	p1.ObjectMeta.OwnerReferences = ownerRef1
 	p2.ObjectMeta.OwnerReferences = ownerRef1
 	p3.ObjectMeta.OwnerReferences = ownerRef1
 
 	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	ownerRef2 := test.GetReplicaSetOwnerRefList()
+	ownerRef2 := test.GetReplicaSetOwnerRefList("replicaset-1")
 	p8.ObjectMeta.OwnerReferences = ownerRef2
 	p9.ObjectMeta.OwnerReferences = ownerRef2
 	p10.ObjectMeta.OwnerReferences = ownerRef2
@@ -112,6 +120,16 @@ func TestFindDuplicatePods(t *testing.T) {
 		Name:  "foo",
 		Image: "foo",
 	})
+
+	// Two Pods in the "default" Namespace in same node, bound to ReplicaSet which has replication factor 2. Should not be evicted.
+	rsOwnerRef := test.GetReplicaSetOwnerRefList("replicaset-2")
+	p15.ObjectMeta.OwnerReferences = rsOwnerRef
+	p16.ObjectMeta.OwnerReferences = rsOwnerRef
+
+	// Two Pods in the "default" Namespace in same node, bound to ReplicationController which has replication factor 2. Should not be evicted.
+	rcOwnerRef := test.GetReplicationControllerOwnerRefList()
+	p17.ObjectMeta.OwnerReferences = rcOwnerRef
+	p18.ObjectMeta.OwnerReferences = rcOwnerRef
 
 	testCases := []struct {
 		description             string
@@ -183,6 +201,20 @@ func TestFindDuplicatePods(t *testing.T) {
 			expectedEvictedPodCount: 0,
 			strategy:                api.DeschedulerStrategy{},
 		},
+		{
+			description:             "Pods managed by Replicaset having 2 replicas greater than available nodes should not trigger an eviction",
+			maxPodsToEvict:          5,
+			pods:                    []v1.Pod{*p15, *p16},
+			expectedEvictedPodCount: 0,
+			strategy:                api.DeschedulerStrategy{},
+		},
+		{
+			description:             "Pods managed by ReplicationController having replicas greater than available nodes should not trigger an eviction",
+			maxPodsToEvict:          5,
+			pods:                    []v1.Pod{*p17, *p18},
+			expectedEvictedPodCount: 0,
+			strategy:                api.DeschedulerStrategy{},
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -192,6 +224,16 @@ func TestFindDuplicatePods(t *testing.T) {
 		})
 		fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 			return true, node, nil
+		})
+
+		fakeClient.Fake.AddReactor("get", "replicationcontrollers", func(action core.Action) (bool, runtime.Object, error) {
+			return true, replicationController, nil
+		})
+		fakeClient.Fake.AddReactor("get", "replicasets", func(action core.Action) (bool, runtime.Object, error) {
+			if strings.Contains(testCase.description, "managed by Replicaset having 2 replicas") {
+				return true, dualReplicasRs, nil
+			}
+			return true, replicaSet, nil
 		})
 		podEvictor := evictions.NewPodEvictor(
 			fakeClient,

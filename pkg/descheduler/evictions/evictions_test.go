@@ -100,7 +100,7 @@ func TestIsEvictable(t *testing.T) {
 		}, {
 			pod: test.BuildTestPod("p3", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
-				pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+				pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList("replicaset-1")
 			},
 			evictLocalStoragePods: false,
 			result:                true,
@@ -108,7 +108,7 @@ func TestIsEvictable(t *testing.T) {
 			pod: test.BuildTestPod("p4", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
-				pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+				pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList("replicaset-1")
 			},
 			evictLocalStoragePods: false,
 			result:                true,
@@ -267,7 +267,7 @@ func TestPodTypes(t *testing.T) {
 	p3 := test.BuildTestPod("p3", 400, 0, n1.Name, nil)
 	p4 := test.BuildTestPod("p4", 400, 0, n1.Name, nil)
 
-	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList("replicaset-1")
 	// The following 4 pods won't get evicted.
 	// A daemonset.
 	//p2.Annotations = test.GetDaemonSetAnnotation()
