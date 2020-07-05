@@ -18,13 +18,14 @@ package pod
 
 import (
 	"context"
-	"fmt"
+	"sort"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/utils"
-	"sort"
 )
 
 // ListPodsOnANode lists all of the pods on a node
@@ -70,7 +71,9 @@ func GetPodOwnerReplicationCount(ctx context.Context, client clientset.Interface
 		}
 		return int(owner.Status.Replicas), nil
 	default:
-		return 0, fmt.Errorf("pod owned by owner %s kind %s non managed", ownerRef.Name, ownerRef.Kind)
+		klog.Infof("pod is non managed by RS or RC - owner name %s kind %s", ownerRef.Name, ownerRef.Kind)
+		// Returning default value as 1 as its a single pod non managed by a rc or rs
+		return 1, nil
 	}
 }
 
