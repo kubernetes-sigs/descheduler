@@ -69,13 +69,28 @@ func RemoveDuplicatePods(
 		// If any of the existing lists for that first key matches the current pod's list, the current pod is a duplicate.
 		// If not, then we add this pod's list to the list of lists for that key.
 		duplicateKeysMap := map[string][][]string{}
+	PodLoop:
 		for _, pod := range pods {
 			ownerRefList := podutil.OwnerRef(pod)
 			if hasExcludedOwnerRefKind(ownerRefList, strategy) {
 				continue
 			}
-			if isOwnerReplMoreThanNodes(ownerRefList, ownerReplicationCounter, ctx, client, totalNodes) {
-				continue
+			for _, ownerRef := range pod.OwnerReferences {
+				var err error
+				replicaCount, ok := ownerReplicationCounter[ownerRef.Name]
+				if !ok {
+					replicaCount, err = podutil.GetPodOwnerReplicationCount(ctx, client, ownerRef)
+					if err != nil {
+						klog.Errorf("Error retreiving owner replica count %s", ownerRef.Name)
+						continue
+					}
+					ownerReplicationCounter[ownerRef.Name] = replicaCount
+				}
+				// If required replicas of the managing owner is greater than available nodes, pods will be duplicated
+				// and shouldnt not be considered for eviction
+				if replicaCount > totalNodes {
+					continue PodLoop
+				}
 			}
 
 			podContainerKeys := make([]string, 0, len(ownerRefList)*len(pod.Spec.Containers))
@@ -113,31 +128,6 @@ func RemoveDuplicatePods(
 			}
 		}
 	}
-}
-
-func isOwnerReplMoreThanNodes(ownerRefs []metav1.OwnerReference,
-	ownerReplicationCounter map[string]int,
-	ctx context.Context,
-	client clientset.Interface,
-	totalNodes int) bool {
-	for _, ownerRef := range ownerRefs {
-		var err error
-		replicaCount, ok := ownerReplicationCounter[ownerRef.Name]
-		if !ok {
-			replicaCount, err = podutil.GetPodOwnerReplicationCount(ctx, client, ownerRef)
-			if err != nil {
-				klog.Errorf("Error retrieving owner replica count %s", ownerRef.Name)
-				continue
-			}
-			ownerReplicationCounter[ownerRef.Name] = replicaCount
-		}
-		// If required replicas of the managing owner is greater than available nodes, pods will be duplicated
-		// and should not be considered for eviction
-		if replicaCount > totalNodes {
-			return true
-		}
-	}
-	return false
 }
 
 func hasExcludedOwnerRefKind(ownerRefs []metav1.OwnerReference, strategy api.DeschedulerStrategy) bool {
