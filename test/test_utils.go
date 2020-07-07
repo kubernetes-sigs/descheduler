@@ -102,9 +102,9 @@ func BuildTestReplicaSet(name string, replicas int) *apps.ReplicaSet {
 }
 
 // GetReplicaSetOwnerRefList returns the ownerRef needed for replicaset pod.
-func GetReplicaSetOwnerRefList() []metav1.OwnerReference {
+func GetReplicaSetOwnerRefList(rsName string) []metav1.OwnerReference {
 	ownerRefList := make([]metav1.OwnerReference, 0)
-	ownerRefList = append(ownerRefList, metav1.OwnerReference{Kind: "ReplicaSet", APIVersion: "v1", Name: "replicaset-1"})
+	ownerRefList = append(ownerRefList, metav1.OwnerReference{Kind: "ReplicaSet", APIVersion: "v1", Name: rsName})
 	return ownerRefList
 }
 
@@ -175,7 +175,7 @@ func MakeGuaranteedPod(pod *v1.Pod) {
 
 // SetRSOwnerRef sets the given pod's owner to ReplicaSet
 func SetRSOwnerRef(pod *v1.Pod) {
-	pod.ObjectMeta.OwnerReferences = GetReplicaSetOwnerRefList()
+	pod.ObjectMeta.OwnerReferences = GetReplicaSetOwnerRefList("replicaset-1")
 }
 
 // SetDSOwnerRef sets the given pod's owner to DaemonSet
