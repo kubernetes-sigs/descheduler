@@ -75,7 +75,9 @@ func RemoveDuplicatePods(
 			if hasExcludedOwnerRefKind(ownerRefList, strategy) {
 				continue
 			}
-			for _, ownerRef := range pod.OwnerReferences {
+
+			podContainerKeys := make([]string, 0, len(ownerRefList)*len(pod.Spec.Containers))
+			for _, ownerRef := range ownerRefList {
 				var err error
 				replicaCount, ok := ownerReplicationCounter[ownerRef.Name]
 				if !ok {
@@ -91,10 +93,6 @@ func RemoveDuplicatePods(
 				if replicaCount > totalNodes {
 					continue PodLoop
 				}
-			}
-
-			podContainerKeys := make([]string, 0, len(ownerRefList)*len(pod.Spec.Containers))
-			for _, ownerRef := range ownerRefList {
 				for _, container := range pod.Spec.Containers {
 					// Namespace/Kind/Name should be unique for the cluster.
 					// We also consider the image, as 2 pods could have the same owner but serve different purposes

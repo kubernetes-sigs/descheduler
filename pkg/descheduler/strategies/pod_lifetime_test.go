@@ -45,7 +45,7 @@ func TestPodLifeTime(t *testing.T) {
 	p2.Namespace = "dev"
 	p2.ObjectMeta.CreationTimestamp = olderPodCreationTime
 
-	ownerRef1 := test.GetReplicaSetOwnerRefList()
+	ownerRef1 := test.GetReplicaSetOwnerRefList("replicaset-1")
 	p1.ObjectMeta.OwnerReferences = ownerRef1
 	p2.ObjectMeta.OwnerReferences = ownerRef1
 
@@ -57,7 +57,7 @@ func TestPodLifeTime(t *testing.T) {
 	p4.Namespace = "dev"
 	p4.ObjectMeta.CreationTimestamp = newerPodCreationTime
 
-	ownerRef2 := test.GetReplicaSetOwnerRefList()
+	ownerRef2 := test.GetReplicaSetOwnerRefList("replicaset-1")
 	p3.ObjectMeta.OwnerReferences = ownerRef2
 	p4.ObjectMeta.OwnerReferences = ownerRef2
 
@@ -69,7 +69,7 @@ func TestPodLifeTime(t *testing.T) {
 	p6.Namespace = "dev"
 	p6.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(time.Second * 605))
 
-	ownerRef3 := test.GetReplicaSetOwnerRefList()
+	ownerRef3 := test.GetReplicaSetOwnerRefList("replicaset-1")
 	p5.ObjectMeta.OwnerReferences = ownerRef3
 	p6.ObjectMeta.OwnerReferences = ownerRef3
 
@@ -81,7 +81,7 @@ func TestPodLifeTime(t *testing.T) {
 	p8.Namespace = "dev"
 	p8.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(time.Second * 595))
 
-	ownerRef4 := test.GetReplicaSetOwnerRefList()
+	ownerRef4 := test.GetReplicaSetOwnerRefList("replicaset-1")
 	p5.ObjectMeta.OwnerReferences = ownerRef4
 	p6.ObjectMeta.OwnerReferences = ownerRef4
 

@@ -18,7 +18,6 @@ package strategies
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -37,8 +36,9 @@ func TestFindDuplicatePods(t *testing.T) {
 	ctx := context.Background()
 	// first setup pods
 	node := test.BuildTestNode("n1", 2000, 3000, 10, nil)
-	replicationController := test.BuildTestReplicaController("replicationcontroller-1", 3)
-	replicaSet := test.BuildTestReplicaSet("replicaset-1", 3)
+	replicationController := test.BuildTestReplicaController("replicationcontroller-1", 2)
+	replicaSet := test.BuildTestReplicaSet("replicaset-1", 1)
+	dualReplicasRs := test.BuildTestReplicaSet("replicaset-2", 2)
 	p1 := test.BuildTestPod("p1", 100, 0, node.Name, nil)
 	p1.Namespace = "dev"
 	p2 := test.BuildTestPod("p2", 100, 0, node.Name, nil)
@@ -72,13 +72,13 @@ func TestFindDuplicatePods(t *testing.T) {
 	// ### Evictable Pods ###
 
 	// Three Pods in the "default" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	ownerRef1 := test.GetReplicaSetOwnerRefList()
+	ownerRef1 := test.GetReplicaSetOwnerRefList("replicaset-1")
 	p1.ObjectMeta.OwnerReferences = ownerRef1
 	p2.ObjectMeta.OwnerReferences = ownerRef1
 	p3.ObjectMeta.OwnerReferences = ownerRef1
 
 	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	ownerRef2 := test.GetReplicaSetOwnerRefList()
+	ownerRef2 := test.GetReplicaSetOwnerRefList("replicaset-1")
 	p8.ObjectMeta.OwnerReferences = ownerRef2
 	p9.ObjectMeta.OwnerReferences = ownerRef2
 	p10.ObjectMeta.OwnerReferences = ownerRef2
@@ -122,7 +122,7 @@ func TestFindDuplicatePods(t *testing.T) {
 	})
 
 	// Two Pods in the "default" Namespace in same node, bound to ReplicaSet which has replication factor 2. Should not be evicted.
-	rsOwnerRef := test.GetReplicaSetOwnerRefList()
+	rsOwnerRef := test.GetReplicaSetOwnerRefList("replicaset-2")
 	p15.ObjectMeta.OwnerReferences = rsOwnerRef
 	p16.ObjectMeta.OwnerReferences = rsOwnerRef
 
@@ -202,7 +202,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			strategy:                api.DeschedulerStrategy{},
 		},
 		{
-			description:             "Pods managed by Replicaset having replicas greater than available nodes should not trigger an eviction",
+			description:             "Pods managed by Replicaset having 2 replicas greater than available nodes should not trigger an eviction",
 			maxPodsToEvict:          5,
 			pods:                    []v1.Pod{*p15, *p16},
 			expectedEvictedPodCount: 0,
@@ -230,10 +230,10 @@ func TestFindDuplicatePods(t *testing.T) {
 			return true, replicationController, nil
 		})
 		fakeClient.Fake.AddReactor("get", "replicasets", func(action core.Action) (bool, runtime.Object, error) {
-			if strings.Contains(testCase.description, "managed by Replicaset") {
-				return true, replicaSet, nil
+			if strings.Contains(testCase.description, "managed by Replicaset having 2 replicas") {
+				return true, dualReplicasRs, nil
 			}
-			return true, nil, fmt.Errorf("not managed by replicaset")
+			return true, replicaSet, nil
 		})
 		podEvictor := evictions.NewPodEvictor(
 			fakeClient,

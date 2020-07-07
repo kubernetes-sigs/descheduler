@@ -80,7 +80,7 @@ func TestGetPodOwnerReplicaSetReplicaCount(t *testing.T) {
 	expectedReplicaCount := 3
 
 	rs := test.BuildTestReplicaSet(replicasetName, 3)
-	ownerRef1 := test.GetReplicaSetOwnerRefList()
+	ownerRef1 := test.GetReplicaSetOwnerRefList("replicaset-1")
 	pod.ObjectMeta.OwnerReferences = ownerRef1
 
 	fakeClient := &fake.Clientset{}
