@@ -70,7 +70,7 @@ func GetPodOwnerReplicationCount(ctx context.Context, client clientset.Interface
 		}
 		return int(owner.Status.Replicas), nil
 	default:
-		klog.Infof("pod is non managed by RS or RC - owner name %s kind %s", ownerRef.Name, ownerRef.Kind)
+		klog.V(4).Infof("pod is non managed by RS or RC - owner name %s kind %s", ownerRef.Name, ownerRef.Kind)
 		// Returning default value as 1 as its a single pod non managed by a rc or rs
 		return 1, nil
 	}
