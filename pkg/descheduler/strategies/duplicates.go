@@ -83,7 +83,7 @@ func RemoveDuplicatePods(
 				if !ok {
 					replicaCount, err = podutil.GetPodOwnerReplicationCount(ctx, client, ownerRef)
 					if err != nil {
-						klog.Errorf("Error retreiving owner replica count %s", ownerRef.Name)
+						klog.Errorf("Error retreiving replica count for owner %s of %s pod in %s namespace", ownerRef.Name, pod.Name, pod.Namespace)
 						continue
 					}
 					ownerReplicationCounter[ownerRef.Name] = replicaCount
@@ -91,6 +91,7 @@ func RemoveDuplicatePods(
 				// If required replicas of the managing owner is greater than available nodes, pods will be duplicated
 				// and shouldnt not be considered for eviction
 				if replicaCount > totalNodes {
+					klog.V(4).Infof("Replication factor of %s pod's owner in namespace %s greater than available nodes. Pod won't be evicted", pod.Name, pod.Namespace)
 					continue PodLoop
 				}
 				for _, container := range pod.Spec.Containers {
