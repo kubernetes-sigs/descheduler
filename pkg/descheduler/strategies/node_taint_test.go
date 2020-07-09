@@ -102,7 +102,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		nodes                   []*v1.Node
 		pods                    []v1.Pod
 		evictLocalStoragePods   bool
-		maxPodsToEvict          int
+		maxPodsToEvictPerNode   int
 		expectedEvictedPodCount int
 	}{
 
@@ -111,7 +111,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p1, *p2, *p3},
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
-			maxPodsToEvict:          0,
+			maxPodsToEvictPerNode:   0,
 			expectedEvictedPodCount: 1, //p2 gets evicted
 		},
 		{
@@ -119,15 +119,15 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p1, *p3, *p4},
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
-			maxPodsToEvict:          0,
+			maxPodsToEvictPerNode:   0,
 			expectedEvictedPodCount: 1, //p4 gets evicted
 		},
 		{
-			description:             "Only <maxPodsToEvict> number of Pods not tolerating node taint should be evicted",
+			description:             "Only <maxPodsToEvictPerNode> number of Pods not tolerating node taint should be evicted",
 			pods:                    []v1.Pod{*p1, *p5, *p6},
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
-			maxPodsToEvict:          1,
+			maxPodsToEvictPerNode:   1,
 			expectedEvictedPodCount: 1, //p5 or p6 gets evicted
 		},
 		{
@@ -135,7 +135,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p7, *p8, *p9, *p10},
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   false,
-			maxPodsToEvict:          0,
+			maxPodsToEvictPerNode:   0,
 			expectedEvictedPodCount: 0,
 		},
 		{
@@ -143,7 +143,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p7, *p8, *p9, *p10},
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   true,
-			maxPodsToEvict:          0,
+			maxPodsToEvictPerNode:   0,
 			expectedEvictedPodCount: 1,
 		},
 		{
@@ -151,7 +151,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p7, *p8, *p10, *p11},
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   false,
-			maxPodsToEvict:          0,
+			maxPodsToEvictPerNode:   0,
 			expectedEvictedPodCount: 1,
 		},
 	}
@@ -168,7 +168,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			fakeClient,
 			"v1",
 			false,
-			tc.maxPodsToEvict,
+			tc.maxPodsToEvictPerNode,
 			tc.nodes,
 			tc.evictLocalStoragePods,
 		)

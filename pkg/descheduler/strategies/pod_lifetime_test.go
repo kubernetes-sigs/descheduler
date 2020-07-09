@@ -89,7 +89,7 @@ func TestPodLifeTime(t *testing.T) {
 	testCases := []struct {
 		description             string
 		strategy                api.DeschedulerStrategy
-		maxPodsToEvict          int
+		maxPodsToEvictPerNode   int
 		pods                    []v1.Pod
 		expectedEvictedPodCount int
 	}{
@@ -101,7 +101,7 @@ func TestPodLifeTime(t *testing.T) {
 					MaxPodLifeTimeSeconds: &maxLifeTime,
 				},
 			},
-			maxPodsToEvict:          5,
+			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p1, *p2},
 			expectedEvictedPodCount: 1,
 		},
@@ -113,7 +113,7 @@ func TestPodLifeTime(t *testing.T) {
 					MaxPodLifeTimeSeconds: &maxLifeTime,
 				},
 			},
-			maxPodsToEvict:          5,
+			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p3, *p4},
 			expectedEvictedPodCount: 0,
 		},
@@ -125,7 +125,7 @@ func TestPodLifeTime(t *testing.T) {
 					MaxPodLifeTimeSeconds: &maxLifeTime,
 				},
 			},
-			maxPodsToEvict:          5,
+			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p5, *p6},
 			expectedEvictedPodCount: 1,
 		},
@@ -137,7 +137,7 @@ func TestPodLifeTime(t *testing.T) {
 					MaxPodLifeTimeSeconds: &maxLifeTime,
 				},
 			},
-			maxPodsToEvict:          5,
+			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p7, *p8},
 			expectedEvictedPodCount: 0,
 		},
@@ -155,7 +155,7 @@ func TestPodLifeTime(t *testing.T) {
 			fakeClient,
 			"v1",
 			false,
-			tc.maxPodsToEvict,
+			tc.maxPodsToEvictPerNode,
 			[]*v1.Node{node},
 			false,
 		)

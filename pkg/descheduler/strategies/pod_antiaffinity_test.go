@@ -67,25 +67,25 @@ func TestPodAntiAffinity(t *testing.T) {
 
 	tests := []struct {
 		description             string
-		maxPodsToEvict          int
+		maxPodsToEvictPerNode   int
 		pods                    []v1.Pod
 		expectedEvictedPodCount int
 	}{
 		{
 			description:             "Maximum pods to evict - 0",
-			maxPodsToEvict:          0,
+			maxPodsToEvictPerNode:   0,
 			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
 			expectedEvictedPodCount: 3,
 		},
 		{
 			description:             "Maximum pods to evict - 3",
-			maxPodsToEvict:          3,
+			maxPodsToEvictPerNode:   3,
 			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
 			expectedEvictedPodCount: 3,
 		},
 		{
 			description:             "Evict only 1 pod after sorting",
-			maxPodsToEvict:          0,
+			maxPodsToEvictPerNode:   0,
 			pods:                    []v1.Pod{*p5, *p6, *p7},
 			expectedEvictedPodCount: 1,
 		},
@@ -105,7 +105,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			fakeClient,
 			"v1",
 			false,
-			test.maxPodsToEvict,
+			test.maxPodsToEvictPerNode,
 			[]*v1.Node{node},
 			false,
 		)

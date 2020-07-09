@@ -48,7 +48,7 @@ type PodEvictor struct {
 	client                clientset.Interface
 	policyGroupVersion    string
 	dryRun                bool
-	maxPodsToEvict        int
+	maxPodsToEvictPerNode int
 	nodepodCount          nodePodEvictedCount
 	evictLocalStoragePods bool
 }
@@ -57,7 +57,7 @@ func NewPodEvictor(
 	client clientset.Interface,
 	policyGroupVersion string,
 	dryRun bool,
-	maxPodsToEvict int,
+	maxPodsToEvictPerNode int,
 	nodes []*v1.Node,
 	evictLocalStoragePods bool,
 ) *PodEvictor {
@@ -71,7 +71,7 @@ func NewPodEvictor(
 		client:                client,
 		policyGroupVersion:    policyGroupVersion,
 		dryRun:                dryRun,
-		maxPodsToEvict:        maxPodsToEvict,
+		maxPodsToEvictPerNode: maxPodsToEvictPerNode,
 		nodepodCount:          nodePodCount,
 		evictLocalStoragePods: evictLocalStoragePods,
 	}
@@ -123,15 +123,15 @@ func (pe *PodEvictor) TotalEvicted() int {
 }
 
 // EvictPod returns non-nil error only when evicting a pod on a node is not
-// possible (due to maxPodsToEvict constraint). Success is true when the pod
+// possible (due to maxPodsToEvictPerNode constraint). Success is true when the pod
 // is evicted on the server side.
 func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, reasons ...string) (bool, error) {
 	var reason string
 	if len(reasons) > 0 {
 		reason = " (" + strings.Join(reasons, ", ") + ")"
 	}
-	if pe.maxPodsToEvict > 0 && pe.nodepodCount[node]+1 > pe.maxPodsToEvict {
-		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", pe.maxPodsToEvict, node.Name)
+	if pe.maxPodsToEvictPerNode > 0 && pe.nodepodCount[node]+1 > pe.maxPodsToEvictPerNode {
+		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", pe.maxPodsToEvictPerNode, node.Name)
 	}
 
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, pe.dryRun)
