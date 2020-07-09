@@ -86,11 +86,15 @@ func RemoveDuplicatePods(
 
 			// If there have been any other pods with the same first "key", look through all the lists to see if any match
 			if existing, ok := duplicateKeysMap[podContainerKeys[0]]; ok {
+				matched := false
 				for _, keys := range existing {
 					if reflect.DeepEqual(keys, podContainerKeys) {
+						matched = true
 						duplicatePods = append(duplicatePods, pod)
 						break
 					}
+				}
+				if !matched {
 					// Found no matches, add this list of keys to the list of lists that have the same first key
 					duplicateKeysMap[podContainerKeys[0]] = append(duplicateKeysMap[podContainerKeys[0]], podContainerKeys)
 				}
