@@ -93,7 +93,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		pods                    []v1.Pod
 		strategy                api.DeschedulerStrategy
 		expectedEvictedPodCount int
-		maxPodsToEvict          int
+		maxPodsToEvictPerNode   int
 	}{
 		{
 			description: "Invalid strategy type, should not evict any pods",
@@ -108,7 +108,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			expectedEvictedPodCount: 0,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			maxPodsToEvict:          0,
+			maxPodsToEvictPerNode:   0,
 		},
 		{
 			description:             "Pod is correctly scheduled on node, no eviction expected",
@@ -116,7 +116,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			expectedEvictedPodCount: 0,
 			pods:                    addPodsToNode(nodeWithLabels),
 			nodes:                   []*v1.Node{nodeWithLabels},
-			maxPodsToEvict:          0,
+			maxPodsToEvictPerNode:   0,
 		},
 		{
 			description:             "Pod is scheduled on node without matching labels, another schedulable node available, should be evicted",
@@ -124,15 +124,15 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			maxPodsToEvict:          0,
+			maxPodsToEvictPerNode:   0,
 		},
 		{
-			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvict set to 1, should not be evicted",
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvictPerNode set to 1, should not be evicted",
 			expectedEvictedPodCount: 1,
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			maxPodsToEvict:          1,
+			maxPodsToEvictPerNode:   1,
 		},
 		{
 			description:             "Pod is scheduled on node without matching labels, but no node where pod fits is available, should not evict",
@@ -140,7 +140,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, unschedulableNodeWithLabels},
-			maxPodsToEvict:          0,
+			maxPodsToEvictPerNode:   0,
 		},
 	}
 
@@ -155,7 +155,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			fakeClient,
 			"v1",
 			false,
-			tc.maxPodsToEvict,
+			tc.maxPodsToEvictPerNode,
 			tc.nodes,
 			false,
 		)
