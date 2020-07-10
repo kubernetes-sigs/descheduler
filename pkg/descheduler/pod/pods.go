@@ -18,12 +18,13 @@ package pod
 
 import (
 	"context"
+	"sort"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	clientset "k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/descheduler/pkg/utils"
-	"sort"
 )
 
 // ListPodsOnANode lists all of the pods on a node
@@ -31,7 +32,12 @@ import (
 // (Usually this is podEvictor.IsEvictable, in order to only list the evictable pods on a node, but can
 // be used by strategies to extend IsEvictable if there are further restrictions, such as with NodeAffinity).
 // The filter function should return true if the pod should be returned from ListPodsOnANode
-func ListPodsOnANode(ctx context.Context, client clientset.Interface, node *v1.Node, filter func(pod *v1.Pod) bool) ([]*v1.Pod, error) {
+func ListPodsOnANode(
+	ctx context.Context,
+	client clientset.Interface,
+	node *v1.Node,
+	filter func(pod *v1.Pod) bool,
+) ([]*v1.Pod, error) {
 	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + node.Name + ",status.phase!=" + string(v1.PodSucceeded) + ",status.phase!=" + string(v1.PodFailed))
 	if err != nil {
 		return []*v1.Pod{}, err
