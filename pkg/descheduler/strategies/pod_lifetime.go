@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	v1meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,16 +30,30 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
+func validatePodLifeTimeParams(params *api.StrategyParameters) error {
+	if params == nil || params.MaxPodLifeTimeSeconds == nil {
+		return fmt.Errorf("MaxPodLifeTimeSeconds not set")
+	}
+
+	// At most one of include/exclude can be set
+	if len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
+		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+	}
+
+	return nil
+}
+
 // PodLifeTime evicts pods on nodes that were created more than strategy.Params.MaxPodLifeTimeSeconds seconds ago.
 func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
-	if strategy.Params == nil || strategy.Params.MaxPodLifeTimeSeconds == nil {
-		klog.V(1).Infof("MaxPodLifeTimeSeconds not set")
+	if err := validatePodLifeTimeParams(strategy.Params); err != nil {
+		klog.V(1).Info(err)
 		return
 	}
 
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v", node.Name)
-		pods := listOldPodsOnNode(ctx, client, node, *strategy.Params.MaxPodLifeTimeSeconds, podEvictor)
+
+		pods := listOldPodsOnNode(ctx, client, node, strategy.Params, podEvictor)
 		for _, pod := range pods {
 			success, err := podEvictor.EvictPod(ctx, pod, node, "PodLifeTime")
 			if success {
@@ -50,11 +65,19 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 				break
 			}
 		}
+
 	}
 }
 
-func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, maxAge uint, evictor *evictions.PodEvictor) []*v1.Pod {
-	pods, err := podutil.ListPodsOnANode(ctx, client, node, podutil.WithFilter(evictor.IsEvictable))
+func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, params *api.StrategyParameters, evictor *evictions.PodEvictor) []*v1.Pod {
+	pods, err := podutil.ListPodsOnANode(
+		ctx,
+		client,
+		node,
+		podutil.WithFilter(evictor.IsEvictable),
+		podutil.WithNamespaces(params.Namespaces.Include),
+		podutil.WithoutNamespaces(params.Namespaces.Exclude),
+	)
 	if err != nil {
 		return nil
 	}
@@ -62,7 +85,7 @@ func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1
 	var oldPods []*v1.Pod
 	for _, pod := range pods {
 		podAgeSeconds := uint(v1meta.Now().Sub(pod.GetCreationTimestamp().Local()).Seconds())
-		if podAgeSeconds > maxAge {
+		if podAgeSeconds > *params.MaxPodLifeTimeSeconds {
 			oldPods = append(oldPods, pod)
 		}
 	}

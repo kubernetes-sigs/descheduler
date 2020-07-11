@@ -44,13 +44,23 @@ type DeschedulerStrategy struct {
 	Params *StrategyParameters
 }
 
-// Only one of its members may be specified
+// Namespaces carries a list of included/excluded namespaces
+// for which a given strategy is applicable
+type Namespaces struct {
+	Include []string
+	Exclude []string
+}
+
+// Besides Namespaces only one of its members may be specified
+// TODO(jchaloup): move Namespaces to individual strategies once the policy
+// version is bumped to v1alpha2
 type StrategyParameters struct {
 	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds
 	NodeAffinityType                  []string
 	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts
 	MaxPodLifeTimeSeconds             *uint
 	RemoveDuplicates                  *RemoveDuplicates
+	Namespaces                        Namespaces
 }
 
 type Percentage float64
