@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -33,7 +34,7 @@ import (
 func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
-		pods, err := podutil.ListPodsOnANode(ctx, client, node, podEvictor.IsEvictable)
+		pods, err := podutil.ListPodsOnANode(ctx, client, node, podutil.WithFilter(podEvictor.IsEvictable))
 		if err != nil {
 			return
 		}

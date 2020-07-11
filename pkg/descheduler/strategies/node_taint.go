@@ -33,7 +33,7 @@ import (
 func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
-		pods, err := podutil.ListPodsOnANode(ctx, client, node, podEvictor.IsEvictable)
+		pods, err := podutil.ListPodsOnANode(ctx, client, node, podutil.WithFilter(podEvictor.IsEvictable))
 		if err != nil {
 			//no pods evicted as error encountered retrieving evictable Pods
 			return

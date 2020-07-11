@@ -38,7 +38,7 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 	}
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %s", node.Name)
-		pods, err := podutil.ListPodsOnANode(ctx, client, node, podEvictor.IsEvictable)
+		pods, err := podutil.ListPodsOnANode(ctx, client, node, podutil.WithFilter(podEvictor.IsEvictable))
 		if err != nil {
 			klog.Errorf("Error when list pods at node %s", node.Name)
 			continue
