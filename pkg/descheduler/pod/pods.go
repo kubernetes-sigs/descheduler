@@ -28,7 +28,9 @@ import (
 )
 
 type Options struct {
-	filter func(pod *v1.Pod) bool
+	filter             func(pod *v1.Pod) bool
+	includedNamespaces []string
+	excludedNamespaces []string
 }
 
 // WithFilter sets a pod filter.
@@ -36,6 +38,20 @@ type Options struct {
 func WithFilter(filter func(pod *v1.Pod) bool) func(opts *Options) {
 	return func(opts *Options) {
 		opts.filter = filter
+	}
+}
+
+// WithNamespaces sets included namespaces
+func WithNamespaces(namespaces []string) func(opts *Options) {
+	return func(opts *Options) {
+		opts.includedNamespaces = namespaces
+	}
+}
+
+// WithoutNamespaces sets excluded namespaces
+func WithoutNamespaces(namespaces []string) func(opts *Options) {
+	return func(opts *Options) {
+		opts.excludedNamespaces = namespaces
 	}
 }
 
@@ -54,18 +70,52 @@ func ListPodsOnANode(
 		opt(options)
 	}
 
-	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + node.Name + ",status.phase!=" + string(v1.PodSucceeded) + ",status.phase!=" + string(v1.PodFailed))
+	pods := make([]*v1.Pod, 0)
+
+	fieldSelectorString := "spec.nodeName=" + node.Name + ",status.phase!=" + string(v1.PodSucceeded) + ",status.phase!=" + string(v1.PodFailed)
+
+	if len(options.includedNamespaces) > 0 {
+		fieldSelector, err := fields.ParseSelector(fieldSelectorString)
+		if err != nil {
+			return []*v1.Pod{}, err
+		}
+
+		for _, namespace := range options.includedNamespaces {
+			podList, err := client.CoreV1().Pods(namespace).List(ctx,
+				metav1.ListOptions{FieldSelector: fieldSelector.String()})
+			if err != nil {
+				return []*v1.Pod{}, err
+			}
+			for i := range podList.Items {
+				if options.filter != nil && !options.filter(&podList.Items[i]) {
+					continue
+				}
+				pods = append(pods, &podList.Items[i])
+			}
+		}
+		return pods, nil
+	}
+
+	if len(options.excludedNamespaces) > 0 {
+		for _, namespace := range options.excludedNamespaces {
+			fieldSelectorString += ",metadata.namespace!=" + namespace
+		}
+	}
+
+	fieldSelector, err := fields.ParseSelector(fieldSelectorString)
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
 
+	// INFO(jchaloup): field selectors do not work properly with listers
+	// Once the descheduler switcheds to pod listers (through informers),
+	// We need to flip to client-side filtering.
 	podList, err := client.CoreV1().Pods(v1.NamespaceAll).List(ctx,
 		metav1.ListOptions{FieldSelector: fieldSelector.String()})
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
 
-	pods := make([]*v1.Pod, 0)
 	for i := range podList.Items {
 		if options.filter != nil && !options.filter(&podList.Items[i]) {
 			continue
