@@ -54,7 +54,7 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 }
 
 func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, maxAge uint, evictor *evictions.PodEvictor) []*v1.Pod {
-	pods, err := podutil.ListPodsOnANode(ctx, client, node, evictor.IsEvictable)
+	pods, err := podutil.ListPodsOnANode(ctx, client, node, podutil.WithFilter(evictor.IsEvictable))
 	if err != nil {
 		return nil
 	}

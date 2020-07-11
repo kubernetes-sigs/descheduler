@@ -324,7 +324,7 @@ func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface,
 			continue
 		}
 		// List all the pods on the current Node
-		podsOnANode, err := podutil.ListPodsOnANode(ctx, clientSet, node, podEvictor.IsEvictable)
+		podsOnANode, err := podutil.ListPodsOnANode(ctx, clientSet, node, podutil.WithFilter(podEvictor.IsEvictable))
 		if err != nil {
 			t.Errorf("Error listing pods on a node %v", err)
 		}
@@ -336,7 +336,7 @@ func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface,
 	}
 	t.Log("Eviction of pods starting")
 	startEndToEndForLowNodeUtilization(ctx, clientSet, nodeInformer, podEvictor)
-	podsOnleastUtilizedNode, err := podutil.ListPodsOnANode(ctx, clientSet, leastLoadedNode, podEvictor.IsEvictable)
+	podsOnleastUtilizedNode, err := podutil.ListPodsOnANode(ctx, clientSet, leastLoadedNode, podutil.WithFilter(podEvictor.IsEvictable))
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}

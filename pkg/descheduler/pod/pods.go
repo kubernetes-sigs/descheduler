@@ -27,17 +27,33 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+type Options struct {
+	filter func(pod *v1.Pod) bool
+}
+
+// WithFilter sets a pod filter.
+// The filter function should return true if the pod should be returned from ListPodsOnANode
+func WithFilter(filter func(pod *v1.Pod) bool) func(opts *Options) {
+	return func(opts *Options) {
+		opts.filter = filter
+	}
+}
+
 // ListPodsOnANode lists all of the pods on a node
 // It also accepts an optional "filter" function which can be used to further limit the pods that are returned.
 // (Usually this is podEvictor.IsEvictable, in order to only list the evictable pods on a node, but can
 // be used by strategies to extend IsEvictable if there are further restrictions, such as with NodeAffinity).
-// The filter function should return true if the pod should be returned from ListPodsOnANode
 func ListPodsOnANode(
 	ctx context.Context,
 	client clientset.Interface,
 	node *v1.Node,
-	filter func(pod *v1.Pod) bool,
+	opts ...func(opts *Options),
 ) ([]*v1.Pod, error) {
+	options := &Options{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + node.Name + ",status.phase!=" + string(v1.PodSucceeded) + ",status.phase!=" + string(v1.PodFailed))
 	if err != nil {
 		return []*v1.Pod{}, err
@@ -51,7 +67,7 @@ func ListPodsOnANode(
 
 	pods := make([]*v1.Pod, 0)
 	for i := range podList.Items {
-		if filter != nil && !filter(&podList.Items[i]) {
+		if options.filter != nil && !options.filter(&podList.Items[i]) {
 			continue
 		}
 		pods = append(pods, &podList.Items[i])

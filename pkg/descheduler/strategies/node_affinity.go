@@ -43,11 +43,11 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 			for _, node := range nodes {
 				klog.V(1).Infof("Processing node: %#v\n", node.Name)
 
-				pods, err := podutil.ListPodsOnANode(ctx, client, node, func(pod *v1.Pod) bool {
+				pods, err := podutil.ListPodsOnANode(ctx, client, node, podutil.WithFilter(func(pod *v1.Pod) bool {
 					return podEvictor.IsEvictable(pod) &&
 						!nodeutil.PodFitsCurrentNode(pod, node) &&
 						nodeutil.PodFitsAnyNode(pod, nodes)
-				})
+				}))
 				if err != nil {
 					klog.Errorf("failed to get pods from %v: %v", node.Name, err)
 				}
