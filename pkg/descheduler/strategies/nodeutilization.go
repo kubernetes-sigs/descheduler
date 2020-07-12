@@ -62,7 +62,7 @@ func validateStrategyConfig(thresholds, targetThresholds api.ResourceThresholds)
 	if len(thresholds) != len(targetThresholds) {
 		return fmt.Errorf("thresholds and targetThresholds configured different resources")
 	}
-	
+
 	return nil
 }
 
@@ -172,13 +172,13 @@ func sortNodesByUsage(nodes []NodeUsageMap, descending bool) {
 		}
 		if descending {
 			return ti > tj
-		} 
+		}
 		return ti < tj
 	})
 }
 
 func computeDesiredNodeResourcesAndTaints(desiredNodes []NodeUsageMap,
-	thresholds api.ResourceThresholds) (float64,float64,float64, map[string][]v1.Taint){
+	thresholds api.ResourceThresholds) (float64, float64, float64, map[string][]v1.Taint) {
 	var totalPods, totalCPU, totalMem float64
 	var taintsOfDesiredNodes = make(map[string][]v1.Taint, len(desiredNodes))
 	for _, node := range desiredNodes {

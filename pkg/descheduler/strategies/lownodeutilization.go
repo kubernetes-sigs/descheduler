@@ -47,7 +47,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		klog.Errorf("LowNodeUtilization config is not valid: %v", err)
 		return
 	}
-	
+
 	setMaxValuesForMissingThresholds(thresholds, targetThresholds)
 
 	npm := createNodePodsMap(ctx, client, nodes)
@@ -118,7 +118,7 @@ func classifyNodesForLowUtilization(npm NodePodsMap, thresholds api.ResourceThre
 
 // evictPodsFromTargetNodes evicts pods based on priority, if all the pods on the node have priority, if not
 // evicts them based on QoS as fallback option.
-func evictPodsFromHighUsageTargetNodes(
+func evictPodsFromLowUsageTargetNodes(
 	ctx context.Context,
 	targetNodes, desiredNodes []NodeUsageMap,
 	targetThresholds api.ResourceThresholds,
@@ -150,13 +150,13 @@ func evictPodsFromHighUsageTargetNodes(
 		klog.V(1).Infof("evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
-		evictPodsFromHighUsageNode(ctx, removablePods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfDesiredNodes, podEvictor, node.node)
+		evictPodsFromLowUsageNode(ctx, removablePods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfDesiredNodes, podEvictor, node.node)
 
 		klog.V(1).Infof("%v pods evicted from node %#v with usage %v", podEvictor.NodeEvicted(node.node), node.node.Name, node.usage)
 	}
 }
 
-func evictPodsFromHighUsageNode(
+func evictPodsFromLowUsageNode(
 	ctx context.Context,
 	inputPods []*v1.Pod,
 	targetThresholds api.ResourceThresholds,
@@ -210,7 +210,7 @@ func evictPodsFromHighUsageNode(
 	}
 }
 
-func validateLowNodeUtilizationStrategyConfig(thresholds, targetThresholds api.ResourceThresholds) error{
+func validateLowNodeUtilizationStrategyConfig(thresholds, targetThresholds api.ResourceThresholds) error {
 	if err := validateStrategyConfig(thresholds, targetThresholds); err != nil {
 		return err
 	}
