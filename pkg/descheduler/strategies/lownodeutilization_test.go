@@ -109,7 +109,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -167,7 +167,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -225,7 +225,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 2100, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 2100, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -303,7 +303,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -378,7 +378,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -554,7 +554,7 @@ func TestValidateStrategyConfig(t *testing.T) {
 	}
 
 	for _, testCase := range tests {
-		validateErr := validateStrategyConfig(testCase.thresholds, testCase.targetThresholds)
+		validateErr := validateLowNodeUtilizationStrategyConfig(testCase.thresholds, testCase.targetThresholds)
 
 		if validateErr == nil || testCase.errInfo == nil {
 			if validateErr != testCase.errInfo {
