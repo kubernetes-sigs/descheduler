@@ -19,6 +19,7 @@ package e2e
 import (
 	"context"
 	"math"
+	"os"
 	"testing"
 	"time"
 
@@ -144,10 +145,11 @@ func TestE2E(t *testing.T) {
 	// If we have reached here, it means cluster would have been already setup and the kubeconfig file should
 	// be in /tmp directory as admin.conf.
 	ctx := context.Background()
-	clientSet, err := client.CreateClient("/tmp/admin.conf")
+	clientSet, err := client.CreateClient(os.Getenv("KUBECONFIG"))
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
 	}
+
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Error listing node with %v", err)
@@ -194,7 +196,7 @@ func TestE2E(t *testing.T) {
 
 func TestDeschedulingInterval(t *testing.T) {
 	ctx := context.Background()
-	clientSet, err := client.CreateClient("/tmp/admin.conf")
+	clientSet, err := client.CreateClient(os.Getenv("KUBECONFIG"))
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
 	}
