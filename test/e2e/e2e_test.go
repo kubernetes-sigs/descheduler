@@ -68,7 +68,6 @@ func MakePodSpec() v1.PodSpec {
 
 // RcByNameContainer returns a ReplicationControoler with specified name and container
 func RcByNameContainer(name string, replicas int32, labels map[string]string, gracePeriod *int64) *v1.ReplicationController {
-
 	zeroGracePeriod := int64(0)
 
 	// Add "name": name to the labels, overwriting if it exists.
@@ -100,46 +99,37 @@ func RcByNameContainer(name string, replicas int32, labels map[string]string, gr
 }
 
 // startEndToEndForLowNodeUtilization tests the lownode utilization strategy.
-func startEndToEndForLowNodeUtilization(ctx context.Context, clientset clientset.Interface, nodeInformer coreinformers.NodeInformer) {
-	var thresholds = make(deschedulerapi.ResourceThresholds)
-	var targetThresholds = make(deschedulerapi.ResourceThresholds)
-	thresholds[v1.ResourceMemory] = 20
-	thresholds[v1.ResourcePods] = 20
-	thresholds[v1.ResourceCPU] = 85
-	targetThresholds[v1.ResourceMemory] = 20
-	targetThresholds[v1.ResourcePods] = 20
-	targetThresholds[v1.ResourceCPU] = 90
+func startEndToEndForLowNodeUtilization(ctx context.Context, clientset clientset.Interface, nodeInformer coreinformers.NodeInformer, podEvictor *evictions.PodEvictor) {
 	// Run descheduler.
-	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientset)
-	if err != nil || len(evictionPolicyGroupVersion) == 0 {
-		klog.Fatalf("%v", err)
-	}
-	stopChannel := make(chan struct{})
-	nodes, err := nodeutil.ReadyNodes(ctx, clientset, nodeInformer, "", stopChannel)
+	nodes, err := nodeutil.ReadyNodes(ctx, clientset, nodeInformer, "", nil)
 	if err != nil {
 		klog.Fatalf("%v", err)
 	}
 
-	lowNodeUtilizationStrategy := deschedulerapi.DeschedulerStrategy{
-		Enabled: true,
-		Params: &deschedulerapi.StrategyParameters{
-			NodeResourceUtilizationThresholds: &deschedulerapi.NodeResourceUtilizationThresholds{
-				Thresholds:       thresholds,
-				TargetThresholds: targetThresholds,
+	strategies.LowNodeUtilization(
+		ctx,
+		clientset,
+		deschedulerapi.DeschedulerStrategy{
+			Enabled: true,
+			Params: &deschedulerapi.StrategyParameters{
+				NodeResourceUtilizationThresholds: &deschedulerapi.NodeResourceUtilizationThresholds{
+					Thresholds: deschedulerapi.ResourceThresholds{
+						v1.ResourceMemory: 20,
+						v1.ResourcePods:   20,
+						v1.ResourceCPU:    85,
+					},
+					TargetThresholds: deschedulerapi.ResourceThresholds{
+						v1.ResourceMemory: 20,
+						v1.ResourcePods:   20,
+						v1.ResourceCPU:    90,
+					},
+				},
 			},
 		},
-	}
-
-	podEvictor := evictions.NewPodEvictor(
-		clientset,
-		evictionPolicyGroupVersion,
-		false,
-		0,
 		nodes,
-		false,
+		podEvictor,
 	)
 
-	strategies.LowNodeUtilization(ctx, clientset, lowNodeUtilizationStrategy, nodes, podEvictor)
 	time.Sleep(10 * time.Second)
 }
 
@@ -332,7 +322,7 @@ func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface,
 		}
 	}
 	t.Log("Eviction of pods starting")
-	startEndToEndForLowNodeUtilization(ctx, clientSet, nodeInformer)
+	startEndToEndForLowNodeUtilization(ctx, clientSet, nodeInformer, podEvictor)
 	podsOnleastUtilizedNode, err := podutil.ListPodsOnANode(ctx, clientSet, leastLoadedNode, podEvictor.IsEvictable)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
