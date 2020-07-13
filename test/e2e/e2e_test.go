@@ -20,12 +20,14 @@ import (
 	"context"
 	"math"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -175,6 +177,7 @@ func TestE2E(t *testing.T) {
 		t.Errorf("Error creating deployment %v", err)
 	}
 	evictPods(ctx, t, clientSet, nodeInformer, nodes, rc)
+	deleteRC(ctx, t, clientSet, rc)
 
 	rc.Spec.Template.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 	rc.Spec.Replicas = func(i int32) *int32 { return &i }(15)
@@ -192,6 +195,7 @@ func TestE2E(t *testing.T) {
 		t.Errorf("Error creating deployment %v", err)
 	}
 	evictPods(ctx, t, clientSet, nodeInformer, nodes, rc)
+	deleteRC(ctx, t, clientSet, rc)
 }
 
 func TestDeschedulingInterval(t *testing.T) {
@@ -226,6 +230,43 @@ func TestDeschedulingInterval(t *testing.T) {
 		// successfully returned
 	case <-time.After(3 * time.Minute):
 		t.Errorf("descheduler.Run timed out even without descheduling-interval set")
+	}
+}
+
+func deleteRC(ctx context.Context, t *testing.T, clientSet clientset.Interface, rc *v1.ReplicationController) {
+	//set number of replicas to 0
+	rcdeepcopy := rc.DeepCopy()
+	rcdeepcopy.Spec.Replicas = func(i int32) *int32 { return &i }(0)
+	if _, err := clientSet.CoreV1().ReplicationControllers(rcdeepcopy.Namespace).Update(ctx, rcdeepcopy, metav1.UpdateOptions{}); err != nil {
+		t.Fatalf("Error updating replica controller %v", err)
+	}
+	allPodsDeleted := false
+	//wait 30 seconds until all pods are deleted
+	for i := 0; i < 6; i++ {
+		scale, _ := clientSet.CoreV1().ReplicationControllers(rc.Namespace).GetScale(ctx, rc.Name, metav1.GetOptions{})
+		if scale.Spec.Replicas == 0 {
+			allPodsDeleted = true
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	if !allPodsDeleted {
+		t.Errorf("Deleting of rc pods took too long")
+	}
+
+	if err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Delete(ctx, rc.Name, metav1.DeleteOptions{}); err != nil {
+		t.Fatalf("Error deleting rc %v", err)
+	}
+
+	if err := wait.PollImmediate(time.Second, 10*time.Second, func() (bool, error) {
+		_, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Get(ctx, rc.Name, metav1.GetOptions{})
+		if err != nil && strings.Contains(err.Error(), "not found") {
+			return true, nil
+		}
+		return false, nil
+	}); err != nil {
+		t.Fatalf("Error deleting rc %v", err)
 	}
 }
 
@@ -270,33 +311,4 @@ func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface,
 	if podsBefore > podsAfter {
 		t.Fatalf("We should have see more pods on this node as per kubeadm's way of installing %v, %v", podsBefore, podsAfter)
 	}
-
-	//set number of replicas to 0
-	rc.Spec.Replicas = func(i int32) *int32 { return &i }(0)
-	_, err = clientSet.CoreV1().ReplicationControllers("default").Update(ctx, rc, metav1.UpdateOptions{})
-	if err != nil {
-		t.Errorf("Error updating replica controller %v", err)
-	}
-	allPodsDeleted := false
-	//wait 30 seconds until all pods are deleted
-	for i := 0; i < 6; i++ {
-		scale, _ := clientSet.CoreV1().ReplicationControllers("default").GetScale(ctx, rc.Name, metav1.GetOptions{})
-		if scale.Spec.Replicas == 0 {
-			allPodsDeleted = true
-			break
-		}
-		time.Sleep(5 * time.Second)
-	}
-
-	if !allPodsDeleted {
-		t.Errorf("Deleting of rc pods took too long")
-	}
-
-	err = clientSet.CoreV1().ReplicationControllers("default").Delete(ctx, rc.Name, metav1.DeleteOptions{})
-	if err != nil {
-		t.Errorf("Error deleting rc %v", err)
-	}
-
-	//wait until rc is deleted
-	time.Sleep(5 * time.Second)
 }
