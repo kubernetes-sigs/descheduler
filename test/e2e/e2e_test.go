@@ -143,44 +143,73 @@ func startEndToEndForLowNodeUtilization(ctx context.Context, clientset clientset
 	time.Sleep(10 * time.Second)
 }
 
-func TestE2E(t *testing.T) {
-	// If we have reached here, it means cluster would have been already setup and the kubeconfig file should
-	// be in /tmp directory as admin.conf.
+func TestLowNodeUtilization(t *testing.T) {
 	ctx := context.Background()
+
 	clientSet, err := client.CreateClient(os.Getenv("KUBECONFIG"))
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
 	}
 
+	stopChannel := make(chan struct{}, 0)
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(clientSet, 0)
+	sharedInformerFactory.Start(stopChannel)
+	sharedInformerFactory.WaitForCacheSync(stopChannel)
+	defer close(stopChannel)
+
+	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
+
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Error listing node with %v", err)
 	}
+
 	var nodes []*v1.Node
 	for i := range nodeList.Items {
 		node := nodeList.Items[i]
 		nodes = append(nodes, &node)
 	}
-	sharedInformerFactory := informers.NewSharedInformerFactory(clientSet, 0)
-	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
+
+	rc := RcByNameContainer("test-rc-node-utilization", int32(15), map[string]string{"test": "node-utilization"}, nil)
+	if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, rc, metav1.CreateOptions{}); err != nil {
+		t.Errorf("Error creating deployment %v", err)
+	}
+
+	evictPods(ctx, t, clientSet, nodeInformer, nodes, rc)
+	deleteRC(ctx, t, clientSet, rc)
+}
+
+func TestEvictAnnotation(t *testing.T) {
+	ctx := context.Background()
+
+	clientSet, err := client.CreateClient(os.Getenv("KUBECONFIG"))
+	if err != nil {
+		t.Errorf("Error during client creation with %v", err)
+	}
 
 	stopChannel := make(chan struct{}, 0)
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(clientSet, 0)
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 	defer close(stopChannel)
 
-	// Assumption: We would have 3 node cluster by now. Kubeadm brings all the master components onto master node.
-	// So, the last node would have least utilization.
-	rc := RcByNameContainer("test-rc", int32(15), map[string]string{"test": "app"}, nil)
-	_, err = clientSet.CoreV1().ReplicationControllers("default").Create(ctx, rc, metav1.CreateOptions{})
-	if err != nil {
-		t.Errorf("Error creating deployment %v", err)
-	}
-	evictPods(ctx, t, clientSet, nodeInformer, nodes, rc)
-	deleteRC(ctx, t, clientSet, rc)
+	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
 
+	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Errorf("Error listing node with %v", err)
+	}
+
+	var nodes []*v1.Node
+	for i := range nodeList.Items {
+		node := nodeList.Items[i]
+		nodes = append(nodes, &node)
+	}
+
+	rc := RcByNameContainer("test-rc-evict-annotation", int32(15), map[string]string{"test": "annotation"}, nil)
 	rc.Spec.Template.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
-	rc.Spec.Replicas = func(i int32) *int32 { return &i }(15)
 	rc.Spec.Template.Spec.Volumes = []v1.Volume{
 		{
 			Name: "sample",
@@ -190,10 +219,11 @@ func TestE2E(t *testing.T) {
 			},
 		},
 	}
-	_, err = clientSet.CoreV1().ReplicationControllers("default").Create(ctx, rc, metav1.CreateOptions{})
-	if err != nil {
+
+	if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, rc, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
+
 	evictPods(ctx, t, clientSet, nodeInformer, nodes, rc)
 	deleteRC(ctx, t, clientSet, rc)
 }
