@@ -22,15 +22,13 @@ import (
 	"strings"
 	"testing"
 
-	"reflect"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/policy/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
@@ -45,30 +43,6 @@ var (
 	highPriority = int32(10000)
 )
 
-func setRSOwnerRef(pod *v1.Pod)          { pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList() }
-func setDSOwnerRef(pod *v1.Pod)          { pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList() }
-func setNormalOwnerRef(pod *v1.Pod)      { pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList() }
-func setHighPriority(pod *v1.Pod)        { pod.Spec.Priority = &highPriority }
-func setLowPriority(pod *v1.Pod)         { pod.Spec.Priority = &lowPriority }
-func setNodeUnschedulable(node *v1.Node) { node.Spec.Unschedulable = true }
-
-func makeBestEffortPod(pod *v1.Pod) {
-	pod.Spec.Containers[0].Resources.Requests = nil
-	pod.Spec.Containers[0].Resources.Requests = nil
-	pod.Spec.Containers[0].Resources.Limits = nil
-	pod.Spec.Containers[0].Resources.Limits = nil
-}
-
-func makeBurstablePod(pod *v1.Pod) {
-	pod.Spec.Containers[0].Resources.Limits = nil
-	pod.Spec.Containers[0].Resources.Limits = nil
-}
-
-func makeGuaranteedPod(pod *v1.Pod) {
-	pod.Spec.Containers[0].Resources.Limits[v1.ResourceCPU] = pod.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]
-	pod.Spec.Containers[0].Resources.Limits[v1.ResourceMemory] = pod.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]
-}
-
 func TestLowNodeUtilization(t *testing.T) {
 	ctx := context.Background()
 	n1NodeName := "n1"
@@ -80,11 +54,9 @@ func TestLowNodeUtilization(t *testing.T) {
 		thresholds, targetThresholds api.ResourceThresholds
 		nodes                        map[string]*v1.Node
 		pods                         map[string]*v1.PodList
-		// TODO: divide expectedPodsEvicted into two params like other tests
-		// expectedPodsEvicted should be the result num of pods that this testCase expected but now it represents both
-		// MaxNoOfPodsToEvictPerNode and the test's expected result
-		expectedPodsEvicted int
-		evictedPods         []string
+		maxPodsToEvictPerNode        int
+		expectedPodsEvicted          int
+		evictedPods                  []string
 	}{
 		{
 			name: "no evictable pods",
@@ -99,19 +71,19 @@ func TestLowNodeUtilization(t *testing.T) {
 			nodes: map[string]*v1.Node{
 				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
 				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
-				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, setNodeUnschedulable),
+				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
 			},
 			pods: map[string]*v1.PodList{
 				n1NodeName: {
 					Items: []v1.Pod{
 						// These won't be evicted.
-						*test.BuildTestPod("p1", 400, 0, n1NodeName, setDSOwnerRef),
-						*test.BuildTestPod("p2", 400, 0, n1NodeName, setDSOwnerRef),
-						*test.BuildTestPod("p3", 400, 0, n1NodeName, setDSOwnerRef),
-						*test.BuildTestPod("p4", 400, 0, n1NodeName, setDSOwnerRef),
+						*test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetDSOwnerRef),
+						*test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetDSOwnerRef),
+						*test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetDSOwnerRef),
+						*test.BuildTestPod("p4", 400, 0, n1NodeName, test.SetDSOwnerRef),
 						*test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
 							// A pod with local storage.
-							setNormalOwnerRef(pod)
+							test.SetNormalOwnerRef(pod)
 							pod.Spec.Volumes = []v1.Volume{
 								{
 									Name: "sample",
@@ -135,12 +107,13 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, setRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
 			},
-			expectedPodsEvicted: 0,
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   0,
 		},
 		{
 			name: "without priorities",
@@ -155,21 +128,21 @@ func TestLowNodeUtilization(t *testing.T) {
 			nodes: map[string]*v1.Node{
 				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
 				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
-				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, setNodeUnschedulable),
+				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
 			},
 			pods: map[string]*v1.PodList{
 				n1NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p1", 400, 0, n1NodeName, setRSOwnerRef),
-						*test.BuildTestPod("p2", 400, 0, n1NodeName, setRSOwnerRef),
-						*test.BuildTestPod("p3", 400, 0, n1NodeName, setRSOwnerRef),
-						*test.BuildTestPod("p4", 400, 0, n1NodeName, setRSOwnerRef),
-						*test.BuildTestPod("p5", 400, 0, n1NodeName, setRSOwnerRef),
+						*test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p4", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p5", 400, 0, n1NodeName, test.SetRSOwnerRef),
 						// These won't be evicted.
-						*test.BuildTestPod("p6", 400, 0, n1NodeName, setDSOwnerRef),
+						*test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
 						*test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 							// A pod with local storage.
-							setNormalOwnerRef(pod)
+							test.SetNormalOwnerRef(pod)
 							pod.Spec.Volumes = []v1.Volume{
 								{
 									Name: "sample",
@@ -193,12 +166,13 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, setRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
 			},
-			expectedPodsEvicted: 3,
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   4,
 		},
 		{
 			name: "without priorities stop when cpu capacity is depleted",
@@ -213,21 +187,21 @@ func TestLowNodeUtilization(t *testing.T) {
 			nodes: map[string]*v1.Node{
 				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
 				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
-				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, setNodeUnschedulable),
+				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
 			},
 			pods: map[string]*v1.PodList{
 				n1NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p1", 400, 300, n1NodeName, setRSOwnerRef),
-						*test.BuildTestPod("p2", 400, 300, n1NodeName, setRSOwnerRef),
-						*test.BuildTestPod("p3", 400, 300, n1NodeName, setRSOwnerRef),
-						*test.BuildTestPod("p4", 400, 300, n1NodeName, setRSOwnerRef),
-						*test.BuildTestPod("p5", 400, 300, n1NodeName, setRSOwnerRef),
+						*test.BuildTestPod("p1", 400, 300, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p2", 400, 300, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p3", 400, 300, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p4", 400, 300, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p5", 400, 300, n1NodeName, test.SetRSOwnerRef),
 						// These won't be evicted.
-						*test.BuildTestPod("p6", 400, 300, n1NodeName, setDSOwnerRef),
+						*test.BuildTestPod("p6", 400, 300, n1NodeName, test.SetDSOwnerRef),
 						*test.BuildTestPod("p7", 400, 300, n1NodeName, func(pod *v1.Pod) {
 							// A pod with local storage.
-							setNormalOwnerRef(pod)
+							test.SetNormalOwnerRef(pod)
 							pod.Spec.Volumes = []v1.Volume{
 								{
 									Name: "sample",
@@ -251,11 +225,12 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 2100, n1NodeName, setRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 2100, n1NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
 			},
+			maxPodsToEvictPerNode: 0,
 			// 4 pods available for eviction based on v1.ResourcePods, only 3 pods can be evicted before cpu is depleted
 			expectedPodsEvicted: 3,
 		},
@@ -272,40 +247,40 @@ func TestLowNodeUtilization(t *testing.T) {
 			nodes: map[string]*v1.Node{
 				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
 				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
-				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, setNodeUnschedulable),
+				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
 			},
 			pods: map[string]*v1.PodList{
 				n1NodeName: {
 					Items: []v1.Pod{
 						*test.BuildTestPod("p1", 400, 0, n1NodeName, func(pod *v1.Pod) {
-							setRSOwnerRef(pod)
-							setHighPriority(pod)
+							test.SetRSOwnerRef(pod)
+							test.SetPodPriority(pod, highPriority)
 						}),
 						*test.BuildTestPod("p2", 400, 0, n1NodeName, func(pod *v1.Pod) {
-							setRSOwnerRef(pod)
-							setHighPriority(pod)
+							test.SetRSOwnerRef(pod)
+							test.SetPodPriority(pod, highPriority)
 						}),
 						*test.BuildTestPod("p3", 400, 0, n1NodeName, func(pod *v1.Pod) {
-							setRSOwnerRef(pod)
-							setHighPriority(pod)
+							test.SetRSOwnerRef(pod)
+							test.SetPodPriority(pod, highPriority)
 						}),
 						*test.BuildTestPod("p4", 400, 0, n1NodeName, func(pod *v1.Pod) {
-							setRSOwnerRef(pod)
-							setHighPriority(pod)
+							test.SetRSOwnerRef(pod)
+							test.SetPodPriority(pod, highPriority)
 						}),
 						*test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
-							setRSOwnerRef(pod)
-							setLowPriority(pod)
+							test.SetRSOwnerRef(pod)
+							test.SetPodPriority(pod, lowPriority)
 						}),
 						// These won't be evicted.
 						*test.BuildTestPod("p6", 400, 0, n1NodeName, func(pod *v1.Pod) {
-							setDSOwnerRef(pod)
-							setHighPriority(pod)
+							test.SetDSOwnerRef(pod)
+							test.SetPodPriority(pod, highPriority)
 						}),
 						*test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 							// A pod with local storage.
-							setNormalOwnerRef(pod)
-							setLowPriority(pod)
+							test.SetNormalOwnerRef(pod)
+							test.SetPodPriority(pod, lowPriority)
 							pod.Spec.Volumes = []v1.Volume{
 								{
 									Name: "sample",
@@ -329,12 +304,13 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, setRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
 			},
-			expectedPodsEvicted: 3,
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   4,
 		},
 		{
 			name: "without priorities evicting best-effort pods only",
@@ -349,38 +325,38 @@ func TestLowNodeUtilization(t *testing.T) {
 			nodes: map[string]*v1.Node{
 				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
 				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
-				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, setNodeUnschedulable),
+				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
 			},
 			// All pods are assumed to be burstable (test.BuildTestNode always sets both cpu/memory resource requests to some value)
 			pods: map[string]*v1.PodList{
 				n1NodeName: {
 					Items: []v1.Pod{
 						*test.BuildTestPod("p1", 400, 0, n1NodeName, func(pod *v1.Pod) {
-							setRSOwnerRef(pod)
-							makeBestEffortPod(pod)
+							test.SetRSOwnerRef(pod)
+							test.MakeBestEffortPod(pod)
 						}),
 						*test.BuildTestPod("p2", 400, 0, n1NodeName, func(pod *v1.Pod) {
-							setRSOwnerRef(pod)
-							makeBestEffortPod(pod)
+							test.SetRSOwnerRef(pod)
+							test.MakeBestEffortPod(pod)
 						}),
 						*test.BuildTestPod("p3", 400, 0, n1NodeName, func(pod *v1.Pod) {
-							setRSOwnerRef(pod)
+							test.SetRSOwnerRef(pod)
 						}),
 						*test.BuildTestPod("p4", 400, 0, n1NodeName, func(pod *v1.Pod) {
-							setRSOwnerRef(pod)
-							makeBestEffortPod(pod)
+							test.SetRSOwnerRef(pod)
+							test.MakeBestEffortPod(pod)
 						}),
 						*test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
-							setRSOwnerRef(pod)
-							makeBestEffortPod(pod)
+							test.SetRSOwnerRef(pod)
+							test.MakeBestEffortPod(pod)
 						}),
 						// These won't be evicted.
 						*test.BuildTestPod("p6", 400, 0, n1NodeName, func(pod *v1.Pod) {
-							setDSOwnerRef(pod)
+							test.SetDSOwnerRef(pod)
 						}),
 						*test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 							// A pod with local storage.
-							setNormalOwnerRef(pod)
+							test.SetNormalOwnerRef(pod)
 							pod.Spec.Volumes = []v1.Volume{
 								{
 									Name: "sample",
@@ -404,13 +380,14 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, setRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
 			},
-			expectedPodsEvicted: 4,
-			evictedPods:         []string{"p1", "p2", "p4", "p5"},
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   4,
+			evictedPods:           []string{"p1", "p2", "p4", "p5"},
 		},
 	}
 
@@ -468,7 +445,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				fakeClient,
 				"v1",
 				false,
-				test.expectedPodsEvicted,
+				test.maxPodsToEvictPerNode,
 				nodes,
 				false,
 			)
@@ -492,44 +469,6 @@ func TestLowNodeUtilization(t *testing.T) {
 				t.Errorf("Pod evictions failed unexpectedly")
 			}
 		})
-	}
-}
-
-func TestSortPodsByPriority(t *testing.T) {
-	n1 := test.BuildTestNode("n1", 4000, 3000, 9, nil)
-
-	p1 := test.BuildTestPod("p1", 400, 0, n1.Name, setLowPriority)
-
-	// BestEffort
-	p2 := test.BuildTestPod("p2", 400, 0, n1.Name, func(pod *v1.Pod) {
-		setHighPriority(pod)
-		makeBestEffortPod(pod)
-	})
-
-	// Burstable
-	p3 := test.BuildTestPod("p3", 400, 0, n1.Name, func(pod *v1.Pod) {
-		setHighPriority(pod)
-		makeBurstablePod(pod)
-	})
-
-	// Guaranteed
-	p4 := test.BuildTestPod("p4", 400, 100, n1.Name, func(pod *v1.Pod) {
-		setHighPriority(pod)
-		makeGuaranteedPod(pod)
-	})
-
-	// Best effort with nil priorities.
-	p5 := test.BuildTestPod("p5", 400, 100, n1.Name, makeBestEffortPod)
-	p5.Spec.Priority = nil
-
-	p6 := test.BuildTestPod("p6", 400, 100, n1.Name, makeGuaranteedPod)
-	p6.Spec.Priority = nil
-
-	podList := []*v1.Pod{p4, p3, p2, p1, p6, p5}
-
-	sortPodsBasedOnPriority(podList)
-	if !reflect.DeepEqual(podList[len(podList)-1], p4) {
-		t.Errorf("Expected last pod in sorted list to be %v which of highest priority and guaranteed but got %v", p4, podList[len(podList)-1])
 	}
 }
 
@@ -783,7 +722,7 @@ func TestWithTaints(t *testing.T) {
 		},
 	}
 
-	podThatToleratesTaint := test.BuildTestPod("tolerate_pod", 200, 0, n1.Name, setRSOwnerRef)
+	podThatToleratesTaint := test.BuildTestPod("tolerate_pod", 200, 0, n1.Name, test.SetRSOwnerRef)
 	podThatToleratesTaint.Spec.Tolerations = []v1.Toleration{
 		{
 			Key:   "key",
@@ -802,16 +741,16 @@ func TestWithTaints(t *testing.T) {
 			nodes: []*v1.Node{n1, n2, n3},
 			pods: []*v1.Pod{
 				//Node 1 pods
-				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_8_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_8_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
 				// Node 2 pods
-				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n2.Name), 200, 0, n2.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n2.Name), 200, 0, n2.Name, test.SetRSOwnerRef),
 			},
 			evictionsExpected: 1,
 		},
@@ -820,16 +759,16 @@ func TestWithTaints(t *testing.T) {
 			nodes: []*v1.Node{n1, n3withTaints},
 			pods: []*v1.Pod{
 				//Node 1 pods
-				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_8_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_8_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
 				// Node 3 pods
-				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n3withTaints.Name), 200, 0, n3withTaints.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n3withTaints.Name), 200, 0, n3withTaints.Name, test.SetRSOwnerRef),
 			},
 			evictionsExpected: 0,
 		},
@@ -838,16 +777,16 @@ func TestWithTaints(t *testing.T) {
 			nodes: []*v1.Node{n1, n3withTaints},
 			pods: []*v1.Pod{
 				//Node 1 pods
-				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
-				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
 				podThatToleratesTaint,
 				// Node 3 pods
-				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n3withTaints.Name), 200, 0, n3withTaints.Name, setRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n3withTaints.Name), 200, 0, n3withTaints.Name, test.SetRSOwnerRef),
 			},
 			evictionsExpected: 1,
 		},

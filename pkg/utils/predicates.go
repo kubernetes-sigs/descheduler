@@ -22,7 +22,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 // The following code has been copied from predicates package to avoid the

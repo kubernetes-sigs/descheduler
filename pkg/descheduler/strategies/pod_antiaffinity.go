@@ -26,7 +26,7 @@ import (
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 // RemovePodsViolatingInterPodAntiAffinity evicts pods on the node which are having a pod affinity rules.
@@ -37,6 +37,8 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 		if err != nil {
 			return
 		}
+		// sort the evictable Pods based on priority, if there are multiple pods with same priority, they are sorted based on QoS tiers.
+		podutil.SortPodsBasedOnPriorityLowToHigh(pods)
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
 			if checkPodsWithAntiAffinityExist(pods[i], pods) {

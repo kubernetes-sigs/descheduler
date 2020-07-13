@@ -19,6 +19,7 @@ package pod
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -27,6 +28,11 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/test"
+)
+
+var (
+	lowPriority  = int32(0)
+	highPriority = int32(10000)
 )
 
 func TestListPodsOnANode(t *testing.T) {
@@ -65,5 +71,45 @@ func TestListPodsOnANode(t *testing.T) {
 		if len(pods) != testCase.expectedPodCount {
 			t.Errorf("expected %v pods on node %v, got %+v", testCase.expectedPodCount, testCase.node.Name, len(pods))
 		}
+	}
+}
+
+func TestSortPodsBasedOnPriorityLowToHigh(t *testing.T) {
+	n1 := test.BuildTestNode("n1", 4000, 3000, 9, nil)
+
+	p1 := test.BuildTestPod("p1", 400, 0, n1.Name, func(pod *v1.Pod) {
+		test.SetPodPriority(pod, lowPriority)
+	})
+
+	// BestEffort
+	p2 := test.BuildTestPod("p2", 400, 0, n1.Name, func(pod *v1.Pod) {
+		test.SetPodPriority(pod, highPriority)
+		test.MakeBestEffortPod(pod)
+	})
+
+	// Burstable
+	p3 := test.BuildTestPod("p3", 400, 0, n1.Name, func(pod *v1.Pod) {
+		test.SetPodPriority(pod, highPriority)
+		test.MakeBurstablePod(pod)
+	})
+
+	// Guaranteed
+	p4 := test.BuildTestPod("p4", 400, 100, n1.Name, func(pod *v1.Pod) {
+		test.SetPodPriority(pod, highPriority)
+		test.MakeGuaranteedPod(pod)
+	})
+
+	// Best effort with nil priorities.
+	p5 := test.BuildTestPod("p5", 400, 100, n1.Name, test.MakeBestEffortPod)
+	p5.Spec.Priority = nil
+
+	p6 := test.BuildTestPod("p6", 400, 100, n1.Name, test.MakeGuaranteedPod)
+	p6.Spec.Priority = nil
+
+	podList := []*v1.Pod{p4, p3, p2, p1, p6, p5}
+
+	SortPodsBasedOnPriorityLowToHigh(podList)
+	if !reflect.DeepEqual(podList[len(podList)-1], p4) {
+		t.Errorf("Expected last pod in sorted list to be %v which of highest priority and guaranteed but got %v", p4, podList[len(podList)-1])
 	}
 }
