@@ -24,7 +24,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -232,35 +232,19 @@ func evictPodsFromTargetNodes(
 		}
 		klog.V(3).Infof("evicting pods from node %#v with usage: %#v", node.node.Name, node.usage)
 
-		nonRemovablePods, bestEffortPods, burstablePods, guaranteedPods := classifyPods(node.allPods, podEvictor)
-		klog.V(2).Infof("allPods:%v, nonRemovablePods:%v, bestEffortPods:%v, burstablePods:%v, guaranteedPods:%v", len(node.allPods), len(nonRemovablePods), len(bestEffortPods), len(burstablePods), len(guaranteedPods))
+		nonRemovablePods, removablePods := classifyPods(node.allPods, podEvictor)
+		klog.V(2).Infof("allPods:%v, nonRemovablePods:%v, removablePods:%v", len(node.allPods), len(nonRemovablePods), len(removablePods))
 
-		if len(node.allPods) == len(nonRemovablePods) {
-			klog.V(1).Infof("all pods nonRemovable on node %#v, try next node", node.node.Name)
+		if len(removablePods) == 0 {
+			klog.V(1).Infof("no removable pods on node %#v, try next node", node.node.Name)
 			continue
 		}
 
-		// Check if one pod has priority, if yes, assume that all pods have priority and evict pods based on priority.
-		if node.allPods[0].Spec.Priority != nil {
-			klog.V(1).Infof("All pods have priority associated with them. Evicting pods based on priority")
-			evictablePods := make([]*v1.Pod, 0)
-			evictablePods = append(append(burstablePods, bestEffortPods...), guaranteedPods...)
+		klog.V(1).Infof("evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
+		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
+		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
+		evictPods(ctx, removablePods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
 
-			// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
-			sortPodsBasedOnPriority(evictablePods)
-			evictPods(ctx, evictablePods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
-		} else {
-			// TODO: Remove this when we support only priority.
-			//  Falling back to evicting pods based on priority.
-			klog.V(1).Infof("Evicting pods based on QoS")
-			klog.V(1).Infof("There are %v non-evictable pods on the node", len(nonRemovablePods))
-			// evict best effort pods
-			evictPods(ctx, bestEffortPods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
-			// evict burstable pods
-			evictPods(ctx, burstablePods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
-			// evict guaranteed pods
-			evictPods(ctx, guaranteedPods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
-		}
 		klog.V(1).Infof("%v pods evicted from node %#v with usage %v", podEvictor.NodeEvicted(node.node), node.node.Name, node.usage)
 	}
 }
@@ -338,28 +322,6 @@ func sortNodesByUsage(nodes []NodeUsageMap) {
 	})
 }
 
-// sortPodsBasedOnPriority sorts pods based on priority and if their priorities are equal, they are sorted based on QoS tiers.
-func sortPodsBasedOnPriority(evictablePods []*v1.Pod) {
-	sort.Slice(evictablePods, func(i, j int) bool {
-		if evictablePods[i].Spec.Priority == nil && evictablePods[j].Spec.Priority != nil {
-			return true
-		}
-		if evictablePods[j].Spec.Priority == nil && evictablePods[i].Spec.Priority != nil {
-			return false
-		}
-		if (evictablePods[j].Spec.Priority == nil && evictablePods[i].Spec.Priority == nil) || (*evictablePods[i].Spec.Priority == *evictablePods[j].Spec.Priority) {
-			if podutil.IsBestEffortPod(evictablePods[i]) {
-				return true
-			}
-			if podutil.IsBurstablePod(evictablePods[i]) && podutil.IsGuaranteedPod(evictablePods[j]) {
-				return true
-			}
-			return false
-		}
-		return *evictablePods[i].Spec.Priority < *evictablePods[j].Spec.Priority
-	})
-}
-
 // createNodePodsMap returns nodepodsmap with evictable pods on node.
 func createNodePodsMap(ctx context.Context, client clientset.Interface, nodes []*v1.Node) NodePodsMap {
 	npm := NodePodsMap{}
@@ -431,34 +393,16 @@ func nodeUtilization(node *v1.Node, pods []*v1.Pod) api.ResourceThresholds {
 	}
 }
 
-func classifyPods(pods []*v1.Pod, evictor *evictions.PodEvictor) ([]*v1.Pod, []*v1.Pod, []*v1.Pod, []*v1.Pod) {
-	var nonRemovablePods, bestEffortPods, burstablePods, guaranteedPods []*v1.Pod
-
-	// From https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/
-	//
-	// For a Pod to be given a QoS class of Guaranteed:
-	// - every Container in the Pod must have a memory limit and a memory request, and they must be the same.
-	// - every Container in the Pod must have a CPU limit and a CPU request, and they must be the same.
-	// A Pod is given a QoS class of Burstable if:
-	// - the Pod does not meet the criteria for QoS class Guaranteed.
-	// - at least one Container in the Pod has a memory or CPU request.
-	// For a Pod to be given a QoS class of BestEffort, the Containers in the Pod must not have any memory or CPU limits or requests.
+func classifyPods(pods []*v1.Pod, evictor *evictions.PodEvictor) ([]*v1.Pod, []*v1.Pod) {
+	var nonRemovablePods, removablePods []*v1.Pod
 
 	for _, pod := range pods {
 		if !evictor.IsEvictable(pod) {
 			nonRemovablePods = append(nonRemovablePods, pod)
-			continue
-		}
-
-		switch utils.GetPodQOS(pod) {
-		case v1.PodQOSGuaranteed:
-			guaranteedPods = append(guaranteedPods, pod)
-		case v1.PodQOSBurstable:
-			burstablePods = append(burstablePods, pod)
-		default: // alias v1.PodQOSBestEffort
-			bestEffortPods = append(bestEffortPods, pod)
+		} else {
+			removablePods = append(removablePods, pod)
 		}
 	}
 
-	return nonRemovablePods, bestEffortPods, burstablePods, guaranteedPods
+	return nonRemovablePods, removablePods
 }

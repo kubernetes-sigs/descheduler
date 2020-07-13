@@ -115,70 +115,70 @@ func TestFindDuplicatePods(t *testing.T) {
 
 	testCases := []struct {
 		description             string
-		maxPodsToEvict          int
+		maxPodsToEvictPerNode   int
 		pods                    []v1.Pod
 		expectedEvictedPodCount int
 		strategy                api.DeschedulerStrategy
 	}{
 		{
 			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet. 2 should be evicted.",
-			maxPodsToEvict:          5,
+			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p1, *p2, *p3},
 			expectedEvictedPodCount: 2,
 			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet, but ReplicaSet kind is excluded. 0 should be evicted.",
-			maxPodsToEvict:          5,
+			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p1, *p2, *p3},
 			expectedEvictedPodCount: 0,
 			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{RemoveDuplicates: &api.RemoveDuplicates{ExcludeOwnerKinds: []string{"ReplicaSet"}}}},
 		},
 		{
 			description:             "Three Pods in the `test` Namespace, bound to same ReplicaSet. 2 should be evicted.",
-			maxPodsToEvict:          5,
+			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p8, *p9, *p10},
 			expectedEvictedPodCount: 2,
 			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Three Pods in the `dev` Namespace, three Pods in the `test` Namespace. Bound to ReplicaSet with same name. 4 should be evicted.",
-			maxPodsToEvict:          5,
+			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p1, *p2, *p3, *p8, *p9, *p10},
 			expectedEvictedPodCount: 4,
 			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Pods are: part of DaemonSet, with local storage, mirror pod annotation, critical pod annotation - none should be evicted.",
-			maxPodsToEvict:          2,
+			maxPodsToEvictPerNode:   2,
 			pods:                    []v1.Pod{*p4, *p5, *p6, *p7},
 			expectedEvictedPodCount: 0,
 			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Test all Pods: 4 should be evicted.",
-			maxPodsToEvict:          5,
+			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p9, *p10},
 			expectedEvictedPodCount: 4,
 			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Pods with the same owner but different images should not be evicted",
-			maxPodsToEvict:          5,
+			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p11, *p12},
 			expectedEvictedPodCount: 0,
 			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Pods with multiple containers should not match themselves",
-			maxPodsToEvict:          5,
+			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p13},
 			expectedEvictedPodCount: 0,
 			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Pods with matching ownerrefs and at not all matching image should not trigger an eviction",
-			maxPodsToEvict:          5,
+			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p11, *p13},
 			expectedEvictedPodCount: 0,
 			strategy:                api.DeschedulerStrategy{},
@@ -197,7 +197,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			fakeClient,
 			"v1",
 			false,
-			testCase.maxPodsToEvict,
+			testCase.maxPodsToEvictPerNode,
 			[]*v1.Node{node},
 			false,
 		)
