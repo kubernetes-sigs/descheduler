@@ -62,6 +62,14 @@ push: push-container-to-gcloud
 clean:
 	rm -rf _output
 
+verify: verify-gofmt verify-vendor lint
+
+verify-gofmt:
+	./hack/verify-gofmt.sh
+
+verify-vendor:
+	./hack/verify-vendor.sh
+
 test-unit:
 	./test/run-unit-tests.sh
 
@@ -76,6 +84,6 @@ gen:
 	go mod tidy
 lint:
 ifndef HAS_GOLANGCI
-	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(GOPATH)/bin ${GOLANGCI_VERSION}
+	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b ./_output/bin ${GOLANGCI_VERSION}
 endif
-	golangci-lint run
+	./_output/bin/golangci-lint run
