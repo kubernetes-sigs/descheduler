@@ -16,12 +16,13 @@
 
 # This just run e2e tests.
 if [ -n "$KIND_E2E" ]; then
-    curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/v1.18.2/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+    K8S_VERSION=${KUBERNETES_VERSION:-v1.18.2}
+    curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/${K8S_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
     wget https://github.com/kubernetes-sigs/kind/releases/download/v0.8.1/kind-linux-amd64
     chmod +x kind-linux-amd64
     mv kind-linux-amd64 kind
     export PATH=$PATH:$PWD
-    kind create cluster --image kindest/node:v1.18.2 --config=./hack/kind_config.yaml
+    kind create cluster --image kindest/node:${K8S_VERSION} --config=./hack/kind_config.yaml
     export KUBECONFIG="$(kind get kubeconfig-path)"
     docker pull kubernetes/pause
     kind load docker-image kubernetes/pause
