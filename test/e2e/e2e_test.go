@@ -67,7 +67,7 @@ func MakePodSpec() v1.PodSpec {
 }
 
 // RcByNameContainer returns a ReplicationControoler with specified name and container
-func RcByNameContainer(name string, replicas int32, labels map[string]string, gracePeriod *int64) *v1.ReplicationController {
+func RcByNameContainer(name, namespace string, replicas int32, labels map[string]string, gracePeriod *int64) *v1.ReplicationController {
 	zeroGracePeriod := int64(0)
 
 	// Add "name": name to the labels, overwriting if it exists.
@@ -81,7 +81,8 @@ func RcByNameContainer(name string, replicas int32, labels map[string]string, gr
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name:      name,
+			Namespace: namespace,
 		},
 		Spec: v1.ReplicationControllerSpec{
 			Replicas: func(i int32) *int32 { return &i }(replicas),
@@ -161,7 +162,13 @@ func TestLowNodeUtilization(t *testing.T) {
 		nodes = append(nodes, &node)
 	}
 
-	rc := RcByNameContainer("test-rc-node-utilization", int32(15), map[string]string{"test": "node-utilization"}, nil)
+	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
+	if _, err := clientSet.CoreV1().Namespaces().Create(ctx, testNamespace, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("Unable to create ns %v", testNamespace.Name)
+	}
+	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
+
+	rc := RcByNameContainer("test-rc-node-utilization", testNamespace.Name, int32(15), map[string]string{"test": "node-utilization"}, nil)
 	if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, rc, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
@@ -198,7 +205,13 @@ func TestEvictAnnotation(t *testing.T) {
 		nodes = append(nodes, &node)
 	}
 
-	rc := RcByNameContainer("test-rc-evict-annotation", int32(15), map[string]string{"test": "annotation"}, nil)
+	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
+	if _, err := clientSet.CoreV1().Namespaces().Create(ctx, testNamespace, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("Unable to create ns %v", testNamespace.Name)
+	}
+	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
+
+	rc := RcByNameContainer("test-rc-evict-annotation", testNamespace.Name, int32(15), map[string]string{"test": "annotation"}, nil)
 	rc.Spec.Template.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 	rc.Spec.Template.Spec.Volumes = []v1.Volume{
 		{
