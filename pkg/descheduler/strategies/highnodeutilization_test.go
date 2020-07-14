@@ -499,10 +499,10 @@ func TestValidateHighNodeUtilizationStrategyConfig(t *testing.T) {
 				v1.ResourceMemory: 20,
 			},
 			targetThresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
+				v1.ResourceCPU:    40,
 				v1.ResourceMemory: 80,
 			},
-			errInfo: fmt.Errorf("thresholds' %v percentage is lesser than targetThresholds'", v1.ResourceCPU),
+			errInfo: fmt.Errorf("thresholds' %v percentage is lesser than targetThresholds'", v1.ResourceMemory),
 		},
 		{
 			name: "passing valid strategy config",
