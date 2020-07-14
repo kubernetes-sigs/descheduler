@@ -38,11 +38,6 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
-var (
-	lowPriority  = int32(0)
-	highPriority = int32(10000)
-)
-
 func TestLowNodeUtilization(t *testing.T) {
 	ctx := context.Background()
 	n1NodeName := "n1"
@@ -107,7 +102,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -166,7 +161,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -225,7 +220,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 2100, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 2100, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -254,33 +249,33 @@ func TestLowNodeUtilization(t *testing.T) {
 					Items: []v1.Pod{
 						*test.BuildTestPod("p1", 400, 0, n1NodeName, func(pod *v1.Pod) {
 							test.SetRSOwnerRef(pod)
-							test.SetPodPriority(pod, highPriority)
+							test.SetPodPriority(pod, int32(10000))
 						}),
 						*test.BuildTestPod("p2", 400, 0, n1NodeName, func(pod *v1.Pod) {
 							test.SetRSOwnerRef(pod)
-							test.SetPodPriority(pod, highPriority)
+							test.SetPodPriority(pod, int32(10000))
 						}),
 						*test.BuildTestPod("p3", 400, 0, n1NodeName, func(pod *v1.Pod) {
 							test.SetRSOwnerRef(pod)
-							test.SetPodPriority(pod, highPriority)
+							test.SetPodPriority(pod, int32(10000))
 						}),
 						*test.BuildTestPod("p4", 400, 0, n1NodeName, func(pod *v1.Pod) {
 							test.SetRSOwnerRef(pod)
-							test.SetPodPriority(pod, highPriority)
+							test.SetPodPriority(pod, int32(10000))
 						}),
 						*test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
 							test.SetRSOwnerRef(pod)
-							test.SetPodPriority(pod, lowPriority)
+							test.SetPodPriority(pod, int32(0))
 						}),
 						// These won't be evicted.
 						*test.BuildTestPod("p6", 400, 0, n1NodeName, func(pod *v1.Pod) {
 							test.SetDSOwnerRef(pod)
-							test.SetPodPriority(pod, highPriority)
+							test.SetPodPriority(pod, int32(10000))
 						}),
 						*test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 							// A pod with local storage.
 							test.SetNormalOwnerRef(pod)
-							test.SetPodPriority(pod, lowPriority)
+							test.SetPodPriority(pod, int32(0))
 							pod.Spec.Volumes = []v1.Volume{
 								{
 									Name: "sample",
@@ -304,7 +299,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -380,7 +375,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
