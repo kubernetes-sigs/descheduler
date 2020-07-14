@@ -47,7 +47,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		klog.Errorf("LowNodeUtilization config is not valid: %v", err)
 		return
 	}
-	
+
 	setMaxValuesForMissingThresholds(thresholds, targetThresholds)
 
 	npm := createNodePodsMap(ctx, client, nodes)
@@ -90,7 +90,6 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 
 	klog.V(1).Infof("Total number of pods evicted: %v", podEvictor.TotalEvicted())
 }
-
 
 // classifyNodesForLowUtilization classifies the nodes into low-utilization or high-utilization nodes. If a node lies between
 // low and high thresholds, it is simply ignored.
