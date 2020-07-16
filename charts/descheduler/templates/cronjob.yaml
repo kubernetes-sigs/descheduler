@@ -1,0 +1,53 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ template "descheduler.fullname" . }}
+  labels:
+    {{- include "descheduler.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  concurrencyPolicy: "Forbid"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          name: {{ template "descheduler.fullname" . }}
+          annotations:
+            checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+            {{- if .Values.podAnnotations }}
+            {{- .Values.podAnnotations | toYaml | nindent 12 }}
+            {{- end }}
+          labels:
+            app.kubernetes.io/name: {{ include "descheduler.name" . }}
+            app.kubernetes.io/instance: {{ .Release.Name }}
+            {{- if .Values.podLabels }}
+            {{- .Values.podLabels | toYaml | nindent 12 }}
+            {{- end }}
+        spec:
+          {{- if .Values.priorityClassName }}
+          priorityClassName: {{ .Values.priorityClassName }}
+          {{- end }}
+          serviceAccountName: {{ template "descheduler.serviceAccountName" . }}
+          restartPolicy: "Never"
+          containers:
+            - name: {{ .Chart.Name }}
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (printf "v%s" .Chart.AppVersion) }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command:
+                - "/bin/descheduler"
+              args:
+                - "--policy-config-file"
+                - "/policy-dir/policy.yaml"
+                {{- range $key, $value := .Values.cmdOptions }}
+                - {{ printf "--%s" $key | quote }}
+                {{- if $value }}
+                - {{ $value | quote }}
+                {{- end }}
+                {{- end }}
+              volumeMounts:
+                - mountPath: /policy-dir
+                  name: policy-volume
+          volumes:
+          - name: policy-volume
+            configMap:
+              name: {{ template "descheduler.fullname" . }}
