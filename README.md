@@ -1,4 +1,3 @@
-[![Build Status](https://travis-ci.org/kubernetes-sigs/descheduler.svg?branch=master)](https://travis-ci.org/kubernetes-sigs/descheduler)
 [![Go Report Card](https://goreportcard.com/badge/kubernetes-sigs/descheduler)](https://goreportcard.com/report/sigs.k8s.io/descheduler)
 
 # Descheduler for Kubernetes
