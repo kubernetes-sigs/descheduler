@@ -19,9 +19,22 @@ package scheme
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
+	componentconfigv1alpha1 "sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
 )
 
 var (
 	Scheme = runtime.NewScheme()
 	Codecs = serializer.NewCodecFactory(Scheme)
 )
+
+func init() {
+	utilruntime.Must(api.AddToScheme(Scheme))
+	utilruntime.Must(v1alpha1.AddToScheme(Scheme))
+
+	utilruntime.Must(componentconfig.AddToScheme(Scheme))
+	utilruntime.Must(componentconfigv1alpha1.AddToScheme(Scheme))
+}
