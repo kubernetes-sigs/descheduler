@@ -228,6 +228,48 @@ strategies:
         maxPodLifeTimeSeconds: 86400
 ````
 
+## Namespace filtering
+
+Strategies like `PodLifeTime`, `RemovePodsHavingTooManyRestarts`, `RemovePodsViolatingNodeTaints`,
+`RemovePodsViolatingNodeAffinity` and `RemovePodsViolatingInterPodAntiAffinity` can specify `namespaces`
+parameter which allows to specify a list of including, resp. excluding namespaces.
+E.g.
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+        maxPodLifeTimeSeconds: 86400
+        namespaces:
+          include:
+          - "namespace1"
+          - "namespace2"
+```
+
+In the examples `PodLifeTime` gets executed only over `namespace1` and `namespace2`.
+The similar holds for `exclude` field:
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+        maxPodLifeTimeSeconds: 86400
+        namespaces:
+          exclude:
+          - "namespace1"
+          - "namespace2"
+```
+
+The strategy gets executed over all namespaces but `namespace1` and `namespace2`.
+
+It's not allowed to compute `include` with `exclude` field.
+
 ## Pod Evictions
 
 When the descheduler decides to evict pods from a node, it employs the following general mechanism:
