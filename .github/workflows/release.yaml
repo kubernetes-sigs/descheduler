@@ -2,8 +2,9 @@ name: Release Charts
 
 on:
   push:
-    tags:
-      - chart-*
+    branches:
+      - master
+      - release-*
 
 jobs:
   release:
