@@ -46,6 +46,11 @@ kubectl create -f kubernetes/configmap.yaml
 kubectl create -f kubernetes/cronjob.yaml
 ```
 
+### Install Using Helm
+
+Starting with release v0.18.0 there is an official helm chart that can be used to install the
+descheduler. See the [helm chart README](https://github.com/kubernetes-sigs/descheduler/blob/master/charts/descheduler/README.md) for detailed instructions.
+
 ## User Guide
 
 See the [user guide](docs/user-guide.md) in the `/docs` directory.
