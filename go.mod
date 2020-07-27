@@ -11,5 +11,5 @@ require (
 	k8s.io/client-go v0.19.0-rc.2
 	k8s.io/code-generator v0.19.0-rc.2
 	k8s.io/component-base v0.19.0-rc.2
-	k8s.io/klog/v2 v2.0.0
+	k8s.io/klog/v2 v2.2.0
 )
