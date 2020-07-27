@@ -1,4 +1,5 @@
 [![Go Report Card](https://goreportcard.com/badge/kubernetes-sigs/descheduler)](https://goreportcard.com/report/sigs.k8s.io/descheduler)
+![Release Charts](https://github.com/kubernetes-sigs/descheduler/workflows/Release%20Charts/badge.svg)
 
 # Descheduler for Kubernetes
 
@@ -45,6 +46,11 @@ kubectl create -f kubernetes/rbac.yaml
 kubectl create -f kubernetes/configmap.yaml
 kubectl create -f kubernetes/cronjob.yaml
 ```
+
+### Install Using Helm
+
+Starting with release v0.18.0 there is an official helm chart that can be used to install the
+descheduler. See the [helm chart README](https://github.com/kubernetes-sigs/descheduler/blob/master/charts/descheduler/README.md) for detailed instructions.
 
 ## User Guide
 

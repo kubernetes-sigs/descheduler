@@ -6,7 +6,7 @@
 
 ```shell
 helm repo add descheduler https://kubernetes-sigs.github.io/descheduler/
-$ helm install descheduler/descheduler --name my-release
+helm install --name my-release descheduler/descheduler-helm-chart
 ```
 
 ## Introduction
