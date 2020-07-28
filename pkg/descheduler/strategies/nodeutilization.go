@@ -104,7 +104,7 @@ func setMaxValuesForMissingThresholds(thresholds, targetThresholds api.ResourceT
 func createNodePodsMap(ctx context.Context, client clientset.Interface, nodes []*v1.Node) NodePodsMap {
 	npm := NodePodsMap{}
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(ctx, client, node, nil)
+		pods, err := podutil.ListPodsOnANode(ctx, client, node)
 		if err != nil {
 			klog.Warningf("node %s will not be processed, error in accessing its pods (%#v)", node.Name, err)
 		} else {
