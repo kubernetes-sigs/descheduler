@@ -561,11 +561,11 @@ func TestValidateStrategyConfig(t *testing.T) {
 
 		if validateErr == nil || testCase.errInfo == nil {
 			if validateErr != testCase.errInfo {
-				t.Errorf("expected validity of strategy config: thresholds %#v targetThresholds %#v\nto be %v but got %v instead",
+				t.Errorf("expected validity of strategy config: thresholds %#v targetThresholds %#v to be %v but got %v instead",
 					testCase.thresholds, testCase.targetThresholds, testCase.errInfo, validateErr)
 			}
 		} else if validateErr.Error() != testCase.errInfo.Error() {
-			t.Errorf("expected validity of strategy config: thresholds %#v targetThresholds %#v\nto be %v but got %v instead",
+			t.Errorf("expected validity of strategy config: thresholds %#v targetThresholds %#v to be %v but got %v instead",
 				testCase.thresholds, testCase.targetThresholds, testCase.errInfo, validateErr)
 		}
 	}
@@ -642,10 +642,10 @@ func TestValidateThresholds(t *testing.T) {
 
 		if validateErr == nil || test.errInfo == nil {
 			if validateErr != test.errInfo {
-				t.Errorf("expected validity of threshold: %#v\nto be %v but got %v instead", test.input, test.errInfo, validateErr)
+				t.Errorf("expected validity of threshold: %#v to be %v but got %v instead", test.input, test.errInfo, validateErr)
 			}
 		} else if validateErr.Error() != test.errInfo.Error() {
-			t.Errorf("expected validity of threshold: %#v\nto be %v but got %v instead", test.input, test.errInfo, validateErr)
+			t.Errorf("expected validity of threshold: %#v to be %v but got %v instead", test.input, test.errInfo, validateErr)
 		}
 	}
 }
