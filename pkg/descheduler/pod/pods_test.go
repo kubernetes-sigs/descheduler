@@ -67,7 +67,7 @@ func TestListPodsOnANode(t *testing.T) {
 			}
 			return true, nil, fmt.Errorf("Failed to list: %v", list)
 		})
-		pods, _ := ListPodsOnANode(context.TODO(), fakeClient, testCase.node, nil)
+		pods, _ := ListPodsOnANode(context.TODO(), fakeClient, testCase.node)
 		if len(pods) != testCase.expectedPodCount {
 			t.Errorf("expected %v pods on node %v, got %+v", testCase.expectedPodCount, testCase.node.Name, len(pods))
 		}

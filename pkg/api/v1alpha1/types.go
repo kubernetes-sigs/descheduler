@@ -44,13 +44,21 @@ type DeschedulerStrategy struct {
 	Params *StrategyParameters `json:"params,omitempty"`
 }
 
-// Only one of its members may be specified
+// Namespaces carries a list of included/excluded namespaces
+// for which a given strategy is applicable.
+type Namespaces struct {
+	Include []string `json:"include"`
+	Exclude []string `json:"exclude"`
+}
+
+// Besides Namespaces only one of its members may be specified
 type StrategyParameters struct {
 	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds `json:"nodeResourceUtilizationThresholds,omitempty"`
 	NodeAffinityType                  []string                           `json:"nodeAffinityType,omitempty"`
 	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts         `json:"podsHavingTooManyRestarts,omitempty"`
 	MaxPodLifeTimeSeconds             *uint                              `json:"maxPodLifeTimeSeconds,omitempty"`
 	RemoveDuplicates                  *RemoveDuplicates                  `json:"removeDuplicates,omitempty"`
+	Namespaces                        Namespaces                         `json:"namespaces"`
 }
 
 type Percentage float64

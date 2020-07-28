@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -28,17 +29,37 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
+func validateRemovePodsHavingTooManyRestartsParams(params *api.StrategyParameters) error {
+	if params == nil || params.PodsHavingTooManyRestarts == nil || params.PodsHavingTooManyRestarts.PodRestartThreshold < 1 {
+		return fmt.Errorf("PodsHavingTooManyRestarts threshold not set")
+	}
+
+	// At most one of include/exclude can be set
+	if len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
+		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+	}
+
+	return nil
+}
+
 // RemovePodsHavingTooManyRestarts removes the pods that have too many restarts on node.
 // There are too many cases leading this issue: Volume mount failed, app error due to nodes' different settings.
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
 func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
-	if strategy.Params == nil || strategy.Params.PodsHavingTooManyRestarts == nil || strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold < 1 {
-		klog.V(1).Infof("PodsHavingTooManyRestarts thresholds not set")
+	if err := validateRemovePodsHavingTooManyRestartsParams(strategy.Params); err != nil {
+		klog.V(1).Info(err)
 		return
 	}
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %s", node.Name)
-		pods, err := podutil.ListPodsOnANode(ctx, client, node, podEvictor.IsEvictable)
+		pods, err := podutil.ListPodsOnANode(
+			ctx,
+			client,
+			node,
+			podutil.WithFilter(podEvictor.IsEvictable),
+			podutil.WithNamespaces(strategy.Params.Namespaces.Include),
+			podutil.WithoutNamespaces(strategy.Params.Namespaces.Exclude),
+		)
 		if err != nil {
 			klog.Errorf("Error when list pods at node %s", node.Name)
 			continue
