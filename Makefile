@@ -15,7 +15,7 @@
 .PHONY: test
 
 # VERSION is currently based on the last commit
-VERSION?=$(shell git describe --tags)
+VERSION?=$(shell git describe --tags --match "v*")
 COMMIT=$(shell git rev-parse HEAD)
 BUILD=$(shell date +%FT%T%z)
 LDFLAG_LOCATION=sigs.k8s.io/descheduler/cmd/descheduler/app
