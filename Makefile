@@ -48,7 +48,6 @@ all build:
 check: | verify test-unit
 .PHONY: check
 
-
 # Verify code conventions are properly setup.
 #
 # Example:
@@ -84,7 +83,7 @@ verify-commits:
 #   make test-unit
 #   make test-unit WHAT=pkg/build TESTFLAGS=-v
 
-verify: verify-gofmt verify-vendor lint
+verify: verify-gofmt verify-vendor lint lint-chart
 
 verify-gofmt:
 	./hack/verify-gofmt.sh

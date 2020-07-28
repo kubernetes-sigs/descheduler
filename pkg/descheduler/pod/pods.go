@@ -18,34 +18,106 @@ package pod
 
 import (
 	"context"
+	"sort"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	clientset "k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/descheduler/pkg/utils"
-	"sort"
 )
+
+type Options struct {
+	filter             func(pod *v1.Pod) bool
+	includedNamespaces []string
+	excludedNamespaces []string
+}
+
+// WithFilter sets a pod filter.
+// The filter function should return true if the pod should be returned from ListPodsOnANode
+func WithFilter(filter func(pod *v1.Pod) bool) func(opts *Options) {
+	return func(opts *Options) {
+		opts.filter = filter
+	}
+}
+
+// WithNamespaces sets included namespaces
+func WithNamespaces(namespaces []string) func(opts *Options) {
+	return func(opts *Options) {
+		opts.includedNamespaces = namespaces
+	}
+}
+
+// WithoutNamespaces sets excluded namespaces
+func WithoutNamespaces(namespaces []string) func(opts *Options) {
+	return func(opts *Options) {
+		opts.excludedNamespaces = namespaces
+	}
+}
 
 // ListPodsOnANode lists all of the pods on a node
 // It also accepts an optional "filter" function which can be used to further limit the pods that are returned.
 // (Usually this is podEvictor.IsEvictable, in order to only list the evictable pods on a node, but can
 // be used by strategies to extend IsEvictable if there are further restrictions, such as with NodeAffinity).
-// The filter function should return true if the pod should be returned from ListPodsOnANode
-func ListPodsOnANode(ctx context.Context, client clientset.Interface, node *v1.Node, filter func(pod *v1.Pod) bool) ([]*v1.Pod, error) {
-	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + node.Name + ",status.phase!=" + string(v1.PodSucceeded) + ",status.phase!=" + string(v1.PodFailed))
+func ListPodsOnANode(
+	ctx context.Context,
+	client clientset.Interface,
+	node *v1.Node,
+	opts ...func(opts *Options),
+) ([]*v1.Pod, error) {
+	options := &Options{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	pods := make([]*v1.Pod, 0)
+
+	fieldSelectorString := "spec.nodeName=" + node.Name + ",status.phase!=" + string(v1.PodSucceeded) + ",status.phase!=" + string(v1.PodFailed)
+
+	if len(options.includedNamespaces) > 0 {
+		fieldSelector, err := fields.ParseSelector(fieldSelectorString)
+		if err != nil {
+			return []*v1.Pod{}, err
+		}
+
+		for _, namespace := range options.includedNamespaces {
+			podList, err := client.CoreV1().Pods(namespace).List(ctx,
+				metav1.ListOptions{FieldSelector: fieldSelector.String()})
+			if err != nil {
+				return []*v1.Pod{}, err
+			}
+			for i := range podList.Items {
+				if options.filter != nil && !options.filter(&podList.Items[i]) {
+					continue
+				}
+				pods = append(pods, &podList.Items[i])
+			}
+		}
+		return pods, nil
+	}
+
+	if len(options.excludedNamespaces) > 0 {
+		for _, namespace := range options.excludedNamespaces {
+			fieldSelectorString += ",metadata.namespace!=" + namespace
+		}
+	}
+
+	fieldSelector, err := fields.ParseSelector(fieldSelectorString)
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
 
+	// INFO(jchaloup): field selectors do not work properly with listers
+	// Once the descheduler switcheds to pod listers (through informers),
+	// We need to flip to client-side filtering.
 	podList, err := client.CoreV1().Pods(v1.NamespaceAll).List(ctx,
 		metav1.ListOptions{FieldSelector: fieldSelector.String()})
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
 
-	pods := make([]*v1.Pod, 0)
 	for i := range podList.Items {
-		if filter != nil && !filter(&podList.Items[i]) {
+		if options.filter != nil && !options.filter(&podList.Items[i]) {
 			continue
 		}
 		pods = append(pods, &podList.Items[i])

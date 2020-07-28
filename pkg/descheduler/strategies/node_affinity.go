@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -29,10 +30,22 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
+func validatePodsViolatingNodeAffinityParams(params *api.StrategyParameters) error {
+	if params == nil || len(params.NodeAffinityType) == 0 {
+		return fmt.Errorf("NodeAffinityType is empty")
+	}
+	// At most one of include/exclude can be set
+	if len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
+		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+	}
+
+	return nil
+}
+
 // RemovePodsViolatingNodeAffinity evicts pods on nodes which violate node affinity
 func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
-	if strategy.Params == nil {
-		klog.V(1).Infof("NodeAffinityType not set")
+	if err := validatePodsViolatingNodeAffinityParams(strategy.Params); err != nil {
+		klog.V(1).Info(err)
 		return
 	}
 	for _, nodeAffinity := range strategy.Params.NodeAffinityType {
@@ -43,11 +56,18 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 			for _, node := range nodes {
 				klog.V(1).Infof("Processing node: %#v\n", node.Name)
 
-				pods, err := podutil.ListPodsOnANode(ctx, client, node, func(pod *v1.Pod) bool {
-					return podEvictor.IsEvictable(pod) &&
-						!nodeutil.PodFitsCurrentNode(pod, node) &&
-						nodeutil.PodFitsAnyNode(pod, nodes)
-				})
+				pods, err := podutil.ListPodsOnANode(
+					ctx,
+					client,
+					node,
+					podutil.WithFilter(func(pod *v1.Pod) bool {
+						return podEvictor.IsEvictable(pod) &&
+							!nodeutil.PodFitsCurrentNode(pod, node) &&
+							nodeutil.PodFitsAnyNode(pod, nodes)
+					}),
+					podutil.WithNamespaces(strategy.Params.Namespaces.Include),
+					podutil.WithoutNamespaces(strategy.Params.Namespaces.Exclude),
+				)
 				if err != nil {
 					klog.Errorf("failed to get pods from %v: %v", node.Name, err)
 				}

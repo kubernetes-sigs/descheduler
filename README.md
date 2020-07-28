@@ -1,5 +1,5 @@
-[![Build Status](https://travis-ci.org/kubernetes-sigs/descheduler.svg?branch=master)](https://travis-ci.org/kubernetes-sigs/descheduler)
 [![Go Report Card](https://goreportcard.com/badge/kubernetes-sigs/descheduler)](https://goreportcard.com/report/sigs.k8s.io/descheduler)
+![Release Charts](https://github.com/kubernetes-sigs/descheduler/workflows/Release%20Charts/badge.svg)
 
 # Descheduler for Kubernetes
 
@@ -46,6 +46,11 @@ kubectl create -f kubernetes/rbac.yaml
 kubectl create -f kubernetes/configmap.yaml
 kubectl create -f kubernetes/cronjob.yaml
 ```
+
+### Install Using Helm
+
+Starting with release v0.18.0 there is an official helm chart that can be used to install the
+descheduler. See the [helm chart README](https://github.com/kubernetes-sigs/descheduler/blob/master/charts/descheduler/README.md) for detailed instructions.
 
 ## User Guide
 
@@ -228,6 +233,48 @@ strategies:
      params:
         maxPodLifeTimeSeconds: 86400
 ````
+
+## Namespace filtering
+
+Strategies like `PodLifeTime`, `RemovePodsHavingTooManyRestarts`, `RemovePodsViolatingNodeTaints`,
+`RemovePodsViolatingNodeAffinity` and `RemovePodsViolatingInterPodAntiAffinity` can specify `namespaces`
+parameter which allows to specify a list of including, resp. excluding namespaces.
+E.g.
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+        maxPodLifeTimeSeconds: 86400
+        namespaces:
+          include:
+          - "namespace1"
+          - "namespace2"
+```
+
+In the examples `PodLifeTime` gets executed only over `namespace1` and `namespace2`.
+The similar holds for `exclude` field:
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+        maxPodLifeTimeSeconds: 86400
+        namespaces:
+          exclude:
+          - "namespace1"
+          - "namespace2"
+```
+
+The strategy gets executed over all namespaces but `namespace1` and `namespace2`.
+
+It's not allowed to compute `include` with `exclude` field.
 
 ## Pod Evictions
 
