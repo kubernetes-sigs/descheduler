@@ -140,6 +140,58 @@ This parameter can be configured to activate the strategy only when the number o
 are above the configured value. This could be helpful in large clusters where a few nodes could go
 under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero.
 
+### HighNodeUtilization
+
+This strategy finds nodes that are under utilized and evicts pods, if possible, from them 
+in the hope that recreation of evicted pods will be scheduled on nodes such that they get highly utilised. This strategy works in conjuction with `MostRequestedPriority` scheduler policy. The
+parameters of this strategy are configured under `nodeResourceUtilizationThresholds`.
+
+The under utilization of nodes is determined by a configurable threshold `targetThresholds`. The threshold
+`targetThresholds` can be configured for cpu, memory, and number of pods in terms of percentage. If a node's
+usage is below threshold for all (cpu, memory, and number of pods), the node is considered underutilized.
+Currently, pods request resource requirements are considered for computing node resource utilization.
+
+There is another configurable threshold, `thresholds`, that is used to compute those nodes
+whose utilisation is high. Pods from underutilised nodes are evicted such that the evicted pods can be placed in nodes whose resource utilisation falls between `thresholds` and `targetThresholds`. The threshold, `thresholds`,
+can be configured for cpu, memory, and number of pods too in terms of percentage.
+
+These thresholds, `thresholds` and `targetThresholds`, could be tuned as per your cluster requirements.
+Here is an example of a policy for this strategy:
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "HighNodeUtilization":
+     enabled: true
+     params:
+       nodeResourceUtilizationThresholds:
+         thresholds:
+           "cpu" : 80
+           "memory": 80
+           "pods": 80
+         targetThresholds:
+           "cpu" : 20
+           "memory": 20
+           "pods": 20
+```
+
+Policy should pass the following validation checks:
+* Only three types of resources are supported: `cpu`, `memory` and `pods`.
+* `thresholds` or `targetThresholds` can not be nil and they must configure exactly the same types of resources.
+* The valid range of the resource's percentage value is \[0, 100\]
+* Percentage value of `targetThresholds` can not be greater than `thresholds` for the same resource.
+
+If any of the resource types is not specified, all its thresholds default to 100% to avoid nodes going
+from underutilized to overutilized.
+
+<!-- 
+TODO [Hanu] Does numberOfNodes makes sense for this strategy
+There is another parameter associated with the `LowNodeUtilization` strategy, called `numberOfNodes`.
+This parameter can be configured to activate the strategy only when the number of under utilized nodes
+are above the configured value. This could be helpful in large clusters where a few nodes could go
+under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero. -->
+
 ### RemovePodsViolatingInterPodAntiAffinity
 
 This strategy makes sure that pods violating interpod anti-affinity are removed from nodes. For example,
