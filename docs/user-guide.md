@@ -1,9 +1,7 @@
 # User Guide
 
-Starting with descheduler release v0.10.0 container images are available in these container registries.
-* `asia.gcr.io/k8s-artifacts-prod/descheduler/descheduler`
-* `eu.gcr.io/k8s-artifacts-prod/descheduler/descheduler`
-* `us.gcr.io/k8s-artifacts-prod/descheduler/descheduler`
+Starting with descheduler release v0.10.0 container images are available in the official k8s container registry.
+* `k8s.gcr.io/descheduler/descheduler`
 
 ## Policy Configuration Examples
 The [examples](https://github.com/kubernetes-sigs/descheduler/tree/master/examples) directory has descheduler policy configuration examples.
