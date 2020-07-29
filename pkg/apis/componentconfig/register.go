@@ -19,8 +19,6 @@ package componentconfig
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	"sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 )
 
 var (
@@ -33,12 +31,6 @@ const GroupName = "deschedulercomponentconfig"
 
 // SchemeGroupVersion is group version used to register these objects
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: runtime.APIVersionInternal}
-
-func init() {
-	if err := addKnownTypes(scheme.Scheme); err != nil {
-		panic(err)
-	}
-}
 
 // Kind takes an unqualified kind and returns a Group qualified GroupKind
 func Kind(kind string) schema.GroupKind {
