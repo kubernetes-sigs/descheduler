@@ -46,6 +46,10 @@ func validateRemovePodsViolatingInterPodAntiAffinityParams(params *api.StrategyP
 
 // RemovePodsViolatingInterPodAntiAffinity evicts pods on the node which are having a pod affinity rules.
 func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+	if err := validateRemovePodsViolatingInterPodAntiAffinityParams(strategy.Params); err != nil {
+		klog.V(1).Info(err)
+		return
+	}
 	var namespaces api.Namespaces
 	if strategy.Params != nil {
 		namespaces = strategy.Params.Namespaces
