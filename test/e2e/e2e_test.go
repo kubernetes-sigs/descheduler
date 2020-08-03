@@ -27,6 +27,7 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	schedulingv1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -374,6 +375,145 @@ func TestNamespaceConstraintsExclude(t *testing.T) {
 	// validate no pods were deleted
 	if len(intersectStrings(initialPodNames, excludePodNames)) != 5 {
 		t.Fatalf("None of %v pods are expected to be deleted", initialPodNames)
+	}
+}
+
+func TestThresholdPriority(t *testing.T) {
+	testPriority(t, false)
+}
+
+func TestThresholdPriorityClass(t *testing.T) {
+	testPriority(t, true)
+}
+
+func testPriority(t *testing.T, isPriorityClass bool) {
+	var highPriority = int32(1000)
+	var lowPriority = int32(500)
+	ctx := context.Background()
+
+	clientSet, nodeInformer, stopCh := initializeClient(t)
+	defer close(stopCh)
+
+	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
+	if _, err := clientSet.CoreV1().Namespaces().Create(ctx, testNamespace, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("Unable to create ns %v", testNamespace.Name)
+	}
+	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
+
+	// create two priority classes
+	highPriorityClass := &schedulingv1.PriorityClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name()) + "-highpriority"},
+		Value:      highPriority,
+	}
+	if _, err := clientSet.SchedulingV1().PriorityClasses().Create(ctx, highPriorityClass, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("Error creating priorityclass %s: %v", highPriorityClass.Name, err)
+	}
+	defer clientSet.SchedulingV1().PriorityClasses().Delete(ctx, highPriorityClass.Name, metav1.DeleteOptions{})
+
+	lowPriorityClass := &schedulingv1.PriorityClass{
+		ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name()) + "-lowpriority"},
+		Value:      lowPriority,
+	}
+	if _, err := clientSet.SchedulingV1().PriorityClasses().Create(ctx, lowPriorityClass, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("Error creating priorityclass %s: %v", lowPriorityClass.Name, err)
+	}
+	defer clientSet.SchedulingV1().PriorityClasses().Delete(ctx, lowPriorityClass.Name, metav1.DeleteOptions{})
+
+	// create two RCs with different priority classes in the same namespace
+	rcHighPriority := RcByNameContainer("test-rc-podlifetime-highpriority", testNamespace.Name, 5,
+		map[string]string{"test": "podlifetime-highpriority"}, nil, highPriorityClass.Name)
+	if _, err := clientSet.CoreV1().ReplicationControllers(rcHighPriority.Namespace).Create(ctx, rcHighPriority, metav1.CreateOptions{}); err != nil {
+		t.Errorf("Error creating rc %s: %v", rcHighPriority.Name, err)
+	}
+	defer deleteRC(ctx, t, clientSet, rcHighPriority)
+
+	rcLowPriority := RcByNameContainer("test-rc-podlifetime-lowpriority", testNamespace.Name, 5,
+		map[string]string{"test": "podlifetime-lowpriority"}, nil, lowPriorityClass.Name)
+	if _, err := clientSet.CoreV1().ReplicationControllers(rcLowPriority.Namespace).Create(ctx, rcLowPriority, metav1.CreateOptions{}); err != nil {
+		t.Errorf("Error creating rc %s: %v", rcLowPriority.Name, err)
+	}
+	defer deleteRC(ctx, t, clientSet, rcLowPriority)
+
+	// wait for a while so all the pods are at least few seconds older
+	time.Sleep(5 * time.Second)
+
+	// it's assumed all new pods are named differently from currently running -> no name collision
+	podListHighPriority, err := clientSet.CoreV1().Pods(rcHighPriority.Namespace).List(
+		ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcHighPriority.Spec.Template.Labels).String()})
+	if err != nil {
+		t.Fatalf("Unable to list pods: %v", err)
+	}
+	podListLowPriority, err := clientSet.CoreV1().Pods(rcLowPriority.Namespace).List(
+		ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcLowPriority.Spec.Template.Labels).String()})
+	if err != nil {
+		t.Fatalf("Unable to list pods: %v", err)
+	}
+
+	if len(podListHighPriority.Items)+len(podListLowPriority.Items) != 10 {
+		t.Fatalf("Expected 10 replicas, got %v instead", len(podListHighPriority.Items)+len(podListLowPriority.Items))
+	}
+
+	expectReservePodNames := getPodNames(podListHighPriority.Items)
+	expectEvictPodNames := getPodNames(podListLowPriority.Items)
+	sort.Strings(expectReservePodNames)
+	sort.Strings(expectEvictPodNames)
+	t.Logf("Pods not expect to be evicted: %v, pods expect to be evicted: %v", expectReservePodNames, expectEvictPodNames)
+
+	if isPriorityClass {
+		t.Logf("set the strategy to delete pods with priority lower than priority class %s", highPriorityClass.Name)
+		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, deschedulerapi.Namespaces{}, highPriorityClass.Name, nil)
+	} else {
+		t.Logf("set the strategy to delete pods with priority lower than %d", highPriority)
+		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, deschedulerapi.Namespaces{}, "", &highPriority)
+	}
+
+	t.Logf("Waiting 10s")
+	time.Sleep(10 * time.Second)
+	// check if all pods with high priority class are not evicted
+	podListHighPriority, err = clientSet.CoreV1().Pods(rcHighPriority.Namespace).List(
+		ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcHighPriority.Spec.Template.Labels).String()})
+	if err != nil {
+		t.Fatalf("Unable to list pods after running strategy: %v", err)
+	}
+
+	excludePodNames := getPodNames(podListHighPriority.Items)
+	sort.Strings(excludePodNames)
+	t.Logf("Existing high priority pods: %v", excludePodNames)
+
+	// validate no pods were deleted
+	if len(intersectStrings(expectReservePodNames, excludePodNames)) != 5 {
+		t.Fatalf("None of %v high priority pods are expected to be deleted", expectReservePodNames)
+	}
+
+	//check if all pods with low priority class are evicted
+	if err := wait.PollImmediate(time.Second, 20*time.Second, func() (bool, error) {
+		podListLowPriority, err := clientSet.CoreV1().Pods(rcLowPriority.Namespace).List(
+			ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcLowPriority.Spec.Template.Labels).String()})
+		if err != nil {
+			return false, nil
+		}
+
+		includePodNames := getPodNames(podListLowPriority.Items)
+		// validate all pod were deleted
+		if len(intersectStrings(expectEvictPodNames, includePodNames)) > 0 {
+			t.Logf("Waiting until %v low priority pods get deleted", intersectStrings(expectEvictPodNames, includePodNames))
+			// check if there's at least one pod not in Terminating state
+			for _, pod := range podListLowPriority.Items {
+				// In case podList contains newly created pods
+				if len(intersectStrings(expectEvictPodNames, []string{pod.Name})) == 0 {
+					continue
+				}
+				if pod.DeletionTimestamp == nil {
+					t.Logf("Pod %v not in terminating state", pod.Name)
+					return false, nil
+				}
+			}
+			t.Logf("All %v pods are terminating", intersectStrings(expectEvictPodNames, includePodNames))
+		}
+
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for pods to be deleted: %v", err)
 	}
 }
 
