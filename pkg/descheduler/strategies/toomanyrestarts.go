@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func validateRemovePodsHavingTooManyRestartsParams(params *api.StrategyParameters) error {
@@ -56,7 +57,9 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 			ctx,
 			client,
 			node,
-			podutil.WithFilter(podEvictor.IsEvictable),
+			podutil.WithFilter(func(pod *v1.Pod) bool {
+				return podEvictor.IsEvictable(pod, utils.SystemCriticalPriority)
+			}),
 			podutil.WithNamespaces(strategy.Params.Namespaces.Include),
 			podutil.WithoutNamespaces(strategy.Params.Namespaces.Exclude),
 		)

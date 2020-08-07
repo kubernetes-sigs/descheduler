@@ -60,7 +60,9 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 			ctx,
 			client,
 			node,
-			podutil.WithFilter(podEvictor.IsEvictable),
+			podutil.WithFilter(func(pod *v1.Pod) bool {
+				return podEvictor.IsEvictable(pod, utils.SystemCriticalPriority)
+			}),
 			podutil.WithNamespaces(namespaces.Include),
 			podutil.WithoutNamespaces(namespaces.Exclude),
 		)

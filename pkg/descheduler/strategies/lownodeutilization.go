@@ -397,7 +397,7 @@ func classifyPods(pods []*v1.Pod, evictor *evictions.PodEvictor) ([]*v1.Pod, []*
 	var nonRemovablePods, removablePods []*v1.Pod
 
 	for _, pod := range pods {
-		if !evictor.IsEvictable(pod) {
+		if !evictor.IsEvictable(pod, utils.SystemCriticalPriority) {
 			nonRemovablePods = append(nonRemovablePods, pod)
 		} else {
 			removablePods = append(removablePods, pod)
