@@ -51,7 +51,7 @@ type Namespaces struct {
 	Exclude []string `json:"exclude"`
 }
 
-// Besides Namespaces only one of its members may be specified
+// Besides Namespaces ThresholdPriority and ThresholdPriorityClassName only one of its members may be specified
 type StrategyParameters struct {
 	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds `json:"nodeResourceUtilizationThresholds,omitempty"`
 	NodeAffinityType                  []string                           `json:"nodeAffinityType,omitempty"`
@@ -59,6 +59,8 @@ type StrategyParameters struct {
 	MaxPodLifeTimeSeconds             *uint                              `json:"maxPodLifeTimeSeconds,omitempty"`
 	RemoveDuplicates                  *RemoveDuplicates                  `json:"removeDuplicates,omitempty"`
 	Namespaces                        Namespaces                         `json:"namespaces"`
+	ThresholdPriority                 *int32                             `json:"thresholdPriority"`
+	ThresholdPriorityClassName        string                             `json:"thresholdPriorityClassName"`
 }
 
 type Percentage float64

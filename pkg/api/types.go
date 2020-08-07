@@ -52,8 +52,8 @@ type Namespaces struct {
 }
 
 // Besides Namespaces only one of its members may be specified
-// TODO(jchaloup): move Namespaces to individual strategies once the policy
-// version is bumped to v1alpha2
+// TODO(jchaloup): move Namespaces ThresholdPriority and ThresholdPriorityClassName to individual strategies
+//  once the policy version is bumped to v1alpha2
 type StrategyParameters struct {
 	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds
 	NodeAffinityType                  []string
@@ -61,6 +61,8 @@ type StrategyParameters struct {
 	MaxPodLifeTimeSeconds             *uint
 	RemoveDuplicates                  *RemoveDuplicates
 	Namespaces                        Namespaces
+	ThresholdPriority                 *int32
+	ThresholdPriorityClassName        string
 }
 
 type Percentage float64
