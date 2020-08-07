@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -34,6 +35,17 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+func validateRemoveDuplicatePodsParams(params *api.StrategyParameters) error {
+	if params == nil {
+		return nil
+	}
+	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
+		return fmt.Errorf("only one of thresholdPriority and thresholdPriorityClassName can be set")
+	}
+
+	return nil
+}
+
 // RemoveDuplicatePods removes the duplicate pods on node. This strategy evicts all duplicate pods on node.
 // A pod is said to be a duplicate of other if both of them are from same creator, kind and are within the same
 // namespace, and have at least one container with the same image.
@@ -45,10 +57,20 @@ func RemoveDuplicatePods(
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
 ) {
+	if err := validateRemoveDuplicatePodsParams(strategy.Params); err != nil {
+		klog.V(1).Info(err)
+		return
+	}
+	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
+	if err != nil {
+		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
+		return
+	}
+
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v", node.Name)
 		pods, err := podutil.ListPodsOnANode(ctx, client, node, podutil.WithFilter(func(pod *v1.Pod) bool {
-			return podEvictor.IsEvictable(pod, utils.SystemCriticalPriority)
+			return podEvictor.IsEvictable(pod, thresholdPriority)
 		}))
 		if err != nil {
 			klog.Errorf("error listing evictable pods on node %s: %+v", node.Name, err)

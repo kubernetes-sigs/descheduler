@@ -50,13 +50,28 @@ const (
 	MaxResourcePercentage = 100
 )
 
+func validateLowNodeUtilizationParams(params *api.StrategyParameters) error {
+	if params == nil || params.NodeResourceUtilizationThresholds == nil {
+		return fmt.Errorf("NodeResourceUtilizationThresholds not set")
+	}
+	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
+		return fmt.Errorf("only one of thresholdPriority and thresholdPriorityClassName can be set")
+	}
+
+	return nil
+}
+
 // LowNodeUtilization evicts pods from overutilized nodes to underutilized nodes. Note that CPU/Memory requests are used
 // to calculate nodes' utilization and not the actual resource usage.
 func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
-	// todo: move to config validation?
 	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
-	if strategy.Params == nil || strategy.Params.NodeResourceUtilizationThresholds == nil {
-		klog.V(1).Infof("NodeResourceUtilizationThresholds not set")
+	if err := validateLowNodeUtilizationParams(strategy.Params); err != nil {
+		klog.V(1).Info(err)
+		return
+	}
+	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
+	if err != nil {
+		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
 		return
 	}
 
@@ -116,7 +131,8 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		targetNodes,
 		lowNodes,
 		targetThresholds,
-		podEvictor)
+		podEvictor,
+		thresholdPriority)
 
 	klog.V(1).Infof("Total number of pods evicted: %v", podEvictor.TotalEvicted())
 }
@@ -196,6 +212,7 @@ func evictPodsFromTargetNodes(
 	targetNodes, lowNodes []NodeUsageMap,
 	targetThresholds api.ResourceThresholds,
 	podEvictor *evictions.PodEvictor,
+	thresholdPriority int32,
 ) {
 
 	sortNodesByUsage(targetNodes)
@@ -232,7 +249,7 @@ func evictPodsFromTargetNodes(
 		}
 		klog.V(3).Infof("evicting pods from node %#v with usage: %#v", node.node.Name, node.usage)
 
-		nonRemovablePods, removablePods := classifyPods(node.allPods, podEvictor)
+		nonRemovablePods, removablePods := classifyPods(node.allPods, podEvictor, thresholdPriority)
 		klog.V(2).Infof("allPods:%v, nonRemovablePods:%v, removablePods:%v", len(node.allPods), len(nonRemovablePods), len(removablePods))
 
 		if len(removablePods) == 0 {
@@ -393,11 +410,11 @@ func nodeUtilization(node *v1.Node, pods []*v1.Pod) api.ResourceThresholds {
 	}
 }
 
-func classifyPods(pods []*v1.Pod, evictor *evictions.PodEvictor) ([]*v1.Pod, []*v1.Pod) {
+func classifyPods(pods []*v1.Pod, evictor *evictions.PodEvictor, thresholdPriority int32) ([]*v1.Pod, []*v1.Pod) {
 	var nonRemovablePods, removablePods []*v1.Pod
 
 	for _, pod := range pods {
-		if !evictor.IsEvictable(pod, utils.SystemCriticalPriority) {
+		if !evictor.IsEvictable(pod, thresholdPriority) {
 			nonRemovablePods = append(nonRemovablePods, pod)
 		} else {
 			removablePods = append(removablePods, pod)
