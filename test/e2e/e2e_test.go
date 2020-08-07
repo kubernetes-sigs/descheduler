@@ -48,7 +48,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 )
 
-func MakePodSpec() v1.PodSpec {
+func MakePodSpec(priorityClassName string) v1.PodSpec {
 	return v1.PodSpec{
 		Containers: []v1.Container{{
 			Name:            "pause",
@@ -66,11 +66,12 @@ func MakePodSpec() v1.PodSpec {
 				},
 			},
 		}},
+		PriorityClassName: priorityClassName,
 	}
 }
 
 // RcByNameContainer returns a ReplicationControoler with specified name and container
-func RcByNameContainer(name, namespace string, replicas int32, labels map[string]string, gracePeriod *int64) *v1.ReplicationController {
+func RcByNameContainer(name, namespace string, replicas int32, labels map[string]string, gracePeriod *int64, priorityClassName string) *v1.ReplicationController {
 	zeroGracePeriod := int64(0)
 
 	// Add "name": name to the labels, overwriting if it exists.
@@ -96,7 +97,7 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
 				},
-				Spec: MakePodSpec(),
+				Spec: MakePodSpec(priorityClassName),
 			},
 		},
 	}
@@ -177,7 +178,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	}
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
-	rc := RcByNameContainer("test-rc-node-utilization", testNamespace.Name, int32(15), map[string]string{"test": "node-utilization"}, nil)
+	rc := RcByNameContainer("test-rc-node-utilization", testNamespace.Name, int32(15), map[string]string{"test": "node-utilization"}, nil, "")
 	if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, rc, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
@@ -186,7 +187,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	deleteRC(ctx, t, clientSet, rc)
 }
 
-func runPodLifetimeStrategy(ctx context.Context, clientset clientset.Interface, nodeInformer coreinformers.NodeInformer, namespaces deschedulerapi.Namespaces) {
+func runPodLifetimeStrategy(ctx context.Context, clientset clientset.Interface, nodeInformer coreinformers.NodeInformer, namespaces deschedulerapi.Namespaces, priorityClass string, priority *int32) {
 	// Run descheduler.
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientset)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
@@ -205,8 +206,10 @@ func runPodLifetimeStrategy(ctx context.Context, clientset clientset.Interface, 
 		deschedulerapi.DeschedulerStrategy{
 			Enabled: true,
 			Params: &deschedulerapi.StrategyParameters{
-				MaxPodLifeTimeSeconds: &maxPodLifeTimeSeconds,
-				Namespaces:            namespaces,
+				MaxPodLifeTimeSeconds:      &maxPodLifeTimeSeconds,
+				Namespaces:                 namespaces,
+				ThresholdPriority:          priority,
+				ThresholdPriorityClassName: priorityClass,
 			},
 		},
 		nodes,
@@ -258,7 +261,7 @@ func TestNamespaceConstraintsInclude(t *testing.T) {
 	}
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
-	rc := RcByNameContainer("test-rc-podlifetime", testNamespace.Name, 5, map[string]string{"test": "podlifetime-include"}, nil)
+	rc := RcByNameContainer("test-rc-podlifetime", testNamespace.Name, 5, map[string]string{"test": "podlifetime-include"}, nil, "")
 	if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, rc, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
@@ -284,7 +287,7 @@ func TestNamespaceConstraintsInclude(t *testing.T) {
 	t.Logf("set the strategy to delete pods from %v namespace", rc.Namespace)
 	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, deschedulerapi.Namespaces{
 		Include: []string{rc.Namespace},
-	})
+	}, "", nil)
 
 	// All pods are supposed to be deleted, wait until all the old pods are deleted
 	if err := wait.PollImmediate(time.Second, 20*time.Second, func() (bool, error) {
@@ -329,7 +332,7 @@ func TestNamespaceConstraintsExclude(t *testing.T) {
 	}
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
-	rc := RcByNameContainer("test-rc-podlifetime", testNamespace.Name, 5, map[string]string{"test": "podlifetime-exclude"}, nil)
+	rc := RcByNameContainer("test-rc-podlifetime", testNamespace.Name, 5, map[string]string{"test": "podlifetime-exclude"}, nil, "")
 	if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, rc, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
@@ -355,7 +358,7 @@ func TestNamespaceConstraintsExclude(t *testing.T) {
 	t.Logf("set the strategy to delete pods from namespaces except the %v namespace", rc.Namespace)
 	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, deschedulerapi.Namespaces{
 		Exclude: []string{rc.Namespace},
-	})
+	}, "", nil)
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
@@ -397,7 +400,7 @@ func TestEvictAnnotation(t *testing.T) {
 	}
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
-	rc := RcByNameContainer("test-rc-evict-annotation", testNamespace.Name, int32(15), map[string]string{"test": "annotation"}, nil)
+	rc := RcByNameContainer("test-rc-evict-annotation", testNamespace.Name, int32(15), map[string]string{"test": "annotation"}, nil, "")
 	rc.Spec.Template.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 	rc.Spec.Template.Spec.Volumes = []v1.Volume{
 		{
