@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func validatePodLifeTimeParams(params *api.StrategyParameters) error {
@@ -69,12 +70,14 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 	}
 }
 
-func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, params *api.StrategyParameters, evictor *evictions.PodEvictor) []*v1.Pod {
+func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, params *api.StrategyParameters, podEvictor *evictions.PodEvictor) []*v1.Pod {
 	pods, err := podutil.ListPodsOnANode(
 		ctx,
 		client,
 		node,
-		podutil.WithFilter(evictor.IsEvictable),
+		podutil.WithFilter(func(pod *v1.Pod) bool {
+			return podEvictor.IsEvictable(pod, utils.SystemCriticalPriority)
+		}),
 		podutil.WithNamespaces(params.Namespaces.Include),
 		podutil.WithoutNamespaces(params.Namespaces.Exclude),
 	)

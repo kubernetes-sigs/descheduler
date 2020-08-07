@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func validatePodsViolatingNodeAffinityParams(params *api.StrategyParameters) error {
@@ -61,7 +62,7 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 					client,
 					node,
 					podutil.WithFilter(func(pod *v1.Pod) bool {
-						return podEvictor.IsEvictable(pod) &&
+						return podEvictor.IsEvictable(pod, utils.SystemCriticalPriority) &&
 							!nodeutil.PodFitsCurrentNode(pod, node) &&
 							nodeutil.PodFitsAnyNode(pod, nodes)
 					}),
