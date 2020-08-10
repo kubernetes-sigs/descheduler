@@ -69,7 +69,7 @@ func RemoveDuplicatePods(
 		duplicateKeysMap := map[string][][]string{}
 		for _, pod := range pods {
 			ownerRefList := podutil.OwnerRef(pod)
-			if hasExcludedOwnerRefKind(ownerRefList, strategy) {
+			if hasExcludedOwnerRefKind(ownerRefList, strategy) || len(ownerRefList) == 0 {
 				continue
 			}
 			podContainerKeys := make([]string, 0, len(ownerRefList)*len(pod.Spec.Containers))
