@@ -45,8 +45,8 @@ The following table lists the configurable parameters of the _descheduler_ chart
 
 | Parameter                      | Description                                                                                                           | Default                                                |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `image.repository`             | Docker repository to use                                                                                              | `us.gcr.io/k8s-artifacts-prod/descheduler/descheduler` |
-| `image.tag`                    | Docker tag to use                                                                                                     | `v[chart appVersion]`                                              |
+| `image.repository`             | Docker repository to use                                                                                              | `k8s.gcr.io/descheduler/descheduler`                   |
+| `image.tag`                    | Docker tag to use                                                                                                     | `v[chart appVersion]`                                  |
 | `image.pullPolicy`             | Docker image pull policy                                                                                              | `IfNotPresent`                                         |
 | `nameOverride`                 | String to partially override `descheduler.fullname` template (will prepend the release name)                          | `""`                                                   |
 | `fullnameOverride`             | String to fully override `descheduler.fullname` template                                                              | `""`                                                   |
