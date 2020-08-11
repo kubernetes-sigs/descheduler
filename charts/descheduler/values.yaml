@@ -3,7 +3,7 @@
 # Declare variables to be passed into your templates.
 
 image:
-  repository: us.gcr.io/k8s-artifacts-prod/descheduler/descheduler
+  repository: k8s.gcr.io/descheduler/descheduler
   # Overrides the image tag whose default is the chart version
   tag: ""
   pullPolicy: IfNotPresent
