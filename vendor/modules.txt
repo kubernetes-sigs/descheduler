@@ -93,9 +93,12 @@ go.uber.org/zap/internal/bufferpool
 go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
-# golang.org/x/crypto v0.0.0-20200220183623-bac4c82f6975
+# golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
+# golang.org/x/mod v0.3.0
+golang.org/x/mod/module
+golang.org/x/mod/semver
+# golang.org/x/net v0.0.0-20200707034311-ab3426394381
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
 golang.org/x/net/http/httpguts
@@ -120,19 +123,20 @@ golang.org/x/text/unicode/norm
 golang.org/x/text/width
 # golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 golang.org/x/time/rate
-# golang.org/x/tools v0.0.0-20200602230032-c00d67ef29d0
+# golang.org/x/tools v0.0.0-20200616133436-c1934b75d054
 golang.org/x/tools/go/ast/astutil
-golang.org/x/tools/go/gcexportdata
-golang.org/x/tools/go/internal/gcimporter
-golang.org/x/tools/go/internal/packagesdriver
-golang.org/x/tools/go/packages
 golang.org/x/tools/imports
+golang.org/x/tools/internal/event
+golang.org/x/tools/internal/event/core
+golang.org/x/tools/internal/event/keys
+golang.org/x/tools/internal/event/label
 golang.org/x/tools/internal/fastwalk
+golang.org/x/tools/internal/gocommand
 golang.org/x/tools/internal/gopathwalk
 golang.org/x/tools/internal/imports
-golang.org/x/tools/internal/module
-golang.org/x/tools/internal/semver
-golang.org/x/tools/internal/span
+# golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543
+golang.org/x/xerrors
+golang.org/x/xerrors/internal
 # google.golang.org/appengine v1.6.5
 google.golang.org/appengine
 google.golang.org/appengine/internal
@@ -179,7 +183,7 @@ google.golang.org/protobuf/types/known/timestamppb
 gopkg.in/inf.v0
 # gopkg.in/yaml.v2 v2.2.8
 gopkg.in/yaml.v2
-# k8s.io/api v0.19.0-rc.2
+# k8s.io/api v0.19.0-rc.4
 ## explicit
 k8s.io/api/admissionregistration/v1
 k8s.io/api/admissionregistration/v1beta1
@@ -222,7 +226,7 @@ k8s.io/api/settings/v1alpha1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apimachinery v0.19.0-rc.2
+# k8s.io/apimachinery v0.19.0-rc.4
 ## explicit
 k8s.io/apimachinery/pkg/api/errors
 k8s.io/apimachinery/pkg/api/meta
@@ -266,10 +270,10 @@ k8s.io/apimachinery/pkg/version
 k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/json
 k8s.io/apimachinery/third_party/forked/golang/reflect
-# k8s.io/apiserver v0.19.0-rc.2
+# k8s.io/apiserver v0.19.0-rc.4
 ## explicit
 k8s.io/apiserver/pkg/util/feature
-# k8s.io/client-go v0.19.0-rc.2
+# k8s.io/client-go v0.19.0-rc.4
 ## explicit
 k8s.io/client-go/discovery
 k8s.io/client-go/discovery/fake
@@ -486,7 +490,7 @@ k8s.io/client-go/util/homedir
 k8s.io/client-go/util/jsonpath
 k8s.io/client-go/util/keyutil
 k8s.io/client-go/util/workqueue
-# k8s.io/code-generator v0.19.0-rc.2
+# k8s.io/code-generator v0.19.0-rc.4
 ## explicit
 k8s.io/code-generator
 k8s.io/code-generator/cmd/client-gen
@@ -521,7 +525,7 @@ k8s.io/code-generator/cmd/set-gen
 k8s.io/code-generator/pkg/namer
 k8s.io/code-generator/pkg/util
 k8s.io/code-generator/third_party/forked/golang/reflect
-# k8s.io/component-base v0.19.0-rc.2
+# k8s.io/component-base v0.19.0-rc.4
 ## explicit
 k8s.io/component-base/cli/flag
 k8s.io/component-base/featuregate
@@ -548,7 +552,7 @@ k8s.io/kube-openapi/pkg/generators
 k8s.io/kube-openapi/pkg/generators/rules
 k8s.io/kube-openapi/pkg/util/proto
 k8s.io/kube-openapi/pkg/util/sets
-# k8s.io/utils v0.0.0-20200720150651-0bdb4ca86cbc
+# k8s.io/utils v0.0.0-20200729134348-d5654de09c73
 k8s.io/utils/buffer
 k8s.io/utils/integer
 k8s.io/utils/trace
