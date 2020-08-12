@@ -66,10 +66,12 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 		excludedNamespaces = strategy.Params.Namespaces.Exclude
 	}
 
+	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
+
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v", node.Name)
 
-		pods := listOldPodsOnNode(ctx, client, node, includedNamespaces, excludedNamespaces, *strategy.Params.MaxPodLifeTimeSeconds, podEvictor, thresholdPriority)
+		pods := listOldPodsOnNode(ctx, client, node, includedNamespaces, excludedNamespaces, *strategy.Params.MaxPodLifeTimeSeconds, evictable.IsEvictable)
 		for _, pod := range pods {
 			success, err := podEvictor.EvictPod(ctx, pod, node, "PodLifeTime")
 			if success {
@@ -85,14 +87,12 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 	}
 }
 
-func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, includedNamespaces, excludedNamespaces []string, maxPodLifeTimeSeconds uint, podEvictor *evictions.PodEvictor, thresholdPriority int32) []*v1.Pod {
+func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, includedNamespaces, excludedNamespaces []string, maxPodLifeTimeSeconds uint, filter func(pod *v1.Pod) bool) []*v1.Pod {
 	pods, err := podutil.ListPodsOnANode(
 		ctx,
 		client,
 		node,
-		podutil.WithFilter(func(pod *v1.Pod) bool {
-			return podEvictor.IsEvictable(pod, thresholdPriority)
-		}),
+		podutil.WithFilter(filter),
 		podutil.WithNamespaces(includedNamespaces),
 		podutil.WithoutNamespaces(excludedNamespaces),
 	)

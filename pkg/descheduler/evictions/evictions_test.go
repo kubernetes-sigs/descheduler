@@ -241,14 +241,17 @@ func TestIsEvictable(t *testing.T) {
 
 	for _, test := range testCases {
 		test.runBefore(test.pod)
+
 		podEvictor := &PodEvictor{
 			evictLocalStoragePods: test.evictLocalStoragePods,
 		}
-		testPriorityThreshold := utils.SystemCriticalPriority
+
+		evictable := podEvictor.Evictable()
 		if test.priorityThreshold != nil {
-			testPriorityThreshold = *test.priorityThreshold
+			evictable = podEvictor.Evictable(WithPriorityThreshold(*test.priorityThreshold))
 		}
-		result := podEvictor.IsEvictable(test.pod, testPriorityThreshold)
+
+		result := evictable.IsEvictable(test.pod)
 		if result != test.result {
 			t.Errorf("IsEvictable should return for pod %s %t, but it returns %t", test.pod.Name, test.result, result)
 		}
