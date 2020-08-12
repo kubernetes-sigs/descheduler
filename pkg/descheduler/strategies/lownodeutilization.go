@@ -126,13 +126,15 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		targetThresholds[v1.ResourceCPU], targetThresholds[v1.ResourceMemory], targetThresholds[v1.ResourcePods])
 	klog.V(1).Infof("Total number of nodes above target utilization: %v", len(targetNodes))
 
+	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
+
 	evictPodsFromTargetNodes(
 		ctx,
 		targetNodes,
 		lowNodes,
 		targetThresholds,
 		podEvictor,
-		thresholdPriority)
+		evictable.IsEvictable)
 
 	klog.V(1).Infof("Total number of pods evicted: %v", podEvictor.TotalEvicted())
 }
@@ -212,7 +214,7 @@ func evictPodsFromTargetNodes(
 	targetNodes, lowNodes []NodeUsageMap,
 	targetThresholds api.ResourceThresholds,
 	podEvictor *evictions.PodEvictor,
-	thresholdPriority int32,
+	podFilter func(pod *v1.Pod) bool,
 ) {
 
 	sortNodesByUsage(targetNodes)
@@ -249,7 +251,7 @@ func evictPodsFromTargetNodes(
 		}
 		klog.V(3).Infof("evicting pods from node %#v with usage: %#v", node.node.Name, node.usage)
 
-		nonRemovablePods, removablePods := classifyPods(node.allPods, podEvictor, thresholdPriority)
+		nonRemovablePods, removablePods := classifyPods(node.allPods, podFilter)
 		klog.V(2).Infof("allPods:%v, nonRemovablePods:%v, removablePods:%v", len(node.allPods), len(nonRemovablePods), len(removablePods))
 
 		if len(removablePods) == 0 {
@@ -410,11 +412,11 @@ func nodeUtilization(node *v1.Node, pods []*v1.Pod) api.ResourceThresholds {
 	}
 }
 
-func classifyPods(pods []*v1.Pod, evictor *evictions.PodEvictor, thresholdPriority int32) ([]*v1.Pod, []*v1.Pod) {
+func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*v1.Pod) {
 	var nonRemovablePods, removablePods []*v1.Pod
 
 	for _, pod := range pods {
-		if !evictor.IsEvictable(pod, thresholdPriority) {
+		if !filter(pod) {
 			nonRemovablePods = append(nonRemovablePods, pod)
 		} else {
 			removablePods = append(removablePods, pod)
