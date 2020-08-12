@@ -78,10 +78,14 @@ func NewPodEvictor(
 }
 
 // IsEvictable checks if a pod is evictable or not.
-func (pe *PodEvictor) IsEvictable(pod *v1.Pod) bool {
+func (pe *PodEvictor) IsEvictable(pod *v1.Pod, thresholdPriority int32) bool {
 	checkErrs := []error{}
 	if IsCriticalPod(pod) {
 		checkErrs = append(checkErrs, fmt.Errorf("pod is critical"))
+	}
+
+	if !IsPodEvictableBasedOnPriority(pod, thresholdPriority) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is not evictable due to its priority"))
 	}
 
 	ownerRefList := podutil.OwnerRef(pod)
@@ -215,4 +219,9 @@ func IsPodWithLocalStorage(pod *v1.Pod) bool {
 	}
 
 	return false
+}
+
+// IsPodEvictableBasedOnPriority checks if the given pod is evictable based on priority resolved from pod Spec.
+func IsPodEvictableBasedOnPriority(pod *v1.Pod, priority int32) bool {
+	return pod.Spec.Priority == nil || (*pod.Spec.Priority < priority && *pod.Spec.Priority < utils.SystemCriticalPriority)
 }

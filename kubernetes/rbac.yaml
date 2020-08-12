@@ -17,6 +17,9 @@ rules:
 - apiGroups: [""]
   resources: ["pods/eviction"]
   verbs: ["create"]
+- apiGroups: ["scheduling.k8s.io"]
+  resources: ["priorityclasses"]
+  verbs: ["get", "watch", "list"]
 ---
 apiVersion: v1
 kind: ServiceAccount
