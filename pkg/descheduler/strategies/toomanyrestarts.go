@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func validateRemovePodsHavingTooManyRestartsParams(params *api.StrategyParameters) error {
@@ -37,6 +38,9 @@ func validateRemovePodsHavingTooManyRestartsParams(params *api.StrategyParameter
 	// At most one of include/exclude can be set
 	if len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
 		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+	}
+	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
+		return fmt.Errorf("only one of thresholdPriority and thresholdPriorityClassName can be set")
 	}
 
 	return nil
@@ -50,13 +54,21 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 		klog.V(1).Info(err)
 		return
 	}
+	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
+	if err != nil {
+		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
+		return
+	}
+
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %s", node.Name)
 		pods, err := podutil.ListPodsOnANode(
 			ctx,
 			client,
 			node,
-			podutil.WithFilter(podEvictor.IsEvictable),
+			podutil.WithFilter(func(pod *v1.Pod) bool {
+				return podEvictor.IsEvictable(pod, thresholdPriority)
+			}),
 			podutil.WithNamespaces(strategy.Params.Namespaces.Include),
 			podutil.WithoutNamespaces(strategy.Params.Namespaces.Exclude),
 		)
