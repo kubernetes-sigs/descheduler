@@ -234,7 +234,9 @@ strategies:
         maxPodLifeTimeSeconds: 86400
 ````
 
-## Namespace filtering
+## Filter Pods
+
+### Namespace filtering
 
 Strategies like `PodLifeTime`, `RemovePodsHavingTooManyRestarts`, `RemovePodsViolatingNodeTaints`,
 `RemovePodsViolatingNodeAffinity` and `RemovePodsViolatingInterPodAntiAffinity` can specify `namespaces`
@@ -275,6 +277,41 @@ strategies:
 The strategy gets executed over all namespaces but `namespace1` and `namespace2`.
 
 It's not allowed to compute `include` with `exclude` field.
+
+### Priority filtering
+
+All strategies are able to configure a priority threshold, only pods under the threshold can be evicted. You can
+specify this threshold by setting `thresholdPriorityClassName`(setting the threshold to the value of the given
+priority class) or `thresholdPriority`(directly setting the threshold) parameters. By default, this threshold
+is set to the value of `system-cluster-critical` priority class.
+E.g.
+
+Setting `thresholdPriority`
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+        maxPodLifeTimeSeconds: 86400
+        thresholdPriority: 10000
+```
+
+Setting `thresholdPriorityClassName`
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+        maxPodLifeTimeSeconds: 86400
+        thresholdPriorityClassName: "priorityclass1"
+```
+
+Note that you can't configure both `thresholdPriority` and `thresholdPriorityClassName`, if the given priority class
+does not exist, descheduler won't create it and will throw an error.
 
 ## Pod Evictions
 

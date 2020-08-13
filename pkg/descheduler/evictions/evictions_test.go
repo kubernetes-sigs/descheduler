@@ -71,10 +71,13 @@ func TestEvictPod(t *testing.T) {
 
 func TestIsEvictable(t *testing.T) {
 	n1 := test.BuildTestNode("node1", 1000, 2000, 13, nil)
+	lowPriority := int32(800)
+	highPriority := int32(900)
 	type testCase struct {
 		pod                   *v1.Pod
 		runBefore             func(*v1.Pod)
 		evictLocalStoragePods bool
+		priorityThreshold     *int32
 		result                bool
 	}
 
@@ -179,6 +182,7 @@ func TestIsEvictable(t *testing.T) {
 		}, {
 			pod: test.BuildTestPod("p10", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 				pod.Annotations = test.GetMirrorPodAnnotation()
 			},
 			evictLocalStoragePods: false,
@@ -186,6 +190,7 @@ func TestIsEvictable(t *testing.T) {
 		}, {
 			pod: test.BuildTestPod("p11", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 				pod.Annotations = test.GetMirrorPodAnnotation()
 				pod.Annotations["descheduler.alpha.kubernetes.io/evict"] = "true"
 			},
@@ -194,6 +199,7 @@ func TestIsEvictable(t *testing.T) {
 		}, {
 			pod: test.BuildTestPod("p12", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 				priority := utils.SystemCriticalPriority
 				pod.Spec.Priority = &priority
 			},
@@ -202,6 +208,7 @@ func TestIsEvictable(t *testing.T) {
 		}, {
 			pod: test.BuildTestPod("p13", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 				priority := utils.SystemCriticalPriority
 				pod.Spec.Priority = &priority
 				pod.Annotations = map[string]string{
@@ -209,6 +216,25 @@ func TestIsEvictable(t *testing.T) {
 				}
 			},
 			evictLocalStoragePods: false,
+			result:                true,
+		}, {
+			pod: test.BuildTestPod("p14", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod) {
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+				pod.Spec.Priority = &highPriority
+			},
+			evictLocalStoragePods: false,
+			priorityThreshold:     &lowPriority,
+			result:                false,
+		}, {
+			pod: test.BuildTestPod("p15", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod) {
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+				pod.Spec.Priority = &highPriority
+			},
+			evictLocalStoragePods: false,
+			priorityThreshold:     &lowPriority,
 			result:                true,
 		},
 	}
@@ -218,7 +244,11 @@ func TestIsEvictable(t *testing.T) {
 		podEvictor := &PodEvictor{
 			evictLocalStoragePods: test.evictLocalStoragePods,
 		}
-		result := podEvictor.IsEvictable(test.pod)
+		testPriorityThreshold := utils.SystemCriticalPriority
+		if test.priorityThreshold != nil {
+			testPriorityThreshold = *test.priorityThreshold
+		}
+		result := podEvictor.IsEvictable(test.pod, testPriorityThreshold)
 		if result != test.result {
 			t.Errorf("IsEvictable should return for pod %s %t, but it returns %t", test.pod.Name, test.result, result)
 		}
@@ -233,10 +263,6 @@ func TestPodTypes(t *testing.T) {
 	p2 := test.BuildTestPod("p2", 400, 0, n1.Name, nil)
 	p3 := test.BuildTestPod("p3", 400, 0, n1.Name, nil)
 	p4 := test.BuildTestPod("p4", 400, 0, n1.Name, nil)
-	p5 := test.BuildTestPod("p5", 400, 0, n1.Name, nil)
-	p6 := test.BuildTestPod("p6", 400, 0, n1.Name, nil)
-
-	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
 	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	// The following 4 pods won't get evicted.
@@ -257,17 +283,8 @@ func TestPodTypes(t *testing.T) {
 	}
 	// A Mirror Pod.
 	p4.Annotations = test.GetMirrorPodAnnotation()
-	// A Critical Pod.
-	p5.Namespace = "kube-system"
-	priority := utils.SystemCriticalPriority
-	p5.Spec.Priority = &priority
-	systemCriticalPriority := utils.SystemCriticalPriority
-	p5.Spec.Priority = &systemCriticalPriority
 	if !IsMirrorPod(p4) {
 		t.Errorf("Expected p4 to be a mirror pod.")
-	}
-	if !IsCriticalPod(p5) {
-		t.Errorf("Expected p5 to be a critical pod.")
 	}
 	if !IsPodWithLocalStorage(p3) {
 		t.Errorf("Expected p3 to be a pod with local storage.")
