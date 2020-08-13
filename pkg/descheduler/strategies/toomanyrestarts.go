@@ -36,7 +36,7 @@ func validateRemovePodsHavingTooManyRestartsParams(params *api.StrategyParameter
 	}
 
 	// At most one of include/exclude can be set
-	if len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
+	if params.Namespaces != nil && len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
 		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
 	}
 	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
@@ -54,10 +54,17 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 		klog.V(1).Info(err)
 		return
 	}
+
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
 		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
 		return
+	}
+
+	var includedNamespaces, excludedNamespaces []string
+	if strategy.Params.Namespaces != nil {
+		includedNamespaces = strategy.Params.Namespaces.Include
+		excludedNamespaces = strategy.Params.Namespaces.Exclude
 	}
 
 	for _, node := range nodes {
@@ -69,8 +76,8 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 			podutil.WithFilter(func(pod *v1.Pod) bool {
 				return podEvictor.IsEvictable(pod, thresholdPriority)
 			}),
-			podutil.WithNamespaces(strategy.Params.Namespaces.Include),
-			podutil.WithoutNamespaces(strategy.Params.Namespaces.Exclude),
+			podutil.WithNamespaces(includedNamespaces),
+			podutil.WithoutNamespaces(excludedNamespaces),
 		)
 		if err != nil {
 			klog.Errorf("Error when list pods at node %s", node.Name)
