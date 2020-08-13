@@ -242,7 +242,11 @@ func (in *StrategyParameters) DeepCopyInto(out *StrategyParameters) {
 		*out = new(RemoveDuplicates)
 		(*in).DeepCopyInto(*out)
 	}
-	in.Namespaces.DeepCopyInto(&out.Namespaces)
+	if in.Namespaces != nil {
+		in, out := &in.Namespaces, &out.Namespaces
+		*out = new(Namespaces)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.ThresholdPriority != nil {
 		in, out := &in.ThresholdPriority, &out.ThresholdPriority
 		*out = new(int32)

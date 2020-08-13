@@ -25,7 +25,7 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
@@ -37,7 +37,7 @@ func validateRemovePodsViolatingInterPodAntiAffinityParams(params *api.StrategyP
 	}
 
 	// At most one of include/exclude can be set
-	if len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
+	if params.Namespaces != nil && len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
 		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
 	}
 	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
@@ -53,10 +53,13 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 		klog.V(1).Info(err)
 		return
 	}
-	var namespaces api.Namespaces
-	if strategy.Params != nil {
-		namespaces = strategy.Params.Namespaces
+
+	var includedNamespaces, excludedNamespaces []string
+	if strategy.Params != nil && strategy.Params.Namespaces != nil {
+		includedNamespaces = strategy.Params.Namespaces.Include
+		excludedNamespaces = strategy.Params.Namespaces.Exclude
 	}
+
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
 		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
@@ -72,8 +75,8 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 			podutil.WithFilter(func(pod *v1.Pod) bool {
 				return podEvictor.IsEvictable(pod, thresholdPriority)
 			}),
-			podutil.WithNamespaces(namespaces.Include),
-			podutil.WithoutNamespaces(namespaces.Exclude),
+			podutil.WithNamespaces(includedNamespaces),
+			podutil.WithoutNamespaces(excludedNamespaces),
 		)
 		if err != nil {
 			return
