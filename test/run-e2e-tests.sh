@@ -32,5 +32,10 @@ if [ -n "$KIND_E2E" ]; then
     mv ~/gopath/src/github.com/kubernetes-sigs/descheduler ~/gopath/src/sigs.k8s.io/.
 fi
 
+echo $GOPATH
+ls $GOPATH/src
+echo $GOROOT
+ls $GOROOT
+
 PRJ_PREFIX="sigs.k8s.io/descheduler"
 go test ${PRJ_PREFIX}/test/e2e/ -v
