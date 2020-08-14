@@ -20,11 +20,12 @@ import (
 	"context"
 	"math"
 	"os"
-	"sigs.k8s.io/descheduler/pkg/utils"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"sigs.k8s.io/descheduler/pkg/utils"
 
 	v1 "k8s.io/api/core/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
@@ -188,7 +189,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	deleteRC(ctx, t, clientSet, rc)
 }
 
-func runPodLifetimeStrategy(ctx context.Context, clientset clientset.Interface, nodeInformer coreinformers.NodeInformer, namespaces deschedulerapi.Namespaces, priorityClass string, priority *int32) {
+func runPodLifetimeStrategy(ctx context.Context, clientset clientset.Interface, nodeInformer coreinformers.NodeInformer, namespaces *deschedulerapi.Namespaces, priorityClass string, priority *int32) {
 	// Run descheduler.
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientset)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
@@ -286,7 +287,7 @@ func TestNamespaceConstraintsInclude(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Logf("set the strategy to delete pods from %v namespace", rc.Namespace)
-	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, deschedulerapi.Namespaces{
+	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, &deschedulerapi.Namespaces{
 		Include: []string{rc.Namespace},
 	}, "", nil)
 
@@ -357,7 +358,7 @@ func TestNamespaceConstraintsExclude(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Logf("set the strategy to delete pods from namespaces except the %v namespace", rc.Namespace)
-	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, deschedulerapi.Namespaces{
+	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, &deschedulerapi.Namespaces{
 		Exclude: []string{rc.Namespace},
 	}, "", nil)
 
@@ -461,10 +462,10 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 
 	if isPriorityClass {
 		t.Logf("set the strategy to delete pods with priority lower than priority class %s", highPriorityClass.Name)
-		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, deschedulerapi.Namespaces{}, highPriorityClass.Name, nil)
+		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, nil, highPriorityClass.Name, nil)
 	} else {
 		t.Logf("set the strategy to delete pods with priority lower than %d", highPriority)
-		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, deschedulerapi.Namespaces{}, "", &highPriority)
+		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, nil, "", &highPriority)
 	}
 
 	t.Logf("Waiting 10s")

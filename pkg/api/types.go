@@ -60,7 +60,7 @@ type StrategyParameters struct {
 	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts
 	MaxPodLifeTimeSeconds             *uint
 	RemoveDuplicates                  *RemoveDuplicates
-	Namespaces                        Namespaces
+	Namespaces                        *Namespaces
 	ThresholdPriority                 *int32
 	ThresholdPriorityClassName        string
 }
