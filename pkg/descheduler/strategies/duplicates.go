@@ -63,17 +63,17 @@ func RemoveDuplicatePods(
 	}
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
+		klog.V(1).InfoS("Failed to get threshold priority from strategy's params", "err", err)
 		return
 	}
 
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	for _, node := range nodes {
-		klog.V(1).Infof("Processing node: %#v", node.Name)
+		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListPodsOnANode(ctx, client, node, podutil.WithFilter(evictable.IsEvictable))
 		if err != nil {
-			klog.Errorf("error listing evictable pods on node %s: %+v", node.Name, err)
+			klog.ErrorS(err, "Error listing evictable pods on node", "node", klog.KObj(node))
 			continue
 		}
 
@@ -131,7 +131,7 @@ func RemoveDuplicatePods(
 
 		for _, pod := range duplicatePods {
 			if _, err := podEvictor.EvictPod(ctx, pod, node, "RemoveDuplicatePods"); err != nil {
-				klog.Errorf("Error evicting pod: (%#v)", err)
+				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
 				break
 			}
 		}
