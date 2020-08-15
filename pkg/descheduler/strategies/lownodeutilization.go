@@ -71,7 +71,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 	}
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
+		klog.V(1).InfoS("Failed to get threshold priority from strategy's params", "err", err)
 		return
 	}
 
@@ -113,12 +113,12 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 	}
 
 	if len(lowNodes) == len(nodes) {
-		klog.V(1).Infof("all nodes are underutilized, nothing to do here")
+		klog.V(1).Infof("All nodes are underutilized, nothing to do here")
 		return
 	}
 
 	if len(targetNodes) == 0 {
-		klog.V(1).Infof("all nodes are under target utilization, nothing to do here")
+		klog.V(1).Infof("All nodes are under target utilization, nothing to do here")
 		return
 	}
 
@@ -136,7 +136,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		podEvictor,
 		evictable.IsEvictable)
 
-	klog.V(1).Infof("Total number of pods evicted: %v", podEvictor.TotalEvicted())
+	klog.V(1).InfoS("Total number of pods evicted", "evictedPods", podEvictor.TotalEvicted())
 }
 
 // validateStrategyConfig checks if the strategy's config is valid
@@ -194,13 +194,14 @@ func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThr
 		}
 		// Check if node is underutilized and if we can schedule pods on it.
 		if !nodeutil.IsNodeUnschedulable(node) && isNodeWithLowUtilization(usage, thresholds) {
-			klog.V(2).Infof("Node %#v is under utilized with usage: %#v", node.Name, usage)
+			klog.V(2).InfoS("Node is underutilized", "node", klog.KObj(node), "usage", usage)
 			lowNodes = append(lowNodes, nuMap)
 		} else if isNodeAboveTargetUtilization(usage, targetThresholds) {
-			klog.V(2).Infof("Node %#v is over utilized with usage: %#v", node.Name, usage)
+			klog.V(2).InfoS("Node is overutilized", "node", klog.KObj(node), "usage", usage)
 			targetNodes = append(targetNodes, nuMap)
 		} else {
-			klog.V(2).Infof("Node %#v is appropriately utilized with usage: %#v", node.Name, usage)
+			klog.V(2).InfoS("Node is appropriately utilized", "node", klog.KObj(node), "usage", usage)
+
 		}
 	}
 	return lowNodes, targetNodes
@@ -241,21 +242,20 @@ func evictPodsFromTargetNodes(
 		totalMem += ((float64(memPercentage) * float64(nodeCapacity.Memory().Value())) / 100)
 	}
 
-	klog.V(1).Infof("Total capacity to be moved: CPU:%v, Mem:%v, Pods:%v", totalCPU, totalMem, totalPods)
-	klog.V(1).Infof("********Number of pods evicted from each node:***********")
+	klog.V(1).InfoS("Total capacity to be moved", "CPU", totalCPU, "Mem", totalMem, "Pods", totalPods)
 
 	for _, node := range targetNodes {
 		nodeCapacity := node.node.Status.Capacity
 		if len(node.node.Status.Allocatable) > 0 {
 			nodeCapacity = node.node.Status.Allocatable
 		}
-		klog.V(3).Infof("evicting pods from node %#v with usage: %#v", node.node.Name, node.usage)
+		klog.V(3).InfoS("Evicting pods from node", "node", klog.KObj(node.node), "usage", node.usage)
 
 		nonRemovablePods, removablePods := classifyPods(node.allPods, podFilter)
-		klog.V(2).Infof("allPods:%v, nonRemovablePods:%v, removablePods:%v", len(node.allPods), len(nonRemovablePods), len(removablePods))
+		klog.V(2).Infof("AllPods:%v, nonRemovablePods:%v, removablePods:%v", len(node.allPods), len(nonRemovablePods), len(removablePods))
 
 		if len(removablePods) == 0 {
-			klog.V(1).Infof("no removable pods on node %#v, try next node", node.node.Name)
+			klog.V(1).InfoS("No removable pods on node, try next node", "node", klog.KObj(node.node))
 			continue
 		}
 
@@ -263,8 +263,7 @@ func evictPodsFromTargetNodes(
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
 		evictPods(ctx, removablePods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)
-
-		klog.V(1).Infof("%v pods evicted from node %#v with usage %v", podEvictor.NodeEvicted(node.node), node.node.Name, node.usage)
+		klog.V(1).InfoS("Evicted pods from node", "node", klog.KObj(node.node), "evictedPods", podEvictor.NodeEvicted(node.node), "usage", node.usage)
 	}
 }
 
@@ -285,7 +284,8 @@ func evictPods(
 		onePodPercentage := api.Percentage((float64(1) * 100) / float64(nodeCapacity.Pods().Value()))
 		for _, pod := range inputPods {
 			if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
-				klog.V(3).Infof("Skipping eviction for Pod: %#v, doesn't tolerate node taint", pod.Name)
+				klog.V(3).InfoS("Skipping eviction for pod, doesn't tolerate node taint", "pod", klog.KObj(pod))
+
 				continue
 			}
 
@@ -294,12 +294,13 @@ func evictPods(
 
 			success, err := podEvictor.EvictPod(ctx, pod, node, "LowNodeUtilization")
 			if err != nil {
-				klog.Errorf("Error evicting pod: (%#v)", err)
+				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
 				break
 			}
 
 			if success {
-				klog.V(3).Infof("Evicted pod: %#v", pod.Name)
+				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod), "err", err)
+
 				// update remaining pods
 				nodeUsage[v1.ResourcePods] -= onePodPercentage
 				*totalPods--
@@ -312,7 +313,7 @@ func evictPods(
 				*totalMem -= float64(mUsage)
 				nodeUsage[v1.ResourceMemory] -= api.Percentage(float64(mUsage) / float64(nodeCapacity.Memory().Value()) * 100)
 
-				klog.V(3).Infof("updated node usage: %#v", nodeUsage)
+				klog.V(3).InfoS("Updated node usage", "updatedUsage", nodeUsage)
 				// check if node utilization drops below target threshold or any required capacity (cpu, memory, pods) is moved
 				if !isNodeAboveTargetUtilization(nodeUsage, targetThresholds) || *totalPods <= 0 || *totalCPU <= 0 || *totalMem <= 0 {
 					break

@@ -54,7 +54,7 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 	}
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
+		klog.V(1).InfoS("Failed to get threshold priority from strategy's params", "err", err)
 		return
 	}
 
@@ -67,12 +67,12 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	for _, nodeAffinity := range strategy.Params.NodeAffinityType {
-		klog.V(2).Infof("Executing for nodeAffinityType: %v", nodeAffinity)
+		klog.V(2).InfoS("Executing for nodeAffinityType", "nodeAffinity", nodeAffinity)
 
 		switch nodeAffinity {
 		case "requiredDuringSchedulingIgnoredDuringExecution":
 			for _, node := range nodes {
-				klog.V(1).Infof("Processing node: %#v\n", node.Name)
+				klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 
 				pods, err := podutil.ListPodsOnANode(
 					ctx,
@@ -92,9 +92,9 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 
 				for _, pod := range pods {
 					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-						klog.V(1).Infof("Evicting pod: %v", pod.Name)
+						klog.V(1).InfoS("Evicting pod", "pod", klog.KObj(pod))
 						if _, err := podEvictor.EvictPod(ctx, pod, node, "NodeAffinity"); err != nil {
-							klog.Errorf("Error evicting pod: (%#v)", err)
+							klog.ErrorS(err, "Error evicting pod")
 							break
 						}
 					}

@@ -57,7 +57,7 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
+		klog.V(1).InfoS("Failed to get threshold priority from strategy's params", "err", err)
 		return
 	}
 
@@ -70,7 +70,7 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	for _, node := range nodes {
-		klog.V(1).Infof("Processing node: %s", node.Name)
+		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListPodsOnANode(
 			ctx,
 			client,
@@ -80,7 +80,7 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 			podutil.WithoutNamespaces(excludedNamespaces),
 		)
 		if err != nil {
-			klog.Errorf("Error when list pods at node %s", node.Name)
+			klog.ErrorS(err, "Error listing a nodes pods", "node", klog.KObj(node))
 			continue
 		}
 
@@ -94,7 +94,7 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 				continue
 			}
 			if _, err := podEvictor.EvictPod(ctx, pods[i], node, "TooManyRestarts"); err != nil {
-				klog.Errorf("Error evicting pod: (%#v)", err)
+				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
 				break
 			}
 		}
