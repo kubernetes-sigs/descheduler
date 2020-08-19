@@ -81,8 +81,8 @@ func NewPodEvictor(
 // IsEvictable checks if a pod is evictable or not.
 func (pe *PodEvictor) IsEvictable(pod *v1.Pod, thresholdPriority int32) bool {
 	checkErrs := []error{}
-	if IsCriticalPod(pod) {
-		checkErrs = append(checkErrs, fmt.Errorf("pod is critical"))
+	if IsCriticalPod(pod) && IsPodWithSystemCritical(pod) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is critical and descheduler is not configured with --evict-system-critical-pods"))
 	}
 
 	if !IsPodEvictableBasedOnPriority(pod, thresholdPriority) {
