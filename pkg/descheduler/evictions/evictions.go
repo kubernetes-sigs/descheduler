@@ -61,6 +61,7 @@ func NewPodEvictor(
 	maxPodsToEvictPerNode int,
 	nodes []*v1.Node,
 	evictLocalStoragePods bool,
+	evictSystemCriticalPods bool,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
 	for _, node := range nodes {
@@ -75,13 +76,14 @@ func NewPodEvictor(
 		maxPodsToEvictPerNode: maxPodsToEvictPerNode,
 		nodepodCount:          nodePodCount,
 		evictLocalStoragePods: evictLocalStoragePods,
+		evictSystemCriticalPods: evictSystemCriticalPods,
 	}
 }
 
 // IsEvictable checks if a pod is evictable or not.
 func (pe *PodEvictor) IsEvictable(pod *v1.Pod, thresholdPriority int32) bool {
 	checkErrs := []error{}
-	if IsCriticalPod(pod) && IsPodWithSystemCritical(pod) {
+	if !pe.evictSystemCriticalPods && IsCriticalPod(pod) {
 		checkErrs = append(checkErrs, fmt.Errorf("pod is critical and descheduler is not configured with --evict-system-critical-pods"))
 	}
 
