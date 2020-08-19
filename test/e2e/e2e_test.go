@@ -25,8 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"sigs.k8s.io/descheduler/pkg/utils"
-
 	v1 "k8s.io/api/core/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -654,10 +652,7 @@ func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface,
 			continue
 		}
 		// List all the pods on the current Node
-		podsOnANode, err := podutil.ListPodsOnANode(ctx, clientSet, node,
-			podutil.WithFilter(func(pod *v1.Pod) bool {
-				return podEvictor.IsEvictable(pod, utils.SystemCriticalPriority)
-			}))
+		podsOnANode, err := podutil.ListPodsOnANode(ctx, clientSet, node, podutil.WithFilter(podEvictor.Evictable().IsEvictable))
 		if err != nil {
 			t.Errorf("Error listing pods on a node %v", err)
 		}
@@ -669,10 +664,7 @@ func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface,
 	}
 	t.Log("Eviction of pods starting")
 	startEndToEndForLowNodeUtilization(ctx, clientSet, nodeInformer, podEvictor)
-	podsOnleastUtilizedNode, err := podutil.ListPodsOnANode(ctx, clientSet, leastLoadedNode,
-		podutil.WithFilter(func(pod *v1.Pod) bool {
-			return podEvictor.IsEvictable(pod, utils.SystemCriticalPriority)
-		}))
+	podsOnleastUtilizedNode, err := podutil.ListPodsOnANode(ctx, clientSet, leastLoadedNode, podutil.WithFilter(podEvictor.Evictable().IsEvictable))
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}

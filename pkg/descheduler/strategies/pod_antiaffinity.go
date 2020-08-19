@@ -66,15 +66,15 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 		return
 	}
 
+	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
+
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
 		pods, err := podutil.ListPodsOnANode(
 			ctx,
 			client,
 			node,
-			podutil.WithFilter(func(pod *v1.Pod) bool {
-				return podEvictor.IsEvictable(pod, thresholdPriority)
-			}),
+			podutil.WithFilter(evictable.IsEvictable),
 			podutil.WithNamespaces(includedNamespaces),
 			podutil.WithoutNamespaces(excludedNamespaces),
 		)
