@@ -64,6 +64,21 @@ Seven strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingI
 are currently implemented. As part of the policy, the parameters associated with the strategies can be configured too.
 By default, all strategies are enabled.
 
+The policy also includes common configuration for all the strategies:
+- `nodeSelector` - limiting the nodes which are processed
+- `evictLocalStoragePods` - allowing to evict pods with local storage
+- `maxNoOfPodsToEvictPerNode` - maximum number of pods evicted from each node (summed through all strategies)
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+nodeSelector: prod=dev
+evictLocalStoragePods: true
+maxNoOfPodsToEvictPerNode: 40
+strategies:
+  ...
+```
+
 ### RemoveDuplicates
 
 This strategy makes sure that there is only one pod associated with a Replica Set (RS),
