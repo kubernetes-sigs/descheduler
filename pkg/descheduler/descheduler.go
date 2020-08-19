@@ -100,6 +100,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			rs.MaxNoOfPodsToEvictPerNode,
 			nodes,
 			rs.EvictLocalStoragePods,
+			rs.EvictSystemCriticalPods,
 		)
 
 		for name, f := range strategyFuncs {

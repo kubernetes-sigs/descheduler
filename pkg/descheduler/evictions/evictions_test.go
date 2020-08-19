@@ -74,11 +74,12 @@ func TestIsEvictable(t *testing.T) {
 	lowPriority := int32(800)
 	highPriority := int32(900)
 	type testCase struct {
-		pod                   *v1.Pod
-		runBefore             func(*v1.Pod)
-		evictLocalStoragePods bool
-		priorityThreshold     *int32
-		result                bool
+		pod                     *v1.Pod
+		runBefore               func(*v1.Pod)
+		evictLocalStoragePods   bool
+		evictSystemCriticalPods bool
+		priorityThreshold       *int32
+		result                  bool
 	}
 
 	testCases := []testCase{

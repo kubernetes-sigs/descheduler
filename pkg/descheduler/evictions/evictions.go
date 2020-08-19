@@ -45,12 +45,13 @@ const (
 type nodePodEvictedCount map[*v1.Node]int
 
 type PodEvictor struct {
-	client                clientset.Interface
-	policyGroupVersion    string
-	dryRun                bool
-	maxPodsToEvictPerNode int
-	nodepodCount          nodePodEvictedCount
-	evictLocalStoragePods bool
+	client                  clientset.Interface
+	policyGroupVersion      string
+	dryRun                  bool
+	maxPodsToEvictPerNode   int
+	nodepodCount            nodePodEvictedCount
+	evictLocalStoragePods   bool
+	evictSystemCriticalPods bool
 }
 
 func NewPodEvictor(

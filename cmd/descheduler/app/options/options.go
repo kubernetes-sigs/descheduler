@@ -58,4 +58,6 @@ func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&rs.MaxNoOfPodsToEvictPerNode, "max-pods-to-evict-per-node", rs.MaxNoOfPodsToEvictPerNode, "Limits the maximum number of pods to be evicted per node by descheduler")
 	// evict-local-storage-pods allows eviction of pods that are using local storage. This is false by default.
 	fs.BoolVar(&rs.EvictLocalStoragePods, "evict-local-storage-pods", rs.EvictLocalStoragePods, "Enables evicting pods using local storage by descheduler")
+	// evict-system-critical-pods allows eviction of critical pods. This is false by default.
+	fs.BoolVar(&rs.EvictSystemCriticalPods, "evict-system-critical-pods", rs.EvictSystemCriticalPods, "Enables evicting critical pods by descheduler")
 }

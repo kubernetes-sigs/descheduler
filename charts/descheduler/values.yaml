@@ -16,6 +16,7 @@ schedule: "*/2 * * * *"
 cmdOptions:
   v: 3
   # evict-local-storage-pods:
+  # evict-system-critical-pods:
   # max-pods-to-evict-per-node: 10
   # node-selector: "key1=value1,key2=value2"
 

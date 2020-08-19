@@ -56,6 +56,7 @@ func autoConvert_v1alpha1_DeschedulerConfiguration_To_componentconfig_Deschedule
 	out.NodeSelector = in.NodeSelector
 	out.MaxNoOfPodsToEvictPerNode = in.MaxNoOfPodsToEvictPerNode
 	out.EvictLocalStoragePods = in.EvictLocalStoragePods
+	out.EvictSystemCriticalPods = in.EvictSystemCriticalPods
 	return nil
 }
 
