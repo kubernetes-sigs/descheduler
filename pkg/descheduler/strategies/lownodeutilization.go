@@ -95,8 +95,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
 	}
 
-	npm := createNodePodsMap(ctx, client, nodes)
-	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds)
+	lowNodes, targetNodes := classifyNodes(ctx, client, nodes, thresholds, targetThresholds)
 
 	klog.V(1).Infof("Criteria for a node under utilization: CPU: %v, Mem: %v, Pods: %v",
 		thresholds[v1.ResourceCPU], thresholds[v1.ResourceMemory], thresholds[v1.ResourcePods])
@@ -183,9 +182,16 @@ func validateThresholds(thresholds api.ResourceThresholds) error {
 
 // classifyNodes classifies the nodes into low-utilization or high-utilization nodes. If a node lies between
 // low and high thresholds, it is simply ignored.
-func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThresholds api.ResourceThresholds) ([]NodeUsageMap, []NodeUsageMap) {
+func classifyNodes(ctx context.Context, client clientset.Interface, nodes []*v1.Node, thresholds api.ResourceThresholds, targetThresholds api.ResourceThresholds) ([]NodeUsageMap, []NodeUsageMap) {
 	lowNodes, targetNodes := []NodeUsageMap{}, []NodeUsageMap{}
-	for node, pods := range npm {
+
+	for _, node := range nodes {
+		pods, err := podutil.ListPodsOnANode(ctx, client, node)
+		if err != nil {
+			klog.Warningf("node %s will not be processed, error in accessing its pods (%#v)", node.Name, err)
+			continue
+		}
+
 		usage := nodeUtilization(node, pods)
 		nuMap := NodeUsageMap{
 			node:    node,
@@ -340,20 +346,6 @@ func sortNodesByUsage(nodes []NodeUsageMap) {
 		// To return sorted in descending order
 		return ti > tj
 	})
-}
-
-// createNodePodsMap returns nodepodsmap with evictable pods on node.
-func createNodePodsMap(ctx context.Context, client clientset.Interface, nodes []*v1.Node) NodePodsMap {
-	npm := NodePodsMap{}
-	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(ctx, client, node)
-		if err != nil {
-			klog.Warningf("node %s will not be processed, error in accessing its pods (%#v)", node.Name, err)
-		} else {
-			npm[node] = pods
-		}
-	}
-	return npm
 }
 
 // isNodeAboveTargetUtilization checks if a node is overutilized
