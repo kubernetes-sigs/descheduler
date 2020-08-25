@@ -117,6 +117,11 @@ func ListPodsOnANode(
 	}
 
 	for i := range podList.Items {
+		// fake client does not support field selectors
+		// so let's filter based on the node name as well (quite cheap)
+		if podList.Items[i].Spec.NodeName != node.Name {
+			continue
+		}
 		if options.filter != nil && !options.filter(&podList.Items[i]) {
 			continue
 		}
