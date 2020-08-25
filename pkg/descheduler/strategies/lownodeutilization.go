@@ -102,7 +102,11 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		getNodeUsage(ctx, client, nodes, thresholds, targetThresholds),
 		// The node has to be schedulable (to be able to move workload there)
 		func(node *v1.Node, usage NodeUsage) bool {
-			return !nodeutil.IsNodeUnschedulable(node) && isNodeWithLowUtilization(usage)
+			if nodeutil.IsNodeUnschedulable(node) {
+				klog.V(2).InfoS("Node is unschedulable, thus not considered as underutilized", "node", klog.KObj(node))
+				return false
+			}
+			return isNodeWithLowUtilization(usage)
 		},
 		func(node *v1.Node, usage NodeUsage) bool {
 			return isNodeAboveTargetUtilization(usage)
