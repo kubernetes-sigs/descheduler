@@ -20,7 +20,7 @@ import (
 	"context"
 	"testing"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
@@ -69,7 +69,7 @@ func TestReadyNodesWithNodeSelector(t *testing.T) {
 	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
 
-	stopChannel := make(chan struct{}, 0)
+	stopChannel := make(chan struct{})
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 	defer close(stopChannel)

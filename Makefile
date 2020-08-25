@@ -22,7 +22,7 @@ LDFLAG_LOCATION=sigs.k8s.io/descheduler/cmd/descheduler/app
 
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitCommit=${COMMIT}"
 
-GOLANGCI_VERSION := v1.15.0
+GOLANGCI_VERSION := v1.30.0
 HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint)
 
 # REGISTRY is the container registry to push
