@@ -20,26 +20,22 @@ import (
 	"context"
 	"math"
 
-	"github.com/golang/glog"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
-func TopologySpreadConstraint(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, evictLocalStoragePods bool, podEvictor *evictions.PodEvictor) {
-	if !strategy.Enabled {
-		return
-	}
-
-	glog.Infof("Found following parameters for TopologySpreadConstraint %v", strategy)
-	//evictPodsViolatingSpreadConstraints(ds.Client, policyGroupVersion, nodes, ds.DryRun, nodePodCount, strategy.Params.NamespacedTopologySpreadConstraints)
-
-}
+// @seanmalloy notes:
+//
+// https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.18/#topologyspreadconstraint-v1-core
+// https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/
+// https://github.com/kubernetes-sigs/descheduler/blob/master/pkg/descheduler/strategies/pod_antiaffinity.go
 
 // AntiAffinityTerm's topology key value used in predicate metadata
 type topologyPair struct {
@@ -55,30 +51,84 @@ type topologyPairToPodSetMap map[topologyPair]podSet
 // for each topologyKey, what is the map of topologyKey pairs to pods
 type topologyKeyToTopologyPairSetMap map[string]topologyPairToPodSetMap
 
-// Create a map of Node Name to v1.Node
-// for each namespace for which there is Topology Constraint
-// for each TopologySpreadyConstraint in that namespace
-// find all evictable pods in that namespace
-// for each evictable pod in that namespace
-// If the pod matches this TopologySpreadConstraint LabelSelector
-// If the pod nodeName is present in the nodeMap
-// create a topoPair with key as this TopologySpreadConstraint.TopologyKey and value as this pod's Node Label Value for this TopologyKey
-// add the pod with key as this topoPair
-// find the min number of pods in any topoPair for this topologyKey
-// iterate through all topoPairs for this topologyKey and diff currentPods -minPods <=maxSkew
-// if diff > maxSkew, add this pod in the current bucket for eviction
+// TODO: remove this type?
+type NamespacedTopologySpreadConstraint struct {
+	Namespace                 string
+	TopologySpreadConstraints []v1.TopologySpreadConstraint
+}
 
-// We get N podLists , one for each TopologyKey in a given Namespace
-// Find the pods which are common to each of these podLists
-// Evict these Pods
-// TODO: Break this down into UT'able functions
-func evictPodsViolatingSpreadConstraints(
+func RemovePodsViolatingTopologySpreadConstraint(
+	ctx context.Context,
 	client clientset.Interface,
-	policyGroupVersion string,
-	nodes []*v1.Node, dryRun bool,
-	nodePodCount nodePodEvictedCount,
-	namespacedTopologySpreadConstraints []api.NamespacedTopologySpreadConstraint,
+	strategy api.DeschedulerStrategy,
+	nodes []*v1.Node,
+	podEvictor *evictions.PodEvictor,
 ) {
+	// START HERE
+
+	// TODO: move code from this function here
+	//
+	//evictPodsViolatingSpreadConstraints(ds.Client, policyGroupVersion, nodes, ds.DryRun, nodePodCount, strategy.Params.NamespacedTopologySpreadConstraints)
+
+	// contents of evictPodsViolatingSpreadConstraints
+	//
+	// Create a map of Node Name to v1.Node
+	// for each namespace for which there is Topology Constraint
+	// for each TopologySpreadyConstraint in that namespace
+	// find all evictable pods in that namespace
+	// for each evictable pod in that namespace
+	// If the pod matches this TopologySpreadConstraint LabelSelector
+	// If the pod nodeName is present in the nodeMap
+	// create a topoPair with key as this TopologySpreadConstraint.TopologyKey and value as this pod's Node Label Value for this TopologyKey
+	// add the pod with key as this topoPair
+	// find the min number of pods in any topoPair for this topologyKey
+	// iterate through all topoPairs for this topologyKey and diff currentPods -minPods <=maxSkew
+	// if diff > maxSkew, add this pod in the current bucket for eviction
+
+	// We get N podLists , one for each TopologyKey in a given Namespace
+	// Find the pods which are common to each of these podLists
+	// Evict these Pods
+
+	// @seanmalloy
+	//
+	// find all canidate pods and namespaces for eviction
+	namespacedTopologySpreadConstrainPods := make(map[string][]*v1.Pod)
+	/*for _, node := range nodes {
+		pods, err := podutil.ListPodsOnANode(ctx, client, node, podEvictor.IsEvictable)
+		if err != nil {
+			return
+		}
+		for _, pod := range pods {
+			if pod.Spec.TopologySpreadConstraints != nil {
+				namespacedTopologySpreadConstrainPods[pod.Namespace] = append(namespacedTopologySpreadConstrainPods[pod.Namespace], pod)
+			}
+		}
+	} */
+
+	// @seanmalloy need to iterate through each namespace and evict pods to rebalance
+	for ns, pods := range namespacedTopologySpreadConstrainPods {
+		klog.V(1).Infof("processing namespace: %v pods; %v", ns, pods)
+		podsToEvict := getPodsViolatingPodsTopologySpreadConstraint(pods)
+		podutil.SortPodsBasedOnPriorityLowToHigh(podsToEvict)
+		/* for _, pod := range podsToEvict {
+			success, err := podEvictor.EvictPod(ctx, pod, node, "TopologySpreadConstraint") // START figure out how to pass in node here to fix compile error
+			if success {
+				klog.V(1).Infof("Evicted pod: %#v because it violated PodTopologySpreadConstraint", pod.Name)
+			}
+
+			if err != nil {
+				klog.Errorf("Error evicting pod: (%#v)", err)
+				break
+			}
+		} */
+	}
+	// START HERE
+	return
+	// @seanmalloy need to calculate which pods should be evicted to "balance" based on topology domains
+	//
+	// need to implement the stubbed in function getPodsViolatingPodsTopologySpreadConstraint
+
+	// @seanmalloy need to handle multiple TopologySpreadConstraints on single pod
 
 	namespaceToTopologyKeySet := make(map[string]topologyKeyToTopologyPairSetMap)
 
@@ -87,6 +137,12 @@ func evictPodsViolatingSpreadConstraints(
 	for _, node := range nodes {
 		nodeMap[node.Name] = node
 	}
+
+	// TODO: the below line just makes an empty slice, and the struct type NamespacedTopologySpreadConstraint will be removed
+	//
+	// namespacedTopologySpreadConstraints variable was previously passed in as a strategy
+	// parameter, but this is no longer a strategy parameter.
+	namespacedTopologySpreadConstraints := []NamespacedTopologySpreadConstraint{}
 	for _, namespacedConstraint := range namespacedTopologySpreadConstraints {
 		if namespaceToTopologyKeySet[namespacedConstraint.Namespace] == nil {
 			namespaceToTopologyKeySet[namespacedConstraint.Namespace] = make(topologyKeyToTopologyPairSetMap)
@@ -105,25 +161,30 @@ func evictPodsViolatingSpreadConstraints(
 					namespaceToTopologyKeySet[namespacedConstraint.Namespace][topoConstraint.TopologyKey][pair] = make(podSet)
 				}
 			}
-			pods, err := podutil.ListEvictablePodsByNamespace(client, false, namespacedConstraint.Namespace)
-			if err != nil || len(pods) == 0 {
-				glog.V(1).Infof("No Evictable pods found for Namespace %v", namespacedConstraint.Namespace)
+
+			// TODO: pods is hard coded to a slice of empty pods
+			//
+			//pods, err := podutil.ListEvictablePodsByNamespace(client, false, namespacedConstraint.Namespace)
+			pods := []*v1.Pod{}
+			//if err != nil || len(pods) == 0 {
+			if len(pods) == 0 {
+				klog.V(1).Infof("No Evictable pods found for Namespace %v", namespacedConstraint.Namespace)
 				continue
 			}
 
 			for _, pod := range pods {
-				glog.V(2).Infof("Processing pod %v", pod.Name)
+				klog.V(2).Infof("Processing pod %v", pod.Name)
 				// does this pod labels match the constraint label selector
 				selector, err := metav1.LabelSelectorAsSelector(topoConstraint.LabelSelector)
 				if err != nil {
-					glog.V(2).Infof("Pod Labels dont match for %v", pod.Name)
+					klog.V(2).Infof("Pod Labels dont match for %v", pod.Name)
 					continue
 				}
 				if !selector.Matches(labels.Set(pod.Labels)) {
-					glog.V(2).Infof("Pod Labels dont match for %v", pod.Name)
+					klog.V(2).Infof("Pod Labels dont match for %v", pod.Name)
 					continue
 				}
-				glog.V(1).Infof("Pod %v matched labels", pod.Name)
+				klog.V(1).Infof("Pod %v matched labels", pod.Name)
 				// TODO: Need to determine if the topokey already present in the node or not
 				if pod.Spec.NodeName == "" {
 					continue
@@ -131,7 +192,7 @@ func evictPodsViolatingSpreadConstraints(
 				// see of this pods NodeName exists in the candidates nodes, else ignore
 				_, ok := nodeMap[pod.Spec.NodeName]
 				if !ok {
-					glog.V(2).Infof("Found a node %v in pod %v, which is not present in our map, ignoring it...", pod.Spec.NodeName, pod.Name)
+					klog.V(2).Infof("Found a node %v in pod %v, which is not present in our map, ignoring it...", pod.Spec.NodeName, pod.Name)
 					continue
 				}
 				pair := topologyPair{key: topoConstraint.TopologyKey, value: nodeMap[pod.Spec.NodeName].Labels[topoConstraint.TopologyKey]}
@@ -140,7 +201,7 @@ func evictPodsViolatingSpreadConstraints(
 					namespaceToTopologyKeySet[namespacedConstraint.Namespace][topoConstraint.TopologyKey][pair] = make(podSet)
 				}
 				namespaceToTopologyKeySet[namespacedConstraint.Namespace][topoConstraint.TopologyKey][pair][pod] = struct{}{}
-				glog.V(2).Infof("Topo Pair %v, Count %v", pair, len(namespaceToTopologyKeySet[namespacedConstraint.Namespace][topoConstraint.TopologyKey][pair]))
+				klog.V(2).Infof("Topo Pair %v, Count %v", pair, len(namespaceToTopologyKeySet[namespacedConstraint.Namespace][topoConstraint.TopologyKey][pair]))
 
 			}
 		}
@@ -160,11 +221,11 @@ func evictPodsViolatingSpreadConstraints(
 			topologyPairToPods := namespaceToTopologyKeySet[namespacedConstraint.Namespace][topoConstraint.TopologyKey]
 			for pair, v := range topologyPairToPods {
 				podsInTopo := len(v)
-				glog.V(1).Infof("Min Pods in Any Pair %v, pair %v, PodCount %v", minPodsForGivenTopo, pair, podsInTopo)
+				klog.V(1).Infof("Min Pods in Any Pair %v, pair %v, PodCount %v", minPodsForGivenTopo, pair, podsInTopo)
 
 				if int32(podsInTopo-minPodsForGivenTopo) > topoConstraint.MaxSkew {
 					countToEvict := int32(podsInTopo-minPodsForGivenTopo) - topoConstraint.MaxSkew
-					glog.V(1).Infof("pair %v, Count to evict %v", pair, countToEvict)
+					klog.V(1).Infof("pair %v, Count to evict %v", pair, countToEvict)
 					podsListToEvict := getPodsToEvict(countToEvict, v)
 					allPodsToEvictPerTopoKey[topoConstraint.TopologyKey] = append(allPodsToEvictPerTopoKey[topoConstraint.TopologyKey], podsListToEvict...)
 
@@ -186,25 +247,36 @@ func evictPodsViolatingSpreadConstraints(
 
 		// defer the decision as late as possible to cause less schedulings
 		for topoKey, podList := range allPodsToEvictPerTopoKey {
-			glog.V(1).Infof("Total pods to evict in TopoKey %v is %v", topoKey, len(podList))
-			evictPodsSimple(client, podList, policyGroupVersion, dryRun)
+			klog.V(1).Infof("Total pods to evict in TopoKey %v is %v", topoKey, len(podList))
+			//evictPodsSimple(client, podList, policyGroupVersion, dryRun)
+			for _, pod := range podList {
+				// TODO: node variable not defined
+				//
+				//success, err := podEvictor.EvictPod(ctx, pod, node)
+				//if success {
+				//klog.V(1).Infof("Evicted pod: %#v because it violate pod topology constraint", pod.Name)
+				//}
+
+				//if err != nil {
+				//	klog.Errorf("Error evicting pod: (%#v)", err)
+				//	break
+				//}
+				klog.V(1).Infof("Evicted pod: %#v because it violate pod topology constraint", pod.Name)
+			}
 		}
 	}
 
 }
 
-func evictPodsSimple(client clientset.Interface, podsListToEvict []*v1.Pod, policyGroupVersion string, dryRun bool) {
-	for _, podToEvict := range podsListToEvict {
-		glog.V(1).Infof("Evicting pods %v", podToEvict.Name)
-		success, err := evictions.EvictPod(client, podToEvict, policyGroupVersion, dryRun)
-		if !success {
-			glog.Infof("Error when evicting pod: %#v (%#v)\n", podToEvict.Name, err)
-		} else {
-
-		}
-	}
+// @seanmalloy
+//
+// TODO: this should find pods that are not balanced and return them. Try
+// to reuse logic from previous code to write this function.
+func getPodsViolatingPodsTopologySpreadConstraint(pods []*v1.Pod) []*v1.Pod {
+	return pods
 }
 
+// TODO: this function is not called
 func intersectAllPodsList(allPodsToEvictPerTopoKey map[string][]*v1.Pod) []*v1.Pod {
 	// increment each pod's count by 1
 	// if the pod count reaches the number of topoKeys, it should be evicted
@@ -212,7 +284,7 @@ func intersectAllPodsList(allPodsToEvictPerTopoKey map[string][]*v1.Pod) []*v1.P
 
 	finalList := []*v1.Pod{}
 	totalTopoKeys := len(allPodsToEvictPerTopoKey)
-	glog.V(1).Infof("Total topokeys found %v", totalTopoKeys)
+	klog.V(1).Infof("Total topokeys found %v", totalTopoKeys)
 	for _, podList := range allPodsToEvictPerTopoKey {
 		for _, pod := range podList {
 			key := pod.Name + "-" + pod.Namespace
@@ -239,6 +311,7 @@ func getPodsToEvict(countToEvict int32, podMap map[*v1.Pod]struct{}) []*v1.Pod {
 	return podList
 }
 
+// TODO: this function is not called
 func addTopologyPair(topoMap map[topologyPair]podSet, pair topologyPair, pod *v1.Pod) {
 	if topoMap[pair] == nil {
 		topoMap[pair] = make(map[*v1.Pod]struct{})

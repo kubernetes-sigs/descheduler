@@ -70,14 +70,14 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 
 	strategyFuncs := map[string]strategyFunction{
-		"RemoveDuplicates":                        strategies.RemoveDuplicatePods,
-		"LowNodeUtilization":                      strategies.LowNodeUtilization,
-		"RemovePodsViolatingInterPodAntiAffinity": strategies.RemovePodsViolatingInterPodAntiAffinity,
-		"RemovePodsViolatingNodeAffinity":         strategies.RemovePodsViolatingNodeAffinity,
-		"RemovePodsViolatingNodeTaints":           strategies.RemovePodsViolatingNodeTaints,
-		"RemovePodsHavingTooManyRestarts":         strategies.RemovePodsHavingTooManyRestarts,
-		"PodLifeTime":                             strategies.PodLifeTime,
-		"TopologySpreadConstraint":                strategies.TopologySpreadConstraint,
+		"RemoveDuplicates":                            strategies.RemoveDuplicatePods,
+		"LowNodeUtilization":                          strategies.LowNodeUtilization,
+		"RemovePodsViolatingInterPodAntiAffinity":     strategies.RemovePodsViolatingInterPodAntiAffinity,
+		"RemovePodsViolatingNodeAffinity":             strategies.RemovePodsViolatingNodeAffinity,
+		"RemovePodsViolatingNodeTaints":               strategies.RemovePodsViolatingNodeTaints,
+		"RemovePodsHavingTooManyRestarts":             strategies.RemovePodsHavingTooManyRestarts,
+		"PodLifeTime":                                 strategies.PodLifeTime,
+		"RemovePodsViolatingTopologySpreadConstraint": strategies.RemovePodsViolatingTopologySpreadConstraint,
 	}
 
 	nodeSelector := rs.NodeSelector
