@@ -34,6 +34,7 @@ GOOS=linux make dev-image
 kind create cluster --config hack/kind_config.yaml
 kind load docker-image <image name>
 kind get kubeconfig > /tmp/admin.conf
+export KUBECONFIG=/tmp/admin.conf
 make test-unit
 make test-e2e
 ```
