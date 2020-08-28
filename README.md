@@ -36,6 +36,7 @@ Table of Contents
      * [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity)
      * [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity)
      * [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints)
+     * [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint)
      * [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts)
      * [PodLifeTime](#podlifetime)
   * [Filter Pods](#filter-pods)
@@ -84,10 +85,10 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 ## Policy and Strategies
 
 Descheduler's policy is configurable and includes strategies that can be enabled or disabled.
-Seven strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`,
-`RemovePodsViolatingNodeAffinity`, `RemovePodsViolatingNodeTaints`, `RemovePodsHavingTooManyRestarts`, and `PodLifeTime`
-are currently implemented. As part of the policy, the parameters associated with the strategies can be configured too.
-By default, all strategies are enabled.
+Eight strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`,
+`RemovePodsViolatingNodeAffinity`, `RemovePodsViolatingNodeTaints`, `RemovePodsViolatingTopologySpreadConstraint`,
+`RemovePodsHavingTooManyRestarts`, and `PodLifeTime` are currently implemented. As part of the policy, the
+parameters associated with the strategies can be configured too. By default, all strategies are enabled.
 
 The policy also includes common configuration for all the strategies:
 - `nodeSelector` - limiting the nodes which are processed
@@ -242,6 +243,21 @@ strategies:
   "RemovePodsViolatingNodeTaints":
     enabled: true
 ````
+
+### RemovePodsViolatingTopologySpreadConstraint
+
+This strategy makes sure that pods violating [topology spread constraints](https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/)
+are evicted from nodes. This strategy requires k8s version 1.18 at a minimum. To disable this strategy, the
+policy should look like:
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "RemovePodsViolatingTopologySpreadConstraint":
+     enabled: false
+```
+
 
 ### RemovePodsHavingTooManyRestarts
 
