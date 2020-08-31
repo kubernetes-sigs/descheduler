@@ -144,7 +144,7 @@ func initializeClient(t *testing.T) (clientset.Interface, coreinformers.NodeInfo
 		t.Errorf("Error during client creation with %v", err)
 	}
 
-	stopChannel := make(chan struct{}, 0)
+	stopChannel := make(chan struct{})
 
 	sharedInformerFactory := informers.NewSharedInformerFactory(clientSet, 0)
 	sharedInformerFactory.Start(stopChannel)

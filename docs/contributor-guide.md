@@ -3,7 +3,7 @@
 ## Required Tools
 
 - [Git](https://git-scm.com/downloads)
-- [Go 1.14+](https://golang.org/dl/)
+- [Go 1.15+](https://golang.org/dl/)
 - [Docker](https://docs.docker.com/install/)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl)
 - [kind](https://kind.sigs.k8s.io/)
