@@ -25,11 +25,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/policy/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -225,7 +221,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 2100, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 2100, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -650,50 +646,6 @@ func TestValidateThresholds(t *testing.T) {
 	}
 }
 
-func newFake(objects ...runtime.Object) *core.Fake {
-	scheme := runtime.NewScheme()
-	codecs := serializer.NewCodecFactory(scheme)
-	fake.AddToScheme(scheme)
-	o := core.NewObjectTracker(scheme, codecs.UniversalDecoder())
-	for _, obj := range objects {
-		if err := o.Add(obj); err != nil {
-			panic(err)
-		}
-	}
-
-	fakePtr := core.Fake{}
-	fakePtr.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		objs, err := o.List(
-			schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
-			schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Pod"},
-			action.GetNamespace(),
-		)
-		if err != nil {
-			return true, nil, err
-		}
-
-		obj := &v1.PodList{
-			Items: []v1.Pod{},
-		}
-		for _, pod := range objs.(*v1.PodList).Items {
-			podFieldSet := fields.Set(map[string]string{
-				"spec.nodeName": pod.Spec.NodeName,
-				"status.phase":  string(pod.Status.Phase),
-			})
-			match := action.(core.ListAction).GetListRestrictions().Fields.Matches(podFieldSet)
-			if !match {
-				continue
-			}
-			obj.Items = append(obj.Items, *pod.DeepCopy())
-		}
-		return true, obj, nil
-	})
-	fakePtr.AddReactor("*", "*", core.ObjectReaction(o))
-	fakePtr.AddWatchReactor("*", core.DefaultWatchReactor(watch.NewFake(), nil))
-
-	return &fakePtr
-}
-
 func TestWithTaints(t *testing.T) {
 	ctx := context.Background()
 	strategy := api.DeschedulerStrategy{
@@ -803,18 +755,10 @@ func TestWithTaints(t *testing.T) {
 				objs = append(objs, pod)
 			}
 
-			fakePtr := newFake(objs...)
-			var evictionCounter int
-			fakePtr.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
-				if action.GetSubresource() != "eviction" || action.GetResource().Resource != "pods" {
-					return false, nil, nil
-				}
-				evictionCounter++
-				return true, nil, nil
-			})
+			fakeClient := fake.NewSimpleClientset(objs...)
 
 			podEvictor := evictions.NewPodEvictor(
-				&fake.Clientset{Fake: *fakePtr},
+				fakeClient,
 				"policy/v1",
 				false,
 				item.evictionsExpected,
@@ -822,10 +766,10 @@ func TestWithTaints(t *testing.T) {
 				false,
 			)
 
-			LowNodeUtilization(ctx, &fake.Clientset{Fake: *fakePtr}, strategy, item.nodes, podEvictor)
+			LowNodeUtilization(ctx, fakeClient, strategy, item.nodes, podEvictor)
 
-			if item.evictionsExpected != evictionCounter {
-				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, evictionCounter)
+			if item.evictionsExpected != podEvictor.TotalEvicted() {
+				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, podEvictor.TotalEvicted())
 			}
 		})
 	}
