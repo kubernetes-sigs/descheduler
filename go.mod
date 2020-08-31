@@ -1,6 +1,6 @@
 module sigs.k8s.io/descheduler
 
-go 1.14
+go 1.15
 
 require (
 	github.com/spf13/cobra v0.0.5
