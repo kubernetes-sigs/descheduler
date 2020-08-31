@@ -386,6 +386,7 @@ packages that it is compiled with.
 
 Descheduler  | Supported Kubernetes Version
 -------------|-----------------------------
+v0.19        | v1.19
 v0.18        | v1.18
 v0.10        | v1.17
 v0.4-v0.9    | v1.9+
