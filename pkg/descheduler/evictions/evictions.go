@@ -77,41 +77,6 @@ func NewPodEvictor(
 	}
 }
 
-// IsEvictable checks if a pod is evictable or not.
-func (pe *PodEvictor) IsEvictable(pod *v1.Pod, thresholdPriority int32) bool {
-	checkErrs := []error{}
-	if IsCriticalPod(pod) {
-		checkErrs = append(checkErrs, fmt.Errorf("pod is critical"))
-	}
-
-	if !IsPodEvictableBasedOnPriority(pod, thresholdPriority) {
-		checkErrs = append(checkErrs, fmt.Errorf("pod is not evictable due to its priority"))
-	}
-
-	ownerRefList := podutil.OwnerRef(pod)
-	if IsDaemonsetPod(ownerRefList) {
-		checkErrs = append(checkErrs, fmt.Errorf("pod is a DaemonSet pod"))
-	}
-
-	if len(ownerRefList) == 0 {
-		checkErrs = append(checkErrs, fmt.Errorf("pod does not have any ownerrefs"))
-	}
-
-	if !pe.evictLocalStoragePods && IsPodWithLocalStorage(pod) {
-		checkErrs = append(checkErrs, fmt.Errorf("pod has local storage and descheduler is not configured with --evict-local-storage-pods"))
-	}
-
-	if IsMirrorPod(pod) {
-		checkErrs = append(checkErrs, fmt.Errorf("pod is a mirror pod"))
-	}
-
-	if len(checkErrs) > 0 && !HaveEvictAnnotation(pod) {
-		klog.V(4).Infof("Pod %s in namespace %s is not evictable: Pod lacks an eviction annotation and fails the following checks: %v", pod.Name, pod.Namespace, errors.NewAggregate(checkErrs).Error())
-		return false
-	}
-	return true
-}
-
 // NodeEvicted gives a number of pods evicted for node
 func (pe *PodEvictor) NodeEvicted(node *v1.Node) int {
 	return pe.nodepodCount[node]
@@ -187,6 +152,87 @@ func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, poli
 	return err
 }
 
+type Options struct {
+	priority *int32
+}
+
+// WithPriorityThreshold sets a threshold for pod's priority class.
+// Any pod whose priority class is lower is evictable.
+func WithPriorityThreshold(priority int32) func(opts *Options) {
+	return func(opts *Options) {
+		var p int32 = priority
+		opts.priority = &p
+	}
+}
+
+type constraint func(pod *v1.Pod) error
+
+type evictable struct {
+	constraints []constraint
+}
+
+// Evictable provides an implementation of IsEvictable(IsEvictable(pod *v1.Pod) bool).
+// The method accepts a list of options which allow to extend constraints
+// which decides when a pod is considered evictable.
+func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
+	options := &Options{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	ev := &evictable{}
+	if !pe.evictLocalStoragePods {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			if IsPodWithLocalStorage(pod) {
+				return fmt.Errorf("pod has local storage and descheduler is not configured with --evict-local-storage-pods")
+			}
+			return nil
+		})
+	}
+	if options.priority != nil {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			if IsPodEvictableBasedOnPriority(pod, *options.priority) {
+				return nil
+			}
+			return fmt.Errorf("pod has higher priority than specified priority class threshold")
+		})
+	}
+	return ev
+}
+
+// IsEvictable decides when a pod is evictable
+func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
+	checkErrs := []error{}
+	if IsCriticalPod(pod) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is critical"))
+	}
+
+	ownerRefList := podutil.OwnerRef(pod)
+	if IsDaemonsetPod(ownerRefList) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is a DaemonSet pod"))
+	}
+
+	if len(ownerRefList) == 0 {
+		checkErrs = append(checkErrs, fmt.Errorf("pod does not have any ownerrefs"))
+	}
+
+	if IsMirrorPod(pod) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is a mirror pod"))
+	}
+
+	for _, c := range ev.constraints {
+		if err := c(pod); err != nil {
+			checkErrs = append(checkErrs, err)
+		}
+	}
+
+	if len(checkErrs) > 0 && !HaveEvictAnnotation(pod) {
+		klog.V(4).Infof("Pod %s in namespace %s is not evictable: Pod lacks an eviction annotation and fails the following checks: %v", pod.Name, pod.Namespace, errors.NewAggregate(checkErrs).Error())
+		return false
+	}
+	return true
+}
+
 func IsCriticalPod(pod *v1.Pod) bool {
 	return utils.IsCriticalPod(pod)
 }
@@ -223,5 +269,5 @@ func IsPodWithLocalStorage(pod *v1.Pod) bool {
 
 // IsPodEvictableBasedOnPriority checks if the given pod is evictable based on priority resolved from pod Spec.
 func IsPodEvictableBasedOnPriority(pod *v1.Pod, priority int32) bool {
-	return pod.Spec.Priority == nil || (*pod.Spec.Priority < priority && *pod.Spec.Priority < utils.SystemCriticalPriority)
+	return pod.Spec.Priority == nil || *pod.Spec.Priority < priority
 }

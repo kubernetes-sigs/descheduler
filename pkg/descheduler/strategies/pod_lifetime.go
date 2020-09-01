@@ -37,7 +37,7 @@ func validatePodLifeTimeParams(params *api.StrategyParameters) error {
 	}
 
 	// At most one of include/exclude can be set
-	if len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
+	if params.Namespaces != nil && len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
 		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
 	}
 	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
@@ -53,16 +53,25 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 		klog.V(1).Info(err)
 		return
 	}
+
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
 		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
 		return
 	}
 
+	var includedNamespaces, excludedNamespaces []string
+	if strategy.Params.Namespaces != nil {
+		includedNamespaces = strategy.Params.Namespaces.Include
+		excludedNamespaces = strategy.Params.Namespaces.Exclude
+	}
+
+	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
+
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v", node.Name)
 
-		pods := listOldPodsOnNode(ctx, client, node, strategy.Params, podEvictor, thresholdPriority)
+		pods := listOldPodsOnNode(ctx, client, node, includedNamespaces, excludedNamespaces, *strategy.Params.MaxPodLifeTimeSeconds, evictable.IsEvictable)
 		for _, pod := range pods {
 			success, err := podEvictor.EvictPod(ctx, pod, node, "PodLifeTime")
 			if success {
@@ -78,16 +87,14 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 	}
 }
 
-func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, params *api.StrategyParameters, podEvictor *evictions.PodEvictor, thresholdPriority int32) []*v1.Pod {
+func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, includedNamespaces, excludedNamespaces []string, maxPodLifeTimeSeconds uint, filter func(pod *v1.Pod) bool) []*v1.Pod {
 	pods, err := podutil.ListPodsOnANode(
 		ctx,
 		client,
 		node,
-		podutil.WithFilter(func(pod *v1.Pod) bool {
-			return podEvictor.IsEvictable(pod, thresholdPriority)
-		}),
-		podutil.WithNamespaces(params.Namespaces.Include),
-		podutil.WithoutNamespaces(params.Namespaces.Exclude),
+		podutil.WithFilter(filter),
+		podutil.WithNamespaces(includedNamespaces),
+		podutil.WithoutNamespaces(excludedNamespaces),
 	)
 	if err != nil {
 		return nil
@@ -96,7 +103,7 @@ func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1
 	var oldPods []*v1.Pod
 	for _, pod := range pods {
 		podAgeSeconds := uint(v1meta.Now().Sub(pod.GetCreationTimestamp().Local()).Seconds())
-		if podAgeSeconds > *params.MaxPodLifeTimeSeconds {
+		if podAgeSeconds > maxPodLifeTimeSeconds {
 			oldPods = append(oldPods, pod)
 		}
 	}
