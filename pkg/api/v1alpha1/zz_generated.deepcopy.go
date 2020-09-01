@@ -35,6 +35,21 @@ func (in *DeschedulerPolicy) DeepCopyInto(out *DeschedulerPolicy) {
 			(*out)[key] = *val.DeepCopy()
 		}
 	}
+	if in.NodeSelector != nil {
+		in, out := &in.NodeSelector, &out.NodeSelector
+		*out = new(string)
+		**out = **in
+	}
+	if in.EvictLocalStoragePods != nil {
+		in, out := &in.EvictLocalStoragePods, &out.EvictLocalStoragePods
+		*out = new(bool)
+		**out = **in
+	}
+	if in.MaxNoOfPodsToEvictPerNode != nil {
+		in, out := &in.MaxNoOfPodsToEvictPerNode, &out.MaxNoOfPodsToEvictPerNode
+		*out = new(int)
+		**out = **in
+	}
 	return
 }
 
@@ -242,7 +257,11 @@ func (in *StrategyParameters) DeepCopyInto(out *StrategyParameters) {
 		*out = new(RemoveDuplicates)
 		(*in).DeepCopyInto(*out)
 	}
-	in.Namespaces.DeepCopyInto(&out.Namespaces)
+	if in.Namespaces != nil {
+		in, out := &in.Namespaces, &out.Namespaces
+		*out = new(Namespaces)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.ThresholdPriority != nil {
 		in, out := &in.ThresholdPriority, &out.ThresholdPriority
 		*out = new(int32)

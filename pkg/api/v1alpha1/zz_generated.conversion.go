@@ -110,6 +110,9 @@ func RegisterConversions(s *runtime.Scheme) error {
 
 func autoConvert_v1alpha1_DeschedulerPolicy_To_api_DeschedulerPolicy(in *DeschedulerPolicy, out *api.DeschedulerPolicy, s conversion.Scope) error {
 	out.Strategies = *(*api.StrategyList)(unsafe.Pointer(&in.Strategies))
+	out.NodeSelector = (*string)(unsafe.Pointer(in.NodeSelector))
+	out.EvictLocalStoragePods = (*bool)(unsafe.Pointer(in.EvictLocalStoragePods))
+	out.MaxNoOfPodsToEvictPerNode = (*int)(unsafe.Pointer(in.MaxNoOfPodsToEvictPerNode))
 	return nil
 }
 
@@ -120,6 +123,9 @@ func Convert_v1alpha1_DeschedulerPolicy_To_api_DeschedulerPolicy(in *Descheduler
 
 func autoConvert_api_DeschedulerPolicy_To_v1alpha1_DeschedulerPolicy(in *api.DeschedulerPolicy, out *DeschedulerPolicy, s conversion.Scope) error {
 	out.Strategies = *(*StrategyList)(unsafe.Pointer(&in.Strategies))
+	out.NodeSelector = (*string)(unsafe.Pointer(in.NodeSelector))
+	out.EvictLocalStoragePods = (*bool)(unsafe.Pointer(in.EvictLocalStoragePods))
+	out.MaxNoOfPodsToEvictPerNode = (*int)(unsafe.Pointer(in.MaxNoOfPodsToEvictPerNode))
 	return nil
 }
 
@@ -246,9 +252,7 @@ func autoConvert_v1alpha1_StrategyParameters_To_api_StrategyParameters(in *Strat
 	out.PodsHavingTooManyRestarts = (*api.PodsHavingTooManyRestarts)(unsafe.Pointer(in.PodsHavingTooManyRestarts))
 	out.MaxPodLifeTimeSeconds = (*uint)(unsafe.Pointer(in.MaxPodLifeTimeSeconds))
 	out.RemoveDuplicates = (*api.RemoveDuplicates)(unsafe.Pointer(in.RemoveDuplicates))
-	if err := Convert_v1alpha1_Namespaces_To_api_Namespaces(&in.Namespaces, &out.Namespaces, s); err != nil {
-		return err
-	}
+	out.Namespaces = (*api.Namespaces)(unsafe.Pointer(in.Namespaces))
 	out.ThresholdPriority = (*int32)(unsafe.Pointer(in.ThresholdPriority))
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
 	return nil
@@ -265,9 +269,7 @@ func autoConvert_api_StrategyParameters_To_v1alpha1_StrategyParameters(in *api.S
 	out.PodsHavingTooManyRestarts = (*PodsHavingTooManyRestarts)(unsafe.Pointer(in.PodsHavingTooManyRestarts))
 	out.MaxPodLifeTimeSeconds = (*uint)(unsafe.Pointer(in.MaxPodLifeTimeSeconds))
 	out.RemoveDuplicates = (*RemoveDuplicates)(unsafe.Pointer(in.RemoveDuplicates))
-	if err := Convert_api_Namespaces_To_v1alpha1_Namespaces(&in.Namespaces, &out.Namespaces, s); err != nil {
-		return err
-	}
+	out.Namespaces = (*Namespaces)(unsafe.Pointer(in.Namespaces))
 	out.ThresholdPriority = (*int32)(unsafe.Pointer(in.ThresholdPriority))
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
 	return nil

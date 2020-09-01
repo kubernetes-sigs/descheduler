@@ -36,7 +36,7 @@ func validatePodsViolatingNodeAffinityParams(params *api.StrategyParameters) err
 		return fmt.Errorf("NodeAffinityType is empty")
 	}
 	// At most one of include/exclude can be set
-	if len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
+	if params.Namespaces != nil && len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
 		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
 	}
 	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
@@ -58,6 +58,14 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 		return
 	}
 
+	var includedNamespaces, excludedNamespaces []string
+	if strategy.Params.Namespaces != nil {
+		includedNamespaces = strategy.Params.Namespaces.Include
+		excludedNamespaces = strategy.Params.Namespaces.Exclude
+	}
+
+	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
+
 	for _, nodeAffinity := range strategy.Params.NodeAffinityType {
 		klog.V(2).Infof("Executing for nodeAffinityType: %v", nodeAffinity)
 
@@ -71,12 +79,12 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 					client,
 					node,
 					podutil.WithFilter(func(pod *v1.Pod) bool {
-						return podEvictor.IsEvictable(pod, thresholdPriority) &&
+						return evictable.IsEvictable(pod) &&
 							!nodeutil.PodFitsCurrentNode(pod, node) &&
 							nodeutil.PodFitsAnyNode(pod, nodes)
 					}),
-					podutil.WithNamespaces(strategy.Params.Namespaces.Include),
-					podutil.WithoutNamespaces(strategy.Params.Namespaces.Exclude),
+					podutil.WithNamespaces(includedNamespaces),
+					podutil.WithoutNamespaces(excludedNamespaces),
 				)
 				if err != nil {
 					klog.Errorf("failed to get pods from %v: %v", node.Name, err)

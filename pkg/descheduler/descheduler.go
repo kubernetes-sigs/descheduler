@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
@@ -79,8 +79,23 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		"PodLifeTime":                             strategies.PodLifeTime,
 	}
 
+	nodeSelector := rs.NodeSelector
+	if deschedulerPolicy.NodeSelector != nil {
+		nodeSelector = *deschedulerPolicy.NodeSelector
+	}
+
+	evictLocalStoragePods := rs.EvictLocalStoragePods
+	if deschedulerPolicy.EvictLocalStoragePods != nil {
+		evictLocalStoragePods = *deschedulerPolicy.EvictLocalStoragePods
+	}
+
+	maxNoOfPodsToEvictPerNode := rs.MaxNoOfPodsToEvictPerNode
+	if deschedulerPolicy.MaxNoOfPodsToEvictPerNode != nil {
+		maxNoOfPodsToEvictPerNode = *deschedulerPolicy.MaxNoOfPodsToEvictPerNode
+	}
+
 	wait.Until(func() {
-		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, rs.NodeSelector, stopChannel)
+		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, nodeSelector, stopChannel)
 		if err != nil {
 			klog.V(1).Infof("Unable to get ready nodes: %v", err)
 			close(stopChannel)
@@ -97,9 +112,9 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			rs.Client,
 			evictionPolicyGroupVersion,
 			rs.DryRun,
-			rs.MaxNoOfPodsToEvictPerNode,
+			maxNoOfPodsToEvictPerNode,
 			nodes,
-			rs.EvictLocalStoragePods,
+			evictLocalStoragePods,
 		)
 
 		for name, f := range strategyFuncs {

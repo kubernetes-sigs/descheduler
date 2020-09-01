@@ -3,8 +3,6 @@
 
 # Descheduler for Kubernetes
 
-## Introduction
-
 Scheduling in Kubernetes is the process of binding pending pods to nodes, and is performed by
 a component of Kubernetes called kube-scheduler. The scheduler's decisions, whether or where a
 pod can or can not be scheduled, are guided by its configurable policy which comprises of set of
@@ -23,6 +21,33 @@ Consequently, there might be several pods scheduled on less desired nodes in a c
 Descheduler, based on its policy, finds pods that can be moved and evicts them. Please
 note, in current implementation, descheduler does not schedule replacement of evicted pods
 but relies on the default scheduler for that.
+
+Table of Contents
+=================
+
+  * [Quick Start](#quick-start)
+     * [Run As A Job](#run-as-a-job)
+     * [Run As A CronJob](#run-as-a-cronjob)
+     * [Install Using Helm](#install-using-helm)
+  * [User Guide](#user-guide)
+  * [Policy and Strategies](#policy-and-strategies)
+     * [RemoveDuplicates](#removeduplicates)
+     * [LowNodeUtilization](#lownodeutilization)
+     * [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity)
+     * [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity)
+     * [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints)
+     * [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts)
+     * [PodLifeTime](#podlifetime)
+  * [Filter Pods](#filter-pods)
+     * [Namespace filtering](#namespace-filtering)
+     * [Priority filtering](#priority-filtering)
+  * [Pod Evictions](#pod-evictions)
+     * [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
+  * [Compatibility Matrix](#compatibility-matrix)
+  * [Getting Involved and Contributing](#getting-involved-and-contributing)
+     * [Communicating With Contributors](#communicating-with-contributors)
+  * [Roadmap](#roadmap)
+     * [Code of conduct](#code-of-conduct)
 
 ## Quick Start
 
@@ -63,6 +88,21 @@ Seven strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingI
 `RemovePodsViolatingNodeAffinity`, `RemovePodsViolatingNodeTaints`, `RemovePodsHavingTooManyRestarts`, and `PodLifeTime`
 are currently implemented. As part of the policy, the parameters associated with the strategies can be configured too.
 By default, all strategies are enabled.
+
+The policy also includes common configuration for all the strategies:
+- `nodeSelector` - limiting the nodes which are processed
+- `evictLocalStoragePods` - allowing to evict pods with local storage
+- `maxNoOfPodsToEvictPerNode` - maximum number of pods evicted from each node (summed through all strategies)
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+nodeSelector: prod=dev
+evictLocalStoragePods: true
+maxNoOfPodsToEvictPerNode: 40
+strategies:
+  ...
+```
 
 ### RemoveDuplicates
 
@@ -346,6 +386,7 @@ packages that it is compiled with.
 
 Descheduler  | Supported Kubernetes Version
 -------------|-----------------------------
+v0.19        | v1.19
 v0.18        | v1.18
 v0.10        | v1.17
 v0.4-v0.9    | v1.9+

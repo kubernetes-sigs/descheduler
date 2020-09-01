@@ -36,7 +36,7 @@ func validateRemovePodsViolatingNodeTaintsParams(params *api.StrategyParameters)
 	}
 
 	// At most one of include/exclude can be set
-	if len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
+	if params.Namespaces != nil && len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
 		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
 	}
 	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
@@ -52,15 +52,20 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 		klog.V(1).Info(err)
 		return
 	}
-	var namespaces api.Namespaces
-	if strategy.Params != nil {
-		namespaces = strategy.Params.Namespaces
+
+	var includedNamespaces, excludedNamespaces []string
+	if strategy.Params != nil && strategy.Params.Namespaces != nil {
+		includedNamespaces = strategy.Params.Namespaces.Include
+		excludedNamespaces = strategy.Params.Namespaces.Exclude
 	}
+
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
 		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
 		return
 	}
+
+	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	for _, node := range nodes {
 		klog.V(1).Infof("Processing node: %#v\n", node.Name)
@@ -68,11 +73,9 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 			ctx,
 			client,
 			node,
-			podutil.WithFilter(func(pod *v1.Pod) bool {
-				return podEvictor.IsEvictable(pod, thresholdPriority)
-			}),
-			podutil.WithNamespaces(namespaces.Include),
-			podutil.WithoutNamespaces(namespaces.Exclude),
+			podutil.WithFilter(evictable.IsEvictable),
+			podutil.WithNamespaces(includedNamespaces),
+			podutil.WithoutNamespaces(excludedNamespaces),
 		)
 		if err != nil {
 			//no pods evicted as error encountered retrieving evictable Pods

@@ -57,8 +57,8 @@ func WithoutNamespaces(namespaces []string) func(opts *Options) {
 
 // ListPodsOnANode lists all of the pods on a node
 // It also accepts an optional "filter" function which can be used to further limit the pods that are returned.
-// (Usually this is podEvictor.IsEvictable, in order to only list the evictable pods on a node, but can
-// be used by strategies to extend IsEvictable if there are further restrictions, such as with NodeAffinity).
+// (Usually this is podEvictor.Evictable().IsEvictable, in order to only list the evictable pods on a node, but can
+// be used by strategies to extend it if there are further restrictions, such as with NodeAffinity).
 func ListPodsOnANode(
 	ctx context.Context,
 	client clientset.Interface,
@@ -117,6 +117,11 @@ func ListPodsOnANode(
 	}
 
 	for i := range podList.Items {
+		// fake client does not support field selectors
+		// so let's filter based on the node name as well (quite cheap)
+		if podList.Items[i].Spec.NodeName != node.Name {
+			continue
+		}
 		if options.filter != nil && !options.filter(&podList.Items[i]) {
 			continue
 		}

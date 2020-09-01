@@ -28,6 +28,15 @@ type DeschedulerPolicy struct {
 
 	// Strategies
 	Strategies StrategyList
+
+	// NodeSelector for a set of nodes to operate over
+	NodeSelector *string
+
+	// EvictLocalStoragePods allows pods using local storage to be evicted.
+	EvictLocalStoragePods *bool
+
+	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
+	MaxNoOfPodsToEvictPerNode *int
 }
 
 type StrategyName string
@@ -60,7 +69,7 @@ type StrategyParameters struct {
 	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts
 	MaxPodLifeTimeSeconds             *uint
 	RemoveDuplicates                  *RemoveDuplicates
-	Namespaces                        Namespaces
+	Namespaces                        *Namespaces
 	ThresholdPriority                 *int32
 	ThresholdPriorityClassName        string
 }
