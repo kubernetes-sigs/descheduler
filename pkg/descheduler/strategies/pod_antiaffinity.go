@@ -62,14 +62,14 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
+		klog.V(1).InfoS("Failed to get threshold priority from strategy's params", "err", err)
 		return
 	}
 
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	for _, node := range nodes {
-		klog.V(1).Infof("Processing node: %#v\n", node.Name)
+		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListPodsOnANode(
 			ctx,
 			client,
@@ -88,7 +88,7 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 			if checkPodsWithAntiAffinityExist(pods[i], pods) {
 				success, err := podEvictor.EvictPod(ctx, pods[i], node, "InterPodAntiAffinity")
 				if err != nil {
-					klog.Errorf("Error evicting pod: (%#v)", err)
+					klog.ErrorS(err, "Error evicting pod")
 					break
 				}
 
