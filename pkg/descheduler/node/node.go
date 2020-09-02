@@ -77,7 +77,7 @@ func IsReady(node *v1.Node) bool {
 		// - NodeOutOfDisk condition status is ConditionFalse,
 		// - NodeNetworkUnavailable condition status is ConditionFalse.
 		if cond.Type == v1.NodeReady && cond.Status != v1.ConditionTrue {
-			klog.V(1).Infof("Ignoring node %v with %v condition status %v", node.Name, cond.Type, cond.Status)
+			klog.V(1).InfoS("Ignoring node", "node", klog.KObj(node), "condition", cond.Type, "status", cond.Status)
 			return false
 		} /*else if cond.Type == v1.NodeOutOfDisk && cond.Status != v1.ConditionFalse {
 			klog.V(4).Infof("Ignoring node %v with %v condition status %v", node.Name, cond.Type, cond.Status)
@@ -112,7 +112,7 @@ func PodFitsAnyNode(pod *v1.Pod, nodes []*v1.Node) bool {
 			continue
 		}
 		if !IsNodeUnschedulable(node) {
-			klog.V(2).Infof("Pod %v can possibly be scheduled on %v", pod.Name, node.Name)
+			klog.V(2).InfoS("Pod can possibly be scheduled on a different node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			return true
 		}
 	}
@@ -130,10 +130,10 @@ func PodFitsCurrentNode(pod *v1.Pod, node *v1.Node) bool {
 	}
 
 	if !ok {
-		klog.V(2).Infof("Pod %v does not fit on node %v", pod.Name, node.Name)
+		klog.V(2).InfoS("Pod does not fit on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 		return false
 	}
 
-	klog.V(2).Infof("Pod %v fits on node %v", pod.Name, node.Name)
+	klog.V(2).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 	return true
 }

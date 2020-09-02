@@ -186,7 +186,7 @@ func PodToleratesTaints(pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
 		if len(pod.Spec.Tolerations) >= len(taintsForNode) && TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taintsForNode, nil) {
 			return true
 		}
-		klog.V(5).Infof("pod: %#v doesn't tolerate node %s's taints", pod.Name, nodeName)
+		klog.V(5).InfoS("Pod doesn't tolerate nodes taint", "pod", klog.KObj(pod), "nodeName", nodeName)
 	}
 
 	return false
