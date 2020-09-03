@@ -206,7 +206,7 @@ func runPodLifetimeStrategy(ctx context.Context, clientset clientset.Interface, 
 		deschedulerapi.DeschedulerStrategy{
 			Enabled: true,
 			Params: &deschedulerapi.StrategyParameters{
-				MaxPodLifeTimeSeconds:      &maxPodLifeTimeSeconds,
+				PodLifeTime:                &deschedulerapi.PodLifeTime{MaxPodLifeTimeSeconds: &maxPodLifeTimeSeconds},
 				Namespaces:                 namespaces,
 				ThresholdPriority:          priority,
 				ThresholdPriorityClassName: priorityClass,

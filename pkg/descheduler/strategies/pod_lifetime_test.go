@@ -85,6 +85,19 @@ func TestPodLifeTime(t *testing.T) {
 	p5.ObjectMeta.OwnerReferences = ownerRef4
 	p6.ObjectMeta.OwnerReferences = ownerRef4
 
+	// Setup two old pods with different status phases
+	p9 := test.BuildTestPod("p9", 100, 0, node.Name, nil)
+	p9.Namespace = "dev"
+	p9.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p10 := test.BuildTestPod("p10", 100, 0, node.Name, nil)
+	p10.Namespace = "dev"
+	p10.ObjectMeta.CreationTimestamp = olderPodCreationTime
+
+	p9.Status.Phase = "Pending"
+	p10.Status.Phase = "Running"
+	p9.ObjectMeta.OwnerReferences = ownerRef1
+	p10.ObjectMeta.OwnerReferences = ownerRef1
+
 	var maxLifeTime uint = 600
 	testCases := []struct {
 		description             string
@@ -98,7 +111,7 @@ func TestPodLifeTime(t *testing.T) {
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
 				Params: &api.StrategyParameters{
-					MaxPodLifeTimeSeconds: &maxLifeTime,
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
 			maxPodsToEvictPerNode:   5,
@@ -110,7 +123,7 @@ func TestPodLifeTime(t *testing.T) {
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
 				Params: &api.StrategyParameters{
-					MaxPodLifeTimeSeconds: &maxLifeTime,
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
 			maxPodsToEvictPerNode:   5,
@@ -122,7 +135,7 @@ func TestPodLifeTime(t *testing.T) {
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
 				Params: &api.StrategyParameters{
-					MaxPodLifeTimeSeconds: &maxLifeTime,
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
 			maxPodsToEvictPerNode:   5,
@@ -134,12 +147,27 @@ func TestPodLifeTime(t *testing.T) {
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
 				Params: &api.StrategyParameters{
-					MaxPodLifeTimeSeconds: &maxLifeTime,
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
 			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p7, *p8},
 			expectedEvictedPodCount: 0,
+		},
+		{
+			description: "Two old pods with different status phases. 1 should be evicted.",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{
+						MaxPodLifeTimeSeconds: &maxLifeTime,
+						PodStatusPhases:       []string{"Pending"},
+					},
+				},
+			},
+			maxPodsToEvictPerNode:   5,
+			pods:                    []v1.Pod{*p9, *p10},
+			expectedEvictedPodCount: 1,
 		},
 	}
 

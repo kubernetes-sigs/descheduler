@@ -17,4 +17,5 @@ strategies:
   "PodLifeTime":
     enabled: true
     params:
-      maxPodLifeTimeSeconds: 604800 # 7 days
+      podLifeTime:
+        maxPodLifeTimeSeconds: 604800 # 7 days

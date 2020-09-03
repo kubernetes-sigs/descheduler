@@ -67,7 +67,7 @@ type StrategyParameters struct {
 	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds
 	NodeAffinityType                  []string
 	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts
-	MaxPodLifeTimeSeconds             *uint
+	PodLifeTime                       *PodLifeTime
 	RemoveDuplicates                  *RemoveDuplicates
 	Namespaces                        *Namespaces
 	ThresholdPriority                 *int32
@@ -90,4 +90,9 @@ type PodsHavingTooManyRestarts struct {
 
 type RemoveDuplicates struct {
 	ExcludeOwnerKinds []string
+}
+
+type PodLifeTime struct {
+	MaxPodLifeTimeSeconds *uint
+	PodStatusPhases       []string
 }
