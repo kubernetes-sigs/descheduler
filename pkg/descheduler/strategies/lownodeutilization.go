@@ -98,14 +98,14 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 	npm := createNodePodsMap(ctx, client, nodes)
 	lowNodes, targetNodes := classifyNodes(npm, thresholds, targetThresholds)
 
-	klog.V(1).Infof("Criteria for a node under utilization: CPU: %v, Mem: %v, Pods: %v",
-		thresholds[v1.ResourceCPU], thresholds[v1.ResourceMemory], thresholds[v1.ResourcePods])
+	klog.V(1).InfoS("Criteria for a node under utilization",
+		"CPU", thresholds[v1.ResourceCPU], "Mem", thresholds[v1.ResourceMemory], "Pods", thresholds[v1.ResourcePods])
 
 	if len(lowNodes) == 0 {
 		klog.V(1).Infof("No node is underutilized, nothing to do here, you might tune your thresholds further")
 		return
 	}
-	klog.V(1).Infof("Total number of underutilized nodes: %v", len(lowNodes))
+	klog.V(1).InfoS("Total number of underutilized nodes", "totalNumber", len(lowNodes))
 
 	if len(lowNodes) < strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
 		klog.V(1).Infof("number of nodes underutilized (%v) is less than NumberOfNodes (%v), nothing to do here", len(lowNodes), strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
@@ -122,10 +122,10 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		return
 	}
 
-	klog.V(1).Infof("Criteria for a node above target utilization: CPU: %v, Mem: %v, Pods: %v",
-		targetThresholds[v1.ResourceCPU], targetThresholds[v1.ResourceMemory], targetThresholds[v1.ResourcePods])
-	klog.V(1).Infof("Total number of nodes above target utilization: %v", len(targetNodes))
+	klog.V(1).InfoS("Criteria for a node above target utilization",
+		"CPU", targetThresholds[v1.ResourceCPU], "Mem", targetThresholds[v1.ResourceMemory], "Pods", targetThresholds[v1.ResourcePods])
 
+	klog.V(1).InfoS("Number of nodes above target utilization", "totalNumber", len(targetNodes))
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	evictPodsFromTargetNodes(
