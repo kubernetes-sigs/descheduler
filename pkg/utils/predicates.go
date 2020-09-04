@@ -70,7 +70,7 @@ func podMatchesNodeLabels(pod *v1.Pod, node *v1.Node) bool {
 		// Match node selector for requiredDuringSchedulingIgnoredDuringExecution.
 		if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
 			nodeSelectorTerms := nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
-			klog.V(10).Infof("Match for RequiredDuringSchedulingIgnoredDuringExecution node selector terms %+v", nodeSelectorTerms)
+			klog.V(10).InfoS("Match for RequiredDuringSchedulingIgnoredDuringExecution node selector terms", "terms", nodeSelectorTerms)
 			return nodeMatchesNodeSelectorTerms(node, nodeSelectorTerms)
 		}
 	}

@@ -112,9 +112,9 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 
 	pe.nodepodCount[node]++
 	if pe.dryRun {
-		klog.V(1).Infof("Evicted pod in dry run mode: %#v in namespace %#v%s", pod.Name, pod.Namespace, reason)
+		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", reason)
 	} else {
-		klog.V(1).Infof("Evicted pod: %#v in namespace %#v%s", pod.Name, pod.Namespace, reason)
+		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", reason)
 		eventBroadcaster := record.NewBroadcaster()
 		eventBroadcaster.StartLogging(klog.V(3).Infof)
 		eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: pe.client.CoreV1().Events(pod.Namespace)})

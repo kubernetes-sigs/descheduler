@@ -104,5 +104,5 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 			klog.Errorf("invalid nodeAffinityType: %v", nodeAffinity)
 		}
 	}
-	klog.V(1).Infof("Evicted %v pods", podEvictor.TotalEvicted())
+	klog.V(1).InfoS("Number of evicted pods", "totalEvicted", podEvictor.TotalEvicted())
 }
