@@ -74,7 +74,6 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 			ctx,
 			client,
 			node,
-			podutil.WithFilter(evictable.IsEvictable),
 			podutil.WithNamespaces(includedNamespaces),
 			podutil.WithoutNamespaces(excludedNamespaces),
 		)
@@ -85,7 +84,7 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 		podutil.SortPodsBasedOnPriorityLowToHigh(pods)
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
-			if checkPodsWithAntiAffinityExist(pods[i], pods) {
+			if checkPodsWithAntiAffinityExist(pods[i], pods) && evictable.IsEvictable(pods[i]) {
 				success, err := podEvictor.EvictPod(ctx, pods[i], node, "InterPodAntiAffinity")
 				if err != nil {
 					klog.ErrorS(err, "Error evicting pod")
