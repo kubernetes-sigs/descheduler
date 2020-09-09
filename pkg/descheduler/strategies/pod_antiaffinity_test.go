@@ -27,6 +27,7 @@ import (
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -40,10 +41,15 @@ func TestPodAntiAffinity(t *testing.T) {
 	p5 := test.BuildTestPod("p5", 100, 0, node.Name, nil)
 	p6 := test.BuildTestPod("p6", 100, 0, node.Name, nil)
 	p7 := test.BuildTestPod("p7", 100, 0, node.Name, nil)
+	criticalPriority := utils.SystemCriticalPriority
+	nonEvictablePod := test.BuildTestPod("non-evict", 100, 0, node.Name, func(pod *v1.Pod) {
+		pod.Spec.Priority = &criticalPriority
+	})
 	p2.Labels = map[string]string{"foo": "bar"}
 	p5.Labels = map[string]string{"foo": "bar"}
 	p6.Labels = map[string]string{"foo": "bar"}
 	p7.Labels = map[string]string{"foo1": "bar1"}
+	nonEvictablePod.Labels = map[string]string{"foo": "bar"}
 	test.SetNormalOwnerRef(p1)
 	test.SetNormalOwnerRef(p2)
 	test.SetNormalOwnerRef(p3)
@@ -87,6 +93,12 @@ func TestPodAntiAffinity(t *testing.T) {
 			description:             "Evict only 1 pod after sorting",
 			maxPodsToEvictPerNode:   0,
 			pods:                    []v1.Pod{*p5, *p6, *p7},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description:             "Evicts pod that conflicts with critical pod (but does not evict critical pod)",
+			maxPodsToEvictPerNode:   1,
+			pods:                    []v1.Pod{*p1, *nonEvictablePod},
 			expectedEvictedPodCount: 1,
 		},
 	}

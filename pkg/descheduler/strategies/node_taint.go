@@ -61,14 +61,14 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
+		klog.V(1).InfoS("Failed to get threshold priority from strategy's params", "err", err)
 		return
 	}
 
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	for _, node := range nodes {
-		klog.V(1).Infof("Processing node: %#v\n", node.Name)
+		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListPodsOnANode(
 			ctx,
 			client,
@@ -88,9 +88,9 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 				node.Spec.Taints,
 				func(taint *v1.Taint) bool { return taint.Effect == v1.TaintEffectNoSchedule },
 			) {
-				klog.V(2).Infof("Not all taints with NoSchedule effect are tolerated after update for pod %v on node %v", pods[i].Name, node.Name)
+				klog.V(2).InfoS("Not all taints with NoSchedule effect are tolerated after update for pod on node", "pod", klog.KObj(pods[i]), "node", klog.KObj(node))
 				if _, err := podEvictor.EvictPod(ctx, pods[i], node, "NodeTaint"); err != nil {
-					klog.Errorf("Error evicting pod: (%#v)", err)
+					klog.ErrorS(err, "Error evicting pod")
 					break
 				}
 			}

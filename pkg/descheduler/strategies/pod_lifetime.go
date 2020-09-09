@@ -56,7 +56,7 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
+		klog.V(1).InfoS("Failed to get threshold priority from strategy's params", "err", err)
 		return
 	}
 
@@ -69,17 +69,17 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	for _, node := range nodes {
-		klog.V(1).Infof("Processing node: %#v", node.Name)
+		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 
 		pods := listOldPodsOnNode(ctx, client, node, includedNamespaces, excludedNamespaces, *strategy.Params.MaxPodLifeTimeSeconds, evictable.IsEvictable)
 		for _, pod := range pods {
 			success, err := podEvictor.EvictPod(ctx, pod, node, "PodLifeTime")
 			if success {
-				klog.V(1).Infof("Evicted pod: %#v because it was created more than %v seconds ago", pod.Name, *strategy.Params.MaxPodLifeTimeSeconds)
+				klog.V(1).InfoS("Evicted pod because it exceeded its lifetime", "pod", klog.KObj(pod), "maxPodLifeTime", *strategy.Params.MaxPodLifeTimeSeconds)
 			}
 
 			if err != nil {
-				klog.Errorf("Error evicting pod: (%#v)", err)
+				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
 				break
 			}
 		}
