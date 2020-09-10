@@ -106,7 +106,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, pe.dryRun)
 	if err != nil {
 		// err is used only for logging purposes
-		klog.Errorf("Error evicting pod: %#v in namespace %#v%s: %#v", pod.Name, pod.Namespace, reason, err)
+		klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", reason)
 		return false, nil
 	}
 
@@ -227,7 +227,7 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 	}
 
 	if len(checkErrs) > 0 && !HaveEvictAnnotation(pod) {
-		klog.V(4).Infof("Pod %s in namespace %s is not evictable: Pod lacks an eviction annotation and fails the following checks: %v", pod.Name, pod.Namespace, errors.NewAggregate(checkErrs).Error())
+		klog.V(4).InfoS("Pod lacks an eviction annotation and fails the following checks", "pod", klog.KObj(pod), "checks", errors.NewAggregate(checkErrs).Error())
 		return false
 	}
 	return true

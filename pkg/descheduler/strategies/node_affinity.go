@@ -87,7 +87,7 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 					podutil.WithoutNamespaces(excludedNamespaces),
 				)
 				if err != nil {
-					klog.Errorf("failed to get pods from %v: %v", node.Name, err)
+					klog.ErrorS(err, "Failed to get pods", "node", klog.KObj(node))
 				}
 
 				for _, pod := range pods {
@@ -101,7 +101,7 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 				}
 			}
 		default:
-			klog.Errorf("invalid nodeAffinityType: %v", nodeAffinity)
+			klog.ErrorS(nil, "Invalid nodeAffinityType", "nodeAffinity", nodeAffinity)
 		}
 	}
 	klog.V(1).InfoS("Number of evicted pods", "totalEvicted", podEvictor.TotalEvicted())
