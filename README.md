@@ -263,18 +263,36 @@ strategies:
 
 ### PodLifeTime
 
-This strategy evicts pods that are older than `.strategies.PodLifeTime.params.maxPodLifeTimeSeconds` The policy
-file should look like:
+This strategy evicts pods that are older than `maxPodLifeTimeSeconds`. The policy file should look like:
 
-````
+```
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
   "PodLifeTime":
      enabled: true
      params:
-        maxPodLifeTimeSeconds: 86400
-````
+       podLifeTime:
+         maxPodLifeTimeSeconds: 86400
+```
+
+You can specify `podStatusPhases` to `only` evict pods with specific `StatusPhases`, currently this parameter is limited
+to `Running` and `Pending`. E.g.
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+       podLifeTime:
+         maxPodLifeTimeSeconds: 86400
+         podStatusPhases:
+         - "Pending"
+```
+
+Only `Pending` pods will get evicted in this example.
 
 ## Filter Pods
 
@@ -292,7 +310,8 @@ strategies:
   "PodLifeTime":
      enabled: true
      params:
-        maxPodLifeTimeSeconds: 86400
+        podLifeTime:
+          maxPodLifeTimeSeconds: 86400
         namespaces:
           include:
           - "namespace1"
@@ -309,7 +328,8 @@ strategies:
   "PodLifeTime":
      enabled: true
      params:
-        maxPodLifeTimeSeconds: 86400
+        podLifeTime:
+          maxPodLifeTimeSeconds: 86400
         namespaces:
           exclude:
           - "namespace1"
@@ -336,7 +356,8 @@ strategies:
   "PodLifeTime":
      enabled: true
      params:
-        maxPodLifeTimeSeconds: 86400
+        podLifeTime:
+          maxPodLifeTimeSeconds: 86400
         thresholdPriority: 10000
 ```
 
@@ -348,7 +369,8 @@ strategies:
   "PodLifeTime":
      enabled: true
      params:
-        maxPodLifeTimeSeconds: 86400
+        podLifeTime:
+          maxPodLifeTimeSeconds: 86400
         thresholdPriorityClassName: "priorityclass1"
 ```
 
