@@ -78,7 +78,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
 	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
 	if err := validateStrategyConfig(thresholds, targetThresholds); err != nil {
-		klog.Errorf("LowNodeUtilization config is not valid: %v", err)
+		klog.ErrorS(err, "LowNodeUtilization config is not valid")
 		return
 	}
 	// check if Pods/CPU/Mem are set, if not, set them to 100
@@ -102,23 +102,23 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		"CPU", thresholds[v1.ResourceCPU], "Mem", thresholds[v1.ResourceMemory], "Pods", thresholds[v1.ResourcePods])
 
 	if len(lowNodes) == 0 {
-		klog.V(1).Infof("No node is underutilized, nothing to do here, you might tune your thresholds further")
+		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
 		return
 	}
 	klog.V(1).InfoS("Total number of underutilized nodes", "totalNumber", len(lowNodes))
 
 	if len(lowNodes) < strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
-		klog.V(1).Infof("number of nodes underutilized (%v) is less than NumberOfNodes (%v), nothing to do here", len(lowNodes), strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
+		klog.V(1).InfoS("Number of nodes underutilized is less than NumberOfNodes, nothing to do here", "underutilizedNodes", len(lowNodes), "numberOfNodes", strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
 		return
 	}
 
 	if len(lowNodes) == len(nodes) {
-		klog.V(1).Infof("All nodes are underutilized, nothing to do here")
+		klog.V(1).InfoS("All nodes are underutilized, nothing to do here")
 		return
 	}
 
 	if len(targetNodes) == 0 {
-		klog.V(1).Infof("All nodes are under target utilization, nothing to do here")
+		klog.V(1).InfoS("All nodes are under target utilization, nothing to do here")
 		return
 	}
 
@@ -252,14 +252,14 @@ func evictPodsFromTargetNodes(
 		klog.V(3).InfoS("Evicting pods from node", "node", klog.KObj(node.node), "usage", node.usage)
 
 		nonRemovablePods, removablePods := classifyPods(node.allPods, podFilter)
-		klog.V(2).Infof("AllPods:%v, nonRemovablePods:%v, removablePods:%v", len(node.allPods), len(nonRemovablePods), len(removablePods))
+		klog.V(2).InfoS("AllPods", len(node.allPods), "nonRemovablePods", len(nonRemovablePods), "removablePods", len(removablePods))
 
 		if len(removablePods) == 0 {
 			klog.V(1).InfoS("No removable pods on node, try next node", "node", klog.KObj(node.node))
 			continue
 		}
 
-		klog.V(1).Infof("evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
+		klog.V(1).InfoS("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
 		evictPods(ctx, removablePods, targetThresholds, nodeCapacity, node.usage, &totalPods, &totalCPU, &totalMem, taintsOfLowNodes, podEvictor, node.node)

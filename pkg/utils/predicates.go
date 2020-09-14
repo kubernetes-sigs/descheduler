@@ -83,7 +83,7 @@ func nodeMatchesNodeSelectorTerms(node *v1.Node, nodeSelectorTerms []v1.NodeSele
 	for _, req := range nodeSelectorTerms {
 		nodeSelector, err := NodeSelectorRequirementsAsSelector(req.MatchExpressions)
 		if err != nil {
-			klog.V(10).Infof("Failed to parse MatchExpressions: %+v, regarding as not match.", req.MatchExpressions)
+			klog.V(10).InfoS("Failed to parse MatchExpressions", "matchExpression", req.MatchExpressions)
 			return false
 		}
 		if nodeSelector.Matches(labels.Set(node.Labels)) {
