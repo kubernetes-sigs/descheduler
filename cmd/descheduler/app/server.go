@@ -43,7 +43,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 			defer logs.FlushLogs()
 			err := Run(s)
 			if err != nil {
-				klog.Errorf("%v", err)
+				klog.ErrorS(err, "descheduler server")
 			}
 		},
 	}

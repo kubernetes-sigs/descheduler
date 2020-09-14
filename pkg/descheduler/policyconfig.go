@@ -30,7 +30,7 @@ import (
 
 func LoadPolicyConfig(policyConfigFile string) (*api.DeschedulerPolicy, error) {
 	if policyConfigFile == "" {
-		klog.V(1).Infof("policy config file not specified")
+		klog.V(1).InfoS("Policy config file not specified")
 		return nil, nil
 	}
 
