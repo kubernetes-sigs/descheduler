@@ -6,7 +6,7 @@
 - [Go 1.15+](https://golang.org/dl/)
 - [Docker](https://docs.docker.com/install/)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl)
-- [kind](https://kind.sigs.k8s.io/)
+- [kind v0.9.0+](https://kind.sigs.k8s.io/)
 
 ## Build and Run
 
