@@ -154,7 +154,10 @@ func classifyNodes(npm NodePodsMap, thresholds api.ResourceThresholds, targetThr
 			klog.V(2).Infof("Node %#v is over utilized with usage: %#v", node.Name, usage)
 			targetNodes = append(targetNodes, nuMap)
 		} else {
-			klog.V(2).Infof("Node %#v is appropriately utilized with usage: %#v", node.Name, usage)
+			if nodeutil.IsNodeUnschedulable(node) {
+				klog.V(2).Infof("Node %#v is unschedulable", node.Name)
+			}
+			klog.V(2).Infof("Node %#v is utilized with usage: %#v", node.Name, usage)
 		}
 	}
 	return lowNodes, targetNodes
