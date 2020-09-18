@@ -39,6 +39,10 @@ func validateRemoveDuplicatePodsParams(params *api.StrategyParameters) error {
 	if params == nil {
 		return nil
 	}
+	// At most one of include/exclude can be set
+	if params.Namespaces != nil && len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
+		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+	}
 	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
 		return fmt.Errorf("only one of thresholdPriority and thresholdPriorityClassName can be set")
 	}
@@ -67,11 +71,23 @@ func RemoveDuplicatePods(
 		return
 	}
 
+	var includedNamespaces, excludedNamespaces []string
+	if strategy.Params != nil && strategy.Params.Namespaces != nil {
+		includedNamespaces = strategy.Params.Namespaces.Include
+		excludedNamespaces = strategy.Params.Namespaces.Exclude
+	}
+
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
-		pods, err := podutil.ListPodsOnANode(ctx, client, node, podutil.WithFilter(evictable.IsEvictable))
+		pods, err := podutil.ListPodsOnANode(ctx,
+			client,
+			node,
+			podutil.WithFilter(evictable.IsEvictable),
+			podutil.WithNamespaces(includedNamespaces),
+			podutil.WithoutNamespaces(excludedNamespaces),
+		)
 		if err != nil {
 			klog.ErrorS(err, "Error listing evictable pods on node", "node", klog.KObj(node))
 			continue
