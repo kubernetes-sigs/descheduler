@@ -49,7 +49,7 @@ func validateRemovePodsViolatingNodeTaintsParams(params *api.StrategyParameters)
 // RemovePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
 func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	if err := validateRemovePodsViolatingNodeTaintsParams(strategy.Params); err != nil {
-		klog.V(1).Info(err)
+		klog.V(1).InfoS("Failed to validate strategy's params", "err", err)
 		return
 	}
 

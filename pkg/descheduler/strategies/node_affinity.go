@@ -49,7 +49,7 @@ func validatePodsViolatingNodeAffinityParams(params *api.StrategyParameters) err
 // RemovePodsViolatingNodeAffinity evicts pods on nodes which violate node affinity
 func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	if err := validatePodsViolatingNodeAffinityParams(strategy.Params); err != nil {
-		klog.V(1).Info(err)
+		klog.V(1).InfoS("Failed to validate strategy's params", "err", err)
 		return
 	}
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)

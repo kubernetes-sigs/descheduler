@@ -50,7 +50,7 @@ func validateRemovePodsViolatingInterPodAntiAffinityParams(params *api.StrategyP
 // RemovePodsViolatingInterPodAntiAffinity evicts pods on the node which are having a pod affinity rules.
 func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	if err := validateRemovePodsViolatingInterPodAntiAffinityParams(strategy.Params); err != nil {
-		klog.V(1).Info(err)
+		klog.V(1).InfoS("Failed to validate strategy's params", "err", err)
 		return
 	}
 
@@ -112,7 +112,7 @@ func checkPodsWithAntiAffinityExist(pod *v1.Pod, pods []*v1.Pod) bool {
 			namespaces := utils.GetNamespacesFromPodAffinityTerm(pod, &term)
 			selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
 			if err != nil {
-				klog.Infof("%v", err)
+				klog.InfoS("Failed to convert LabelSelector api type", "err", err)
 				return false
 			}
 			for _, existingPod := range pods {
