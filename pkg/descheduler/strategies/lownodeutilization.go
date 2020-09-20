@@ -69,7 +69,7 @@ func validateLowNodeUtilizationParams(params *api.StrategyParameters) error {
 func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
 	if err := validateLowNodeUtilizationParams(strategy.Params); err != nil {
-		klog.V(1).Info(err)
+		klog.V(1).InfoS("Invalid LowNodeUtilization parameters", "err", err)
 		return
 	}
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
