@@ -49,12 +49,12 @@ func validatePodsViolatingNodeAffinityParams(params *api.StrategyParameters) err
 // RemovePodsViolatingNodeAffinity evicts pods on nodes which violate node affinity
 func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	if err := validatePodsViolatingNodeAffinityParams(strategy.Params); err != nil {
-		klog.V(1).InfoS("Invalid RemovePodsViolatingNodeAffinity parameters", "err", err)
+		klog.ErrorS(err, "Invalid RemovePodsViolatingNodeAffinity parameters")
 		return
 	}
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).InfoS("Failed to get threshold priority from strategy's params", "err", err)
+		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
