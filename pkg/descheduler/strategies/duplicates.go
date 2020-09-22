@@ -58,12 +58,12 @@ func RemoveDuplicatePods(
 	podEvictor *evictions.PodEvictor,
 ) {
 	if err := validateRemoveDuplicatePodsParams(strategy.Params); err != nil {
-		klog.V(1).InfoS("Invalid RemoveDuplicatePods parameters", "err", err)
+		klog.ErrorS(err, "Invalid RemoveDuplicatePods parameters")
 		return
 	}
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).InfoS("Failed to get threshold priority from strategy's params", "err", err)
+		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
