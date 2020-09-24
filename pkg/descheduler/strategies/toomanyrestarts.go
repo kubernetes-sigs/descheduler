@@ -51,7 +51,7 @@ func validateRemovePodsHavingTooManyRestartsParams(params *api.StrategyParameter
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
 func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	if err := validateRemovePodsHavingTooManyRestartsParams(strategy.Params); err != nil {
-		klog.V(1).Info(err)
+		klog.V(1).InfoS("Invalid RemovePodsHavingTooManyRestarts parameters", "err", err)
 		return
 	}
 
