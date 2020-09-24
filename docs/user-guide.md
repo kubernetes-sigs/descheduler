@@ -69,18 +69,6 @@ This policy configuration file ensures that pods created more than 7 days ago ar
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
-  "LowNodeUtilization":
-    enabled: false
-  "RemoveDuplicates":
-    enabled: false
-  "RemovePodsViolatingInterPodAntiAffinity":
-    enabled: false
-  "RemovePodsViolatingNodeAffinity":
-    enabled: false
-  "RemovePodsViolatingNodeTaints":
-    enabled: false
-  "RemovePodsHavingTooManyRestarts":
-    enabled: false
   "PodLifeTime":
     enabled: true
     params:
