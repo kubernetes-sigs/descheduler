@@ -75,6 +75,29 @@ strategies:
       maxPodLifeTimeSeconds: 604800 # pods run for a maximum of 7 days
 ```
 
+### Balance Cluster By Node Memory Utilization
+
+If your cluster has been running for a long period of time, you may find that the resource utilization is not very
+balanced. The `LowNodeUtilization` strategy can be used to rebalance your cluster based on `cpu`, `memory`
+or `number of pods`.
+
+Using the following policy configuration file, descheduler will rebalance the cluster based on memory by evicting pods
+from nodes with memory utilization over 70% to nodes with memory utilization below 20%.
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "LowNodeUtilization":
+    enabled: true
+    params:
+      nodeResourceUtilizationThresholds:
+        thresholds:
+          "memory": 20
+        targetThresholds:
+          "memory": 70
+```
+
 ### Autoheal Node Problems
 Descheduler's `RemovePodsViolatingNodeTaints` strategy can be combined with
 [Node Problem Detector](https://github.com/kubernetes/node-problem-detector/) and
