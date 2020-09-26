@@ -49,7 +49,7 @@ func validateRemovePodsViolatingNodeTaintsParams(params *api.StrategyParameters)
 // RemovePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
 func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	if err := validateRemovePodsViolatingNodeTaintsParams(strategy.Params); err != nil {
-		klog.V(1).InfoS("Invalid RemovePodsViolatingNodeTaints parameters", "err", err)
+		klog.ErrorS(err, "Invalid RemovePodsViolatingNodeTaints parameters")
 		return
 	}
 
@@ -61,7 +61,7 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).InfoS("Failed to get threshold priority from strategy's params", "err", err)
+		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
