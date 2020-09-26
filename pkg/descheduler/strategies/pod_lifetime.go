@@ -58,13 +58,13 @@ func validatePodLifeTimeParams(params *api.StrategyParameters) error {
 // PodLifeTime evicts pods on nodes that were created more than strategy.Params.MaxPodLifeTimeSeconds seconds ago.
 func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	if err := validatePodLifeTimeParams(strategy.Params); err != nil {
-		klog.V(1).InfoS("Invalid PodLifeTime parameters", "err", err)
+		klog.ErrorS(err, "Invalid PodLifeTime parameters")
 		return
 	}
 
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).InfoS("Failed to get threshold priority from strategy's params", "err", err)
+		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 

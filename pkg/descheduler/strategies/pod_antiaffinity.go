@@ -50,7 +50,7 @@ func validateRemovePodsViolatingInterPodAntiAffinityParams(params *api.StrategyP
 // RemovePodsViolatingInterPodAntiAffinity evicts pods on the node which are having a pod affinity rules.
 func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	if err := validateRemovePodsViolatingInterPodAntiAffinityParams(strategy.Params); err != nil {
-		klog.V(1).InfoS("Invalid RemovePodsViolatingInterPodAntiAffinity parameters", "err", err)
+		klog.ErrorS(err, "Invalid RemovePodsViolatingInterPodAntiAffinity parameters")
 		return
 	}
 
@@ -62,7 +62,7 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).InfoS("Failed to get threshold priority from strategy's params", "err", err)
+		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
@@ -112,7 +112,7 @@ func checkPodsWithAntiAffinityExist(pod *v1.Pod, pods []*v1.Pod) bool {
 			namespaces := utils.GetNamespacesFromPodAffinityTerm(pod, &term)
 			selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
 			if err != nil {
-				klog.InfoS("Unable to convert LabelSelector into Selector", "err", err)
+				klog.ErrorS(err, "Unable to convert LabelSelector into Selector")
 				return false
 			}
 			for _, existingPod := range pods {
