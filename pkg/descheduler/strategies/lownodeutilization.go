@@ -206,7 +206,7 @@ func getNodeUsage(
 	for _, node := range nodes {
 		pods, err := podutil.ListPodsOnANode(ctx, client, node)
 		if err != nil {
-			klog.Warningf("node %s will not be processed, error in accessing its pods (%#v)", node.Name, err)
+			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
 			continue
 		}
 
