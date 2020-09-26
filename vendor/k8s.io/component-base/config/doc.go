@@ -1,5 +1,5 @@
 /*
-Copyright 2017 The Kubernetes Authors.
+Copyright 2018 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,25 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+// +k8s:deepcopy-gen=package
 
-import (
-	"fmt"
-	"k8s.io/component-base/logs"
-	"os"
-	"sigs.k8s.io/descheduler/cmd/descheduler/app"
-)
-
-func main() {
-	out := os.Stdout
-	cmd := app.NewDeschedulerCommand(out)
-	cmd.AddCommand(app.NewVersionCommand())
-
-	logs.InitLogs()
-	defer logs.FlushLogs()
-
-	if err := cmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-}
+package config // import "k8s.io/component-base/config"
