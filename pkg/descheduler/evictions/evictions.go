@@ -116,7 +116,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 	} else {
 		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", reason)
 		eventBroadcaster := record.NewBroadcaster()
-		eventBroadcaster.StartLogging(klog.V(3).Infof)
+		eventBroadcaster.StartStructuredLogging(3)
 		eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: pe.client.CoreV1().Events(pod.Namespace)})
 		r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
 		r.Event(pod, v1.EventTypeNormal, "Descheduled", fmt.Sprintf("pod evicted by sigs.k8s.io/descheduler%s", reason))
