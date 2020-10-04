@@ -21,4 +21,11 @@ rules:
 - apiGroups: ["scheduling.k8s.io"]
   resources: ["priorityclasses"]
   verbs: ["get", "watch", "list"]
+{{- if .Values.podSecurityPolicy.create }}
+- apiGroups: ['policy']
+  resources: ['podsecuritypolicies']
+  verbs:     ['use']
+  resourceNames:
+  - {{ template "descheduler.fullname" . }}
+{{- end }}
 {{- end -}}
