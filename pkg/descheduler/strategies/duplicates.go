@@ -19,7 +19,6 @@ package strategies
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 
@@ -50,7 +49,7 @@ func validateRemoveDuplicatePodsParams(params *api.StrategyParameters) error {
 	return nil
 }
 
-// RemoveDuplicatePods removes the duplicate pods on node. This strategy evicts all duplicate pods on node.
+// RemoveDuplicatePods removes the duplicate pods on node. This strategy evicts duplicate pods on node.
 // A pod is said to be a duplicate of other if both of them are from same creator, kind and are within the same
 // namespace, and have at least one container with the same image.
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
@@ -62,92 +61,69 @@ func RemoveDuplicatePods(
 	podEvictor *evictions.PodEvictor,
 ) {
 	if err := validateRemoveDuplicatePodsParams(strategy.Params); err != nil {
-		klog.ErrorS(err, "Invalid RemoveDuplicatePods parameters")
+		klog.V(1).Info(err)
 		return
 	}
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
+		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
 		return
-	}
-
-	var includedNamespaces, excludedNamespaces []string
-	if strategy.Params != nil && strategy.Params.Namespaces != nil {
-		includedNamespaces = strategy.Params.Namespaces.Include
-		excludedNamespaces = strategy.Params.Namespaces.Exclude
 	}
 
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
+	listOfPodsOnNode := map[*v1.Node][]*v1.Pod{}
+	ownerKeyCountInCluster := map[string]int32{}
 	for _, node := range nodes {
-		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
-		pods, err := podutil.ListPodsOnANode(ctx,
-			client,
-			node,
-			podutil.WithFilter(evictable.IsEvictable),
-			podutil.WithNamespaces(includedNamespaces),
-			podutil.WithoutNamespaces(excludedNamespaces),
-		)
+		klog.V(1).Infof("Processing node: %#v", node.Name)
+		pods, err := podutil.ListPodsOnANode(ctx, client, node, podutil.WithFilter(evictable.IsEvictable))
 		if err != nil {
-			klog.ErrorS(err, "Error listing evictable pods on node", "node", klog.KObj(node))
+			klog.Errorf("error listing evictable pods on node %s: %+v", node.Name, err)
 			continue
 		}
+		listOfPodsOnNode[node] = pods
+		for _, pod := range pods {
+			ownerKeyOfPod := getUniqueOwnerKeyOfPod(pod)
+			if _, ok := ownerKeyCountInCluster[ownerKeyOfPod]; ok {
+				ownerKeyCountInCluster[ownerKeyOfPod]++
+			} else {
+				ownerKeyCountInCluster[ownerKeyOfPod] = 1
+			}
+		}
+	}
 
-		duplicatePods := make([]*v1.Pod, 0, len(pods))
-		// Each pod has a list of owners and a list of containers, and each container has 1 image spec.
-		// For each pod, we go through all the OwnerRef/Image mappings and represent them as a "key" string.
-		// All of those mappings together makes a list of "key" strings that essentially represent that pod's uniqueness.
-		// This list of keys representing a single pod is then sorted alphabetically.
-		// If any other pod has a list that matches that pod's list, those pods are undeniably duplicates for the following reasons:
-		//   - The 2 pods have the exact same ownerrefs
-		//   - The 2 pods have the exact same container images
-		//
-		// duplicateKeysMap maps the first Namespace/Kind/Name/Image in a pod's list to a 2D-slice of all the other lists where that is the first key
-		// (Since we sort each pod's list, we only need to key the map on the first entry in each list. Any pod that doesn't have
-		// the same first entry is clearly not a duplicate. This makes lookup quick and minimizes storage needed).
-		// If any of the existing lists for that first key matches the current pod's list, the current pod is a duplicate.
-		// If not, then we add this pod's list to the list of lists for that key.
-		duplicateKeysMap := map[string][][]string{}
+	for node, pods := range listOfPodsOnNode {
+		podsToEvict := make([]*v1.Pod, 0, len(pods))
+
+		// count of pods on node
+		ownerKeyCountOnNode := map[string]int32{}
+		for _, pod := range pods {
+			ownerKeyOfPod := getUniqueOwnerKeyOfPod(pod)
+			if _, ok := ownerKeyCountOnNode[ownerKeyOfPod]; ok {
+				ownerKeyCountOnNode[ownerKeyOfPod]++
+			} else {
+				ownerKeyCountOnNode[ownerKeyOfPod] = 1
+			}
+		}
+
 		for _, pod := range pods {
 			ownerRefList := podutil.OwnerRef(pod)
 			if hasExcludedOwnerRefKind(ownerRefList, strategy) || len(ownerRefList) == 0 {
 				continue
 			}
-			podContainerKeys := make([]string, 0, len(ownerRefList)*len(pod.Spec.Containers))
-			for _, ownerRef := range ownerRefList {
-				for _, container := range pod.Spec.Containers {
-					// Namespace/Kind/Name should be unique for the cluster.
-					// We also consider the image, as 2 pods could have the same owner but serve different purposes
-					// So any non-unique Namespace/Kind/Name/Image pattern is a duplicate pod.
-					s := strings.Join([]string{pod.ObjectMeta.Namespace, ownerRef.Kind, ownerRef.Name, container.Image}, "/")
-					podContainerKeys = append(podContainerKeys, s)
-				}
-			}
-			sort.Strings(podContainerKeys)
-
-			// If there have been any other pods with the same first "key", look through all the lists to see if any match
-			if existing, ok := duplicateKeysMap[podContainerKeys[0]]; ok {
-				matched := false
-				for _, keys := range existing {
-					if reflect.DeepEqual(keys, podContainerKeys) {
-						matched = true
-						duplicatePods = append(duplicatePods, pod)
-						break
-					}
-				}
-				if !matched {
-					// Found no matches, add this list of keys to the list of lists that have the same first key
-					duplicateKeysMap[podContainerKeys[0]] = append(duplicateKeysMap[podContainerKeys[0]], podContainerKeys)
-				}
-			} else {
-				// This is the first pod we've seen that has this first "key" entry
-				duplicateKeysMap[podContainerKeys[0]] = [][]string{podContainerKeys}
+			ownerKeyOfPod := getUniqueOwnerKeyOfPod(pod)
+			countInCluster := ownerKeyCountInCluster[ownerKeyOfPod]
+			maxCountOnNode := int32(float64(countInCluster)/float64(len(nodes))) + 1
+			if countOnThisNode := ownerKeyCountOnNode[ownerKeyOfPod]; countOnThisNode > 1 &&
+				countOnThisNode >= maxCountOnNode {
+				podsToEvict = append(podsToEvict, pod)
+				ownerKeyCountOnNode[ownerKeyOfPod]--
 			}
 		}
 
-		for _, pod := range duplicatePods {
+		for _, pod := range podsToEvict {
 			if _, err := podEvictor.EvictPod(ctx, pod, node, "RemoveDuplicatePods"); err != nil {
-				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
+				klog.Errorf("Error evicting pod: (%#v)", err)
 				break
 			}
 		}
@@ -165,4 +141,21 @@ func hasExcludedOwnerRefKind(ownerRefs []metav1.OwnerReference, strategy api.Des
 		}
 	}
 	return false
+}
+
+func getUniqueOwnerKeyOfPod(pod *v1.Pod) string {
+	ownerRefList := podutil.OwnerRef(pod)
+	podContainerKeys := make([]string, 0, len(ownerRefList)*len(pod.Spec.Containers))
+	for _, ownerRef := range ownerRefList {
+		for _, container := range pod.Spec.Containers {
+			// Namespace/Kind/Name should be unique for the cluster.
+			// We also consider the image, as 2 pods could have the same owner but serve different purposes
+			// So any non-unique Namespace/Kind/Name/Image pattern is a duplicate pod.
+			s := strings.Join([]string{pod.ObjectMeta.Namespace, ownerRef.Kind, ownerRef.Name, container.Image}, "/")
+			podContainerKeys = append(podContainerKeys, s)
+		}
+	}
+	sort.Strings(podContainerKeys)
+	// Each pod has a list of owners and a list of containers, and each container has 1 image spec.
+	return podContainerKeys[0]
 }
