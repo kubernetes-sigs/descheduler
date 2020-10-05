@@ -97,6 +97,9 @@ func RemoveDuplicatePods(
 			if hasExcludedOwnerRefKind(ownerRefList, strategy) || len(ownerRefList) == 0 {
 				continue
 			}
+			if hasExcludedOwnerRefNames(ownerRefList, strategy) || len(ownerRefList) == 0 {
+				continue
+			}
 			podContainerKeys := make([]string, 0, len(ownerRefList)*len(pod.Spec.Containers))
 			for _, ownerRef := range ownerRefList {
 				for _, container := range pod.Spec.Containers {
@@ -143,6 +146,19 @@ func hasExcludedOwnerRefKind(ownerRefs []metav1.OwnerReference, strategy api.Des
 		return false
 	}
 	exclude := sets.NewString(strategy.Params.RemoveDuplicates.ExcludeOwnerKinds...)
+	for _, owner := range ownerRefs {
+		if exclude.Has(owner.Kind) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasExcludedOwnerRefNames(ownerRefs []metav1.OwnerReference, strategy api.DeschedulerStrategy) bool {
+	if strategy.Params == nil || strategy.Params.RemoveDuplicates == nil {
+		return false
+	}
+	exclude := sets.NewString(strategy.Params.RemoveDuplicates.ExcludeOwnerNames...)
 	for _, owner := range ownerRefs {
 		if exclude.Has(owner.Kind) {
 			return true

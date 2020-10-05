@@ -90,4 +90,5 @@ type PodsHavingTooManyRestarts struct {
 
 type RemoveDuplicates struct {
 	ExcludeOwnerKinds []string
+	ExcludeOwnerNames []string
 }
