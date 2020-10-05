@@ -75,10 +75,20 @@ func RemoveDuplicatePods(
 	listOfPodsOnNode := map[*v1.Node][]*v1.Pod{}
 	ownerKeyCountInCluster := map[string]int32{}
 	for _, node := range nodes {
+		var includedNamespaces, excludedNamespaces []string
+		if strategy.Params != nil && strategy.Params.Namespaces != nil {
+			includedNamespaces = strategy.Params.Namespaces.Include
+			excludedNamespaces = strategy.Params.Namespaces.Exclude
+		}
 		klog.V(1).Infof("Processing node: %#v", node.Name)
-		pods, err := podutil.ListPodsOnANode(ctx, client, node, podutil.WithFilter(evictable.IsEvictable))
+		pods, err := podutil.ListPodsOnANode(ctx,
+			client,
+			node,
+			podutil.WithFilter(evictable.IsEvictable),
+			podutil.WithNamespaces(includedNamespaces),
+			podutil.WithoutNamespaces(excludedNamespaces))
 		if err != nil {
-			klog.Errorf("error listing evictable pods on node %s: %+v", node.Name, err)
+			klog.ErrorS(err, "Error listing evictable pods on node", "node", klog.KObj(node))
 			continue
 		}
 		listOfPodsOnNode[node] = pods
@@ -123,7 +133,7 @@ func RemoveDuplicatePods(
 
 		for _, pod := range podsToEvict {
 			if _, err := podEvictor.EvictPod(ctx, pod, node, "RemoveDuplicatePods"); err != nil {
-				klog.Errorf("Error evicting pod: (%#v)", err)
+				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
 				break
 			}
 		}
