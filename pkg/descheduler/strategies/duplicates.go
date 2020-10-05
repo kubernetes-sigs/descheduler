@@ -61,12 +61,12 @@ func RemoveDuplicatePods(
 	podEvictor *evictions.PodEvictor,
 ) {
 	if err := validateRemoveDuplicatePodsParams(strategy.Params); err != nil {
-		klog.V(1).Info(err)
+		klog.ErrorS(err, "Invalid RemoveDuplicatePods parameters")
 		return
 	}
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).Infof("failed to get threshold priority from strategy's params: %#v", err)
+		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
@@ -80,13 +80,14 @@ func RemoveDuplicatePods(
 			includedNamespaces = strategy.Params.Namespaces.Include
 			excludedNamespaces = strategy.Params.Namespaces.Exclude
 		}
-		klog.V(1).Infof("Processing node: %#v", node.Name)
+		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListPodsOnANode(ctx,
 			client,
 			node,
 			podutil.WithFilter(evictable.IsEvictable),
 			podutil.WithNamespaces(includedNamespaces),
-			podutil.WithoutNamespaces(excludedNamespaces))
+			podutil.WithoutNamespaces(excludedNamespaces),
+		)
 		if err != nil {
 			klog.ErrorS(err, "Error listing evictable pods on node", "node", klog.KObj(node))
 			continue
