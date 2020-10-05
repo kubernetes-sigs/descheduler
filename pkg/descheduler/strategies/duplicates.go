@@ -71,15 +71,15 @@ func RemoveDuplicatePods(
 	}
 
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
+	var includedNamespaces, excludedNamespaces []string
+	if strategy.Params != nil && strategy.Params.Namespaces != nil {
+		includedNamespaces = strategy.Params.Namespaces.Include
+		excludedNamespaces = strategy.Params.Namespaces.Exclude
+	}
 
 	listOfPodsOnNode := map[*v1.Node][]*v1.Pod{}
 	ownerKeyCountInCluster := map[string]int32{}
 	for _, node := range nodes {
-		var includedNamespaces, excludedNamespaces []string
-		if strategy.Params != nil && strategy.Params.Namespaces != nil {
-			includedNamespaces = strategy.Params.Namespaces.Include
-			excludedNamespaces = strategy.Params.Namespaces.Exclude
-		}
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListPodsOnANode(ctx,
 			client,
@@ -95,11 +95,7 @@ func RemoveDuplicatePods(
 		listOfPodsOnNode[node] = pods
 		for _, pod := range pods {
 			ownerKeyOfPod := getUniqueOwnerKeyOfPod(pod)
-			if _, ok := ownerKeyCountInCluster[ownerKeyOfPod]; ok {
-				ownerKeyCountInCluster[ownerKeyOfPod]++
-			} else {
-				ownerKeyCountInCluster[ownerKeyOfPod] = 1
-			}
+			ownerKeyCountInCluster[ownerKeyOfPod] += 1
 		}
 	}
 
@@ -110,11 +106,7 @@ func RemoveDuplicatePods(
 		ownerKeyCountOnNode := map[string]int32{}
 		for _, pod := range pods {
 			ownerKeyOfPod := getUniqueOwnerKeyOfPod(pod)
-			if _, ok := ownerKeyCountOnNode[ownerKeyOfPod]; ok {
-				ownerKeyCountOnNode[ownerKeyOfPod]++
-			} else {
-				ownerKeyCountOnNode[ownerKeyOfPod] = 1
-			}
+			ownerKeyCountOnNode[ownerKeyOfPod] += 1
 		}
 
 		for _, pod := range pods {
