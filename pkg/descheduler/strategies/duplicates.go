@@ -70,12 +70,12 @@ func RemoveDuplicatePods(
 		return
 	}
 
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 	var includedNamespaces, excludedNamespaces []string
 	if strategy.Params != nil && strategy.Params.Namespaces != nil {
 		includedNamespaces = strategy.Params.Namespaces.Include
 		excludedNamespaces = strategy.Params.Namespaces.Exclude
 	}
+	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	listOfPodsOnNode := map[*v1.Node][]*v1.Pod{}
 	ownerKeyCountInCluster := map[string]int32{}
