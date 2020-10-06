@@ -29,6 +29,7 @@ Table of Contents
      * [Run As A Job](#run-as-a-job)
      * [Run As A CronJob](#run-as-a-cronjob)
      * [Install Using Helm](#install-using-helm)
+     * [Install Using Kustomize](#install-using-kustomize)
   * [User Guide](#user-guide)
   * [Policy and Strategies](#policy-and-strategies)
      * [RemoveDuplicates](#removeduplicates)
@@ -59,17 +60,17 @@ being evicted by itself or by the kubelet.
 ### Run As A Job
 
 ```
-kubectl create -f kubernetes/rbac.yaml
-kubectl create -f kubernetes/configmap.yaml
-kubectl create -f kubernetes/job.yaml
+kubectl create -f kubernetes/base/rbac.yaml
+kubectl create -f kubernetes/base/configmap.yaml
+kubectl create -f kubernetes/job/job.yaml
 ```
 
 ### Run As A CronJob
 
 ```
-kubectl create -f kubernetes/rbac.yaml
-kubectl create -f kubernetes/configmap.yaml
-kubectl create -f kubernetes/cronjob.yaml
+kubectl create -f kubernetes/base/rbac.yaml
+kubectl create -f kubernetes/base/configmap.yaml
+kubectl create -f kubernetes/cronjob/cronjob.yaml
 ```
 
 ### Install Using Helm
@@ -78,6 +79,21 @@ Starting with release v0.18.0 there is an official helm chart that can be used t
 descheduler. See the [helm chart README](https://github.com/kubernetes-sigs/descheduler/blob/master/charts/descheduler/README.md) for detailed instructions.
 
 The descheduler helm chart is also listed on the [helm hub](https://hub.helm.sh/charts/descheduler/descheduler-helm-chart).
+
+### Install Using Kustomize
+
+You can use kustomize to install descheduler.
+See the [resources | Kustomize](https://kubernetes-sigs.github.io/kustomize/api-reference/kustomization/resources/) for detailed instructions.
+
+Run As A Job
+```
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=master' | kubectl apply -f -
+```
+
+Run As A CronJob
+```
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=master' | kubectl apply -f -
+```
 
 ## User Guide
 
