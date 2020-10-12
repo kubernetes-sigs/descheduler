@@ -38,7 +38,10 @@ func TestTaintsUpdated(t *testing.T) {
 	stopChannel := make(chan struct{})
 	defer close(stopChannel)
 
-	rs := options.NewDeschedulerServer()
+	rs, err := options.NewDeschedulerServer()
+	if err != nil {
+		t.Fatalf("Unable to initialize server: %v", err)
+	}
 	rs.Client = client
 	rs.DeschedulingInterval = 100 * time.Millisecond
 	go func() {
