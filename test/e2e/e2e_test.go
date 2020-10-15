@@ -206,7 +206,7 @@ func runPodLifetimeStrategy(ctx context.Context, clientset clientset.Interface, 
 		deschedulerapi.DeschedulerStrategy{
 			Enabled: true,
 			Params: &deschedulerapi.StrategyParameters{
-				MaxPodLifeTimeSeconds:      &maxPodLifeTimeSeconds,
+				PodLifeTime:                &deschedulerapi.PodLifeTime{MaxPodLifeTimeSeconds: &maxPodLifeTimeSeconds},
 				Namespaces:                 namespaces,
 				ThresholdPriority:          priority,
 				ThresholdPriorityClassName: priorityClass,
@@ -567,7 +567,10 @@ func TestDeschedulingInterval(t *testing.T) {
 	}
 
 	// By default, the DeschedulingInterval param should be set to 0, meaning Descheduler only runs once then exits
-	s := options.NewDeschedulerServer()
+	s, err := options.NewDeschedulerServer()
+	if err != nil {
+		t.Fatalf("Unable to initialize server: %v", err)
+	}
 	s.Client = clientSet
 
 	deschedulerPolicy := &api.DeschedulerPolicy{}

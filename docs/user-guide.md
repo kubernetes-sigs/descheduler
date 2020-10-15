@@ -69,22 +69,33 @@ This policy configuration file ensures that pods created more than 7 days ago ar
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
-  "LowNodeUtilization":
-    enabled: false
-  "RemoveDuplicates":
-    enabled: false
-  "RemovePodsViolatingInterPodAntiAffinity":
-    enabled: false
-  "RemovePodsViolatingNodeAffinity":
-    enabled: false
-  "RemovePodsViolatingNodeTaints":
-    enabled: false
-  "RemovePodsHavingTooManyRestarts":
-    enabled: false
   "PodLifeTime":
     enabled: true
     params:
       maxPodLifeTimeSeconds: 604800 # pods run for a maximum of 7 days
+```
+
+### Balance Cluster By Node Memory Utilization
+
+If your cluster has been running for a long period of time, you may find that the resource utilization is not very
+balanced. The `LowNodeUtilization` strategy can be used to rebalance your cluster based on `cpu`, `memory`
+or `number of pods`.
+
+Using the following policy configuration file, descheduler will rebalance the cluster based on memory by evicting pods
+from nodes with memory utilization over 70% to nodes with memory utilization below 20%.
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "LowNodeUtilization":
+    enabled: true
+    params:
+      nodeResourceUtilizationThresholds:
+        thresholds:
+          "memory": 20
+        targetThresholds:
+          "memory": 70
 ```
 
 ### Autoheal Node Problems

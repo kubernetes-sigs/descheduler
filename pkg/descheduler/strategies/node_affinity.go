@@ -49,12 +49,12 @@ func validatePodsViolatingNodeAffinityParams(params *api.StrategyParameters) err
 // RemovePodsViolatingNodeAffinity evicts pods on nodes which violate node affinity
 func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	if err := validatePodsViolatingNodeAffinityParams(strategy.Params); err != nil {
-		klog.V(1).Info(err)
+		klog.ErrorS(err, "Invalid RemovePodsViolatingNodeAffinity parameters")
 		return
 	}
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.V(1).InfoS("Failed to get threshold priority from strategy's params", "err", err)
+		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
@@ -87,7 +87,7 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 					podutil.WithoutNamespaces(excludedNamespaces),
 				)
 				if err != nil {
-					klog.Errorf("failed to get pods from %v: %v", node.Name, err)
+					klog.ErrorS(err, "Failed to get pods", "node", klog.KObj(node))
 				}
 
 				for _, pod := range pods {
@@ -101,8 +101,8 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 				}
 			}
 		default:
-			klog.Errorf("invalid nodeAffinityType: %v", nodeAffinity)
+			klog.ErrorS(nil, "Invalid nodeAffinityType", "nodeAffinity", nodeAffinity)
 		}
 	}
-	klog.V(1).Infof("Evicted %v pods", podEvictor.TotalEvicted())
+	klog.V(1).InfoS("Number of evicted pods", "totalEvicted", podEvictor.TotalEvicted())
 }
