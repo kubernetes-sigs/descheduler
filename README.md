@@ -118,6 +118,16 @@ are ready again, this strategy could be enabled to evict those duplicate pods.
 It provides one optional parameter, `ExcludeOwnerKinds`, which is a list of OwnerRef `Kind`s. If a pod
 has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
 
+**Parameters:**
+
+|Name|Type|
+|---|---|
+|`excludeOwnerKinds`|list(string)|
+|`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+
+**Example:**
 ```
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
@@ -148,7 +158,17 @@ considered appropriately utilized and is not considered for eviction. The thresh
 can be configured for cpu, memory, and number of pods too in terms of percentage.
 
 These thresholds, `thresholds` and `targetThresholds`, could be tuned as per your cluster requirements.
-Here is an example of a policy for this strategy:
+
+**Parameters:**
+
+|Name|Type|
+|---|---|
+|`thresholds`|map(string:int)|
+|`targetThresholds`|map(string:int)|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+
+**Example:**
 
 ```
 apiVersion: "descheduler/v1alpha1"
@@ -188,15 +208,24 @@ This strategy makes sure that pods violating interpod anti-affinity are removed 
 if there is podA on a node and podB and podC (running on the same node) have anti-affinity rules which prohibit
 them to run on the same node, then podA will be evicted from the node so that podB and podC could run. This
 issue could happen, when the anti-affinity rules for podB and podC are created when they are already running on
-node. Currently, there are no parameters associated with this strategy. To disable this strategy, the
-policy should look like:
+node.
+
+**Parameters:**
+
+|Name|Type|
+|---|---|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`namespaces`|(see [namespace filtering](#namespace-filtering))|
+
+**Example:**
 
 ```
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingInterPodAntiAffinity":
-     enabled: false
+     enabled: true
 ```
 
 ### RemovePodsViolatingNodeAffinity
@@ -217,7 +246,16 @@ of scheduling. Over time nodeA stops to satisfy the rule. When the strategy gets
 executed and there is another node available that satisfies the node affinity rule,
 podA gets evicted from nodeA.
 
-The policy file should look like:
+**Parameters:**
+
+|Name|Type|
+|---|---|
+|`nodeAffinityType`|list(string)|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`namespaces`|(see [namespace filtering](#namespace-filtering))|
+
+**Example:**
 
 ```
 apiVersion: "descheduler/v1alpha1"
@@ -235,7 +273,17 @@ strategies:
 This strategy makes sure that pods violating NoSchedule taints on nodes are removed. For example there is a
 pod "podA" with a toleration to tolerate a taint ``key=value:NoSchedule`` scheduled and running on the tainted
 node. If the node's taint is subsequently updated/removed, taint is no longer satisfied by its pods' tolerations
-and will be evicted. The policy file should look like:
+and will be evicted.
+
+**Parameters:**
+
+|Name|Type|
+|---|---|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`namespaces`|(see [namespace filtering](#namespace-filtering))|
+
+**Example:**
 
 ````
 apiVersion: "descheduler/v1alpha1"
@@ -247,7 +295,22 @@ strategies:
 
 ### RemovePodsHavingTooManyRestarts
 
-This strategy makes sure that pods having too many restarts are removed from nodes. For example a pod with EBS/PD that can't get the volume/disk attached to the instance, then the pod should be re-scheduled to other nodes.
+This strategy makes sure that pods having too many restarts are removed from nodes. For example a pod with EBS/PD that 
+can't get the volume/disk attached to the instance, then the pod should be re-scheduled to other nodes. Its parameters 
+include `podRestartThreshold`, which is the number of restarts at which a pod should be evicted, and `includingInitContainers`, 
+which determines whether init container restarts should be factored into that calculation.
+
+**Parameters:**
+
+|Name|Type|
+|---|---|
+|`podRestartThreshold`|int|
+|`includingInitContainers`|bool|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`namespaces`|(see [namespace filtering](#namespace-filtering))|
+
+**Example:**
 
 ```
 apiVersion: "descheduler/v1alpha1"
@@ -263,27 +326,22 @@ strategies:
 
 ### PodLifeTime
 
-This strategy evicts pods that are older than `.strategies.PodLifeTime.params.maxPodLifeTimeSeconds` The policy
-file should look like:
+This strategy evicts pods that are older than `maxPodLifeTimeSeconds`.
 
-````
-apiVersion: "descheduler/v1alpha1"
-kind: "DeschedulerPolicy"
-strategies:
-  "PodLifeTime":
-     enabled: true
-     params:
-        maxPodLifeTimeSeconds: 86400
-````
+You can also specify `podStatusPhases` to `only` evict pods with specific `StatusPhases`, currently this parameter is limited
+to `Running` and `Pending`.
 
-## Filter Pods
+**Parameters:**
 
-### Namespace filtering
+|Name|Type|
+|---|---|
+|`maxPodLifeTimeSeconds`|int|
+|`podStatusPhases`|list(string)|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`namespaces`|(see [namespace filtering](#namespace-filtering))|
 
-Strategies like `PodLifeTime`, `RemovePodsHavingTooManyRestarts`, `RemovePodsViolatingNodeTaints`,
-`RemovePodsViolatingNodeAffinity` and `RemovePodsViolatingInterPodAntiAffinity` can specify `namespaces`
-parameter which allows to specify a list of including, resp. excluding namespaces.
-E.g.
+**Example:**
 
 ```
 apiVersion: "descheduler/v1alpha1"
@@ -292,7 +350,35 @@ strategies:
   "PodLifeTime":
      enabled: true
      params:
-        maxPodLifeTimeSeconds: 86400
+       podLifeTime:
+         maxPodLifeTimeSeconds: 86400
+         podStatusPhases:
+         - "Pending"
+```
+
+## Filter Pods
+
+### Namespace filtering
+
+The following strategies accept a `namespaces` parameter which allows to specify a list of including, resp. excluding namespaces:
+* `PodLifeTime`
+* `RemovePodsHavingTooManyRestarts`
+* `RemovePodsViolatingNodeTaints`
+* `RemovePodsViolatingNodeAffinity`
+* `RemovePodsViolatingInterPodAntiAffinity`
+* `RemoveDuplicates`
+
+For example:
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+        podLifeTime:
+          maxPodLifeTimeSeconds: 86400
         namespaces:
           include:
           - "namespace1"
@@ -309,7 +395,8 @@ strategies:
   "PodLifeTime":
      enabled: true
      params:
-        maxPodLifeTimeSeconds: 86400
+        podLifeTime:
+          maxPodLifeTimeSeconds: 86400
         namespaces:
           exclude:
           - "namespace1"
@@ -336,7 +423,8 @@ strategies:
   "PodLifeTime":
      enabled: true
      params:
-        maxPodLifeTimeSeconds: 86400
+        podLifeTime:
+          maxPodLifeTimeSeconds: 86400
         thresholdPriority: 10000
 ```
 
@@ -348,7 +436,8 @@ strategies:
   "PodLifeTime":
      enabled: true
      params:
-        maxPodLifeTimeSeconds: 86400
+        podLifeTime:
+          maxPodLifeTimeSeconds: 86400
         thresholdPriorityClassName: "priorityclass1"
 ```
 
@@ -363,7 +452,7 @@ When the descheduler decides to evict pods from a node, it employs the following
 * Pods (static or mirrored pods or stand alone pods) not part of an RC, RS, Deployment or Job are
 never evicted because these pods won't be recreated.
 * Pods associated with DaemonSets are never evicted.
-* Pods with local storage are never evicted.
+* Pods with local storage are never evicted (unless `evictLocalStoragePods: true` is set)
 * In `LowNodeUtilization` and `RemovePodsViolatingInterPodAntiAffinity`, pods are evicted by their priority from low to high, and if they have same priority,
 best effort pods are evicted before burstable and guaranteed pods.
 * All types of pods with the annotation descheduler.alpha.kubernetes.io/evict are evicted. This

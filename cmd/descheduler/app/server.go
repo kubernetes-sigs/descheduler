@@ -27,28 +27,35 @@ import (
 	"github.com/spf13/cobra"
 
 	aflag "k8s.io/component-base/cli/flag"
-	"k8s.io/component-base/logs"
 	"k8s.io/klog/v2"
 )
 
 // NewDeschedulerCommand creates a *cobra.Command object with default parameters
 func NewDeschedulerCommand(out io.Writer) *cobra.Command {
-	s := options.NewDeschedulerServer()
+	s, err := options.NewDeschedulerServer()
+
+	if err != nil {
+		klog.ErrorS(err, "unable to initialize server")
+	}
+
 	cmd := &cobra.Command{
 		Use:   "descheduler",
 		Short: "descheduler",
 		Long:  `The descheduler evicts pods which may be bound to less desired nodes`,
 		Run: func(cmd *cobra.Command, args []string) {
-			logs.InitLogs()
-			defer logs.FlushLogs()
+			s.Logs.LogFormat = s.Logging.Format
+			s.Logs.Apply()
+
+			if err := s.Validate(); err != nil {
+				klog.ErrorS(err, "failed to validate server configuration")
+			}
 			err := Run(s)
 			if err != nil {
-				klog.Errorf("%v", err)
+				klog.ErrorS(err, "descheduler server")
 			}
 		},
 	}
-	cmd.SetOutput(out)
-
+	cmd.SetOut(out)
 	flags := cmd.Flags()
 	flags.SetNormalizeFunc(aflag.WordSepNormalizeFunc)
 	flags.AddGoFlagSet(flag.CommandLine)

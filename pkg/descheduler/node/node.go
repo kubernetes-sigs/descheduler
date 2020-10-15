@@ -18,7 +18,8 @@ package node
 
 import (
 	"context"
-	"k8s.io/api/core/v1"
+
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -42,7 +43,7 @@ func ReadyNodes(ctx context.Context, client clientset.Interface, nodeInformer co
 	}
 
 	if len(nodes) == 0 {
-		klog.V(2).Infof("node lister returned empty list, now fetch directly")
+		klog.V(2).InfoS("Node lister returned empty list, now fetch directly")
 
 		nItems, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: nodeSelector})
 		if err != nil {
@@ -80,16 +81,16 @@ func IsReady(node *v1.Node) bool {
 			klog.V(1).InfoS("Ignoring node", "node", klog.KObj(node), "condition", cond.Type, "status", cond.Status)
 			return false
 		} /*else if cond.Type == v1.NodeOutOfDisk && cond.Status != v1.ConditionFalse {
-			klog.V(4).Infof("Ignoring node %v with %v condition status %v", node.Name, cond.Type, cond.Status)
+			klog.V(4).InfoS("Ignoring node with condition status", "node", klog.KObj(node.Name), "condition", cond.Type, "status", cond.Status)
 			return false
 		} else if cond.Type == v1.NodeNetworkUnavailable && cond.Status != v1.ConditionFalse {
-			klog.V(4).Infof("Ignoring node %v with %v condition status %v", node.Name, cond.Type, cond.Status)
+			klog.V(4).InfoS("Ignoring node with condition status", "node", klog.KObj(node.Name), "condition", cond.Type, "status", cond.Status)
 			return false
 		}*/
 	}
 	// Ignore nodes that are marked unschedulable
 	/*if node.Spec.Unschedulable {
-		klog.V(4).Infof("Ignoring node %v since it is unschedulable", node.Name)
+		klog.V(4).InfoS("Ignoring node since it is unschedulable", "node", klog.KObj(node.Name))
 		return false
 	}*/
 	return true
@@ -125,7 +126,7 @@ func PodFitsCurrentNode(pod *v1.Pod, node *v1.Node) bool {
 	ok, err := utils.PodMatchNodeSelector(pod, node)
 
 	if err != nil {
-		klog.Error(err)
+		klog.ErrorS(err, "Failed to match node selector")
 		return false
 	}
 

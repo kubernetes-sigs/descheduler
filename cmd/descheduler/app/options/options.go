@@ -18,36 +18,55 @@ limitations under the License.
 package options
 
 import (
+	"github.com/spf13/pflag"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	clientset "k8s.io/client-go/kubernetes"
 
-	// install the componentconfig api so we get its defaulting and conversion functions
+	"k8s.io/component-base/logs"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
 	deschedulerscheme "sigs.k8s.io/descheduler/pkg/descheduler/scheme"
-
-	"github.com/spf13/pflag"
 )
 
 // DeschedulerServer configuration
 type DeschedulerServer struct {
 	componentconfig.DeschedulerConfiguration
 	Client clientset.Interface
+	Logs   *logs.Options
 }
 
 // NewDeschedulerServer creates a new DeschedulerServer with default parameters
-func NewDeschedulerServer() *DeschedulerServer {
-	versioned := v1alpha1.DeschedulerConfiguration{}
-	deschedulerscheme.Scheme.Default(&versioned)
-	cfg := componentconfig.DeschedulerConfiguration{}
-	deschedulerscheme.Scheme.Convert(versioned, &cfg, nil)
-	s := DeschedulerServer{
-		DeschedulerConfiguration: cfg,
+func NewDeschedulerServer() (*DeschedulerServer, error) {
+	cfg, err := newDefaultComponentConfig()
+	if err != nil {
+		return nil, err
 	}
-	return &s
+	return &DeschedulerServer{
+		DeschedulerConfiguration: *cfg,
+		Logs:                     logs.NewOptions(),
+	}, nil
+}
+
+// Validation checks for DeschedulerServer.
+func (s *DeschedulerServer) Validate() error {
+	var errs []error
+	errs = append(errs, s.Logs.Validate()...)
+	return utilerrors.NewAggregate(errs)
+}
+
+func newDefaultComponentConfig() (*componentconfig.DeschedulerConfiguration, error) {
+	versionedCfg := v1alpha1.DeschedulerConfiguration{}
+	deschedulerscheme.Scheme.Default(&versionedCfg)
+	cfg := componentconfig.DeschedulerConfiguration{}
+	if err := deschedulerscheme.Scheme.Convert(&versionedCfg, &cfg, nil); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
 }
 
 // AddFlags adds flags for a specific SchedulerServer to the specified FlagSet
 func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
+	fs.StringVar(&rs.Logging.Format, "logging-format", rs.Logging.Format, `Sets the log format. Permitted formats: "text", "json". Non-default formats don't honor these flags: --add-dir-header, --alsologtostderr, --log-backtrace-at, --log-dir, --log-file, --log-file-max-size, --logtostderr, --skip-headers, --skip-log-headers, --stderrthreshold, --log-flush-frequency.\nNon-default choices are currently alpha and subject to change without warning.`)
 	fs.DurationVar(&rs.DeschedulingInterval, "descheduling-interval", rs.DeschedulingInterval, "Time interval between two consecutive descheduler executions. Setting this value instructs the descheduler to run in a continuous loop at the interval specified.")
 	fs.StringVar(&rs.KubeconfigFile, "kubeconfig", rs.KubeconfigFile, "File with  kube configuration.")
 	fs.StringVar(&rs.PolicyConfigFile, "policy-config-file", rs.PolicyConfigFile, "File with descheduler policy configuration.")
