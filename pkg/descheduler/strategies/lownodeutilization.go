@@ -219,7 +219,7 @@ func getNodeUsage(
 			node:    node,
 			usage:   nodeUtilization(node, pods),
 			allPods: pods,
-			// A treshold is in percentages but in <0;100> interval.
+			// A threshold is in percentages but in <0;100> interval.
 			// Performing `threshold * 0.01` will convert <0;100> interval into <0;1>.
 			// Multiplying it with capacity will give fraction of the capacity corresponding to the given high/low resource threshold in Quantity units.
 			lowResourceThreshold: map[v1.ResourceName]*resource.Quantity{
