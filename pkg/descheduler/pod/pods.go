@@ -108,7 +108,7 @@ func ListPodsOnANode(
 	}
 
 	// INFO(jchaloup): field selectors do not work properly with listers
-	// Once the descheduler switcheds to pod listers (through informers),
+	// Once the descheduler switches to pod listers (through informers),
 	// We need to flip to client-side filtering.
 	podList, err := client.CoreV1().Pods(v1.NamespaceAll).List(ctx,
 		metav1.ListOptions{FieldSelector: fieldSelector.String()})
