@@ -3,6 +3,7 @@ module sigs.k8s.io/descheduler
 go 1.15
 
 require (
+	github.com/client9/misspell v0.3.4
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.19.2
