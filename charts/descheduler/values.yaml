@@ -51,6 +51,10 @@ rbac:
   # Specifies whether RBAC resources should be created
   create: true
 
+podSecurityPolicy:
+  # Specifies whether PodSecurityPolicy should be created.
+  create: true
+
 serviceAccount:
   # Specifies whether a ServiceAccount should be created
   create: true
