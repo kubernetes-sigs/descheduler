@@ -39,10 +39,12 @@ spec:
                 - "--policy-config-file"
                 - "/policy-dir/policy.yaml"
                 {{- range $key, $value := .Values.cmdOptions }}
+                  {{- if ne (kindOf $value) "invalid" }}
                 - {{ printf "--%s" $key | quote }}
-                {{- if $value }}
+                    {{- if $value }}
                 - {{ $value | quote }}
-                {{- end }}
+                    {{- end }}
+                  {{- end }}
                 {{- end }}
               volumeMounts:
                 - mountPath: /policy-dir
