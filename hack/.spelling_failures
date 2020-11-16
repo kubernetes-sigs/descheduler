@@ -1,0 +1,6 @@
+BUILD
+CHANGELOG
+OWNERS
+go.mod
+go.sum
+vendor/

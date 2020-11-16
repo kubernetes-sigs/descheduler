@@ -29,6 +29,7 @@ Table of Contents
      * [Run As A Job](#run-as-a-job)
      * [Run As A CronJob](#run-as-a-cronjob)
      * [Install Using Helm](#install-using-helm)
+     * [Install Using Kustomize](#install-using-kustomize)
   * [User Guide](#user-guide)
   * [Policy and Strategies](#policy-and-strategies)
      * [RemoveDuplicates](#removeduplicates)
@@ -36,6 +37,7 @@ Table of Contents
      * [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity)
      * [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity)
      * [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints)
+     * [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint)
      * [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts)
      * [PodLifeTime](#podlifetime)
   * [Filter Pods](#filter-pods)
@@ -59,17 +61,17 @@ being evicted by itself or by the kubelet.
 ### Run As A Job
 
 ```
-kubectl create -f kubernetes/rbac.yaml
-kubectl create -f kubernetes/configmap.yaml
-kubectl create -f kubernetes/job.yaml
+kubectl create -f kubernetes/base/rbac.yaml
+kubectl create -f kubernetes/base/configmap.yaml
+kubectl create -f kubernetes/job/job.yaml
 ```
 
 ### Run As A CronJob
 
 ```
-kubectl create -f kubernetes/rbac.yaml
-kubectl create -f kubernetes/configmap.yaml
-kubectl create -f kubernetes/cronjob.yaml
+kubectl create -f kubernetes/base/rbac.yaml
+kubectl create -f kubernetes/base/configmap.yaml
+kubectl create -f kubernetes/cronjob/cronjob.yaml
 ```
 
 ### Install Using Helm
@@ -79,6 +81,21 @@ descheduler. See the [helm chart README](https://github.com/kubernetes-sigs/desc
 
 The descheduler helm chart is also listed on the [helm hub](https://hub.helm.sh/charts/descheduler/descheduler-helm-chart).
 
+### Install Using Kustomize
+
+You can use kustomize to install descheduler.
+See the [resources | Kustomize](https://kubernetes-sigs.github.io/kustomize/api-reference/kustomization/resources/) for detailed instructions.
+
+Run As A Job
+```
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=master' | kubectl apply -f -
+```
+
+Run As A CronJob
+```
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=master' | kubectl apply -f -
+```
+
 ## User Guide
 
 See the [user guide](docs/user-guide.md) in the `/docs` directory.
@@ -86,17 +103,17 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 ## Policy and Strategies
 
 Descheduler's policy is configurable and includes strategies that can be enabled or disabled.
-Seven strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`,
-`RemovePodsViolatingNodeAffinity`, `RemovePodsViolatingNodeTaints`, `RemovePodsHavingTooManyRestarts`, and `PodLifeTime`
-are currently implemented. As part of the policy, the parameters associated with the strategies can be configured too.
-By default, all strategies are enabled.
+Eight strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`,
+`RemovePodsViolatingNodeAffinity`, `RemovePodsViolatingNodeTaints`, `RemovePodsViolatingTopologySpreadConstraint`,
+`RemovePodsHavingTooManyRestarts`, and `PodLifeTime` are currently implemented. As part of the policy, the
+parameters associated with the strategies can be configured too. By default, all strategies are enabled.
 
 The policy also includes common configuration for all the strategies:
 - `nodeSelector` - limiting the nodes which are processed
 - `evictLocalStoragePods` - allowing to evict pods with local storage
 - `maxNoOfPodsToEvictPerNode` - maximum number of pods evicted from each node (summed through all strategies)
 
-```
+```yaml
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 nodeSelector: prod=dev
@@ -128,7 +145,7 @@ has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considere
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 
 **Example:**
-```
+```yaml
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
@@ -170,7 +187,7 @@ These thresholds, `thresholds` and `targetThresholds`, could be tuned as per you
 
 **Example:**
 
-```
+```yaml
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
@@ -220,7 +237,7 @@ node.
 
 **Example:**
 
-```
+```yaml
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
@@ -257,7 +274,7 @@ podA gets evicted from nodeA.
 
 **Example:**
 
-```
+```yaml
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
@@ -285,13 +302,38 @@ and will be evicted.
 
 **Example:**
 
-````
+````yaml
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingNodeTaints":
     enabled: true
 ````
+
+### RemovePodsViolatingTopologySpreadConstraint
+
+This strategy makes sure that pods violating [topology spread constraints](https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/)
+are evicted from nodes. Specifically, it tries to evict the minimum number of pods required to balance topology domains to within each constraint's `maxSkew`.
+This strategy requires k8s version 1.18 at a minimum.
+
+**Parameters:**
+
+|Name|Type|
+|---|---|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`namespaces`|(see [namespace filtering](#namespace-filtering))|
+
+**Example:**
+
+```yaml
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "RemovePodsViolatingTopologySpreadConstraint":
+     enabled: true
+```
+
 
 ### RemovePodsHavingTooManyRestarts
 
@@ -312,7 +354,7 @@ which determines whether init container restarts should be factored into that ca
 
 **Example:**
 
-```
+```yaml
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
@@ -343,7 +385,7 @@ to `Running` and `Pending`.
 
 **Example:**
 
-```
+```yaml
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
@@ -367,10 +409,11 @@ The following strategies accept a `namespaces` parameter which allows to specify
 * `RemovePodsViolatingNodeAffinity`
 * `RemovePodsViolatingInterPodAntiAffinity`
 * `RemoveDuplicates`
+* `RemovePodsViolatingTopologySpreadConstraint`
 
 For example:
 
-```
+```yaml
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
@@ -388,7 +431,7 @@ strategies:
 In the examples `PodLifeTime` gets executed only over `namespace1` and `namespace2`.
 The similar holds for `exclude` field:
 
-```
+```yaml
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
@@ -416,7 +459,7 @@ is set to the value of `system-cluster-critical` priority class.
 E.g.
 
 Setting `thresholdPriority`
-```
+```yaml
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
@@ -429,7 +472,7 @@ strategies:
 ```
 
 Setting `thresholdPriorityClassName`
-```
+```yaml
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
