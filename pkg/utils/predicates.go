@@ -21,7 +21,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
+	"k8s.io/component-helpers/scheduling/corev1"
 	"k8s.io/klog/v2"
 )
 
@@ -69,62 +69,15 @@ func podMatchesNodeLabels(pod *v1.Pod, node *v1.Node) bool {
 
 		// Match node selector for requiredDuringSchedulingIgnoredDuringExecution.
 		if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-			nodeSelectorTerms := nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
-			klog.V(10).InfoS("Match for RequiredDuringSchedulingIgnoredDuringExecution node selector terms", "terms", nodeSelectorTerms)
-			return nodeMatchesNodeSelectorTerms(node, nodeSelectorTerms)
+			klog.V(10).InfoS("Match for RequiredDuringSchedulingIgnoredDuringExecution node selector", "selector", nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
+			matches, err := corev1.MatchNodeSelectorTerms(node, nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
+			if err != nil {
+				klog.ErrorS(err, "error parsing node selector", "selector", nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
+			}
+			return matches
 		}
 	}
 	return true
-}
-
-// nodeMatchesNodeSelectorTerms checks if a node's labels satisfy a list of node selector terms,
-// terms are ORed, and an empty list of terms will match nothing.
-func nodeMatchesNodeSelectorTerms(node *v1.Node, nodeSelectorTerms []v1.NodeSelectorTerm) bool {
-	for _, req := range nodeSelectorTerms {
-		nodeSelector, err := NodeSelectorRequirementsAsSelector(req.MatchExpressions)
-		if err != nil {
-			klog.V(10).InfoS("Failed to parse MatchExpressions", "matchExpression", req.MatchExpressions)
-			return false
-		}
-		if nodeSelector.Matches(labels.Set(node.Labels)) {
-			return true
-		}
-	}
-	return false
-}
-
-// NodeSelectorRequirementsAsSelector converts the []NodeSelectorRequirement api type into a struct that implements
-// labels.Selector.
-func NodeSelectorRequirementsAsSelector(nsm []v1.NodeSelectorRequirement) (labels.Selector, error) {
-	if len(nsm) == 0 {
-		return labels.Nothing(), nil
-	}
-	selector := labels.NewSelector()
-	for _, expr := range nsm {
-		var op selection.Operator
-		switch expr.Operator {
-		case v1.NodeSelectorOpIn:
-			op = selection.In
-		case v1.NodeSelectorOpNotIn:
-			op = selection.NotIn
-		case v1.NodeSelectorOpExists:
-			op = selection.Exists
-		case v1.NodeSelectorOpDoesNotExist:
-			op = selection.DoesNotExist
-		case v1.NodeSelectorOpGt:
-			op = selection.GreaterThan
-		case v1.NodeSelectorOpLt:
-			op = selection.LessThan
-		default:
-			return nil, fmt.Errorf("%q is not a valid node selector operator", expr.Operator)
-		}
-		r, err := labels.NewRequirement(expr.Key, op, expr.Values)
-		if err != nil {
-			return nil, err
-		}
-		selector = selector.Add(*r)
-	}
-	return selector, nil
 }
 
 // TolerationsTolerateTaint checks if taint is tolerated by any of the tolerations.

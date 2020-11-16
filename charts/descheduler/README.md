@@ -11,7 +11,7 @@ helm install my-release --namespace kube-system descheduler/descheduler-helm-cha
 
 ## Introduction
 
-This chart bootstraps a [desheduler](https://github.com/kubernetes-sigs/descheduler/) cron job on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
+This chart bootstraps a [descheduler](https://github.com/kubernetes-sigs/descheduler/) cron job on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
 
 ## Prerequisites
 
@@ -55,5 +55,6 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `deschedulerPolicy.strategies` | The _descheduler_ strategies to apply                                                                                 | _see values.yaml_                                      |
 | `priorityClassName`            | The name of the priority class to add to pods                                                                         | `system-cluster-critical`                              |
 | `rbac.create`                  | If `true`, create & use RBAC resources                                                                                | `true`                                                 |
+| `podSecurityPolicy.create`     | If `true`, create PodSecurityPolicy                                                                                   | `true`                                                 |
 | `serviceAccount.create`        | If `true`, create a service account for the cron job                                                                  | `true`                                                 |
 | `serviceAccount.name`          | The name of the service account to use, if not set and create is true a name is generated using the fullname template | `nil`                                                  |
