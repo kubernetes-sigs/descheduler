@@ -182,6 +182,7 @@ These thresholds, `thresholds` and `targetThresholds`, could be tuned as per you
 |---|---|
 |`thresholds`|map(string:int)|
 |`targetThresholds`|map(string:int)|
+|`numberOfNodes`|int|
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 
