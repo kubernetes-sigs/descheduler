@@ -79,7 +79,7 @@ kubectl create -f kubernetes/cronjob/cronjob.yaml
 Starting with release v0.18.0 there is an official helm chart that can be used to install the
 descheduler. See the [helm chart README](https://github.com/kubernetes-sigs/descheduler/blob/master/charts/descheduler/README.md) for detailed instructions.
 
-The descheduler helm chart is also listed on the [helm hub](https://hub.helm.sh/charts/descheduler/descheduler-helm-chart).
+The descheduler helm chart is also listed on the [artifact hub](https://artifacthub.io/packages/helm/descheduler/descheduler).
 
 ### Install Using Kustomize
 
@@ -182,6 +182,7 @@ These thresholds, `thresholds` and `targetThresholds`, could be tuned as per you
 |---|---|
 |`thresholds`|map(string:int)|
 |`targetThresholds`|map(string:int)|
+|`numberOfNodes`|int|
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 

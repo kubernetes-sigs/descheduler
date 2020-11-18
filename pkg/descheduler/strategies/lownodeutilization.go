@@ -238,6 +238,23 @@ func getNodeUsage(
 	return nodeUsageList
 }
 
+func resourceUsagePercentages(nodeUsage NodeUsage) map[v1.ResourceName]float64 {
+	nodeCapacity := nodeUsage.node.Status.Capacity
+	if len(nodeUsage.node.Status.Allocatable) > 0 {
+		nodeCapacity = nodeUsage.node.Status.Allocatable
+	}
+
+	resourceUsagePercentage := map[v1.ResourceName]float64{}
+	for resourceName, resourceUsage := range nodeUsage.usage {
+		cap := nodeCapacity[resourceName]
+		if !cap.IsZero() {
+			resourceUsagePercentage[resourceName] = float64(resourceUsage.Value()) / float64(cap.Value())
+		}
+	}
+
+	return resourceUsagePercentage
+}
+
 // classifyNodes classifies the nodes into low-utilization or high-utilization nodes. If a node lies between
 // low and high thresholds, it is simply ignored.
 func classifyNodes(
@@ -248,13 +265,13 @@ func classifyNodes(
 
 	for _, nodeUsage := range nodeUsages {
 		if lowThresholdFilter(nodeUsage.node, nodeUsage) {
-			klog.V(2).InfoS("Node is underutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage)
+			klog.V(2).InfoS("Node is underutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
 			lowNodes = append(lowNodes, nodeUsage)
 		} else if highThresholdFilter(nodeUsage.node, nodeUsage) {
-			klog.V(2).InfoS("Node is overutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage)
+			klog.V(2).InfoS("Node is overutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
 			highNodes = append(highNodes, nodeUsage)
 		} else {
-			klog.V(2).InfoS("Node is appropriately utilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage)
+			klog.V(2).InfoS("Node is appropriately utilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
 		}
 	}
 
@@ -301,7 +318,7 @@ func evictPodsFromTargetNodes(
 		klog.V(3).InfoS("Evicting pods from node", "node", klog.KObj(node.node), "usage", node.usage)
 
 		nonRemovablePods, removablePods := classifyPods(node.allPods, podFilter)
-		klog.V(2).InfoS("AllPods", len(node.allPods), "nonRemovablePods", len(nonRemovablePods), "removablePods", len(removablePods))
+		klog.V(2).InfoS("Pods on node", "node", klog.KObj(node.node), "allPods", len(node.allPods), "nonRemovablePods", len(nonRemovablePods), "removablePods", len(removablePods))
 
 		if len(removablePods) == 0 {
 			klog.V(1).InfoS("No removable pods on node, try next node", "node", klog.KObj(node.node))
