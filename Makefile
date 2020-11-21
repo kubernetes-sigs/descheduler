@@ -14,13 +14,12 @@
 
 .PHONY: test
 
-# VERSION is currently based on the last commit
-VERSION?=$(shell git describe --tags --match "v*")
-COMMIT=$(shell git rev-parse HEAD)
+# VERSION is based on a date stamp plus the last commit
+VERSION?=v$(shell date +%Y%m%d)-$(shell git describe --tags --match "v*")
 BUILD=$(shell date +%FT%T%z)
 LDFLAG_LOCATION=sigs.k8s.io/descheduler/cmd/descheduler/app
 
-LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitCommit=${COMMIT}"
+LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD}"
 
 GOLANGCI_VERSION := v1.30.0
 HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint)
@@ -52,7 +51,7 @@ dev-image: build
 	docker build -f Dockerfile.dev -t $(IMAGE) .
 
 image:
-	docker build -t $(IMAGE) .
+	docker build --build-arg VERSION="$(VERSION)" -t $(IMAGE) .
 
 push-container-to-gcloud: image
 	gcloud auth configure-docker
