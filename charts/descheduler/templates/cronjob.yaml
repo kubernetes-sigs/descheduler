@@ -44,6 +44,8 @@ spec:
                 - {{ $value | quote }}
                 {{- end }}
                 {{- end }}
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
               volumeMounts:
                 - mountPath: /policy-dir
                   name: policy-volume
