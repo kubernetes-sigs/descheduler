@@ -27,6 +27,10 @@ spec:
               - "/policy-dir/policy.yaml"
               - "--v"
               - "3"
+            resources:
+              requests:
+                cpu: "500m"
+                memory: "256Mi"
           restartPolicy: "Never"
           serviceAccountName: descheduler-sa
           volumes:
