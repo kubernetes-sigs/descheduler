@@ -20,6 +20,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 schedule: "*/2 * * * *"
+#startingDeadlineSeconds: 200
 
 cmdOptions:
   v: 3
