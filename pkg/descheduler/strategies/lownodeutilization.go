@@ -248,7 +248,7 @@ func resourceUsagePercentages(nodeUsage NodeUsage) map[v1.ResourceName]float64 {
 	for resourceName, resourceUsage := range nodeUsage.usage {
 		cap := nodeCapacity[resourceName]
 		if !cap.IsZero() {
-			resourceUsagePercentage[resourceName] = float64(resourceUsage.Value()) / float64(cap.Value())
+			resourceUsagePercentage[resourceName] = 100 * float64(resourceUsage.Value()) / float64(cap.Value())
 		}
 	}
 
