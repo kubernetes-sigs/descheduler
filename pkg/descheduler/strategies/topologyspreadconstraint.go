@@ -106,6 +106,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		klog.ErrorS(err, "Couldn't list namespaces")
 		return
 	}
+	klog.V(1).InfoS("Processing namespaces for topology spread constraints")
 	podsForEviction := make(map[*v1.Pod]struct{})
 	// 1. for each namespace...
 	for _, namespace := range namespaces.Items {
@@ -267,6 +268,7 @@ func balanceDomains(
 					aboveToEvict[k].Spec.Affinity.NodeAffinity != nil &&
 					aboveToEvict[k].Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil &&
 					nodesPodFitsOnBesidesCurrent(aboveToEvict[k], nodeMap) == 0) {
+				klog.V(2).InfoS("Ignoring pod for eviction due to node selector/affinity", "pod", klog.KObj(aboveToEvict[k]))
 				continue
 			}
 			podsForEviction[aboveToEvict[k]] = struct{}{}
