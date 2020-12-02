@@ -6,7 +6,7 @@
 
 ```shell
 helm repo add descheduler https://kubernetes-sigs.github.io/descheduler/
-helm install my-release --namespace kube-system descheduler/descheduler
+helm install my-release --namespace kube-system descheduler/descheduler-helm-chart
 ```
 
 ## Introduction
@@ -22,7 +22,7 @@ This chart bootstraps a [descheduler](https://github.com/kubernetes-sigs/desched
 To install the chart with the release name `my-release`:
 
 ```shell
-helm install --namespace kube-system my-release descheduler/descheduler
+helm install my-release --namespace kube-system descheduler/descheduler-helm-chart
 ```
 
 The command deploys _descheduler_ on the Kubernetes cluster in the default configuration. The [configuration](#configuration) section lists the parameters that can be configured during installation.
