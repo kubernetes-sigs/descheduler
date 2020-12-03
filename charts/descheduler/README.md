@@ -51,7 +51,9 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `nameOverride`                 | String to partially override `descheduler.fullname` template (will prepend the release name)                          | `""`                                 |
 | `fullnameOverride`             | String to fully override `descheduler.fullname` template                                                              | `""`                                 |
 | `schedule`                     | The cron schedule to run the _descheduler_ job on                                                                     | `"*/2 * * * *"`                      |
-| `startingDeadlineSeconds`      | If set, configure `startingDeadlineSeconds` for the _descheduler_ job                                                 | `nil`                                 |
+| `startingDeadlineSeconds`      | If set, configure `startingDeadlineSeconds` for the _descheduler_ job                                                 | `nil`                                |
+| `successfulJobsHistoryLimit`   | If set, configure `successfulJobsHistoryLimit` for the _descheduler_ job                                              | `nil`                                |
+| `failedJobsHistoryLimit`       | If set, configure `failedJobsHistoryLimit` for the _descheduler_ job                                                  | `nil`                                |
 | `cmdOptions`                   | The options to pass to the _descheduler_ command                                                                      | _see values.yaml_                    |
 | `deschedulerPolicy.strategies` | The _descheduler_ strategies to apply                                                                                 | _see values.yaml_                    |
 | `priorityClassName`            | The name of the priority class to add to pods                                                                         | `system-cluster-critical`            |
