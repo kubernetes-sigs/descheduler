@@ -15,8 +15,9 @@ FROM golang:1.15.2
 
 WORKDIR /go/src/sigs.k8s.io/descheduler
 COPY . .
+ARG ARCH
 ARG VERSION
-RUN VERSION=${VERSION} make
+RUN VERSION=${VERSION} make build.$ARCH
 
 FROM scratch
 
