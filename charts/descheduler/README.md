@@ -51,10 +51,13 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `nameOverride`                 | String to partially override `descheduler.fullname` template (will prepend the release name)                          | `""`                                 |
 | `fullnameOverride`             | String to fully override `descheduler.fullname` template                                                              | `""`                                 |
 | `schedule`                     | The cron schedule to run the _descheduler_ job on                                                                     | `"*/2 * * * *"`                      |
+| `startingDeadlineSeconds`      | If set, configure `startingDeadlineSeconds` for the _descheduler_ job                                                 | `nil`                                 |
 | `cmdOptions`                   | The options to pass to the _descheduler_ command                                                                      | _see values.yaml_                    |
 | `deschedulerPolicy.strategies` | The _descheduler_ strategies to apply                                                                                 | _see values.yaml_                    |
 | `priorityClassName`            | The name of the priority class to add to pods                                                                         | `system-cluster-critical`            |
 | `rbac.create`                  | If `true`, create & use RBAC resources                                                                                | `true`                               |
 | `podSecurityPolicy.create`     | If `true`, create PodSecurityPolicy                                                                                   | `true`                               |
+| `resources.cpuRequest`        | Descheduler container CPU request                                                                  | `500m`                               |
+| `resources.memoryRequest`        | Descheduler container memory request                                                                  | `256Mi`                               |
 | `serviceAccount.create`        | If `true`, create a service account for the cron job                                                                  | `true`                               |
 | `serviceAccount.name`          | The name of the service account to use, if not set and create is true a name is generated using the fullname template | `nil`                                |

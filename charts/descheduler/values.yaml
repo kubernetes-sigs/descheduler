@@ -8,10 +8,19 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
+resources:
+  requests:
+    cpu: 500m
+    memory: 256Mi
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+
 nameOverride: ""
 fullnameOverride: ""
 
 schedule: "*/2 * * * *"
+#startingDeadlineSeconds: 200
 
 cmdOptions:
   v: 3
