@@ -21,6 +21,8 @@ fullnameOverride: ""
 
 schedule: "*/2 * * * *"
 #startingDeadlineSeconds: 200
+#successfulJobsHistoryLimit: 1
+#failedJobsHistoryLimit: 1
 
 cmdOptions:
   v: 3
