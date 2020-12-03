@@ -18,6 +18,7 @@ package app
 
 import (
 	"fmt"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -25,9 +26,6 @@ import (
 )
 
 var (
-	// gitCommit is a constant representing the source version that
-	// generated this build. It should be set during build via -ldflags.
-	gitCommit string
 	// version is a constant representing the version tag that
 	// generated this build. It should be set during build via -ldflags.
 	version string
@@ -40,7 +38,6 @@ var (
 type Info struct {
 	Major      string `json:"major"`
 	Minor      string `json:"minor"`
-	GitCommit  string `json:"gitCommit"`
 	GitVersion string `json:"gitVersion"`
 	BuildDate  string `json:"buildDate"`
 	GoVersion  string `json:"goVersion"`
@@ -55,7 +52,6 @@ func Get() Info {
 	return Info{
 		Major:      majorVersion,
 		Minor:      minorVersion,
-		GitCommit:  gitCommit,
 		GitVersion: version,
 		BuildDate:  buildDate,
 		GoVersion:  runtime.Version(),
@@ -81,7 +77,18 @@ func splitVersion(version string) (string, string) {
 	if version == "" {
 		return "", ""
 	}
-	// A sample version would be of form v0.1.0-7-ge884046, so split at first '.' and
-	// then return 0 and 1+(+ appended to follow semver convention) for major and minor versions.
-	return strings.Trim(strings.Split(version, ".")[0], "v"), strings.Split(version, ".")[1] + "+"
+
+	// Version from an automated container build environment for a tag. For example v20200521-v0.18.0.
+	m1, _ := regexp.MatchString(`^v\d{8}-v\d+\.\d+\.\d+$`, version)
+
+	// Version from an automated container build environment(not a tag) or a local build. For example v20201009-v0.18.0-46-g939c1c0.
+	m2, _ := regexp.MatchString(`^v\d{8}-v\d+\.\d+\.\d+-\w+-\w+$`, version)
+
+	if m1 || m2 {
+		semVer := strings.Split(version, "-")[1]
+		return strings.Trim(strings.Split(semVer, ".")[0], "v"), strings.Split(semVer, ".")[1] + "+"
+	}
+
+	// Something went wrong
+	return "", ""
 }
