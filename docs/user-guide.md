@@ -3,6 +3,16 @@
 Starting with descheduler release v0.10.0 container images are available in the official k8s container registry.
 * `k8s.gcr.io/descheduler/descheduler`
 
+Also, starting with descheduler release v0.20.0 multi-arch container images are provided. Currently AMD64 and ARM64
+container images are provided. Multi-arch container images cannot be pulled by [kind](https://kind.sigs.k8s.io) from
+a registry. Therefore starting with descheduler release v0.20.0 use the below process to download the official descheduler
+image into a kind cluster.
+```
+kind create cluster
+docker pull k8s.gcr.io/descheduler/descheduler:v0.20.0
+kind load docker-image k8s.gcr.io/descheduler/descheduler:v0.20.0
+```
+
 ## Policy Configuration Examples
 The [examples](https://github.com/kubernetes-sigs/descheduler/tree/master/examples) directory has descheduler policy configuration examples.
 
