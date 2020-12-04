@@ -110,7 +110,8 @@ func RemovePodsViolatingTopologySpreadConstraint(
 	podsForEviction := make(map[*v1.Pod]struct{})
 	// 1. for each namespace...
 	for _, namespace := range namespaces.Items {
-		if (!includedNamespaces.Has(namespace.Name) || excludedNamespaces.Has(namespace.Name)) && (includedNamespaces.Len()+excludedNamespaces.Len() > 0) {
+		if (len(includedNamespaces) > 0 && !includedNamespaces.Has(namespace.Name)) ||
+			(len(excludedNamespaces) > 0 && excludedNamespaces.Has(namespace.Name)) {
 			continue
 		}
 		namespacePods, err := client.CoreV1().Pods(namespace.Name).List(ctx, metav1.ListOptions{})
