@@ -14,7 +14,7 @@ steps:
     - VERSION=$_GIT_TAG
     - BASE_REF=$_PULL_BASE_REF
     args:
-    - push
+    - push-all
 substitutions:
   # _GIT_TAG will be filled with a git-based tag for the image, of the form vYYYYMMDD-hash, and
   # can be used as a substitution
