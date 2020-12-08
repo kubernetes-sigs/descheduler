@@ -3,11 +3,26 @@ entries:
   descheduler-helm-chart:
   - apiVersion: v1
     appVersion: 0.19.0
+    created: "2020-12-08T19:22:08.294224978Z"
+    deprecated: true
+    description: DEPRECATED - Descheduler for Kubernetes is used to rebalance clusters by evicting pods that can potentially be scheduled on better nodes. In the current implementation, descheduler does not schedule replacement of evicted pods but relies on the default scheduler for that.
+    digest: b77ac9bb15ec71f7006d7d4faefffbb29b0cbcdabbef6389c858690beb12e529
+    home: https://github.com/kubernetes-sigs/descheduler
+    icon: https://kubernetes.io/images/favicon.png
+    keywords:
+    - kubernetes
+    - descheduler
+    - kube-scheduler
+    name: descheduler-helm-chart
+    sources:
+    - https://github.com/kubernetes-sigs/descheduler
+    urls:
+    - https://github.com/kubernetes-sigs/descheduler/releases/download/descheduler-helm-chart-0.19.1/descheduler-helm-chart-0.19.1.tgz
+    version: 0.19.1
+  - apiVersion: v1
+    appVersion: 0.19.0
     created: "2020-09-01T16:59:22.515242595Z"
-    description: Descheduler for Kubernetes is used to rebalance clusters by evicting
-      pods that can potentially be scheduled on better nodes. In the current implementation,
-      descheduler does not schedule replacement of evicted pods but relies on the
-      default scheduler for that.
+    description: Descheduler for Kubernetes is used to rebalance clusters by evicting pods that can potentially be scheduled on better nodes. In the current implementation, descheduler does not schedule replacement of evicted pods but relies on the default scheduler for that.
     digest: dc70fc1ac8b57872e54c3406000617d4cbd0b2a9653abf0054c345c471b4be1c
     home: https://github.com/kubernetes-sigs/descheduler
     icon: https://kubernetes.io/images/favicon.png
@@ -27,10 +42,7 @@ entries:
   - apiVersion: v1
     appVersion: 0.18.0
     created: "2020-07-23T18:29:32.622241657Z"
-    description: Descheduler for Kubernetes is used to rebalance clusters by evicting
-      pods that can potentially be scheduled on better nodes. In the current implementation,
-      descheduler does not schedule replacement of evicted pods but relies on the
-      default scheduler for that.
+    description: Descheduler for Kubernetes is used to rebalance clusters by evicting pods that can potentially be scheduled on better nodes. In the current implementation, descheduler does not schedule replacement of evicted pods but relies on the default scheduler for that.
     digest: d2a7516d4b2bbd288d5016b935d1a0ce4db9cc40c4f8a6981fe5075d71f4bcda
     home: https://github.com/kubernetes-sigs/descheduler
     icon: https://kubernetes.io/images/favicon.png
