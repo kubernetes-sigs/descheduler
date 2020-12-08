@@ -11,43 +11,42 @@ a Kubernetes cluster at that point of time when a new pod appears for scheduling
 As Kubernetes clusters are very dynamic and their state changes over time, there may be desire
 to move already running pods to some other nodes for various reasons:
 
-* Some nodes are under or over utilized.
-* The original scheduling decision does not hold true any more, as taints or labels are added to
-or removed from nodes, pod/node affinity requirements are not satisfied any more.
-* Some nodes failed and their pods moved to other nodes.
-* New nodes are added to clusters.
+- Some nodes are under or over utilized.
+- The original scheduling decision does not hold true any more, as taints or labels are added to
+  or removed from nodes, pod/node affinity requirements are not satisfied any more.
+- Some nodes failed and their pods moved to other nodes.
+- New nodes are added to clusters.
 
 Consequently, there might be several pods scheduled on less desired nodes in a cluster.
 Descheduler, based on its policy, finds pods that can be moved and evicts them. Please
 note, in current implementation, descheduler does not schedule replacement of evicted pods
 but relies on the default scheduler for that.
 
-Table of Contents
-=================
+# Table of Contents
 
-  * [Quick Start](#quick-start)
-     * [Run As A Job](#run-as-a-job)
-     * [Run As A CronJob](#run-as-a-cronjob)
-     * [Install Using Helm](#install-using-helm)
-  * [User Guide](#user-guide)
-  * [Policy and Strategies](#policy-and-strategies)
-     * [RemoveDuplicates](#removeduplicates)
-     * [LowNodeUtilization](#lownodeutilization)
-     * [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity)
-     * [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity)
-     * [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints)
-     * [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts)
-     * [PodLifeTime](#podlifetime)
-  * [Filter Pods](#filter-pods)
-     * [Namespace filtering](#namespace-filtering)
-     * [Priority filtering](#priority-filtering)
-  * [Pod Evictions](#pod-evictions)
-     * [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
-  * [Compatibility Matrix](#compatibility-matrix)
-  * [Getting Involved and Contributing](#getting-involved-and-contributing)
-     * [Communicating With Contributors](#communicating-with-contributors)
-  * [Roadmap](#roadmap)
-     * [Code of conduct](#code-of-conduct)
+- [Quick Start](#quick-start)
+  - [Run As A Job](#run-as-a-job)
+  - [Run As A CronJob](#run-as-a-cronjob)
+  - [Install Using Helm](#install-using-helm)
+- [User Guide](#user-guide)
+- [Policy and Strategies](#policy-and-strategies)
+  - [RemoveDuplicates](#removeduplicates)
+  - [LowNodeUtilization](#lownodeutilization)
+  - [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity)
+  - [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity)
+  - [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints)
+  - [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts)
+  - [PodLifeTime](#podlifetime)
+- [Filter Pods](#filter-pods)
+  - [Namespace filtering](#namespace-filtering)
+  - [Priority filtering](#priority-filtering)
+- [Pod Evictions](#pod-evictions)
+  - [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
+- [Compatibility Matrix](#compatibility-matrix)
+- [Getting Involved and Contributing](#getting-involved-and-contributing)
+  - [Communicating With Contributors](#communicating-with-contributors)
+- [Roadmap](#roadmap)
+  - [Code of conduct](#code-of-conduct)
 
 ## Quick Start
 
@@ -74,8 +73,7 @@ kubectl create -f kubernetes/cronjob.yaml
 
 ### Install Using Helm
 
-Starting with release v0.18.0 there is an official helm chart that can be used to install the
-descheduler. See the [helm chart README](https://github.com/kubernetes-sigs/descheduler/blob/master/charts/descheduler/README.md) for detailed instructions.
+Starting with release v0.18.0 there is an official helm chart that can be used to install the descheduler. See the [helm chart README](https://github.com/kubernetes-sigs/descheduler/blob/master/charts/descheduler/README.md) for detailed instructions.
 
 ## User Guide
 
@@ -90,6 +88,7 @@ are currently implemented. As part of the policy, the parameters associated with
 By default, all strategies are enabled.
 
 The policy also includes common configuration for all the strategies:
+
 - `nodeSelector` - limiting the nodes which are processed
 - `evictLocalStoragePods` - allowing to evict pods with local storage
 - `maxNoOfPodsToEvictPerNode` - maximum number of pods evicted from each node (summed through all strategies)
@@ -167,10 +166,11 @@ strategies:
 ```
 
 Policy should pass the following validation checks:
-* Only three types of resources are supported: `cpu`, `memory` and `pods`.
-* `thresholds` or `targetThresholds` can not be nil and they must configure exactly the same types of resources.
-* The valid range of the resource's percentage value is \[0, 100\]
-* Percentage value of `thresholds` can not be greater than `targetThresholds` for the same resource.
+
+- Only three types of resources are supported: `cpu`, `memory` and `pods`.
+- `thresholds` or `targetThresholds` can not be nil and they must configure exactly the same types of resources.
+- The valid range of the resource's percentage value is \[0, 100\]
+- Percentage value of `thresholds` can not be greater than `targetThresholds` for the same resource.
 
 If any of the resource types is not specified, all its thresholds default to 100% to avoid nodes going
 from underutilized to overutilized.
@@ -231,17 +231,17 @@ strategies:
 ### RemovePodsViolatingNodeTaints
 
 This strategy makes sure that pods violating NoSchedule taints on nodes are removed. For example there is a
-pod "podA" with a toleration to tolerate a taint ``key=value:NoSchedule`` scheduled and running on the tainted
+pod "podA" with a toleration to tolerate a taint `key=value:NoSchedule` scheduled and running on the tainted
 node. If the node's taint is subsequently updated/removed, taint is no longer satisfied by its pods' tolerations
 and will be evicted. The policy file should look like:
 
-````
+```
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingNodeTaints":
     enabled: true
-````
+```
 
 ### RemovePodsHavingTooManyRestarts
 
@@ -264,7 +264,7 @@ strategies:
 This strategy evicts pods that are older than `.strategies.PodLifeTime.params.maxPodLifeTimeSeconds` The policy
 file should look like:
 
-````
+```
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
@@ -272,7 +272,7 @@ strategies:
      enabled: true
      params:
         maxPodLifeTimeSeconds: 86400
-````
+```
 
 ## Filter Pods
 
@@ -327,6 +327,7 @@ is set to the value of `system-cluster-critical` priority class.
 E.g.
 
 Setting `thresholdPriority`
+
 ```
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
@@ -339,6 +340,7 @@ strategies:
 ```
 
 Setting `thresholdPriorityClassName`
+
 ```
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
@@ -357,14 +359,14 @@ does not exist, descheduler won't create it and will throw an error.
 
 When the descheduler decides to evict pods from a node, it employs the following general mechanism:
 
-* [Critical pods](https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/) (with priorityClassName set to system-cluster-critical or system-node-critical) are never evicted.
-* Pods (static or mirrored pods or stand alone pods) not part of an RC, RS, Deployment or Job are
-never evicted because these pods won't be recreated.
-* Pods associated with DaemonSets are never evicted.
-* Pods with local storage are never evicted.
-* In `LowNodeUtilization` and `RemovePodsViolatingInterPodAntiAffinity`, pods are evicted by their priority from low to high, and if they have same priority,
-best effort pods are evicted before burstable and guaranteed pods.
-* All types of pods with the annotation descheduler.alpha.kubernetes.io/evict are evicted. This
+- [Critical pods](https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/) (with priorityClassName set to system-cluster-critical or system-node-critical) are never evicted.
+- Pods (static or mirrored pods or stand alone pods) not part of an RC, RS, Deployment or Job are
+  never evicted because these pods won't be recreated.
+- Pods associated with DaemonSets are never evicted.
+- Pods with local storage are never evicted.
+- In `LowNodeUtilization` and `RemovePodsViolatingInterPodAntiAffinity`, pods are evicted by their priority from low to high, and if they have same priority,
+  best effort pods are evicted before burstable and guaranteed pods.
+- All types of pods with the annotation descheduler.alpha.kubernetes.io/evict are evicted. This
   annotation is used to override checks which prevent eviction and users can select which pod is evicted.
   Users should know how and if the pod will be recreated.
 
@@ -376,6 +378,7 @@ Pods subject to a Pod Disruption Budget(PDB) are not evicted if descheduling vio
 are evicted by using the eviction subresource to handle PDB.
 
 ## Compatibility Matrix
+
 The below compatibility matrix shows the k8s client package(client-go, apimachinery, etc) versions that descheduler
 is compiled with. At this time descheduler does not have a hard dependency to a specific k8s release. However a
 particular descheduler release is only tested against the three latest k8s minor versions. For example descheduler
@@ -384,14 +387,13 @@ v0.18 should work with k8s v1.18, v1.17, and v1.16.
 Starting with descheduler release v0.18 the minor version of descheduler matches the minor version of the k8s client
 packages that it is compiled with.
 
-Descheduler  | Supported Kubernetes Version
--------------|-----------------------------
-v0.19        | v1.19
-v0.18        | v1.18
-v0.10        | v1.17
-v0.4-v0.9    | v1.9+
-v0.1-v0.3    | v1.7-v1.8
-
+| Descheduler | Supported Kubernetes Version |
+| ----------- | ---------------------------- |
+| v0.19       | v1.19                        |
+| v0.18       | v1.18                        |
+| v0.10       | v1.17                        |
+| v0.4-v0.9   | v1.9+                        |
+| v0.1-v0.3   | v1.7-v1.8                    |
 
 ## Getting Involved and Contributing
 
@@ -431,12 +433,11 @@ Learn how to engage with the Kubernetes community on the [community page](http:/
 
 This roadmap is not in any particular order.
 
-* Consideration of pod affinity
-* Strategy to consider number of pending pods
-* Integration with cluster autoscaler
-* Integration with metrics providers for obtaining real load metrics
-* Consideration of Kubernetes's scheduler's predicates
-
+- Consideration of pod affinity
+- Strategy to consider number of pending pods
+- Integration with cluster autoscaler
+- Integration with metrics providers for obtaining real load metrics
+- Consideration of Kubernetes's scheduler's predicates
 
 ### Code of conduct
 
