@@ -10,6 +10,12 @@ spec:
   {{- if .Values.startingDeadlineSeconds }}
   startingDeadlineSeconds: {{ .Values.startingDeadlineSeconds }}
   {{- end }}
+  {{- if .Values.successfulJobsHistoryLimit }}
+  successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit }}
+  {{- end }}
+  {{- if .Values.failedJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
+  {{- end }}
   jobTemplate:
     spec:
       template:
