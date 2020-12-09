@@ -32,6 +32,15 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+func buildTestPodWithImage(podName, node, image string) *v1.Pod {
+	pod := test.BuildTestPod(podName, 100, 0, node, test.SetRSOwnerRef)
+	pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
+		Name:  image,
+		Image: image,
+	})
+	return pod
+}
+
 func TestFindDuplicatePods(t *testing.T) {
 	ctx := context.Background()
 	// first setup pods
@@ -339,6 +348,28 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				// (2,0,0) -> (1,1,0) -> 1 eviction
 				*test.BuildTestPod("p1", 100, 0, "n1", test.SetRSOwnerRef),
 				*test.BuildTestPod("p2", 100, 0, "n1", test.SetRSOwnerRef),
+			},
+			expectedEvictedPodCount: 1,
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, nil),
+				test.BuildTestNode("n2", 2000, 3000, 10, nil),
+				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+			},
+			strategy: api.DeschedulerStrategy{},
+		},
+		{
+			description: "Evict pods with number of pods less than nodes, but ignore different pods with the same ownerref",
+			pods: []v1.Pod{
+				// (1, 0, 0) for "bar","baz" images -> no eviction, even with a matching ownerKey
+				// (2, 0, 0) for "foo" image -> (1,1,0) - 1 eviction
+				// In this case the only "real" duplicates are p1 and p4, so one of those should be evicted
+				// however because of how ownerKey is calculated, this is seen as 4 "occurrences"
+				// average is then ceil(occurences/nodes)=ceil(4/3)=2
+				// it should be ceil(2/3)=1 and trigger 1 eviction
+				*buildTestPodWithImage("p1", "n1", "foo"),
+				*buildTestPodWithImage("p2", "n1", "bar"),
+				*buildTestPodWithImage("p3", "n1", "baz"),
+				*buildTestPodWithImage("p4", "n1", "foo"),
 			},
 			expectedEvictedPodCount: 1,
 			nodes: []*v1.Node{
