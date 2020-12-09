@@ -19,6 +19,7 @@ package strategies
 import (
 	"context"
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"strings"
@@ -50,6 +51,10 @@ func validateRemoveDuplicatePodsParams(params *api.StrategyParameters) error {
 	return nil
 }
 
+type podOwner struct {
+	namespace, kind, name string
+}
+
 // RemoveDuplicatePods removes the duplicate pods on node. This strategy evicts all duplicate pods on node.
 // A pod is said to be a duplicate of other if both of them are from same creator, kind and are within the same
 // namespace, and have at least one container with the same image.
@@ -79,8 +84,13 @@ func RemoveDuplicatePods(
 
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
+	duplicatePods := make(map[podOwner]map[string][]*v1.Pod)
+	ownerKeyOccurence := make(map[podOwner]int32)
+	nodeCount := 0
+	nodeMap := make(map[string]*v1.Node)
+
 	for _, node := range nodes {
-		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
+		klog.V(0).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListPodsOnANode(ctx,
 			client,
 			node,
@@ -92,8 +102,8 @@ func RemoveDuplicatePods(
 			klog.ErrorS(err, "Error listing evictable pods on node", "node", klog.KObj(node))
 			continue
 		}
-
-		duplicatePods := make([]*v1.Pod, 0, len(pods))
+		nodeMap[node.Name] = node
+		nodeCount++
 		// Each pod has a list of owners and a list of containers, and each container has 1 image spec.
 		// For each pod, we go through all the OwnerRef/Image mappings and represent them as a "key" string.
 		// All of those mappings together makes a list of "key" strings that essentially represent that pod's uniqueness.
@@ -115,6 +125,8 @@ func RemoveDuplicatePods(
 			}
 			podContainerKeys := make([]string, 0, len(ownerRefList)*len(pod.Spec.Containers))
 			for _, ownerRef := range ownerRefList {
+				ownerKey := podOwner{pod.ObjectMeta.Namespace, ownerRef.Kind, ownerRef.Name}
+				ownerKeyOccurence[ownerKey] = ownerKeyOccurence[ownerKey] + 1
 				for _, container := range pod.Spec.Containers {
 					// Namespace/Kind/Name should be unique for the cluster.
 					// We also consider the image, as 2 pods could have the same owner but serve different purposes
@@ -131,7 +143,14 @@ func RemoveDuplicatePods(
 				for _, keys := range existing {
 					if reflect.DeepEqual(keys, podContainerKeys) {
 						matched = true
-						duplicatePods = append(duplicatePods, pod)
+						klog.V(3).InfoS("Duplicate found", "pod", klog.KObj(pod))
+						for _, ownerRef := range ownerRefList {
+							ownerKey := podOwner{pod.ObjectMeta.Namespace, ownerRef.Kind, ownerRef.Name}
+							if _, ok := duplicatePods[ownerKey]; !ok {
+								duplicatePods[ownerKey] = make(map[string][]*v1.Pod)
+							}
+							duplicatePods[ownerKey][node.Name] = append(duplicatePods[ownerKey][node.Name], pod)
+						}
 						break
 					}
 				}
@@ -144,11 +163,23 @@ func RemoveDuplicatePods(
 				duplicateKeysMap[podContainerKeys[0]] = [][]string{podContainerKeys}
 			}
 		}
+	}
 
-		for _, pod := range duplicatePods {
-			if _, err := podEvictor.EvictPod(ctx, pod, node, "RemoveDuplicatePods"); err != nil {
-				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
-				break
+	// 1. how many pods can be evicted to respect uniform placement of pods among viable nodes?
+	for ownerKey, nodes := range duplicatePods {
+		upperAvg := int(math.Ceil(float64(ownerKeyOccurence[ownerKey]) / float64(nodeCount)))
+		for nodeName, pods := range nodes {
+			klog.V(2).InfoS("Average occurrence per node", "node", klog.KObj(nodeMap[nodeName]), "ownerKey", ownerKey, "avg", upperAvg)
+			// list of duplicated pods does not contain the original referential pod
+			if len(pods)+1 > upperAvg {
+				// It's assumed all duplicated pods are in the same priority class
+				// TODO(jchaloup): check if the pod has a different node to lend to
+				for _, pod := range pods[upperAvg-1:] {
+					if _, err := podEvictor.EvictPod(ctx, pod, nodeMap[nodeName], "RemoveDuplicatePods"); err != nil {
+						klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
+						break
+					}
+				}
 			}
 		}
 	}
