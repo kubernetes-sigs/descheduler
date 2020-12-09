@@ -89,7 +89,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	// 1. for each namespace for which there is Topology Constraint
-	// 2. for each TopologySpreadyConstraint in that namespace
+	// 2. for each TopologySpreadConstraint in that namespace
 	//  { find all evictable pods in that namespace
 	//  { 3. for each evictable pod in that namespace
 	// 4. If the pod matches this TopologySpreadConstraint LabelSelector
@@ -155,7 +155,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 			}
 
 			// 3. for each evictable pod in that namespace
-			// (this loop is where we count the number of pods per topologyValue that match this constraint'selector selector)
+			// (this loop is where we count the number of pods per topologyValue that match this constraint's selector)
 			var sumPods float64
 			for i := range namespacePods.Items {
 				// 4. if the pod matches this TopologySpreadConstraint LabelSelector
@@ -163,7 +163,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 					continue
 				}
 
-				// 5. If the pod'selector node matches this constraint'selector topologyKey, create a topoPair and add the pod
+				// 5. If the pod's node matches this constraint'selector topologyKey, create a topoPair and add the pod
 				node, ok := nodeMap[namespacePods.Items[i].Spec.NodeName]
 				if !ok {
 					// If ok is false, node is nil in which case node.Labels will panic. In which case a pod is yet to be scheduled. So it's safe to just continue here.
@@ -179,6 +179,10 @@ func RemovePodsViolatingTopologySpreadConstraint(
 				constraintTopologies[topoPair] = append(constraintTopologies[topoPair], &namespacePods.Items[i])
 				sumPods++
 			}
+			if topologyIsBalanced(constraintTopologies, constraint) {
+				klog.V(2).InfoS("Skipping topology constraint because it is already balanced", "constraint", constraint)
+				continue
+			}
 			balanceDomains(podsForEviction, constraint, constraintTopologies, sumPods, evictable.IsEvictable, nodeMap)
 		}
 	}
@@ -189,6 +193,25 @@ func RemovePodsViolatingTopologySpreadConstraint(
 			break
 		}
 	}
+}
+
+// topologyIsBalanced checks if any domains in the topology differ by more than the MaxSkew
+// this is called before any sorting or other calculations and is used to skip topologies that don't need to be balanced
+func topologyIsBalanced(topology map[topologyPair][]*v1.Pod, constraint v1.TopologySpreadConstraint) bool {
+	minDomainSize := math.MaxInt32
+	maxDomainSize := math.MinInt32
+	for _, pods := range topology {
+		if len(pods) < minDomainSize {
+			minDomainSize = len(pods)
+		}
+		if len(pods) > maxDomainSize {
+			maxDomainSize = len(pods)
+		}
+		if int32(maxDomainSize-minDomainSize) > constraint.MaxSkew {
+			return false
+		}
+	}
+	return true
 }
 
 // balanceDomains determines how many pods (minimum) should be evicted from large domains to achieve an ideal balance within maxSkew
