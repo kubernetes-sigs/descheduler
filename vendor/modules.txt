@@ -190,7 +190,7 @@ google.golang.org/protobuf/types/known/timestamppb
 gopkg.in/inf.v0
 # gopkg.in/yaml.v2 v2.2.8
 gopkg.in/yaml.v2
-# k8s.io/api v0.20.0-rc.0
+# k8s.io/api v0.20.0
 ## explicit
 k8s.io/api/admissionregistration/v1
 k8s.io/api/admissionregistration/v1beta1
@@ -235,7 +235,7 @@ k8s.io/api/scheduling/v1beta1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apimachinery v0.20.0-rc.0
+# k8s.io/apimachinery v0.20.0
 ## explicit
 k8s.io/apimachinery/pkg/api/errors
 k8s.io/apimachinery/pkg/api/meta
@@ -279,10 +279,10 @@ k8s.io/apimachinery/pkg/version
 k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/json
 k8s.io/apimachinery/third_party/forked/golang/reflect
-# k8s.io/apiserver v0.20.0-rc.0
+# k8s.io/apiserver v0.20.0
 ## explicit
 k8s.io/apiserver/pkg/util/feature
-# k8s.io/client-go v0.20.0-rc.0
+# k8s.io/client-go v0.20.0
 ## explicit
 k8s.io/client-go/discovery
 k8s.io/client-go/discovery/fake
@@ -507,7 +507,7 @@ k8s.io/client-go/util/homedir
 k8s.io/client-go/util/jsonpath
 k8s.io/client-go/util/keyutil
 k8s.io/client-go/util/workqueue
-# k8s.io/code-generator v0.20.0-rc.0
+# k8s.io/code-generator v0.20.0
 ## explicit
 k8s.io/code-generator
 k8s.io/code-generator/cmd/client-gen
@@ -542,7 +542,7 @@ k8s.io/code-generator/cmd/set-gen
 k8s.io/code-generator/pkg/namer
 k8s.io/code-generator/pkg/util
 k8s.io/code-generator/third_party/forked/golang/reflect
-# k8s.io/component-base v0.20.0-rc.0
+# k8s.io/component-base v0.20.0
 ## explicit
 k8s.io/component-base/cli/flag
 k8s.io/component-base/config
@@ -551,7 +551,7 @@ k8s.io/component-base/logs
 k8s.io/component-base/logs/datapol
 k8s.io/component-base/logs/json
 k8s.io/component-base/logs/sanitization
-# k8s.io/component-helpers v0.20.0-rc.0
+# k8s.io/component-helpers v0.20.0
 ## explicit
 k8s.io/component-helpers/scheduling/corev1
 k8s.io/component-helpers/scheduling/corev1/nodeaffinity
