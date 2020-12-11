@@ -30,28 +30,36 @@ import (
 
 // ReadyNodes returns ready nodes irrespective of whether they are
 // schedulable or not.
-func ReadyNodes(ctx context.Context, client clientset.Interface, nodeInformer coreinformers.NodeInformer, nodeSelector string, stopChannel <-chan struct{}) ([]*v1.Node, error) {
-	ns, err := labels.Parse(nodeSelector)
-	if err != nil {
-		return []*v1.Node{}, err
-	}
-
+func ReadyNodes(
+	ctx context.Context,
+	client clientset.Interface,
+	nodeInformer coreinformers.NodeInformer,
+	nodeSelector string,
+) (
+	[]*v1.Node,
+	int,
+	error,
+) {
 	var nodes []*v1.Node
+	var err error
+
+	// list all nodes in cluster
+	ns := labels.Everything()
 	// err is defined above
 	if nodes, err = nodeInformer.Lister().List(ns); err != nil {
-		return []*v1.Node{}, err
+		return []*v1.Node{}, 0, err
 	}
 
 	if len(nodes) == 0 {
 		klog.V(2).InfoS("Node lister returned empty list, now fetch directly")
 
-		nItems, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: nodeSelector})
+		nItems, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 		if err != nil {
-			return []*v1.Node{}, err
+			return []*v1.Node{}, 0, err
 		}
 
 		if nItems == nil || len(nItems.Items) == 0 {
-			return []*v1.Node{}, nil
+			return []*v1.Node{}, 0, nil
 		}
 
 		for i := range nItems.Items {
@@ -60,13 +68,25 @@ func ReadyNodes(ctx context.Context, client clientset.Interface, nodeInformer co
 		}
 	}
 
+	selectNode := len(nodeSelector) != 0
+	if selectNode {
+		ns, err = labels.Parse(nodeSelector)
+		if err != nil {
+			return []*v1.Node{}, 0, err
+		}
+	}
+
+	totalReadyNodeNum := 0
 	readyNodes := make([]*v1.Node, 0, len(nodes))
 	for _, node := range nodes {
 		if IsReady(node) {
-			readyNodes = append(readyNodes, node)
+			totalReadyNodeNum++
+			if !selectNode || ns.Matches(labels.Set(node.Labels)) {
+				readyNodes = append(readyNodes, node)
+			}
 		}
 	}
-	return readyNodes, nil
+	return readyNodes, totalReadyNodeNum, nil
 }
 
 // IsReady checks if the descheduler could run against given node.

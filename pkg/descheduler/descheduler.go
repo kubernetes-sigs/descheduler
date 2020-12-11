@@ -96,15 +96,16 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	}
 
 	wait.Until(func() {
-		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, nodeSelector, stopChannel)
+		nodes, totalReadyNodeNum, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, nodeSelector)
 		if err != nil {
 			klog.V(1).InfoS("Unable to get ready nodes", "err", err)
 			close(stopChannel)
 			return
 		}
 
-		if len(nodes) <= 1 {
-			klog.V(1).InfoS("The cluster size is 0 or 1 meaning eviction causes service disruption or degradation. So aborting..")
+		if len(nodes) == 0 || totalReadyNodeNum <= 1 {
+			klog.V(1).InfoS("Aborting given there's no enough ready node for eviction",
+				"total ready node num", totalReadyNodeNum, "selected node num", len(nodes))
 			close(stopChannel)
 			return
 		}

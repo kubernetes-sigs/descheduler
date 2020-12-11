@@ -62,8 +62,10 @@ func TestReadyNodesWithNodeSelector(t *testing.T) {
 	node1.Labels = map[string]string{"type": "compute"}
 	node2 := test.BuildTestNode("node2", 1000, 2000, 9, nil)
 	node2.Labels = map[string]string{"type": "infra"}
+	node3 := test.BuildTestNode("node3", 1000, 2000, 9, nil)
+	node3.Labels = map[string]string{}
 
-	fakeClient := fake.NewSimpleClientset(node1, node2)
+	fakeClient := fake.NewSimpleClientset(node1, node2, node3)
 	nodeSelector := "type=compute"
 
 	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
@@ -74,10 +76,24 @@ func TestReadyNodesWithNodeSelector(t *testing.T) {
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 	defer close(stopChannel)
 
-	nodes, _ := ReadyNodes(ctx, fakeClient, nodeInformer, nodeSelector, nil)
+	nodes, totalNodeNum, _ := ReadyNodes(ctx, fakeClient, nodeInformer, nodeSelector)
 
 	if nodes[0].Name != "node1" {
 		t.Errorf("Expected node1, got %s", nodes[0].Name)
+	}
+	if len(nodes) != 1 {
+		t.Errorf("Expected 1 node selected, got %d", len(nodes))
+	}
+	if totalNodeNum != 3 {
+		t.Errorf("Expected 3 nodes total, got %d", totalNodeNum)
+	}
+
+	nodes, totalNodeNum, _ = ReadyNodes(ctx, fakeClient, nodeInformer, "")
+	if len(nodes) != 3 {
+		t.Errorf("Expected 3 node selected, got %d", len(nodes))
+	}
+	if totalNodeNum != 3 {
+		t.Errorf("Expected 3 nodes total, got %d", totalNodeNum)
 	}
 }
 
