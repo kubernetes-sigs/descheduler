@@ -74,7 +74,7 @@ func TestReadyNodesWithNodeSelector(t *testing.T) {
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 	defer close(stopChannel)
 
-	nodes, _ := ReadyNodes(ctx, fakeClient, nodeInformer, nodeSelector, nil)
+	nodes, _ := ReadyNodes(ctx, fakeClient, nodeInformer, nodeSelector)
 
 	if nodes[0].Name != "node1" {
 		t.Errorf("Expected node1, got %s", nodes[0].Name)
