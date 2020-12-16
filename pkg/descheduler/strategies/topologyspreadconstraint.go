@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -114,9 +115,10 @@ func RemovePodsViolatingTopologySpreadConstraint(
 			(len(excludedNamespaces) > 0 && excludedNamespaces.Has(namespace.Name)) {
 			continue
 		}
+		klog.V(1).InfoS("Processing namespace", "namespace", namespace.Name)
 		namespacePods, err := client.CoreV1().Pods(namespace.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
-			klog.ErrorS(err, "Couldn't list pods in namespace", "namespace", namespace)
+			klog.ErrorS(err, "Couldn't list pods in namespace", "namespace", namespace.Name)
 			continue
 		}
 
@@ -133,10 +135,12 @@ func RemovePodsViolatingTopologySpreadConstraint(
 			}
 		}
 		if len(namespaceTopologySpreadConstraints) == 0 {
+			klog.V(1).InfoS("No constraint to check, skipping namespace", "namespace", namespace.Name)
 			continue
 		}
 
 		// 2. for each topologySpreadConstraint in that namespace
+		klog.V(1).InfoS("Processing "+strconv.Itoa(len(namespaceTopologySpreadConstraints))+" constraints", "namespace", namespace.Name)
 		for constraint := range namespaceTopologySpreadConstraints {
 			constraintTopologies := make(map[topologyPair][]*v1.Pod)
 			// pre-populate the topologyPair map with all the topologies available from the nodeMap
@@ -162,7 +166,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 					continue
 				}
 
-				// 5. If the pod's node matches this constraint'selector topologyKey, create a topoPair and add the pod
+				// 5. If the pod's node matches this constraint's topologyKey, create a topoPair and add the pod
 				node, ok := nodeMap[namespacePods.Items[i].Spec.NodeName]
 				if !ok {
 					// If ok is false, node is nil in which case node.Labels will panic. In which case a pod is yet to be scheduled. So it's safe to just continue here.

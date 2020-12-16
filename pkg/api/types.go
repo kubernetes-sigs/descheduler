@@ -79,9 +79,10 @@ type Percentage float64
 type ResourceThresholds map[v1.ResourceName]Percentage
 
 type NodeResourceUtilizationThresholds struct {
-	Thresholds       ResourceThresholds
-	TargetThresholds ResourceThresholds
-	NumberOfNodes    int
+	UseDeviationThresholds bool
+	Thresholds             ResourceThresholds
+	TargetThresholds       ResourceThresholds
+	NumberOfNodes          int
 }
 
 type PodsHavingTooManyRestarts struct {

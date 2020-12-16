@@ -176,10 +176,16 @@ can be configured for cpu, memory, and number of pods too in terms of percentage
 
 These thresholds, `thresholds` and `targetThresholds`, could be tuned as per your cluster requirements.
 
+Additionally, the strategy accepts a `useDeviationThresholds` parameter.
+If that parameter is set to `true`, the thresholds are considered as percentage deviations from mean resource usage.
+`thresholds` will be deducted from the mean among all nodes and `targetThresholds` will be added to the mean.
+A resource consumption above (resp. below) this window is considered as overutilization (resp. underutilization).
+
 **Parameters:**
 
 |Name|Type|
 |---|---|
+|`useDeviationThresholds`|bool|
 |`thresholds`|map(string:int)|
 |`targetThresholds`|map(string:int)|
 |`numberOfNodes`|int|

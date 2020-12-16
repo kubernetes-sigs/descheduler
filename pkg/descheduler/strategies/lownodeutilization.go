@@ -78,43 +78,45 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		return
 	}
 
-	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
-	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
-	if err := validateStrategyConfig(thresholds, targetThresholds); err != nil {
+	strategyConfig := strategy.Params.NodeResourceUtilizationThresholds
+	if err := validateStrategyConfig(strategyConfig); err != nil {
 		klog.ErrorS(err, "LowNodeUtilization config is not valid")
 		return
 	}
 	// check if Pods/CPU/Mem are set, if not, set them to 100
-	if _, ok := thresholds[v1.ResourcePods]; !ok {
-		thresholds[v1.ResourcePods] = MaxResourcePercentage
-		targetThresholds[v1.ResourcePods] = MaxResourcePercentage
-	}
-	if _, ok := thresholds[v1.ResourceCPU]; !ok {
-		thresholds[v1.ResourceCPU] = MaxResourcePercentage
-		targetThresholds[v1.ResourceCPU] = MaxResourcePercentage
-	}
-	if _, ok := thresholds[v1.ResourceMemory]; !ok {
-		thresholds[v1.ResourceMemory] = MaxResourcePercentage
-		targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
+	// for % deviations, we'll handle that in the getNodeUsage function
+	if !strategyConfig.UseDeviationThresholds {
+		if _, ok := strategyConfig.Thresholds[v1.ResourcePods]; !ok {
+			strategyConfig.Thresholds[v1.ResourcePods] = MaxResourcePercentage
+			strategyConfig.TargetThresholds[v1.ResourcePods] = MaxResourcePercentage
+		}
+		if _, ok := strategyConfig.Thresholds[v1.ResourceCPU]; !ok {
+			strategyConfig.Thresholds[v1.ResourceCPU] = MaxResourcePercentage
+			strategyConfig.TargetThresholds[v1.ResourceCPU] = MaxResourcePercentage
+		}
+		if _, ok := strategyConfig.Thresholds[v1.ResourceMemory]; !ok {
+			strategyConfig.Thresholds[v1.ResourceMemory] = MaxResourcePercentage
+			strategyConfig.TargetThresholds[v1.ResourceMemory] = MaxResourcePercentage
+		}
 	}
 
 	lowNodes, targetNodes := classifyNodes(
-		getNodeUsage(ctx, client, nodes, thresholds, targetThresholds),
+		getNodeUsage(ctx, client, nodes, strategyConfig),
 		// The node has to be schedulable (to be able to move workload there)
-		func(node *v1.Node, usage NodeUsage) bool {
+		func(node *v1.Node, usage *NodeUsage) bool {
 			if nodeutil.IsNodeUnschedulable(node) {
 				klog.V(2).InfoS("Node is unschedulable, thus not considered as underutilized", "node", klog.KObj(node))
 				return false
 			}
 			return isNodeWithLowUtilization(usage)
 		},
-		func(node *v1.Node, usage NodeUsage) bool {
+		func(node *v1.Node, usage *NodeUsage) bool {
 			return isNodeAboveTargetUtilization(usage)
 		},
 	)
 
 	klog.V(1).InfoS("Criteria for a node under utilization",
-		"CPU", thresholds[v1.ResourceCPU], "Mem", thresholds[v1.ResourceMemory], "Pods", thresholds[v1.ResourcePods])
+		"CPU", strategyConfig.Thresholds[v1.ResourceCPU], "Mem", strategyConfig.Thresholds[v1.ResourceMemory], "Pods", strategyConfig.Thresholds[v1.ResourcePods])
 
 	if len(lowNodes) == 0 {
 		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
@@ -138,7 +140,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 	}
 
 	klog.V(1).InfoS("Criteria for a node above target utilization",
-		"CPU", targetThresholds[v1.ResourceCPU], "Mem", targetThresholds[v1.ResourceMemory], "Pods", targetThresholds[v1.ResourcePods])
+		"CPU", strategyConfig.TargetThresholds[v1.ResourceCPU], "Mem", strategyConfig.TargetThresholds[v1.ResourceMemory], "Pods", strategyConfig.TargetThresholds[v1.ResourcePods])
 
 	klog.V(1).InfoS("Number of nodes above target utilization", "totalNumber", len(targetNodes))
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
@@ -154,23 +156,20 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 }
 
 // validateStrategyConfig checks if the strategy's config is valid
-func validateStrategyConfig(thresholds, targetThresholds api.ResourceThresholds) error {
+func validateStrategyConfig(thresholds *api.NodeResourceUtilizationThresholds) error {
 	// validate thresholds and targetThresholds config
 	if err := validateThresholds(thresholds); err != nil {
 		return fmt.Errorf("thresholds config is not valid: %v", err)
 	}
-	if err := validateThresholds(targetThresholds); err != nil {
-		return fmt.Errorf("targetThresholds config is not valid: %v", err)
-	}
 
 	// validate if thresholds and targetThresholds have same resources configured
-	if len(thresholds) != len(targetThresholds) {
+	if len(thresholds.Thresholds) != len(thresholds.TargetThresholds) {
 		return fmt.Errorf("thresholds and targetThresholds configured different resources")
 	}
-	for resourceName, value := range thresholds {
-		if targetValue, ok := targetThresholds[resourceName]; !ok {
+	for resourceName, value := range thresholds.Thresholds {
+		if targetValue, ok := thresholds.TargetThresholds[resourceName]; !ok {
 			return fmt.Errorf("thresholds and targetThresholds configured different resources")
-		} else if value > targetValue {
+		} else if !thresholds.UseDeviationThresholds && value > targetValue {
 			return fmt.Errorf("thresholds' %v percentage is greater than targetThresholds'", resourceName)
 		}
 	}
@@ -178,18 +177,20 @@ func validateStrategyConfig(thresholds, targetThresholds api.ResourceThresholds)
 }
 
 // validateThresholds checks if thresholds have valid resource name and resource percentage configured
-func validateThresholds(thresholds api.ResourceThresholds) error {
-	if thresholds == nil || len(thresholds) == 0 {
+func validateThresholds(strategyConfig *api.NodeResourceUtilizationThresholds) error {
+	if strategyConfig.Thresholds == nil || len(strategyConfig.Thresholds) == 0 || strategyConfig.TargetThresholds == nil || len(strategyConfig.TargetThresholds) == 0 {
 		return fmt.Errorf("no resource threshold is configured")
 	}
-	for name, percent := range thresholds {
-		switch name {
-		case v1.ResourceCPU, v1.ResourceMemory, v1.ResourcePods:
-			if percent < MinResourcePercentage || percent > MaxResourcePercentage {
-				return fmt.Errorf("%v threshold not in [%v, %v] range", name, MinResourcePercentage, MaxResourcePercentage)
+	for isTargetThreshold, thresholds := range []api.ResourceThresholds{strategyConfig.Thresholds, strategyConfig.TargetThresholds} {
+		for name, percent := range thresholds {
+			switch name {
+			case v1.ResourceCPU, v1.ResourceMemory, v1.ResourcePods:
+				if percent < MinResourcePercentage || ((!strategyConfig.UseDeviationThresholds || isTargetThreshold == 0) && percent > MaxResourcePercentage) {
+					return fmt.Errorf("%v threshold not in [%v, %v] range", name, MinResourcePercentage, MaxResourcePercentage)
+				}
+			default:
+				return fmt.Errorf("only cpu, memory, or pods thresholds can be specified")
 			}
-		default:
-			return fmt.Errorf("only cpu, memory, or pods thresholds can be specified")
 		}
 	}
 	return nil
@@ -199,9 +200,13 @@ func getNodeUsage(
 	ctx context.Context,
 	client clientset.Interface,
 	nodes []*v1.Node,
-	lowThreshold, highThreshold api.ResourceThresholds,
-) []NodeUsage {
-	nodeUsageList := []NodeUsage{}
+	strategyConfig *api.NodeResourceUtilizationThresholds,
+) []*NodeUsage {
+	var nodeUsageList []*NodeUsage
+
+	var totalCPUUsagePercent float64
+	var totalMemoryUsagePercent float64
+	var totalPodsUsagePercent float64
 
 	for _, node := range nodes {
 		pods, err := podutil.ListPodsOnANode(ctx, client, node)
@@ -215,30 +220,96 @@ func getNodeUsage(
 			nodeCapacity = node.Status.Allocatable
 		}
 
-		nodeUsageList = append(nodeUsageList, NodeUsage{
-			node:    node,
-			usage:   nodeUtilization(node, pods),
-			allPods: pods,
-			// A threshold is in percentages but in <0;100> interval.
-			// Performing `threshold * 0.01` will convert <0;100> interval into <0;1>.
-			// Multiplying it with capacity will give fraction of the capacity corresponding to the given high/low resource threshold in Quantity units.
-			lowResourceThreshold: map[v1.ResourceName]*resource.Quantity{
-				v1.ResourceCPU:    resource.NewMilliQuantity(int64(float64(lowThreshold[v1.ResourceCPU])*float64(nodeCapacity.Cpu().MilliValue())*0.01), resource.DecimalSI),
-				v1.ResourceMemory: resource.NewQuantity(int64(float64(lowThreshold[v1.ResourceMemory])*float64(nodeCapacity.Memory().Value())*0.01), resource.BinarySI),
-				v1.ResourcePods:   resource.NewQuantity(int64(float64(lowThreshold[v1.ResourcePods])*float64(nodeCapacity.Pods().Value())*0.01), resource.DecimalSI),
-			},
-			highResourceThreshold: map[v1.ResourceName]*resource.Quantity{
-				v1.ResourceCPU:    resource.NewMilliQuantity(int64(float64(highThreshold[v1.ResourceCPU])*float64(nodeCapacity.Cpu().MilliValue())*0.01), resource.DecimalSI),
-				v1.ResourceMemory: resource.NewQuantity(int64(float64(highThreshold[v1.ResourceMemory])*float64(nodeCapacity.Memory().Value())*0.01), resource.BinarySI),
-				v1.ResourcePods:   resource.NewQuantity(int64(float64(highThreshold[v1.ResourcePods])*float64(nodeCapacity.Pods().Value())*0.01), resource.DecimalSI),
-			},
+		usage := nodeUtilization(node, pods)
+
+		// A threshold is in percentages but in <0;100> interval.
+		// Performing `threshold * 0.01` will convert <0;100> interval into <0;1>.
+		// Multiplying it with capacity will give fraction of the capacity corresponding to the given high/low resource threshold in Quantity units.
+		lowResourceThreshold := make(map[v1.ResourceName]*resource.Quantity)
+		highResourceThreshold := make(map[v1.ResourceName]*resource.Quantity)
+
+		if strategyConfig.UseDeviationThresholds {
+			// we'll have to compute the absolute thresholds later because
+			// we need to compute the averages over all nodes
+			totalCPUUsagePercent += float64(usage[v1.ResourceCPU].MilliValue()) / float64(nodeCapacity.Cpu().MilliValue()) * 100.0
+			totalMemoryUsagePercent += float64(usage[v1.ResourceMemory].Value()) / float64(nodeCapacity.Memory().Value()) * 100.0
+			totalPodsUsagePercent += float64(usage[v1.ResourcePods].Value()) / float64(nodeCapacity.Pods().Value()) * 100.0
+		} else {
+			lowResourceThreshold = map[v1.ResourceName]*resource.Quantity{
+				v1.ResourceCPU:    resource.NewMilliQuantity(int64(float64(strategyConfig.Thresholds[v1.ResourceCPU])*float64(nodeCapacity.Cpu().MilliValue())*0.01), resource.DecimalSI),
+				v1.ResourceMemory: resource.NewQuantity(int64(float64(strategyConfig.Thresholds[v1.ResourceMemory])*float64(nodeCapacity.Memory().Value())*0.01), resource.BinarySI),
+				v1.ResourcePods:   resource.NewQuantity(int64(float64(strategyConfig.Thresholds[v1.ResourcePods])*float64(nodeCapacity.Pods().Value())*0.01), resource.DecimalSI),
+			}
+
+			highResourceThreshold = map[v1.ResourceName]*resource.Quantity{
+				v1.ResourceCPU:    resource.NewMilliQuantity(int64(float64(strategyConfig.TargetThresholds[v1.ResourceCPU])*float64(nodeCapacity.Cpu().MilliValue())*0.01), resource.DecimalSI),
+				v1.ResourceMemory: resource.NewQuantity(int64(float64(strategyConfig.TargetThresholds[v1.ResourceMemory])*float64(nodeCapacity.Memory().Value())*0.01), resource.BinarySI),
+				v1.ResourcePods:   resource.NewQuantity(int64(float64(strategyConfig.TargetThresholds[v1.ResourcePods])*float64(nodeCapacity.Pods().Value())*0.01), resource.DecimalSI),
+			}
+		}
+
+		nodeUsageList = append(nodeUsageList, &NodeUsage{
+			node:                  node,
+			usage:                 usage,
+			allPods:               pods,
+			lowResourceThreshold:  lowResourceThreshold,
+			highResourceThreshold: highResourceThreshold,
 		})
+	}
+
+	if strategyConfig.UseDeviationThresholds {
+		averageCPUUsagePercent := totalCPUUsagePercent / float64(len(nodeUsageList))
+		averageMemoryUsagePercent := totalMemoryUsagePercent / float64(len(nodeUsageList))
+		averagePodsUsagePercent := totalPodsUsagePercent / float64(len(nodeUsageList))
+
+		for _, node := range nodeUsageList {
+			nodeCapacity := node.node.Status.Capacity
+			if len(node.node.Status.Allocatable) > 0 {
+				nodeCapacity = node.node.Status.Allocatable
+			}
+
+			node.lowResourceThreshold = map[v1.ResourceName]*resource.Quantity{
+				v1.ResourceCPU:    nodeCapacity.Cpu(),
+				v1.ResourceMemory: nodeCapacity.Memory(),
+				v1.ResourcePods:   nodeCapacity.Pods(),
+			}
+
+			if _, ok := strategyConfig.Thresholds[v1.ResourceCPU]; ok {
+				node.lowResourceThreshold[v1.ResourceCPU] = resource.NewMilliQuantity(int64((averageCPUUsagePercent-float64(strategyConfig.Thresholds[v1.ResourceCPU]))*float64(nodeCapacity.Cpu().MilliValue())*0.01), resource.DecimalSI)
+			}
+
+			if _, ok := strategyConfig.Thresholds[v1.ResourceMemory]; ok {
+				node.lowResourceThreshold[v1.ResourceMemory] = resource.NewQuantity(int64((averageMemoryUsagePercent-float64(strategyConfig.Thresholds[v1.ResourceMemory]))*float64(nodeCapacity.Memory().Value())*0.01), resource.BinarySI)
+			}
+
+			if _, ok := strategyConfig.Thresholds[v1.ResourcePods]; ok {
+				node.lowResourceThreshold[v1.ResourcePods] = resource.NewQuantity(int64((averagePodsUsagePercent-float64(strategyConfig.Thresholds[v1.ResourcePods]))*float64(nodeCapacity.Pods().Value())*0.01), resource.DecimalSI)
+			}
+
+			node.highResourceThreshold = map[v1.ResourceName]*resource.Quantity{
+				v1.ResourceCPU:    nodeCapacity.Cpu(),
+				v1.ResourceMemory: nodeCapacity.Memory(),
+				v1.ResourcePods:   nodeCapacity.Pods(),
+			}
+
+			if _, ok := strategyConfig.TargetThresholds[v1.ResourceCPU]; ok {
+				node.highResourceThreshold[v1.ResourceCPU] = resource.NewMilliQuantity(int64((averageCPUUsagePercent+float64(strategyConfig.TargetThresholds[v1.ResourceCPU]))*float64(nodeCapacity.Cpu().MilliValue())*0.01), resource.DecimalSI)
+			}
+
+			if _, ok := strategyConfig.TargetThresholds[v1.ResourceMemory]; ok {
+				node.highResourceThreshold[v1.ResourceMemory] = resource.NewQuantity(int64((averageMemoryUsagePercent+float64(strategyConfig.TargetThresholds[v1.ResourceMemory]))*float64(nodeCapacity.Memory().Value())*0.01), resource.BinarySI)
+			}
+
+			if _, ok := strategyConfig.TargetThresholds[v1.ResourcePods]; ok {
+				node.highResourceThreshold[v1.ResourcePods] = resource.NewQuantity(int64((averagePodsUsagePercent+float64(strategyConfig.TargetThresholds[v1.ResourcePods]))*float64(nodeCapacity.Pods().Value())*0.01), resource.DecimalSI)
+			}
+		}
 	}
 
 	return nodeUsageList
 }
 
-func resourceUsagePercentages(nodeUsage NodeUsage) map[v1.ResourceName]float64 {
+func resourceUsagePercentages(nodeUsage *NodeUsage) map[v1.ResourceName]float64 {
 	nodeCapacity := nodeUsage.node.Status.Capacity
 	if len(nodeUsage.node.Status.Allocatable) > 0 {
 		nodeCapacity = nodeUsage.node.Status.Allocatable
@@ -258,20 +329,20 @@ func resourceUsagePercentages(nodeUsage NodeUsage) map[v1.ResourceName]float64 {
 // classifyNodes classifies the nodes into low-utilization or high-utilization nodes. If a node lies between
 // low and high thresholds, it is simply ignored.
 func classifyNodes(
-	nodeUsages []NodeUsage,
-	lowThresholdFilter, highThresholdFilter func(node *v1.Node, usage NodeUsage) bool,
-) ([]NodeUsage, []NodeUsage) {
-	lowNodes, highNodes := []NodeUsage{}, []NodeUsage{}
+	nodeUsages []*NodeUsage,
+	lowThresholdFilter, highThresholdFilter func(node *v1.Node, usage *NodeUsage) bool,
+) ([]*NodeUsage, []*NodeUsage) {
+	lowNodes, highNodes := []*NodeUsage{}, []*NodeUsage{}
 
 	for _, nodeUsage := range nodeUsages {
 		if lowThresholdFilter(nodeUsage.node, nodeUsage) {
-			klog.V(2).InfoS("Node is underutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
+			klog.V(2).InfoS("Node is underutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "thresholds", nodeUsage.lowResourceThreshold, "usagePercentage", resourceUsagePercentages(nodeUsage))
 			lowNodes = append(lowNodes, nodeUsage)
 		} else if highThresholdFilter(nodeUsage.node, nodeUsage) {
-			klog.V(2).InfoS("Node is overutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
+			klog.V(2).InfoS("Node is overutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "targetThresholds", nodeUsage.highResourceThreshold, "usagePercentage", resourceUsagePercentages(nodeUsage))
 			highNodes = append(highNodes, nodeUsage)
 		} else {
-			klog.V(2).InfoS("Node is appropriately utilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
+			klog.V(2).InfoS("Node is appropriately utilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "thresholds", nodeUsage.lowResourceThreshold, "targetThresholds", nodeUsage.highResourceThreshold, "usagePercentage", resourceUsagePercentages(nodeUsage))
 		}
 	}
 
@@ -283,7 +354,7 @@ func classifyNodes(
 // TODO: @ravig Break this function into smaller functions.
 func evictPodsFromTargetNodes(
 	ctx context.Context,
-	targetNodes, lowNodes []NodeUsage,
+	targetNodes, lowNodes []*NodeUsage,
 	podEvictor *evictions.PodEvictor,
 	podFilter func(pod *v1.Pod) bool,
 ) {
@@ -336,7 +407,7 @@ func evictPodsFromTargetNodes(
 func evictPods(
 	ctx context.Context,
 	inputPods []*v1.Pod,
-	nodeUsage NodeUsage,
+	nodeUsage *NodeUsage,
 	totalAvailableUsage map[v1.ResourceName]*resource.Quantity,
 	taintsOfLowNodes map[string][]v1.Taint,
 	podEvictor *evictions.PodEvictor,
@@ -386,7 +457,7 @@ func evictPods(
 				nodeUsage.usage[v1.ResourcePods].Sub(*resource.NewQuantity(1, resource.DecimalSI))
 				totalAvailableUsage[v1.ResourcePods].Sub(*resource.NewQuantity(1, resource.DecimalSI))
 
-				klog.V(3).InfoS("Updated node usage", "updatedUsage", nodeUsage)
+				klog.V(3).InfoS("Updated node usage", "updatedUsage", nodeUsage.usage)
 				// check if node utilization drops below target threshold or any required capacity (cpu, memory, pods) is moved
 				if !continueCond() {
 					break
@@ -397,7 +468,7 @@ func evictPods(
 }
 
 // sortNodesByUsage sorts nodes based on usage in descending order
-func sortNodesByUsage(nodes []NodeUsage) {
+func sortNodesByUsage(nodes []*NodeUsage) {
 	sort.Slice(nodes, func(i, j int) bool {
 		ti := nodes[i].usage[v1.ResourceMemory].Value() + nodes[i].usage[v1.ResourceCPU].MilliValue() + nodes[i].usage[v1.ResourcePods].Value()
 		tj := nodes[j].usage[v1.ResourceMemory].Value() + nodes[j].usage[v1.ResourceCPU].MilliValue() + nodes[j].usage[v1.ResourcePods].Value()
@@ -408,7 +479,7 @@ func sortNodesByUsage(nodes []NodeUsage) {
 
 // isNodeAboveTargetUtilization checks if a node is overutilized
 // At least one resource has to be above the high threshold
-func isNodeAboveTargetUtilization(usage NodeUsage) bool {
+func isNodeAboveTargetUtilization(usage *NodeUsage) bool {
 	for name, nodeValue := range usage.usage {
 		// usage.highResourceThreshold[name] < nodeValue
 		if usage.highResourceThreshold[name].Cmp(*nodeValue) == -1 {
@@ -420,7 +491,7 @@ func isNodeAboveTargetUtilization(usage NodeUsage) bool {
 
 // isNodeWithLowUtilization checks if a node is underutilized
 // All resources have to be below the low threshold
-func isNodeWithLowUtilization(usage NodeUsage) bool {
+func isNodeWithLowUtilization(usage *NodeUsage) bool {
 	for name, nodeValue := range usage.usage {
 		// usage.lowResourceThreshold[name] < nodeValue
 		if usage.lowResourceThreshold[name].Cmp(*nodeValue) == -1 {
