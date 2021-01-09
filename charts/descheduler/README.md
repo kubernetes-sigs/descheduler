@@ -63,3 +63,4 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `resources.memoryRequest`        | Descheduler container memory request                                                                  | `256Mi`                               |
 | `serviceAccount.create`        | If `true`, create a service account for the cron job                                                                  | `true`                               |
 | `serviceAccount.name`          | The name of the service account to use, if not set and create is true a name is generated using the fullname template | `nil`                                |
+| `nodeSelector`          | Node selectors to run the descheduler cronjob on specific nodes | `nil`                                |
