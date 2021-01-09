@@ -58,6 +58,9 @@ deschedulerPolicy:
 
 priorityClassName: system-cluster-critical
 
+nodeSelector: {}
+#  foo: bar
+
 rbac:
   # Specifies whether RBAC resources should be created
   create: true
