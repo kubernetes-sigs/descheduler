@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	componentbaseconfig "k8s.io/component-base/config"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,4 +49,8 @@ type DeschedulerConfiguration struct {
 
 	// EvictLocalStoragePods allows pods using local storage to be evicted.
 	EvictLocalStoragePods bool `json:"evictLocalStoragePods,omitempty"`
+
+	// Logging specifies the options of logging.
+	// Refer [Logs Options](https://github.com/kubernetes/component-base/blob/master/logs/options.go) for more information.
+	Logging componentbaseconfig.LoggingConfiguration `json:"logging,omitempty"`
 }
