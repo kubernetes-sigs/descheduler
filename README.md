@@ -111,6 +111,7 @@ parameters associated with the strategies can be configured too. By default, all
 The policy also includes common configuration for all the strategies:
 - `nodeSelector` - limiting the nodes which are processed
 - `evictLocalStoragePods` - allowing to evict pods with local storage
+- `ignorePvcPods` - set whether PVC pods should be evicted or ignored (defaults to `false`)
 - `maxNoOfPodsToEvictPerNode` - maximum number of pods evicted from each node (summed through all strategies)
 
 ```yaml
@@ -119,6 +120,7 @@ kind: "DeschedulerPolicy"
 nodeSelector: prod=dev
 evictLocalStoragePods: true
 maxNoOfPodsToEvictPerNode: 40
+ignorePvcPods: false
 strategies:
   ...
 ```
@@ -497,9 +499,10 @@ When the descheduler decides to evict pods from a node, it employs the following
 never evicted because these pods won't be recreated.
 * Pods associated with DaemonSets are never evicted.
 * Pods with local storage are never evicted (unless `evictLocalStoragePods: true` is set)
+* Pods with PVCs are evicted unless `ignorePvcPods: true` is set.
 * In `LowNodeUtilization` and `RemovePodsViolatingInterPodAntiAffinity`, pods are evicted by their priority from low to high, and if they have same priority,
 best effort pods are evicted before burstable and guaranteed pods.
-* All types of pods with the annotation descheduler.alpha.kubernetes.io/evict are evicted. This
+* All types of pods with the annotation `descheduler.alpha.kubernetes.io/evict` are eligible for eviction. This
   annotation is used to override checks which prevent eviction and users can select which pod is evicted.
   Users should know how and if the pod will be recreated.
 

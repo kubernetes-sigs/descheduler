@@ -171,6 +171,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			tc.maxPodsToEvictPerNode,
 			tc.nodes,
 			tc.evictLocalStoragePods,
+			false,
 		)
 
 		RemovePodsViolatingNodeTaints(ctx, fakeClient, api.DeschedulerStrategy{}, tc.nodes, podEvictor)

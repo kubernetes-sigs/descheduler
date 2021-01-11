@@ -120,6 +120,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			test.maxPodsToEvictPerNode,
 			[]*v1.Node{node},
 			false,
+			false,
 		)
 
 		RemovePodsViolatingInterPodAntiAffinity(ctx, fakeClient, api.DeschedulerStrategy{}, []*v1.Node{node}, podEvictor)
