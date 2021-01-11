@@ -122,6 +122,7 @@ func autoConvert_v1alpha1_DeschedulerPolicy_To_api_DeschedulerPolicy(in *Desched
 	out.Strategies = *(*api.StrategyList)(unsafe.Pointer(&in.Strategies))
 	out.NodeSelector = (*string)(unsafe.Pointer(in.NodeSelector))
 	out.EvictLocalStoragePods = (*bool)(unsafe.Pointer(in.EvictLocalStoragePods))
+	out.IgnorePVCPods = (*bool)(unsafe.Pointer(in.IgnorePVCPods))
 	out.MaxNoOfPodsToEvictPerNode = (*int)(unsafe.Pointer(in.MaxNoOfPodsToEvictPerNode))
 	return nil
 }
@@ -135,6 +136,7 @@ func autoConvert_api_DeschedulerPolicy_To_v1alpha1_DeschedulerPolicy(in *api.Des
 	out.Strategies = *(*StrategyList)(unsafe.Pointer(&in.Strategies))
 	out.NodeSelector = (*string)(unsafe.Pointer(in.NodeSelector))
 	out.EvictLocalStoragePods = (*bool)(unsafe.Pointer(in.EvictLocalStoragePods))
+	out.IgnorePVCPods = (*bool)(unsafe.Pointer(in.IgnorePVCPods))
 	out.MaxNoOfPodsToEvictPerNode = (*int)(unsafe.Pointer(in.MaxNoOfPodsToEvictPerNode))
 	return nil
 }

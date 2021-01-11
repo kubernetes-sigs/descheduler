@@ -444,6 +444,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.maxPodsToEvictPerNode,
 				nodes,
 				false,
+				false,
 			)
 
 			strategy := api.DeschedulerStrategy{
@@ -763,6 +764,7 @@ func TestWithTaints(t *testing.T) {
 				false,
 				item.evictionsExpected,
 				item.nodes,
+				false,
 				false,
 			)
 
