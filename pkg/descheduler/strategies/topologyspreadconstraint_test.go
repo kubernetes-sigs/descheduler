@@ -96,6 +96,45 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			namespaces:           []string{"ns1"},
 		},
 		{
+			name: "NEW",
+			//name: "2 domains, sizes [3,1], maxSkew=1, no pods eligible, move 0 pods",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							MaxSkew:           1,
+							TopologyKey:       "zone",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+						},
+					},
+					noOwners: true,
+				},
+				{
+					count:    2,
+					node:     "n1",
+					labels:   map[string]string{"foo": "bar"},
+					noOwners: true,
+				},
+				{
+					count:    1,
+					node:     "n2",
+					labels:   map[string]string{"foo": "bar"},
+					noOwners: true,
+				},
+			}),
+			expectedEvictedCount: 0,
+			strategy:             api.DeschedulerStrategy{},
+			namespaces:           []string{"ns1"},
+		},
+		{
 			name: "2 domains, sizes [3,1], maxSkew=1, move 1 pod to achieve [2,2], exclude kube-system namespace",
 			nodes: []*v1.Node{
 				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
@@ -385,6 +424,7 @@ type testPodList struct {
 	constraints  []v1.TopologySpreadConstraint
 	nodeSelector map[string]string
 	nodeAffinity *v1.Affinity
+	noOwners     bool
 }
 
 func createTestPods(testPods []testPodList) []*v1.Pod {
@@ -398,7 +438,9 @@ func createTestPods(testPods []testPodList) []*v1.Pod {
 					p.Labels = make(map[string]string)
 					p.Labels = tp.labels
 					p.Namespace = "ns1"
-					p.ObjectMeta.OwnerReferences = ownerRef1
+					if !tp.noOwners {
+						p.ObjectMeta.OwnerReferences = ownerRef1
+					}
 					p.Spec.TopologySpreadConstraints = tp.constraints
 					p.Spec.NodeSelector = tp.nodeSelector
 					p.Spec.Affinity = tp.nodeAffinity
