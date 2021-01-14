@@ -106,7 +106,7 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 // startEndToEndForLowNodeUtilization tests the lownode utilization strategy.
 func startEndToEndForLowNodeUtilization(ctx context.Context, clientset clientset.Interface, nodeInformer coreinformers.NodeInformer, podEvictor *evictions.PodEvictor) {
 	// Run descheduler.
-	nodes, err := nodeutil.ReadyNodes(ctx, clientset, nodeInformer, "", nil)
+	nodes, err := nodeutil.ReadyNodes(ctx, clientset, nodeInformer, "")
 	if err != nil {
 		klog.Fatalf("%v", err)
 	}
@@ -194,7 +194,7 @@ func runPodLifetimeStrategy(ctx context.Context, clientset clientset.Interface, 
 		klog.Fatalf("%v", err)
 	}
 
-	nodes, err := nodeutil.ReadyNodes(ctx, clientset, nodeInformer, "", nil)
+	nodes, err := nodeutil.ReadyNodes(ctx, clientset, nodeInformer, "")
 	if err != nil {
 		klog.Fatalf("%v", err)
 	}
