@@ -69,6 +69,7 @@ type StrategyParameters struct {
 	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts
 	PodLifeTime                       *PodLifeTime
 	RemoveDuplicates                  *RemoveDuplicates
+	IncludeSoftConstraints            bool
 	Namespaces                        *Namespaces
 	ThresholdPriority                 *int32
 	ThresholdPriorityClassName        string
