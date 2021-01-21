@@ -284,6 +284,7 @@ func autoConvert_v1alpha1_StrategyParameters_To_api_StrategyParameters(in *Strat
 	out.PodsHavingTooManyRestarts = (*api.PodsHavingTooManyRestarts)(unsafe.Pointer(in.PodsHavingTooManyRestarts))
 	out.PodLifeTime = (*api.PodLifeTime)(unsafe.Pointer(in.PodLifeTime))
 	out.RemoveDuplicates = (*api.RemoveDuplicates)(unsafe.Pointer(in.RemoveDuplicates))
+	out.IncludeSoftConstraints = in.IncludeSoftConstraints
 	out.Namespaces = (*api.Namespaces)(unsafe.Pointer(in.Namespaces))
 	out.ThresholdPriority = (*int32)(unsafe.Pointer(in.ThresholdPriority))
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
@@ -301,6 +302,7 @@ func autoConvert_api_StrategyParameters_To_v1alpha1_StrategyParameters(in *api.S
 	out.PodsHavingTooManyRestarts = (*PodsHavingTooManyRestarts)(unsafe.Pointer(in.PodsHavingTooManyRestarts))
 	out.PodLifeTime = (*PodLifeTime)(unsafe.Pointer(in.PodLifeTime))
 	out.RemoveDuplicates = (*RemoveDuplicates)(unsafe.Pointer(in.RemoveDuplicates))
+	out.IncludeSoftConstraints = in.IncludeSoftConstraints
 	out.Namespaces = (*Namespaces)(unsafe.Pointer(in.Namespaces))
 	out.ThresholdPriority = (*int32)(unsafe.Pointer(in.ThresholdPriority))
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
