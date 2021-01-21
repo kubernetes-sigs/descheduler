@@ -317,10 +317,14 @@ This strategy makes sure that pods violating [topology spread constraints](https
 are evicted from nodes. Specifically, it tries to evict the minimum number of pods required to balance topology domains to within each constraint's `maxSkew`.
 This strategy requires k8s version 1.18 at a minimum.
 
+By default, this strategy only deals with hard constraints, setting parameter `includeSoftConstraints` to `true` will
+include soft constraints.
+
 **Parameters:**
 
 |Name|Type|
 |---|---|
+|`includeSoftConstraints`|bool|
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
@@ -333,6 +337,8 @@ kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingTopologySpreadConstraint":
      enabled: true
+     params:
+       includeSoftConstraints: false
 ```
 
 
