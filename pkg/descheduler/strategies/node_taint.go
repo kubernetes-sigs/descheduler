@@ -20,17 +20,42 @@ import (
 	"context"
 	"fmt"
 
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/workqueue"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
-
-	v1 "k8s.io/api/core/v1"
-	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/klog/v2"
 )
 
 const NodeTaintsName = "RemovePodsViolatingNodeTaints"
+
+// NewRemovePodsViolatingNodeTaints returns a StrategyController to run Node taints with informers
+func NewRemovePodsViolatingNodeTaints(
+	ctx context.Context,
+	client clientset.Interface,
+	sharedInformerFactory informers.SharedInformerFactory,
+	strategy api.DeschedulerStrategy,
+	podEvictor *evictions.PodEvictor,
+	nodeSelector string,
+	stopChannel chan struct{},
+) *StrategyController {
+	c := &StrategyController{
+		ctx:                   ctx,
+		client:                client,
+		queue:                 workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		sharedInformerFactory: sharedInformerFactory,
+		strategy:              strategy,
+		podEvictor:            podEvictor,
+		nodeSelector:          nodeSelector,
+		stopChannel:           stopChannel,
+	}
+	sharedInformerFactory.Core().V1().Nodes().Informer().AddEventHandler(nodeEventHandler(c))
+	return c
+}
 
 func validateRemovePodsViolatingNodeTaintsParams(params *api.StrategyParameters) error {
 	if params == nil {

@@ -80,6 +80,29 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		maxNoOfPodsToEvictPerNode = *deschedulerPolicy.MaxNoOfPodsToEvictPerNode
 	}
 
+	// first start informed strategies
+	if rs.DeschedulingInterval != 0 {
+		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, nodeSelector)
+		if err != nil {
+			return err
+		}
+		podEvictor := evictions.NewPodEvictor(
+			rs.Client,
+			evictionPolicyGroupVersion,
+			rs.DryRun,
+			maxNoOfPodsToEvictPerNode,
+			nodes,
+			evictLocalStoragePods,
+		)
+		for name, f := range strategies.StrategyFuncs {
+			if strategy := deschedulerPolicy.Strategies[api.StrategyName(name)]; strategy.Enabled && strategy.RunMode == api.Informed {
+				controller := f.StrategyControllerFunc(ctx, rs.Client, sharedInformerFactory, strategy, podEvictor, nodeSelector, stopChannel)
+				go controller.Run(stopChannel)
+			}
+		}
+	}
+
+	// now start time-looped strategies
 	wait.Until(func() {
 		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, nodeSelector)
 		if err != nil {

@@ -21,9 +21,11 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
-
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -32,6 +34,55 @@ import (
 )
 
 const NodeAffinityName = "RemovePodsViolatingNodeAffinity"
+
+// NewRemovePodsViolatingNodeAffinity returns a StrategyController to run Node affinity with informers
+func NewRemovePodsViolatingNodeAffinity(
+	ctx context.Context,
+	client clientset.Interface,
+	sharedInformerFactory informers.SharedInformerFactory,
+	strategy api.DeschedulerStrategy,
+	podEvictor *evictions.PodEvictor,
+	nodeSelector string,
+	stopChannel chan struct{},
+) *StrategyController {
+	c := &StrategyController{
+		ctx:                   ctx,
+		client:                client,
+		queue:                 workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		sharedInformerFactory: sharedInformerFactory,
+		strategy:              strategy,
+		podEvictor:            podEvictor,
+		nodeSelector:          nodeSelector,
+		stopChannel:           stopChannel,
+	}
+	sharedInformerFactory.Core().V1().Nodes().Informer().AddEventHandler(nodeEventHandler(c))
+	return c
+}
+
+func nodeEventHandler(c *StrategyController) cache.ResourceEventHandler {
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			nodes, err := nodeutil.ReadyNodes(c.ctx, c.client, c.sharedInformerFactory.Core().V1().Nodes(), c.nodeSelector)
+			if err != nil {
+				klog.V(1).InfoS("Unable to get ready nodes", "err", err)
+				close(c.stopChannel)
+				return
+			}
+			c.nodes = nodes
+			c.queue.Add(workQueueKey)
+		},
+		UpdateFunc: func(old, new interface{}) {
+			nodes, err := nodeutil.ReadyNodes(c.ctx, c.client, c.sharedInformerFactory.Core().V1().Nodes(), c.nodeSelector)
+			if err != nil {
+				klog.V(1).InfoS("Unable to get ready nodes", "err", err)
+				close(c.stopChannel)
+				return
+			}
+			c.nodes = nodes
+			c.queue.Add(workQueueKey)
+		},
+	}
+}
 
 func validatePodsViolatingNodeAffinityParams(params *api.StrategyParameters) error {
 	if params == nil || len(params.NodeAffinityType) == 0 {
