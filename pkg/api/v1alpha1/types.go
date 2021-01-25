@@ -51,7 +51,21 @@ type DeschedulerStrategy struct {
 
 	// Strategy parameters
 	Params *StrategyParameters `json:"params,omitempty"`
+
+	// RunMode defines whether a strategy should run in the default, iterative mode or the informed, reactive mode.
+	RunMode StrategyRunMode `json:"runMode,omitempty"`
 }
+
+// StrategyRunMode toggles whether applicable strategies should run in "Default" or "Informed" mode
+type StrategyRunMode string
+
+var (
+	// Default instructs a strategy to run on a periodic loop
+	Default StrategyRunMode = "Default"
+
+	// Informed instructs a strategy to run with relevant informers, reacting to cluster changes immediately
+	Informed StrategyRunMode = "Informed"
+)
 
 // Namespaces carries a list of included/excluded namespaces
 // for which a given strategy is applicable.

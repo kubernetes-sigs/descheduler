@@ -104,7 +104,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		)
 
 		for name, f := range strategies.StrategyFuncs {
-			if strategy := deschedulerPolicy.Strategies[api.StrategyName(name)]; strategy.Enabled {
+			if strategy := deschedulerPolicy.Strategies[api.StrategyName(name)]; strategy.Enabled && strategy.RunMode != api.Informed {
 				f.StrategyFunc(ctx, rs.Client, strategy, nodes, podEvictor)
 			}
 		}

@@ -148,6 +148,7 @@ func autoConvert_v1alpha1_DeschedulerStrategy_To_api_DeschedulerStrategy(in *Des
 	out.Enabled = in.Enabled
 	out.Weight = in.Weight
 	out.Params = (*api.StrategyParameters)(unsafe.Pointer(in.Params))
+	out.RunMode = api.StrategyRunMode(in.RunMode)
 	return nil
 }
 
@@ -160,6 +161,7 @@ func autoConvert_api_DeschedulerStrategy_To_v1alpha1_DeschedulerStrategy(in *api
 	out.Enabled = in.Enabled
 	out.Weight = in.Weight
 	out.Params = (*StrategyParameters)(unsafe.Pointer(in.Params))
+	out.RunMode = StrategyRunMode(in.RunMode)
 	return nil
 }
 
