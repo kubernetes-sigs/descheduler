@@ -54,6 +54,7 @@ func NewRemovePodsViolatingNodeAffinity(
 		podEvictor:            podEvictor,
 		nodeSelector:          nodeSelector,
 		stopChannel:           stopChannel,
+		name:                  NodeAffinityName,
 	}
 	sharedInformerFactory.Core().V1().Nodes().Informer().AddEventHandler(nodeEventHandler(c))
 	return c

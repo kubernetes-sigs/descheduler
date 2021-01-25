@@ -52,6 +52,7 @@ func NewRemovePodsViolatingNodeTaints(
 		podEvictor:            podEvictor,
 		nodeSelector:          nodeSelector,
 		stopChannel:           stopChannel,
+		name:                  NodeTaintsName,
 	}
 	sharedInformerFactory.Core().V1().Nodes().Informer().AddEventHandler(nodeEventHandler(c))
 	return c
