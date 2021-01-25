@@ -31,6 +31,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+const NodeAffinityName = "RemovePodsViolatingNodeAffinity"
+
 func validatePodsViolatingNodeAffinityParams(params *api.StrategyParameters) error {
 	if params == nil || len(params.NodeAffinityType) == 0 {
 		return fmt.Errorf("NodeAffinityType is empty")

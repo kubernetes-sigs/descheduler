@@ -51,6 +51,8 @@ const (
 	MinResourcePercentage = 0
 	// MaxResourcePercentage is the maximum value of a resource's percentage
 	MaxResourcePercentage = 100
+
+	LowNodeUtilizationName = "LowNodeUtilization"
 )
 
 func validateLowNodeUtilizationParams(params *api.StrategyParameters) error {

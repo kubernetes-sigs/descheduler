@@ -36,6 +36,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+const RemoveDuplicatesName = "RemoveDuplicates"
+
 func validateRemoveDuplicatePodsParams(params *api.StrategyParameters) error {
 	if params == nil {
 		return nil

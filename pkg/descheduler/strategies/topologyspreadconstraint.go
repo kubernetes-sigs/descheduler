@@ -34,6 +34,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+const TopologySpreadName = "RemovePodsViolatingTopologySpreadConstraint"
+
 // AntiAffinityTerm's topology key value used in predicate metadata
 type topologyPair struct {
 	key   string

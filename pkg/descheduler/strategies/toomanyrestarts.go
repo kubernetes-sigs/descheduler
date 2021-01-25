@@ -30,6 +30,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+const TooManyRestartsName = "RemovePodsHavingTooManyRestarts"
+
 func validateRemovePodsHavingTooManyRestartsParams(params *api.StrategyParameters) error {
 	if params == nil || params.PodsHavingTooManyRestarts == nil || params.PodsHavingTooManyRestarts.PodRestartThreshold < 1 {
 		return fmt.Errorf("PodsHavingTooManyRestarts threshold not set")

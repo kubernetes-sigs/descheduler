@@ -31,6 +31,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+const PodLifeTimeName = "PodLifeTime"
+
 func validatePodLifeTimeParams(params *api.StrategyParameters) error {
 	if params == nil || params.PodLifeTime == nil || params.PodLifeTime.MaxPodLifeTimeSeconds == nil {
 		return fmt.Errorf("MaxPodLifeTimeSeconds not set")

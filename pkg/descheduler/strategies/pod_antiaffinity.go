@@ -31,6 +31,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+const InterPodAntiAffinityName = "RemovePodsViolatingInterPodAntiAffinity"
+
 func validateRemovePodsViolatingInterPodAntiAffinityParams(params *api.StrategyParameters) error {
 	if params == nil {
 		return nil

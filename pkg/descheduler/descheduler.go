@@ -65,17 +65,6 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 
-	strategyFuncs := map[string]strategies.StrategyFunction{
-		"RemoveDuplicates":                            strategies.RemoveDuplicatePods,
-		"LowNodeUtilization":                          strategies.LowNodeUtilization,
-		"RemovePodsViolatingInterPodAntiAffinity":     strategies.RemovePodsViolatingInterPodAntiAffinity,
-		"RemovePodsViolatingNodeAffinity":             strategies.RemovePodsViolatingNodeAffinity,
-		"RemovePodsViolatingNodeTaints":               strategies.RemovePodsViolatingNodeTaints,
-		"RemovePodsHavingTooManyRestarts":             strategies.RemovePodsHavingTooManyRestarts,
-		"PodLifeTime":                                 strategies.PodLifeTime,
-		"RemovePodsViolatingTopologySpreadConstraint": strategies.RemovePodsViolatingTopologySpreadConstraint,
-	}
-
 	nodeSelector := rs.NodeSelector
 	if deschedulerPolicy.NodeSelector != nil {
 		nodeSelector = *deschedulerPolicy.NodeSelector
@@ -114,9 +103,9 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			evictLocalStoragePods,
 		)
 
-		for name, f := range strategyFuncs {
+		for name, f := range strategies.StrategyFuncs {
 			if strategy := deschedulerPolicy.Strategies[api.StrategyName(name)]; strategy.Enabled {
-				f(ctx, rs.Client, strategy, nodes, podEvictor)
+				f.StrategyFunc(ctx, rs.Client, strategy, nodes, podEvictor)
 			}
 		}
 

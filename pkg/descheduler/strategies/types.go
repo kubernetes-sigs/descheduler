@@ -3,11 +3,30 @@ package strategies
 import (
 	"context"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 )
+
+var StrategyFuncs = map[string]struct {
+	StrategyFunc           StrategyFunction
+	StrategyControllerFunc StrategyControllerFunction
+}{
+	RemoveDuplicatesName:     {StrategyFunc: RemoveDuplicatePods},
+	LowNodeUtilizationName:   {StrategyFunc: LowNodeUtilization},
+	InterPodAntiAffinityName: {StrategyFunc: RemovePodsViolatingInterPodAntiAffinity},
+	NodeAffinityName: {
+		StrategyFunc:           RemovePodsViolatingNodeAffinity,
+		StrategyControllerFunc: NewRemovePodsViolatingNodeAffinity},
+	NodeTaintsName: {
+		StrategyFunc:           RemovePodsViolatingNodeTaints,
+		StrategyControllerFunc: NewRemovePodsViolatingNodeTaints},
+	TooManyRestartsName: {StrategyFunc: RemovePodsHavingTooManyRestarts},
+	PodLifeTimeName:     {StrategyFunc: PodLifeTime},
+	TopologySpreadName:  {StrategyFunc: RemovePodsViolatingTopologySpreadConstraint},
+}
 
 // StrategyFunction defines the function signature for each strategy's main function
 type StrategyFunction func(
@@ -30,5 +49,6 @@ type StrategyController struct {
 type StrategyControllerFunction func(
 	ctx context.Context,
 	client clientset.Interface,
+	sharedInformerFactory informers.SharedInformerFactory,
 	f StrategyFunction,
 ) *StrategyController
