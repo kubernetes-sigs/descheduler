@@ -43,6 +43,7 @@ Table of Contents
   * [Filter Pods](#filter-pods)
      * [Namespace filtering](#namespace-filtering)
      * [Priority filtering](#priority-filtering)
+  * [Informed Strategies](#informed-strategies)
   * [Pod Evictions](#pod-evictions)
      * [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
   * [Compatibility Matrix](#compatibility-matrix)
@@ -272,6 +273,7 @@ podA gets evicted from nodeA.
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`runMode`|(see [informed strategies](#informed-strategies))|
 
 **Example:**
 
@@ -281,6 +283,7 @@ kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingNodeAffinity":
     enabled: true
+    runMode: Default
     params:
       nodeAffinityType:
       - "requiredDuringSchedulingIgnoredDuringExecution"
@@ -300,6 +303,7 @@ and will be evicted.
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`runMode`|(see [informed strategies](#informed-strategies))|
 
 **Example:**
 
@@ -309,6 +313,7 @@ kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingNodeTaints":
     enabled: true
+    runMode: Default
 ````
 
 ### RemovePodsViolatingTopologySpreadConstraint
@@ -493,6 +498,20 @@ strategies:
 
 Note that you can't configure both `thresholdPriority` and `thresholdPriorityClassName`, if the given priority class
 does not exist, descheduler won't create it and will throw an error.
+
+## Informed Strategies
+Some strategies are able to run with informers, making the strategy instantly react when updates to relevant cluster 
+resources for that strategy occur. These strategies are:
+
+* [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity)
+* [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints)
+
+This can be enabled by setting `runMode: Informed` on the strategy's configuration. This means that, for example, when 
+a taint is added to a node the descheduler will automatically check to make sure all pods tolerate taints on that node 
+(rather than waiting for the next descheduling interval to run).
+
+This can only be enabled if the descheduler is run as a long-running deployment (ie, not a Job or CronJob) with a 
+`DeschedulingInterval` set to greater than `0`.
 
 ## Pod Evictions
 
