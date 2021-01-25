@@ -20,8 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	v1 "k8s.io/api/core/v1"
-	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -60,8 +58,6 @@ func Run(rs *options.DeschedulerServer) error {
 	return RunDeschedulerStrategies(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel)
 }
 
-type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor)
-
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, stopChannel chan struct{}) error {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
 	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
@@ -69,7 +65,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 
-	strategyFuncs := map[string]strategyFunction{
+	strategyFuncs := map[string]strategies.StrategyFunction{
 		"RemoveDuplicates":                            strategies.RemoveDuplicatePods,
 		"LowNodeUtilization":                          strategies.LowNodeUtilization,
 		"RemovePodsViolatingInterPodAntiAffinity":     strategies.RemovePodsViolatingInterPodAntiAffinity,
