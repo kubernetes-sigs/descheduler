@@ -35,6 +35,9 @@ type DeschedulerPolicy struct {
 	// EvictLocalStoragePods allows pods using local storage to be evicted.
 	EvictLocalStoragePods *bool `json:"evictLocalStoragePods,omitempty"`
 
+	// IgnorePVCPods prevents pods with PVCs from being evicted.
+	IgnorePVCPods *bool `json:"ignorePvcPods,omitempty"`
+
 	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
 	MaxNoOfPodsToEvictPerNode *int `json:"maxNoOfPodsToEvictPerNode,omitempty"`
 }
