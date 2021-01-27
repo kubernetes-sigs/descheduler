@@ -158,6 +158,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			tc.maxPodsToEvictPerNode,
 			tc.nodes,
 			false,
+			false,
 		)
 
 		RemovePodsViolatingNodeAffinity(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor)

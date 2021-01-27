@@ -35,6 +35,9 @@ type DeschedulerPolicy struct {
 	// EvictLocalStoragePods allows pods using local storage to be evicted.
 	EvictLocalStoragePods *bool
 
+	// IgnorePVCPods prevents pods with PVCs from being evicted.
+	IgnorePVCPods *bool
+
 	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
 	MaxNoOfPodsToEvictPerNode *int
 }
@@ -69,6 +72,7 @@ type StrategyParameters struct {
 	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts
 	PodLifeTime                       *PodLifeTime
 	RemoveDuplicates                  *RemoveDuplicates
+	IncludeSoftConstraints            bool
 	Namespaces                        *Namespaces
 	ThresholdPriority                 *int32
 	ThresholdPriorityClassName        string

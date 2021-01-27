@@ -122,6 +122,7 @@ func autoConvert_v1alpha1_DeschedulerPolicy_To_api_DeschedulerPolicy(in *Desched
 	out.Strategies = *(*api.StrategyList)(unsafe.Pointer(&in.Strategies))
 	out.NodeSelector = (*string)(unsafe.Pointer(in.NodeSelector))
 	out.EvictLocalStoragePods = (*bool)(unsafe.Pointer(in.EvictLocalStoragePods))
+	out.IgnorePVCPods = (*bool)(unsafe.Pointer(in.IgnorePVCPods))
 	out.MaxNoOfPodsToEvictPerNode = (*int)(unsafe.Pointer(in.MaxNoOfPodsToEvictPerNode))
 	return nil
 }
@@ -135,6 +136,7 @@ func autoConvert_api_DeschedulerPolicy_To_v1alpha1_DeschedulerPolicy(in *api.Des
 	out.Strategies = *(*StrategyList)(unsafe.Pointer(&in.Strategies))
 	out.NodeSelector = (*string)(unsafe.Pointer(in.NodeSelector))
 	out.EvictLocalStoragePods = (*bool)(unsafe.Pointer(in.EvictLocalStoragePods))
+	out.IgnorePVCPods = (*bool)(unsafe.Pointer(in.IgnorePVCPods))
 	out.MaxNoOfPodsToEvictPerNode = (*int)(unsafe.Pointer(in.MaxNoOfPodsToEvictPerNode))
 	return nil
 }
@@ -284,6 +286,7 @@ func autoConvert_v1alpha1_StrategyParameters_To_api_StrategyParameters(in *Strat
 	out.PodsHavingTooManyRestarts = (*api.PodsHavingTooManyRestarts)(unsafe.Pointer(in.PodsHavingTooManyRestarts))
 	out.PodLifeTime = (*api.PodLifeTime)(unsafe.Pointer(in.PodLifeTime))
 	out.RemoveDuplicates = (*api.RemoveDuplicates)(unsafe.Pointer(in.RemoveDuplicates))
+	out.IncludeSoftConstraints = in.IncludeSoftConstraints
 	out.Namespaces = (*api.Namespaces)(unsafe.Pointer(in.Namespaces))
 	out.ThresholdPriority = (*int32)(unsafe.Pointer(in.ThresholdPriority))
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
@@ -301,6 +304,7 @@ func autoConvert_api_StrategyParameters_To_v1alpha1_StrategyParameters(in *api.S
 	out.PodsHavingTooManyRestarts = (*PodsHavingTooManyRestarts)(unsafe.Pointer(in.PodsHavingTooManyRestarts))
 	out.PodLifeTime = (*PodLifeTime)(unsafe.Pointer(in.PodLifeTime))
 	out.RemoveDuplicates = (*RemoveDuplicates)(unsafe.Pointer(in.RemoveDuplicates))
+	out.IncludeSoftConstraints = in.IncludeSoftConstraints
 	out.Namespaces = (*Namespaces)(unsafe.Pointer(in.Namespaces))
 	out.ThresholdPriority = (*int32)(unsafe.Pointer(in.ThresholdPriority))
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
