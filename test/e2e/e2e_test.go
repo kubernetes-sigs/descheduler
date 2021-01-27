@@ -220,6 +220,7 @@ func runPodLifetimeStrategy(ctx context.Context, clientset clientset.Interface, 
 			0,
 			nodes,
 			false,
+			false,
 		),
 	)
 }
@@ -648,6 +649,7 @@ func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface,
 		0,
 		nodeList,
 		true,
+		false,
 	)
 	for _, node := range nodeList {
 		// Skip the Master Node

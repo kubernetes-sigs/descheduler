@@ -98,6 +98,19 @@ func TestPodLifeTime(t *testing.T) {
 	p9.ObjectMeta.OwnerReferences = ownerRef1
 	p10.ObjectMeta.OwnerReferences = ownerRef1
 
+	p11 := test.BuildTestPod("p11", 100, 0, node.Name, func(pod *v1.Pod) {
+		pod.Spec.Volumes = []v1.Volume{
+			{
+				Name: "pvc", VolumeSource: v1.VolumeSource{
+					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
+				},
+			},
+		}
+		pod.Namespace = "dev"
+		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
+
 	var maxLifeTime uint = 600
 	testCases := []struct {
 		description             string
@@ -105,6 +118,7 @@ func TestPodLifeTime(t *testing.T) {
 		maxPodsToEvictPerNode   int
 		pods                    []v1.Pod
 		expectedEvictedPodCount int
+		ignorePvcPods           bool
 	}{
 		{
 			description: "Two pods in the `dev` Namespace, 1 is new and 1 very is old. 1 should be evicted.",
@@ -169,6 +183,31 @@ func TestPodLifeTime(t *testing.T) {
 			pods:                    []v1.Pod{*p9, *p10},
 			expectedEvictedPodCount: 1,
 		},
+		{
+			description: "does not evict pvc pods with ignorePvcPods set to true",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
+				},
+			},
+			maxPodsToEvictPerNode:   5,
+			pods:                    []v1.Pod{*p11},
+			expectedEvictedPodCount: 0,
+			ignorePvcPods:           true,
+		},
+		{
+			description: "evicts pvc pods with ignorePvcPods set to false (or unset)",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
+				},
+			},
+			maxPodsToEvictPerNode:   5,
+			pods:                    []v1.Pod{*p11},
+			expectedEvictedPodCount: 1,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -186,6 +225,7 @@ func TestPodLifeTime(t *testing.T) {
 			tc.maxPodsToEvictPerNode,
 			[]*v1.Node{node},
 			false,
+			tc.ignorePvcPods,
 		)
 
 		PodLifeTime(ctx, fakeClient, tc.strategy, []*v1.Node{node}, podEvictor)
