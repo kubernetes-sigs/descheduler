@@ -51,6 +51,7 @@ type PodEvictor struct {
 	maxPodsToEvictPerNode int
 	nodepodCount          nodePodEvictedCount
 	evictLocalStoragePods bool
+	ignorePvcPods         bool
 }
 
 func NewPodEvictor(
@@ -60,6 +61,7 @@ func NewPodEvictor(
 	maxPodsToEvictPerNode int,
 	nodes []*v1.Node,
 	evictLocalStoragePods bool,
+	ignorePvcPods bool,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
 	for _, node := range nodes {
@@ -74,6 +76,7 @@ func NewPodEvictor(
 		maxPodsToEvictPerNode: maxPodsToEvictPerNode,
 		nodepodCount:          nodePodCount,
 		evictLocalStoragePods: evictLocalStoragePods,
+		ignorePvcPods:         ignorePvcPods,
 	}
 }
 
@@ -189,6 +192,14 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 			return nil
 		})
 	}
+	if pe.ignorePvcPods {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			if IsPodWithPVC(pod) {
+				return fmt.Errorf("pod has a PVC and descheduler is configured to ignore PVC pods")
+			}
+			return nil
+		})
+	}
 	if options.priority != nil {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			if IsPodEvictableBasedOnPriority(pod, *options.priority) {
@@ -264,6 +275,15 @@ func IsPodWithLocalStorage(pod *v1.Pod) bool {
 		}
 	}
 
+	return false
+}
+
+func IsPodWithPVC(pod *v1.Pod) bool {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.PersistentVolumeClaim != nil {
+			return true
+		}
+	}
 	return false
 }
 

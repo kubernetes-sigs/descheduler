@@ -90,6 +90,11 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		evictLocalStoragePods = *deschedulerPolicy.EvictLocalStoragePods
 	}
 
+	ignorePvcPods := false
+	if deschedulerPolicy.IgnorePVCPods != nil {
+		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
+	}
+
 	maxNoOfPodsToEvictPerNode := rs.MaxNoOfPodsToEvictPerNode
 	if deschedulerPolicy.MaxNoOfPodsToEvictPerNode != nil {
 		maxNoOfPodsToEvictPerNode = *deschedulerPolicy.MaxNoOfPodsToEvictPerNode
@@ -116,6 +121,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			maxNoOfPodsToEvictPerNode,
 			nodes,
 			evictLocalStoragePods,
+			ignorePvcPods,
 		)
 
 		for name, f := range strategyFuncs {
