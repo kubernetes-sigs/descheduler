@@ -33,6 +33,10 @@ spec:
             {{- .Values.podLabels | toYaml | nindent 12 }}
             {{- end }}
         spec:
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- if .Values.priorityClassName }}
           priorityClassName: {{ .Values.priorityClassName }}
           {{- end }}
