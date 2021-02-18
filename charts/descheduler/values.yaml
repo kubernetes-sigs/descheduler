@@ -39,8 +39,8 @@ deschedulerPolicy:
     RemovePodsViolatingNodeAffinity:
       enabled: true
       params:
-         nodeAffinityType:
-         - requiredDuringSchedulingIgnoredDuringExecution
+        nodeAffinityType:
+        - requiredDuringSchedulingIgnoredDuringExecution
     RemovePodsViolatingInterPodAntiAffinity:
       enabled: true
     LowNodeUtilization:
