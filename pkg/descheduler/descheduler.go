@@ -130,6 +130,8 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			}
 		}
 
+		klog.V(1).InfoS("Number of evicted pods", "totalEvicted", podEvictor.TotalEvicted())
+
 		// If there was no interval specified, send a signal to the stopChannel to end the wait.Until loop after 1 iteration
 		if rs.DeschedulingInterval.Seconds() == 0 {
 			close(stopChannel)

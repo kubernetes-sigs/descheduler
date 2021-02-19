@@ -149,8 +149,6 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		lowNodes,
 		podEvictor,
 		evictable.IsEvictable)
-
-	klog.V(1).InfoS("Total number of pods evicted", "evictedPods", podEvictor.TotalEvicted())
 }
 
 // validateStrategyConfig checks if the strategy's config is valid
