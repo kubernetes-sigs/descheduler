@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
@@ -75,6 +75,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p7.Namespace = "kube-system"
 	priority := utils.SystemCriticalPriority
 	p7.Spec.Priority = &priority
+	p7.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
 	// A daemonset.
 	p8.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
@@ -102,6 +103,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		nodes                   []*v1.Node
 		pods                    []v1.Pod
 		evictLocalStoragePods   bool
+		evictSystemCriticalPods bool
 		maxPodsToEvictPerNode   int
 		expectedEvictedPodCount int
 	}{
@@ -111,6 +113,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p1, *p2, *p3},
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
 			maxPodsToEvictPerNode:   0,
 			expectedEvictedPodCount: 1, //p2 gets evicted
 		},
@@ -119,6 +122,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p1, *p3, *p4},
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
 			maxPodsToEvictPerNode:   0,
 			expectedEvictedPodCount: 1, //p4 gets evicted
 		},
@@ -127,6 +131,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p1, *p5, *p6},
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
 			maxPodsToEvictPerNode:   1,
 			expectedEvictedPodCount: 1, //p5 or p6 gets evicted
 		},
@@ -135,24 +140,36 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:                    []v1.Pod{*p7, *p8, *p9, *p10},
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
 			maxPodsToEvictPerNode:   0,
-			expectedEvictedPodCount: 0,
+			expectedEvictedPodCount: 0, //nothing is evicted
 		},
 		{
 			description:             "Critical pods except storage pods not tolerating node taint should not be evicted",
 			pods:                    []v1.Pod{*p7, *p8, *p9, *p10},
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   true,
+			evictSystemCriticalPods: false,
 			maxPodsToEvictPerNode:   0,
-			expectedEvictedPodCount: 1,
+			expectedEvictedPodCount: 1, //p9 gets evicted
 		},
 		{
 			description:             "Critical and non critical pods, only non critical pods not tolerating node taint should be evicted",
 			pods:                    []v1.Pod{*p7, *p8, *p10, *p11},
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
 			maxPodsToEvictPerNode:   0,
-			expectedEvictedPodCount: 1,
+			expectedEvictedPodCount: 1, //p11 gets evicted
+		},
+		{
+			description:             "Critical and non critical pods, pods not tolerating node taint should be evicted even if they are critical",
+			pods:                    []v1.Pod{*p2, *p7, *p9, *p10},
+			nodes:                   []*v1.Node{node2},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: true,
+			maxPodsToEvictPerNode:   0,
+			expectedEvictedPodCount: 2, //p2 and p7 are evicted
 		},
 	}
 
@@ -171,6 +188,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			tc.maxPodsToEvictPerNode,
 			tc.nodes,
 			tc.evictLocalStoragePods,
+			tc.evictSystemCriticalPods,
 			false,
 		)
 

@@ -187,7 +187,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	deleteRC(ctx, t, clientSet, rc)
 }
 
-func runPodLifetimeStrategy(ctx context.Context, clientset clientset.Interface, nodeInformer coreinformers.NodeInformer, namespaces *deschedulerapi.Namespaces, priorityClass string, priority *int32) {
+func runPodLifetimeStrategy(ctx context.Context, clientset clientset.Interface, nodeInformer coreinformers.NodeInformer, namespaces *deschedulerapi.Namespaces, priorityClass string, priority *int32, evictCritical bool) {
 	// Run descheduler.
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientset)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
@@ -220,6 +220,7 @@ func runPodLifetimeStrategy(ctx context.Context, clientset clientset.Interface, 
 			0,
 			nodes,
 			false,
+			evictCritical,
 			false,
 		),
 	)
@@ -288,7 +289,7 @@ func TestNamespaceConstraintsInclude(t *testing.T) {
 	t.Logf("set the strategy to delete pods from %v namespace", rc.Namespace)
 	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, &deschedulerapi.Namespaces{
 		Include: []string{rc.Namespace},
-	}, "", nil)
+	}, "", nil, false)
 
 	// All pods are supposed to be deleted, wait until all the old pods are deleted
 	if err := wait.PollImmediate(time.Second, 20*time.Second, func() (bool, error) {
@@ -359,7 +360,7 @@ func TestNamespaceConstraintsExclude(t *testing.T) {
 	t.Logf("set the strategy to delete pods from namespaces except the %v namespace", rc.Namespace)
 	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, &deschedulerapi.Namespaces{
 		Exclude: []string{rc.Namespace},
-	}, "", nil)
+	}, "", nil, false)
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
@@ -378,15 +379,82 @@ func TestNamespaceConstraintsExclude(t *testing.T) {
 	}
 }
 
+func TestEvictSystemCritical(t *testing.T) {
+	ctx := context.Background()
+
+	clientSet, nodeInformer, stopCh := initializeClient(t)
+	defer close(stopCh)
+
+	// The kube-dns pods have a system-critical priority, but are not daemonsets, static pods, have local storage, etc.
+	namespace := "kube-system"
+	podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(map[string]string{"k8s-app": "kube-dns"}).String()})
+	if err != nil {
+		t.Fatalf("Unable to list pods: %v", err)
+	}
+
+	initialPodNames := getPodNames(podList.Items)
+	sort.Strings(initialPodNames)
+	t.Logf("Existing pods: %v", initialPodNames)
+
+	t.Logf("set the strategy to delete pods of any priority from %v namespace", namespace)
+	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, &deschedulerapi.Namespaces{
+		Include: []string{namespace},
+	}, "", nil, true)
+
+	// All pods are supposed to be deleted, wait until all the old pods are deleted
+	if err := wait.PollImmediate(time.Second, 20*time.Second, func() (bool, error) {
+		podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(map[string]string{"k8s-app": "kube-dns"}).String()})
+		if err != nil {
+			return false, nil
+		}
+		includePodNames := getPodNames(podList.Items)
+		// validate all pod were deleted
+		if len(intersectStrings(initialPodNames, includePodNames)) > 0 {
+			t.Logf("Waiting until %v pods get deleted", intersectStrings(initialPodNames, includePodNames))
+			// check if there's at least one pod not in Terminating state
+			for _, pod := range podList.Items {
+				// In case podList contains newly created pods
+				if len(intersectStrings(initialPodNames, []string{pod.Name})) == 0 {
+					continue
+				}
+				if pod.DeletionTimestamp == nil {
+					t.Logf("Pod %v not in terminating state", pod.Name)
+					return false, nil
+				}
+			}
+			t.Logf("All %v pods are terminating", intersectStrings(initialPodNames, includePodNames))
+		}
+
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for pods to be deleted: %v", err)
+	}
+}
+
 func TestThresholdPriority(t *testing.T) {
-	testPriority(t, false)
+	// Without this, there's a chance the descheduler strategy will
+	// run while a few pods are in a Pending state. This causes the test case
+	// to fail because the pods will be scheduled after the descheduler has been run
+	t.Logf("Waiting 15s for terminating pods to disappear")
+	time.Sleep(15 * time.Second)
+	testPriority(t, false, false)
 }
 
 func TestThresholdPriorityClass(t *testing.T) {
-	testPriority(t, true)
+	testPriority(t, true, false)
 }
 
-func testPriority(t *testing.T, isPriorityClass bool) {
+func TestThresholdPriorityDisable(t *testing.T) {
+	t.Logf("Waiting 15s for terminating pods to disappear")
+	time.Sleep(15 * time.Second)
+	testPriority(t, false, true)
+}
+
+func TestThresholdPriorityClassDisable(t *testing.T) {
+	testPriority(t, true, true)
+}
+
+func testPriority(t *testing.T, isPriorityClass bool, evictCritical bool) {
 	var highPriority = int32(1000)
 	var lowPriority = int32(500)
 	ctx := context.Background()
@@ -420,14 +488,14 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 	defer clientSet.SchedulingV1().PriorityClasses().Delete(ctx, lowPriorityClass.Name, metav1.DeleteOptions{})
 
 	// create two RCs with different priority classes in the same namespace
-	rcHighPriority := RcByNameContainer("test-rc-podlifetime-highpriority", testNamespace.Name, 5,
+	rcHighPriority := RcByNameContainer("test-rc-podlifetime-highpriority", testNamespace.Name, 3,
 		map[string]string{"test": "podlifetime-highpriority"}, nil, highPriorityClass.Name)
 	if _, err := clientSet.CoreV1().ReplicationControllers(rcHighPriority.Namespace).Create(ctx, rcHighPriority, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Error creating rc %s: %v", rcHighPriority.Name, err)
 	}
 	defer deleteRC(ctx, t, clientSet, rcHighPriority)
 
-	rcLowPriority := RcByNameContainer("test-rc-podlifetime-lowpriority", testNamespace.Name, 5,
+	rcLowPriority := RcByNameContainer("test-rc-podlifetime-lowpriority", testNamespace.Name, 3,
 		map[string]string{"test": "podlifetime-lowpriority"}, nil, lowPriorityClass.Name)
 	if _, err := clientSet.CoreV1().ReplicationControllers(rcLowPriority.Namespace).Create(ctx, rcLowPriority, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Error creating rc %s: %v", rcLowPriority.Name, err)
@@ -449,71 +517,120 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 		t.Fatalf("Unable to list pods: %v", err)
 	}
 
-	if len(podListHighPriority.Items)+len(podListLowPriority.Items) != 10 {
-		t.Fatalf("Expected 10 replicas, got %v instead", len(podListHighPriority.Items)+len(podListLowPriority.Items))
+	var expectReservePodNames []string
+	var expectEvictPodNames []string
+	if evictCritical {
+		expectEvictPodNames = append(getPodNames(podListHighPriority.Items), getPodNames(podListLowPriority.Items)...)
+		expectReservePodNames = []string{}
+	} else {
+		expectReservePodNames = getPodNames(podListHighPriority.Items)
+		expectEvictPodNames = getPodNames(podListLowPriority.Items)
 	}
 
-	expectReservePodNames := getPodNames(podListHighPriority.Items)
-	expectEvictPodNames := getPodNames(podListLowPriority.Items)
+	if len(podListHighPriority.Items)+len(podListLowPriority.Items) != 6 {
+		t.Fatalf("Expected 6 replicas, got %v instead", len(podListHighPriority.Items)+len(podListLowPriority.Items))
+	}
+
 	sort.Strings(expectReservePodNames)
 	sort.Strings(expectEvictPodNames)
-	t.Logf("Pods not expect to be evicted: %v, pods expect to be evicted: %v", expectReservePodNames, expectEvictPodNames)
+	t.Logf("Pods not expected to be evicted: %v, pods expected to be evicted: %v", expectReservePodNames, expectEvictPodNames)
 
 	if isPriorityClass {
-		t.Logf("set the strategy to delete pods with priority lower than priority class %s", highPriorityClass.Name)
-		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, nil, highPriorityClass.Name, nil)
+		t.Logf("Set evictSystemCriticalPods to %v and set the strategy to delete pods with priority lower than priority class %s", evictCritical, highPriorityClass.Name)
+		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, evictCritical)
 	} else {
-		t.Logf("set the strategy to delete pods with priority lower than %d", highPriority)
-		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, nil, "", &highPriority)
+		t.Logf("Set evictSystemCriticalPods to %v and set the strategy to delete pods with priority lower than %d", evictCritical, highPriority)
+		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, nil, "", &highPriority, evictCritical)
 	}
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
-	// check if all pods with high priority class are not evicted
-	podListHighPriority, err = clientSet.CoreV1().Pods(rcHighPriority.Namespace).List(
-		ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcHighPriority.Spec.Template.Labels).String()})
-	if err != nil {
-		t.Fatalf("Unable to list pods after running strategy: %v", err)
-	}
 
-	excludePodNames := getPodNames(podListHighPriority.Items)
-	sort.Strings(excludePodNames)
-	t.Logf("Existing high priority pods: %v", excludePodNames)
-
-	// validate no pods were deleted
-	if len(intersectStrings(expectReservePodNames, excludePodNames)) != 5 {
-		t.Fatalf("None of %v high priority pods are expected to be deleted", expectReservePodNames)
-	}
-
-	//check if all pods with low priority class are evicted
-	if err := wait.PollImmediate(time.Second, 20*time.Second, func() (bool, error) {
-		podListLowPriority, err := clientSet.CoreV1().Pods(rcLowPriority.Namespace).List(
-			ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcLowPriority.Spec.Template.Labels).String()})
-		if err != nil {
-			return false, nil
-		}
-
-		includePodNames := getPodNames(podListLowPriority.Items)
-		// validate all pod were deleted
-		if len(intersectStrings(expectEvictPodNames, includePodNames)) > 0 {
-			t.Logf("Waiting until %v low priority pods get deleted", intersectStrings(expectEvictPodNames, includePodNames))
-			// check if there's at least one pod not in Terminating state
-			for _, pod := range podListLowPriority.Items {
-				// In case podList contains newly created pods
-				if len(intersectStrings(expectEvictPodNames, []string{pod.Name})) == 0 {
-					continue
-				}
-				if pod.DeletionTimestamp == nil {
-					t.Logf("Pod %v not in terminating state", pod.Name)
-					return false, nil
-				}
+	if evictCritical {
+		//check if all pods are evicted
+		if err := wait.PollImmediate(time.Second, 30*time.Second, func() (bool, error) {
+			podListLowPriority, err := clientSet.CoreV1().Pods(rcLowPriority.Namespace).List(
+				ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcLowPriority.Spec.Template.Labels).String()})
+			if err != nil {
+				return false, nil
 			}
-			t.Logf("All %v pods are terminating", intersectStrings(expectEvictPodNames, includePodNames))
+
+			podListHighPriority, err := clientSet.CoreV1().Pods(rcHighPriority.Namespace).List(
+				ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcHighPriority.Spec.Template.Labels).String()})
+			if err != nil {
+				return false, nil
+			}
+
+			includePodList := &v1.PodList{Items: append(podListLowPriority.Items, podListHighPriority.Items...)}
+			includePodNames := append(getPodNames(podListHighPriority.Items), getPodNames(podListLowPriority.Items)...)
+			// validate all pods were deleted
+			if len(intersectStrings(expectEvictPodNames, includePodNames)) > 0 {
+				t.Logf("Waiting until %v pods get deleted", intersectStrings(expectEvictPodNames, includePodNames))
+				// check if there's at least one pod not in Terminating state
+				for _, pod := range includePodList.Items {
+					// In case podList contains newly created pods
+					if len(intersectStrings(expectEvictPodNames, []string{pod.Name})) == 0 {
+						continue
+					}
+					if pod.DeletionTimestamp == nil {
+						t.Logf("Pod %v not in terminating state", pod.Name)
+						return false, nil
+					}
+				}
+				t.Logf("All %v pods are terminating", intersectStrings(expectEvictPodNames, includePodNames))
+			}
+
+			return true, nil
+		}); err != nil {
+			t.Fatalf("Error waiting for pods to be deleted: %v", err)
+		}
+	} else {
+		// check if pods with high priority class were evicted
+		podListHighPriority, err = clientSet.CoreV1().Pods(rcHighPriority.Namespace).List(
+			ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcHighPriority.Spec.Template.Labels).String()})
+		if err != nil {
+			t.Fatalf("Unable to list pods after running strategy: %v", err)
 		}
 
-		return true, nil
-	}); err != nil {
-		t.Fatalf("Error waiting for pods to be deleted: %v", err)
+		excludePodNames := getPodNames(podListHighPriority.Items)
+		sort.Strings(excludePodNames)
+		t.Logf("Existing high priority pods: %v", excludePodNames)
+
+		// validate no pods were deleted
+		if len(intersectStrings(expectReservePodNames, excludePodNames)) != 3 {
+			t.Fatalf("None of %v high priority pods are expected to be deleted", expectReservePodNames)
+		}
+
+		//check if all pods with low priority class are evicted
+		if err := wait.PollImmediate(time.Second, 30*time.Second, func() (bool, error) {
+			podListLowPriority, err := clientSet.CoreV1().Pods(rcLowPriority.Namespace).List(
+				ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcLowPriority.Spec.Template.Labels).String()})
+			if err != nil {
+				return false, nil
+			}
+
+			includePodNames := getPodNames(podListLowPriority.Items)
+			// validate all pod were deleted
+			if len(intersectStrings(expectEvictPodNames, includePodNames)) > 0 {
+				t.Logf("Waiting until %v low priority pods get deleted", intersectStrings(expectEvictPodNames, includePodNames))
+				// check if there's at least one pod not in Terminating state
+				for _, pod := range podListLowPriority.Items {
+					// In case podList contains newly created pods
+					if len(intersectStrings(expectEvictPodNames, []string{pod.Name})) == 0 {
+						continue
+					}
+					if pod.DeletionTimestamp == nil {
+						t.Logf("Pod %v not in terminating state", pod.Name)
+						return false, nil
+					}
+				}
+				t.Logf("All %v pods are terminating", intersectStrings(expectEvictPodNames, includePodNames))
+			}
+
+			return true, nil
+		}); err != nil {
+			t.Fatalf("Error waiting for pods to be deleted: %v", err)
+		}
 	}
 }
 
@@ -649,6 +766,7 @@ func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface,
 		0,
 		nodeList,
 		true,
+		false,
 		false,
 	)
 	for _, node := range nodeList {

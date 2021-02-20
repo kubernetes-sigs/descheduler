@@ -35,6 +35,9 @@ type DeschedulerPolicy struct {
 	// EvictLocalStoragePods allows pods using local storage to be evicted.
 	EvictLocalStoragePods *bool `json:"evictLocalStoragePods,omitempty"`
 
+	// EvictSystemCriticalPods allows kube-system pods to be evicted.
+	EvictSystemCriticalPods *bool `json:"evictSystemCriticalPods,omitempty"`
+
 	// IgnorePVCPods prevents pods with PVCs from being evicted.
 	IgnorePVCPods *bool `json:"ignorePvcPods,omitempty"`
 

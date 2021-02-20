@@ -176,7 +176,9 @@ the node is considered over utilized. Any node between the thresholds, `threshol
 considered appropriately utilized and is not considered for eviction. The threshold, `targetThresholds`,
 can be configured for cpu, memory, and number of pods too in terms of percentage.
 
-These thresholds, `thresholds` and `targetThresholds`, could be tuned as per your cluster requirements.
+These thresholds, `thresholds` and `targetThresholds`, could be tuned as per your cluster requirements. Note that this
+strategy evicts pods from `overutilized nodes` (those with usage above `targetThresholds`) to `underutilized nodes`
+(those with usage below `thresholds`), it will abort if any number of `underutilized nodes` or `overutilized nodes` is zero.
 
 **Parameters:**
 

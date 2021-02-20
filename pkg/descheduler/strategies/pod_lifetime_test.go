@@ -225,6 +225,7 @@ func TestPodLifeTime(t *testing.T) {
 			tc.maxPodsToEvictPerNode,
 			[]*v1.Node{node},
 			false,
+			false,
 			tc.ignorePvcPods,
 		)
 

@@ -45,13 +45,14 @@ const (
 type nodePodEvictedCount map[*v1.Node]int
 
 type PodEvictor struct {
-	client                clientset.Interface
-	policyGroupVersion    string
-	dryRun                bool
-	maxPodsToEvictPerNode int
-	nodepodCount          nodePodEvictedCount
-	evictLocalStoragePods bool
-	ignorePvcPods         bool
+	client                  clientset.Interface
+	policyGroupVersion      string
+	dryRun                  bool
+	maxPodsToEvictPerNode   int
+	nodepodCount            nodePodEvictedCount
+	evictLocalStoragePods   bool
+	evictSystemCriticalPods bool
+	ignorePvcPods           bool
 }
 
 func NewPodEvictor(
@@ -61,6 +62,7 @@ func NewPodEvictor(
 	maxPodsToEvictPerNode int,
 	nodes []*v1.Node,
 	evictLocalStoragePods bool,
+	evictSystemCriticalPods bool,
 	ignorePvcPods bool,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
@@ -70,13 +72,14 @@ func NewPodEvictor(
 	}
 
 	return &PodEvictor{
-		client:                client,
-		policyGroupVersion:    policyGroupVersion,
-		dryRun:                dryRun,
-		maxPodsToEvictPerNode: maxPodsToEvictPerNode,
-		nodepodCount:          nodePodCount,
-		evictLocalStoragePods: evictLocalStoragePods,
-		ignorePvcPods:         ignorePvcPods,
+		client:                  client,
+		policyGroupVersion:      policyGroupVersion,
+		dryRun:                  dryRun,
+		maxPodsToEvictPerNode:   maxPodsToEvictPerNode,
+		nodepodCount:            nodePodCount,
+		evictLocalStoragePods:   evictLocalStoragePods,
+		evictSystemCriticalPods: evictSystemCriticalPods,
+		ignorePvcPods:           ignorePvcPods,
 	}
 }
 
@@ -184,10 +187,19 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 	}
 
 	ev := &evictable{}
+	if !pe.evictSystemCriticalPods {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			// Moved from IsEvictable function to allow for disabling
+			if IsPriorityPod(pod) {
+				return fmt.Errorf("pod has system critical priority")
+			}
+			return nil
+		})
+	}
 	if !pe.evictLocalStoragePods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			if IsPodWithLocalStorage(pod) {
-				return fmt.Errorf("pod has local storage and descheduler is not configured with --evict-local-storage-pods")
+				return fmt.Errorf("pod has local storage and descheduler is not configured with evictLocalStoragePods")
 			}
 			return nil
 		})
@@ -200,7 +212,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 			return nil
 		})
 	}
-	if options.priority != nil {
+	if !pe.evictSystemCriticalPods && options.priority != nil {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			if IsPodEvictableBasedOnPriority(pod, *options.priority) {
 				return nil
@@ -208,15 +220,13 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 			return fmt.Errorf("pod has higher priority than specified priority class threshold")
 		})
 	}
+
 	return ev
 }
 
 // IsEvictable decides when a pod is evictable
 func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 	checkErrs := []error{}
-	if IsCriticalPod(pod) {
-		checkErrs = append(checkErrs, fmt.Errorf("pod is critical"))
-	}
 
 	ownerRefList := podutil.OwnerRef(pod)
 	if IsDaemonsetPod(ownerRefList) {
@@ -231,6 +241,10 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 		checkErrs = append(checkErrs, fmt.Errorf("pod is a mirror pod"))
 	}
 
+	if IsStaticPod(pod) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is a static pod"))
+	}
+
 	for _, c := range ev.constraints {
 		if err := c(pod); err != nil {
 			checkErrs = append(checkErrs, err)
@@ -241,11 +255,12 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 		klog.V(4).InfoS("Pod lacks an eviction annotation and fails the following checks", "pod", klog.KObj(pod), "checks", errors.NewAggregate(checkErrs).Error())
 		return false
 	}
+
 	return true
 }
 
-func IsCriticalPod(pod *v1.Pod) bool {
-	return utils.IsCriticalPod(pod)
+func IsPriorityPod(pod *v1.Pod) bool {
+	return utils.IsPriorityPod(pod)
 }
 
 func IsDaemonsetPod(ownerRefList []metav1.OwnerReference) bool {
@@ -260,6 +275,11 @@ func IsDaemonsetPod(ownerRefList []metav1.OwnerReference) bool {
 // IsMirrorPod checks whether the pod is a mirror pod.
 func IsMirrorPod(pod *v1.Pod) bool {
 	return utils.IsMirrorPod(pod)
+}
+
+// IsStaticPod checks whether the pod is a static pod.
+func IsStaticPod(pod *v1.Pod) bool {
+	return utils.IsStaticPod(pod)
 }
 
 // HaveEvictAnnotation checks if the pod have evict annotation
