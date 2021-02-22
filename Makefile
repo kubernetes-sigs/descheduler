@@ -17,7 +17,7 @@
 # VERSION is based on a date stamp plus the last commit
 VERSION?=v$(shell date +%Y%m%d)-$(shell git describe --tags --match "v*")
 BUILD=$(shell date +%FT%T%z)
-LDFLAG_LOCATION=sigs.k8s.io/descheduler/cmd/descheduler/app
+LDFLAG_LOCATION=sigs.k8s.io/descheduler/pkg/version
 ARCHS = amd64 arm64
 
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD}"
