@@ -94,7 +94,7 @@ push-all: image.amd64 image.arm image.arm64
 clean:
 	rm -rf _output
 
-verify: verify-gofmt verify-vendor lint lint-chart verify-spelling verify-toc
+verify: verify-gofmt verify-vendor lint lint-chart verify-spelling verify-toc verify-gen
 
 verify-spelling:
 	./hack/verify-spelling.sh
@@ -119,6 +119,9 @@ gen:
 	./hack/update-generated-deep-copies.sh
 	./hack/update-generated-defaulters.sh
 	./hack/update-toc.sh
+
+verify-gen:
+	./hack/verify-conversions.sh
 
 lint:
 ifndef HAS_GOLANGCI
