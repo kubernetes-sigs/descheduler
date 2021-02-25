@@ -104,7 +104,7 @@ func GetPodSource(pod *v1.Pod) (string, error) {
 	return "", fmt.Errorf("cannot get source of pod %q", pod.UID)
 }
 
-// IsCriticalPod returns true if the pod is a static or mirror pod.
+// IsCriticalPod returns true if the pod is a static or mirror pod or if the pod priority is >= SystemCriticalPriority.
 func IsCriticalPod(pod *v1.Pod) bool {
 	if IsStaticPod(pod) {
 		return true

@@ -45,13 +45,14 @@ const (
 type nodePodEvictedCount map[*v1.Node]int
 
 type PodEvictor struct {
-	client                clientset.Interface
-	policyGroupVersion    string
-	dryRun                bool
-	maxPodsToEvictPerNode int
-	nodepodCount          nodePodEvictedCount
-	evictLocalStoragePods bool
-	ignorePvcPods         bool
+	client                  clientset.Interface
+	policyGroupVersion      string
+	dryRun                  bool
+	maxPodsToEvictPerNode   int
+	nodepodCount            nodePodEvictedCount
+	evictLocalStoragePods   bool
+	evictSystemCriticalPods bool
+	ignorePvcPods           bool
 }
 
 func NewPodEvictor(
@@ -61,6 +62,7 @@ func NewPodEvictor(
 	maxPodsToEvictPerNode int,
 	nodes []*v1.Node,
 	evictLocalStoragePods bool,
+	evictSystemCriticalPods bool,
 	ignorePvcPods bool,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
@@ -70,13 +72,14 @@ func NewPodEvictor(
 	}
 
 	return &PodEvictor{
-		client:                client,
-		policyGroupVersion:    policyGroupVersion,
-		dryRun:                dryRun,
-		maxPodsToEvictPerNode: maxPodsToEvictPerNode,
-		nodepodCount:          nodePodCount,
-		evictLocalStoragePods: evictLocalStoragePods,
-		ignorePvcPods:         ignorePvcPods,
+		client:                  client,
+		policyGroupVersion:      policyGroupVersion,
+		dryRun:                  dryRun,
+		maxPodsToEvictPerNode:   maxPodsToEvictPerNode,
+		nodepodCount:            nodePodCount,
+		evictLocalStoragePods:   evictLocalStoragePods,
+		evictSystemCriticalPods: evictSystemCriticalPods,
+		ignorePvcPods:           ignorePvcPods,
 	}
 }
 
@@ -200,7 +203,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 			return nil
 		})
 	}
-	if options.priority != nil {
+	if !pe.evictSystemCriticalPods && options.priority != nil {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			if IsPodEvictableBasedOnPriority(pod, *options.priority) {
 				return nil
@@ -208,6 +211,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 			return fmt.Errorf("pod has higher priority than specified priority class threshold")
 		})
 	}
+
 	return ev
 }
 
@@ -215,7 +219,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 	checkErrs := []error{}
 	if IsCriticalPod(pod) {
-		checkErrs = append(checkErrs, fmt.Errorf("pod is critical"))
+		checkErrs = append(checkErrs, fmt.Errorf("pod is critical and EvictSystemCriticalPods set to false"))
 	}
 
 	ownerRefList := podutil.OwnerRef(pod)
