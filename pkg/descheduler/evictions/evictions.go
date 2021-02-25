@@ -187,6 +187,15 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 	}
 
 	ev := &evictable{}
+	if !pe.evictSystemCriticalPods != nil {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			// Moved from IsEvictable function to allow for disabling priority checks
+			if IsCriticalPod(pod) {
+				return fmt.Errorf("pod is critical and EvictSystemCriticalPods set to false")
+			}
+			return nil
+		})
+	}
 	if !pe.evictLocalStoragePods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			if IsPodWithLocalStorage(pod) {
@@ -218,9 +227,6 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 // IsEvictable decides when a pod is evictable
 func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 	checkErrs := []error{}
-	if IsCriticalPod(pod) {
-		checkErrs = append(checkErrs, fmt.Errorf("pod is critical and EvictSystemCriticalPods set to false"))
-	}
 
 	ownerRefList := podutil.OwnerRef(pod)
 	if IsDaemonsetPod(ownerRefList) {
