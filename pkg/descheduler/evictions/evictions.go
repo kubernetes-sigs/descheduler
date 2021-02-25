@@ -187,7 +187,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 	}
 
 	ev := &evictable{}
-	if !pe.evictSystemCriticalPods != nil {
+	if !pe.evictSystemCriticalPods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			// Moved from IsEvictable function to allow for disabling priority checks
 			if IsCriticalPod(pod) {
