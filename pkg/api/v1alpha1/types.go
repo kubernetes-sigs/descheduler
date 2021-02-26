@@ -77,6 +77,7 @@ type StrategyParameters struct {
 	Namespaces                        *Namespaces                        `json:"namespaces"`
 	ThresholdPriority                 *int32                             `json:"thresholdPriority"`
 	ThresholdPriorityClassName        string                             `json:"thresholdPriorityClassName"`
+	LabelSelector                     *metav1.LabelSelector              `json:"labelSelector"`
 }
 
 type Percentage float64

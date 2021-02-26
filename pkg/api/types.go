@@ -79,6 +79,7 @@ type StrategyParameters struct {
 	Namespaces                        *Namespaces
 	ThresholdPriority                 *int32
 	ThresholdPriorityClassName        string
+	LabelSelector                     *metav1.LabelSelector
 }
 
 type Percentage float64
