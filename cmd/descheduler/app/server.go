@@ -18,6 +18,7 @@ limitations under the License.
 package app
 
 import (
+	"context"
 	"flag"
 	"io"
 
@@ -26,7 +27,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	apiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/pkg/server/mux"
+	restclient "k8s.io/client-go/rest"
 	aflag "k8s.io/component-base/cli/flag"
+	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/klog/v2"
 )
 
@@ -46,9 +51,30 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 			s.Logs.LogFormat = s.Logging.Format
 			s.Logs.Apply()
 
+			// LoopbackClientConfig is a config for a privileged loopback connection
+			var LoopbackClientConfig *restclient.Config
+			var SecureServing *apiserver.SecureServingInfo
+			if err := s.SecureServing.ApplyTo(&SecureServing, &LoopbackClientConfig); err != nil {
+				klog.ErrorS(err, "failed to apply secure server configuration")
+				return
+			}
+
 			if err := s.Validate(); err != nil {
 				klog.ErrorS(err, "failed to validate server configuration")
+				return
 			}
+
+			if !s.DisableMetrics {
+				ctx := context.TODO()
+				pathRecorderMux := mux.NewPathRecorderMux("descheduler")
+				pathRecorderMux.Handle("/metrics", legacyregistry.HandlerWithReset())
+
+				if _, err := SecureServing.Serve(pathRecorderMux, 0, ctx.Done()); err != nil {
+					klog.Fatalf("failed to start secure server: %v", err)
+					return
+				}
+			}
+
 			err := Run(s)
 			if err != nil {
 				klog.ErrorS(err, "descheduler server")
