@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
@@ -40,6 +41,7 @@ func TestListPodsOnANode(t *testing.T) {
 		name             string
 		pods             map[string][]v1.Pod
 		node             *v1.Node
+		labelSelector    *metav1.LabelSelector
 		expectedPodCount int
 	}{
 		{
@@ -52,6 +54,33 @@ func TestListPodsOnANode(t *testing.T) {
 				"n2": {*test.BuildTestPod("pod3", 100, 0, "n2", nil)},
 			},
 			node:             test.BuildTestNode("n1", 2000, 3000, 10, nil),
+			labelSelector:    nil,
+			expectedPodCount: 2,
+		},
+		{
+			name: "test listing pods with label selector",
+			pods: map[string][]v1.Pod{
+				"n1": {
+					*test.BuildTestPod("pod1", 100, 0, "n1", nil),
+					*test.BuildTestPod("pod2", 100, 0, "n1", func(pod *v1.Pod) {
+						pod.Labels = map[string]string{"foo": "bar"}
+					}),
+					*test.BuildTestPod("pod3", 100, 0, "n1", func(pod *v1.Pod) {
+						pod.Labels = map[string]string{"foo": "bar1"}
+					}),
+				},
+				"n2": {*test.BuildTestPod("pod4", 100, 0, "n2", nil)},
+			},
+			node: test.BuildTestNode("n1", 2000, 3000, 10, nil),
+			labelSelector: &metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      "foo",
+						Operator: metav1.LabelSelectorOpIn,
+						Values:   []string{"bar", "bar1"},
+					},
+				},
+			},
 			expectedPodCount: 2,
 		},
 	}
@@ -67,7 +96,7 @@ func TestListPodsOnANode(t *testing.T) {
 			}
 			return true, nil, fmt.Errorf("Failed to list: %v", list)
 		})
-		pods, _ := ListPodsOnANode(context.TODO(), fakeClient, testCase.node)
+		pods, _ := ListPodsOnANode(context.TODO(), fakeClient, testCase.node, WithLabelSelector(testCase.labelSelector))
 		if len(pods) != testCase.expectedPodCount {
 			t.Errorf("expected %v pods on node %v, got %+v", testCase.expectedPodCount, testCase.node.Name, len(pods))
 		}
