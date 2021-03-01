@@ -48,6 +48,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 
 			if err := s.Validate(); err != nil {
 				klog.ErrorS(err, "failed to validate server configuration")
+				return
 			}
 			err := Run(s)
 			if err != nil {

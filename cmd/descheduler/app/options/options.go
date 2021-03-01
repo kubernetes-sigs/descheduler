@@ -41,10 +41,15 @@ func NewDeschedulerServer() (*DeschedulerServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DeschedulerServer{
+
+	ds := &DeschedulerServer{
 		DeschedulerConfiguration: *cfg,
 		Logs:                     logs.NewOptions(),
-	}, nil
+	}
+	// Default to text format logging
+	ds.Logging.Format = "text"
+
+	return ds, nil
 }
 
 // Validation checks for DeschedulerServer.
