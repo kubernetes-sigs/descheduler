@@ -46,6 +46,7 @@ Table of Contents
      * [Label filtering](#label-filtering)
   * [Pod Evictions](#pod-evictions)
      * [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
+  * [Metrics](#metrics)
   * [Compatibility Matrix](#compatibility-matrix)
   * [Getting Involved and Contributing](#getting-involved-and-contributing)
      * [Communicating With Contributors](#communicating-with-contributors)
@@ -355,9 +356,9 @@ strategies:
 
 ### RemovePodsHavingTooManyRestarts
 
-This strategy makes sure that pods having too many restarts are removed from nodes. For example a pod with EBS/PD that 
-can't get the volume/disk attached to the instance, then the pod should be re-scheduled to other nodes. Its parameters 
-include `podRestartThreshold`, which is the number of restarts at which a pod should be evicted, and `includingInitContainers`, 
+This strategy makes sure that pods having too many restarts are removed from nodes. For example a pod with EBS/PD that
+can't get the volume/disk attached to the instance, then the pod should be re-scheduled to other nodes. Its parameters
+include `podRestartThreshold`, which is the number of restarts at which a pod should be evicted, and `includingInitContainers`,
 which determines whether init container restarts should be factored into that calculation.
 |`labelSelector`|(see [label filtering](#label-filtering))|
 
@@ -561,6 +562,16 @@ Setting `--v=4` or greater on the Descheduler will log all reasons why any pod i
 
 Pods subject to a Pod Disruption Budget(PDB) are not evicted if descheduling violates its PDB. The pods
 are evicted by using the eviction subresource to handle PDB.
+
+## Metrics
+
+| name	| type	| description |
+|-------|-------|----------------|
+| build_info |	gauge |	constant 1 |
+| pods_evicted | CounterVec | total number of pods evicted |
+
+The metrics are served through https://localhost:10258/metrics by default.
+The address and port can be changed by setting `--binding-address` and `--secure-port` flags.
 
 ## Compatibility Matrix
 The below compatibility matrix shows the k8s client package(client-go, apimachinery, etc) versions that descheduler
