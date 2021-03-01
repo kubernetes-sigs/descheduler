@@ -55,9 +55,13 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 	}
 
 	var includedNamespaces, excludedNamespaces []string
-	if strategy.Params != nil && strategy.Params.Namespaces != nil {
-		includedNamespaces = strategy.Params.Namespaces.Include
-		excludedNamespaces = strategy.Params.Namespaces.Exclude
+	var labelSelector *metav1.LabelSelector
+	if strategy.Params != nil {
+		if strategy.Params.Namespaces != nil {
+			includedNamespaces = strategy.Params.Namespaces.Include
+			excludedNamespaces = strategy.Params.Namespaces.Exclude
+		}
+		labelSelector = strategy.Params.LabelSelector
 	}
 
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
@@ -76,6 +80,7 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 			node,
 			podutil.WithNamespaces(includedNamespaces),
 			podutil.WithoutNamespaces(excludedNamespaces),
+			podutil.WithLabelSelector(labelSelector),
 		)
 		if err != nil {
 			return
