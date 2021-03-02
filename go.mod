@@ -4,6 +4,7 @@ go 1.15
 
 require (
 	github.com/client9/misspell v0.3.4
+	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.20.0
