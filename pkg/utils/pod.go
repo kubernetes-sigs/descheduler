@@ -94,6 +94,11 @@ func IsStaticPod(pod *v1.Pod) bool {
 	return err == nil && source != "api"
 }
 
+// IsPriorityPod returns true if the pod is a priority pod.
+func IsPriorityPod(pod *v1.Pod) bool {
+	return pod.Spec.Priority != nil && *pod.Spec.Priority >= SystemCriticalPriority
+}
+
 // GetPodSource returns the source of the pod based on the annotation.
 func GetPodSource(pod *v1.Pod) (string, error) {
 	if pod.Annotations != nil {
@@ -102,23 +107,6 @@ func GetPodSource(pod *v1.Pod) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("cannot get source of pod %q", pod.UID)
-}
-
-// IsCriticalPod returns true if the pod is a static or mirror pod or if the pod priority is >= SystemCriticalPriority.
-func IsCriticalPod(pod *v1.Pod) bool {
-	if IsStaticPod(pod) {
-		return true
-	}
-
-	if IsMirrorPod(pod) {
-		return true
-	}
-
-	if pod.Spec.Priority != nil && *pod.Spec.Priority >= SystemCriticalPriority {
-		return true
-	}
-
-	return false
 }
 
 // PodRequestsAndLimits returns a dictionary of all defined resources summed up for all
