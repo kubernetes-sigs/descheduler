@@ -28,8 +28,14 @@ var (
 	// generated this build. It should be set during build via -ldflags.
 	version string
 	// buildDate in ISO8601 format, output of $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-	//It should be set during build via -ldflags.
+	// It should be set during build via -ldflags.
 	buildDate string
+	// gitbranch is a constant representing git branch for this build.
+	// It should be set during build via -ldflags.
+	gitbranch string
+	// gitbranch is a constant representing git sha1 for this build.
+	// It should be set during build via -ldflags.
+	gitsha1 string
 )
 
 // Info holds the information related to descheduler app version.
@@ -37,6 +43,8 @@ type Info struct {
 	Major      string `json:"major"`
 	Minor      string `json:"minor"`
 	GitVersion string `json:"gitVersion"`
+	GitBranch  string `json:"gitBranch"`
+	GitSha1    string `json:"gitSha1"`
 	BuildDate  string `json:"buildDate"`
 	GoVersion  string `json:"goVersion"`
 	Compiler   string `json:"compiler"`
@@ -51,6 +59,8 @@ func Get() Info {
 		Major:      majorVersion,
 		Minor:      minorVersion,
 		GitVersion: version,
+		GitBranch:  gitbranch,
+		GitSha1:    gitsha1,
 		BuildDate:  buildDate,
 		GoVersion:  runtime.Version(),
 		Compiler:   runtime.Compiler,
