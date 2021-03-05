@@ -39,8 +39,8 @@ deschedulerPolicy:
     RemovePodsViolatingNodeAffinity:
       enabled: true
       params:
-         nodeAffinityType:
-         - requiredDuringSchedulingIgnoredDuringExecution
+        nodeAffinityType:
+        - requiredDuringSchedulingIgnoredDuringExecution
     RemovePodsViolatingInterPodAntiAffinity:
       enabled: true
     LowNodeUtilization:
@@ -57,6 +57,9 @@ deschedulerPolicy:
             pods: 50
 
 priorityClassName: system-cluster-critical
+
+nodeSelector: {}
+#  foo: bar
 
 rbac:
   # Specifies whether RBAC resources should be created

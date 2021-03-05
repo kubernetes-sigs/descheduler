@@ -115,32 +115,24 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 
 	klog.V(1).InfoS("Criteria for a node under utilization",
 		"CPU", thresholds[v1.ResourceCPU], "Mem", thresholds[v1.ResourceMemory], "Pods", thresholds[v1.ResourcePods])
+	klog.V(1).InfoS("Number of underutilized nodes", "totalNumber", len(lowNodes))
+	klog.V(1).InfoS("Criteria for a node above target utilization",
+		"CPU", targetThresholds[v1.ResourceCPU], "Mem", targetThresholds[v1.ResourceMemory], "Pods", targetThresholds[v1.ResourcePods])
+	klog.V(1).InfoS("Number of overutilized nodes", "totalNumber", len(targetNodes))
 
 	if len(lowNodes) == 0 {
 		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
 		return
 	}
-	klog.V(1).InfoS("Total number of underutilized nodes", "totalNumber", len(lowNodes))
-
 	if len(lowNodes) < strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
 		klog.V(1).InfoS("Number of nodes underutilized is less than NumberOfNodes, nothing to do here", "underutilizedNodes", len(lowNodes), "numberOfNodes", strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
 		return
 	}
-
-	if len(lowNodes) == len(nodes) {
-		klog.V(1).InfoS("All nodes are underutilized, nothing to do here")
-		return
-	}
-
 	if len(targetNodes) == 0 {
-		klog.V(1).InfoS("All nodes are under target utilization, nothing to do here")
+		klog.V(1).InfoS("No node is overutilized, nothing to do here, you might tune your thresholds further")
 		return
 	}
 
-	klog.V(1).InfoS("Criteria for a node above target utilization",
-		"CPU", targetThresholds[v1.ResourceCPU], "Mem", targetThresholds[v1.ResourceMemory], "Pods", targetThresholds[v1.ResourcePods])
-
-	klog.V(1).InfoS("Number of nodes above target utilization", "totalNumber", len(targetNodes))
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	evictPodsFromTargetNodes(
@@ -149,8 +141,6 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		lowNodes,
 		podEvictor,
 		evictable.IsEvictable)
-
-	klog.V(1).InfoS("Total number of pods evicted", "evictedPods", podEvictor.TotalEvicted())
 }
 
 // validateStrategyConfig checks if the strategy's config is valid
@@ -248,7 +238,7 @@ func resourceUsagePercentages(nodeUsage NodeUsage) map[v1.ResourceName]float64 {
 	for resourceName, resourceUsage := range nodeUsage.usage {
 		cap := nodeCapacity[resourceName]
 		if !cap.IsZero() {
-			resourceUsagePercentage[resourceName] = 100 * float64(resourceUsage.Value()) / float64(cap.Value())
+			resourceUsagePercentage[resourceName] = 100 * float64(resourceUsage.MilliValue()) / float64(cap.MilliValue())
 		}
 	}
 
