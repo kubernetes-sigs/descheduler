@@ -22,6 +22,7 @@ Descheduler, based on its policy, finds pods that can be moved and evicts them. 
 note, in current implementation, descheduler does not schedule replacement of evicted pods
 but relies on the default scheduler for that.
 
+<!--ts-->
 Table of Contents
 =================
 
@@ -51,6 +52,7 @@ Table of Contents
      * [Communicating With Contributors](#communicating-with-contributors)
   * [Roadmap](#roadmap)
      * [Code of conduct](#code-of-conduct)
+<!--te-->
 
 ## Quick Start
 
