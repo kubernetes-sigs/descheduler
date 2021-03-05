@@ -31,6 +31,7 @@ type Options struct {
 	filter             func(pod *v1.Pod) bool
 	includedNamespaces []string
 	excludedNamespaces []string
+	labelSelector      *metav1.LabelSelector
 }
 
 // WithFilter sets a pod filter.
@@ -55,6 +56,13 @@ func WithoutNamespaces(namespaces []string) func(opts *Options) {
 	}
 }
 
+// WithLabelSelector sets a pod label selector
+func WithLabelSelector(labelSelector *metav1.LabelSelector) func(opts *Options) {
+	return func(opts *Options) {
+		opts.labelSelector = labelSelector
+	}
+}
+
 // ListPodsOnANode lists all of the pods on a node
 // It also accepts an optional "filter" function which can be used to further limit the pods that are returned.
 // (Usually this is podEvictor.Evictable().IsEvictable, in order to only list the evictable pods on a node, but can
@@ -74,6 +82,15 @@ func ListPodsOnANode(
 
 	fieldSelectorString := "spec.nodeName=" + node.Name + ",status.phase!=" + string(v1.PodSucceeded) + ",status.phase!=" + string(v1.PodFailed)
 
+	labelSelectorString := ""
+	if options.labelSelector != nil {
+		selector, err := metav1.LabelSelectorAsSelector(options.labelSelector)
+		if err != nil {
+			return []*v1.Pod{}, err
+		}
+		labelSelectorString = selector.String()
+	}
+
 	if len(options.includedNamespaces) > 0 {
 		fieldSelector, err := fields.ParseSelector(fieldSelectorString)
 		if err != nil {
@@ -82,7 +99,10 @@ func ListPodsOnANode(
 
 		for _, namespace := range options.includedNamespaces {
 			podList, err := client.CoreV1().Pods(namespace).List(ctx,
-				metav1.ListOptions{FieldSelector: fieldSelector.String()})
+				metav1.ListOptions{
+					FieldSelector: fieldSelector.String(),
+					LabelSelector: labelSelectorString,
+				})
 			if err != nil {
 				return []*v1.Pod{}, err
 			}
@@ -111,7 +131,10 @@ func ListPodsOnANode(
 	// Once the descheduler switches to pod listers (through informers),
 	// We need to flip to client-side filtering.
 	podList, err := client.CoreV1().Pods(v1.NamespaceAll).List(ctx,
-		metav1.ListOptions{FieldSelector: fieldSelector.String()})
+		metav1.ListOptions{
+			FieldSelector: fieldSelector.String(),
+			LabelSelector: labelSelectorString,
+		})
 	if err != nil {
 		return []*v1.Pod{}, err
 	}

@@ -111,6 +111,19 @@ func TestPodLifeTime(t *testing.T) {
 		pod.ObjectMeta.OwnerReferences = ownerRef1
 	})
 
+	// Setup two old pods with different labels
+	p12 := test.BuildTestPod("p12", 100, 0, node.Name, nil)
+	p12.Namespace = "dev"
+	p12.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p13 := test.BuildTestPod("p13", 100, 0, node.Name, nil)
+	p13.Namespace = "dev"
+	p13.ObjectMeta.CreationTimestamp = olderPodCreationTime
+
+	p12.ObjectMeta.Labels = map[string]string{"foo": "bar"}
+	p13.ObjectMeta.Labels = map[string]string{"foo": "bar1"}
+	p12.ObjectMeta.OwnerReferences = ownerRef1
+	p13.ObjectMeta.OwnerReferences = ownerRef1
+
 	var maxLifeTime uint = 600
 	testCases := []struct {
 		description             string
@@ -206,6 +219,21 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p11},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "Two old pods with different labels, 1 selected by labelSelector",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"foo": "bar"},
+					},
+				},
+			},
+			maxPodsToEvictPerNode:   5,
+			pods:                    []v1.Pod{*p12, *p13},
 			expectedEvictedPodCount: 1,
 		},
 	}

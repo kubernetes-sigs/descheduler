@@ -85,6 +85,7 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 					}),
 					podutil.WithNamespaces(includedNamespaces),
 					podutil.WithoutNamespaces(excludedNamespaces),
+					podutil.WithLabelSelector(strategy.Params.LabelSelector),
 				)
 				if err != nil {
 					klog.ErrorS(err, "Failed to get pods", "node", klog.KObj(node))
