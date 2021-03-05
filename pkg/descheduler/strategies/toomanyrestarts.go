@@ -78,6 +78,7 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 			podutil.WithFilter(evictable.IsEvictable),
 			podutil.WithNamespaces(includedNamespaces),
 			podutil.WithoutNamespaces(excludedNamespaces),
+			podutil.WithLabelSelector(strategy.Params.LabelSelector),
 		)
 		if err != nil {
 			klog.ErrorS(err, "Error listing a nodes pods", "node", klog.KObj(node))

@@ -21,7 +21,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
-	v1meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
@@ -91,7 +91,7 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 
-		pods := listOldPodsOnNode(ctx, client, node, includedNamespaces, excludedNamespaces, *strategy.Params.PodLifeTime.MaxPodLifeTimeSeconds, filter)
+		pods := listOldPodsOnNode(ctx, client, node, includedNamespaces, excludedNamespaces, strategy.Params.LabelSelector, *strategy.Params.PodLifeTime.MaxPodLifeTimeSeconds, filter)
 		for _, pod := range pods {
 			success, err := podEvictor.EvictPod(ctx, pod, node, "PodLifeTime")
 			if success {
@@ -107,7 +107,15 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 	}
 }
 
-func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1.Node, includedNamespaces, excludedNamespaces []string, maxPodLifeTimeSeconds uint, filter func(pod *v1.Pod) bool) []*v1.Pod {
+func listOldPodsOnNode(
+	ctx context.Context,
+	client clientset.Interface,
+	node *v1.Node,
+	includedNamespaces, excludedNamespaces []string,
+	labelSelector *metav1.LabelSelector,
+	maxPodLifeTimeSeconds uint,
+	filter func(pod *v1.Pod) bool,
+) []*v1.Pod {
 	pods, err := podutil.ListPodsOnANode(
 		ctx,
 		client,
@@ -115,6 +123,7 @@ func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1
 		podutil.WithFilter(filter),
 		podutil.WithNamespaces(includedNamespaces),
 		podutil.WithoutNamespaces(excludedNamespaces),
+		podutil.WithLabelSelector(labelSelector),
 	)
 	if err != nil {
 		return nil
@@ -122,7 +131,7 @@ func listOldPodsOnNode(ctx context.Context, client clientset.Interface, node *v1
 
 	var oldPods []*v1.Pod
 	for _, pod := range pods {
-		podAgeSeconds := uint(v1meta.Now().Sub(pod.GetCreationTimestamp().Local()).Seconds())
+		podAgeSeconds := uint(metav1.Now().Sub(pod.GetCreationTimestamp().Local()).Seconds())
 		if podAgeSeconds > maxPodLifeTimeSeconds {
 			oldPods = append(oldPods, pod)
 		}

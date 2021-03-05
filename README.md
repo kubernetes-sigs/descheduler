@@ -43,6 +43,7 @@ Table of Contents
   * [Filter Pods](#filter-pods)
      * [Namespace filtering](#namespace-filtering)
      * [Priority filtering](#priority-filtering)
+     * [Label filtering](#label-filtering)
   * [Pod Evictions](#pod-evictions)
      * [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
   * [Compatibility Matrix](#compatibility-matrix)
@@ -239,6 +240,7 @@ node.
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
 
 **Example:**
 
@@ -276,6 +278,7 @@ podA gets evicted from nodeA.
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
 
 **Example:**
 
@@ -304,6 +307,7 @@ and will be evicted.
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
 
 **Example:**
 
@@ -352,6 +356,7 @@ This strategy makes sure that pods having too many restarts are removed from nod
 can't get the volume/disk attached to the instance, then the pod should be re-scheduled to other nodes. Its parameters 
 include `podRestartThreshold`, which is the number of restarts at which a pod should be evicted, and `includingInitContainers`, 
 which determines whether init container restarts should be factored into that calculation.
+|`labelSelector`|(see [label filtering](#label-filtering))|
 
 **Parameters:**
 
@@ -393,6 +398,7 @@ to `Running` and `Pending`.
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
 
 **Example:**
 
@@ -497,6 +503,38 @@ strategies:
 
 Note that you can't configure both `thresholdPriority` and `thresholdPriorityClassName`, if the given priority class
 does not exist, descheduler won't create it and will throw an error.
+
+### Label filtering
+
+The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.20/#labelselector-v1-meta)
+to filter pods by their labels:
+
+* `PodLifeTime`
+* `RemovePodsHavingTooManyRestarts`
+* `RemovePodsViolatingNodeTaints`
+* `RemovePodsViolatingNodeAffinity`
+* `RemovePodsViolatingInterPodAntiAffinity`
+
+This allows running strategies among pods the descheduler is interested in.
+
+For example:
+
+```yaml
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+    enabled: true
+    params:
+      podLifeTime:
+        maxPodLifeTimeSeconds: 86400
+      labelSelector:
+        matchLabels:
+          component: redis
+        matchExpressions:
+          - {key: tier, operator: In, values: [cache]}
+          - {key: environment, operator: NotIn, values: [dev]}
+```
 
 ## Pod Evictions
 

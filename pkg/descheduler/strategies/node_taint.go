@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 )
@@ -54,9 +55,13 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 	}
 
 	var includedNamespaces, excludedNamespaces []string
-	if strategy.Params != nil && strategy.Params.Namespaces != nil {
-		includedNamespaces = strategy.Params.Namespaces.Include
-		excludedNamespaces = strategy.Params.Namespaces.Exclude
+	var labelSelector *metav1.LabelSelector
+	if strategy.Params != nil {
+		if strategy.Params.Namespaces != nil {
+			includedNamespaces = strategy.Params.Namespaces.Include
+			excludedNamespaces = strategy.Params.Namespaces.Exclude
+		}
+		labelSelector = strategy.Params.LabelSelector
 	}
 
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
@@ -76,6 +81,7 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 			podutil.WithFilter(evictable.IsEvictable),
 			podutil.WithNamespaces(includedNamespaces),
 			podutil.WithoutNamespaces(excludedNamespaces),
+			podutil.WithLabelSelector(labelSelector),
 		)
 		if err != nil {
 			//no pods evicted as error encountered retrieving evictable Pods
