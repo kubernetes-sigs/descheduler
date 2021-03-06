@@ -78,7 +78,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 ) {
 	thresholdPriority, includedNamespaces, excludedNamespaces, err := validateAndParseTopologySpreadParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.ErrorS(err, "Invalid PodLifeTime parameters")
+		klog.ErrorS(err, "Invalid RemovePodsViolatingTopologySpreadConstraint parameters")
 		return
 	}
 
