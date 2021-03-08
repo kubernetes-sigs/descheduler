@@ -21,6 +21,7 @@ limitations under the License.
 package api
 
 import (
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -297,6 +298,11 @@ func (in *StrategyParameters) DeepCopyInto(out *StrategyParameters) {
 		in, out := &in.ThresholdPriority, &out.ThresholdPriority
 		*out = new(int32)
 		**out = **in
+	}
+	if in.LabelSelector != nil {
+		in, out := &in.LabelSelector, &out.LabelSelector
+		*out = new(v1.LabelSelector)
+		(*in).DeepCopyInto(*out)
 	}
 	return
 }

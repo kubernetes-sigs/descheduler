@@ -23,6 +23,7 @@ package v1alpha1
 import (
 	unsafe "unsafe"
 
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	api "sigs.k8s.io/descheduler/pkg/api"
@@ -290,6 +291,7 @@ func autoConvert_v1alpha1_StrategyParameters_To_api_StrategyParameters(in *Strat
 	out.Namespaces = (*api.Namespaces)(unsafe.Pointer(in.Namespaces))
 	out.ThresholdPriority = (*int32)(unsafe.Pointer(in.ThresholdPriority))
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
+	out.LabelSelector = (*v1.LabelSelector)(unsafe.Pointer(in.LabelSelector))
 	return nil
 }
 
@@ -308,6 +310,7 @@ func autoConvert_api_StrategyParameters_To_v1alpha1_StrategyParameters(in *api.S
 	out.Namespaces = (*Namespaces)(unsafe.Pointer(in.Namespaces))
 	out.ThresholdPriority = (*int32)(unsafe.Pointer(in.ThresholdPriority))
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
+	out.LabelSelector = (*v1.LabelSelector)(unsafe.Pointer(in.LabelSelector))
 	return nil
 }
 
