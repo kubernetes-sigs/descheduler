@@ -24,7 +24,7 @@ but relies on the default scheduler for that.
 
 Table of Contents
 =================
-
+<!-- toc -->
   * [Quick Start](#quick-start)
      * [Run As A Job](#run-as-a-job)
      * [Run As A CronJob](#run-as-a-cronjob)
@@ -52,6 +52,7 @@ Table of Contents
      * [Communicating With Contributors](#communicating-with-contributors)
   * [Roadmap](#roadmap)
      * [Code of conduct](#code-of-conduct)
+<!-- /toc -->
 
 ## Quick Start
 
