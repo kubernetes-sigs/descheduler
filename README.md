@@ -130,15 +130,17 @@ strategies:
 
 ### RemoveDuplicates
 
-This strategy makes sure that there is only one pod associated with a Replica Set (RS),
-Replication Controller (RC), Deployment, or Job running on the same node. If there are more,
+This strategy makes sure that there is only one pod associated with a ReplicaSet (RS),
+ReplicationController (RC), StatefulSet, or Job running on the same node. If there are more,
 those duplicate pods are evicted for better spreading of pods in a cluster. This issue could happen
 if some nodes went down due to whatever reasons, and pods on them were moved to other nodes leading to
 more than one pod associated with a RS or RC, for example, running on the same node. Once the failed nodes
 are ready again, this strategy could be enabled to evict those duplicate pods.
 
-It provides one optional parameter, `ExcludeOwnerKinds`, which is a list of OwnerRef `Kind`s. If a pod
-has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
+It provides one optional parameter, `excludeOwnerKinds`, which is a list of OwnerRef `Kind`s. If a pod
+has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction. Note that
+pods created by Deployments are considered for eviction by this strategy. The `excludeOwnerKinds` parameter
+should include `ReplicaSet` to have pods created by Deployments excluded.
 
 **Parameters:**
 
@@ -546,7 +548,7 @@ strategies:
 When the descheduler decides to evict pods from a node, it employs the following general mechanism:
 
 * [Critical pods](https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/) (with priorityClassName set to system-cluster-critical or system-node-critical) are never evicted.
-* Pods (static or mirrored pods or stand alone pods) not part of an RC, RS, Deployment or Job are
+* Pods (static or mirrored pods or stand alone pods) not part of an ReplicationController, ReplicaSet(Deployment), StatefulSet, or Job are
 never evicted because these pods won't be recreated.
 * Pods associated with DaemonSets are never evicted.
 * Pods with local storage are never evicted (unless `evictLocalStoragePods: true` is set)
