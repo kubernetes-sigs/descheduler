@@ -3,3 +3,4 @@ _tmp/
 vendordiff.patch
 .idea/
 *.code-workspace
+.vscode/

@@ -3,8 +3,9 @@ package strategies
 import (
 	"context"
 	"fmt"
-	"sigs.k8s.io/descheduler/pkg/api"
 	"testing"
+
+	"sigs.k8s.io/descheduler/pkg/api"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -456,6 +457,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				false,
 				100,
 				tc.nodes,
+				false,
 				false,
 				false,
 			)
