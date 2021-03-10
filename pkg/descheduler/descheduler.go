@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
+	"sigs.k8s.io/descheduler/metrics"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -36,6 +37,8 @@ import (
 )
 
 func Run(rs *options.DeschedulerServer) error {
+	metrics.Register()
+
 	ctx := context.Background()
 	rsclient, err := client.CreateClient(rs.KubeconfigFile)
 	if err != nil {

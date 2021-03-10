@@ -24,32 +24,35 @@ but relies on the default scheduler for that.
 
 Table of Contents
 =================
-
-  * [Quick Start](#quick-start)
-     * [Run As A Job](#run-as-a-job)
-     * [Run As A CronJob](#run-as-a-cronjob)
-     * [Install Using Helm](#install-using-helm)
-     * [Install Using Kustomize](#install-using-kustomize)
-  * [User Guide](#user-guide)
-  * [Policy and Strategies](#policy-and-strategies)
-     * [RemoveDuplicates](#removeduplicates)
-     * [LowNodeUtilization](#lownodeutilization)
-     * [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity)
-     * [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity)
-     * [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints)
-     * [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint)
-     * [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts)
-     * [PodLifeTime](#podlifetime)
-  * [Filter Pods](#filter-pods)
-     * [Namespace filtering](#namespace-filtering)
-     * [Priority filtering](#priority-filtering)
-  * [Pod Evictions](#pod-evictions)
-     * [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
-  * [Compatibility Matrix](#compatibility-matrix)
-  * [Getting Involved and Contributing](#getting-involved-and-contributing)
-     * [Communicating With Contributors](#communicating-with-contributors)
-  * [Roadmap](#roadmap)
-     * [Code of conduct](#code-of-conduct)
+<!-- toc -->
+- [Quick Start](#quick-start)
+  - [Run As A Job](#run-as-a-job)
+  - [Run As A CronJob](#run-as-a-cronjob)
+  - [Install Using Helm](#install-using-helm)
+  - [Install Using Kustomize](#install-using-kustomize)
+- [User Guide](#user-guide)
+- [Policy and Strategies](#policy-and-strategies)
+  - [RemoveDuplicates](#removeduplicates)
+  - [LowNodeUtilization](#lownodeutilization)
+  - [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity)
+  - [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity)
+  - [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints)
+  - [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint)
+  - [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts)
+  - [PodLifeTime](#podlifetime)
+- [Filter Pods](#filter-pods)
+  - [Namespace filtering](#namespace-filtering)
+  - [Priority filtering](#priority-filtering)
+  - [Label filtering](#label-filtering)
+- [Pod Evictions](#pod-evictions)
+  - [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
+- [Metrics](#metrics)
+- [Compatibility Matrix](#compatibility-matrix)
+- [Getting Involved and Contributing](#getting-involved-and-contributing)
+  - [Communicating With Contributors](#communicating-with-contributors)
+- [Roadmap](#roadmap)
+  - [Code of conduct](#code-of-conduct)
+<!-- /toc -->
 
 ## Quick Start
 
@@ -166,8 +169,11 @@ in the hope that recreation of evicted pods will be scheduled on these underutil
 parameters of this strategy are configured under `nodeResourceUtilizationThresholds`.
 
 The under utilization of nodes is determined by a configurable threshold `thresholds`. The threshold
-`thresholds` can be configured for cpu, memory, and number of pods in terms of percentage. If a node's
-usage is below threshold for all (cpu, memory, and number of pods), the node is considered underutilized.
+`thresholds` can be configured for cpu, memory, and number of pods in terms of percentage (the percentage is
+calculated as the current resources requested on the node vs [total allocatable](https://kubernetes.io/docs/concepts/architecture/nodes/#capacity).
+For pods, this means the number of pods on the node as a fraction of the pod capacity set for that node).
+
+If a node's usage is below threshold for all (cpu, memory, and number of pods), the node is considered underutilized.
 Currently, pods request resource requirements are considered for computing node resource utilization.
 
 There is another configurable threshold, `targetThresholds`, that is used to compute those potential nodes
@@ -239,6 +245,7 @@ node.
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
 
 **Example:**
 
@@ -276,6 +283,7 @@ podA gets evicted from nodeA.
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
 
 **Example:**
 
@@ -304,6 +312,7 @@ and will be evicted.
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
 
 **Example:**
 
@@ -348,10 +357,11 @@ strategies:
 
 ### RemovePodsHavingTooManyRestarts
 
-This strategy makes sure that pods having too many restarts are removed from nodes. For example a pod with EBS/PD that 
-can't get the volume/disk attached to the instance, then the pod should be re-scheduled to other nodes. Its parameters 
-include `podRestartThreshold`, which is the number of restarts at which a pod should be evicted, and `includingInitContainers`, 
+This strategy makes sure that pods having too many restarts are removed from nodes. For example a pod with EBS/PD that
+can't get the volume/disk attached to the instance, then the pod should be re-scheduled to other nodes. Its parameters
+include `podRestartThreshold`, which is the number of restarts at which a pod should be evicted, and `includingInitContainers`,
 which determines whether init container restarts should be factored into that calculation.
+|`labelSelector`|(see [label filtering](#label-filtering))|
 
 **Parameters:**
 
@@ -393,6 +403,7 @@ to `Running` and `Pending`.
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
 
 **Example:**
 
@@ -498,6 +509,38 @@ strategies:
 Note that you can't configure both `thresholdPriority` and `thresholdPriorityClassName`, if the given priority class
 does not exist, descheduler won't create it and will throw an error.
 
+### Label filtering
+
+The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.20/#labelselector-v1-meta)
+to filter pods by their labels:
+
+* `PodLifeTime`
+* `RemovePodsHavingTooManyRestarts`
+* `RemovePodsViolatingNodeTaints`
+* `RemovePodsViolatingNodeAffinity`
+* `RemovePodsViolatingInterPodAntiAffinity`
+
+This allows running strategies among pods the descheduler is interested in.
+
+For example:
+
+```yaml
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+    enabled: true
+    params:
+      podLifeTime:
+        maxPodLifeTimeSeconds: 86400
+      labelSelector:
+        matchLabels:
+          component: redis
+        matchExpressions:
+          - {key: tier, operator: In, values: [cache]}
+          - {key: environment, operator: NotIn, values: [dev]}
+```
+
 ## Pod Evictions
 
 When the descheduler decides to evict pods from a node, it employs the following general mechanism:
@@ -520,6 +563,16 @@ Setting `--v=4` or greater on the Descheduler will log all reasons why any pod i
 
 Pods subject to a Pod Disruption Budget(PDB) are not evicted if descheduling violates its PDB. The pods
 are evicted by using the eviction subresource to handle PDB.
+
+## Metrics
+
+| name	| type	| description |
+|-------|-------|----------------|
+| build_info |	gauge |	constant 1 |
+| pods_evicted | CounterVec | total number of pods evicted |
+
+The metrics are served through https://localhost:10258/metrics by default.
+The address and port can be changed by setting `--binding-address` and `--secure-port` flags.
 
 ## Compatibility Matrix
 The below compatibility matrix shows the k8s client package(client-go, apimachinery, etc) versions that descheduler

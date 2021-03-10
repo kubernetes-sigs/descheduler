@@ -22,4 +22,5 @@ package tools
 import (
 	_ "github.com/client9/misspell/cmd/misspell"
 	_ "k8s.io/code-generator"
+	_ "sigs.k8s.io/mdtoc"
 )

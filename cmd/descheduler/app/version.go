@@ -18,47 +18,10 @@ package app
 
 import (
 	"fmt"
-	"regexp"
-	"runtime"
-	"strings"
 
 	"github.com/spf13/cobra"
+	"sigs.k8s.io/descheduler/pkg/version"
 )
-
-var (
-	// version is a constant representing the version tag that
-	// generated this build. It should be set during build via -ldflags.
-	version string
-	// buildDate in ISO8601 format, output of $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-	//It should be set during build via -ldflags.
-	buildDate string
-)
-
-// Info holds the information related to descheduler app version.
-type Info struct {
-	Major      string `json:"major"`
-	Minor      string `json:"minor"`
-	GitVersion string `json:"gitVersion"`
-	BuildDate  string `json:"buildDate"`
-	GoVersion  string `json:"goVersion"`
-	Compiler   string `json:"compiler"`
-	Platform   string `json:"platform"`
-}
-
-// Get returns the overall codebase version. It's for detecting
-// what code a binary was built from.
-func Get() Info {
-	majorVersion, minorVersion := splitVersion(version)
-	return Info{
-		Major:      majorVersion,
-		Minor:      minorVersion,
-		GitVersion: version,
-		BuildDate:  buildDate,
-		GoVersion:  runtime.Version(),
-		Compiler:   runtime.Compiler,
-		Platform:   fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
-	}
-}
 
 func NewVersionCommand() *cobra.Command {
 	var versionCmd = &cobra.Command{
@@ -66,29 +29,8 @@ func NewVersionCommand() *cobra.Command {
 		Short: "Version of descheduler",
 		Long:  `Prints the version of descheduler.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("Descheduler version %+v\n", Get())
+			fmt.Printf("Descheduler version %+v\n", version.Get())
 		},
 	}
 	return versionCmd
-}
-
-// splitVersion splits the git version to generate major and minor versions needed.
-func splitVersion(version string) (string, string) {
-	if version == "" {
-		return "", ""
-	}
-
-	// Version from an automated container build environment for a tag. For example v20200521-v0.18.0.
-	m1, _ := regexp.MatchString(`^v\d{8}-v\d+\.\d+\.\d+$`, version)
-
-	// Version from an automated container build environment(not a tag) or a local build. For example v20201009-v0.18.0-46-g939c1c0.
-	m2, _ := regexp.MatchString(`^v\d{8}-v\d+\.\d+\.\d+-\w+-\w+$`, version)
-
-	if m1 || m2 {
-		semVer := strings.Split(version, "-")[1]
-		return strings.Trim(strings.Split(semVer, ".")[0], "v"), strings.Split(semVer, ".")[1] + "+"
-	}
-
-	// Something went wrong
-	return "", ""
 }
