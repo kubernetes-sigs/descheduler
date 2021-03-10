@@ -114,7 +114,7 @@ parameters associated with the strategies can be configured too. By default, all
 The policy also includes common configuration for all the strategies:
 - `nodeSelector` - limiting the nodes which are processed
 - `evictLocalStoragePods` - allows eviction of pods with local storage
-- `evictSystemCriticalPods` - allows eviction of pods with any priority, including system pods like kube-dns
+- `evictSystemCriticalPods` - [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns
 - `ignorePvcPods` - set whether PVC pods should be evicted or ignored (defaults to `false`)
 - `maxNoOfPodsToEvictPerNode` - maximum number of pods evicted from each node (summed through all strategies)
 
