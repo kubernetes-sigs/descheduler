@@ -110,7 +110,8 @@ parameters associated with the strategies can be configured too. By default, all
 
 The policy also includes common configuration for all the strategies:
 - `nodeSelector` - limiting the nodes which are processed
-- `evictLocalStoragePods` - allowing to evict pods with local storage
+- `evictLocalStoragePods` - allows eviction of pods with local storage
+- `evictSystemCriticalPods` - allows eviction of pods with any priority, including system pods like kube-dns
 - `ignorePvcPods` - set whether PVC pods should be evicted or ignored (defaults to `false`)
 - `maxNoOfPodsToEvictPerNode` - maximum number of pods evicted from each node (summed through all strategies)
 
@@ -119,6 +120,7 @@ apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 nodeSelector: prod=dev
 evictLocalStoragePods: true
+evictSystemCriticalPods: true
 maxNoOfPodsToEvictPerNode: 40
 ignorePvcPods: false
 strategies:
@@ -502,12 +504,12 @@ does not exist, descheduler won't create it and will throw an error.
 
 When the descheduler decides to evict pods from a node, it employs the following general mechanism:
 
-* [Critical pods](https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/) (with priorityClassName set to system-cluster-critical or system-node-critical) are never evicted.
+* [Critical pods](https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/) (with priorityClassName set to system-cluster-critical or system-node-critical) are never evicted (unless `evictSystemCriticalPods: true` is set).
 * Pods (static or mirrored pods or stand alone pods) not part of an RC, RS, Deployment or Job are
 never evicted because these pods won't be recreated.
 * Pods associated with DaemonSets are never evicted.
-* Pods with local storage are never evicted (unless `evictLocalStoragePods: true` is set)
-* Pods with PVCs are evicted unless `ignorePvcPods: true` is set.
+* Pods with local storage are never evicted (unless `evictLocalStoragePods: true` is set).
+* Pods with PVCs are evicted (unless `ignorePvcPods: true` is set).
 * In `LowNodeUtilization` and `RemovePodsViolatingInterPodAntiAffinity`, pods are evicted by their priority from low to high, and if they have same priority,
 best effort pods are evicted before burstable and guaranteed pods.
 * All types of pods with the annotation `descheduler.alpha.kubernetes.io/evict` are eligible for eviction. This
