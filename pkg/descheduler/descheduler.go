@@ -93,6 +93,14 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		evictLocalStoragePods = *deschedulerPolicy.EvictLocalStoragePods
 	}
 
+	evictSystemCriticalPods := false
+	if deschedulerPolicy.EvictSystemCriticalPods != nil {
+		evictSystemCriticalPods = *deschedulerPolicy.EvictSystemCriticalPods
+		if evictSystemCriticalPods {
+			klog.V(1).InfoS("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
+		}
+	}
+
 	ignorePvcPods := false
 	if deschedulerPolicy.IgnorePVCPods != nil {
 		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
@@ -124,6 +132,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			maxNoOfPodsToEvictPerNode,
 			nodes,
 			evictLocalStoragePods,
+			evictSystemCriticalPods,
 			ignorePvcPods,
 		)
 

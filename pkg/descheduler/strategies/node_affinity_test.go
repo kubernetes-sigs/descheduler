@@ -20,7 +20,7 @@ import (
 	"context"
 	"testing"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
@@ -157,6 +157,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			false,
 			tc.maxPodsToEvictPerNode,
 			tc.nodes,
+			false,
 			false,
 			false,
 		)
