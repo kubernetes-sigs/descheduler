@@ -252,12 +252,10 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 	}
 
 	if len(checkErrs) > 0 && !HaveEvictAnnotation(pod) {
-		klog.InfoS("*********************************************Pod lacks an eviction annotation and fails the following checks", "pod", klog.KObj(pod), "checks", errors.NewAggregate(checkErrs).Error())
 		klog.V(4).InfoS("Pod lacks an eviction annotation and fails the following checks", "pod", klog.KObj(pod), "checks", errors.NewAggregate(checkErrs).Error())
 		return false
 	}
 
-	klog.InfoS("--------------------------------------Happily evicting", "pod", klog.KObj(pod))
 	return true
 }
 

@@ -211,6 +211,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				[]*v1.Node{node1, node2},
 				false,
 				false,
+				false,
 			)
 
 			RemoveDuplicatePods(ctx, fakeClient, testCase.strategy, []*v1.Node{node1, node2}, podEvictor)
@@ -405,6 +406,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				false,
 				testCase.maxPodsToEvictPerNode,
 				testCase.nodes,
+				false,
 				false,
 				false,
 			)
