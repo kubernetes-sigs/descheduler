@@ -194,7 +194,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 	if !pe.evictSystemCriticalPods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			// Moved from IsEvictable function to allow for disabling
-			if IsPriorityPod(pod) {
+			if utils.IsCriticalPriorityPod(pod) {
 				return fmt.Errorf("pod has system critical priority")
 			}
 			return nil
@@ -202,7 +202,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 	}
 	if !pe.evictLocalStoragePods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
-			if IsPodWithLocalStorage(pod) {
+			if utils.IsPodWithLocalStorage(pod) {
 				return fmt.Errorf("pod has local storage and descheduler is not configured with evictLocalStoragePods")
 			}
 			return nil
@@ -210,7 +210,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 	}
 	if pe.ignorePvcPods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
-			if IsPodWithPVC(pod) {
+			if utils.IsPodWithPVC(pod) {
 				return fmt.Errorf("pod has a PVC and descheduler is configured to ignore PVC pods")
 			}
 			return nil
@@ -233,7 +233,7 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 	checkErrs := []error{}
 
 	ownerRefList := podutil.OwnerRef(pod)
-	if IsDaemonsetPod(ownerRefList) {
+	if utils.IsDaemonsetPod(ownerRefList) {
 		checkErrs = append(checkErrs, fmt.Errorf("pod is a DaemonSet pod"))
 	}
 
@@ -241,11 +241,11 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 		checkErrs = append(checkErrs, fmt.Errorf("pod does not have any ownerrefs"))
 	}
 
-	if IsMirrorPod(pod) {
+	if utils.IsMirrorPod(pod) {
 		checkErrs = append(checkErrs, fmt.Errorf("pod is a mirror pod"))
 	}
 
-	if IsStaticPod(pod) {
+	if utils.IsStaticPod(pod) {
 		checkErrs = append(checkErrs, fmt.Errorf("pod is a static pod"))
 	}
 
@@ -263,52 +263,10 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 	return true
 }
 
-func IsPriorityPod(pod *v1.Pod) bool {
-	return utils.IsPriorityPod(pod)
-}
-
-func IsDaemonsetPod(ownerRefList []metav1.OwnerReference) bool {
-	for _, ownerRef := range ownerRefList {
-		if ownerRef.Kind == "DaemonSet" {
-			return true
-		}
-	}
-	return false
-}
-
-// IsMirrorPod checks whether the pod is a mirror pod.
-func IsMirrorPod(pod *v1.Pod) bool {
-	return utils.IsMirrorPod(pod)
-}
-
-// IsStaticPod checks whether the pod is a static pod.
-func IsStaticPod(pod *v1.Pod) bool {
-	return utils.IsStaticPod(pod)
-}
-
 // HaveEvictAnnotation checks if the pod have evict annotation
 func HaveEvictAnnotation(pod *v1.Pod) bool {
 	_, found := pod.ObjectMeta.Annotations[evictPodAnnotationKey]
 	return found
-}
-
-func IsPodWithLocalStorage(pod *v1.Pod) bool {
-	for _, volume := range pod.Spec.Volumes {
-		if volume.HostPath != nil || volume.EmptyDir != nil {
-			return true
-		}
-	}
-
-	return false
-}
-
-func IsPodWithPVC(pod *v1.Pod) bool {
-	for _, volume := range pod.Spec.Volumes {
-		if volume.PersistentVolumeClaim != nil {
-			return true
-		}
-	}
-	return false
 }
 
 // IsPodEvictableBasedOnPriority checks if the given pod is evictable based on priority resolved from pod Spec.

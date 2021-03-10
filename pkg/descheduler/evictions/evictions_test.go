@@ -323,18 +323,18 @@ func TestPodTypes(t *testing.T) {
 	}
 	// A Mirror Pod.
 	p4.Annotations = test.GetMirrorPodAnnotation()
-	if !IsMirrorPod(p4) {
+	if !utils.IsMirrorPod(p4) {
 		t.Errorf("Expected p4 to be a mirror pod.")
 	}
-	if !IsPodWithLocalStorage(p3) {
+	if !utils.IsPodWithLocalStorage(p3) {
 		t.Errorf("Expected p3 to be a pod with local storage.")
 	}
 	ownerRefList := podutil.OwnerRef(p2)
-	if !IsDaemonsetPod(ownerRefList) {
+	if !utils.IsDaemonsetPod(ownerRefList) {
 		t.Errorf("Expected p2 to be a daemonset pod.")
 	}
 	ownerRefList = podutil.OwnerRef(p1)
-	if IsDaemonsetPod(ownerRefList) || IsPodWithLocalStorage(p1) || IsPriorityPod(p1) || IsMirrorPod(p1) || IsStaticPod(p1) {
+	if utils.IsDaemonsetPod(ownerRefList) || utils.IsPodWithLocalStorage(p1) || utils.IsCriticalPriorityPod(p1) || utils.IsMirrorPod(p1) || utils.IsStaticPod(p1) {
 		t.Errorf("Expected p1 to be a normal pod.")
 	}
 

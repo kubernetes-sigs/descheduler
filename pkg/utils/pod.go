@@ -5,6 +5,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/component-base/featuregate"
 	"k8s.io/klog/v2"
@@ -95,8 +96,36 @@ func IsStaticPod(pod *v1.Pod) bool {
 }
 
 // IsPriorityPod returns true if the pod is a priority pod.
-func IsPriorityPod(pod *v1.Pod) bool {
+func IsCriticalPriorityPod(pod *v1.Pod) bool {
 	return pod.Spec.Priority != nil && *pod.Spec.Priority >= SystemCriticalPriority
+}
+
+func IsDaemonsetPod(ownerRefList []metav1.OwnerReference) bool {
+	for _, ownerRef := range ownerRefList {
+		if ownerRef.Kind == "DaemonSet" {
+			return true
+		}
+	}
+	return false
+}
+
+func IsPodWithLocalStorage(pod *v1.Pod) bool {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.HostPath != nil || volume.EmptyDir != nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+func IsPodWithPVC(pod *v1.Pod) bool {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.PersistentVolumeClaim != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // GetPodSource returns the source of the pod based on the annotation.
