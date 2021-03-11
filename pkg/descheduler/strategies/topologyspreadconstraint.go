@@ -289,11 +289,12 @@ func balanceDomains(
 			// however we still account for it "being evicted" so the algorithm can complete
 			// TODO(@damemi): Since we don't order pods wrt their affinities, we should refactor this to skip the current pod
 			// but still try to get the required # of movePods (instead of just chopping that value off the slice above)
-			if aboveToEvict[k].Spec.NodeSelector != nil ||
-				(aboveToEvict[k].Spec.Affinity != nil &&
-					aboveToEvict[k].Spec.Affinity.NodeAffinity != nil &&
-					aboveToEvict[k].Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil &&
-					nodesPodFitsOnBesidesCurrent(aboveToEvict[k], nodeMap) == 0) {
+			isRequiredDuringSchedulingIgnoredDuringExecution := aboveToEvict[k].Spec.Affinity != nil &&
+				aboveToEvict[k].Spec.Affinity.NodeAffinity != nil &&
+				aboveToEvict[k].Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil
+
+			if (aboveToEvict[k].Spec.NodeSelector != nil || isRequiredDuringSchedulingIgnoredDuringExecution) &&
+				nodesPodFitsOnBesidesCurrent(aboveToEvict[k], nodeMap) == 0 {
 				klog.V(2).InfoS("Ignoring pod for eviction due to node selector/affinity", "pod", klog.KObj(aboveToEvict[k]))
 				continue
 			}
