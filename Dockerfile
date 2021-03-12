@@ -21,7 +21,7 @@ RUN VERSION=${VERSION} make build.$ARCH
 
 FROM scratch
 
-MAINTAINER Avesh Agarwal <avesh.ncsu@gmail.com>
+MAINTAINER Kubernetes SIG Scheduling <kubernetes-sig-scheduling@googlegroups.com>
 
 USER 1000
 

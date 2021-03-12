@@ -1,8 +1,7 @@
 approvers:
-- aveshagarwal
-- k82cn
-- ravisantoshgudimetla
 - damemi
+- ingvagabund
+- seanmalloy
 reviewers:
 - aveshagarwal
 - k82cn
@@ -11,3 +10,7 @@ reviewers:
 - seanmalloy
 - ingvagabund
 - lixiang233
+emeritus_approvers:
+- aveshagarwal
+- k82cn
+- ravisantoshgudimetla
