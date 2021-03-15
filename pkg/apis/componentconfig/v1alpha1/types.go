@@ -17,8 +17,9 @@ limitations under the License.
 package v1alpha1
 
 import (
-	componentbaseconfig "k8s.io/component-base/config"
 	"time"
+
+	componentbaseconfig "k8s.io/component-base/config"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -30,6 +31,9 @@ type DeschedulerConfiguration struct {
 
 	// Time interval for descheduler to run
 	DeschedulingInterval time.Duration `json:"deschedulingInterval,omitempty"`
+
+	// Time to wait for each descheduling run to complete
+	DeschedulingRunTimeout time.Duration
 
 	// KubeconfigFile is path to kubeconfig file with authorization and master
 	// location information.

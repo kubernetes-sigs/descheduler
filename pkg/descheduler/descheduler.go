@@ -18,11 +18,14 @@ package descheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/klog/v2"
+	klog "k8s.io/klog/v2"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -63,7 +66,8 @@ func Run(rs *options.DeschedulerServer) error {
 	return RunDeschedulerStrategies(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel)
 }
 
-type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor)
+type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor,
+	sopts ...strategies.StrategyOption)
 
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, stopChannel chan struct{}) error {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
@@ -127,10 +131,25 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			ignorePvcPods,
 		)
 
+		wg := sync.WaitGroup{}
 		for name, f := range strategyFuncs {
 			if strategy := deschedulerPolicy.Strategies[api.StrategyName(name)]; strategy.Enabled {
-				f(ctx, rs.Client, strategy, nodes, podEvictor)
+				f(ctx, rs.Client, strategy, nodes, podEvictor, strategies.WithWaitGroup(&wg))
 			}
+		}
+
+		klog.V(1).InfoS("Waiting for strategies to complete...", "waitTime", rs.DeschedulingRunTimeout.String())
+		c := make(chan struct{})
+		go func() {
+			defer close(c)
+			wg.Wait()
+		}()
+		select {
+		case <-c:
+			klog.V(1).InfoS("All strategies run to completion")
+		case <-time.After(rs.DeschedulingRunTimeout):
+			// NOTE: This leaks a go routine until the original wait group completes
+			klog.V(0).ErrorS(errors.New("time-out"), "Timeout while waiting for strategies to complete", "timeout", rs.DeschedulingRunTimeout.String())
 		}
 
 		klog.V(1).InfoS("Number of evicted pods", "totalEvicted", podEvictor.TotalEvicted())

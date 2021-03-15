@@ -31,6 +31,9 @@ type DeschedulerConfiguration struct {
 	// Time interval for descheduler to run
 	DeschedulingInterval time.Duration
 
+	// Time to wait for each descheduling run to complete
+	DeschedulingRunTimeout time.Duration
+
 	// KubeconfigFile is path to kubeconfig file with authorization and master
 	// location information.
 	KubeconfigFile string

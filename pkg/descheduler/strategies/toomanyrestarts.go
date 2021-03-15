@@ -22,7 +22,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/klog/v2"
+	klog "k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -49,7 +49,7 @@ func validateRemovePodsHavingTooManyRestartsParams(params *api.StrategyParameter
 // RemovePodsHavingTooManyRestarts removes the pods that have too many restarts on node.
 // There are too many cases leading this issue: Volume mount failed, app error due to nodes' different settings.
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
-func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, sopts ...StrategyOption) {
 	if err := validateRemovePodsHavingTooManyRestartsParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsHavingTooManyRestarts parameters")
 		return

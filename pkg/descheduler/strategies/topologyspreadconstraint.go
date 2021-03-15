@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/klog/v2"
+	klog "k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -75,6 +75,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
+	sopts ...StrategyOption,
 ) {
 	thresholdPriority, includedNamespaces, excludedNamespaces, err := validateAndParseTopologySpreadParams(ctx, client, strategy.Params)
 	if err != nil {

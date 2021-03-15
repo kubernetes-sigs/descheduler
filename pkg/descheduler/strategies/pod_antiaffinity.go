@@ -28,7 +28,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/klog/v2"
+	klog "k8s.io/klog/v2"
 )
 
 func validateRemovePodsViolatingInterPodAntiAffinityParams(params *api.StrategyParameters) error {
@@ -48,7 +48,7 @@ func validateRemovePodsViolatingInterPodAntiAffinityParams(params *api.StrategyP
 }
 
 // RemovePodsViolatingInterPodAntiAffinity evicts pods on the node which are having a pod affinity rules.
-func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, sopts ...StrategyOption) {
 	if err := validateRemovePodsViolatingInterPodAntiAffinityParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsViolatingInterPodAntiAffinity parameters")
 		return
