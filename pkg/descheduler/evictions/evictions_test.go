@@ -236,6 +236,21 @@ func TestIsEvictable(t *testing.T) {
 			evictLocalStoragePods: false,
 			priorityThreshold:     &lowPriority,
 			result:                true,
+		}, {
+			pod: test.BuildTestPod("p16", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod) {
+				pod.ObjectMeta.OwnerReferences = test.GetStatefulSetOwnerRefList()
+			},
+			evictLocalStoragePods: false,
+			result:                true,
+		}, {
+			pod: test.BuildTestPod("p17", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod) {
+				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+				pod.ObjectMeta.OwnerReferences = test.GetStatefulSetOwnerRefList()
+			},
+			evictLocalStoragePods: false,
+			result:                true,
 		},
 	}
 
