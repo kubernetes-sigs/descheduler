@@ -79,6 +79,13 @@ func GetReplicaSetOwnerRefList() []metav1.OwnerReference {
 	return ownerRefList
 }
 
+// GetStatefulSetOwnerRefList returns the ownerRef needed for statefulset pod.
+func GetStatefulSetOwnerRefList() []metav1.OwnerReference {
+	ownerRefList := make([]metav1.OwnerReference, 0)
+	ownerRefList = append(ownerRefList, metav1.OwnerReference{Kind: "StatefulSet", APIVersion: "v1", Name: "statefulset-1"})
+	return ownerRefList
+}
+
 // GetDaemonSetOwnerRefList returns the ownerRef needed for daemonset pod.
 func GetDaemonSetOwnerRefList() []metav1.OwnerReference {
 	ownerRefList := make([]metav1.OwnerReference, 0)
@@ -140,6 +147,11 @@ func MakeGuaranteedPod(pod *v1.Pod) {
 // SetRSOwnerRef sets the given pod's owner to ReplicaSet
 func SetRSOwnerRef(pod *v1.Pod) {
 	pod.ObjectMeta.OwnerReferences = GetReplicaSetOwnerRefList()
+}
+
+// SetSSOwnerRef sets the given pod's owner to StatefulSet
+func SetSSOwnerRef(pod *v1.Pod) {
+	pod.ObjectMeta.OwnerReferences = GetStatefulSetOwnerRefList()
 }
 
 // SetDSOwnerRef sets the given pod's owner to DaemonSet
