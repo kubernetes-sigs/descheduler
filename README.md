@@ -91,12 +91,12 @@ See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/ku
 
 Run As A Job
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=master' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.20.0' | kubectl apply -f -
 ```
 
 Run As A CronJob
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=master' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.20.0' | kubectl apply -f -
 ```
 
 ## User Guide
