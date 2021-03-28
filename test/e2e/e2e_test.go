@@ -108,41 +108,6 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 	}
 }
 
-// startEndToEndForLowNodeUtilization tests the lownode utilization strategy.
-func startEndToEndForLowNodeUtilization(ctx context.Context, clientset clientset.Interface, nodeInformer coreinformers.NodeInformer, podEvictor *evictions.PodEvictor) {
-	// Run descheduler.
-	nodes, err := nodeutil.ReadyNodes(ctx, clientset, nodeInformer, "")
-	if err != nil {
-		klog.Fatalf("%v", err)
-	}
-
-	strategies.LowNodeUtilization(
-		ctx,
-		clientset,
-		deschedulerapi.DeschedulerStrategy{
-			Enabled: true,
-			Params: &deschedulerapi.StrategyParameters{
-				NodeResourceUtilizationThresholds: &deschedulerapi.NodeResourceUtilizationThresholds{
-					Thresholds: deschedulerapi.ResourceThresholds{
-						v1.ResourceMemory: 20,
-						v1.ResourcePods:   20,
-						v1.ResourceCPU:    85,
-					},
-					TargetThresholds: deschedulerapi.ResourceThresholds{
-						v1.ResourceMemory: 20,
-						v1.ResourcePods:   20,
-						v1.ResourceCPU:    90,
-					},
-				},
-			},
-		},
-		nodes,
-		podEvictor,
-	)
-
-	time.Sleep(10 * time.Second)
-}
-
 func initializeClient(t *testing.T) (clientset.Interface, coreinformers.NodeInformer, chan struct{}) {
 	clientSet, err := client.CreateClient(os.Getenv("KUBECONFIG"))
 	if err != nil {
@@ -913,7 +878,8 @@ func TestEvictAnnotation(t *testing.T) {
 	}
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
-	rc := RcByNameContainer("test-rc-evict-annotation", testNamespace.Name, int32(15), map[string]string{"test": "annotation"}, nil, "")
+	t.Log("Create RC with pods with local storage which require descheduler.alpha.kubernetes.io/evict annotation to be set for eviction")
+	rc := RcByNameContainer("test-rc-evict-annotation", testNamespace.Name, int32(5), map[string]string{"test": "annotation"}, nil, "")
 	rc.Spec.Template.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 	rc.Spec.Template.Spec.Volumes = []v1.Volume{
 		{
@@ -928,9 +894,47 @@ func TestEvictAnnotation(t *testing.T) {
 	if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, rc, metav1.CreateOptions{}); err != nil {
 		t.Errorf("Error creating deployment %v", err)
 	}
+	defer deleteRC(ctx, t, clientSet, rc)
 
-	evictPods(ctx, t, clientSet, nodeInformer, nodes, rc)
-	deleteRC(ctx, t, clientSet, rc)
+	t.Logf("Waiting 10s to make pods 10s old")
+	time.Sleep(10 * time.Second)
+
+	podList, err := clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
+	if err != nil {
+		t.Fatalf("Unable to list pods: %v", err)
+	}
+
+	if len(podList.Items) != 5 {
+		t.Fatalf("Expected 5 replicas, got %v instead", len(podList.Items))
+	}
+
+	initialPodNames := getPodNames(podList.Items)
+	sort.Strings(initialPodNames)
+	t.Logf("Existing pods: %v", initialPodNames)
+
+	t.Log("Running PodLifetime strategy")
+	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, nil, "", nil, false, nil)
+
+	if err := wait.PollImmediate(5*time.Second, time.Minute, func() (bool, error) {
+		podList, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
+		if err != nil {
+			return false, fmt.Errorf("Unable to list pods after running strategy: %v", err)
+		}
+
+		excludePodNames := getPodNames(podList.Items)
+		sort.Strings(excludePodNames)
+		t.Logf("Existing pods: %v", excludePodNames)
+
+		// validate no pods were deleted
+		if len(intersectStrings(initialPodNames, excludePodNames)) > 0 {
+			t.Logf("Not every pods was evicted")
+			return false, nil
+		}
+
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for pods to be deleted: %v", err)
+	}
 }
 
 func TestDeschedulingInterval(t *testing.T) {
@@ -1055,51 +1059,6 @@ func deleteRC(ctx context.Context, t *testing.T, clientSet clientset.Interface, 
 		return false, nil
 	}); err != nil {
 		t.Fatalf("Error deleting rc %v", err)
-	}
-}
-
-func evictPods(ctx context.Context, t *testing.T, clientSet clientset.Interface, nodeInformer coreinformers.NodeInformer, nodeList []*v1.Node, rc *v1.ReplicationController) {
-	var leastLoadedNode *v1.Node
-	podsBefore := math.MaxInt16
-	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
-	if err != nil || len(evictionPolicyGroupVersion) == 0 {
-		klog.Fatalf("%v", err)
-	}
-	podEvictor := evictions.NewPodEvictor(
-		clientSet,
-		evictionPolicyGroupVersion,
-		false,
-		0,
-		nodeList,
-		true,
-		false,
-		false,
-	)
-	for _, node := range nodeList {
-		// Skip the Master Node
-		if _, exist := node.Labels["node-role.kubernetes.io/master"]; exist {
-			continue
-		}
-		// List all the pods on the current Node
-		podsOnANode, err := podutil.ListPodsOnANode(ctx, clientSet, node, podutil.WithFilter(podEvictor.Evictable().IsEvictable))
-		if err != nil {
-			t.Errorf("Error listing pods on a node %v", err)
-		}
-		// Update leastLoadedNode if necessary
-		if tmpLoads := len(podsOnANode); tmpLoads < podsBefore {
-			leastLoadedNode = node
-			podsBefore = tmpLoads
-		}
-	}
-	t.Log("Eviction of pods starting")
-	startEndToEndForLowNodeUtilization(ctx, clientSet, nodeInformer, podEvictor)
-	podsOnleastUtilizedNode, err := podutil.ListPodsOnANode(ctx, clientSet, leastLoadedNode, podutil.WithFilter(podEvictor.Evictable().IsEvictable))
-	if err != nil {
-		t.Errorf("Error listing pods on a node %v", err)
-	}
-	podsAfter := len(podsOnleastUtilizedNode)
-	if podsBefore > podsAfter {
-		t.Fatalf("We should have see more pods on this node as per kubeadm's way of installing %v, %v", podsBefore, podsAfter)
 	}
 }
 
