@@ -1014,25 +1014,22 @@ func waitForTerminatingPodsToDisappear(ctx context.Context, t *testing.T, client
 }
 
 func deleteRC(ctx context.Context, t *testing.T, clientSet clientset.Interface, rc *v1.ReplicationController) {
-	//set number of replicas to 0
+	// set number of replicas to 0
 	rcdeepcopy := rc.DeepCopy()
 	rcdeepcopy.Spec.Replicas = func(i int32) *int32 { return &i }(0)
 	if _, err := clientSet.CoreV1().ReplicationControllers(rcdeepcopy.Namespace).Update(ctx, rcdeepcopy, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("Error updating replica controller %v", err)
 	}
-	allPodsDeleted := false
-	//wait 30 seconds until all pods are deleted
-	for i := 0; i < 6; i++ {
-		scale, _ := clientSet.CoreV1().ReplicationControllers(rc.Namespace).GetScale(ctx, rc.Name, metav1.GetOptions{})
-		if scale.Spec.Replicas == 0 {
-			allPodsDeleted = true
-			break
-		}
-		time.Sleep(5 * time.Second)
-	}
 
-	if !allPodsDeleted {
-		t.Errorf("Deleting of rc pods took too long")
+	// wait 30 seconds until all pods are deleted
+	if err := wait.PollImmediate(5*time.Second, 30*time.Second, func() (bool, error) {
+		scale, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).GetScale(ctx, rc.Name, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		return scale.Spec.Replicas == 0, nil
+	}); err != nil {
+		t.Fatalf("Error deleting rc pods %v", err)
 	}
 
 	if err := wait.PollImmediate(5*time.Second, time.Minute, func() (bool, error) {
