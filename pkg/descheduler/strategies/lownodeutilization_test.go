@@ -446,6 +446,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				nodes,
 				false,
 				false,
+				false,
 			)
 
 			strategy := api.DeschedulerStrategy{
@@ -765,6 +766,7 @@ func TestWithTaints(t *testing.T) {
 				false,
 				item.evictionsExpected,
 				item.nodes,
+				false,
 				false,
 				false,
 			)
