@@ -14,7 +14,7 @@
 
 #!/bin/bash
 
-# This just run e2e tests.
+# This just runs e2e tests.
 if [ -n "$KIND_E2E" ]; then
     K8S_VERSION=${KUBERNETES_VERSION:-v1.18.2}
     curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/${K8S_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
