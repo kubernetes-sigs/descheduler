@@ -36,7 +36,6 @@ import (
 	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/klog/v2"
 	v1qos "k8s.io/kubectl/pkg/util/qos"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
@@ -127,6 +126,7 @@ func initializeClient(t *testing.T) (clientset.Interface, coreinformers.NodeInfo
 
 func runPodLifetimeStrategy(
 	ctx context.Context,
+	t *testing.T,
 	clientset clientset.Interface,
 	nodeInformer coreinformers.NodeInformer,
 	namespaces *deschedulerapi.Namespaces,
@@ -138,12 +138,12 @@ func runPodLifetimeStrategy(
 	// Run descheduler.
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientset)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
-		klog.Fatalf("%v", err)
+		t.Fatalf("%v", err)
 	}
 
 	nodes, err := nodeutil.ReadyNodes(ctx, clientset, nodeInformer, "")
 	if err != nil {
-		klog.Fatalf("%v", err)
+		t.Fatalf("%v", err)
 	}
 
 	maxPodLifeTimeSeconds := uint(1)
@@ -299,7 +299,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	// Run LowNodeUtilization strategy
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
-		klog.Fatalf("%v", err)
+		t.Fatalf("%v", err)
 	}
 	podEvictor := evictions.NewPodEvictor(
 		clientSet,
@@ -391,7 +391,7 @@ func TestNamespaceConstraintsInclude(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Logf("set the strategy to delete pods from %v namespace", rc.Namespace)
-	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, &deschedulerapi.Namespaces{
+	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, &deschedulerapi.Namespaces{
 		Include: []string{rc.Namespace},
 	}, "", nil, false, nil)
 
@@ -462,7 +462,7 @@ func TestNamespaceConstraintsExclude(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Logf("set the strategy to delete pods from namespaces except the %v namespace", rc.Namespace)
-	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, &deschedulerapi.Namespaces{
+	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, &deschedulerapi.Namespaces{
 		Exclude: []string{rc.Namespace},
 	}, "", nil, false, nil)
 
@@ -577,9 +577,9 @@ func testEvictSystemCritical(t *testing.T, isPriorityClass bool) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	if isPriorityClass {
-		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, true, nil)
+		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, true, nil)
 	} else {
-		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, nil, "", &highPriority, true, nil)
+		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, true, nil)
 	}
 
 	// All pods are supposed to be deleted, wait until all pods in the test namespace are terminating
@@ -696,10 +696,10 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 
 	if isPriorityClass {
 		t.Logf("set the strategy to delete pods with priority lower than priority class %s", highPriorityClass.Name)
-		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, false, nil)
+		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, false, nil)
 	} else {
 		t.Logf("set the strategy to delete pods with priority lower than %d", highPriority)
-		runPodLifetimeStrategy(ctx, clientSet, nodeInformer, nil, "", &highPriority, false, nil)
+		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, false, nil)
 	}
 
 	t.Logf("Waiting 10s")
@@ -803,7 +803,7 @@ func TestPodLabelSelector(t *testing.T) {
 	t.Logf("Pods not expected to be evicted: %v, pods expected to be evicted: %v", expectReservePodNames, expectEvictPodNames)
 
 	t.Logf("set the strategy to delete pods with label test:podlifetime-evict")
-	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, nil, "", nil, false, &metav1.LabelSelector{MatchLabels: map[string]string{"test": "podlifetime-evict"}})
+	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", nil, false, &metav1.LabelSelector{MatchLabels: map[string]string{"test": "podlifetime-evict"}})
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
@@ -913,7 +913,7 @@ func TestEvictAnnotation(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Log("Running PodLifetime strategy")
-	runPodLifetimeStrategy(ctx, clientSet, nodeInformer, nil, "", nil, false, nil)
+	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", nil, false, nil)
 
 	if err := wait.PollImmediate(5*time.Second, time.Minute, func() (bool, error) {
 		podList, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
