@@ -821,7 +821,7 @@ func TestDeschedulingInterval(t *testing.T) {
 
 	deschedulerPolicy := &api.DeschedulerPolicy{}
 
-	c := make(chan bool)
+	c := make(chan bool, 1)
 	go func() {
 		evictionPolicyGroupVersion, err := eutils.SupportEviction(s.Client)
 		if err != nil || len(evictionPolicyGroupVersion) == 0 {
