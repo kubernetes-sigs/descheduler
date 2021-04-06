@@ -173,7 +173,7 @@ in the hope that recreation of evicted pods will be scheduled on these underutil
 parameters of this strategy are configured under `nodeResourceUtilizationThresholds`.
 
 The under utilization of nodes is determined by a configurable threshold `thresholds`. The threshold
-`thresholds` can be configured for cpu, memory, and number of pods in terms of percentage (the percentage is
+`thresholds` can be configured for cpu, memory, number of pods, and extended resources in terms of percentage (the percentage is
 calculated as the current resources requested on the node vs [total allocatable](https://kubernetes.io/docs/concepts/architecture/nodes/#capacity).
 For pods, this means the number of pods on the node as a fraction of the pod capacity set for that node).
 
@@ -181,7 +181,7 @@ If a node's usage is below threshold for all (cpu, memory, and number of pods), 
 Currently, pods request resource requirements are considered for computing node resource utilization.
 
 There is another configurable threshold, `targetThresholds`, that is used to compute those potential nodes
-from where pods could be evicted. If a node's usage is above targetThreshold for any (cpu, memory, or number of pods),
+from where pods could be evicted. If a node's usage is above targetThreshold for any (cpu, memory, number of pods, or extended resources),
 the node is considered over utilized. Any node between the thresholds, `thresholds` and `targetThresholds` is
 considered appropriately utilized and is not considered for eviction. The threshold, `targetThresholds`,
 can be configured for cpu, memory, and number of pods too in terms of percentage.
@@ -221,13 +221,11 @@ strategies:
 ```
 
 Policy should pass the following validation checks:
-* Only three types of resources are supported: `cpu`, `memory` and `pods`.
+* Three basic native types of resources are supported: `cpu`, `memory` and `pods`. If any of these resource types is not specified, all its thresholds default to 100% to avoid nodes going from underutilized to overutilized.
+* Extended resources are supported. For example, resource type `nvidia.com/gpu` is specified for GPU node utilization. Extended resources are optional, and will not be used to compute node's usage if it's not specified in `thresholds` and `targetThresholds` explicitly.
 * `thresholds` or `targetThresholds` can not be nil and they must configure exactly the same types of resources.
 * The valid range of the resource's percentage value is \[0, 100\]
 * Percentage value of `thresholds` can not be greater than `targetThresholds` for the same resource.
-
-If any of the resource types is not specified, all its thresholds default to 100% to avoid nodes going
-from underutilized to overutilized.
 
 There is another parameter associated with the `LowNodeUtilization` strategy, called `numberOfNodes`.
 This parameter can be configured to activate the strategy only when the number of under utilized nodes
