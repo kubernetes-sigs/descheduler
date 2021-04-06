@@ -16,21 +16,21 @@ git archive --format=tar --prefix=descheduler/ "$(git write-tree)" | (cd "${_des
 _deschedulertmp="${_deschedulertmp}/descheduler"
 
 pushd "${_deschedulertmp}" > /dev/null 2>&1
-go build -o "${OS_OUTPUT_BINPATH}/conversion-gen" "k8s.io/code-generator/cmd/conversion-gen"
+go build -o "${OS_OUTPUT_BINPATH}/deepcopy-gen" "k8s.io/code-generator/cmd/deepcopy-gen"
 
-${OS_OUTPUT_BINPATH}/conversion-gen \
-		--go-header-file "hack/boilerplate/boilerplate.go.txt" \
-		--input-dirs "./pkg/apis/componentconfig/v1alpha1,./pkg/api/v1alpha1" \
-		--output-file-base zz_generated.conversion
+${OS_OUTPUT_BINPATH}/deepcopy-gen \
+                --go-header-file "hack/boilerplate/boilerplate.go.txt" \
+                --input-dirs "./pkg/apis/componentconfig,./pkg/apis/componentconfig/v1alpha1,./pkg/api,./pkg/api/v1alpha1" \
+                --output-file-base zz_generated.deepcopy
 popd > /dev/null 2>&1
 
 pushd "${DESCHEDULER_ROOT}" > /dev/null 2>&1
 if ! _out="$(diff -Naupr pkg/ "${_deschedulertmp}/pkg/")"; then
-    echo "Generated output differs:" >&2
+    echo "Generated deep-copies output differs:" >&2
     echo "${_out}" >&2
-    echo "Generated conversions verify failed. Please run ./hack/update-conversions.sh"
+    echo "Generated deep-copies verify failed. Please run ./hack/update-deep-copies.sh"
     exit 1
 fi
 popd > /dev/null 2>&1
 
-echo "Generated conversions verified."
+echo "Generated deep-copies verified."
