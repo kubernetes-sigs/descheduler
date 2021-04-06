@@ -177,7 +177,7 @@ The under utilization of nodes is determined by a configurable threshold `thresh
 calculated as the current resources requested on the node vs [total allocatable](https://kubernetes.io/docs/concepts/architecture/nodes/#capacity).
 For pods, this means the number of pods on the node as a fraction of the pod capacity set for that node).
 
-If a node's usage is below threshold for all (cpu, memory, and number of pods), the node is considered underutilized.
+If a node's usage is below threshold for all (cpu, memory, number of pods and extended resources), the node is considered underutilized.
 Currently, pods request resource requirements are considered for computing node resource utilization.
 
 There is another configurable threshold, `targetThresholds`, that is used to compute those potential nodes
