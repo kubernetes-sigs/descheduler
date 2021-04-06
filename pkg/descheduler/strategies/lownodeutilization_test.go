@@ -36,8 +36,9 @@ import (
 )
 
 var (
-	lowPriority  = int32(0)
-	highPriority = int32(10000)
+	lowPriority      = int32(0)
+	highPriority     = int32(10000)
+	extendedResource = v1.ResourceName("example.com/foo")
 )
 
 func TestLowNodeUtilization(t *testing.T) {
@@ -104,7 +105,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -163,7 +164,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -301,7 +302,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -377,7 +378,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {
 					Items: []v1.Pod{
-						*test.BuildTestPod("p9", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 					},
 				},
 				n3NodeName: {},
@@ -385,6 +386,132 @@ func TestLowNodeUtilization(t *testing.T) {
 			maxPodsToEvictPerNode: 0,
 			expectedPodsEvicted:   4,
 			evictedPods:           []string{"p1", "p2", "p4", "p5"},
+		},
+		{
+			name: "with extended resource",
+			thresholds: api.ResourceThresholds{
+				v1.ResourcePods:  30,
+				extendedResource: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourcePods:  50,
+				extendedResource: 50,
+			},
+			nodes: map[string]*v1.Node{
+				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, func(node *v1.Node) {
+					test.SetNodeExtendedResource(node, extendedResource, 8)
+				}),
+				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, func(node *v1.Node) {
+					test.SetNodeExtendedResource(node, extendedResource, 8)
+				}),
+				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
+			},
+			pods: map[string]*v1.PodList{
+				n1NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p1", 0, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod with extended resource.
+							test.SetRSOwnerRef(pod)
+							test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
+						}),
+						*test.BuildTestPod("p2", 0, 0, n1NodeName, func(pod *v1.Pod) {
+							test.SetRSOwnerRef(pod)
+							test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
+						}),
+						*test.BuildTestPod("p3", 0, 0, n1NodeName, func(pod *v1.Pod) {
+							test.SetRSOwnerRef(pod)
+							test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
+						}),
+						*test.BuildTestPod("p4", 0, 0, n1NodeName, func(pod *v1.Pod) {
+							test.SetRSOwnerRef(pod)
+							test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
+						}),
+						*test.BuildTestPod("p5", 0, 0, n1NodeName, func(pod *v1.Pod) {
+							test.SetRSOwnerRef(pod)
+							test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
+						}),
+						*test.BuildTestPod("p6", 0, 0, n1NodeName, func(pod *v1.Pod) {
+							test.SetNormalOwnerRef(pod)
+							test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
+						}),
+
+						*test.BuildTestPod("p7", 0, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod with local storage.
+							test.SetNormalOwnerRef(pod)
+							test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
+							pod.Spec.Volumes = []v1.Volume{
+								{
+									Name: "sample",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+										EmptyDir: &v1.EmptyDirVolumeSource{
+											SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									},
+								},
+							}
+							// A Mirror Pod.
+							pod.Annotations = test.GetMirrorPodAnnotation()
+						}),
+						*test.BuildTestPod("p8", 0, 0, n1NodeName, func(pod *v1.Pod) {
+							// A Critical Pod.
+							test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
+							pod.Namespace = "kube-system"
+							priority := utils.SystemCriticalPriority
+							pod.Spec.Priority = &priority
+						}),
+					},
+				},
+				n2NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p9", 0, 0, n2NodeName, func(pod *v1.Pod) {
+							test.SetRSOwnerRef(pod)
+							test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
+						}),
+					},
+				},
+				n3NodeName: {},
+			},
+			maxPodsToEvictPerNode: 0,
+			// 4 pods available for eviction based on v1.ResourcePods, only 3 pods can be evicted before extended resource is depleted
+			expectedPodsEvicted: 3,
+		},
+		{
+			name: "with extended resource in some of nodes",
+			thresholds: api.ResourceThresholds{
+				v1.ResourcePods:  30,
+				extendedResource: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourcePods:  50,
+				extendedResource: 50,
+			},
+			nodes: map[string]*v1.Node{
+				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, func(node *v1.Node) {
+					test.SetNodeExtendedResource(node, extendedResource, 8)
+				}),
+				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				n3NodeName: test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
+			},
+			pods: map[string]*v1.PodList{
+				n1NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p1", 0, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod with extended resource.
+							test.SetRSOwnerRef(pod)
+							test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
+						}),
+					},
+				},
+				n2NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p9", 0, 0, n2NodeName, test.SetRSOwnerRef),
+					},
+				},
+				n3NodeName: {},
+			},
+			maxPodsToEvictPerNode: 0,
+			// 0 pods available for eviction because there's no enough extended resource in node2
+			expectedPodsEvicted: 0,
 		},
 	}
 
@@ -492,19 +619,6 @@ func TestValidateStrategyConfig(t *testing.T) {
 				"%v threshold not in [%v, %v] range", v1.ResourceMemory, MinResourcePercentage, MaxResourcePercentage)),
 		},
 		{
-			name: "passing invalid targetThresholds",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    20,
-				v1.ResourceMemory: 20,
-			},
-			targetThresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				"resourceInvalid": 80,
-			},
-			errInfo: fmt.Errorf("targetThresholds config is not valid: %v",
-				fmt.Errorf("only cpu, memory, or pods thresholds can be specified")),
-		},
-		{
 			name: "thresholds and targetThresholds configured different num of resources",
 			thresholds: api.ResourceThresholds{
 				v1.ResourceCPU:    20,
@@ -542,6 +656,60 @@ func TestValidateStrategyConfig(t *testing.T) {
 			errInfo: fmt.Errorf("thresholds' %v percentage is greater than targetThresholds'", v1.ResourceCPU),
 		},
 		{
+			name: "only thresholds configured extended resource",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:    20,
+				v1.ResourceMemory: 20,
+				extendedResource:  20,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:    80,
+				v1.ResourceMemory: 80,
+			},
+			errInfo: fmt.Errorf("thresholds and targetThresholds configured different resources"),
+		},
+		{
+			name: "only targetThresholds configured extended resource",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:    20,
+				v1.ResourceMemory: 20,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:    80,
+				v1.ResourceMemory: 80,
+				extendedResource:  80,
+			},
+			errInfo: fmt.Errorf("thresholds and targetThresholds configured different resources"),
+		},
+		{
+			name: "thresholds and targetThresholds configured different extended resources",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:    20,
+				v1.ResourceMemory: 20,
+				extendedResource:  20,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:    80,
+				v1.ResourceMemory: 80,
+				"example.com/bar": 80,
+			},
+			errInfo: fmt.Errorf("thresholds and targetThresholds configured different resources"),
+		},
+		{
+			name: "thresholds' extended resource config value is greater than targetThresholds'",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:    20,
+				v1.ResourceMemory: 20,
+				extendedResource:  90,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:    80,
+				v1.ResourceMemory: 80,
+				extendedResource:  20,
+			},
+			errInfo: fmt.Errorf("thresholds' %v percentage is greater than targetThresholds'", extendedResource),
+		},
+		{
 			name: "passing valid strategy config",
 			thresholds: api.ResourceThresholds{
 				v1.ResourceCPU:    20,
@@ -550,6 +718,20 @@ func TestValidateStrategyConfig(t *testing.T) {
 			targetThresholds: api.ResourceThresholds{
 				v1.ResourceCPU:    80,
 				v1.ResourceMemory: 80,
+			},
+			errInfo: nil,
+		},
+		{
+			name: "passing valid strategy config with extended resource",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:    20,
+				v1.ResourceMemory: 20,
+				extendedResource:  20,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:    80,
+				v1.ResourceMemory: 80,
+				extendedResource:  80,
 			},
 			errInfo: nil,
 		},
@@ -587,20 +769,12 @@ func TestValidateThresholds(t *testing.T) {
 			errInfo: fmt.Errorf("no resource threshold is configured"),
 		},
 		{
-			name: "passing unsupported resource name",
+			name: "passing extended resource name other than cpu/memory/pods",
 			input: api.ResourceThresholds{
-				v1.ResourceCPU:     40,
-				v1.ResourceStorage: 25.5,
+				v1.ResourceCPU:   40,
+				extendedResource: 50,
 			},
-			errInfo: fmt.Errorf("only cpu, memory, or pods thresholds can be specified"),
-		},
-		{
-			name: "passing invalid resource name",
-			input: api.ResourceThresholds{
-				v1.ResourceCPU: 40,
-				"coolResource": 42.0,
-			},
-			errInfo: fmt.Errorf("only cpu, memory, or pods thresholds can be specified"),
+			errInfo: nil,
 		},
 		{
 			name: "passing invalid resource value",
@@ -631,6 +805,23 @@ func TestValidateThresholds(t *testing.T) {
 				v1.ResourceCPU:    20,
 				v1.ResourceMemory: 30,
 				v1.ResourcePods:   40,
+			},
+			errInfo: nil,
+		},
+		{
+			name: "passing a valid threshold with only extended resource",
+			input: api.ResourceThresholds{
+				extendedResource: 80,
+			},
+			errInfo: nil,
+		},
+		{
+			name: "passing a valid threshold with cpu, memory, pods and extended resource",
+			input: api.ResourceThresholds{
+				v1.ResourceCPU:    20,
+				v1.ResourceMemory: 30,
+				v1.ResourcePods:   40,
+				extendedResource:  50,
 			},
 			errInfo: nil,
 		},
