@@ -111,6 +111,11 @@ Eight strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingI
 `RemovePodsHavingTooManyRestarts`, and `PodLifeTime` are currently implemented. As part of the policy, the
 parameters associated with the strategies can be configured too. By default, all strategies are enabled.
 
+The following diagram provides a visualization of most of the strategies to help
+categorize how strategies fit together.
+
+![Strategies diagram](strategies_diagram.png)
+
 The policy also includes common configuration for all the strategies:
 - `nodeSelector` - limiting the nodes which are processed
 - `evictLocalStoragePods` - allows eviction of pods with local storage
