@@ -122,6 +122,7 @@ gen:
 
 verify-gen:
 	./hack/verify-conversions.sh
+	./hack/verify-deep-copies.sh
 
 lint:
 ifndef HAS_GOLANGCI
