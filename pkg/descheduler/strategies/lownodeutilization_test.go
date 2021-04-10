@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/api/policy/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -567,7 +568,7 @@ func TestLowNodeUtilization(t *testing.T) {
 
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
-				"v1",
+				policyv1.SchemeGroupVersion.String(),
 				false,
 				test.maxPodsToEvictPerNode,
 				nodes,
@@ -953,7 +954,7 @@ func TestWithTaints(t *testing.T) {
 
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
-				"policy/v1",
+				policyv1.SchemeGroupVersion.String(),
 				false,
 				item.evictionsExpected,
 				item.nodes,
