@@ -39,5 +39,18 @@ make test-unit
 make test-e2e
 ```
 
+## Run Helm Tests
+Run the helm test for a particular descheduler release by setting below variables,
+```
+HELM_IMAGE_REPO="descheduler"
+HELM_IMAGE_TAG="helm-test"
+HELM_CHART_LOCATION="./charts/descheduler"
+```
+The helm tests runs as part of descheduler CI. But, to run it manually from the descheduler root,
+
+```
+make test-helm
+```
+
 ### Miscellaneous
 See the [hack directory](https://github.com/kubernetes-sigs/descheduler/tree/master/hack) for additional tools and scripts used for developing the descheduler.

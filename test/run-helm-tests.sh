@@ -18,9 +18,9 @@ set -o nounset
 set -o pipefail
 
 K8S_VERSION=${KUBERNETES_VERSION:-v1.20.2}
-HELM_IMAGE_REPO="descheduler"
-HELM_IMAGE_TAG="helm-test"
-CHARTS_PATH="./charts/descheduler"
+IMAGE_REPO=${HELM_IMAGE_REPO:-descheduler}
+IMAGE_TAG=${HELM_IMAGE_TAG:-helm-test}
+CHART_LOCATION=${HELM_CHART_LOCATION:-./charts/descheduler}
 VERSION=helm-test make image
 wget https://github.com/kubernetes-sigs/kind/releases/download/v0.10.0/kind-linux-amd64
 chmod +x kind-linux-amd64
@@ -28,7 +28,7 @@ mv kind-linux-amd64 kind
 export PATH=$PATH:$PWD
 kind create cluster --image kindest/node:"${K8S_VERSION}" --config=./hack/kind_config.yaml
 kind load docker-image descheduler:helm-test
-helm install descheduler-ci --set image.repository="${HELM_IMAGE_REPO}",image.tag="${HELM_IMAGE_TAG}" --namespace kube-system "${CHARTS_PATH}"
+helm install descheduler-ci --set image.repository="${IMAGE_REPO}",image.tag="${IMAGE_TAG}" --namespace kube-system "${CHART_LOCATION}"
 sleep 20s
 helm test descheduler-ci --namespace kube-system
 

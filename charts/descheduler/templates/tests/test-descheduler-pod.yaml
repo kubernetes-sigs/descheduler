@@ -17,7 +17,7 @@ spec:
               drop:
                 - All
             privileged: false
-            runAsNonRoot: false
+            runAsNonRoot: false 
         command: ["/bin/ash"]
         args:
           - -c
@@ -26,4 +26,4 @@ spec:
             curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl &&
             chmod +x ./kubectl &&
             mv ./kubectl /usr/local/bin/kubectl &&
-            /usr/local/bin/kubectl get pods --namespace kube-system --token "$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" | grep "Completed"
+            /usr/local/bin/kubectl get pods --namespace kube-system --token "$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" | grep "descheduler" | grep "Completed"
