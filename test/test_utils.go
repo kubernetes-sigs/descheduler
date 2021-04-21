@@ -79,6 +79,13 @@ func GetReplicaSetOwnerRefList() []metav1.OwnerReference {
 	return ownerRefList
 }
 
+// GetStatefulSetOwnerRefList returns the ownerRef needed for statefulset pod.
+func GetStatefulSetOwnerRefList() []metav1.OwnerReference {
+	ownerRefList := make([]metav1.OwnerReference, 0)
+	ownerRefList = append(ownerRefList, metav1.OwnerReference{Kind: "StatefulSet", APIVersion: "v1", Name: "statefulset-1"})
+	return ownerRefList
+}
+
 // GetDaemonSetOwnerRefList returns the ownerRef needed for daemonset pod.
 func GetDaemonSetOwnerRefList() []metav1.OwnerReference {
 	ownerRefList := make([]metav1.OwnerReference, 0)
@@ -142,6 +149,11 @@ func SetRSOwnerRef(pod *v1.Pod) {
 	pod.ObjectMeta.OwnerReferences = GetReplicaSetOwnerRefList()
 }
 
+// SetSSOwnerRef sets the given pod's owner to StatefulSet
+func SetSSOwnerRef(pod *v1.Pod) {
+	pod.ObjectMeta.OwnerReferences = GetStatefulSetOwnerRefList()
+}
+
 // SetDSOwnerRef sets the given pod's owner to DaemonSet
 func SetDSOwnerRef(pod *v1.Pod) {
 	pod.ObjectMeta.OwnerReferences = GetDaemonSetOwnerRefList()
@@ -160,4 +172,15 @@ func SetPodPriority(pod *v1.Pod, priority int32) {
 // SetNodeUnschedulable sets the given node unschedulable
 func SetNodeUnschedulable(node *v1.Node) {
 	node.Spec.Unschedulable = true
+}
+
+// SetPodExtendedResourceRequest sets the given pod's extended resources
+func SetPodExtendedResourceRequest(pod *v1.Pod, resourceName v1.ResourceName, requestQuantity int64) {
+	pod.Spec.Containers[0].Resources.Requests[resourceName] = *resource.NewQuantity(requestQuantity, resource.DecimalSI)
+}
+
+// SetNodeExtendedResouces sets the given node's extended resources
+func SetNodeExtendedResource(node *v1.Node, resourceName v1.ResourceName, requestQuantity int64) {
+	node.Status.Capacity[resourceName] = *resource.NewQuantity(requestQuantity, resource.DecimalSI)
+	node.Status.Allocatable[resourceName] = *resource.NewQuantity(requestQuantity, resource.DecimalSI)
 }

@@ -83,7 +83,7 @@ verify-commits:
 #   make test-unit
 #   make test-unit WHAT=pkg/build TESTFLAGS=-v
 
-verify: verify-gofmt verify-vendor lint lint-chart verify-spelling
+verify: verify-gofmt verify-vendor lint lint-chart verify-spelling verify-toc verify-gen
 
 verify-spelling:
 	./hack/verify-spelling.sh
@@ -93,6 +93,9 @@ verify-gofmt:
 
 verify-vendor:
 	./hack/verify-vendor.sh
+
+verify-toc:
+	./hack/verify-toc.sh
 
 test-unit:
 	GOTEST_FLAGS="$(TESTFLAGS)" hack/test-go.sh $(WHAT) $(TESTS)

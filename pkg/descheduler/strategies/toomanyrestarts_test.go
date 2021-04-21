@@ -22,7 +22,8 @@ import (
 
 	"fmt"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
@@ -167,10 +168,11 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 
 		podEvictor := evictions.NewPodEvictor(
 			fakeClient,
-			"v1",
+			policyv1.SchemeGroupVersion.String(),
 			false,
 			tc.maxPodsToEvictPerNode,
 			[]*v1.Node{node},
+			false,
 			false,
 			false,
 		)

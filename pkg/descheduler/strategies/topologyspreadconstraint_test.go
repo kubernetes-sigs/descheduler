@@ -3,8 +3,9 @@ package strategies
 import (
 	"context"
 	"fmt"
-	"sigs.k8s.io/descheduler/pkg/api"
 	"testing"
+
+	"sigs.k8s.io/descheduler/pkg/api"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -282,6 +283,56 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			namespaces:           []string{"ns1"},
 		},
 		{
+			name: "2 domains, sizes [4,0], maxSkew=1, move 2 pods since selector matches multiple nodes",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneA"
+					n.Labels["region"] = "boston"
+				}),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneB"
+					n.Labels["region"] = "boston"
+				}),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							MaxSkew:           1,
+							TopologyKey:       "zone",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+						},
+					},
+					nodeSelector: map[string]string{"region": "boston"},
+				},
+				{
+					count:        1,
+					node:         "n1",
+					labels:       map[string]string{"foo": "bar"},
+					nodeSelector: map[string]string{"region": "boston"},
+				},
+				{
+					count:        1,
+					node:         "n1",
+					labels:       map[string]string{"foo": "bar"},
+					nodeSelector: map[string]string{"region": "boston"},
+				},
+				{
+					count:        1,
+					node:         "n1",
+					labels:       map[string]string{"foo": "bar"},
+					nodeSelector: map[string]string{"region": "boston"},
+				},
+			}),
+			expectedEvictedCount: 2,
+			strategy:             api.DeschedulerStrategy{},
+			namespaces:           []string{"ns1"},
+		},
+		{
 			name: "3 domains, sizes [0, 1, 100], maxSkew=1, move 66 pods to get [34, 33, 34]",
 			nodes: []*v1.Node{
 				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
@@ -406,6 +457,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				false,
 				100,
 				tc.nodes,
+				false,
 				false,
 				false,
 			)

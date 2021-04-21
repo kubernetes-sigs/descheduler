@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -209,6 +210,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				false,
 				testCase.maxPodsToEvictPerNode,
 				[]*v1.Node{node1, node2},
+				false,
 				false,
 				false,
 			)
@@ -401,10 +403,11 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			})
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
-				"v1",
+				policyv1.SchemeGroupVersion.String(),
 				false,
 				testCase.maxPodsToEvictPerNode,
 				testCase.nodes,
+				false,
 				false,
 				false,
 			)
