@@ -96,7 +96,38 @@ func IsReady(node *v1.Node) bool {
 	return true
 }
 
-// IsNodeUnschedulable checks if the node is unschedulable. This is helper function to check only in case of
+// PodFitsAnyOtherNode checks if the given pod fits any of the given nodes, besides the node
+// the pod is already running on. The node fit is based on multiple criteria, like, pod node selector
+// matching the node label (including affinity), the taints on the node, and the node being schedulable or not.
+func PodFitsAnyOtherNode(pod *v1.Pod, nodes []*v1.Node) bool {
+
+	for _, node := range nodes {
+		// Skip node pod is already on
+		if node.Name == pod.Spec.NodeName {
+			continue
+		}
+		// Check node selector and required affinity
+		ok, err := utils.PodMatchNodeSelector(pod, node)
+		if err != nil || !ok {
+			continue
+		}
+		// Check taints (we only care about NoSchedule and NoExecute taints)
+		ok = utils.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, func(taint *v1.Taint) bool {
+			return taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectNoExecute
+		})
+		if !ok {
+			continue
+		}
+		// Check if node is schedulable
+		if !IsNodeUnschedulable(node) {
+			klog.V(2).InfoS("Pod can possibly be scheduled on a different node", "pod", klog.KObj(pod), "node", klog.KObj(node))
+			return true
+		}
+	}
+	return false
+}
+
+// IsNodeUnschedulable checks if the node is unschedulable. This is a helper function to check only in case of
 // underutilized node so that they won't be accounted for.
 func IsNodeUnschedulable(node *v1.Node) bool {
 	return node.Spec.Unschedulable

@@ -78,6 +78,11 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		return
 	}
 
+	nodeFit := false
+	if strategy.Params != nil {
+		nodeFit = strategy.Params.NodeFit
+	}
+
 	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
 	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
 	if err := validateStrategyConfig(thresholds, targetThresholds); err != nil {
@@ -162,7 +167,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		return
 	}
 
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
+	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
 
 	evictPodsFromTargetNodes(
 		ctx,
