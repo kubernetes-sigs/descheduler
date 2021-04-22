@@ -24,34 +24,35 @@ but relies on the default scheduler for that.
 
 Table of Contents
 =================
-
-  * [Quick Start](#quick-start)
-     * [Run As A Job](#run-as-a-job)
-     * [Run As A CronJob](#run-as-a-cronjob)
-     * [Install Using Helm](#install-using-helm)
-     * [Install Using Kustomize](#install-using-kustomize)
-  * [User Guide](#user-guide)
-  * [Policy and Strategies](#policy-and-strategies)
-     * [RemoveDuplicates](#removeduplicates)
-     * [LowNodeUtilization](#lownodeutilization)
-     * [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity)
-     * [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity)
-     * [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints)
-     * [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint)
-     * [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts)
-     * [PodLifeTime](#podlifetime)
-  * [Filter Pods](#filter-pods)
-     * [Namespace filtering](#namespace-filtering)
-     * [Priority filtering](#priority-filtering)
-     * [Label filtering](#label-filtering)
-  * [Pod Evictions](#pod-evictions)
-     * [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
-  * [Metrics](#metrics)
-  * [Compatibility Matrix](#compatibility-matrix)
-  * [Getting Involved and Contributing](#getting-involved-and-contributing)
-     * [Communicating With Contributors](#communicating-with-contributors)
-  * [Roadmap](#roadmap)
-     * [Code of conduct](#code-of-conduct)
+<!-- toc -->
+- [Quick Start](#quick-start)
+  - [Run As A Job](#run-as-a-job)
+  - [Run As A CronJob](#run-as-a-cronjob)
+  - [Install Using Helm](#install-using-helm)
+  - [Install Using Kustomize](#install-using-kustomize)
+- [User Guide](#user-guide)
+- [Policy and Strategies](#policy-and-strategies)
+  - [RemoveDuplicates](#removeduplicates)
+  - [LowNodeUtilization](#lownodeutilization)
+  - [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity)
+  - [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity)
+  - [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints)
+  - [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint)
+  - [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts)
+  - [PodLifeTime](#podlifetime)
+- [Filter Pods](#filter-pods)
+  - [Namespace filtering](#namespace-filtering)
+  - [Priority filtering](#priority-filtering)
+  - [Label filtering](#label-filtering)
+- [Pod Evictions](#pod-evictions)
+  - [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
+- [Metrics](#metrics)
+- [Compatibility Matrix](#compatibility-matrix)
+- [Getting Involved and Contributing](#getting-involved-and-contributing)
+  - [Communicating With Contributors](#communicating-with-contributors)
+- [Roadmap](#roadmap)
+  - [Code of conduct](#code-of-conduct)
+<!-- /toc -->
 
 ## Quick Start
 
@@ -90,12 +91,12 @@ See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/ku
 
 Run As A Job
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=master' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.21.0' | kubectl apply -f -
 ```
 
 Run As A CronJob
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=master' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.21.0' | kubectl apply -f -
 ```
 
 ## User Guide
@@ -110,9 +111,15 @@ Eight strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingI
 `RemovePodsHavingTooManyRestarts`, and `PodLifeTime` are currently implemented. As part of the policy, the
 parameters associated with the strategies can be configured too. By default, all strategies are enabled.
 
+The following diagram provides a visualization of most of the strategies to help
+categorize how strategies fit together.
+
+![Strategies diagram](strategies_diagram.png)
+
 The policy also includes common configuration for all the strategies:
 - `nodeSelector` - limiting the nodes which are processed
-- `evictLocalStoragePods` - allowing to evict pods with local storage
+- `evictLocalStoragePods` - allows eviction of pods with local storage
+- `evictSystemCriticalPods` - [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns
 - `ignorePvcPods` - set whether PVC pods should be evicted or ignored (defaults to `false`)
 - `maxNoOfPodsToEvictPerNode` - maximum number of pods evicted from each node (summed through all strategies)
 
@@ -121,6 +128,7 @@ apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 nodeSelector: prod=dev
 evictLocalStoragePods: true
+evictSystemCriticalPods: true
 maxNoOfPodsToEvictPerNode: 40
 ignorePvcPods: false
 strategies:
@@ -129,15 +137,17 @@ strategies:
 
 ### RemoveDuplicates
 
-This strategy makes sure that there is only one pod associated with a Replica Set (RS),
-Replication Controller (RC), Deployment, or Job running on the same node. If there are more,
+This strategy makes sure that there is only one pod associated with a ReplicaSet (RS),
+ReplicationController (RC), StatefulSet, or Job running on the same node. If there are more,
 those duplicate pods are evicted for better spreading of pods in a cluster. This issue could happen
 if some nodes went down due to whatever reasons, and pods on them were moved to other nodes leading to
 more than one pod associated with a RS or RC, for example, running on the same node. Once the failed nodes
 are ready again, this strategy could be enabled to evict those duplicate pods.
 
-It provides one optional parameter, `ExcludeOwnerKinds`, which is a list of OwnerRef `Kind`s. If a pod
-has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
+It provides one optional parameter, `excludeOwnerKinds`, which is a list of OwnerRef `Kind`s. If a pod
+has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction. Note that
+pods created by Deployments are considered for eviction by this strategy. The `excludeOwnerKinds` parameter
+should include `ReplicaSet` to have pods created by Deployments excluded.
 
 **Parameters:**
 
@@ -168,15 +178,15 @@ in the hope that recreation of evicted pods will be scheduled on these underutil
 parameters of this strategy are configured under `nodeResourceUtilizationThresholds`.
 
 The under utilization of nodes is determined by a configurable threshold `thresholds`. The threshold
-`thresholds` can be configured for cpu, memory, and number of pods in terms of percentage (the percentage is
+`thresholds` can be configured for cpu, memory, number of pods, and extended resources in terms of percentage (the percentage is
 calculated as the current resources requested on the node vs [total allocatable](https://kubernetes.io/docs/concepts/architecture/nodes/#capacity).
 For pods, this means the number of pods on the node as a fraction of the pod capacity set for that node).
 
-If a node's usage is below threshold for all (cpu, memory, and number of pods), the node is considered underutilized.
+If a node's usage is below threshold for all (cpu, memory, number of pods and extended resources), the node is considered underutilized.
 Currently, pods request resource requirements are considered for computing node resource utilization.
 
 There is another configurable threshold, `targetThresholds`, that is used to compute those potential nodes
-from where pods could be evicted. If a node's usage is above targetThreshold for any (cpu, memory, or number of pods),
+from where pods could be evicted. If a node's usage is above targetThreshold for any (cpu, memory, number of pods, or extended resources),
 the node is considered over utilized. Any node between the thresholds, `thresholds` and `targetThresholds` is
 considered appropriately utilized and is not considered for eviction. The threshold, `targetThresholds`,
 can be configured for cpu, memory, and number of pods too in terms of percentage.
@@ -216,13 +226,11 @@ strategies:
 ```
 
 Policy should pass the following validation checks:
-* Only three types of resources are supported: `cpu`, `memory` and `pods`.
+* Three basic native types of resources are supported: `cpu`, `memory` and `pods`. If any of these resource types is not specified, all its thresholds default to 100% to avoid nodes going from underutilized to overutilized.
+* Extended resources are supported. For example, resource type `nvidia.com/gpu` is specified for GPU node utilization. Extended resources are optional, and will not be used to compute node's usage if it's not specified in `thresholds` and `targetThresholds` explicitly.
 * `thresholds` or `targetThresholds` can not be nil and they must configure exactly the same types of resources.
 * The valid range of the resource's percentage value is \[0, 100\]
 * Percentage value of `thresholds` can not be greater than `targetThresholds` for the same resource.
-
-If any of the resource types is not specified, all its thresholds default to 100% to avoid nodes going
-from underutilized to overutilized.
 
 There is another parameter associated with the `LowNodeUtilization` strategy, called `numberOfNodes`.
 This parameter can be configured to activate the strategy only when the number of under utilized nodes
@@ -477,6 +485,9 @@ All strategies are able to configure a priority threshold, only pods under the t
 specify this threshold by setting `thresholdPriorityClassName`(setting the threshold to the value of the given
 priority class) or `thresholdPriority`(directly setting the threshold) parameters. By default, this threshold
 is set to the value of `system-cluster-critical` priority class.
+
+Note: Setting `evictSystemCriticalPods` to true disables priority filtering entirely.
+
 E.g.
 
 Setting `thresholdPriority`
@@ -510,7 +521,7 @@ does not exist, descheduler won't create it and will throw an error.
 
 ### Label filtering
 
-The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.20/#labelselector-v1-meta)
+The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.21/#labelselector-v1-meta)
 to filter pods by their labels:
 
 * `PodLifeTime`
@@ -544,12 +555,12 @@ strategies:
 
 When the descheduler decides to evict pods from a node, it employs the following general mechanism:
 
-* [Critical pods](https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/) (with priorityClassName set to system-cluster-critical or system-node-critical) are never evicted.
-* Pods (static or mirrored pods or stand alone pods) not part of an RC, RS, Deployment or Job are
+* [Critical pods](https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/) (with priorityClassName set to system-cluster-critical or system-node-critical) are never evicted (unless `evictSystemCriticalPods: true` is set).
+* Pods (static or mirrored pods or stand alone pods) not part of an ReplicationController, ReplicaSet(Deployment), StatefulSet, or Job are
 never evicted because these pods won't be recreated.
 * Pods associated with DaemonSets are never evicted.
-* Pods with local storage are never evicted (unless `evictLocalStoragePods: true` is set)
-* Pods with PVCs are evicted unless `ignorePvcPods: true` is set.
+* Pods with local storage are never evicted (unless `evictLocalStoragePods: true` is set).
+* Pods with PVCs are evicted (unless `ignorePvcPods: true` is set).
 * In `LowNodeUtilization` and `RemovePodsViolatingInterPodAntiAffinity`, pods are evicted by their priority from low to high, and if they have same priority,
 best effort pods are evicted before burstable and guaranteed pods.
 * All types of pods with the annotation `descheduler.alpha.kubernetes.io/evict` are eligible for eviction. This
@@ -584,6 +595,7 @@ packages that it is compiled with.
 
 Descheduler  | Supported Kubernetes Version
 -------------|-----------------------------
+v0.21        | v1.21
 v0.20        | v1.20
 v0.19        | v1.19
 v0.18        | v1.18

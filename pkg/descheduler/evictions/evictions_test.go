@@ -74,45 +74,67 @@ func TestIsEvictable(t *testing.T) {
 	lowPriority := int32(800)
 	highPriority := int32(900)
 	type testCase struct {
-		pod                   *v1.Pod
-		runBefore             func(*v1.Pod)
-		evictLocalStoragePods bool
-		priorityThreshold     *int32
-		result                bool
+		pod                     *v1.Pod
+		runBefore               func(*v1.Pod)
+		evictLocalStoragePods   bool
+		evictSystemCriticalPods bool
+		priorityThreshold       *int32
+		result                  bool
 	}
 
 	testCases := []testCase{
-		{
+		{ // Normal pod eviction with normal ownerRefs
 			pod: test.BuildTestPod("p1", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, { // Normal pod eviction with normal ownerRefs and descheduler.alpha.kubernetes.io/evict annotation
 			pod: test.BuildTestPod("p2", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, { // Normal pod eviction with replicaSet ownerRefs
 			pod: test.BuildTestPod("p3", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, { // Normal pod eviction with replicaSet ownerRefs and descheduler.alpha.kubernetes.io/evict annotation
 			pod: test.BuildTestPod("p4", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 				pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, { // Normal pod eviction with statefulSet ownerRefs
+			pod: test.BuildTestPod("p18", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod) {
+				pod.ObjectMeta.OwnerReferences = test.GetStatefulSetOwnerRefList()
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, { // Normal pod eviction with statefulSet ownerRefs and descheduler.alpha.kubernetes.io/evict annotation
+			pod: test.BuildTestPod("p19", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod) {
+				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+				pod.ObjectMeta.OwnerReferences = test.GetStatefulSetOwnerRefList()
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, { // Pod not evicted because it is bound to a PV and evictLocalStoragePods = false
 			pod: test.BuildTestPod("p5", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -127,9 +149,10 @@ func TestIsEvictable(t *testing.T) {
 					},
 				}
 			},
-			evictLocalStoragePods: false,
-			result:                false,
-		}, {
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  false,
+		}, { // Pod is evicted because it is bound to a PV and evictLocalStoragePods = true
 			pod: test.BuildTestPod("p6", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -144,9 +167,10 @@ func TestIsEvictable(t *testing.T) {
 					},
 				}
 			},
-			evictLocalStoragePods: true,
-			result:                true,
-		}, {
+			evictLocalStoragePods:   true,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, { // Pod is evicted because it is bound to a PV and evictLocalStoragePods = false, but it has scheduler.alpha.kubernetes.io/evict annotation
 			pod: test.BuildTestPod("p7", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
@@ -162,50 +186,56 @@ func TestIsEvictable(t *testing.T) {
 					},
 				}
 			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, { // Pod not evicted becasuse it is part of a daemonSet
 			pod: test.BuildTestPod("p8", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 			},
-			evictLocalStoragePods: false,
-			result:                false,
-		}, {
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  false,
+		}, { // Pod is evicted becasuse it is part of a daemonSet, but it has scheduler.alpha.kubernetes.io/evict annotation
 			pod: test.BuildTestPod("p9", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 				pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, { // Pod not evicted becasuse it is a mirror pod
 			pod: test.BuildTestPod("p10", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 				pod.Annotations = test.GetMirrorPodAnnotation()
 			},
-			evictLocalStoragePods: false,
-			result:                false,
-		}, {
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  false,
+		}, { // Pod is evicted becasuse it is a mirror pod, but it has scheduler.alpha.kubernetes.io/evict annotation
 			pod: test.BuildTestPod("p11", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 				pod.Annotations = test.GetMirrorPodAnnotation()
 				pod.Annotations["descheduler.alpha.kubernetes.io/evict"] = "true"
 			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, { // Pod not evicted becasuse it has system critical priority
 			pod: test.BuildTestPod("p12", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 				priority := utils.SystemCriticalPriority
 				pod.Spec.Priority = &priority
 			},
-			evictLocalStoragePods: false,
-			result:                false,
-		}, {
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  false,
+		}, { // Pod is evicted becasuse it has system critical priority, but it has scheduler.alpha.kubernetes.io/evict annotation
 			pod: test.BuildTestPod("p13", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -215,27 +245,72 @@ func TestIsEvictable(t *testing.T) {
 					"descheduler.alpha.kubernetes.io/evict": "true",
 				}
 			},
-			evictLocalStoragePods: false,
-			result:                true,
-		}, {
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, { // Pod not evicted becasuse it has a priority higher than the configured priority threshold
 			pod: test.BuildTestPod("p14", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 				pod.Spec.Priority = &highPriority
 			},
-			evictLocalStoragePods: false,
-			priorityThreshold:     &lowPriority,
-			result:                false,
-		}, {
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			priorityThreshold:       &lowPriority,
+			result:                  false,
+		}, { // Pod is evicted becasuse it has a priority higher than the configured priority threshold, but it has scheduler.alpha.kubernetes.io/evict annotation
 			pod: test.BuildTestPod("p15", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod) {
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
 				pod.Spec.Priority = &highPriority
 			},
-			evictLocalStoragePods: false,
-			priorityThreshold:     &lowPriority,
-			result:                true,
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			priorityThreshold:       &lowPriority,
+			result:                  true,
+		}, { // Pod is evicted becasuse it has system critical priority, but evictSystemCriticalPods = true
+			pod: test.BuildTestPod("p16", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod) {
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+				priority := utils.SystemCriticalPriority
+				pod.Spec.Priority = &priority
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: true,
+			result:                  true,
+		}, { // Pod is evicted becasuse it has system critical priority, but evictSystemCriticalPods = true and it has scheduler.alpha.kubernetes.io/evict annotation
+			pod: test.BuildTestPod("p16", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod) {
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+				priority := utils.SystemCriticalPriority
+				pod.Spec.Priority = &priority
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: true,
+			result:                  true,
+		}, { // Pod is evicted becasuse it has a priority higher than the configured priority threshold, but evictSystemCriticalPods = true
+			pod: test.BuildTestPod("p17", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod) {
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+				pod.Spec.Priority = &highPriority
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: true,
+			priorityThreshold:       &lowPriority,
+			result:                  true,
+		}, { // Pod is evicted becasuse it has a priority higher than the configured priority threshold, but evictSystemCriticalPods = true and it has scheduler.alpha.kubernetes.io/evict annotation
+			pod: test.BuildTestPod("p17", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod) {
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+				pod.Spec.Priority = &highPriority
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: true,
+			priorityThreshold:       &lowPriority,
+			result:                  true,
 		},
 	}
 
@@ -243,7 +318,8 @@ func TestIsEvictable(t *testing.T) {
 		test.runBefore(test.pod)
 
 		podEvictor := &PodEvictor{
-			evictLocalStoragePods: test.evictLocalStoragePods,
+			evictLocalStoragePods:   test.evictLocalStoragePods,
+			evictSystemCriticalPods: test.evictSystemCriticalPods,
 		}
 
 		evictable := podEvictor.Evictable()
@@ -286,18 +362,18 @@ func TestPodTypes(t *testing.T) {
 	}
 	// A Mirror Pod.
 	p4.Annotations = test.GetMirrorPodAnnotation()
-	if !IsMirrorPod(p4) {
+	if !utils.IsMirrorPod(p4) {
 		t.Errorf("Expected p4 to be a mirror pod.")
 	}
-	if !IsPodWithLocalStorage(p3) {
+	if !utils.IsPodWithLocalStorage(p3) {
 		t.Errorf("Expected p3 to be a pod with local storage.")
 	}
 	ownerRefList := podutil.OwnerRef(p2)
-	if !IsDaemonsetPod(ownerRefList) {
+	if !utils.IsDaemonsetPod(ownerRefList) {
 		t.Errorf("Expected p2 to be a daemonset pod.")
 	}
 	ownerRefList = podutil.OwnerRef(p1)
-	if IsDaemonsetPod(ownerRefList) || IsPodWithLocalStorage(p1) || IsCriticalPod(p1) || IsMirrorPod(p1) {
+	if utils.IsDaemonsetPod(ownerRefList) || utils.IsPodWithLocalStorage(p1) || utils.IsCriticalPriorityPod(p1) || utils.IsMirrorPod(p1) || utils.IsStaticPod(p1) {
 		t.Errorf("Expected p1 to be a normal pod.")
 	}
 

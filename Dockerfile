@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-FROM golang:1.15.8
+FROM golang:1.16.1
 
 WORKDIR /go/src/sigs.k8s.io/descheduler
 COPY . .
@@ -21,7 +21,7 @@ RUN VERSION=${VERSION} make build.$ARCH
 
 FROM scratch
 
-MAINTAINER Avesh Agarwal <avesh.ncsu@gmail.com>
+MAINTAINER Kubernetes SIG Scheduling <kubernetes-sig-scheduling@googlegroups.com>
 
 USER 1000
 

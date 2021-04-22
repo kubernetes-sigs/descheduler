@@ -5,6 +5,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/component-base/featuregate"
 	"k8s.io/klog/v2"
@@ -82,7 +83,7 @@ func GetResourceRequestQuantity(pod *v1.Pod, resourceName v1.ResourceName) resou
 	return requestQuantity
 }
 
-// IsMirrorPod returns true if the passed Pod is a Mirror Pod.
+// IsMirrorPod returns true if the pod is a Mirror Pod.
 func IsMirrorPod(pod *v1.Pod) bool {
 	_, ok := pod.Annotations[v1.MirrorPodAnnotationKey]
 	return ok
@@ -94,6 +95,42 @@ func IsStaticPod(pod *v1.Pod) bool {
 	return err == nil && source != "api"
 }
 
+// IsCriticalPriorityPod returns true if the pod has critical priority.
+func IsCriticalPriorityPod(pod *v1.Pod) bool {
+	return pod.Spec.Priority != nil && *pod.Spec.Priority >= SystemCriticalPriority
+}
+
+// IsDaemonsetPod returns true if the pod is a IsDaemonsetPod.
+func IsDaemonsetPod(ownerRefList []metav1.OwnerReference) bool {
+	for _, ownerRef := range ownerRefList {
+		if ownerRef.Kind == "DaemonSet" {
+			return true
+		}
+	}
+	return false
+}
+
+// IsPodWithLocalStorage returns true if the pod has local storage.
+func IsPodWithLocalStorage(pod *v1.Pod) bool {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.HostPath != nil || volume.EmptyDir != nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+// IsPodWithLocalStorage returns true if the pod has claimed a persistent volume.
+func IsPodWithPVC(pod *v1.Pod) bool {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.PersistentVolumeClaim != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // GetPodSource returns the source of the pod based on the annotation.
 func GetPodSource(pod *v1.Pod) (string, error) {
 	if pod.Annotations != nil {
@@ -102,23 +139,6 @@ func GetPodSource(pod *v1.Pod) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("cannot get source of pod %q", pod.UID)
-}
-
-// IsCriticalPod returns true if the pod is a static or mirror pod.
-func IsCriticalPod(pod *v1.Pod) bool {
-	if IsStaticPod(pod) {
-		return true
-	}
-
-	if IsMirrorPod(pod) {
-		return true
-	}
-
-	if pod.Spec.Priority != nil && *pod.Spec.Priority >= SystemCriticalPriority {
-		return true
-	}
-
-	return false
 }
 
 // PodRequestsAndLimits returns a dictionary of all defined resources summed up for all
