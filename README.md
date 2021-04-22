@@ -44,6 +44,7 @@ Table of Contents
   - [Namespace filtering](#namespace-filtering)
   - [Priority filtering](#priority-filtering)
   - [Label filtering](#label-filtering)
+  - [Node Fit filtering](#node-fit-filtering)
 - [Pod Evictions](#pod-evictions)
   - [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
 - [Metrics](#metrics)
@@ -157,6 +158,7 @@ should include `ReplicaSet` to have pods created by Deployments excluded.
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 ```yaml
@@ -204,6 +206,7 @@ strategy evicts pods from `overutilized nodes` (those with usage above `targetTh
 |`numberOfNodes`|int|
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
@@ -253,6 +256,7 @@ node.
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
@@ -291,6 +295,7 @@ podA gets evicted from nodeA.
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
@@ -320,6 +325,7 @@ and will be evicted.
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
@@ -348,6 +354,7 @@ include soft constraints.
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
@@ -379,6 +386,7 @@ which determines whether init container restarts should be factored into that ca
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
@@ -550,6 +558,49 @@ strategies:
           - {key: tier, operator: In, values: [cache]}
           - {key: environment, operator: NotIn, values: [dev]}
 ```
+
+
+### Node Fit filtering
+
+The following strategies accept a `nodeFit` boolean parameter which can optimize descheduling:
+* `RemoveDuplicates`
+* `LowNodeUtilization`
+* `RemovePodsViolatingInterPodAntiAffinity`
+* `RemovePodsViolatingNodeAffinity`
+* `RemovePodsViolatingNodeTaints`
+* `RemovePodsViolatingTopologySpreadConstraint`
+* `RemovePodsHavingTooManyRestarts`
+
+ If set to `true` the descheduler will consider whether or not the pods that meet eviction criteria will fit on other nodes before evicting them. If a pod cannot be rescheduled to another node, it will not be evicted. Currently the following criteria are considered when setting `nodeFit` to `true`:
+- A `nodeSelector` on the pod
+- Any `Tolerations` on the pod and any `Taints` on the other nodes
+- `nodeAffinity` on the pod
+- Whether any of the other nodes are marked as `unschedulable`
+
+E.g.
+
+```yaml
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "LowNodeUtilization":
+     enabled: true
+     params:
+       nodeResourceUtilizationThresholds:
+         thresholds:
+           "cpu" : 20
+           "memory": 20
+           "pods": 20
+         targetThresholds:
+           "cpu" : 50
+           "memory": 50
+           "pods": 50
+        nodeFit: true
+```
+
+Note that node fit filtering references the current pod spec, and not that of it's owner. Thus, if the pod is owned by a ReplicationController (and that ReplicationController was modified recently), the pod may be running with an outdated spec, which the descheduler will reference when determining node fit. This is expected behavior as the descheduler is a "best-effort" mechanism. 
+
+Using Deployments instead of ReplicationControllers provides an automated rollout of pod spec changes, therefore ensuring that the descheduler has an up-to-date view of the cluster state.
 
 ## Pod Evictions
 

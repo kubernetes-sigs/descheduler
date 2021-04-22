@@ -64,7 +64,12 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 		excludedNamespaces = strategy.Params.Namespaces.Exclude
 	}
 
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
+	nodeFit := false
+	if strategy.Params != nil {
+		nodeFit = strategy.Params.NodeFit
+	}
+
+	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
 
 	for _, nodeAffinity := range strategy.Params.NodeAffinityType {
 		klog.V(2).InfoS("Executing for nodeAffinityType", "nodeAffinity", nodeAffinity)
