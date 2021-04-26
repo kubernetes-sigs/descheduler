@@ -72,7 +72,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 
-	strategyFuncs := map[string]strategyFunction{
+	strategyFuncs := map[api.StrategyName]strategyFunction{
 		"RemoveDuplicates":                            strategies.RemoveDuplicatePods,
 		"LowNodeUtilization":                          strategies.LowNodeUtilization,
 		"RemovePodsViolatingInterPodAntiAffinity":     strategies.RemovePodsViolatingInterPodAntiAffinity,
@@ -136,9 +136,13 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			ignorePvcPods,
 		)
 
-		for name, f := range strategyFuncs {
-			if strategy := deschedulerPolicy.Strategies[api.StrategyName(name)]; strategy.Enabled {
-				f(ctx, rs.Client, strategy, nodes, podEvictor)
+		for name, strategy := range deschedulerPolicy.Strategies {
+			if f, ok := strategyFuncs[name]; ok {
+				if strategy.Enabled {
+					f(ctx, rs.Client, strategy, nodes, podEvictor)
+				}
+			} else {
+				klog.Errorf("Unknown strategy name '%s', skipping", name)
 			}
 		}
 
