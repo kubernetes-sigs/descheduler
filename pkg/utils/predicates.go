@@ -95,10 +95,6 @@ type taintsFilterFunc func(*v1.Taint) bool
 // TolerationsTolerateTaintsWithFilter checks if given tolerations tolerates
 // all the taints that apply to the filter in given taint list.
 func TolerationsTolerateTaintsWithFilter(tolerations []v1.Toleration, taints []v1.Taint, applyFilter taintsFilterFunc) bool {
-	if len(taints) == 0 {
-		return true
-	}
-
 	for i := range taints {
 		if applyFilter != nil && !applyFilter(&taints[i]) {
 			continue
