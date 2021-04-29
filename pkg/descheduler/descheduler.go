@@ -142,7 +142,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 					f(ctx, rs.Client, strategy, nodes, podEvictor)
 				}
 			} else {
-				klog.Errorf("Unknown strategy name '%s', skipping", name)
+				klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
 			}
 		}
 
