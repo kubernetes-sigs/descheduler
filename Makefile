@@ -93,6 +93,7 @@ push-all: image.amd64 image.arm image.arm64
 
 clean:
 	rm -rf _output
+	rm -rf _tmp
 
 verify: verify-gofmt verify-vendor lint lint-chart verify-spelling verify-toc verify-gen
 
