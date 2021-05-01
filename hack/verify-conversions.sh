@@ -28,7 +28,7 @@ pushd "${DESCHEDULER_ROOT}" > /dev/null 2>&1
 if ! _out="$(diff -Naupr pkg/ "${_deschedulertmp}/pkg/")"; then
     echo "Generated output differs:" >&2
     echo "${_out}" >&2
-    echo "Generated conversions verify failed. Please run ./hack/update-conversions.sh"
+    echo "Generated conversions verify failed. Please run ./hack/update-generated-conversions.sh (and commit the result)"
     exit 1
 fi
 popd > /dev/null 2>&1
