@@ -61,6 +61,12 @@ priorityClassName: system-cluster-critical
 nodeSelector: {}
 #  foo: bar
 
+tolerations: []
+# - key: 'management'
+#   operator: 'Equal'
+#   value: 'tool'
+#   effect: 'NoSchedule'
+
 rbac:
   # Specifies whether RBAC resources should be created
   create: true
