@@ -240,6 +240,117 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 		}
 	}
 
+	setTolerationsK1 := func(pod *v1.Pod) {
+		test.SetRSOwnerRef(pod)
+		pod.Spec.Tolerations = []v1.Toleration{
+			{
+				Key:      "k1",
+				Value:    "v1",
+				Operator: v1.TolerationOpEqual,
+				Effect:   v1.TaintEffectNoSchedule,
+			},
+		}
+	}
+	setTolerationsK2 := func(pod *v1.Pod) {
+		test.SetRSOwnerRef(pod)
+		pod.Spec.Tolerations = []v1.Toleration{
+			{
+				Key:      "k2",
+				Value:    "v2",
+				Operator: v1.TolerationOpEqual,
+				Effect:   v1.TaintEffectNoSchedule,
+			},
+		}
+	}
+
+	setMasterNoScheduleTaint := func(node *v1.Node) {
+		node.Spec.Taints = []v1.Taint{
+			{
+				Effect: v1.TaintEffectNoSchedule,
+				Key:    "node-role.kubernetes.io/master",
+			},
+		}
+	}
+
+	setMasterNoScheduleLabel := func(node *v1.Node) {
+		if node.ObjectMeta.Labels == nil {
+			node.ObjectMeta.Labels = map[string]string{}
+		}
+		node.ObjectMeta.Labels["node-role.kubernetes.io/master"] = ""
+	}
+
+	setWorkerLabel := func(node *v1.Node) {
+		if node.ObjectMeta.Labels == nil {
+			node.ObjectMeta.Labels = map[string]string{}
+		}
+		node.ObjectMeta.Labels["node-role.kubernetes.io/worker"] = "k1"
+		node.ObjectMeta.Labels["node-role.kubernetes.io/worker"] = "k2"
+	}
+
+	setNotMasterNodeSelectorK1 := func(pod *v1.Pod) {
+		test.SetRSOwnerRef(pod)
+		pod.Spec.Affinity = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{
+						{
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      "node-role.kubernetes.io/master",
+									Operator: v1.NodeSelectorOpDoesNotExist,
+								},
+								{
+									Key:      "k1",
+									Operator: v1.NodeSelectorOpDoesNotExist,
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	setNotMasterNodeSelectorK2 := func(pod *v1.Pod) {
+		test.SetRSOwnerRef(pod)
+		pod.Spec.Affinity = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{
+						{
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      "node-role.kubernetes.io/master",
+									Operator: v1.NodeSelectorOpDoesNotExist,
+								},
+								{
+									Key:      "k2",
+									Operator: v1.NodeSelectorOpDoesNotExist,
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	setWorkerLabelSelectorK1 := func(pod *v1.Pod) {
+		test.SetRSOwnerRef(pod)
+		if pod.Spec.NodeSelector == nil {
+			pod.Spec.NodeSelector = map[string]string{}
+		}
+		pod.Spec.NodeSelector["node-role.kubernetes.io/worker"] = "k1"
+	}
+
+	setWorkerLabelSelectorK2 := func(pod *v1.Pod) {
+		test.SetRSOwnerRef(pod)
+		if pod.Spec.NodeSelector == nil {
+			pod.Spec.NodeSelector = map[string]string{}
+		}
+		pod.Spec.NodeSelector["node-role.kubernetes.io/worker"] = "k2"
+	}
+
 	testCases := []struct {
 		description             string
 		maxPodsToEvictPerNode   int
@@ -390,6 +501,106 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n1", 2000, 3000, 10, nil),
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+			},
+			strategy: api.DeschedulerStrategy{},
+		},
+		{
+			description: "Evict pods uniformly respecting taints",
+			pods: []v1.Pod{
+				// (5,3,1,0,0,0) -> (3,3,3,0,0,0) -> 2 evictions
+				*test.BuildTestPod("p1", 100, 0, "worker1", setTolerationsK1),
+				*test.BuildTestPod("p2", 100, 0, "worker1", setTolerationsK2),
+				*test.BuildTestPod("p3", 100, 0, "worker1", setTolerationsK1),
+				*test.BuildTestPod("p4", 100, 0, "worker1", setTolerationsK2),
+				*test.BuildTestPod("p5", 100, 0, "worker1", setTolerationsK1),
+				*test.BuildTestPod("p6", 100, 0, "worker2", setTolerationsK2),
+				*test.BuildTestPod("p7", 100, 0, "worker2", setTolerationsK1),
+				*test.BuildTestPod("p8", 100, 0, "worker2", setTolerationsK2),
+				*test.BuildTestPod("p9", 100, 0, "worker3", setTolerationsK1),
+			},
+			expectedEvictedPodCount: 2,
+			nodes: []*v1.Node{
+				test.BuildTestNode("worker1", 2000, 3000, 10, nil),
+				test.BuildTestNode("worker2", 2000, 3000, 10, nil),
+				test.BuildTestNode("worker3", 2000, 3000, 10, nil),
+				test.BuildTestNode("master1", 2000, 3000, 10, setMasterNoScheduleTaint),
+				test.BuildTestNode("master2", 2000, 3000, 10, setMasterNoScheduleTaint),
+				test.BuildTestNode("master3", 2000, 3000, 10, setMasterNoScheduleTaint),
+			},
+			strategy: api.DeschedulerStrategy{},
+		},
+		{
+			description: "Evict pods uniformly respecting RequiredDuringSchedulingIgnoredDuringExecution node affinity",
+			pods: []v1.Pod{
+				// (5,3,1,0,0,0) -> (3,3,3,0,0,0) -> 2 evictions
+				*test.BuildTestPod("p1", 100, 0, "worker1", setNotMasterNodeSelectorK1),
+				*test.BuildTestPod("p2", 100, 0, "worker1", setNotMasterNodeSelectorK2),
+				*test.BuildTestPod("p3", 100, 0, "worker1", setNotMasterNodeSelectorK1),
+				*test.BuildTestPod("p4", 100, 0, "worker1", setNotMasterNodeSelectorK2),
+				*test.BuildTestPod("p5", 100, 0, "worker1", setNotMasterNodeSelectorK1),
+				*test.BuildTestPod("p6", 100, 0, "worker2", setNotMasterNodeSelectorK2),
+				*test.BuildTestPod("p7", 100, 0, "worker2", setNotMasterNodeSelectorK1),
+				*test.BuildTestPod("p8", 100, 0, "worker2", setNotMasterNodeSelectorK2),
+				*test.BuildTestPod("p9", 100, 0, "worker3", setNotMasterNodeSelectorK1),
+			},
+			expectedEvictedPodCount: 2,
+			nodes: []*v1.Node{
+				test.BuildTestNode("worker1", 2000, 3000, 10, nil),
+				test.BuildTestNode("worker2", 2000, 3000, 10, nil),
+				test.BuildTestNode("worker3", 2000, 3000, 10, nil),
+				test.BuildTestNode("master1", 2000, 3000, 10, setMasterNoScheduleLabel),
+				test.BuildTestNode("master2", 2000, 3000, 10, setMasterNoScheduleLabel),
+				test.BuildTestNode("master3", 2000, 3000, 10, setMasterNoScheduleLabel),
+			},
+			strategy: api.DeschedulerStrategy{},
+		},
+		{
+			description: "Evict pods uniformly respecting node selector",
+			pods: []v1.Pod{
+				// (5,3,1,0,0,0) -> (3,3,3,0,0,0) -> 2 evictions
+				*test.BuildTestPod("p1", 100, 0, "worker1", setWorkerLabelSelectorK1),
+				*test.BuildTestPod("p2", 100, 0, "worker1", setWorkerLabelSelectorK2),
+				*test.BuildTestPod("p3", 100, 0, "worker1", setWorkerLabelSelectorK1),
+				*test.BuildTestPod("p4", 100, 0, "worker1", setWorkerLabelSelectorK2),
+				*test.BuildTestPod("p5", 100, 0, "worker1", setWorkerLabelSelectorK1),
+				*test.BuildTestPod("p6", 100, 0, "worker2", setWorkerLabelSelectorK2),
+				*test.BuildTestPod("p7", 100, 0, "worker2", setWorkerLabelSelectorK1),
+				*test.BuildTestPod("p8", 100, 0, "worker2", setWorkerLabelSelectorK2),
+				*test.BuildTestPod("p9", 100, 0, "worker3", setWorkerLabelSelectorK1),
+			},
+			expectedEvictedPodCount: 2,
+			nodes: []*v1.Node{
+				test.BuildTestNode("worker1", 2000, 3000, 10, setWorkerLabel),
+				test.BuildTestNode("worker2", 2000, 3000, 10, setWorkerLabel),
+				test.BuildTestNode("worker3", 2000, 3000, 10, setWorkerLabel),
+				test.BuildTestNode("master1", 2000, 3000, 10, nil),
+				test.BuildTestNode("master2", 2000, 3000, 10, nil),
+				test.BuildTestNode("master3", 2000, 3000, 10, nil),
+			},
+			strategy: api.DeschedulerStrategy{},
+		},
+		{
+			description: "Evict pods uniformly respecting node selector with zero target nodes",
+			pods: []v1.Pod{
+				// (5,3,1,0,0,0) -> (3,3,3,0,0,0) -> 2 evictions
+				*test.BuildTestPod("p1", 100, 0, "worker1", setWorkerLabelSelectorK1),
+				*test.BuildTestPod("p2", 100, 0, "worker1", setWorkerLabelSelectorK2),
+				*test.BuildTestPod("p3", 100, 0, "worker1", setWorkerLabelSelectorK1),
+				*test.BuildTestPod("p4", 100, 0, "worker1", setWorkerLabelSelectorK2),
+				*test.BuildTestPod("p5", 100, 0, "worker1", setWorkerLabelSelectorK1),
+				*test.BuildTestPod("p6", 100, 0, "worker2", setWorkerLabelSelectorK2),
+				*test.BuildTestPod("p7", 100, 0, "worker2", setWorkerLabelSelectorK1),
+				*test.BuildTestPod("p8", 100, 0, "worker2", setWorkerLabelSelectorK2),
+				*test.BuildTestPod("p9", 100, 0, "worker3", setWorkerLabelSelectorK1),
+			},
+			expectedEvictedPodCount: 0,
+			nodes: []*v1.Node{
+				test.BuildTestNode("worker1", 2000, 3000, 10, nil),
+				test.BuildTestNode("worker2", 2000, 3000, 10, nil),
+				test.BuildTestNode("worker3", 2000, 3000, 10, nil),
+				test.BuildTestNode("master1", 2000, 3000, 10, nil),
+				test.BuildTestNode("master2", 2000, 3000, 10, nil),
+				test.BuildTestNode("master3", 2000, 3000, 10, nil),
 			},
 			strategy: api.DeschedulerStrategy{},
 		},
