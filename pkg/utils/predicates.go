@@ -18,6 +18,7 @@ package utils
 
 import (
 	"fmt"
+	"sort"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -105,5 +106,61 @@ func TolerationsTolerateTaintsWithFilter(tolerations []v1.Toleration, taints []v
 		}
 	}
 
+	return true
+}
+
+// sort by (key, value, effect, operand)
+func uniqueSortTolerations(srcTolerations []v1.Toleration) []v1.Toleration {
+	tolerations := append([]v1.Toleration{}, srcTolerations...)
+
+	if len(tolerations) < 2 {
+		return tolerations
+	}
+
+	sort.Slice(tolerations, func(i, j int) bool {
+		if tolerations[i].Key < tolerations[j].Key {
+			return true
+		}
+		if tolerations[i].Key > tolerations[j].Key {
+			return false
+		}
+		if tolerations[i].Value < tolerations[j].Value {
+			return true
+		}
+		if tolerations[i].Value > tolerations[j].Value {
+			return false
+		}
+		if tolerations[i].Effect < tolerations[j].Effect {
+			return true
+		}
+		if tolerations[i].Effect > tolerations[j].Effect {
+			return false
+		}
+		return tolerations[i].Operator < tolerations[j].Operator
+	})
+	uniqueTolerations := []v1.Toleration{tolerations[0]}
+	idx := 0
+	for _, t := range tolerations[1:] {
+		if t.MatchToleration(&uniqueTolerations[idx]) {
+			continue
+		}
+		idx++
+		uniqueTolerations = append(uniqueTolerations, t)
+	}
+	return uniqueTolerations
+}
+
+func TolerationsEqual(t1, t2 []v1.Toleration) bool {
+	t1Sorted := uniqueSortTolerations(t1)
+	t2Sorted := uniqueSortTolerations(t2)
+	l1Len := len(t1Sorted)
+	if l1Len != len(t2Sorted) {
+		return false
+	}
+	for i := 0; i < l1Len; i++ {
+		if !t1Sorted[i].MatchToleration(&t2Sorted[i]) {
+			return false
+		}
+	}
 	return true
 }
