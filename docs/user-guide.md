@@ -92,12 +92,12 @@ strategies:
 ```
 
 ### Balance Cluster By Node Memory Utilization
-
 If your cluster has been running for a long period of time, you may find that the resource utilization is not very
-balanced. The `LowNodeUtilization` strategy can be used to rebalance your cluster based on `cpu`, `memory`
+balanced. The following two strategies can be used to rebalance your cluster based on `cpu`, `memory` 
 or `number of pods`.
 
-Using the following policy configuration file, descheduler will rebalance the cluster based on memory by evicting pods
+#### Balance high utilization nodes
+Using `LowNodeUtilization`, descheduler will rebalance the cluster based on memory by evicting pods
 from nodes with memory utilization over 70% to nodes with memory utilization below 20%.
 
 ```
@@ -112,6 +112,23 @@ strategies:
           "memory": 20
         targetThresholds:
           "memory": 70
+```
+
+#### Balance low utilization nodes
+Using `HighNodeUtilization`, descheduler will rebalance the cluster based on memory by evicting pods
+from nodes with memory utilization lower than 20%. This should be used along with scheduler strategy `MostRequestedPriority`.
+The evicted pods will be compacted into minimal set of nodes.
+
+```
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "HighNodeUtilization":
+    enabled: true
+    params:
+      nodeResourceUtilizationThresholds:
+        thresholds:
+          "memory": 20
 ```
 
 ### Autoheal Node Problems

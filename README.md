@@ -34,6 +34,7 @@ Table of Contents
 - [Policy and Strategies](#policy-and-strategies)
   - [RemoveDuplicates](#removeduplicates)
   - [LowNodeUtilization](#lownodeutilization)
+  - [HighNodeUtilization](#highnodeutilization)
   - [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity)
   - [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity)
   - [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints)
@@ -107,9 +108,17 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 ## Policy and Strategies
 
 Descheduler's policy is configurable and includes strategies that can be enabled or disabled.
-Eight strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`,
-`RemovePodsViolatingNodeAffinity`, `RemovePodsViolatingNodeTaints`, `RemovePodsViolatingTopologySpreadConstraint`,
-`RemovePodsHavingTooManyRestarts`, and `PodLifeTime` are currently implemented. As part of the policy, the
+Nine strategies 
+1. `RemoveDuplicates`
+2. `LowNodeUtilization`
+3. `HighNodeUtilization`
+4. `RemovePodsViolatingInterPodAntiAffinity`
+5. `RemovePodsViolatingNodeAffinity`
+6. `RemovePodsViolatingNodeTaints`
+7. `RemovePodsViolatingTopologySpreadConstraint`
+8. `RemovePodsHavingTooManyRestarts`
+9. `PodLifeTime`  
+are currently implemented. As part of the policy, the
 parameters associated with the strategies can be configured too. By default, all strategies are enabled.
 
 The following diagram provides a visualization of most of the strategies to help
@@ -238,6 +247,58 @@ Policy should pass the following validation checks:
 There is another parameter associated with the `LowNodeUtilization` strategy, called `numberOfNodes`.
 This parameter can be configured to activate the strategy only when the number of under utilized nodes
 are above the configured value. This could be helpful in large clusters where a few nodes could go
+under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero.
+
+### HighNodeUtilization
+
+This strategy finds nodes that are under utilized and evicts pods in the hope that these pods will be scheduled compactly into fewer nodes. This strategy **must** be used with the 
+scheduler strategy `MostRequestedPriority`. The parameters of this strategy are configured under `nodeResourceUtilizationThresholds`.
+
+The under utilization of nodes is determined by a configurable threshold `thresholds`. The threshold
+`thresholds` can be configured for cpu, memory, number of pods, and extended resources in terms of percentage. The percentage is
+calculated as the current resources requested on the node vs [total allocatable](https://kubernetes.io/docs/concepts/architecture/nodes/#capacity).
+For pods, this means the number of pods on the node as a fraction of the pod capacity set for that node.
+
+If a node's usage is below threshold for all (cpu, memory, number of pods and extended resources), the node is considered underutilized.
+Currently, pods request resource requirements are considered for computing node resource utilization. Any node above `thresholds` is considered appropriately utilized and is not considered for eviction. 
+
+The `thresholds` param could be tuned as per your cluster requirements. Note that this
+strategy evicts pods from `underutilized nodes` (those with usage below `thresholds`) so that they can be recreated in appropriately utilized nodes. The strategy will abort if any number of `underutilized nodes` or `appropriately utilized nodes` is zero.
+
+**Parameters:**
+
+|Name|Type|
+|---|---|
+|`thresholds`|map(string:int)|
+|`numberOfNodes`|int|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+
+**Example:**
+
+```yaml
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "HighNodeUtilization":
+     enabled: true
+     params:
+       nodeResourceUtilizationThresholds:
+         thresholds:
+           "cpu" : 20
+           "memory": 20
+           "pods": 20
+```
+
+Policy should pass the following validation checks:
+* Three basic native types of resources are supported: `cpu`, `memory` and `pods`. If any of these resource types is not specified, all its thresholds default to 100%.
+* Extended resources are supported. For example, resource type `nvidia.com/gpu` is specified for GPU node utilization. Extended resources are optional, and will not be used to compute node's usage if it's not specified in `thresholds` explicitly.
+* `thresholds` can not be nil.
+* The valid range of the resource's percentage value is \[0, 100\]
+
+There is another parameter associated with the `HighNodeUtilization` strategy, called `numberOfNodes`.
+This parameter can be configured to activate the strategy only when the number of under utilized nodes
+is above the configured value. This could be helpful in large clusters where a few nodes could go
 under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero.
 
 ### RemovePodsViolatingInterPodAntiAffinity
