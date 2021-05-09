@@ -18,6 +18,7 @@ package utils
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 
 	v1 "k8s.io/api/core/v1"
@@ -79,6 +80,116 @@ func podMatchesNodeLabels(pod *v1.Pod, node *v1.Node) bool {
 		}
 	}
 	return true
+}
+
+func uniqueSortNodeSelectorTerms(srcTerms []v1.NodeSelectorTerm) []v1.NodeSelectorTerm {
+	terms := append([]v1.NodeSelectorTerm{}, srcTerms...)
+	for i := range terms {
+		if terms[i].MatchExpressions != nil {
+			terms[i].MatchExpressions = uniqueSortNodeSelectorRequirements(terms[i].MatchExpressions)
+		}
+		if terms[i].MatchFields != nil {
+			terms[i].MatchFields = uniqueSortNodeSelectorRequirements(terms[i].MatchFields)
+		}
+	}
+
+	if len(terms) < 2 {
+		return terms
+	}
+
+	lastTerm := terms[0]
+	uniqueTerms := append([]v1.NodeSelectorTerm{}, terms[0])
+
+	for _, term := range terms[1:] {
+		if reflect.DeepEqual(term, lastTerm) {
+			continue
+		}
+		lastTerm = term
+		uniqueTerms = append(uniqueTerms, term)
+	}
+
+	return uniqueTerms
+}
+
+// sort NodeSelectorRequirement in (key, operator, values) order
+func uniqueSortNodeSelectorRequirements(srcReqs []v1.NodeSelectorRequirement) []v1.NodeSelectorRequirement {
+	reqs := append([]v1.NodeSelectorRequirement{}, srcReqs...)
+
+	// unique sort Values
+	for i := range reqs {
+		sort.Strings(reqs[i].Values)
+		if len(reqs[i].Values) > 1 {
+			lastString := reqs[i].Values[0]
+			values := []string{lastString}
+			for _, val := range reqs[i].Values {
+				if val == lastString {
+					continue
+				}
+				lastString = val
+				values = append(values, val)
+			}
+			reqs[i].Values = values
+		}
+	}
+
+	if len(reqs) < 2 {
+		return reqs
+	}
+
+	// unique sort reqs
+	sort.Slice(reqs, func(i, j int) bool {
+		if reqs[i].Key < reqs[j].Key {
+			return true
+		}
+		if reqs[i].Key > reqs[j].Key {
+			return false
+		}
+		if reqs[i].Operator < reqs[j].Operator {
+			return true
+		}
+		if reqs[i].Operator > reqs[j].Operator {
+			return false
+		}
+		if len(reqs[i].Values) < len(reqs[j].Values) {
+			return true
+		}
+		if len(reqs[i].Values) > len(reqs[j].Values) {
+			return false
+		}
+		for k := range reqs[i].Values {
+			if reqs[i].Values[k] < reqs[j].Values[k] {
+				return true
+			}
+			if reqs[i].Values[k] > reqs[j].Values[k] {
+				return false
+			}
+		}
+		return true
+	})
+
+	lastReq := reqs[0]
+	uniqueReqs := append([]v1.NodeSelectorRequirement{}, lastReq)
+	for _, req := range reqs[1:] {
+		if reflect.DeepEqual(req, lastReq) {
+			continue
+		}
+		lastReq = req
+		uniqueReqs = append(uniqueReqs, req)
+	}
+	return uniqueReqs
+}
+
+func NodeSelectorsEqual(n1, n2 *v1.NodeSelector) bool {
+	if n1 == nil && n2 == nil {
+		return true
+	}
+	if n1 == nil || n2 == nil {
+		return false
+	}
+	return reflect.DeepEqual(
+		uniqueSortNodeSelectorTerms(n1.NodeSelectorTerms),
+		uniqueSortNodeSelectorTerms(n2.NodeSelectorTerms),
+	)
 }
 
 // TolerationsTolerateTaint checks if taint is tolerated by any of the tolerations.
