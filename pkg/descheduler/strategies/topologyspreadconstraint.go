@@ -121,12 +121,11 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		}
 
 		// ...where there is a topology constraint
-		//namespaceTopologySpreadConstrainPods := make([]v1.Pod, 0, len(namespacePods.Items))
 		namespaceTopologySpreadConstraints := make(map[v1.TopologySpreadConstraint]struct{})
 		for _, pod := range namespacePods.Items {
 			for _, constraint := range pod.Spec.TopologySpreadConstraints {
 				// Ignore soft topology constraints if they are not included
-				if (strategy.Params == nil || !strategy.Params.IncludeSoftConstraints) && constraint.WhenUnsatisfiable != v1.DoNotSchedule {
+				if constraint.WhenUnsatisfiable == v1.ScheduleAnyway && (strategy.Params == nil || !strategy.Params.IncludeSoftConstraints) {
 					continue
 				}
 				namespaceTopologySpreadConstraints[constraint] = struct{}{}
