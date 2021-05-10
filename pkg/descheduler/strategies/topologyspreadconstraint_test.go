@@ -97,8 +97,42 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			namespaces:           []string{"ns1"},
 		},
 		{
-			name: "NEW",
-			//name: "2 domains, sizes [3,1], maxSkew=1, no pods eligible, move 0 pods",
+			name: "2 domains, sizes [3,1], maxSkew=1, move 1 pod to achieve [2,2] (soft constraints)",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							MaxSkew:           1,
+							TopologyKey:       "zone",
+							WhenUnsatisfiable: v1.ScheduleAnyway,
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+						},
+					},
+				},
+				{
+					count:  2,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+				{
+					count:  1,
+					node:   "n2",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy:             api.DeschedulerStrategy{Params: &api.StrategyParameters{IncludeSoftConstraints: true}},
+			namespaces:           []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [3,1], maxSkew=1, no pods eligible, move 0 pods",
 			nodes: []*v1.Node{
 				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
 				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
@@ -433,6 +467,111 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			}),
 			expectedEvictedCount: 1,
 			strategy:             api.DeschedulerStrategy{},
+			namespaces:           []string{"ns1"},
+		},
+		{
+			// see https://github.com/kubernetes-sigs/descheduler/issues/564
+			name: "Multiple constraints (6 nodes/2 zones, 4 pods)",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels = map[string]string{"topology.kubernetes.io/zone": "zoneA", "kubernetes.io/hostname": "n1"}
+				}),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels = map[string]string{"topology.kubernetes.io/zone": "zoneA", "kubernetes.io/hostname": "n2"}
+				}),
+				test.BuildTestNode("n3", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels = map[string]string{"topology.kubernetes.io/zone": "zoneA", "kubernetes.io/hostname": "n3"}
+				}),
+				test.BuildTestNode("n4", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels = map[string]string{"topology.kubernetes.io/zone": "zoneB", "kubernetes.io/hostname": "n4"}
+				}),
+				test.BuildTestNode("n5", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels = map[string]string{"topology.kubernetes.io/zone": "zoneB", "kubernetes.io/hostname": "n5"}
+				}),
+				test.BuildTestNode("n6", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels = map[string]string{"topology.kubernetes.io/zone": "zoneB", "kubernetes.io/hostname": "n6"}
+				}),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"app": "whoami"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "topology.kubernetes.io/zone",
+							WhenUnsatisfiable: v1.ScheduleAnyway,
+						},
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/hostname",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+						},
+					},
+				},
+				{
+					count:  1,
+					node:   "n2",
+					labels: map[string]string{"app": "whoami"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "topology.kubernetes.io/zone",
+							WhenUnsatisfiable: v1.ScheduleAnyway,
+						},
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/hostname",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+						},
+					},
+				},
+				{
+					count:  1,
+					node:   "n3",
+					labels: map[string]string{"app": "whoami"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "topology.kubernetes.io/zone",
+							WhenUnsatisfiable: v1.ScheduleAnyway,
+						},
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/hostname",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+						},
+					},
+				},
+				{
+					count:  1,
+					node:   "n4",
+					labels: map[string]string{"app": "whoami"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "topology.kubernetes.io/zone",
+							WhenUnsatisfiable: v1.ScheduleAnyway,
+						},
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/hostname",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+						},
+					},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy:             api.DeschedulerStrategy{Params: &api.StrategyParameters{IncludeSoftConstraints: true}},
 			namespaces:           []string{"ns1"},
 		},
 	}
