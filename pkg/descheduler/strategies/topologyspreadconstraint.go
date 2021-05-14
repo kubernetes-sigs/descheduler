@@ -19,6 +19,7 @@ package strategies
 import (
 	"context"
 	"fmt"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"math"
 	"sort"
 
@@ -283,20 +284,11 @@ func balanceDomains(
 		// also (just for tracking), add them to the list of pods in the lower topology
 		aboveToEvict := sortedDomains[j].pods[len(sortedDomains[j].pods)-movePods:]
 		for k := range aboveToEvict {
-			// if the pod has a hard nodeAffinity or nodeSelector that only matches this node,
-			// don't bother evicting it as it will just end up back on the same node
-			// however we still account for it "being evicted" so the algorithm can complete
-			// TODO(@damemi): Since we don't order pods wrt their affinities, we should refactor this to skip the current pod
-			// but still try to get the required # of movePods (instead of just chopping that value off the slice above)
-			isRequiredDuringSchedulingIgnoredDuringExecution := aboveToEvict[k].Spec.Affinity != nil &&
-				aboveToEvict[k].Spec.Affinity.NodeAffinity != nil &&
-				aboveToEvict[k].Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil
-
-			if (aboveToEvict[k].Spec.NodeSelector != nil || isRequiredDuringSchedulingIgnoredDuringExecution) &&
-				nodesPodFitsOnBesidesCurrent(aboveToEvict[k], nodeMap) == 0 {
-				klog.V(2).InfoS("Ignoring pod for eviction due to node selector/affinity", "pod", klog.KObj(aboveToEvict[k]))
+			if err := validatePodFitsOnOtherNodes(aboveToEvict[k], nodeMap); err != nil {
+				klog.V(2).InfoS(fmt.Sprintf("ignoring pod for eviction due to: %s", err.Error()), "pod", klog.KObj(aboveToEvict[k]))
 				continue
 			}
+
 			podsForEviction[aboveToEvict[k]] = struct{}{}
 		}
 		sortedDomains[j].pods = sortedDomains[j].pods[:len(sortedDomains[j].pods)-movePods]
@@ -304,18 +296,54 @@ func balanceDomains(
 	}
 }
 
-// nodesPodFitsOnBesidesCurrent counts the number of nodes this pod could fit on based on its affinity
+// validatePodFitsOnOtherNodes performs validation based on scheduling predicates for affinity and toleration.
 // It excludes the current node because, for the sake of domain balancing only, we care about if there is any other
 // place it could theoretically fit.
 // If the pod doesn't fit on its current node, that is a job for RemovePodsViolatingNodeAffinity, and irrelevant to Topology Spreading
-func nodesPodFitsOnBesidesCurrent(pod *v1.Pod, nodeMap map[string]*v1.Node) int {
-	count := 0
-	for _, node := range nodeMap {
-		if nodeutil.PodFitsCurrentNode(pod, node) && node != nodeMap[pod.Spec.NodeName] {
-			count++
-		}
+func validatePodFitsOnOtherNodes(pod *v1.Pod, nodeMap map[string]*v1.Node) error {
+	// if the pod has a hard nodeAffinity/nodeSelector/toleration that only matches this node,
+	// don't bother evicting it as it will just end up back on the same node
+	// however we still account for it "being evicted" so the algorithm can complete
+	// TODO(@damemi): Since we don't order pods wrt their affinities, we should refactor this to skip the current pod
+	// but still try to get the required # of movePods (instead of just chopping that value off the slice above)
+	isRequiredDuringSchedulingIgnoredDuringExecution := pod.Spec.Affinity != nil &&
+		pod.Spec.Affinity.NodeAffinity != nil &&
+		pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil
+
+	hardTaintsFilter := func(taint *v1.Taint) bool {
+		return taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectNoExecute
 	}
-	return count
+
+	var eligibleNodesCount, ineligibleAffinityNodesCount, ineligibleTaintedNodesCount int
+	for _, node := range nodeMap {
+		if node == nodeMap[pod.Spec.NodeName] {
+			continue
+		}
+		if pod.Spec.NodeSelector != nil || isRequiredDuringSchedulingIgnoredDuringExecution {
+			if !nodeutil.PodFitsCurrentNode(pod, node) {
+				ineligibleAffinityNodesCount++
+				continue
+			}
+		}
+		if !utils.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, hardTaintsFilter) {
+			ineligibleTaintedNodesCount++
+			continue
+		}
+
+		eligibleNodesCount++
+	}
+
+	if eligibleNodesCount == 0 {
+		var errs []error
+		if ineligibleAffinityNodesCount > 0 {
+			errs = append(errs, fmt.Errorf("%d nodes with ineligible selector/affinity", ineligibleAffinityNodesCount))
+		}
+		if ineligibleTaintedNodesCount > 0 {
+			errs = append(errs, fmt.Errorf("%d nodes with taints that are not tolerated", ineligibleTaintedNodesCount))
+		}
+		return utilerrors.NewAggregate(errs)
+	}
+	return nil
 }
 
 // sortDomains sorts and splits the list of topology domains based on their size
