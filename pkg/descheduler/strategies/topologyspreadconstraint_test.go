@@ -574,6 +574,134 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			strategy:             api.DeschedulerStrategy{Params: &api.StrategyParameters{IncludeSoftConstraints: true}},
 			namespaces:           []string{"ns1"},
 		},
+		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pod since pod tolerates the node with taint",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneB"
+					n.Spec.Taints = []v1.Taint{
+						{
+							Key:    "taint-test",
+							Value:  "test",
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							MaxSkew:           1,
+							TopologyKey:       "zone",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+						},
+					},
+					tolerations: []v1.Toleration{
+						{
+							Key:      "taint-test",
+							Value:    "test",
+							Operator: v1.TolerationOpEqual,
+							Effect:   v1.TaintEffectNoSchedule,
+						},
+					},
+				},
+				{
+					count:        1,
+					node:         "n1",
+					labels:       map[string]string{"foo": "bar"},
+					nodeSelector: map[string]string{"zone": "zoneA"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy:             api.DeschedulerStrategy{},
+			namespaces:           []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 0 pods since pod does not tolerate the tainted node",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneB"
+					n.Spec.Taints = []v1.Taint{
+						{
+							Key:    "taint-test",
+							Value:  "test",
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							MaxSkew:           1,
+							TopologyKey:       "zone",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+						},
+					},
+				},
+				{
+					count:        1,
+					node:         "n1",
+					labels:       map[string]string{"foo": "bar"},
+					nodeSelector: map[string]string{"zone": "zoneA"},
+				},
+			}),
+			expectedEvictedCount: 0,
+			strategy:             api.DeschedulerStrategy{},
+			namespaces:           []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pod for node with PreferNoSchedule Taint",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneB"
+					n.Spec.Taints = []v1.Taint{
+						{
+							Key:    "taint-test",
+							Value:  "test",
+							Effect: v1.TaintEffectPreferNoSchedule,
+						},
+					}
+				}),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							MaxSkew:           1,
+							TopologyKey:       "zone",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+						},
+					},
+				},
+				{
+					count:        1,
+					node:         "n1",
+					labels:       map[string]string{"foo": "bar"},
+					nodeSelector: map[string]string{"zone": "zoneA"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy:             api.DeschedulerStrategy{},
+			namespaces:           []string{"ns1"},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -617,6 +745,7 @@ type testPodList struct {
 	nodeSelector map[string]string
 	nodeAffinity *v1.Affinity
 	noOwners     bool
+	tolerations  []v1.Toleration
 }
 
 func createTestPods(testPods []testPodList) []*v1.Pod {
@@ -636,6 +765,7 @@ func createTestPods(testPods []testPodList) []*v1.Pod {
 					p.Spec.TopologySpreadConstraints = tp.constraints
 					p.Spec.NodeSelector = tp.nodeSelector
 					p.Spec.Affinity = tp.nodeAffinity
+					p.Spec.Tolerations = tp.tolerations
 				}))
 			podNum++
 		}
