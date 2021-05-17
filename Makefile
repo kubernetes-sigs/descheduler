@@ -95,7 +95,10 @@ clean:
 	rm -rf _output
 	rm -rf _tmp
 
-verify: verify-gofmt verify-vendor lint lint-chart verify-spelling verify-toc verify-gen
+verify: verify-govet verify-spelling verify-gofmt verify-vendor lint lint-chart verify-toc verify-gen
+
+verify-govet:
+	./hack/verify-govet.sh
 
 verify-spelling:
 	./hack/verify-spelling.sh
