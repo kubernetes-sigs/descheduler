@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Pod
+metadata:
+    name: descheduler-test-pod
+    annotations:
+      "helm.sh/hook": test
+spec:
+    restartPolicy: Never
+    serviceAccountName: descheduler-ci
+    containers:
+      - name: descheduler-test-container
+        image: alpine:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - All
+            privileged: false
+            runAsNonRoot: false 
+        command: ["/bin/ash"]
+        args:
+          - -c
+          - >-
+            apk --no-cache add curl &&
+            curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl &&
+            chmod +x ./kubectl &&
+            mv ./kubectl /usr/local/bin/kubectl &&
+            /usr/local/bin/kubectl get pods --namespace kube-system --token "$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" | grep "descheduler" | grep "Completed"
