@@ -14,6 +14,10 @@
 
 #!/bin/bash
 
+set -x
+set -o errexit
+set -o nounset
+
 # This just run unit-tests. Ignoring the current directory so as to avoid running e2e tests.
 PRJ_PREFIX="sigs.k8s.io/descheduler"
 go test $(go list ${PRJ_PREFIX}/... | grep -v ${PRJ_PREFIX}/vendor/| grep -v ${PRJ_PREFIX}/test/)
