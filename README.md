@@ -57,7 +57,7 @@ Table of Contents
 
 ## Quick Start
 
-The descheduler can be run as a Job or CronJob or Deployment inside of a k8s cluster. It has the
+The descheduler can be run as a `Job`, `CronJob`, or `Deployment` inside of a k8s cluster. It has the
 advantage of being able to be run multiple times without needing user intervention.
 The descheduler pod is run as a critical pod in the `kube-system` namespace to avoid
 being evicted by itself or by the kubelet.
