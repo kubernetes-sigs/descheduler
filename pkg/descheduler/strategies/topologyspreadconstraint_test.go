@@ -73,17 +73,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
 					count:  2,
@@ -147,18 +140,11 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
-					noOwners: true,
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+					noOwners:    true,
 				},
 				{
 					count:    2,
@@ -189,17 +175,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
 					count:  2,
@@ -224,17 +203,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
 					count:  4,
@@ -263,17 +235,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
 					count:  3,
@@ -297,17 +262,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:        1,
+					node:         "n1",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultTopologyConstraints(1),
 					nodeSelector: map[string]string{"zone": "zoneA"},
 				},
 				{
@@ -354,17 +312,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:        1,
+					node:         "n1",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultTopologyConstraints(1),
 					nodeSelector: map[string]string{"region": "boston"},
 				},
 				{
@@ -403,17 +354,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n2",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n2",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
 					count:  100,
@@ -435,17 +379,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n2",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n2",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
 					count:  3,
@@ -474,17 +411,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           2,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(2),
 				},
 				{
 					count:  1,
@@ -675,17 +605,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 					tolerations: []v1.Toleration{
 						{
 							Key:      "taint-test",
@@ -723,17 +646,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
 					count:        1,
@@ -763,17 +679,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
 					count:        1,
@@ -785,6 +694,87 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 1,
 			strategy:             api.DeschedulerStrategy{},
 			namespaces:           []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 0 pod for node with unmatched label filtering",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 0,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					LabelSelector: getLabelSelector("foo", []string{"baz"}, metav1.LabelSelectorOpIn),
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pod for node with matched label filtering",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					LabelSelector: getLabelSelector("foo", []string{"bar"}, metav1.LabelSelectorOpIn),
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pod for node with matched label filtering (NotIn op)",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					LabelSelector: getLabelSelector("foo", []string{"baz"}, metav1.LabelSelectorOpNotIn),
+				},
+			},
+			namespaces: []string{"ns1"},
 		},
 	}
 
@@ -855,4 +845,21 @@ func createTestPods(testPods []testPodList) []*v1.Pod {
 		}
 	}
 	return pods
+}
+
+func getLabelSelector(key string, values []string, operator metav1.LabelSelectorOperator) *metav1.LabelSelector {
+	return &metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{{Key: key, Operator: operator, Values: values}},
+	}
+}
+
+func getDefaultTopologyConstraints(maxSkew int32) []v1.TopologySpreadConstraint {
+	return []v1.TopologySpreadConstraint{
+		{
+			MaxSkew:           maxSkew,
+			TopologyKey:       "zone",
+			WhenUnsatisfiable: v1.DoNotSchedule,
+			LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+		},
+	}
 }
