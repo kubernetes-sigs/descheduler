@@ -19,6 +19,7 @@ resources:
 nameOverride: ""
 fullnameOverride: ""
 
+cronJobApiVersion: "batch/v1"  # for k8s version < 0.21.0, use "batch/v1beta1"
 schedule: "*/2 * * * *"
 #startingDeadlineSeconds: 200
 #successfulJobsHistoryLimit: 1
