@@ -124,7 +124,7 @@ The policy also includes common configuration for all the strategies:
 - `maxNoOfPodsToEvictPerNode` - maximum number of pods evicted from each node (summed through all strategies)
 
 ```yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 nodeSelector: prod=dev
 evictLocalStoragePods: true
@@ -160,7 +160,7 @@ should include `ReplicaSet` to have pods created by Deployments excluded.
 
 **Example:**
 ```yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "RemoveDuplicates":
@@ -208,7 +208,7 @@ strategy evicts pods from `overutilized nodes` (those with usage above `targetTh
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "LowNodeUtilization":
@@ -257,7 +257,7 @@ node.
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingInterPodAntiAffinity":
@@ -295,7 +295,7 @@ podA gets evicted from nodeA.
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingNodeAffinity":
@@ -324,7 +324,7 @@ and will be evicted.
 **Example:**
 
 ````yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingNodeTaints":
@@ -352,7 +352,7 @@ include soft constraints.
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingTopologySpreadConstraint":
@@ -383,7 +383,7 @@ which determines whether init container restarts should be factored into that ca
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsHavingTooManyRestarts":
@@ -415,7 +415,7 @@ to `Running` and `Pending`.
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "PodLifeTime":
@@ -443,7 +443,7 @@ The following strategies accept a `namespaces` parameter which allows to specify
 For example:
 
 ```yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "PodLifeTime":
@@ -461,7 +461,7 @@ In the examples `PodLifeTime` gets executed only over `namespace1` and `namespac
 The similar holds for `exclude` field:
 
 ```yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "PodLifeTime":
@@ -492,7 +492,7 @@ E.g.
 
 Setting `thresholdPriority`
 ```yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "PodLifeTime":
@@ -505,7 +505,7 @@ strategies:
 
 Setting `thresholdPriorityClassName`
 ```yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "PodLifeTime":
@@ -535,7 +535,7 @@ This allows running strategies among pods the descheduler is interested in.
 For example:
 
 ```yaml
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "PodLifeTime":
