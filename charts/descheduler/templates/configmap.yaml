@@ -6,6 +6,6 @@ metadata:
     {{- include "descheduler.labels" . | nindent 4 }}
 data:
   policy.yaml: |
-    apiVersion: "descheduler/v1alpha1"
+    apiVersion: "descheduler/v1alpha2"
     kind: "DeschedulerPolicy"
 {{ toYaml .Values.deschedulerPolicy | trim | indent 4 }}

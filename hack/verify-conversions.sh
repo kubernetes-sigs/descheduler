@@ -20,7 +20,7 @@ go build -o "${OS_OUTPUT_BINPATH}/conversion-gen" "k8s.io/code-generator/cmd/con
 
 ${OS_OUTPUT_BINPATH}/conversion-gen \
 		--go-header-file "hack/boilerplate/boilerplate.go.txt" \
-		--input-dirs "./pkg/apis/componentconfig/v1alpha1,./pkg/api/v1alpha1" \
+		--input-dirs "./pkg/apis/componentconfig/v1alpha1,./pkg/api/v1alpha1,./pkg/api/v1alpha2" \
 		--output-file-base zz_generated.conversion
 popd > /dev/null 2>&1
 

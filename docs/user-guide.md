@@ -82,7 +82,7 @@ descheduler -v=3 --evict-local-storage-pods --policy-config-file=pod-life-time.y
 This policy configuration file ensures that pods created more than 7 days ago are evicted.
 ```
 ---
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "PodLifeTime":
@@ -101,7 +101,7 @@ Using `LowNodeUtilization`, descheduler will rebalance the cluster based on memo
 from nodes with memory utilization over 70% to nodes with memory utilization below 20%.
 
 ```
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 strategies:
   "LowNodeUtilization":

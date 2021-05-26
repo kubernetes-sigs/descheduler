@@ -19,12 +19,14 @@ package descheduler
 import (
 	"fmt"
 	"io/ioutil"
-
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
+	"unsafe"
 
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
+	"sigs.k8s.io/descheduler/pkg/api/v1alpha2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 )
 
@@ -39,10 +41,13 @@ func LoadPolicyConfig(policyConfigFile string) (*api.DeschedulerPolicy, error) {
 		return nil, fmt.Errorf("failed to read policy config file %q: %+v", policyConfigFile, err)
 	}
 
-	versionedPolicy := &v1alpha1.DeschedulerPolicy{}
-
-	decoder := scheme.Codecs.UniversalDecoder(v1alpha1.SchemeGroupVersion)
-	if err := runtime.DecodeInto(decoder, policy, versionedPolicy); err != nil {
+	decoder := scheme.Codecs.UniversalDecoder(v1alpha2.SchemeGroupVersion, v1alpha1.SchemeGroupVersion)
+	obj, err := runtime.Decode(decoder, policy)
+	if err != nil {
+		return nil, fmt.Errorf("failed decoding descheduler's policy config %q: %v", policyConfigFile, err)
+	}
+	versionedPolicy, err := decodeVersionedPolicy(obj.GetObjectKind(), decoder, policy)
+	if err != nil {
 		return nil, fmt.Errorf("failed decoding descheduler's policy config %q: %v", policyConfigFile, err)
 	}
 
@@ -52,4 +57,32 @@ func LoadPolicyConfig(policyConfigFile string) (*api.DeschedulerPolicy, error) {
 	}
 
 	return internalPolicy, nil
+}
+
+func decodeVersionedPolicy(kind schema.ObjectKind, decoder runtime.Decoder, policy []byte) (*v1alpha2.DeschedulerPolicy, error) {
+	v2Policy := &v1alpha2.DeschedulerPolicy{}
+	if kind.GroupVersionKind().Version == "v1alpha1" {
+		v1Policy := &v1alpha1.DeschedulerPolicy{}
+		if err := runtime.DecodeInto(decoder, policy, v1Policy); err != nil {
+			return nil, err
+		}
+		v2Policy = convertV1toV2Policy(v1Policy)
+	} else {
+		if err := runtime.DecodeInto(decoder, policy, v2Policy); err != nil {
+			return nil, err
+		}
+	}
+	return v2Policy, nil
+}
+
+func convertV1toV2Policy(in *v1alpha1.DeschedulerPolicy) *v1alpha2.DeschedulerPolicy {
+	return &v1alpha2.DeschedulerPolicy{
+		TypeMeta:                  *&in.TypeMeta,
+		Strategies:                *(*v1alpha2.StrategyList)(unsafe.Pointer(&in.Strategies)),
+		NodeSelector:              in.NodeSelector,
+		EvictLocalStoragePods:     in.EvictLocalStoragePods,
+		EvictSystemCriticalPods:   in.EvictSystemCriticalPods,
+		IgnorePVCPods:             in.IgnorePVCPods,
+		MaxNoOfPodsToEvictPerNode: in.MaxNoOfPodsToEvictPerNode,
+	}
 }

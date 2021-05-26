@@ -20,7 +20,7 @@ go build -o "${OS_OUTPUT_BINPATH}/deepcopy-gen" "k8s.io/code-generator/cmd/deepc
 
 ${OS_OUTPUT_BINPATH}/deepcopy-gen \
                 --go-header-file "hack/boilerplate/boilerplate.go.txt" \
-                --input-dirs "./pkg/apis/componentconfig,./pkg/apis/componentconfig/v1alpha1,./pkg/api,./pkg/api/v1alpha1" \
+                --input-dirs "./pkg/apis/componentconfig,./pkg/apis/componentconfig/v1alpha1,./pkg/api,./pkg/api/v1alpha1,./pkg/api/v1alpha2" \
                 --output-file-base zz_generated.deepcopy
 popd > /dev/null 2>&1
 
