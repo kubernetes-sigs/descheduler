@@ -83,7 +83,12 @@ func RemoveDuplicatePods(
 		excludedNamespaces = strategy.Params.Namespaces.Exclude
 	}
 
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
+	nodeFit := false
+	if strategy.Params != nil {
+		nodeFit = strategy.Params.NodeFit
+	}
+
+	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
 
 	duplicatePods := make(map[podOwner]map[string][]*v1.Pod)
 	ownerKeyOccurence := make(map[podOwner]int32)

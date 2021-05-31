@@ -19,9 +19,10 @@ package strategies
 import (
 	"context"
 	"fmt"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"math"
 	"sort"
+
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -83,11 +84,17 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		return
 	}
 
+	nodeFit := false
+	if strategy.Params != nil {
+		nodeFit = strategy.Params.NodeFit
+	}
+
+	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
+
 	nodeMap := make(map[string]*v1.Node, len(nodes))
 	for _, node := range nodes {
 		nodeMap[node.Name] = node
 	}
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	// 1. for each namespace for which there is Topology Constraint
 	// 2. for each TopologySpreadConstraint in that namespace
@@ -243,6 +250,7 @@ func balanceDomains(
 	sumPods float64,
 	isEvictable func(*v1.Pod) bool,
 	nodeMap map[string]*v1.Node) {
+
 	idealAvg := sumPods / float64(len(constraintTopologies))
 	sortedDomains := sortDomains(constraintTopologies, isEvictable)
 	// i is the index for belowOrEqualAvg

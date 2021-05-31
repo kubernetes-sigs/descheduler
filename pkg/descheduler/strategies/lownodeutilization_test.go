@@ -48,6 +48,10 @@ func TestLowNodeUtilization(t *testing.T) {
 	n2NodeName := "n2"
 	n3NodeName := "n3"
 
+	nodeSelectorKey := "datacenter"
+	nodeSelectorValue := "west"
+	notMatchingNodeSelectorValue := "east"
+
 	testCases := []struct {
 		name                         string
 		thresholds, targetThresholds api.ResourceThresholds
@@ -514,6 +518,227 @@ func TestLowNodeUtilization(t *testing.T) {
 			// 0 pods available for eviction because there's no enough extended resource in node2
 			expectedPodsEvicted: 0,
 		},
+		{
+			name: "without priorities, but only other node is unschedulable",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			nodes: map[string]*v1.Node{
+				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
+			},
+			pods: map[string]*v1.PodList{
+				n1NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p4", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p5", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						// These won't be evicted.
+						*test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
+						*test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod with local storage.
+							test.SetNormalOwnerRef(pod)
+							pod.Spec.Volumes = []v1.Volume{
+								{
+									Name: "sample",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+										EmptyDir: &v1.EmptyDirVolumeSource{
+											SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									},
+								},
+							}
+							// A Mirror Pod.
+							pod.Annotations = test.GetMirrorPodAnnotation()
+						}),
+						*test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A Critical Pod.
+							pod.Namespace = "kube-system"
+							priority := utils.SystemCriticalPriority
+							pod.Spec.Priority = &priority
+						}),
+					},
+				},
+				n2NodeName: {},
+			},
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   0,
+		},
+		{
+			name: "without priorities, but only other node doesn't match pod node selector for p4 and p5",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			nodes: map[string]*v1.Node{
+				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeSelectorKey: notMatchingNodeSelectorValue,
+					}
+				}),
+			},
+			pods: map[string]*v1.PodList{
+				n1NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						// These won't be evicted.
+						*test.BuildTestPod("p4", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod selecting nodes in the "west" datacenter
+							test.SetNormalOwnerRef(pod)
+							pod.Spec.NodeSelector = map[string]string{
+								nodeSelectorKey: nodeSelectorValue,
+							}
+						}),
+						*test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod selecting nodes in the "west" datacenter
+							test.SetNormalOwnerRef(pod)
+							pod.Spec.NodeSelector = map[string]string{
+								nodeSelectorKey: nodeSelectorValue,
+							}
+						}),
+						*test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
+						*test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod with local storage.
+							test.SetNormalOwnerRef(pod)
+							pod.Spec.Volumes = []v1.Volume{
+								{
+									Name: "sample",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+										EmptyDir: &v1.EmptyDirVolumeSource{
+											SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									},
+								},
+							}
+							// A Mirror Pod.
+							pod.Annotations = test.GetMirrorPodAnnotation()
+						}),
+						*test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A Critical Pod.
+							pod.Namespace = "kube-system"
+							priority := utils.SystemCriticalPriority
+							pod.Spec.Priority = &priority
+						}),
+					},
+				},
+				n2NodeName: {},
+			},
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   3,
+		},
+		{
+			name: "without priorities, but only other node doesn't match pod node affinity for p4 and p5",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			nodes: map[string]*v1.Node{
+				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeSelectorKey: notMatchingNodeSelectorValue,
+					}
+				}),
+			},
+			pods: map[string]*v1.PodList{
+				n1NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						// These won't be evicted.
+						*test.BuildTestPod("p4", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod with affinity to run in the "west" datacenter upon scheduling
+							test.SetNormalOwnerRef(pod)
+							pod.Spec.Affinity = &v1.Affinity{
+								NodeAffinity: &v1.NodeAffinity{
+									RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+										NodeSelectorTerms: []v1.NodeSelectorTerm{
+											{
+												MatchExpressions: []v1.NodeSelectorRequirement{
+													{
+														Key:      nodeSelectorKey,
+														Operator: "In",
+														Values:   []string{nodeSelectorValue},
+													},
+												},
+											},
+										},
+									},
+								},
+							}
+						}),
+						*test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod with affinity to run in the "west" datacenter upon scheduling
+							test.SetNormalOwnerRef(pod)
+							pod.Spec.Affinity = &v1.Affinity{
+								NodeAffinity: &v1.NodeAffinity{
+									RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+										NodeSelectorTerms: []v1.NodeSelectorTerm{
+											{
+												MatchExpressions: []v1.NodeSelectorRequirement{
+													{
+														Key:      nodeSelectorKey,
+														Operator: "In",
+														Values:   []string{nodeSelectorValue},
+													},
+												},
+											},
+										},
+									},
+								},
+							}
+						}),
+						*test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
+						*test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod with local storage.
+							test.SetNormalOwnerRef(pod)
+							pod.Spec.Volumes = []v1.Volume{
+								{
+									Name: "sample",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+										EmptyDir: &v1.EmptyDirVolumeSource{
+											SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									},
+								},
+							}
+							// A Mirror Pod.
+							pod.Annotations = test.GetMirrorPodAnnotation()
+						}),
+						*test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A Critical Pod.
+							pod.Namespace = "kube-system"
+							priority := utils.SystemCriticalPriority
+							pod.Spec.Priority = &priority
+						}),
+					},
+				},
+				n2NodeName: {Items: []v1.Pod{
+					*test.BuildTestPod("p9", 0, 0, n2NodeName, test.SetRSOwnerRef),
+				}},
+			},
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   3,
+		},
 	}
 
 	for _, test := range testCases {
@@ -584,6 +809,7 @@ func TestLowNodeUtilization(t *testing.T) {
 						Thresholds:       test.thresholds,
 						TargetThresholds: test.targetThresholds,
 					},
+					NodeFit: true,
 				},
 			}
 			LowNodeUtilization(ctx, fakeClient, strategy, nodes, podEvictor)
@@ -854,6 +1080,7 @@ func TestWithTaints(t *testing.T) {
 					v1.ResourcePods: 70,
 				},
 			},
+			NodeFit: true,
 		},
 	}
 

@@ -51,6 +51,17 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 	node1 = addTaintsToNode(node2, "testingTaint", "testing", []int{1})
 
+	node3 := test.BuildTestNode("n3", 2000, 3000, 10, func(node *v1.Node) {
+		node.ObjectMeta.Labels = map[string]string{
+			"datacenter": "east",
+		}
+	})
+	node4 := test.BuildTestNode("n4", 2000, 3000, 10, func(node *v1.Node) {
+		node.Spec = v1.NodeSpec{
+			Unschedulable: true,
+		}
+	})
+
 	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
 	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, nil)
 	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, nil)
@@ -70,6 +81,8 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p10 := test.BuildTestPod("p10", 100, 0, node2.Name, nil)
 	p11 := test.BuildTestPod("p11", 100, 0, node2.Name, nil)
 	p11.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	p12 := test.BuildTestPod("p11", 100, 0, node2.Name, nil)
+	p12.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
 	// The following 4 pods won't get evicted.
 	// A Critical Pod.
@@ -99,6 +112,10 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p3 = addTolerationToPod(p3, "testTaint", "test", 1)
 	p4 = addTolerationToPod(p4, "testTaintX", "testX", 1)
 
+	p12.Spec.NodeSelector = map[string]string{
+		"datacenter": "west",
+	}
+
 	tests := []struct {
 		description             string
 		nodes                   []*v1.Node
@@ -107,6 +124,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		evictSystemCriticalPods bool
 		maxPodsToEvictPerNode   int
 		expectedEvictedPodCount int
+		nodeFit                 bool
 	}{
 
 		{
@@ -172,6 +190,36 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			maxPodsToEvictPerNode:   0,
 			expectedEvictedPodCount: 2, //p2 and p7 are evicted
 		},
+		{
+			description:             "Pod p2 doesn't tolerate taint on it's node, but also doesn't tolerate taints on other nodes",
+			pods:                    []v1.Pod{*p1, *p2, *p3},
+			nodes:                   []*v1.Node{node1, node2},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			maxPodsToEvictPerNode:   0,
+			expectedEvictedPodCount: 0, //p2 gets evicted
+			nodeFit:                 true,
+		},
+		{
+			description:             "Pod p12 doesn't tolerate taint on it's node, but other nodes don't match it's selector",
+			pods:                    []v1.Pod{*p1, *p3, *p12},
+			nodes:                   []*v1.Node{node1, node3},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			maxPodsToEvictPerNode:   0,
+			expectedEvictedPodCount: 0, //p2 gets evicted
+			nodeFit:                 true,
+		},
+		{
+			description:             "Pod p2 doesn't tolerate taint on it's node, but other nodes are unschedulable",
+			pods:                    []v1.Pod{*p1, *p2, *p3},
+			nodes:                   []*v1.Node{node1, node4},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			maxPodsToEvictPerNode:   0,
+			expectedEvictedPodCount: 0, //p2 gets evicted
+			nodeFit:                 true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -193,7 +241,13 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			false,
 		)
 
-		RemovePodsViolatingNodeTaints(ctx, fakeClient, api.DeschedulerStrategy{}, tc.nodes, podEvictor)
+		strategy := api.DeschedulerStrategy{
+			Params: &api.StrategyParameters{
+				NodeFit: tc.nodeFit,
+			},
+		}
+
+		RemovePodsViolatingNodeTaints(ctx, fakeClient, strategy, tc.nodes, podEvictor)
 		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)
