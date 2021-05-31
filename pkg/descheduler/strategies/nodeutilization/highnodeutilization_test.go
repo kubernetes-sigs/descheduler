@@ -585,7 +585,6 @@ func TestHighNodeUtilization(t *testing.T) {
 			)
 
 			strategy := api.DeschedulerStrategy{
-				Enabled: true,
 				Params: &api.StrategyParameters{
 					NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
 						Thresholds: test.thresholds,
@@ -676,7 +675,6 @@ func TestValidateHighNodeUtilizationStrategyConfig(t *testing.T) {
 func TestHighNodeUtilizationWithTaints(t *testing.T) {
 	ctx := context.Background()
 	strategy := api.DeschedulerStrategy{
-		Enabled: true,
 		Params: &api.StrategyParameters{
 			NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
 				Thresholds: api.ResourceThresholds{

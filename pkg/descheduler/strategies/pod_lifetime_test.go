@@ -138,7 +138,6 @@ func TestPodLifeTime(t *testing.T) {
 		{
 			description: "Two pods in the `dev` Namespace, 1 is new and 1 very is old. 1 should be evicted.",
 			strategy: api.DeschedulerStrategy{
-				Enabled: true,
 				Params: &api.StrategyParameters{
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
@@ -151,7 +150,6 @@ func TestPodLifeTime(t *testing.T) {
 		{
 			description: "Two pods in the `dev` Namespace, 2 are new and 0 are old. 0 should be evicted.",
 			strategy: api.DeschedulerStrategy{
-				Enabled: true,
 				Params: &api.StrategyParameters{
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
@@ -164,7 +162,6 @@ func TestPodLifeTime(t *testing.T) {
 		{
 			description: "Two pods in the `dev` Namespace, 1 created 605 seconds ago. 1 should be evicted.",
 			strategy: api.DeschedulerStrategy{
-				Enabled: true,
 				Params: &api.StrategyParameters{
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
@@ -177,7 +174,6 @@ func TestPodLifeTime(t *testing.T) {
 		{
 			description: "Two pods in the `dev` Namespace, 1 created 595 seconds ago. 0 should be evicted.",
 			strategy: api.DeschedulerStrategy{
-				Enabled: true,
 				Params: &api.StrategyParameters{
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
@@ -190,7 +186,6 @@ func TestPodLifeTime(t *testing.T) {
 		{
 			description: "Two old pods with different status phases. 1 should be evicted.",
 			strategy: api.DeschedulerStrategy{
-				Enabled: true,
 				Params: &api.StrategyParameters{
 					PodLifeTime: &api.PodLifeTime{
 						MaxPodLifeTimeSeconds: &maxLifeTime,
@@ -206,7 +201,6 @@ func TestPodLifeTime(t *testing.T) {
 		{
 			description: "does not evict pvc pods with ignorePvcPods set to true",
 			strategy: api.DeschedulerStrategy{
-				Enabled: true,
 				Params: &api.StrategyParameters{
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
@@ -220,7 +214,6 @@ func TestPodLifeTime(t *testing.T) {
 		{
 			description: "evicts pvc pods with ignorePvcPods set to false (or unset)",
 			strategy: api.DeschedulerStrategy{
-				Enabled: true,
 				Params: &api.StrategyParameters{
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
@@ -233,7 +226,6 @@ func TestPodLifeTime(t *testing.T) {
 		{
 			description: "Two old pods with different labels, 1 selected by labelSelector",
 			strategy: api.DeschedulerStrategy{
-				Enabled: true,
 				Params: &api.StrategyParameters{
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 					LabelSelector: &metav1.LabelSelector{

@@ -138,13 +138,20 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			ignorePvcPods,
 		)
 
-		for name, strategy := range deschedulerPolicy.Strategies {
-			if f, ok := strategyFuncs[name]; ok {
-				if strategy.Enabled {
+		for _, profile := range deschedulerPolicy.Profiles {
+			if profile.Enabled != nil && !*(profile.Enabled) {
+				continue
+			}
+			klog.V(1).InfoS("Executing profile", "name", profile.Name)
+			for name, strategy := range profile.Strategies {
+				if f, ok := strategyFuncs[name]; ok {
+					if strategy.Enabled != nil && !*(strategy.Enabled) {
+						continue
+					}
 					f(ctx, rs.Client, strategy, nodes, podEvictor)
+				} else {
+					klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name, "profile", profile.Name)
 				}
-			} else {
-				klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
 			}
 		}
 

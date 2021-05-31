@@ -26,8 +26,8 @@ import (
 type DeschedulerPolicy struct {
 	metav1.TypeMeta
 
-	// Strategies
-	Strategies StrategyList
+	// Profiles
+	Profiles []DeschedulerProfile
 
 	// NodeSelector for a set of nodes to operate over
 	NodeSelector *string
@@ -45,12 +45,23 @@ type DeschedulerPolicy struct {
 	MaxNoOfPodsToEvictPerNode *int
 }
 
+type DeschedulerProfile struct {
+	// Name
+	Name string
+
+	//Enabled
+	Enabled *bool
+
+	// Strategies
+	Strategies StrategyList
+}
+
 type StrategyName string
 type StrategyList map[StrategyName]DeschedulerStrategy
 
 type DeschedulerStrategy struct {
 	// Enabled or disabled
-	Enabled bool
+	Enabled *bool
 
 	// Weight
 	Weight int

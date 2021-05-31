@@ -103,7 +103,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 
 	createStrategy := func(enabled, includingInitContainers bool, restartThresholds int32, nodeFit bool) api.DeschedulerStrategy {
 		return api.DeschedulerStrategy{
-			Enabled: enabled,
+			Enabled: &enabled,
 			Params: &api.StrategyParameters{
 				PodsHavingTooManyRestarts: &api.PodsHavingTooManyRestarts{
 					PodRestartThreshold:     restartThresholds,

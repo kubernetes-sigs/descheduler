@@ -66,7 +66,7 @@ func decodeVersionedPolicy(kind schema.ObjectKind, decoder runtime.Decoder, poli
 		if err := runtime.DecodeInto(decoder, policy, v1Policy); err != nil {
 			return nil, err
 		}
-		v2Policy = convertV1toV2Policy(v1Policy)
+		v2Policy = convertV1ToV2Policy(v1Policy)
 	} else {
 		if err := runtime.DecodeInto(decoder, policy, v2Policy); err != nil {
 			return nil, err
@@ -75,10 +75,18 @@ func decodeVersionedPolicy(kind schema.ObjectKind, decoder runtime.Decoder, poli
 	return v2Policy, nil
 }
 
-func convertV1toV2Policy(in *v1alpha1.DeschedulerPolicy) *v1alpha2.DeschedulerPolicy {
+func convertV1ToV2Policy(in *v1alpha1.DeschedulerPolicy) *v1alpha2.DeschedulerPolicy {
+	t := true
+	profiles := []v1alpha2.DeschedulerProfile{
+		{
+			Name:       "Default",
+			Enabled:    &t,
+			Strategies: *(*v1alpha2.StrategyList)(unsafe.Pointer(&in.Strategies)),
+		},
+	}
 	return &v1alpha2.DeschedulerPolicy{
 		TypeMeta:                  *&in.TypeMeta,
-		Strategies:                *(*v1alpha2.StrategyList)(unsafe.Pointer(&in.Strategies)),
+		Profiles:                  profiles,
 		NodeSelector:              in.NodeSelector,
 		EvictLocalStoragePods:     in.EvictLocalStoragePods,
 		EvictSystemCriticalPods:   in.EvictSystemCriticalPods,

@@ -50,7 +50,7 @@ type StrategyList map[StrategyName]DeschedulerStrategy
 
 type DeschedulerStrategy struct {
 	// Enabled or disabled
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// Weight
 	Weight int `json:"weight,omitempty"`

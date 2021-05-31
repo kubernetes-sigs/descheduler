@@ -1,12 +1,14 @@
 ---
 apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
-strategies:
-  "LowNodeUtilization":
-    enabled: true
-    params:
-      nodeResourceUtilizationThresholds:
-        thresholds:
-          "memory": 20
-        targetThresholds:
-          "memory": 70
+profiles:
+  - name : "default"
+    strategies:
+      "LowNodeUtilization":
+        enabled: true
+        params:
+          nodeResourceUtilizationThresholds:
+            thresholds:
+              "memory": 20
+            targetThresholds:
+              "memory": 70

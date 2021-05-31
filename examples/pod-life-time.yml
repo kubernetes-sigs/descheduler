@@ -1,9 +1,11 @@
 ---
 apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
-strategies:
-  "PodLifeTime":
-    enabled: true
-    params:
-      podLifeTime:
-        maxPodLifeTimeSeconds: 604800 # 7 days
+profiles:
+  - name : "default"
+    strategies:
+      "PodLifeTime":
+        enabled: true
+        params:
+          podLifeTime:
+            maxPodLifeTimeSeconds: 604800 # 7 days

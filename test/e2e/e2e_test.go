@@ -152,7 +152,6 @@ func runPodLifetimeStrategy(
 		ctx,
 		clientset,
 		deschedulerapi.DeschedulerStrategy{
-			Enabled: true,
 			Params: &deschedulerapi.StrategyParameters{
 				PodLifeTime:                &deschedulerapi.PodLifeTime{MaxPodLifeTimeSeconds: &maxPodLifeTimeSeconds},
 				Namespaces:                 namespaces,
@@ -324,7 +323,6 @@ func TestLowNodeUtilization(t *testing.T) {
 		ctx,
 		clientSet,
 		deschedulerapi.DeschedulerStrategy{
-			Enabled: true,
 			Params: &deschedulerapi.StrategyParameters{
 				NodeResourceUtilizationThresholds: &deschedulerapi.NodeResourceUtilizationThresholds{
 					Thresholds: deschedulerapi.ResourceThresholds{

@@ -26,8 +26,8 @@ import (
 type DeschedulerPolicy struct {
 	metav1.TypeMeta `json:",inline"`
 
-	// Strategies
-	Strategies StrategyList `json:"strategies,omitempty"`
+	// Profiles
+	Profiles []DeschedulerProfile `json:"profiles,omitempty"`
 
 	// NodeSelector for a set of nodes to operate over
 	NodeSelector *string `json:"nodeSelector,omitempty"`
@@ -45,12 +45,23 @@ type DeschedulerPolicy struct {
 	MaxNoOfPodsToEvictPerNode *int `json:"maxNoOfPodsToEvictPerNode,omitempty"`
 }
 
+type DeschedulerProfile struct {
+	// Name
+	Name string `json:"name,omitempty"`
+
+	// Enabled
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Strategies
+	Strategies StrategyList `json:"strategies,omitempty"`
+}
+
 type StrategyName string
 type StrategyList map[StrategyName]DeschedulerStrategy
 
 type DeschedulerStrategy struct {
 	// Enabled or disabled
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// Weight
 	Weight int `json:"weight,omitempty"`

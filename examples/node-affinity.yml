@@ -1,8 +1,10 @@
 apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
-strategies:
-  "RemovePodsViolatingNodeAffinity":
-    enabled: true
-    params:
-      nodeAffinityType:
-      - "requiredDuringSchedulingIgnoredDuringExecution"
+profiles:
+  - name : "default"
+    strategies:
+      "RemovePodsViolatingNodeAffinity":
+        enabled: true
+        params:
+          nodeAffinityType:
+            - "requiredDuringSchedulingIgnoredDuringExecution"

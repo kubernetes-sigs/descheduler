@@ -28,9 +28,12 @@ func TestTaintsUpdated(t *testing.T) {
 
 	client := fakeclientset.NewSimpleClientset(n1, n2, p1)
 	dp := &api.DeschedulerPolicy{
-		Strategies: api.StrategyList{
-			"RemovePodsViolatingNodeTaints": api.DeschedulerStrategy{
-				Enabled: true,
+		Profiles: []api.DeschedulerProfile{
+			{
+				Name: "Default",
+				Strategies: api.StrategyList{
+					"RemovePodsViolatingNodeTaints": api.DeschedulerStrategy{},
+				},
 			},
 		},
 	}
