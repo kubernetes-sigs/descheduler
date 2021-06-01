@@ -48,6 +48,7 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -319,7 +320,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	podsBefore := len(podsOnMosttUtilizedNode)
 
 	t.Log("Running LowNodeUtilization strategy")
-	strategies.LowNodeUtilization(
+	nodeutilization.LowNodeUtilization(
 		ctx,
 		clientSet,
 		deschedulerapi.DeschedulerStrategy{

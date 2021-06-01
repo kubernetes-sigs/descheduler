@@ -19,6 +19,7 @@ package descheduler
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
 
 	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -74,7 +75,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 
 	strategyFuncs := map[api.StrategyName]strategyFunction{
 		"RemoveDuplicates":                            strategies.RemoveDuplicatePods,
-		"LowNodeUtilization":                          strategies.LowNodeUtilization,
+		"LowNodeUtilization":                          nodeutilization.LowNodeUtilization,
 		"RemovePodsViolatingInterPodAntiAffinity":     strategies.RemovePodsViolatingInterPodAntiAffinity,
 		"RemovePodsViolatingNodeAffinity":             strategies.RemovePodsViolatingNodeAffinity,
 		"RemovePodsViolatingNodeTaints":               strategies.RemovePodsViolatingNodeTaints,

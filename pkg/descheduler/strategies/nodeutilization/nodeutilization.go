@@ -1,5 +1,5 @@
 /*
-Copyright 2017 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,23 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package strategies
+package nodeutilization
 
 import (
 	"context"
 	"fmt"
-	"sort"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
-
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
+	"sort"
 )
 
 // NodeUsage stores a node's info, pods on it, thresholds and its resource usage
@@ -64,146 +61,6 @@ func validateLowNodeUtilizationParams(params *api.StrategyParameters) error {
 	return nil
 }
 
-// LowNodeUtilization evicts pods from overutilized nodes to underutilized nodes. Note that CPU/Memory requests are used
-// to calculate nodes' utilization and not the actual resource usage.
-func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
-	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
-	if err := validateLowNodeUtilizationParams(strategy.Params); err != nil {
-		klog.ErrorS(err, "Invalid LowNodeUtilization parameters")
-		return
-	}
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
-	if err != nil {
-		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
-		return
-	}
-
-	nodeFit := false
-	if strategy.Params != nil {
-		nodeFit = strategy.Params.NodeFit
-	}
-
-	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
-	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
-	if err := validateStrategyConfig(thresholds, targetThresholds); err != nil {
-		klog.ErrorS(err, "LowNodeUtilization config is not valid")
-		return
-	}
-	// check if Pods/CPU/Mem are set, if not, set them to 100
-	if _, ok := thresholds[v1.ResourcePods]; !ok {
-		thresholds[v1.ResourcePods] = MaxResourcePercentage
-		targetThresholds[v1.ResourcePods] = MaxResourcePercentage
-	}
-	if _, ok := thresholds[v1.ResourceCPU]; !ok {
-		thresholds[v1.ResourceCPU] = MaxResourcePercentage
-		targetThresholds[v1.ResourceCPU] = MaxResourcePercentage
-	}
-	if _, ok := thresholds[v1.ResourceMemory]; !ok {
-		thresholds[v1.ResourceMemory] = MaxResourcePercentage
-		targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
-	}
-	resourceNames := getResourceNames(thresholds)
-
-	lowNodes, targetNodes := classifyNodes(
-		getNodeUsage(ctx, client, nodes, thresholds, targetThresholds, resourceNames),
-		// The node has to be schedulable (to be able to move workload there)
-		func(node *v1.Node, usage NodeUsage) bool {
-			if nodeutil.IsNodeUnschedulable(node) {
-				klog.V(2).InfoS("Node is unschedulable, thus not considered as underutilized", "node", klog.KObj(node))
-				return false
-			}
-			return isNodeWithLowUtilization(usage)
-		},
-		func(node *v1.Node, usage NodeUsage) bool {
-			return isNodeAboveTargetUtilization(usage)
-		},
-	)
-
-	// log message in one line
-	keysAndValues := []interface{}{
-		"CPU", thresholds[v1.ResourceCPU],
-		"Mem", thresholds[v1.ResourceMemory],
-		"Pods", thresholds[v1.ResourcePods],
-	}
-	for name := range thresholds {
-		if !isBasicResource(name) {
-			keysAndValues = append(keysAndValues, string(name), int64(float64(thresholds[name])))
-		}
-	}
-	klog.V(1).InfoS("Criteria for a node under utilization", keysAndValues...)
-	klog.V(1).InfoS("Number of underutilized nodes", "totalNumber", len(lowNodes))
-
-	// log message in one line
-	keysAndValues = []interface{}{
-		"CPU", targetThresholds[v1.ResourceCPU],
-		"Mem", targetThresholds[v1.ResourceMemory],
-		"Pods", targetThresholds[v1.ResourcePods],
-	}
-	for name := range targetThresholds {
-		if !isBasicResource(name) {
-			keysAndValues = append(keysAndValues, string(name), int64(float64(targetThresholds[name])))
-		}
-	}
-	klog.V(1).InfoS("Criteria for a node above target utilization", keysAndValues...)
-	klog.V(1).InfoS("Number of overutilized nodes", "totalNumber", len(targetNodes))
-
-	if len(lowNodes) == 0 {
-		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
-		return
-	}
-
-	if len(lowNodes) < strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
-		klog.V(1).InfoS("Number of nodes underutilized is less than NumberOfNodes, nothing to do here", "underutilizedNodes", len(lowNodes), "numberOfNodes", strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
-		return
-	}
-
-	if len(lowNodes) == len(nodes) {
-		klog.V(1).InfoS("All nodes are underutilized, nothing to do here")
-		return
-	}
-
-	if len(targetNodes) == 0 {
-		klog.V(1).InfoS("All nodes are under target utilization, nothing to do here")
-		return
-	}
-
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
-
-	evictPodsFromTargetNodes(
-		ctx,
-		targetNodes,
-		lowNodes,
-		podEvictor,
-		evictable.IsEvictable,
-		resourceNames)
-
-	klog.V(1).InfoS("Total number of pods evicted", "evictedPods", podEvictor.TotalEvicted())
-}
-
-// validateStrategyConfig checks if the strategy's config is valid
-func validateStrategyConfig(thresholds, targetThresholds api.ResourceThresholds) error {
-	// validate thresholds and targetThresholds config
-	if err := validateThresholds(thresholds); err != nil {
-		return fmt.Errorf("thresholds config is not valid: %v", err)
-	}
-	if err := validateThresholds(targetThresholds); err != nil {
-		return fmt.Errorf("targetThresholds config is not valid: %v", err)
-	}
-
-	// validate if thresholds and targetThresholds have same resources configured
-	if len(thresholds) != len(targetThresholds) {
-		return fmt.Errorf("thresholds and targetThresholds configured different resources")
-	}
-	for resourceName, value := range thresholds {
-		if targetValue, ok := targetThresholds[resourceName]; !ok {
-			return fmt.Errorf("thresholds and targetThresholds configured different resources")
-		} else if value > targetValue {
-			return fmt.Errorf("thresholds' %v percentage is greater than targetThresholds'", resourceName)
-		}
-	}
-	return nil
-}
-
 // validateThresholds checks if thresholds have valid resource name and resource percentage configured
 func validateThresholds(thresholds api.ResourceThresholds) error {
 	if thresholds == nil || len(thresholds) == 0 {
@@ -224,7 +81,7 @@ func getNodeUsage(
 	lowThreshold, highThreshold api.ResourceThresholds,
 	resourceNames []v1.ResourceName,
 ) []NodeUsage {
-	nodeUsageList := []NodeUsage{}
+	var nodeUsageList []NodeUsage
 
 	for _, node := range nodes {
 		pods, err := podutil.ListPodsOnANode(ctx, client, node)
@@ -388,8 +245,9 @@ func evictPods(
 	taintsOfLowNodes map[string][]v1.Taint,
 	podEvictor *evictions.PodEvictor,
 ) {
+
 	// stop if node utilization drops below target threshold or any of required capacity (cpu, memory, pods) is moved
-	continueCond := func() bool {
+	continueCond := func(nodeUsage NodeUsage, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool {
 		if !isNodeAboveTargetUtilization(nodeUsage) {
 			return false
 		}
@@ -401,8 +259,7 @@ func evictPods(
 
 		return true
 	}
-
-	if continueCond() {
+	if continueCond(nodeUsage, totalAvailableUsage) {
 		for _, pod := range inputPods {
 			if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
 				klog.V(3).InfoS("Skipping eviction for pod, doesn't tolerate node taint", "pod", klog.KObj(pod))
@@ -443,7 +300,7 @@ func evictPods(
 
 				klog.V(3).InfoS("Updated node usage", keysAndValues...)
 				// check if node utilization drops below target threshold or any required capacity (cpu, memory, pods) is moved
-				if !continueCond() {
+				if !continueCond(nodeUsage, totalAvailableUsage) {
 					break
 				}
 			}
