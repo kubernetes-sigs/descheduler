@@ -818,7 +818,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	}
 }
 
-func TestValidateStrategyConfig(t *testing.T) {
+func TestValidateLowNodeUtilizationStrategyConfig(t *testing.T) {
 	tests := []struct {
 		name             string
 		thresholds       api.ResourceThresholds
@@ -958,7 +958,7 @@ func TestValidateStrategyConfig(t *testing.T) {
 	}
 
 	for _, testCase := range tests {
-		validateErr := validateStrategyConfig(testCase.thresholds, testCase.targetThresholds)
+		validateErr := validateLowUtilizationStrategyConfig(testCase.thresholds, testCase.targetThresholds)
 
 		if validateErr == nil || testCase.errInfo == nil {
 			if validateErr != testCase.errInfo {
@@ -972,9 +972,7 @@ func TestValidateStrategyConfig(t *testing.T) {
 	}
 }
 
-
-
-func TestWithTaints(t *testing.T) {
+func TestLowNodeUtilizationWithTaints(t *testing.T) {
 	ctx := context.Background()
 	strategy := api.DeschedulerStrategy{
 		Enabled: true,
