@@ -346,6 +346,8 @@ This strategy requires k8s version 1.18 at a minimum.
 By default, this strategy only deals with hard constraints, setting parameter `includeSoftConstraints` to `true` will
 include soft constraints.
 
+Strategy parameter `labelSelector` is not utilized when balancing topology domains and is only applied during eviction to determine if the pod can be evicted.
+
 **Parameters:**
 
 |Name|Type|
@@ -354,6 +356,7 @@ include soft constraints.
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
 |`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
@@ -537,6 +540,7 @@ to filter pods by their labels:
 * `RemovePodsViolatingNodeTaints`
 * `RemovePodsViolatingNodeAffinity`
 * `RemovePodsViolatingInterPodAntiAffinity`
+* `RemovePodsViolatingTopologySpreadConstraint`
 
 This allows running strategies among pods the descheduler is interested in.
 
