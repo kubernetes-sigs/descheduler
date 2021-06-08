@@ -1,0 +1,75 @@
+{{- if eq .Values.kind "Deployment" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "descheduler.fullname" . }}
+  labels:
+    {{- include "descheduler.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "descheduler.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "descheduler.selectorLabels" . | nindent 8 }}
+        {{- if .Values.podLabels }}
+        {{- .Values.podLabels | toYaml | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.podAnnotations }}
+        {{- .Values.podAnnotations | toYaml | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      serviceAccountName: {{ template "descheduler.serviceAccountName" . }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (printf "v%s" .Chart.AppVersion) }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - "/bin/descheduler"
+          args:
+            - "--policy-config-file"
+            - "/policy-dir/policy.yaml"
+            - "--descheduling-interval"
+            - {{ required "deschedulingInterval required for running as Deployment" .Values.deschedulingInterval }}
+            {{- range $key, $value := .Values.cmdOptions }}
+            - {{ printf "--%s" $key | quote }}
+            {{- if $value }}
+            - {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+          ports:
+            - containerPort: 10258
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          volumeMounts:
+            - mountPath: /policy-dir
+              name: policy-volume
+      volumes:
+        - name: policy-volume
+          configMap:
+            name: {{ template "descheduler.fullname" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
