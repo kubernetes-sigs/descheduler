@@ -122,7 +122,7 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 ## Policy and Strategies
 
 Descheduler's policy is configurable and includes strategies that can be enabled or disabled.
-Nine strategies 
+Nine strategies
 1. `RemoveDuplicates`
 2. `LowNodeUtilization`
 3. `HighNodeUtilization`
@@ -252,8 +252,10 @@ strategies:
 ```
 
 Policy should pass the following validation checks:
-* Three basic native types of resources are supported: `cpu`, `memory` and `pods`. If any of these resource types is not specified, all its thresholds default to 100% to avoid nodes going from underutilized to overutilized.
-* Extended resources are supported. For example, resource type `nvidia.com/gpu` is specified for GPU node utilization. Extended resources are optional, and will not be used to compute node's usage if it's not specified in `thresholds` and `targetThresholds` explicitly.
+* Three basic native types of resources are supported: `cpu`, `memory` and `pods`.
+If any of these resource types is not specified, all its thresholds default to 100% to avoid nodes going from underutilized to overutilized.
+* Extended resources are supported. For example, resource type `nvidia.com/gpu` is specified for GPU node utilization. Extended resources are optional,
+and will not be used to compute node's usage if it's not specified in `thresholds` and `targetThresholds` explicitly.
 * `thresholds` or `targetThresholds` can not be nil and they must configure exactly the same types of resources.
 * The valid range of the resource's percentage value is \[0, 100\]
 * Percentage value of `thresholds` can not be greater than `targetThresholds` for the same resource.
@@ -265,7 +267,8 @@ under utilized frequently or for a short period of time. By default, `numberOfNo
 
 ### HighNodeUtilization
 
-This strategy finds nodes that are under utilized and evicts pods in the hope that these pods will be scheduled compactly into fewer nodes. This strategy **must** be used with the 
+This strategy finds nodes that are under utilized and evicts pods in the hope that these pods will be scheduled compactly into fewer nodes.
+This strategy **must** be used with the
 scheduler strategy `MostRequestedPriority`. The parameters of this strategy are configured under `nodeResourceUtilizationThresholds`.
 
 The under utilization of nodes is determined by a configurable threshold `thresholds`. The threshold
@@ -274,10 +277,13 @@ calculated as the current resources requested on the node vs [total allocatable]
 For pods, this means the number of pods on the node as a fraction of the pod capacity set for that node.
 
 If a node's usage is below threshold for all (cpu, memory, number of pods and extended resources), the node is considered underutilized.
-Currently, pods request resource requirements are considered for computing node resource utilization. Any node above `thresholds` is considered appropriately utilized and is not considered for eviction. 
+Currently, pods request resource requirements are considered for computing node resource utilization.
+Any node above `thresholds` is considered appropriately utilized and is not considered for eviction.
 
 The `thresholds` param could be tuned as per your cluster requirements. Note that this
-strategy evicts pods from `underutilized nodes` (those with usage below `thresholds`) so that they can be recreated in appropriately utilized nodes. The strategy will abort if any number of `underutilized nodes` or `appropriately utilized nodes` is zero.
+strategy evicts pods from `underutilized nodes` (those with usage below `thresholds`)
+so that they can be recreated in appropriately utilized nodes.
+The strategy will abort if any number of `underutilized nodes` or `appropriately utilized nodes` is zero.
 
 **Parameters:**
 
@@ -287,6 +293,7 @@ strategy evicts pods from `underutilized nodes` (those with usage below `thresho
 |`numberOfNodes`|int|
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
@@ -644,6 +651,7 @@ strategies:
 The following strategies accept a `nodeFit` boolean parameter which can optimize descheduling:
 * `RemoveDuplicates`
 * `LowNodeUtilization`
+* `HighNodeUtilization`
 * `RemovePodsViolatingInterPodAntiAffinity`
 * `RemovePodsViolatingNodeAffinity`
 * `RemovePodsViolatingNodeTaints`
@@ -677,7 +685,10 @@ strategies:
         nodeFit: true
 ```
 
-Note that node fit filtering references the current pod spec, and not that of it's owner. Thus, if the pod is owned by a ReplicationController (and that ReplicationController was modified recently), the pod may be running with an outdated spec, which the descheduler will reference when determining node fit. This is expected behavior as the descheduler is a "best-effort" mechanism. 
+Note that node fit filtering references the current pod spec, and not that of it's owner.
+Thus, if the pod is owned by a ReplicationController (and that ReplicationController was modified recently),
+the pod may be running with an outdated spec, which the descheduler will reference when determining node fit.
+This is expected behavior as the descheduler is a "best-effort" mechanism.
 
 Using Deployments instead of ReplicationControllers provides an automated rollout of pod spec changes, therefore ensuring that the descheduler has an up-to-date view of the cluster state.
 
