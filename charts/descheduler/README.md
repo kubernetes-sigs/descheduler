@@ -50,6 +50,7 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `image.pullPolicy`             | Docker image pull policy                                                                                              | `IfNotPresent`                       |
 | `nameOverride`                 | String to partially override `descheduler.fullname` template (will prepend the release name)                          | `""`                                 |
 | `fullnameOverride`             | String to fully override `descheduler.fullname` template                                                              | `""`                                 |
+| `cronJobApiVersion`            | CronJob API Group Version                                                                                             | `"batch/v1"`                         |
 | `schedule`                     | The cron schedule to run the _descheduler_ job on                                                                     | `"*/2 * * * *"`                      |
 | `startingDeadlineSeconds`      | If set, configure `startingDeadlineSeconds` for the _descheduler_ job                                                 | `nil`                                |
 | `successfulJobsHistoryLimit`   | If set, configure `successfulJobsHistoryLimit` for the _descheduler_ job                                              | `nil`                                |
