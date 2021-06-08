@@ -28,6 +28,7 @@ Table of Contents
 - [Quick Start](#quick-start)
   - [Run As A Job](#run-as-a-job)
   - [Run As A CronJob](#run-as-a-cronjob)
+  - [Run As A Deployment](#run-as-a-deployment)
   - [Install Using Helm](#install-using-helm)
   - [Install Using Kustomize](#install-using-kustomize)
 - [User Guide](#user-guide)
@@ -58,7 +59,7 @@ Table of Contents
 
 ## Quick Start
 
-The descheduler can be run as a Job or CronJob inside of a k8s cluster. It has the
+The descheduler can be run as a `Job`, `CronJob`, or `Deployment` inside of a k8s cluster. It has the
 advantage of being able to be run multiple times without needing user intervention.
 The descheduler pod is run as a critical pod in the `kube-system` namespace to avoid
 being evicted by itself or by the kubelet.
@@ -77,6 +78,14 @@ kubectl create -f kubernetes/job/job.yaml
 kubectl create -f kubernetes/base/rbac.yaml
 kubectl create -f kubernetes/base/configmap.yaml
 kubectl create -f kubernetes/cronjob/cronjob.yaml
+```
+
+### Run As A Deployment
+
+```
+kubectl create -f kubernetes/base/rbac.yaml
+kubectl create -f kubernetes/base/configmap.yaml
+kubectl create -f kubernetes/deployment/deployment.yaml
 ```
 
 ### Install Using Helm
@@ -99,6 +108,11 @@ kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.21
 Run As A CronJob
 ```
 kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.21.0' | kubectl apply -f -
+```
+
+Run As A Deployment
+```
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.21.0' | kubectl apply -f -
 ```
 
 ## User Guide
