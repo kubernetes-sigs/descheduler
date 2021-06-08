@@ -19,6 +19,7 @@ package nodeutilization
 import (
 	"context"
 	"fmt"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	clientset "k8s.io/client-go/kubernetes"
@@ -36,6 +37,12 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 		klog.ErrorS(err, "Invalid HighNodeUtilization parameters")
 		return
 	}
+
+	nodeFit := false
+	if strategy.Params != nil {
+		nodeFit = strategy.Params.NodeFit
+	}
+
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
 		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
@@ -68,13 +75,13 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 
 	// log message in one line
 	keysAndValues := []interface{}{
-		"CPU", targetThresholds[v1.ResourceCPU],
-		"Mem", targetThresholds[v1.ResourceMemory],
-		"Pods", targetThresholds[v1.ResourcePods],
+		"CPU", thresholds[v1.ResourceCPU],
+		"Mem", thresholds[v1.ResourceMemory],
+		"Pods", thresholds[v1.ResourcePods],
 	}
-	for name := range targetThresholds {
+	for name := range thresholds {
 		if !isBasicResource(name) {
-			keysAndValues = append(keysAndValues, string(name), int64(targetThresholds[name]))
+			keysAndValues = append(keysAndValues, string(name), int64(thresholds[name]))
 		}
 	}
 
@@ -98,7 +105,7 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 		return
 	}
 
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
+	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
 
 	// stop if the total available usage has dropped to zero - no more pods can be scheduled
 	continueEvictionCond := func(nodeUsage NodeUsage, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool {

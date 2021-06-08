@@ -19,6 +19,9 @@ package nodeutilization
 import (
 	"context"
 	"fmt"
+	"strings"
+	"testing"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/api/policy/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -29,8 +32,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
-	"strings"
-	"testing"
 )
 
 func TestHighNodeUtilization(t *testing.T) {
@@ -38,6 +39,9 @@ func TestHighNodeUtilization(t *testing.T) {
 	n1NodeName := "n1"
 	n2NodeName := "n2"
 	n3NodeName := "n3"
+
+	nodeSelectorKey := "datacenter"
+	nodeSelectorValue := "west"
 
 	testCases := []struct {
 		name                  string
@@ -445,6 +449,78 @@ func TestHighNodeUtilization(t *testing.T) {
 			maxPodsToEvictPerNode: 0,
 			expectedPodsEvicted:   0,
 		},
+		{
+			name: "Other node match pod node selector",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			nodes: map[string]*v1.Node{
+				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeSelectorKey: nodeSelectorValue,
+					}
+				}),
+				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+			},
+			pods: map[string]*v1.PodList{
+				n1NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p4", 400, 0, n1NodeName, test.SetDSOwnerRef),
+					},
+				},
+				n2NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p5", 400, 0, n2NodeName, func(pod *v1.Pod) {
+							// A pod selecting nodes in the "west" datacenter
+							test.SetRSOwnerRef(pod)
+							pod.Spec.NodeSelector = map[string]string{
+								nodeSelectorKey: nodeSelectorValue,
+							}
+						}),
+					},
+				},
+			},
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   1,
+		},
+		{
+			name: "Other node does not match pod node selector",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			nodes: map[string]*v1.Node{
+				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+			},
+			pods: map[string]*v1.PodList{
+				n1NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p4", 400, 0, n1NodeName, test.SetDSOwnerRef),
+					},
+				},
+				n2NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p5", 400, 0, n2NodeName, func(pod *v1.Pod) {
+							// A pod selecting nodes in the "west" datacenter
+							test.SetRSOwnerRef(pod)
+							pod.Spec.NodeSelector = map[string]string{
+								nodeSelectorKey: nodeSelectorValue,
+							}
+						}),
+					},
+				},
+			},
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   0,
+		},
 	}
 
 	for _, test := range testCases {
@@ -514,6 +590,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
 						Thresholds: test.thresholds,
 					},
+					NodeFit: true,
 				},
 			}
 			HighNodeUtilization(ctx, fakeClient, strategy, nodes, podEvictor)
