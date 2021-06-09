@@ -5,4 +5,3 @@ go:
 script:
 - hack/verify-gofmt.sh
 - make build
-- make test-unit
