@@ -44,20 +44,16 @@ func TestTaintsUpdated(t *testing.T) {
 	}
 	rs.Client = client
 	rs.DeschedulingInterval = 100 * time.Millisecond
-	errChan := make(chan error, 1)
-	defer close(errChan)
+
 	go func() {
 		err := RunDeschedulerStrategies(ctx, rs, dp, "v1beta1", stopChannel)
-		errChan <- err
-	}()
-	select {
-	case err := <-errChan:
 		if err != nil {
-			t.Fatalf("Unable to run descheduler strategies: %v", err)
+			t.Logf("ERROR: Unable to run descheduler strategies: %v", err)
 		}
-	case <-time.After(300 * time.Millisecond):
-		// Wait for few cycles and then verify the only pod still exists
-	}
+	}()
+
+	// Wait for few cycles and then verify the only pod still exists
+	time.Sleep(300 * time.Millisecond)
 
 	pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
