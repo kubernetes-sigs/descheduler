@@ -1,4 +1,4 @@
-[![Go Report Card](https://goreportcard.com/badge/kubernetes-sigs/descheduler)](https://goreportcard.com/report/sigs.k8s.io/descheduler)
+[![Go Report Card](https://goreportcard.com/badge/sigs.k8s.io/descheduler)](https://goreportcard.com/report/sigs.k8s.io/descheduler)
 ![Release Charts](https://github.com/kubernetes-sigs/descheduler/workflows/Release%20Charts/badge.svg)
 
 # Descheduler for Kubernetes
@@ -28,12 +28,14 @@ Table of Contents
 - [Quick Start](#quick-start)
   - [Run As A Job](#run-as-a-job)
   - [Run As A CronJob](#run-as-a-cronjob)
+  - [Run As A Deployment](#run-as-a-deployment)
   - [Install Using Helm](#install-using-helm)
   - [Install Using Kustomize](#install-using-kustomize)
 - [User Guide](#user-guide)
 - [Policy and Strategies](#policy-and-strategies)
   - [RemoveDuplicates](#removeduplicates)
   - [LowNodeUtilization](#lownodeutilization)
+  - [HighNodeUtilization](#highnodeutilization)
   - [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity)
   - [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity)
   - [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints)
@@ -44,6 +46,7 @@ Table of Contents
   - [Namespace filtering](#namespace-filtering)
   - [Priority filtering](#priority-filtering)
   - [Label filtering](#label-filtering)
+  - [Node Fit filtering](#node-fit-filtering)
 - [Pod Evictions](#pod-evictions)
   - [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
 - [Metrics](#metrics)
@@ -56,7 +59,7 @@ Table of Contents
 
 ## Quick Start
 
-The descheduler can be run as a Job or CronJob inside of a k8s cluster. It has the
+The descheduler can be run as a `Job`, `CronJob`, or `Deployment` inside of a k8s cluster. It has the
 advantage of being able to be run multiple times without needing user intervention.
 The descheduler pod is run as a critical pod in the `kube-system` namespace to avoid
 being evicted by itself or by the kubelet.
@@ -75,6 +78,14 @@ kubectl create -f kubernetes/job/job.yaml
 kubectl create -f kubernetes/base/rbac.yaml
 kubectl create -f kubernetes/base/configmap.yaml
 kubectl create -f kubernetes/cronjob/cronjob.yaml
+```
+
+### Run As A Deployment
+
+```
+kubectl create -f kubernetes/base/rbac.yaml
+kubectl create -f kubernetes/base/configmap.yaml
+kubectl create -f kubernetes/deployment/deployment.yaml
 ```
 
 ### Install Using Helm
@@ -99,6 +110,11 @@ Run As A CronJob
 kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.21.0' | kubectl apply -f -
 ```
 
+Run As A Deployment
+```
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.21.0' | kubectl apply -f -
+```
+
 ## User Guide
 
 See the [user guide](docs/user-guide.md) in the `/docs` directory.
@@ -106,9 +122,17 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 ## Policy and Strategies
 
 Descheduler's policy is configurable and includes strategies that can be enabled or disabled.
-Eight strategies `RemoveDuplicates`, `LowNodeUtilization`, `RemovePodsViolatingInterPodAntiAffinity`,
-`RemovePodsViolatingNodeAffinity`, `RemovePodsViolatingNodeTaints`, `RemovePodsViolatingTopologySpreadConstraint`,
-`RemovePodsHavingTooManyRestarts`, and `PodLifeTime` are currently implemented. As part of the policy, the
+Nine strategies
+1. `RemoveDuplicates`
+2. `LowNodeUtilization`
+3. `HighNodeUtilization`
+4. `RemovePodsViolatingInterPodAntiAffinity`
+5. `RemovePodsViolatingNodeAffinity`
+6. `RemovePodsViolatingNodeTaints`
+7. `RemovePodsViolatingTopologySpreadConstraint`
+8. `RemovePodsHavingTooManyRestarts`
+9. `PodLifeTime`  
+are currently implemented. As part of the policy, the
 parameters associated with the strategies can be configured too. By default, all strategies are enabled.
 
 The following diagram provides a visualization of most of the strategies to help
@@ -157,6 +181,7 @@ should include `ReplicaSet` to have pods created by Deployments excluded.
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 ```yaml
@@ -204,6 +229,7 @@ strategy evicts pods from `overutilized nodes` (those with usage above `targetTh
 |`numberOfNodes`|int|
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
@@ -226,8 +252,10 @@ strategies:
 ```
 
 Policy should pass the following validation checks:
-* Three basic native types of resources are supported: `cpu`, `memory` and `pods`. If any of these resource types is not specified, all its thresholds default to 100% to avoid nodes going from underutilized to overutilized.
-* Extended resources are supported. For example, resource type `nvidia.com/gpu` is specified for GPU node utilization. Extended resources are optional, and will not be used to compute node's usage if it's not specified in `thresholds` and `targetThresholds` explicitly.
+* Three basic native types of resources are supported: `cpu`, `memory` and `pods`.
+If any of these resource types is not specified, all its thresholds default to 100% to avoid nodes going from underutilized to overutilized.
+* Extended resources are supported. For example, resource type `nvidia.com/gpu` is specified for GPU node utilization. Extended resources are optional,
+and will not be used to compute node's usage if it's not specified in `thresholds` and `targetThresholds` explicitly.
 * `thresholds` or `targetThresholds` can not be nil and they must configure exactly the same types of resources.
 * The valid range of the resource's percentage value is \[0, 100\]
 * Percentage value of `thresholds` can not be greater than `targetThresholds` for the same resource.
@@ -235,6 +263,63 @@ Policy should pass the following validation checks:
 There is another parameter associated with the `LowNodeUtilization` strategy, called `numberOfNodes`.
 This parameter can be configured to activate the strategy only when the number of under utilized nodes
 are above the configured value. This could be helpful in large clusters where a few nodes could go
+under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero.
+
+### HighNodeUtilization
+
+This strategy finds nodes that are under utilized and evicts pods in the hope that these pods will be scheduled compactly into fewer nodes.
+This strategy **must** be used with the
+scheduler strategy `MostRequestedPriority`. The parameters of this strategy are configured under `nodeResourceUtilizationThresholds`.
+
+The under utilization of nodes is determined by a configurable threshold `thresholds`. The threshold
+`thresholds` can be configured for cpu, memory, number of pods, and extended resources in terms of percentage. The percentage is
+calculated as the current resources requested on the node vs [total allocatable](https://kubernetes.io/docs/concepts/architecture/nodes/#capacity).
+For pods, this means the number of pods on the node as a fraction of the pod capacity set for that node.
+
+If a node's usage is below threshold for all (cpu, memory, number of pods and extended resources), the node is considered underutilized.
+Currently, pods request resource requirements are considered for computing node resource utilization.
+Any node above `thresholds` is considered appropriately utilized and is not considered for eviction.
+
+The `thresholds` param could be tuned as per your cluster requirements. Note that this
+strategy evicts pods from `underutilized nodes` (those with usage below `thresholds`)
+so that they can be recreated in appropriately utilized nodes.
+The strategy will abort if any number of `underutilized nodes` or `appropriately utilized nodes` is zero.
+
+**Parameters:**
+
+|Name|Type|
+|---|---|
+|`thresholds`|map(string:int)|
+|`numberOfNodes`|int|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
+
+**Example:**
+
+```yaml
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "HighNodeUtilization":
+     enabled: true
+     params:
+       nodeResourceUtilizationThresholds:
+         thresholds:
+           "cpu" : 20
+           "memory": 20
+           "pods": 20
+```
+
+Policy should pass the following validation checks:
+* Three basic native types of resources are supported: `cpu`, `memory` and `pods`. If any of these resource types is not specified, all its thresholds default to 100%.
+* Extended resources are supported. For example, resource type `nvidia.com/gpu` is specified for GPU node utilization. Extended resources are optional, and will not be used to compute node's usage if it's not specified in `thresholds` explicitly.
+* `thresholds` can not be nil.
+* The valid range of the resource's percentage value is \[0, 100\]
+
+There is another parameter associated with the `HighNodeUtilization` strategy, called `numberOfNodes`.
+This parameter can be configured to activate the strategy only when the number of under utilized nodes
+is above the configured value. This could be helpful in large clusters where a few nodes could go
 under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero.
 
 ### RemovePodsViolatingInterPodAntiAffinity
@@ -253,6 +338,7 @@ node.
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
@@ -291,6 +377,7 @@ podA gets evicted from nodeA.
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
@@ -320,6 +407,7 @@ and will be evicted.
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
@@ -340,6 +428,8 @@ This strategy requires k8s version 1.18 at a minimum.
 By default, this strategy only deals with hard constraints, setting parameter `includeSoftConstraints` to `true` will
 include soft constraints.
 
+Strategy parameter `labelSelector` is not utilized when balancing topology domains and is only applied during eviction to determine if the pod can be evicted.
+
 **Parameters:**
 
 |Name|Type|
@@ -348,6 +438,8 @@ include soft constraints.
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
@@ -379,6 +471,7 @@ which determines whether init container restarts should be factored into that ca
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
@@ -529,6 +622,7 @@ to filter pods by their labels:
 * `RemovePodsViolatingNodeTaints`
 * `RemovePodsViolatingNodeAffinity`
 * `RemovePodsViolatingInterPodAntiAffinity`
+* `RemovePodsViolatingTopologySpreadConstraint`
 
 This allows running strategies among pods the descheduler is interested in.
 
@@ -550,6 +644,53 @@ strategies:
           - {key: tier, operator: In, values: [cache]}
           - {key: environment, operator: NotIn, values: [dev]}
 ```
+
+
+### Node Fit filtering
+
+The following strategies accept a `nodeFit` boolean parameter which can optimize descheduling:
+* `RemoveDuplicates`
+* `LowNodeUtilization`
+* `HighNodeUtilization`
+* `RemovePodsViolatingInterPodAntiAffinity`
+* `RemovePodsViolatingNodeAffinity`
+* `RemovePodsViolatingNodeTaints`
+* `RemovePodsViolatingTopologySpreadConstraint`
+* `RemovePodsHavingTooManyRestarts`
+
+ If set to `true` the descheduler will consider whether or not the pods that meet eviction criteria will fit on other nodes before evicting them. If a pod cannot be rescheduled to another node, it will not be evicted. Currently the following criteria are considered when setting `nodeFit` to `true`:
+- A `nodeSelector` on the pod
+- Any `Tolerations` on the pod and any `Taints` on the other nodes
+- `nodeAffinity` on the pod
+- Whether any of the other nodes are marked as `unschedulable`
+
+E.g.
+
+```yaml
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "LowNodeUtilization":
+     enabled: true
+     params:
+       nodeResourceUtilizationThresholds:
+         thresholds:
+           "cpu" : 20
+           "memory": 20
+           "pods": 20
+         targetThresholds:
+           "cpu" : 50
+           "memory": 50
+           "pods": 50
+        nodeFit: true
+```
+
+Note that node fit filtering references the current pod spec, and not that of it's owner.
+Thus, if the pod is owned by a ReplicationController (and that ReplicationController was modified recently),
+the pod may be running with an outdated spec, which the descheduler will reference when determining node fit.
+This is expected behavior as the descheduler is a "best-effort" mechanism.
+
+Using Deployments instead of ReplicationControllers provides an automated rollout of pod spec changes, therefore ensuring that the descheduler has an up-to-date view of the cluster state.
 
 ## Pod Evictions
 

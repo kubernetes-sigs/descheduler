@@ -22,6 +22,8 @@ import (
 	"math"
 	"sort"
 
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -45,28 +47,51 @@ type topology struct {
 	pods []*v1.Pod
 }
 
-func validateAndParseTopologySpreadParams(ctx context.Context, client clientset.Interface, params *api.StrategyParameters) (int32, sets.String, sets.String, error) {
+// topologySpreadStrategyParams contains validated strategy parameters
+type topologySpreadStrategyParams struct {
+	thresholdPriority  int32
+	includedNamespaces sets.String
+	excludedNamespaces sets.String
+	labelSelector      labels.Selector
+	nodeFit            bool
+}
+
+// validateAndParseTopologySpreadParams will validate parameters to ensure that they do not contain invalid values.
+func validateAndParseTopologySpreadParams(ctx context.Context, client clientset.Interface, params *api.StrategyParameters) (*topologySpreadStrategyParams, error) {
 	var includedNamespaces, excludedNamespaces sets.String
 	if params == nil {
-		return 0, includedNamespaces, excludedNamespaces, nil
+		return &topologySpreadStrategyParams{includedNamespaces: includedNamespaces, excludedNamespaces: excludedNamespaces}, nil
 	}
 	// At most one of include/exclude can be set
 	if params.Namespaces != nil && len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
-		return 0, includedNamespaces, excludedNamespaces, fmt.Errorf("only one of Include/Exclude namespaces can be set")
+		return nil, fmt.Errorf("only one of Include/Exclude namespaces can be set")
 	}
 	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
-		return 0, includedNamespaces, excludedNamespaces, fmt.Errorf("only one of thresholdPriority and thresholdPriorityClassName can be set")
+		return nil, fmt.Errorf("only one of thresholdPriority and thresholdPriorityClassName can be set")
 	}
 	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, params)
 	if err != nil {
-		return 0, includedNamespaces, excludedNamespaces, fmt.Errorf("failed to get threshold priority from strategy's params: %+v", err)
+		return nil, fmt.Errorf("failed to get threshold priority from strategy's params: %+v", err)
 	}
 	if params.Namespaces != nil {
 		includedNamespaces = sets.NewString(params.Namespaces.Include...)
 		excludedNamespaces = sets.NewString(params.Namespaces.Exclude...)
 	}
+	var selector labels.Selector
+	if params.LabelSelector != nil {
+		selector, err = metav1.LabelSelectorAsSelector(params.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get label selectors from strategy's params: %+v", err)
+		}
+	}
 
-	return thresholdPriority, includedNamespaces, excludedNamespaces, nil
+	return &topologySpreadStrategyParams{
+		thresholdPriority:  thresholdPriority,
+		includedNamespaces: includedNamespaces,
+		excludedNamespaces: excludedNamespaces,
+		labelSelector:      selector,
+		nodeFit:            params.NodeFit,
+	}, nil
 }
 
 func RemovePodsViolatingTopologySpreadConstraint(
@@ -76,17 +101,22 @@ func RemovePodsViolatingTopologySpreadConstraint(
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
 ) {
-	thresholdPriority, includedNamespaces, excludedNamespaces, err := validateAndParseTopologySpreadParams(ctx, client, strategy.Params)
+	strategyParams, err := validateAndParseTopologySpreadParams(ctx, client, strategy.Params)
 	if err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsViolatingTopologySpreadConstraint parameters")
 		return
 	}
 
+	evictable := podEvictor.Evictable(
+		evictions.WithPriorityThreshold(strategyParams.thresholdPriority),
+		evictions.WithNodeFit(strategyParams.nodeFit),
+		evictions.WithLabelSelector(strategyParams.labelSelector),
+	)
+
 	nodeMap := make(map[string]*v1.Node, len(nodes))
 	for _, node := range nodes {
 		nodeMap[node.Name] = node
 	}
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	// 1. for each namespace for which there is Topology Constraint
 	// 2. for each TopologySpreadConstraint in that namespace
@@ -110,8 +140,8 @@ func RemovePodsViolatingTopologySpreadConstraint(
 	podsForEviction := make(map[*v1.Pod]struct{})
 	// 1. for each namespace...
 	for _, namespace := range namespaces.Items {
-		if (len(includedNamespaces) > 0 && !includedNamespaces.Has(namespace.Name)) ||
-			(len(excludedNamespaces) > 0 && excludedNamespaces.Has(namespace.Name)) {
+		if (len(strategyParams.includedNamespaces) > 0 && !strategyParams.includedNamespaces.Has(namespace.Name)) ||
+			(len(strategyParams.excludedNamespaces) > 0 && strategyParams.excludedNamespaces.Has(namespace.Name)) {
 			continue
 		}
 		namespacePods, err := client.CoreV1().Pods(namespace.Name).List(ctx, metav1.ListOptions{})
@@ -121,12 +151,11 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		}
 
 		// ...where there is a topology constraint
-		//namespaceTopologySpreadConstrainPods := make([]v1.Pod, 0, len(namespacePods.Items))
 		namespaceTopologySpreadConstraints := make(map[v1.TopologySpreadConstraint]struct{})
 		for _, pod := range namespacePods.Items {
 			for _, constraint := range pod.Spec.TopologySpreadConstraints {
 				// Ignore soft topology constraints if they are not included
-				if (strategy.Params == nil || !strategy.Params.IncludeSoftConstraints) && constraint.WhenUnsatisfiable != v1.DoNotSchedule {
+				if constraint.WhenUnsatisfiable == v1.ScheduleAnyway && (strategy.Params == nil || !strategy.Params.IncludeSoftConstraints) {
 					continue
 				}
 				namespaceTopologySpreadConstraints[constraint] = struct{}{}
@@ -243,6 +272,7 @@ func balanceDomains(
 	sumPods float64,
 	isEvictable func(*v1.Pod) bool,
 	nodeMap map[string]*v1.Node) {
+
 	idealAvg := sumPods / float64(len(constraintTopologies))
 	sortedDomains := sortDomains(constraintTopologies, isEvictable)
 	// i is the index for belowOrEqualAvg
@@ -284,20 +314,11 @@ func balanceDomains(
 		// also (just for tracking), add them to the list of pods in the lower topology
 		aboveToEvict := sortedDomains[j].pods[len(sortedDomains[j].pods)-movePods:]
 		for k := range aboveToEvict {
-			// if the pod has a hard nodeAffinity or nodeSelector that only matches this node,
-			// don't bother evicting it as it will just end up back on the same node
-			// however we still account for it "being evicted" so the algorithm can complete
-			// TODO(@damemi): Since we don't order pods wrt their affinities, we should refactor this to skip the current pod
-			// but still try to get the required # of movePods (instead of just chopping that value off the slice above)
-			isRequiredDuringSchedulingIgnoredDuringExecution := aboveToEvict[k].Spec.Affinity != nil &&
-				aboveToEvict[k].Spec.Affinity.NodeAffinity != nil &&
-				aboveToEvict[k].Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil
-
-			if (aboveToEvict[k].Spec.NodeSelector != nil || isRequiredDuringSchedulingIgnoredDuringExecution) &&
-				nodesPodFitsOnBesidesCurrent(aboveToEvict[k], nodeMap) == 0 {
-				klog.V(2).InfoS("Ignoring pod for eviction due to node selector/affinity", "pod", klog.KObj(aboveToEvict[k]))
+			if err := validatePodFitsOnOtherNodes(aboveToEvict[k], nodeMap); err != nil {
+				klog.V(2).InfoS(fmt.Sprintf("ignoring pod for eviction due to: %s", err.Error()), "pod", klog.KObj(aboveToEvict[k]))
 				continue
 			}
+
 			podsForEviction[aboveToEvict[k]] = struct{}{}
 		}
 		sortedDomains[j].pods = sortedDomains[j].pods[:len(sortedDomains[j].pods)-movePods]
@@ -305,18 +326,54 @@ func balanceDomains(
 	}
 }
 
-// nodesPodFitsOnBesidesCurrent counts the number of nodes this pod could fit on based on its affinity
+// validatePodFitsOnOtherNodes performs validation based on scheduling predicates for affinity and toleration.
 // It excludes the current node because, for the sake of domain balancing only, we care about if there is any other
 // place it could theoretically fit.
 // If the pod doesn't fit on its current node, that is a job for RemovePodsViolatingNodeAffinity, and irrelevant to Topology Spreading
-func nodesPodFitsOnBesidesCurrent(pod *v1.Pod, nodeMap map[string]*v1.Node) int {
-	count := 0
-	for _, node := range nodeMap {
-		if nodeutil.PodFitsCurrentNode(pod, node) && node != nodeMap[pod.Spec.NodeName] {
-			count++
-		}
+func validatePodFitsOnOtherNodes(pod *v1.Pod, nodeMap map[string]*v1.Node) error {
+	// if the pod has a hard nodeAffinity/nodeSelector/toleration that only matches this node,
+	// don't bother evicting it as it will just end up back on the same node
+	// however we still account for it "being evicted" so the algorithm can complete
+	// TODO(@damemi): Since we don't order pods wrt their affinities, we should refactor this to skip the current pod
+	// but still try to get the required # of movePods (instead of just chopping that value off the slice above)
+	isRequiredDuringSchedulingIgnoredDuringExecution := pod.Spec.Affinity != nil &&
+		pod.Spec.Affinity.NodeAffinity != nil &&
+		pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil
+
+	hardTaintsFilter := func(taint *v1.Taint) bool {
+		return taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectNoExecute
 	}
-	return count
+
+	var eligibleNodesCount, ineligibleAffinityNodesCount, ineligibleTaintedNodesCount int
+	for _, node := range nodeMap {
+		if node == nodeMap[pod.Spec.NodeName] {
+			continue
+		}
+		if pod.Spec.NodeSelector != nil || isRequiredDuringSchedulingIgnoredDuringExecution {
+			if !nodeutil.PodFitsCurrentNode(pod, node) {
+				ineligibleAffinityNodesCount++
+				continue
+			}
+		}
+		if !utils.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, hardTaintsFilter) {
+			ineligibleTaintedNodesCount++
+			continue
+		}
+
+		eligibleNodesCount++
+	}
+
+	if eligibleNodesCount == 0 {
+		var errs []error
+		if ineligibleAffinityNodesCount > 0 {
+			errs = append(errs, fmt.Errorf("%d nodes with ineligible selector/affinity", ineligibleAffinityNodesCount))
+		}
+		if ineligibleTaintedNodesCount > 0 {
+			errs = append(errs, fmt.Errorf("%d nodes with taints that are not tolerated", ineligibleTaintedNodesCount))
+		}
+		return utilerrors.NewAggregate(errs)
+	}
+	return nil
 }
 
 // sortDomains sorts and splits the list of topology domains based on their size

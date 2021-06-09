@@ -41,6 +41,16 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		},
 	}
 
+	requiredDuringSchedulingIgnoredDuringExecutionWithNodeFitStrategy := api.DeschedulerStrategy{
+		Enabled: true,
+		Params: &api.StrategyParameters{
+			NodeAffinityType: []string{
+				"requiredDuringSchedulingIgnoredDuringExecution",
+			},
+			NodeFit: true,
+		},
+	}
+
 	nodeLabelKey := "kubernetes.io/desiredNode"
 	nodeLabelValue := "yes"
 	nodeWithLabels := test.BuildTestNode("nodeWithLabels", 2000, 3000, 10, nil)
@@ -138,10 +148,18 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		{
 			description:             "Pod is scheduled on node without matching labels, but no node where pod fits is available, should not evict",
 			expectedEvictedPodCount: 0,
-			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
+			strategy:                requiredDuringSchedulingIgnoredDuringExecutionWithNodeFitStrategy,
 			pods:                    addPodsToNode(nodeWithoutLabels),
 			nodes:                   []*v1.Node{nodeWithoutLabels, unschedulableNodeWithLabels},
 			maxPodsToEvictPerNode:   0,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, and node where pod fits is available, should evict",
+			expectedEvictedPodCount: 0,
+			strategy:                requiredDuringSchedulingIgnoredDuringExecutionWithNodeFitStrategy,
+			pods:                    addPodsToNode(nodeWithoutLabels),
+			nodes:                   []*v1.Node{nodeWithLabels, unschedulableNodeWithLabels},
+			maxPodsToEvictPerNode:   1,
 		},
 	}
 

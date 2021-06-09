@@ -200,10 +200,15 @@ func TestPodFitsCurrentNode(t *testing.T) {
 	}
 }
 
-func TestPodFitsAnyNode(t *testing.T) {
+func TestPodFitsAnyOtherNode(t *testing.T) {
 
 	nodeLabelKey := "kubernetes.io/desiredNode"
 	nodeLabelValue := "yes"
+	nodeTaintKey := "hardware"
+	nodeTaintValue := "gpu"
+
+	// Staging node has no scheduling restrictions, but the pod always starts here and PodFitsAnyOtherNode() doesn't take into account the node the pod is running on.
+	nodeNames := []string{"node1", "node2", "stagingNode"}
 
 	tests := []struct {
 		description string
@@ -212,33 +217,12 @@ func TestPodFitsAnyNode(t *testing.T) {
 		success     bool
 	}{
 		{
-			description: "Pod expected to fit one of the nodes",
-			pod: &v1.Pod{
-				Spec: v1.PodSpec{
-					Affinity: &v1.Affinity{
-						NodeAffinity: &v1.NodeAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-								NodeSelectorTerms: []v1.NodeSelectorTerm{
-									{
-										MatchExpressions: []v1.NodeSelectorRequirement{
-											{
-												Key:      nodeLabelKey,
-												Operator: "In",
-												Values: []string{
-													nodeLabelValue,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+			description: "Pod fits another node matching node affinity",
+			pod:         createPodManifest(nodeNames[2], nodeLabelKey, nodeLabelValue),
 			nodes: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[0],
 						Labels: map[string]string{
 							nodeLabelKey: nodeLabelValue,
 						},
@@ -246,42 +230,27 @@ func TestPodFitsAnyNode(t *testing.T) {
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[1],
 						Labels: map[string]string{
 							nodeLabelKey: "no",
 						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[2],
 					},
 				},
 			},
 			success: true,
 		},
 		{
-			description: "Pod expected to fit one of the nodes (error node first)",
-			pod: &v1.Pod{
-				Spec: v1.PodSpec{
-					Affinity: &v1.Affinity{
-						NodeAffinity: &v1.NodeAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-								NodeSelectorTerms: []v1.NodeSelectorTerm{
-									{
-										MatchExpressions: []v1.NodeSelectorRequirement{
-											{
-												Key:      nodeLabelKey,
-												Operator: "In",
-												Values: []string{
-													nodeLabelValue,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+			description: "Pod expected to fit one of the nodes",
+			pod:         createPodManifest(nodeNames[2], nodeLabelKey, nodeLabelValue),
 			nodes: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[0],
 						Labels: map[string]string{
 							nodeLabelKey: "no",
 						},
@@ -289,9 +258,15 @@ func TestPodFitsAnyNode(t *testing.T) {
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[1],
 						Labels: map[string]string{
 							nodeLabelKey: nodeLabelValue,
 						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[2],
 					},
 				},
 			},
@@ -299,32 +274,11 @@ func TestPodFitsAnyNode(t *testing.T) {
 		},
 		{
 			description: "Pod expected to fit none of the nodes",
-			pod: &v1.Pod{
-				Spec: v1.PodSpec{
-					Affinity: &v1.Affinity{
-						NodeAffinity: &v1.NodeAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-								NodeSelectorTerms: []v1.NodeSelectorTerm{
-									{
-										MatchExpressions: []v1.NodeSelectorRequirement{
-											{
-												Key:      nodeLabelKey,
-												Operator: "In",
-												Values: []string{
-													nodeLabelValue,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+			pod:         createPodManifest(nodeNames[2], nodeLabelKey, nodeLabelValue),
 			nodes: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[0],
 						Labels: map[string]string{
 							nodeLabelKey: "unfit1",
 						},
@@ -332,9 +286,15 @@ func TestPodFitsAnyNode(t *testing.T) {
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[1],
 						Labels: map[string]string{
 							nodeLabelKey: "unfit2",
 						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[2],
 					},
 				},
 			},
@@ -342,32 +302,11 @@ func TestPodFitsAnyNode(t *testing.T) {
 		},
 		{
 			description: "Nodes are unschedulable but labels match, should fail",
-			pod: &v1.Pod{
-				Spec: v1.PodSpec{
-					Affinity: &v1.Affinity{
-						NodeAffinity: &v1.NodeAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-								NodeSelectorTerms: []v1.NodeSelectorTerm{
-									{
-										MatchExpressions: []v1.NodeSelectorRequirement{
-											{
-												Key:      nodeLabelKey,
-												Operator: "In",
-												Values: []string{
-													nodeLabelValue,
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
+			pod:         createPodManifest(nodeNames[2], nodeLabelKey, nodeLabelValue),
 			nodes: []*v1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[0],
 						Labels: map[string]string{
 							nodeLabelKey: nodeLabelValue,
 						},
@@ -378,9 +317,98 @@ func TestPodFitsAnyNode(t *testing.T) {
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[1],
 						Labels: map[string]string{
 							nodeLabelKey: "no",
 						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[2],
+					},
+				},
+			},
+			success: false,
+		},
+		{
+			description: "Two nodes matches node selector, one of them is tained, should pass",
+			pod:         createPodManifest(nodeNames[2], nodeLabelKey, nodeLabelValue),
+			nodes: []*v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[0],
+						Labels: map[string]string{
+							nodeLabelKey: nodeLabelValue,
+						},
+					},
+					Spec: v1.NodeSpec{
+						Taints: []v1.Taint{
+							{
+								Key:    nodeTaintKey,
+								Value:  nodeTaintValue,
+								Effect: v1.TaintEffectNoSchedule,
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[1],
+						Labels: map[string]string{
+							nodeLabelKey: nodeLabelValue,
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[2],
+					},
+				},
+			},
+			success: true,
+		},
+		{
+			description: "Both nodes are tained, should fail",
+			pod:         createPodManifest(nodeNames[2], nodeLabelKey, nodeLabelValue),
+			nodes: []*v1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[0],
+						Labels: map[string]string{
+							nodeLabelKey: nodeLabelValue,
+						},
+					},
+					Spec: v1.NodeSpec{
+						Taints: []v1.Taint{
+							{
+								Key:    nodeTaintKey,
+								Value:  nodeTaintValue,
+								Effect: v1.TaintEffectNoSchedule,
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[1],
+						Labels: map[string]string{
+							nodeLabelKey: nodeLabelValue,
+						},
+					},
+					Spec: v1.NodeSpec{
+						Taints: []v1.Taint{
+							{
+								Key:    nodeTaintKey,
+								Value:  nodeTaintValue,
+								Effect: v1.TaintEffectNoExecute,
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeNames[2],
 					},
 				},
 			},
@@ -389,9 +417,36 @@ func TestPodFitsAnyNode(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		actual := PodFitsAnyNode(tc.pod, tc.nodes)
+		actual := PodFitsAnyOtherNode(tc.pod, tc.nodes)
 		if actual != tc.success {
 			t.Errorf("Test %#v failed", tc.description)
 		}
 	}
+}
+
+func createPodManifest(nodeName string, nodeSelectorKey string, nodeSelectorValue string) *v1.Pod {
+	return (&v1.Pod{
+		Spec: v1.PodSpec{
+			NodeName: nodeName,
+			Affinity: &v1.Affinity{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      nodeSelectorKey,
+										Operator: "In",
+										Values: []string{
+											nodeSelectorValue,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
 }

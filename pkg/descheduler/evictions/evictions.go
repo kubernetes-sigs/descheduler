@@ -25,6 +25,7 @@ import (
 	policy "k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/errors"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -32,6 +33,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/metrics"
+	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 
@@ -47,6 +49,7 @@ type nodePodEvictedCount map[*v1.Node]int
 
 type PodEvictor struct {
 	client                  clientset.Interface
+	nodes                   []*v1.Node
 	policyGroupVersion      string
 	dryRun                  bool
 	maxPodsToEvictPerNode   int
@@ -74,6 +77,7 @@ func NewPodEvictor(
 
 	return &PodEvictor{
 		client:                  client,
+		nodes:                   nodes,
 		policyGroupVersion:      policyGroupVersion,
 		dryRun:                  dryRun,
 		maxPodsToEvictPerNode:   maxPodsToEvictPerNode,
@@ -163,7 +167,9 @@ func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, poli
 }
 
 type Options struct {
-	priority *int32
+	priority      *int32
+	nodeFit       bool
+	labelSelector labels.Selector
 }
 
 // WithPriorityThreshold sets a threshold for pod's priority class.
@@ -172,6 +178,24 @@ func WithPriorityThreshold(priority int32) func(opts *Options) {
 	return func(opts *Options) {
 		var p int32 = priority
 		opts.priority = &p
+	}
+}
+
+// WithNodeFit sets whether or not to consider taints, node selectors,
+// and pod affinity when evicting. A pod whose tolerations, node selectors,
+// and affinity match a node other than the one it is currently running on
+// is evictable.
+func WithNodeFit(nodeFit bool) func(opts *Options) {
+	return func(opts *Options) {
+		opts.nodeFit = nodeFit
+	}
+}
+
+// WithLabelSelector sets whether or not to apply label filtering when evicting.
+// Any pod matching the label selector is considered evictable.
+func WithLabelSelector(labelSelector labels.Selector) func(opts *Options) {
+	return func(opts *Options) {
+		opts.labelSelector = labelSelector
 	}
 }
 
@@ -221,6 +245,22 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			if utils.IsPodWithPVC(pod) {
 				return fmt.Errorf("pod has a PVC and descheduler is configured to ignore PVC pods")
+			}
+			return nil
+		})
+	}
+	if options.nodeFit {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			if !nodeutil.PodFitsAnyOtherNode(pod, pe.nodes) {
+				return fmt.Errorf("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable")
+			}
+			return nil
+		})
+	}
+	if options.labelSelector != nil && !options.labelSelector.Empty() {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			if !options.labelSelector.Matches(labels.Set(pod.Labels)) {
+				return fmt.Errorf("pod labels do not match the labelSelector filter in the policy parameter")
 			}
 			return nil
 		})

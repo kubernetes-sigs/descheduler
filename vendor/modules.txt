@@ -133,7 +133,7 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
-# github.com/spf13/cobra v0.0.5
+# github.com/spf13/cobra v1.1.1
 ## explicit
 github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.5
@@ -894,6 +894,9 @@ k8s.io/kube-openapi/pkg/schemaconv
 k8s.io/kube-openapi/pkg/util
 k8s.io/kube-openapi/pkg/util/proto
 k8s.io/kube-openapi/pkg/util/sets
+# k8s.io/kubectl v0.20.5
+## explicit
+k8s.io/kubectl/pkg/util/qos
 # k8s.io/utils v0.0.0-20201110183641-67b214c5f920
 k8s.io/utils/buffer
 k8s.io/utils/integer
