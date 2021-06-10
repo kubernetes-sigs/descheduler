@@ -19,6 +19,7 @@ package descheduler
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
 
 	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -72,9 +73,10 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 
-	strategyFuncs := map[string]strategyFunction{
+	strategyFuncs := map[api.StrategyName]strategyFunction{
 		"RemoveDuplicates":                            strategies.RemoveDuplicatePods,
-		"LowNodeUtilization":                          strategies.LowNodeUtilization,
+		"LowNodeUtilization":                          nodeutilization.LowNodeUtilization,
+		"HighNodeUtilization":                         nodeutilization.HighNodeUtilization,
 		"RemovePodsViolatingInterPodAntiAffinity":     strategies.RemovePodsViolatingInterPodAntiAffinity,
 		"RemovePodsViolatingNodeAffinity":             strategies.RemovePodsViolatingNodeAffinity,
 		"RemovePodsViolatingNodeTaints":               strategies.RemovePodsViolatingNodeTaints,
@@ -136,9 +138,13 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			ignorePvcPods,
 		)
 
-		for name, f := range strategyFuncs {
-			if strategy := deschedulerPolicy.Strategies[api.StrategyName(name)]; strategy.Enabled {
-				f(ctx, rs.Client, strategy, nodes, podEvictor)
+		for name, strategy := range deschedulerPolicy.Strategies {
+			if f, ok := strategyFuncs[name]; ok {
+				if strategy.Enabled {
+					f(ctx, rs.Client, strategy, nodes, podEvictor)
+				}
+			} else {
+				klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
 			}
 		}
 

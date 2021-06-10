@@ -83,7 +83,12 @@ func RemoveDuplicatePods(
 		excludedNamespaces = strategy.Params.Namespaces.Exclude
 	}
 
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
+	nodeFit := false
+	if strategy.Params != nil {
+		nodeFit = strategy.Params.NodeFit
+	}
+
+	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
 
 	duplicatePods := make(map[podOwner]map[string][]*v1.Pod)
 	ownerKeyOccurence := make(map[podOwner]int32)
@@ -183,9 +188,17 @@ func RemoveDuplicatePods(
 	}
 
 	// 1. how many pods can be evicted to respect uniform placement of pods among viable nodes?
-	for ownerKey, nodes := range duplicatePods {
-		upperAvg := int(math.Ceil(float64(ownerKeyOccurence[ownerKey]) / float64(nodeCount)))
-		for nodeName, pods := range nodes {
+	for ownerKey, podNodes := range duplicatePods {
+		targetNodes := getTargetNodes(podNodes, nodes)
+
+		klog.V(2).InfoS("Adjusting feasible nodes", "owner", ownerKey, "from", nodeCount, "to", len(targetNodes))
+		if len(targetNodes) < 2 {
+			klog.V(1).InfoS("Less than two feasible nodes for duplicates to land, skipping eviction", "owner", ownerKey)
+			continue
+		}
+
+		upperAvg := int(math.Ceil(float64(ownerKeyOccurence[ownerKey]) / float64(len(targetNodes))))
+		for nodeName, pods := range podNodes {
 			klog.V(2).InfoS("Average occurrence per node", "node", klog.KObj(nodeMap[nodeName]), "ownerKey", ownerKey, "avg", upperAvg)
 			// list of duplicated pods does not contain the original referential pod
 			if len(pods)+1 > upperAvg {
@@ -200,6 +213,73 @@ func RemoveDuplicatePods(
 			}
 		}
 	}
+}
+
+func getNodeAffinityNodeSelector(pod *v1.Pod) *v1.NodeSelector {
+	if pod.Spec.Affinity == nil {
+		return nil
+	}
+	if pod.Spec.Affinity.NodeAffinity == nil {
+		return nil
+	}
+	return pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+}
+
+func getTargetNodes(podNodes map[string][]*v1.Pod, nodes []*v1.Node) []*v1.Node {
+	// In order to reduce the number of pods processed, identify pods which have
+	// equal (tolerations, nodeselectors, node affinity) terms and considered them
+	// as identical. Identical pods wrt. (tolerations, nodeselectors, node affinity) terms
+	// will produce the same result when checking if a pod is feasible for a node.
+	// Thus, improving efficiency of processing pods marked for eviction.
+
+	// Collect all distinct pods which differ in at least taints, node affinity or node selector terms
+	distinctPods := map[*v1.Pod]struct{}{}
+	for _, pods := range podNodes {
+		for _, pod := range pods {
+			duplicated := false
+			for dp := range distinctPods {
+				if utils.TolerationsEqual(pod.Spec.Tolerations, dp.Spec.Tolerations) &&
+					utils.NodeSelectorsEqual(getNodeAffinityNodeSelector(pod), getNodeAffinityNodeSelector(dp)) &&
+					reflect.DeepEqual(pod.Spec.NodeSelector, dp.Spec.NodeSelector) {
+					duplicated = true
+					continue
+				}
+			}
+			if duplicated {
+				continue
+			}
+			distinctPods[pod] = struct{}{}
+		}
+	}
+
+	// For each distinct pod get a list of nodes where it can land
+	targetNodesMap := map[string]*v1.Node{}
+	for pod := range distinctPods {
+		matchingNodes := map[string]*v1.Node{}
+		for _, node := range nodes {
+			if !utils.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, func(taint *v1.Taint) bool {
+				return taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectNoExecute
+			}) {
+				continue
+			}
+			if match, err := utils.PodMatchNodeSelector(pod, node); err == nil && !match {
+				continue
+			}
+			matchingNodes[node.Name] = node
+		}
+		if len(matchingNodes) > 1 {
+			for nodeName := range matchingNodes {
+				targetNodesMap[nodeName] = matchingNodes[nodeName]
+			}
+		}
+	}
+
+	targetNodes := []*v1.Node{}
+	for _, node := range targetNodesMap {
+		targetNodes = append(targetNodes, node)
+	}
+
+	return targetNodes
 }
 
 func hasExcludedOwnerRefKind(ownerRefs []metav1.OwnerReference, strategy api.DeschedulerStrategy) bool {

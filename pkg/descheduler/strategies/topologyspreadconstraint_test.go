@@ -58,11 +58,47 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 0,
-			strategy:             api.DeschedulerStrategy{},
-			namespaces:           []string{"ns1"},
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					NodeFit: false,
+				},
+			},
+			namespaces: []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [3,1], maxSkew=1, move 1 pod to achieve [2,2]",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  2,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+				{
+					count:  1,
+					node:   "n2",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					NodeFit: false,
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [3,1], maxSkew=1, move 1 pod to achieve [2,2] (soft constraints)",
 			nodes: []*v1.Node{
 				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
 				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
@@ -76,7 +112,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 						{
 							MaxSkew:           1,
 							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
+							WhenUnsatisfiable: v1.ScheduleAnyway,
 							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
 						},
 					},
@@ -93,30 +129,22 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy:             api.DeschedulerStrategy{},
+			strategy:             api.DeschedulerStrategy{Params: &api.StrategyParameters{IncludeSoftConstraints: true}},
 			namespaces:           []string{"ns1"},
 		},
 		{
-			name: "NEW",
-			//name: "2 domains, sizes [3,1], maxSkew=1, no pods eligible, move 0 pods",
+			name: "2 domains, sizes [3,1], maxSkew=1, no pods eligible, move 0 pods",
 			nodes: []*v1.Node{
 				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
 				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
-					noOwners: true,
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+					noOwners:    true,
 				},
 				{
 					count:    2,
@@ -132,8 +160,12 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 0,
-			strategy:             api.DeschedulerStrategy{},
-			namespaces:           []string{"ns1"},
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					NodeFit: false,
+				},
+			},
+			namespaces: []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [3,1], maxSkew=1, move 1 pod to achieve [2,2], exclude kube-system namespace",
@@ -143,17 +175,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
 					count:  2,
@@ -167,7 +192,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy:             api.DeschedulerStrategy{Enabled: true, Params: &api.StrategyParameters{Namespaces: &api.Namespaces{Exclude: []string{"kube-system"}}}},
+			strategy:             api.DeschedulerStrategy{Enabled: true, Params: &api.StrategyParameters{NodeFit: true, Namespaces: &api.Namespaces{Exclude: []string{"kube-system"}}}},
 			namespaces:           []string{"ns1"},
 		},
 		{
@@ -178,17 +203,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
 					count:  4,
@@ -202,8 +220,12 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy:             api.DeschedulerStrategy{},
-			namespaces:           []string{"ns1"},
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					NodeFit: false,
+				},
+			},
+			namespaces: []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [4,0], maxSkew=1, move 2 pods to achieve [2,2]",
@@ -213,17 +235,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
 					count:  3,
@@ -232,8 +247,12 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 2,
-			strategy:             api.DeschedulerStrategy{},
-			namespaces:           []string{"ns1"},
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					NodeFit: false,
+				},
+			},
+			namespaces: []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [4,0], maxSkew=1, only move 1 pod since pods with nodeSelector and nodeAffinity aren't evicted",
@@ -243,17 +262,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:        1,
+					node:         "n1",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultTopologyConstraints(1),
 					nodeSelector: map[string]string{"zone": "zoneA"},
 				},
 				{
@@ -279,8 +291,12 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy:             api.DeschedulerStrategy{},
-			namespaces:           []string{"ns1"},
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					NodeFit: true,
+				},
+			},
+			namespaces: []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [4,0], maxSkew=1, move 2 pods since selector matches multiple nodes",
@@ -296,17 +312,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:        1,
+					node:         "n1",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultTopologyConstraints(1),
 					nodeSelector: map[string]string{"region": "boston"},
 				},
 				{
@@ -329,8 +338,12 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 2,
-			strategy:             api.DeschedulerStrategy{},
-			namespaces:           []string{"ns1"},
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					NodeFit: false,
+				},
+			},
+			namespaces: []string{"ns1"},
 		},
 		{
 			name: "3 domains, sizes [0, 1, 100], maxSkew=1, move 66 pods to get [34, 33, 34]",
@@ -341,17 +354,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n2",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n2",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
 					count:  100,
@@ -373,17 +379,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			pods: createTestPods([]testPodList{
 				{
-					count:  1,
-					node:   "n2",
-					labels: map[string]string{"foo": "bar"},
-					constraints: []v1.TopologySpreadConstraint{
-						{
-							MaxSkew:           1,
-							TopologyKey:       "zone",
-							WhenUnsatisfiable: v1.DoNotSchedule,
-							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-						},
-					},
+					count:       1,
+					node:        "n2",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
 					count:  3,
@@ -397,13 +396,58 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 3,
-			strategy:             api.DeschedulerStrategy{},
-			namespaces:           []string{"ns1"},
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					NodeFit: false,
+				},
+			},
+			namespaces: []string{"ns1"},
 		},
 		{
 			name: "2 domains size [2 6], maxSkew=2, should move 1 to get [3 5]",
 			nodes: []*v1.Node{
 				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(2),
+				},
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+				{
+					count:  6,
+					node:   "n2",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					NodeFit: false,
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
+		{
+			name: "2 domains size [2 6], maxSkew=2, can't move any because of node taints",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneA"
+					n.Spec.Taints = []v1.Taint{
+						{
+							Key:    "hardware",
+							Value:  "gpu",
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
 				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
 			},
 			pods: createTestPods([]testPodList{
@@ -431,9 +475,306 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					labels: map[string]string{"foo": "bar"},
 				},
 			}),
+			expectedEvictedCount: 0,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					NodeFit: true,
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
+		{
+			// see https://github.com/kubernetes-sigs/descheduler/issues/564
+			name: "Multiple constraints (6 nodes/2 zones, 4 pods)",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels = map[string]string{"topology.kubernetes.io/zone": "zoneA", "kubernetes.io/hostname": "n1"}
+				}),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels = map[string]string{"topology.kubernetes.io/zone": "zoneA", "kubernetes.io/hostname": "n2"}
+				}),
+				test.BuildTestNode("n3", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels = map[string]string{"topology.kubernetes.io/zone": "zoneA", "kubernetes.io/hostname": "n3"}
+				}),
+				test.BuildTestNode("n4", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels = map[string]string{"topology.kubernetes.io/zone": "zoneB", "kubernetes.io/hostname": "n4"}
+				}),
+				test.BuildTestNode("n5", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels = map[string]string{"topology.kubernetes.io/zone": "zoneB", "kubernetes.io/hostname": "n5"}
+				}),
+				test.BuildTestNode("n6", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels = map[string]string{"topology.kubernetes.io/zone": "zoneB", "kubernetes.io/hostname": "n6"}
+				}),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"app": "whoami"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "topology.kubernetes.io/zone",
+							WhenUnsatisfiable: v1.ScheduleAnyway,
+						},
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/hostname",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+						},
+					},
+				},
+				{
+					count:  1,
+					node:   "n2",
+					labels: map[string]string{"app": "whoami"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "topology.kubernetes.io/zone",
+							WhenUnsatisfiable: v1.ScheduleAnyway,
+						},
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/hostname",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+						},
+					},
+				},
+				{
+					count:  1,
+					node:   "n3",
+					labels: map[string]string{"app": "whoami"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "topology.kubernetes.io/zone",
+							WhenUnsatisfiable: v1.ScheduleAnyway,
+						},
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/hostname",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+						},
+					},
+				},
+				{
+					count:  1,
+					node:   "n4",
+					labels: map[string]string{"app": "whoami"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "topology.kubernetes.io/zone",
+							WhenUnsatisfiable: v1.ScheduleAnyway,
+						},
+						{
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app": "whoami"}},
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/hostname",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+						},
+					},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy:             api.DeschedulerStrategy{Params: &api.StrategyParameters{IncludeSoftConstraints: true}},
+			namespaces:           []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pod since pod tolerates the node with taint",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneB"
+					n.Spec.Taints = []v1.Taint{
+						{
+							Key:    "taint-test",
+							Value:  "test",
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+					tolerations: []v1.Toleration{
+						{
+							Key:      "taint-test",
+							Value:    "test",
+							Operator: v1.TolerationOpEqual,
+							Effect:   v1.TaintEffectNoSchedule,
+						},
+					},
+				},
+				{
+					count:        1,
+					node:         "n1",
+					labels:       map[string]string{"foo": "bar"},
+					nodeSelector: map[string]string{"zone": "zoneA"},
+				},
+			}),
 			expectedEvictedCount: 1,
 			strategy:             api.DeschedulerStrategy{},
 			namespaces:           []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 0 pods since pod does not tolerate the tainted node",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneB"
+					n.Spec.Taints = []v1.Taint{
+						{
+							Key:    "taint-test",
+							Value:  "test",
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:        1,
+					node:         "n1",
+					labels:       map[string]string{"foo": "bar"},
+					nodeSelector: map[string]string{"zone": "zoneA"},
+				},
+			}),
+			expectedEvictedCount: 0,
+			strategy:             api.DeschedulerStrategy{},
+			namespaces:           []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pod for node with PreferNoSchedule Taint",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneB"
+					n.Spec.Taints = []v1.Taint{
+						{
+							Key:    "taint-test",
+							Value:  "test",
+							Effect: v1.TaintEffectPreferNoSchedule,
+						},
+					}
+				}),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:        1,
+					node:         "n1",
+					labels:       map[string]string{"foo": "bar"},
+					nodeSelector: map[string]string{"zone": "zoneA"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy:             api.DeschedulerStrategy{},
+			namespaces:           []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 0 pod for node with unmatched label filtering",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 0,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					LabelSelector: getLabelSelector("foo", []string{"baz"}, metav1.LabelSelectorOpIn),
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pod for node with matched label filtering",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					LabelSelector: getLabelSelector("foo", []string{"bar"}, metav1.LabelSelectorOpIn),
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pod for node with matched label filtering (NotIn op)",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					LabelSelector: getLabelSelector("foo", []string{"baz"}, metav1.LabelSelectorOpNotIn),
+				},
+			},
+			namespaces: []string{"ns1"},
 		},
 	}
 
@@ -478,6 +819,7 @@ type testPodList struct {
 	nodeSelector map[string]string
 	nodeAffinity *v1.Affinity
 	noOwners     bool
+	tolerations  []v1.Toleration
 }
 
 func createTestPods(testPods []testPodList) []*v1.Pod {
@@ -497,9 +839,27 @@ func createTestPods(testPods []testPodList) []*v1.Pod {
 					p.Spec.TopologySpreadConstraints = tp.constraints
 					p.Spec.NodeSelector = tp.nodeSelector
 					p.Spec.Affinity = tp.nodeAffinity
+					p.Spec.Tolerations = tp.tolerations
 				}))
 			podNum++
 		}
 	}
 	return pods
+}
+
+func getLabelSelector(key string, values []string, operator metav1.LabelSelectorOperator) *metav1.LabelSelector {
+	return &metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{{Key: key, Operator: operator, Values: values}},
+	}
+}
+
+func getDefaultTopologyConstraints(maxSkew int32) []v1.TopologySpreadConstraint {
+	return []v1.TopologySpreadConstraint{
+		{
+			MaxSkew:           maxSkew,
+			TopologyKey:       "zone",
+			WhenUnsatisfiable: v1.DoNotSchedule,
+			LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+		},
+	}
 }
