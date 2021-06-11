@@ -8,6 +8,8 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
+imagePullSecrets: []
+
 resources:
   requests:
     cpu: 500m

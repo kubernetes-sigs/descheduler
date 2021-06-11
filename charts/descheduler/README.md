@@ -48,6 +48,7 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `image.repository`             | Docker repository to use                                                                                              | `k8s.gcr.io/descheduler/descheduler` |
 | `image.tag`                    | Docker tag to use                                                                                                     | `v[chart appVersion]`                |
 | `image.pullPolicy`             | Docker image pull policy                                                                                              | `IfNotPresent`                       |
+| `imagePullSecrets`             | Docker repository secrets                                                                                              | `[]`                       |
 | `nameOverride`                 | String to partially override `descheduler.fullname` template (will prepend the release name)                          | `""`                                 |
 | `fullnameOverride`             | String to fully override `descheduler.fullname` template                                                              | `""`                                 |
 | `cronJobApiVersion`            | CronJob API Group Version                                                                                             | `"batch/v1"`                         |

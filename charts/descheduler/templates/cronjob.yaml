@@ -42,6 +42,10 @@ spec:
           {{- end }}
           serviceAccountName: {{ template "descheduler.serviceAccountName" . }}
           restartPolicy: "Never"
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
           containers:
             - name: {{ .Chart.Name }}
               image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (printf "v%s" .Chart.AppVersion) }}"
