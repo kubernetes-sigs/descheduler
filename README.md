@@ -267,9 +267,11 @@ under utilized frequently or for a short period of time. By default, `numberOfNo
 
 ### HighNodeUtilization
 
-This strategy finds nodes that are under utilized and evicts pods in the hope that these pods will be scheduled compactly into fewer nodes.
-This strategy **must** be used with the
-scheduler strategy `MostRequestedPriority`. The parameters of this strategy are configured under `nodeResourceUtilizationThresholds`.
+This strategy finds nodes that are under utilized and evicts pods from the node in the hope that these pods will be 
+scheduled onto other nodes.  Used in conjunction with node auto-scaling, this strategy is intended to help trigger down 
+scaling of under utilized nodes.
+This strategy **must** be used with the scheduler strategy `MostRequestedPriority`. The parameters of this strategy are 
+configured under `nodeResourceUtilizationThresholds`.
 
 The under utilization of nodes is determined by a configurable threshold `thresholds`. The threshold
 `thresholds` can be configured for cpu, memory, number of pods, and extended resources in terms of percentage. The percentage is
