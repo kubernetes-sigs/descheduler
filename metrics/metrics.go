@@ -48,9 +48,23 @@ var (
 		},
 	)
 
+	DuplicatePods = metrics.NewGaugeVec(
+		&metrics.GaugeOpts{
+			Subsystem:      DeschedulerSubsystem,
+			Name:           "pods_duplicate",
+			Help:           "Number of duplicate pods on a node",
+			StabilityLevel: metrics.ALPHA,
+		},
+		// name is the name of the workload
+		// kind is the type of the workload
+		// namespace is the namespace in which workload is running
+		// node is the node on which the workload pods are running
+		[]string{"name", "kind", "namespace", "node"})
+
 	metricsList = []metrics.Registerable{
 		PodsEvicted,
 		buildInfo,
+		DuplicatePods,
 	}
 )
 

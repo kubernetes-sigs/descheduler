@@ -114,7 +114,6 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		metrics.PodsEvicted.With(map[string]string{"result": "maximum number reached", "strategy": strategy, "namespace": pod.Namespace}).Inc()
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", pe.maxPodsToEvictPerNode, node.Name)
 	}
-
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, pe.dryRun)
 	if err != nil {
 		// err is used only for logging purposes
@@ -122,7 +121,6 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": strategy, "namespace": pod.Namespace}).Inc()
 		return false, nil
 	}
-
 	pe.nodepodCount[node]++
 	if pe.dryRun {
 		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", reason)
@@ -134,6 +132,14 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
 		r.Event(pod, v1.EventTypeNormal, "Descheduled", fmt.Sprintf("pod evicted by sigs.k8s.io/descheduler%s", reason))
 		metrics.PodsEvicted.With(map[string]string{"result": "success", "strategy": strategy, "namespace": pod.Namespace}).Inc()
+		var ownerRefName, ownerRefKind string
+		ownerRefs := pod.OwnerReferences
+		for _, ownerRef := range ownerRefs {
+			ownerRefName = ownerRef.Name
+			ownerRefKind = ownerRef.Kind
+		}
+		metrics.DuplicatePods.With(map[string]string{"name": ownerRefName,
+			"kind": ownerRefKind, "namespace": pod.Namespace, "node": node.Name}).Dec()
 	}
 	return true, nil
 }

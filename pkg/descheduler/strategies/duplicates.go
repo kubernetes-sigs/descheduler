@@ -30,6 +30,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
+	"sigs.k8s.io/descheduler/metrics"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -172,6 +173,10 @@ func RemoveDuplicatePods(
 								duplicatePods[ownerKey] = make(map[string][]*v1.Pod)
 							}
 							duplicatePods[ownerKey][node.Name] = append(duplicatePods[ownerKey][node.Name], pod)
+							// We would like to see if there is a duplicate copy via metrics. If this value for any
+							// workload is greater than 1, we should add an alert for it.
+							metrics.DuplicatePods.With(map[string]string{"name": ownerKey.name,
+								"kind": ownerKey.kind, "namespace": pod.ObjectMeta.Namespace, "node": node.Name}).Inc()
 						}
 						break
 					}

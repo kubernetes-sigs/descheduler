@@ -27,6 +27,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	metrics "k8s.io/component-base/metrics"
+
+	deschedulermetrics "sigs.k8s.io/descheduler/metrics"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -706,6 +709,95 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != testCase.expectedEvictedPodCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)
+			}
+		})
+	}
+}
+
+func TestDuplicatePodMetricValidation(t *testing.T) {
+	// This test should ensure that the metric is properly incrementing and decrementing
+	ctx := context.Background()
+
+	testCases := []struct {
+		description               string
+		maxPodsToEvictPerNode     int
+		pods                      []v1.Pod
+		nodes                     []*v1.Node
+		expectedDuplicatePodCount float64
+		strategy                  api.DeschedulerStrategy
+		dryRun                    bool
+	}{
+		{
+			description: "Dry run mod with 4 pods, no pods evicted. All the pods expect 1 on node should be marked " +
+				"duplicate",
+			pods: []v1.Pod{
+				*test.BuildTestPod("p1", 100, 0, "n1", test.SetRSOwnerRef),
+				*test.BuildTestPod("p2", 100, 0, "n1", test.SetRSOwnerRef),
+				*test.BuildTestPod("p3", 100, 0, "n1", test.SetRSOwnerRef),
+				*test.BuildTestPod("p4", 100, 0, "n1", test.SetRSOwnerRef),
+			},
+			expectedDuplicatePodCount: float64(3),
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, nil),
+			},
+			dryRun:   true,
+			strategy: api.DeschedulerStrategy{},
+		},
+		{
+			description: "Normal descheduler strategy with 4 pods, expect all pods except to be evicted except 1",
+			pods: []v1.Pod{
+				*test.BuildTestPod("p1", 100, 0, "n1", test.SetRSOwnerRef),
+				*test.BuildTestPod("p2", 100, 0, "n1", test.SetRSOwnerRef),
+				*test.BuildTestPod("p3", 100, 0, "n1", test.SetRSOwnerRef),
+				*test.BuildTestPod("p4", 100, 0, "n1", test.SetRSOwnerRef),
+			},
+			expectedDuplicatePodCount: float64(0),
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, nil),
+				test.BuildTestNode("n2", 2000, 3000, 10, nil),
+				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+				test.BuildTestNode("n4", 2000, 3000, 10, nil),
+			},
+			dryRun:   false,
+			strategy: api.DeschedulerStrategy{},
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.description, func(t *testing.T) {
+			fakeClient := &fake.Clientset{}
+			fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+				return true, &v1.PodList{Items: testCase.pods}, nil
+			})
+			podEvictor := evictions.NewPodEvictor(
+				fakeClient,
+				policyv1.SchemeGroupVersion.String(),
+				testCase.dryRun,
+				testCase.maxPodsToEvictPerNode,
+				testCase.nodes,
+				false,
+				false,
+				false,
+			)
+			registry := metrics.NewKubeRegistry()
+			defer registry.Reset()
+			err := registry.Register(deschedulermetrics.DuplicatePods)
+			if err != nil {
+				t.Errorf("unexpected error while registering metrics %v", err)
+			}
+
+			RemoveDuplicatePods(ctx, fakeClient, testCase.strategy, testCase.nodes, podEvictor)
+			metricsCollected, err := registry.Gather()
+			if err != nil {
+				t.Errorf("unexpected error while registering metrics %v", err)
+			}
+			var neededMetric float64
+			for _, metricFamily := range metricsCollected {
+				for _, metric := range metricFamily.GetMetric() {
+					neededMetric = metric.GetGauge().GetValue()
+				}
+			}
+			if neededMetric != testCase.expectedDuplicatePodCount {
+				t.Errorf("Test error for description: %s. Expected duplicated pods count %v, got %v", testCase.description, testCase.expectedDuplicatePodCount, neededMetric)
 			}
 		})
 	}
