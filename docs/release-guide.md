@@ -9,7 +9,7 @@
 3. Push the release branch to the descheuler repo and ensure branch protection is enabled (not required for patch releases)
 4. Tag the repository from the `master` branch (from the `release-1.18` branch for a patch release) and push the tag `VERSION=v0.18.0 git tag -m $VERSION $VERSION; git push origin $VERSION`
 5. Publish a draft release using the tag you just created
-6. Perform the [image promotion process](https://github.com/kubernetes/k8s.io/tree/master/k8s.gcr.io#image-promoter)
+6. Perform the [image promotion process](https://github.com/kubernetes/k8s.io/tree/main/k8s.gcr.io#image-promoter)
 7. Publish release
 8. Email `kubernetes-sig-scheduling@googlegroups.com` to announce the release
 
@@ -22,7 +22,7 @@
 5. Checkout the tag you just created and make sure your repo is clean by git's standards `git checkout $VERSION`
 6. Build and push the container image to the staging registry `VERSION=$VERSION make push-all`
 7. Publish a draft release using the tag you just created
-8. Perform the [image promotion process](https://github.com/kubernetes/k8s.io/tree/master/k8s.gcr.io#image-promoter)
+8. Perform the [image promotion process](https://github.com/kubernetes/k8s.io/tree/main/k8s.gcr.io#image-promoter)
 9. Publish release
 10. Email `kubernetes-sig-scheduling@googlegroups.com` to announce the release
 
