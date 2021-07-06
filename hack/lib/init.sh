@@ -15,7 +15,6 @@
 # limitations under the License.
 
 set -o errexit
-set -o nounset
 set -o pipefail
 
 
@@ -37,11 +36,37 @@ function os::util::absolute_path() {
 }
 readonly -f os::util::absolute_path
 
+# os::util::project_within_gopath checks if the OS_ROOT exists within a GOPATH
+function os::util::project_within_gopath() {
+	local within_gopath=false
+
+	if [[ ! -z "$GOPATH" ]]; then
+		for p in $GOPATH; do
+			# As OS_ROOT is an absolute path, we can simply check
+			# to see if it begins with any of the GOPATH paths.
+			if [[ $1 == $p* ]]; then
+				within_gopath=true
+				break
+			fi
+		done
+	fi
+
+	echo $within_gopath
+}
+readonly -f os::util::project_within_gopath
+
 # find the absolute path to the root of the Origin source tree
 init_source="$( dirname "${BASH_SOURCE}" )/../.."
 OS_ROOT="$( os::util::absolute_path "${init_source}" )"
 export OS_ROOT
 cd "${OS_ROOT}"
 
-PRJ_PREFIX="sigs.k8s.io/descheduler"
+WITHIN_GOPATH="$( os::util::project_within_gopath "${OS_ROOT}" )"
+
+if [ "$WITHIN_GOPATH" = true ]; then
+	PRJ_PREFIX="sigs.k8s.io/descheduler"
+else
+	PRJ_PREFIX="."
+fi
+
 OS_OUTPUT_BINPATH="${OS_ROOT}/_output/bin"

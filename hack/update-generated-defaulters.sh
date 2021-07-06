@@ -7,4 +7,5 @@ ${OS_OUTPUT_BINPATH}/defaulter-gen \
                 --go-header-file "hack/boilerplate/boilerplate.go.txt" \
                 --input-dirs "${PRJ_PREFIX}/pkg/apis/componentconfig/v1alpha1,${PRJ_PREFIX}/pkg/api/v1alpha1" \
 		--extra-peer-dirs "${PRJ_PREFIX}/pkg/apis/componentconfig/v1alpha1,${PRJ_PREFIX}/pkg/api/v1alpha1" \
+		--output-base "${OS_ROOT}" \
                 --output-file-base zz_generated.defaults
