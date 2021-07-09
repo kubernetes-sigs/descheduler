@@ -26,7 +26,7 @@ create_cluster() {
 	echo "gcloud compute instances delete descheduler-$node1_uuid --zone=us-east1-b --quiet" >> $E2E_GCE_HOME/delete_cluster.sh
 
 	gcloud compute instances create descheduler-$node2_uuid --image-family="ubuntu-1804-lts" --image-project="ubuntu-os-cloud" --zone=us-east1-b
-	echo "gcloud compute instances delete descheduler-$node2_uuid --zone=us-east1-b --quiet" >> $E2E_GCE_HOME/delete_cluster.sh
+	echo "gcloud compute instances delete descheduler-$node2_uuid --zone=us-east1-c --quiet" >> $E2E_GCE_HOME/delete_cluster.sh
 
 	# Delete the firewall port created for master.
 	echo "gcloud compute firewall-rules delete kubeapiserver-$master_uuid --quiet" >> $E2E_GCE_HOME/delete_cluster.sh
@@ -44,10 +44,10 @@ generate_kubeadm_instance_files() {
 
 
 transfer_install_files() {
-	gcloud compute scp  $E2E_GCE_HOME/kubeadm_preinstall.sh descheduler-$master_uuid:/tmp --zone=us-east1-b
+	gcloud compute scp $E2E_GCE_HOME/kubeadm_preinstall.sh descheduler-$master_uuid:/tmp --zone=us-east1-b
 	gcloud compute scp $E2E_GCE_HOME/kubeadm_install.sh descheduler-$master_uuid:/tmp --zone=us-east1-b
-	gcloud compute scp  $E2E_GCE_HOME/kubeadm_preinstall.sh descheduler-$node1_uuid:/tmp --zone=us-east1-b
-	gcloud compute scp  $E2E_GCE_HOME/kubeadm_preinstall.sh descheduler-$node2_uuid:/tmp --zone=us-east1-b
+	gcloud compute scp $E2E_GCE_HOME/kubeadm_preinstall.sh descheduler-$node1_uuid:/tmp --zone=us-east1-b
+	gcloud compute scp $E2E_GCE_HOME/kubeadm_preinstall.sh descheduler-$node2_uuid:/tmp --zone=us-east1-c
 }
 
 
@@ -55,7 +55,7 @@ install_kube() {
 	# Docker installation.
 	gcloud compute ssh descheduler-$master_uuid --command "sudo apt-get update; sudo apt-get install -y docker.io" --zone=us-east1-b
 	gcloud compute ssh descheduler-$node1_uuid --command "sudo apt-get update; sudo apt-get install -y docker.io" --zone=us-east1-b
-	gcloud compute ssh descheduler-$node2_uuid --command "sudo apt-get update; sudo apt-get install -y docker.io" --zone=us-east1-b
+	gcloud compute ssh descheduler-$node2_uuid --command "sudo apt-get update; sudo apt-get install -y docker.io" --zone=us-east1-c
 	# kubeadm installation.
 	# 1. Transfer files to master, nodes.
 	transfer_install_files
@@ -81,10 +81,9 @@ install_kube() {
 	gcloud compute scp $E2E_GCE_HOME/kubeadm_join.sh descheduler-$node1_uuid:/tmp --zone=us-east1-b
 	gcloud compute ssh descheduler-$node1_uuid --command "sudo chmod 755 /tmp/kubeadm_join.sh; sudo /tmp/kubeadm_join.sh" --zone=us-east1-b
 	
-	gcloud compute ssh descheduler-$node2_uuid --command "sudo chmod 755 /tmp/kubeadm_preinstall.sh; sudo /tmp/kubeadm_preinstall.sh" --zone=us-east1-b
-	gcloud compute scp $E2E_GCE_HOME/kubeadm_join.sh descheduler-$node2_uuid:/tmp --zone=us-east1-b
-	gcloud compute ssh descheduler-$node2_uuid --command "sudo chmod 755 /tmp/kubeadm_join.sh; sudo /tmp/kubeadm_join.sh" --zone=us-east1-b
-
+	gcloud compute ssh descheduler-$node2_uuid --command "sudo chmod 755 /tmp/kubeadm_preinstall.sh; sudo /tmp/kubeadm_preinstall.sh" --zone=us-east1-c
+	gcloud compute scp $E2E_GCE_HOME/kubeadm_join.sh descheduler-$node2_uuid:/tmp --zone=us-east1-c
+	gcloud compute ssh descheduler-$node2_uuid --command "sudo chmod 755 /tmp/kubeadm_join.sh; sudo /tmp/kubeadm_join.sh" --zone=us-east1-c
 }
 
 
