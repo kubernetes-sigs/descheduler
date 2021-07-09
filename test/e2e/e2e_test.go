@@ -62,11 +62,11 @@ func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 			Resources: v1.ResourceRequirements{
 				Limits: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("100m"),
-					v1.ResourceMemory: resource.MustParse("1000Mi"),
+					v1.ResourceMemory: resource.MustParse("200Mi"),
 				},
 				Requests: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("100m"),
-					v1.ResourceMemory: resource.MustParse("800Mi"),
+					v1.ResourceMemory: resource.MustParse("100Mi"),
 				},
 			},
 		}},
@@ -209,15 +209,7 @@ func TestLowNodeUtilization(t *testing.T) {
 		t.Errorf("Error listing node with %v", err)
 	}
 
-	var nodes []*v1.Node
-	var workerNodes []*v1.Node
-	for i := range nodeList.Items {
-		node := nodeList.Items[i]
-		nodes = append(nodes, &node)
-		if _, exists := node.Labels["node-role.kubernetes.io/master"]; !exists {
-			workerNodes = append(workerNodes, &node)
-		}
-	}
+	nodes, workerNodes := splitNodesAndWorkerNodes(nodeList.Items)
 
 	t.Log("Creating testing namespace")
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -1287,4 +1279,17 @@ func waitForPodRunning(ctx context.Context, t *testing.T, clientSet clientset.In
 	}); err != nil {
 		t.Fatalf("Error waiting for pod running: %v", err)
 	}
+}
+
+func splitNodesAndWorkerNodes(nodes []v1.Node) ([]*v1.Node, []*v1.Node) {
+	var allNodes []*v1.Node
+	var workerNodes []*v1.Node
+	for i := range nodes {
+		node := nodes[i]
+		allNodes = append(allNodes, &node)
+		if _, exists := node.Labels["node-role.kubernetes.io/master"]; !exists {
+			workerNodes = append(workerNodes, &node)
+		}
+	}
+	return allNodes, workerNodes
 }
