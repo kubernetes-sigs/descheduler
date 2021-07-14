@@ -281,7 +281,7 @@ func balanceDomains(
 	j := len(sortedDomains) - 1
 	for i < j {
 		// if j has no more to give without falling below the ideal average, move to next aboveAvg
-		if float64(len(sortedDomains[j].pods)) < idealAvg {
+		if float64(len(sortedDomains[j].pods)) <= idealAvg {
 			j--
 		}
 
