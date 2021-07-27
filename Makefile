@@ -25,7 +25,7 @@ ARCHS = amd64 arm arm64
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitbranch=${BRANCH} -X ${LDFLAG_LOCATION}.gitsha1=${SHA1}"
 
 GOLANGCI_VERSION := v1.30.0
-HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint)
+HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint 2> /dev/null)
 
 # REGISTRY is the container registry to push
 # into. The default is to push to the staging
@@ -43,7 +43,7 @@ IMAGE_GCLOUD:=$(REGISTRY)/descheduler:$(VERSION)
 # In the future binaries can be uploaded to
 # GCS bucket gs://k8s-staging-descheduler.
 
-HAS_HELM := $(shell which helm)
+HAS_HELM := $(shell which helm 2> /dev/null)
 
 all: build
 
@@ -135,11 +135,13 @@ ifndef HAS_GOLANGCI
 endif
 	./_output/bin/golangci-lint run
 
-lint-chart:
+lint-chart: ensure-helm-install
+	helm lint ./charts/descheduler
+
+test-helm: ensure-helm-install
+	./test/run-helm-tests.sh
+
+ensure-helm-install:
 ifndef HAS_HELM
 	curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 && chmod 700 ./get_helm.sh && ./get_helm.sh
 endif
-	helm lint ./charts/descheduler
-
-test-helm:
-	./test/run-helm-tests.sh
