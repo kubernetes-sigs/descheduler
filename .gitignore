@@ -4,3 +4,4 @@ vendordiff.patch
 .idea/
 *.code-workspace
 .vscode/
+kind
