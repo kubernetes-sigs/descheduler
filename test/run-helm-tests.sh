@@ -29,8 +29,8 @@ mv kind-linux-amd64 kind
 export PATH=$PATH:$PWD
 kind create cluster --image kindest/node:"${K8S_VERSION}" --config=./hack/kind_config.yaml
 kind load docker-image descheduler:helm-test
-helm install descheduler-ci --set image.repository="${IMAGE_REPO}",image.tag="${IMAGE_TAG}" --namespace kube-system "${CHART_LOCATION}"
-sleep 20s
+helm install descheduler-ci --set image.repository="${IMAGE_REPO}",image.tag="${IMAGE_TAG}",schedule="* * * * *" --namespace kube-system "${CHART_LOCATION}"
+sleep 61 # sleep until Job is triggered
 helm test descheduler-ci --namespace kube-system
 
 # Delete kind cluster once test is finished
