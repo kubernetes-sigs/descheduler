@@ -73,14 +73,25 @@ func ListPodsOnANode(
 	node *v1.Node,
 	opts ...func(opts *Options),
 ) ([]*v1.Pod, error) {
+	fieldSelectorString := "spec.nodeName=" + node.Name + ",status.phase!=" + string(v1.PodSucceeded) + ",status.phase!=" + string(v1.PodFailed)
+
+	return ListPodsOnANodeWithFieldSelector(ctx, client, node, fieldSelectorString, opts...)
+}
+
+// ListPodsOnANodeWithFieldSelector lists all of the pods on a node using the filter selectors
+func ListPodsOnANodeWithFieldSelector(
+	ctx context.Context,
+	client clientset.Interface,
+	node *v1.Node,
+	fieldSelectorString string,
+	opts ...func(opts *Options),
+) ([]*v1.Pod, error) {
 	options := &Options{}
 	for _, opt := range opts {
 		opt(options)
 	}
 
 	pods := make([]*v1.Pod, 0)
-
-	fieldSelectorString := "spec.nodeName=" + node.Name + ",status.phase!=" + string(v1.PodSucceeded) + ",status.phase!=" + string(v1.PodFailed)
 
 	labelSelectorString := ""
 	if options.labelSelector != nil {
