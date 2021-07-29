@@ -42,6 +42,7 @@ Table of Contents
   - [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint)
   - [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts)
   - [PodLifeTime](#podlifetime)
+  - [RemoveFailedPods](#removefailedpods)
 - [Filter Pods](#filter-pods)
   - [Namespace filtering](#namespace-filtering)
   - [Priority filtering](#priority-filtering)
@@ -517,6 +518,47 @@ strategies:
          - "Pending"
 ```
 
+### RemoveFailedPods
+
+This strategy evicts pods that are in failed status phase.
+You can provide an optional parameter to filter by failed `reasons`.
+`reasons` can be expanded to include reasons of InitContainers as well by setting the optional parameter `includingInitContainers` to `true`.
+You can specify an optional parameter `minPodLifeTimeSeconds` to evict pods that are older than specified seconds.
+Lastly, you can specify the optional parameter `excludeOwnerKinds` and if a pod
+has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
+
+**Parameters:**
+
+|Name|Type|
+|---|---|
+|`minPodLifeTimeSeconds`|uint|
+|`excludeOwnerKinds`|list(string)|
+|`reasons`|list(string)|
+|`includingInitContainers`|bool|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
+
+**Example:**
+
+```yaml
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "RemoveFailedPods":
+     enabled: true
+     params:
+       failedPods:
+         reasons:
+         - "NodeAffinity"
+         includingInitContainers: true
+         excludeOwnerKinds:
+         - "Job"
+         minPodLifeTimeSeconds: 3600
+```
+
 ## Filter Pods
 
 ### Namespace filtering
@@ -529,6 +571,7 @@ The following strategies accept a `namespaces` parameter which allows to specify
 * `RemovePodsViolatingInterPodAntiAffinity`
 * `RemoveDuplicates`
 * `RemovePodsViolatingTopologySpreadConstraint`
+* `RemoveFailedPods`
 
 For example:
 
@@ -620,6 +663,7 @@ to filter pods by their labels:
 * `RemovePodsViolatingNodeAffinity`
 * `RemovePodsViolatingInterPodAntiAffinity`
 * `RemovePodsViolatingTopologySpreadConstraint`
+* `RemoveFailedPods`
 
 This allows running strategies among pods the descheduler is interested in.
 
@@ -654,6 +698,7 @@ The following strategies accept a `nodeFit` boolean parameter which can optimize
 * `RemovePodsViolatingNodeTaints`
 * `RemovePodsViolatingTopologySpreadConstraint`
 * `RemovePodsHavingTooManyRestarts`
+* `RemoveFailedPods`
 
  If set to `true` the descheduler will consider whether or not the pods that meet eviction criteria will fit on other nodes before evicting them. If a pod cannot be rescheduled to another node, it will not be evicted. Currently the following criteria are considered when setting `nodeFit` to `true`:
 - A `nodeSelector` on the pod
