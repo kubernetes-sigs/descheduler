@@ -121,31 +121,21 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 
 ## Policy and Strategies
 
-Descheduler's policy is configurable and includes strategies that can be enabled or disabled.
-Nine strategies
-1. `RemoveDuplicates`
-2. `LowNodeUtilization`
-3. `HighNodeUtilization`
-4. `RemovePodsViolatingInterPodAntiAffinity`
-5. `RemovePodsViolatingNodeAffinity`
-6. `RemovePodsViolatingNodeTaints`
-7. `RemovePodsViolatingTopologySpreadConstraint`
-8. `RemovePodsHavingTooManyRestarts`
-9. `PodLifeTime`  
-are currently implemented. As part of the policy, the
-parameters associated with the strategies can be configured too. By default, all strategies are enabled.
+Descheduler's policy is configurable and includes strategies that can be enabled or disabled. By default, all strategies are enabled.
 
-The following diagram provides a visualization of most of the strategies to help
-categorize how strategies fit together.
+The policy includes a common configuration that applies to all the strategies:
+| Name | Default Value | Description |
+|------|---------------|-------------|
+| `nodeSelector` | `nil` | limiting the nodes which are processed |
+| `evictLocalStoragePods` | `false` | allows eviction of pods with local storage |
+| `evictSystemCriticalPods` | `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
+| `ignorePvcPods` | `false` | set whether PVC pods should be evicted or ignored |
+| `maxNoOfPodsToEvictPerNode` | `nil` | maximum number of pods evicted from each node (summed through all strategies) |
 
-![Strategies diagram](strategies_diagram.png)
+As part of the policy, the parameters associated with each strategy can be configured.
+See each strategy for details on available parameters.
 
-The policy also includes common configuration for all the strategies:
-- `nodeSelector` - limiting the nodes which are processed
-- `evictLocalStoragePods` - allows eviction of pods with local storage
-- `evictSystemCriticalPods` - [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns
-- `ignorePvcPods` - set whether PVC pods should be evicted or ignored (defaults to `false`)
-- `maxNoOfPodsToEvictPerNode` - maximum number of pods evicted from each node (summed through all strategies)
+**Policy:**
 
 ```yaml
 apiVersion: "descheduler/v1alpha1"
@@ -158,6 +148,11 @@ ignorePvcPods: false
 strategies:
   ...
 ```
+
+The following diagram provides a visualization of most of the strategies to help
+categorize how strategies fit together.
+
+![Strategies diagram](strategies_diagram.png)
 
 ### RemoveDuplicates
 
