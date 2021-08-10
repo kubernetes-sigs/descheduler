@@ -18,14 +18,14 @@ E2E_GCE_HOME=$DESCHEDULER_ROOT/hack/e2e-gce
 
 create_cluster() {
 	echo "#################### Creating instances ##########################"
-        gcloud compute instances create descheduler-$master_uuid --image="ubuntu-1604-xenial-v20180306" --image-project="ubuntu-os-cloud" --zone=us-east1-b
+	gcloud compute instances create descheduler-$master_uuid --image-family="ubuntu-1804-lts" --image-project="ubuntu-os-cloud" --zone=us-east1-b
 	# Keeping the --zone here so as to make sure that e2e's can run locally.
 	echo "gcloud compute instances delete descheduler-$master_uuid --zone=us-east1-b --quiet" > $E2E_GCE_HOME/delete_cluster.sh
 
-	gcloud compute instances create descheduler-$node1_uuid --image="ubuntu-1604-xenial-v20180306" --image-project="ubuntu-os-cloud" --zone=us-east1-b
+	gcloud compute instances create descheduler-$node1_uuid --image-family="ubuntu-1804-lts" --image-project="ubuntu-os-cloud" --zone=us-east1-b
 	echo "gcloud compute instances delete descheduler-$node1_uuid --zone=us-east1-b --quiet" >> $E2E_GCE_HOME/delete_cluster.sh
 
-	gcloud compute instances create descheduler-$node2_uuid --image="ubuntu-1604-xenial-v20180306" --image-project="ubuntu-os-cloud" --zone=us-east1-b
+	gcloud compute instances create descheduler-$node2_uuid --image-family="ubuntu-1804-lts" --image-project="ubuntu-os-cloud" --zone=us-east1-b
 	echo "gcloud compute instances delete descheduler-$node2_uuid --zone=us-east1-b --quiet" >> $E2E_GCE_HOME/delete_cluster.sh
 
 	# Delete the firewall port created for master.
