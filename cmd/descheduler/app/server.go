@@ -48,7 +48,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 		Short: "descheduler",
 		Long:  `The descheduler evicts pods which may be bound to less desired nodes`,
 		Run: func(cmd *cobra.Command, args []string) {
-			s.Logs.LogFormat = s.Logging.Format
+			s.Logs.Config.Format = s.Logging.Format
 			s.Logs.Apply()
 
 			// LoopbackClientConfig is a config for a privileged loopback connection
