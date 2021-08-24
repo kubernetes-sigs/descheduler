@@ -92,8 +92,8 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
 		return
 	}
-	if len(sourceNodes) < strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
-		klog.V(1).InfoS("Number of nodes underutilized is less than NumberOfNodes, nothing to do here", "underutilizedNodes", len(sourceNodes), "numberOfNodes", strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
+	if len(sourceNodes) <= strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
+		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(sourceNodes), "numberOfNodes", strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
 		return
 	}
 	if len(sourceNodes) == len(nodes) {
