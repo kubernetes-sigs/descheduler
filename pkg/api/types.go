@@ -75,6 +75,7 @@ type StrategyParameters struct {
 	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts
 	PodLifeTime                       *PodLifeTime
 	RemoveDuplicates                  *RemoveDuplicates
+	FailedPods                        *FailedPods
 	IncludeSoftConstraints            bool
 	Namespaces                        *Namespaces
 	ThresholdPriority                 *int32
@@ -104,4 +105,11 @@ type RemoveDuplicates struct {
 type PodLifeTime struct {
 	MaxPodLifeTimeSeconds *uint
 	PodStatusPhases       []string
+}
+
+type FailedPods struct {
+	ExcludeOwnerKinds       []string
+	MinPodLifetimeSeconds   *uint
+	Reasons                 []string
+	IncludingInitContainers bool
 }
