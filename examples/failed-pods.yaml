@@ -1,0 +1,14 @@
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "RemoveFailedPods":
+    enabled: true
+    params:
+      failedPods:
+        reasons:
+        - "OutOfcpu"
+        - "CreateContainerConfigError"
+        includingInitContainers: true
+        excludeOwnerKinds:
+        - "Job"
+        minPodLifeTimeSeconds: 3600 # 1 hour
