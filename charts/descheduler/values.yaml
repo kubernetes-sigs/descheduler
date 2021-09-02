@@ -35,7 +35,7 @@ deschedulingInterval: 5m
 
 cmdOptions:
   v: 3
-  # evict-local-storage-pods:
+  # evict-local-storage-pods: # To enable, just uncomment the key. Don't set its value to "true".
   # max-pods-to-evict-per-node: 10
   # node-selector: "key1=value1,key2=value2"
 
