@@ -140,6 +140,11 @@ func RemovePodsViolatingTopologySpreadConstraint(
 			// (this loop is where we count the number of pods per topologyValue that match this constraint's selector)
 			var sumPods float64
 			for i := range namespacePods.Items {
+				// skip pods that are being deleted.
+				if namespacePods.Items[i].DeletionTimestamp != nil {
+					continue
+				}
+
 				// 4. if the pod matches this TopologySpreadConstraint LabelSelector
 				if !selector.Matches(labels.Set(namespacePods.Items[i].Labels)) {
 					continue

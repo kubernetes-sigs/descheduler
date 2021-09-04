@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"testing"
 
-	"sigs.k8s.io/descheduler/pkg/api"
-
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -832,6 +831,41 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			namespaces: []string{"ns1"},
 		},
+		{
+			name: "2 domains, sizes [4,2], maxSkew=1, 2 pods in termination; nothing should be moved",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       2,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:             2,
+					node:              "n1",
+					labels:            map[string]string{"foo": "bar"},
+					constraints:       getDefaultTopologyConstraints(1),
+					deletionTimestamp: &metav1.Time{},
+				},
+				{
+					count:       2,
+					node:        "n2",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+			}),
+			expectedEvictedCount: 0,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					LabelSelector: getLabelSelector("foo", []string{"bar"}, metav1.LabelSelectorOpIn),
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -868,14 +902,15 @@ func TestTopologySpreadConstraint(t *testing.T) {
 }
 
 type testPodList struct {
-	count        int
-	node         string
-	labels       map[string]string
-	constraints  []v1.TopologySpreadConstraint
-	nodeSelector map[string]string
-	nodeAffinity *v1.Affinity
-	noOwners     bool
-	tolerations  []v1.Toleration
+	count             int
+	node              string
+	labels            map[string]string
+	constraints       []v1.TopologySpreadConstraint
+	nodeSelector      map[string]string
+	nodeAffinity      *v1.Affinity
+	noOwners          bool
+	tolerations       []v1.Toleration
+	deletionTimestamp *metav1.Time
 }
 
 func createTestPods(testPods []testPodList) []*v1.Pod {
@@ -896,6 +931,7 @@ func createTestPods(testPods []testPodList) []*v1.Pod {
 					p.Spec.NodeSelector = tp.nodeSelector
 					p.Spec.Affinity = tp.nodeAffinity
 					p.Spec.Tolerations = tp.tolerations
+					p.ObjectMeta.DeletionTimestamp = tp.deletionTimestamp
 				}))
 			podNum++
 		}
