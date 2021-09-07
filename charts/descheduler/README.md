@@ -45,9 +45,11 @@ The following table lists the configurable parameters of the _descheduler_ chart
 
 | Parameter                      | Description                                                                                                           | Default                              |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `kind`                         | Use as CronJob or Deployment                                                                                          | `CronJob`                            |
 | `image.repository`             | Docker repository to use                                                                                              | `k8s.gcr.io/descheduler/descheduler` |
 | `image.tag`                    | Docker tag to use                                                                                                     | `v[chart appVersion]`                |
 | `image.pullPolicy`             | Docker image pull policy                                                                                              | `IfNotPresent`                       |
+| `imagePullSecrets`             | Docker repository secrets                                                                                              | `[]`                       |
 | `nameOverride`                 | String to partially override `descheduler.fullname` template (will prepend the release name)                          | `""`                                 |
 | `fullnameOverride`             | String to fully override `descheduler.fullname` template                                                              | `""`                                 |
 | `cronJobApiVersion`            | CronJob API Group Version                                                                                             | `"batch/v1"`                         |
@@ -55,6 +57,7 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `startingDeadlineSeconds`      | If set, configure `startingDeadlineSeconds` for the _descheduler_ job                                                 | `nil`                                |
 | `successfulJobsHistoryLimit`   | If set, configure `successfulJobsHistoryLimit` for the _descheduler_ job                                              | `nil`                                |
 | `failedJobsHistoryLimit`       | If set, configure `failedJobsHistoryLimit` for the _descheduler_ job                                                  | `nil`                                |
+| `deschedulingInterval`         | If using kind:Deployment, sets time between consecutive descheduler executions.                                       | `5m`                                 |
 | `cmdOptions`                   | The options to pass to the _descheduler_ command                                                                      | _see values.yaml_                    |
 | `deschedulerPolicy.strategies` | The _descheduler_ strategies to apply                                                                                 | _see values.yaml_                    |
 | `priorityClassName`            | The name of the priority class to add to pods                                                                         | `system-cluster-critical`            |
@@ -64,3 +67,4 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `serviceAccount.create`        | If `true`, create a service account for the cron job                                                                  | `true`                               |
 | `serviceAccount.name`          | The name of the service account to use, if not set and create is true a name is generated using the fullname template | `nil`                                |
 | `nodeSelector`                 | Node selectors to run the descheduler cronjob on specific nodes                                                       | `nil`                                |
+| `tolerations`                  | tolerations to run the descheduler cronjob on specific nodes                                                          | `nil`                                |

@@ -42,6 +42,7 @@ Table of Contents
   - [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint)
   - [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts)
   - [PodLifeTime](#podlifetime)
+  - [RemoveFailedPods](#removefailedpods)
 - [Filter Pods](#filter-pods)
   - [Namespace filtering](#namespace-filtering)
   - [Priority filtering](#priority-filtering)
@@ -102,17 +103,17 @@ See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/ku
 
 Run As A Job
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.21.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.22.0' | kubectl apply -f -
 ```
 
 Run As A CronJob
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.21.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.22.0' | kubectl apply -f -
 ```
 
 Run As A Deployment
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.21.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.22.0' | kubectl apply -f -
 ```
 
 ## User Guide
@@ -121,31 +122,21 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 
 ## Policy and Strategies
 
-Descheduler's policy is configurable and includes strategies that can be enabled or disabled.
-Nine strategies
-1. `RemoveDuplicates`
-2. `LowNodeUtilization`
-3. `HighNodeUtilization`
-4. `RemovePodsViolatingInterPodAntiAffinity`
-5. `RemovePodsViolatingNodeAffinity`
-6. `RemovePodsViolatingNodeTaints`
-7. `RemovePodsViolatingTopologySpreadConstraint`
-8. `RemovePodsHavingTooManyRestarts`
-9. `PodLifeTime`  
-are currently implemented. As part of the policy, the
-parameters associated with the strategies can be configured too. By default, all strategies are enabled.
+Descheduler's policy is configurable and includes strategies that can be enabled or disabled. By default, all strategies are enabled.
 
-The following diagram provides a visualization of most of the strategies to help
-categorize how strategies fit together.
+The policy includes a common configuration that applies to all the strategies:
+| Name | Default Value | Description |
+|------|---------------|-------------|
+| `nodeSelector` | `nil` | limiting the nodes which are processed |
+| `evictLocalStoragePods` | `false` | allows eviction of pods with local storage |
+| `evictSystemCriticalPods` | `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
+| `ignorePvcPods` | `false` | set whether PVC pods should be evicted or ignored |
+| `maxNoOfPodsToEvictPerNode` | `nil` | maximum number of pods evicted from each node (summed through all strategies) |
 
-![Strategies diagram](strategies_diagram.png)
+As part of the policy, the parameters associated with each strategy can be configured.
+See each strategy for details on available parameters.
 
-The policy also includes common configuration for all the strategies:
-- `nodeSelector` - limiting the nodes which are processed
-- `evictLocalStoragePods` - allows eviction of pods with local storage
-- `evictSystemCriticalPods` - [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns
-- `ignorePvcPods` - set whether PVC pods should be evicted or ignored (defaults to `false`)
-- `maxNoOfPodsToEvictPerNode` - maximum number of pods evicted from each node (summed through all strategies)
+**Policy:**
 
 ```yaml
 apiVersion: "descheduler/v1alpha1"
@@ -158,6 +149,11 @@ ignorePvcPods: false
 strategies:
   ...
 ```
+
+The following diagram provides a visualization of most of the strategies to help
+categorize how strategies fit together.
+
+![Strategies diagram](strategies_diagram.png)
 
 ### RemoveDuplicates
 
@@ -267,9 +263,11 @@ under utilized frequently or for a short period of time. By default, `numberOfNo
 
 ### HighNodeUtilization
 
-This strategy finds nodes that are under utilized and evicts pods in the hope that these pods will be scheduled compactly into fewer nodes.
-This strategy **must** be used with the
-scheduler strategy `MostRequestedPriority`. The parameters of this strategy are configured under `nodeResourceUtilizationThresholds`.
+This strategy finds nodes that are under utilized and evicts pods from the nodes in the hope that these pods will be 
+scheduled compactly into fewer nodes.  Used in conjunction with node auto-scaling, this strategy is intended to help 
+trigger down scaling of under utilized nodes.
+This strategy **must** be used with the scheduler strategy `MostRequestedPriority`. The parameters of this strategy are 
+configured under `nodeResourceUtilizationThresholds`.
 
 The under utilization of nodes is determined by a configurable threshold `thresholds`. The threshold
 `thresholds` can be configured for cpu, memory, number of pods, and extended resources in terms of percentage. The percentage is
@@ -520,6 +518,47 @@ strategies:
          - "Pending"
 ```
 
+### RemoveFailedPods
+
+This strategy evicts pods that are in failed status phase.
+You can provide an optional parameter to filter by failed `reasons`.
+`reasons` can be expanded to include reasons of InitContainers as well by setting the optional parameter `includingInitContainers` to `true`.
+You can specify an optional parameter `minPodLifeTimeSeconds` to evict pods that are older than specified seconds.
+Lastly, you can specify the optional parameter `excludeOwnerKinds` and if a pod
+has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
+
+**Parameters:**
+
+|Name|Type|
+|---|---|
+|`minPodLifeTimeSeconds`|uint|
+|`excludeOwnerKinds`|list(string)|
+|`reasons`|list(string)|
+|`includingInitContainers`|bool|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
+
+**Example:**
+
+```yaml
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "RemoveFailedPods":
+     enabled: true
+     params:
+       failedPods:
+         reasons:
+         - "NodeAffinity"
+         includingInitContainers: true
+         excludeOwnerKinds:
+         - "Job"
+         minPodLifeTimeSeconds: 3600
+```
+
 ## Filter Pods
 
 ### Namespace filtering
@@ -532,6 +571,7 @@ The following strategies accept a `namespaces` parameter which allows to specify
 * `RemovePodsViolatingInterPodAntiAffinity`
 * `RemoveDuplicates`
 * `RemovePodsViolatingTopologySpreadConstraint`
+* `RemoveFailedPods`
 
 For example:
 
@@ -614,7 +654,7 @@ does not exist, descheduler won't create it and will throw an error.
 
 ### Label filtering
 
-The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.21/#labelselector-v1-meta)
+The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#labelselector-v1-meta)
 to filter pods by their labels:
 
 * `PodLifeTime`
@@ -623,6 +663,7 @@ to filter pods by their labels:
 * `RemovePodsViolatingNodeAffinity`
 * `RemovePodsViolatingInterPodAntiAffinity`
 * `RemovePodsViolatingTopologySpreadConstraint`
+* `RemoveFailedPods`
 
 This allows running strategies among pods the descheduler is interested in.
 
@@ -657,6 +698,7 @@ The following strategies accept a `nodeFit` boolean parameter which can optimize
 * `RemovePodsViolatingNodeTaints`
 * `RemovePodsViolatingTopologySpreadConstraint`
 * `RemovePodsHavingTooManyRestarts`
+* `RemoveFailedPods`
 
  If set to `true` the descheduler will consider whether or not the pods that meet eviction criteria will fit on other nodes before evicting them. If a pod cannot be rescheduled to another node, it will not be evicted. Currently the following criteria are considered when setting `nodeFit` to `true`:
 - A `nodeSelector` on the pod
@@ -736,6 +778,7 @@ packages that it is compiled with.
 
 Descheduler  | Supported Kubernetes Version
 -------------|-----------------------------
+v0.22        | v1.22
 v0.21        | v1.21
 v0.20        | v1.20
 v0.19        | v1.19

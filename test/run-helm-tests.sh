@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 # Copyright 2021 The Kubernetes Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#!/bin/bash
 set -o errexit
 set -o nounset
 set -o pipefail
@@ -28,8 +29,8 @@ mv kind-linux-amd64 kind
 export PATH=$PATH:$PWD
 kind create cluster --image kindest/node:"${K8S_VERSION}" --config=./hack/kind_config.yaml
 kind load docker-image descheduler:helm-test
-helm install descheduler-ci --set image.repository="${IMAGE_REPO}",image.tag="${IMAGE_TAG}" --namespace kube-system "${CHART_LOCATION}"
-sleep 20s
+helm install descheduler-ci --set image.repository="${IMAGE_REPO}",image.tag="${IMAGE_TAG}",schedule="* * * * *" --namespace kube-system "${CHART_LOCATION}"
+sleep 61 # sleep until Job is triggered
 helm test descheduler-ci --namespace kube-system
 
 # Delete kind cluster once test is finished

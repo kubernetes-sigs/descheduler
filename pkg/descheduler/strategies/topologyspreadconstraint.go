@@ -27,12 +27,13 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/validation"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -47,53 +48,6 @@ type topology struct {
 	pods []*v1.Pod
 }
 
-// topologySpreadStrategyParams contains validated strategy parameters
-type topologySpreadStrategyParams struct {
-	thresholdPriority  int32
-	includedNamespaces sets.String
-	excludedNamespaces sets.String
-	labelSelector      labels.Selector
-	nodeFit            bool
-}
-
-// validateAndParseTopologySpreadParams will validate parameters to ensure that they do not contain invalid values.
-func validateAndParseTopologySpreadParams(ctx context.Context, client clientset.Interface, params *api.StrategyParameters) (*topologySpreadStrategyParams, error) {
-	var includedNamespaces, excludedNamespaces sets.String
-	if params == nil {
-		return &topologySpreadStrategyParams{includedNamespaces: includedNamespaces, excludedNamespaces: excludedNamespaces}, nil
-	}
-	// At most one of include/exclude can be set
-	if params.Namespaces != nil && len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
-		return nil, fmt.Errorf("only one of Include/Exclude namespaces can be set")
-	}
-	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
-		return nil, fmt.Errorf("only one of thresholdPriority and thresholdPriorityClassName can be set")
-	}
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get threshold priority from strategy's params: %+v", err)
-	}
-	if params.Namespaces != nil {
-		includedNamespaces = sets.NewString(params.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(params.Namespaces.Exclude...)
-	}
-	var selector labels.Selector
-	if params.LabelSelector != nil {
-		selector, err = metav1.LabelSelectorAsSelector(params.LabelSelector)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get label selectors from strategy's params: %+v", err)
-		}
-	}
-
-	return &topologySpreadStrategyParams{
-		thresholdPriority:  thresholdPriority,
-		includedNamespaces: includedNamespaces,
-		excludedNamespaces: excludedNamespaces,
-		labelSelector:      selector,
-		nodeFit:            params.NodeFit,
-	}, nil
-}
-
 func RemovePodsViolatingTopologySpreadConstraint(
 	ctx context.Context,
 	client clientset.Interface,
@@ -101,16 +55,16 @@ func RemovePodsViolatingTopologySpreadConstraint(
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
 ) {
-	strategyParams, err := validateAndParseTopologySpreadParams(ctx, client, strategy.Params)
+	strategyParams, err := validation.ValidateAndParseStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsViolatingTopologySpreadConstraint parameters")
 		return
 	}
 
 	evictable := podEvictor.Evictable(
-		evictions.WithPriorityThreshold(strategyParams.thresholdPriority),
-		evictions.WithNodeFit(strategyParams.nodeFit),
-		evictions.WithLabelSelector(strategyParams.labelSelector),
+		evictions.WithPriorityThreshold(strategyParams.ThresholdPriority),
+		evictions.WithNodeFit(strategyParams.NodeFit),
+		evictions.WithLabelSelector(strategyParams.LabelSelector),
 	)
 
 	nodeMap := make(map[string]*v1.Node, len(nodes))
@@ -140,8 +94,8 @@ func RemovePodsViolatingTopologySpreadConstraint(
 	podsForEviction := make(map[*v1.Pod]struct{})
 	// 1. for each namespace...
 	for _, namespace := range namespaces.Items {
-		if (len(strategyParams.includedNamespaces) > 0 && !strategyParams.includedNamespaces.Has(namespace.Name)) ||
-			(len(strategyParams.excludedNamespaces) > 0 && strategyParams.excludedNamespaces.Has(namespace.Name)) {
+		if (len(strategyParams.IncludedNamespaces) > 0 && !strategyParams.IncludedNamespaces.Has(namespace.Name)) ||
+			(len(strategyParams.ExcludedNamespaces) > 0 && strategyParams.ExcludedNamespaces.Has(namespace.Name)) {
 			continue
 		}
 		namespacePods, err := client.CoreV1().Pods(namespace.Name).List(ctx, metav1.ListOptions{})
@@ -281,7 +235,7 @@ func balanceDomains(
 	j := len(sortedDomains) - 1
 	for i < j {
 		// if j has no more to give without falling below the ideal average, move to next aboveAvg
-		if float64(len(sortedDomains[j].pods)) < idealAvg {
+		if float64(len(sortedDomains[j].pods)) <= idealAvg {
 			j--
 		}
 
