@@ -1,9 +1,9 @@
-FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.16-openshift-4.9 AS builder
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.16-openshift-4.10 AS builder
 WORKDIR /go/src/sigs.k8s.io/descheduler
 COPY . .
 ARG prefix=sigs.k8s.io/descheduler/pkg/version
 RUN go build -ldflags "-X ${prefix}.version=${OS_GIT_VERSION} -X ${prefix}.buildDate=${BUILD_RELEASE} -X ${prefix}.gitsha1=${SOURCE_GIT_COMMIT}" -o descheduler ./cmd/descheduler
 
-FROM registry.ci.openshift.org/ocp/builder:rhel-8-base-openshift-4.9
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-base-openshift-4.10
 COPY --from=builder /go/src/sigs.k8s.io/descheduler/descheduler /usr/bin/
 CMD ["/usr/bin/descheduler"]
