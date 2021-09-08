@@ -1,3 +1,4 @@
+{{- if eq .Values.kind "CronJob" }}
 apiVersion: {{ .Values.cronJobApiVersion | default "batch/v1" }}
 kind: CronJob
 metadata:
@@ -27,8 +28,7 @@ spec:
             {{- .Values.podAnnotations | toYaml | nindent 12 }}
             {{- end }}
           labels:
-            app.kubernetes.io/name: {{ include "descheduler.name" . }}
-            app.kubernetes.io/instance: {{ .Release.Name }}
+            {{- include "descheduler.selectorLabels" . | nindent 12 }}
             {{- if .Values.podLabels }}
             {{- .Values.podLabels | toYaml | nindent 12 }}
             {{- end }}
@@ -37,11 +37,19 @@ spec:
           nodeSelector:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- if .Values.priorityClassName }}
           priorityClassName: {{ .Values.priorityClassName }}
           {{- end }}
           serviceAccountName: {{ template "descheduler.serviceAccountName" . }}
           restartPolicy: "Never"
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
           containers:
             - name: {{ .Chart.Name }}
               image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (printf "v%s" .Chart.AppVersion) }}"
@@ -74,3 +82,4 @@ spec:
           - name: policy-volume
             configMap:
               name: {{ template "descheduler.fullname" . }}
+{{- end }}

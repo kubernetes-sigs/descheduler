@@ -28,7 +28,7 @@ pushd "${DESCHEDULER_ROOT}" > /dev/null 2>&1
 if ! _out="$(diff -Naupr pkg/ "${_deschedulertmp}/pkg/")"; then
     echo "Generated deep-copies output differs:" >&2
     echo "${_out}" >&2
-    echo "Generated deep-copies verify failed. Please run ./hack/update-generated-deep-copies.sh (and commit the result)"
+    echo "Generated deep-copies verify failed. Please run ./hack/update-generated-deep-copies.sh"
     exit 1
 fi
 popd > /dev/null 2>&1

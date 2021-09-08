@@ -23,3 +23,7 @@ strategies:
        podsHavingTooManyRestarts:
          podRestartThreshold: 100
          includingInitContainers: true
+  "RemovePodsViolatingTopologySpreadConstraint":
+     enabled: true
+     params:
+       includeSoftConstraints: true

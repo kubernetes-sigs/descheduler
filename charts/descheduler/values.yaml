@@ -2,11 +2,16 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# CronJob or Deployment
+kind: CronJob
+
 image:
   repository: k8s.gcr.io/descheduler/descheduler
   # Overrides the image tag whose default is the chart version
   tag: ""
   pullPolicy: IfNotPresent
+
+imagePullSecrets: []
 
 resources:
   requests:
@@ -24,6 +29,9 @@ schedule: "*/2 * * * *"
 #startingDeadlineSeconds: 200
 #successfulJobsHistoryLimit: 1
 #failedJobsHistoryLimit: 1
+
+# Required when running as a Deployment
+deschedulingInterval: 5m
 
 cmdOptions:
   v: 3
@@ -61,6 +69,12 @@ priorityClassName: system-cluster-critical
 
 nodeSelector: {}
 #  foo: bar
+
+tolerations: []
+# - key: 'management'
+#   operator: 'Equal'
+#   value: 'tool'
+#   effect: 'NoSchedule'
 
 rbac:
   # Specifies whether RBAC resources should be created
