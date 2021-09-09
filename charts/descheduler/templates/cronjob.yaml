@@ -7,6 +7,9 @@ metadata:
     {{- include "descheduler.labels" . | nindent 4 }}
 spec:
   schedule: {{ .Values.schedule | quote }}
+  {{- if .Values.suspend }}
+  suspend: {{ .Values.suspend }}
+  {{- end }}
   concurrencyPolicy: "Forbid"
   {{- if .Values.startingDeadlineSeconds }}
   startingDeadlineSeconds: {{ .Values.startingDeadlineSeconds }}
