@@ -59,7 +59,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	nodeWithoutLabels := test.BuildTestNode("nodeWithoutLabels", 2000, 3000, 10, nil)
 
 	unschedulableNodeWithLabels := test.BuildTestNode("unschedulableNodeWithLabels", 2000, 3000, 10, nil)
-	nodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
+	unschedulableNodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
 	unschedulableNodeWithLabels.Spec.Unschedulable = true
 
 	addPodsToNode := func(node *v1.Node) []v1.Pod {
