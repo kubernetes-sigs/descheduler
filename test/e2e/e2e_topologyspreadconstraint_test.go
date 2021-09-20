@@ -119,6 +119,9 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				t.Fatalf("Pods were not evicted for %s TopologySpreadConstraint", name)
 			}
 
+			// Ensure recently evicted Pod are rescheduled and running before asserting for a balanced topology spread
+			waitForRCPodsRunning(ctx, t, clientSet, rc)
+
 			pods, err := clientSet.CoreV1().Pods(testNamespace.Name).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", tc.labelKey, tc.labelValue)})
 			if err != nil {
 				t.Errorf("Error listing pods for %s: %v", name, err)
