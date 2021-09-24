@@ -112,7 +112,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 	}
 	if pe.maxPodsToEvictPerNode > 0 && pe.nodepodCount[node]+1 > pe.maxPodsToEvictPerNode {
 		metrics.PodsEvicted.With(map[string]string{"result": "maximum number reached", "strategy": strategy, "namespace": pod.Namespace}).Inc()
-		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", pe.maxPodsToEvictPerNode, node.Name)
+		return false, fmt.Errorf("maximum number %v of evicted pods per %q node reached", pe.maxPodsToEvictPerNode, node.Name)
 	}
 
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, pe.dryRun)
@@ -199,7 +199,7 @@ func WithLabelSelector(labelSelector labels.Selector) func(opts *Options) {
 	}
 }
 
-type constraint func(pod *v1.Pod) error
+type constraint func(ctx context.Context, pod *v1.Pod) error
 
 type evictable struct {
 	constraints []constraint
@@ -216,7 +216,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 
 	ev := &evictable{}
 	if !pe.evictSystemCriticalPods {
-		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+		ev.constraints = append(ev.constraints, func(ctx context.Context, pod *v1.Pod) error {
 			// Moved from IsEvictable function to allow for disabling
 			if utils.IsCriticalPriorityPod(pod) {
 				return fmt.Errorf("pod has system critical priority")
@@ -225,7 +225,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 		})
 
 		if options.priority != nil {
-			ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			ev.constraints = append(ev.constraints, func(ctx context.Context, pod *v1.Pod) error {
 				if IsPodEvictableBasedOnPriority(pod, *options.priority) {
 					return nil
 				}
@@ -234,7 +234,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 		}
 	}
 	if !pe.evictLocalStoragePods {
-		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+		ev.constraints = append(ev.constraints, func(ctx context.Context, pod *v1.Pod) error {
 			if utils.IsPodWithLocalStorage(pod) {
 				return fmt.Errorf("pod has local storage and descheduler is not configured with evictLocalStoragePods")
 			}
@@ -242,7 +242,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 		})
 	}
 	if pe.ignorePvcPods {
-		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+		ev.constraints = append(ev.constraints, func(ctx context.Context, pod *v1.Pod) error {
 			if utils.IsPodWithPVC(pod) {
 				return fmt.Errorf("pod has a PVC and descheduler is configured to ignore PVC pods")
 			}
@@ -250,15 +250,15 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 		})
 	}
 	if options.nodeFit {
-		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
-			if !nodeutil.PodFitsAnyOtherNode(pod, pe.nodes) {
+		ev.constraints = append(ev.constraints, func(ctx context.Context, pod *v1.Pod) error {
+			if !nodeutil.PodFitsAnyOtherNode(ctx, pe.client, pod, pe.nodes) {
 				return fmt.Errorf("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable")
 			}
 			return nil
 		})
 	}
 	if options.labelSelector != nil && !options.labelSelector.Empty() {
-		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+		ev.constraints = append(ev.constraints, func(ctx context.Context, pod *v1.Pod) error {
 			if !options.labelSelector.Matches(labels.Set(pod.Labels)) {
 				return fmt.Errorf("pod labels do not match the labelSelector filter in the policy parameter")
 			}
@@ -270,7 +270,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 }
 
 // IsEvictable decides when a pod is evictable
-func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
+func (ev *evictable) IsEvictable(ctx context.Context, pod *v1.Pod) bool {
 	checkErrs := []error{}
 
 	ownerRefList := podutil.OwnerRef(pod)
@@ -291,7 +291,7 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 	}
 
 	for _, c := range ev.constraints {
-		if err := c(pod); err != nil {
+		if err := c(ctx, pod); err != nil {
 			checkErrs = append(checkErrs, err)
 		}
 	}

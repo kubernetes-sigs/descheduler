@@ -521,6 +521,37 @@ func TestHighNodeUtilization(t *testing.T) {
 			maxPodsToEvictPerNode: 0,
 			expectedPodsEvicted:   0,
 		},
+		{
+			name: "Other node does not have enough Memory",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			nodes: map[string]*v1.Node{
+				n1NodeName: test.BuildTestNode(n1NodeName, 4000, 200, 9, nil),
+				n2NodeName: test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+			},
+			pods: map[string]*v1.PodList{
+				n1NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p1", 400, 50, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p2", 400, 50, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p3", 400, 50, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p4", 400, 50, n1NodeName, test.SetDSOwnerRef),
+					},
+				},
+				n2NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p5", 400, 100, n2NodeName, func(pod *v1.Pod) {
+							// A pod requesting more memory than is available on node1
+							test.SetRSOwnerRef(pod)
+						}),
+					},
+				},
+			},
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   0,
+		},
 	}
 
 	for _, test := range testCases {

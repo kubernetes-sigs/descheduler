@@ -83,10 +83,10 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 					ctx,
 					client,
 					node,
-					podutil.WithFilter(func(pod *v1.Pod) bool {
-						return evictable.IsEvictable(pod) &&
-							!nodeutil.PodFitsCurrentNode(pod, node) &&
-							nodeutil.PodFitsAnyNode(pod, nodes)
+					podutil.WithFilter(func(ctx context.Context, pod *v1.Pod) bool {
+						return evictable.IsEvictable(ctx, pod) &&
+							!nodeutil.PodFitsCurrentNode(ctx, client, pod, node) &&
+							nodeutil.PodFitsAnyNode(ctx, client, pod, nodes)
 					}),
 					podutil.WithNamespaces(includedNamespaces),
 					podutil.WithoutNamespaces(excludedNamespaces),

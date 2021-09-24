@@ -9,14 +9,23 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/component-base/featuregate"
 
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 const zoneTopologyKey string = "topology.kubernetes.io/zone"
 
 func TestTopologySpreadConstraint(t *testing.T) {
+	// We must manually enable FeatureGate states because in these e2e tests Kubernetes core components remain uninitialized
+	utilfeature.DefaultMutableFeatureGate.Add(map[featuregate.Feature]featuregate.FeatureSpec{
+		utils.PodOverhead:                   {Default: true, PreRelease: featuregate.Beta},
+		utils.LocalStorageCapacityIsolation: {Default: true, PreRelease: featuregate.Beta},
+	})
+
 	ctx := context.Background()
 	clientSet, _, stopCh := initializeClient(t)
 	defer close(stopCh)

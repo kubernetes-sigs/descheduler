@@ -18,11 +18,8 @@ package strategies
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"sort"
-
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,7 +31,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/validation"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 // AntiAffinityTerm's topology key value used in predicate metadata
@@ -165,12 +161,12 @@ func RemovePodsViolatingTopologySpreadConstraint(
 				klog.V(2).InfoS("Skipping topology constraint because it is already balanced", "constraint", constraint)
 				continue
 			}
-			balanceDomains(podsForEviction, constraint, constraintTopologies, sumPods, evictable.IsEvictable, nodeMap)
+			balanceDomains(ctx, client, podsForEviction, constraint, constraintTopologies, sumPods, evictable.IsEvictable, nodes)
 		}
 	}
 
 	for pod := range podsForEviction {
-		if !evictable.IsEvictable(pod) {
+		if !evictable.IsEvictable(ctx, pod) {
 			continue
 		}
 		if _, err := podEvictor.EvictPod(ctx, pod, nodeMap[pod.Spec.NodeName], "PodTopologySpread"); err != nil {
@@ -220,15 +216,17 @@ func topologyIsBalanced(topology map[topologyPair][]*v1.Pod, constraint v1.Topol
 // [5, 5, 5, 5, 5, 5]
 // (assuming even distribution by the scheduler of the evicted pods)
 func balanceDomains(
+	ctx context.Context,
+	client clientset.Interface,
 	podsForEviction map[*v1.Pod]struct{},
 	constraint v1.TopologySpreadConstraint,
 	constraintTopologies map[topologyPair][]*v1.Pod,
 	sumPods float64,
-	isEvictable func(*v1.Pod) bool,
-	nodeMap map[string]*v1.Node) {
+	isEvictable func(ctx context.Context, pod *v1.Pod) bool,
+	nodes []*v1.Node) {
 
 	idealAvg := sumPods / float64(len(constraintTopologies))
-	sortedDomains := sortDomains(constraintTopologies, isEvictable)
+	sortedDomains := sortDomains(ctx, constraintTopologies, isEvictable)
 	// i is the index for belowOrEqualAvg
 	// j is the index for aboveAvg
 	i := 0
@@ -268,8 +266,7 @@ func balanceDomains(
 		// also (just for tracking), add them to the list of pods in the lower topology
 		aboveToEvict := sortedDomains[j].pods[len(sortedDomains[j].pods)-movePods:]
 		for k := range aboveToEvict {
-			if err := validatePodFitsOnOtherNodes(aboveToEvict[k], nodeMap); err != nil {
-				klog.V(2).InfoS(fmt.Sprintf("ignoring pod for eviction due to: %s", err.Error()), "pod", klog.KObj(aboveToEvict[k]))
+			if !nodeutil.PodFitsAnyOtherNode(ctx, client, aboveToEvict[k], nodes) {
 				continue
 			}
 
@@ -280,56 +277,6 @@ func balanceDomains(
 	}
 }
 
-// validatePodFitsOnOtherNodes performs validation based on scheduling predicates for affinity and toleration.
-// It excludes the current node because, for the sake of domain balancing only, we care about if there is any other
-// place it could theoretically fit.
-// If the pod doesn't fit on its current node, that is a job for RemovePodsViolatingNodeAffinity, and irrelevant to Topology Spreading
-func validatePodFitsOnOtherNodes(pod *v1.Pod, nodeMap map[string]*v1.Node) error {
-	// if the pod has a hard nodeAffinity/nodeSelector/toleration that only matches this node,
-	// don't bother evicting it as it will just end up back on the same node
-	// however we still account for it "being evicted" so the algorithm can complete
-	// TODO(@damemi): Since we don't order pods wrt their affinities, we should refactor this to skip the current pod
-	// but still try to get the required # of movePods (instead of just chopping that value off the slice above)
-	isRequiredDuringSchedulingIgnoredDuringExecution := pod.Spec.Affinity != nil &&
-		pod.Spec.Affinity.NodeAffinity != nil &&
-		pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil
-
-	hardTaintsFilter := func(taint *v1.Taint) bool {
-		return taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectNoExecute
-	}
-
-	var eligibleNodesCount, ineligibleAffinityNodesCount, ineligibleTaintedNodesCount int
-	for _, node := range nodeMap {
-		if node == nodeMap[pod.Spec.NodeName] {
-			continue
-		}
-		if pod.Spec.NodeSelector != nil || isRequiredDuringSchedulingIgnoredDuringExecution {
-			if !nodeutil.PodFitsCurrentNode(pod, node) {
-				ineligibleAffinityNodesCount++
-				continue
-			}
-		}
-		if !utils.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, hardTaintsFilter) {
-			ineligibleTaintedNodesCount++
-			continue
-		}
-
-		eligibleNodesCount++
-	}
-
-	if eligibleNodesCount == 0 {
-		var errs []error
-		if ineligibleAffinityNodesCount > 0 {
-			errs = append(errs, fmt.Errorf("%d nodes with ineligible selector/affinity", ineligibleAffinityNodesCount))
-		}
-		if ineligibleTaintedNodesCount > 0 {
-			errs = append(errs, fmt.Errorf("%d nodes with taints that are not tolerated", ineligibleTaintedNodesCount))
-		}
-		return utilerrors.NewAggregate(errs)
-	}
-	return nil
-}
-
 // sortDomains sorts and splits the list of topology domains based on their size
 // it also sorts the list of pods within the domains based on their node affinity/selector and priority in the following order:
 // 1. non-evictable pods
@@ -337,7 +284,7 @@ func validatePodFitsOnOtherNodes(pod *v1.Pod, nodeMap map[string]*v1.Node) error
 // 3. pods in descending priority
 // 4. all other pods
 // We then pop pods off the back of the list for eviction
-func sortDomains(constraintTopologyPairs map[topologyPair][]*v1.Pod, isEvictable func(*v1.Pod) bool) []topology {
+func sortDomains(ctx context.Context, constraintTopologyPairs map[topologyPair][]*v1.Pod, isEvictable func(ctx context.Context, pod *v1.Pod) bool) []topology {
 	sortedTopologies := make([]topology, 0, len(constraintTopologyPairs))
 	// sort the topologies and return 2 lists: those <= the average and those > the average (> list inverted)
 	for pair, list := range constraintTopologyPairs {
@@ -347,11 +294,11 @@ func sortDomains(constraintTopologyPairs map[topologyPair][]*v1.Pod, isEvictable
 		// followed by the highest priority pods with affinity or nodeSelector
 		sort.Slice(list, func(i, j int) bool {
 			// any non-evictable pods should be considered last (ie, first in the list)
-			if !isEvictable(list[i]) || !isEvictable(list[j]) {
+			if !isEvictable(ctx, list[i]) || !isEvictable(ctx, list[j]) {
 				// false - i is the only non-evictable, so return true to put it first
 				// true - j is non-evictable, so return false to put j before i
 				// if true and both and non-evictable, order doesn't matter
-				return !(isEvictable(list[i]) && !isEvictable(list[j]))
+				return !(isEvictable(ctx, list[i]) && !isEvictable(ctx, list[j]))
 			}
 
 			// if both pods have selectors/affinity, compare them by their priority

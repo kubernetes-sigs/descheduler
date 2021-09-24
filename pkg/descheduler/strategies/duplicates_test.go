@@ -66,6 +66,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			Unschedulable: true,
 		}
 	})
+	node6 := test.BuildTestNode("n6", 200, 200, 10, nil)
 
 	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
 	p1.Namespace = "dev"
@@ -100,6 +101,14 @@ func TestFindDuplicatePods(t *testing.T) {
 	p17.Namespace = "node-fit"
 	p18 := test.BuildTestPod("TARGET", 100, 0, node1.Name, nil)
 	p18.Namespace = "node-fit"
+
+	// This pod sits on node6 and is used to take up CPU requests on the node
+	p19 := test.BuildTestPod("CPU-eater", 150, 150, node6.Name, nil)
+	p19.Namespace = "test"
+
+	// Dummy pod for node6 used to do the opposite of p19
+	p20 := test.BuildTestPod("CPU-saver", 100, 150, node6.Name, nil)
+	p20.Namespace = "test"
 
 	// ### Evictable Pods ###
 
@@ -273,6 +282,22 @@ func TestFindDuplicatePods(t *testing.T) {
 			pods:                    []v1.Pod{*p1, *p2, *p3},
 			nodes:                   []*v1.Node{node1, node5},
 			expectedEvictedPodCount: 0,
+			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
+		},
+		{
+			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available does not have enough CPU, and nodeFit set to true. 0 should be evicted.",
+			maxPodsToEvictPerNode:   5,
+			pods:                    []v1.Pod{*p1, *p2, *p3, *p19},
+			nodes:                   []*v1.Node{node1, node6},
+			expectedEvictedPodCount: 0,
+			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
+		},
+		{
+			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available has enough CPU, and nodeFit set to true. 1 should be evicted.",
+			maxPodsToEvictPerNode:   5,
+			pods:                    []v1.Pod{*p1, *p2, *p3, *p20},
+			nodes:                   []*v1.Node{node1, node6},
+			expectedEvictedPodCount: 1,
 			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
 		},
 	}

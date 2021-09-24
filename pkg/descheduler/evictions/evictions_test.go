@@ -22,6 +22,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
@@ -70,6 +71,7 @@ func TestEvictPod(t *testing.T) {
 }
 
 func TestIsEvictable(t *testing.T) {
+	ctx := context.Background()
 	n1 := test.BuildTestNode("node1", 1000, 2000, 13, nil)
 	lowPriority := int32(800)
 	highPriority := int32(900)
@@ -82,6 +84,7 @@ func TestIsEvictable(t *testing.T) {
 	type testCase struct {
 		pod                     *v1.Pod
 		nodes                   []*v1.Node
+		podsOnNodes             []v1.Pod
 		runBefore               func(*v1.Pod, []*v1.Node)
 		evictLocalStoragePods   bool
 		evictSystemCriticalPods bool
@@ -407,6 +410,168 @@ func TestIsEvictable(t *testing.T) {
 			evictSystemCriticalPods: false,
 			nodeFit:                 true,
 			result:                  true,
+		}, { // Pod with correct node selector, but only available node doesn't have enough CPU
+			pod: test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+			}),
+			nodes: []*v1.Node{test.BuildTestNode("node2", 10, 16, 10, nil), test.BuildTestNode("node3", 10, 16, 10, nil)},
+			runBefore: func(pod *v1.Pod, nodes []*v1.Node) {
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+
+				for _, node := range nodes {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+				}
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			nodeFit:                 true,
+			result:                  false,
+		}, { // Pod with correct node selector, and one node has enough memory
+			pod: test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+			}),
+			nodes: []*v1.Node{
+				test.BuildTestNode("node2", 100, 16, 10, nil),
+				test.BuildTestNode("node3", 100, 20, 10, nil),
+			},
+			podsOnNodes: []v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "node2-pod-10GB-mem",
+						Namespace: "test",
+						Labels: map[string]string{
+							"test": "true",
+						},
+					},
+					Spec: v1.PodSpec{
+						NodeName: "node2",
+						Containers: []v1.Container{
+							{
+								Name: "backend",
+								Resources: v1.ResourceRequirements{
+									Requests: v1.ResourceList{
+										v1.ResourceCPU:    *resource.NewMilliQuantity(20, resource.DecimalSI),
+										v1.ResourceMemory: *resource.NewQuantity(10, resource.DecimalSI),
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "node3-pod-10GB-mem",
+						Namespace: "test",
+						Labels: map[string]string{
+							"test": "true",
+						},
+					},
+					Spec: v1.PodSpec{
+						NodeName: "node3",
+						Containers: []v1.Container{
+							{
+								Name: "backend",
+								Resources: v1.ResourceRequirements{
+									Requests: v1.ResourceList{
+										v1.ResourceCPU:    *resource.NewMilliQuantity(20, resource.DecimalSI),
+										v1.ResourceMemory: *resource.NewQuantity(10, resource.DecimalSI),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			runBefore: func(pod *v1.Pod, nodes []*v1.Node) {
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+
+				for _, node := range nodes {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+				}
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			nodeFit:                 true,
+			result:                  true,
+		}, { // Pod with correct node selector, but both nodes don't have enough memory
+			pod: test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+			}),
+			nodes: []*v1.Node{
+				test.BuildTestNode("node2", 100, 16, 10, nil),
+				test.BuildTestNode("node3", 100, 16, 10, nil),
+			},
+			podsOnNodes: []v1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "node2-pod-10GB-mem",
+						Namespace: "test",
+						Labels: map[string]string{
+							"test": "true",
+						},
+					},
+					Spec: v1.PodSpec{
+						NodeName: "node2",
+						Containers: []v1.Container{
+							{
+								Name: "backend",
+								Resources: v1.ResourceRequirements{
+									Requests: v1.ResourceList{
+										v1.ResourceCPU:    *resource.NewMilliQuantity(5000, resource.DecimalSI),
+										v1.ResourceMemory: *resource.NewQuantity(10, resource.DecimalSI),
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "node3-pod-10GB-mem",
+						Namespace: "test",
+						Labels: map[string]string{
+							"test": "true",
+						},
+					},
+					Spec: v1.PodSpec{
+						NodeName: "node3",
+						Containers: []v1.Container{
+							{
+								Name: "backend",
+								Resources: v1.ResourceRequirements{
+									Requests: v1.ResourceList{
+										v1.ResourceCPU:    *resource.NewMilliQuantity(5000, resource.DecimalSI),
+										v1.ResourceMemory: *resource.NewQuantity(10, resource.DecimalSI),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			runBefore: func(pod *v1.Pod, nodes []*v1.Node) {
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+
+				for _, node := range nodes {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+				}
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			nodeFit:                 true,
+			result:                  false,
 		},
 	}
 
@@ -414,13 +579,18 @@ func TestIsEvictable(t *testing.T) {
 		test.runBefore(test.pod, test.nodes)
 		nodes := append(test.nodes, n1)
 
+		fakeClient := &fake.Clientset{}
+		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+			return true, &v1.PodList{Items: test.podsOnNodes}, nil
+		})
+
 		podEvictor := &PodEvictor{
+			client:                  fakeClient,
 			evictLocalStoragePods:   test.evictLocalStoragePods,
 			evictSystemCriticalPods: test.evictSystemCriticalPods,
 			nodes:                   nodes,
 		}
 
-		evictable := podEvictor.Evictable()
 		var opts []func(opts *Options)
 		if test.priorityThreshold != nil {
 			opts = append(opts, WithPriorityThreshold(*test.priorityThreshold))
@@ -428,9 +598,9 @@ func TestIsEvictable(t *testing.T) {
 		if test.nodeFit {
 			opts = append(opts, WithNodeFit(true))
 		}
-		evictable = podEvictor.Evictable(opts...)
+		evictable := podEvictor.Evictable(opts...)
 
-		result := evictable.IsEvictable(test.pod)
+		result := evictable.IsEvictable(ctx, test.pod)
 		if result != test.result {
 			t.Errorf("IsEvictable should return for pod %s %t, but it returns %t", test.pod.Name, test.result, result)
 		}

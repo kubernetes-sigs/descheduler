@@ -78,10 +78,10 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 
 	filter := evictable.IsEvictable
 	if strategy.Params.PodLifeTime.PodStatusPhases != nil {
-		filter = func(pod *v1.Pod) bool {
+		filter = func(ctx context.Context, pod *v1.Pod) bool {
 			for _, phase := range strategy.Params.PodLifeTime.PodStatusPhases {
 				if string(pod.Status.Phase) == phase {
-					return evictable.IsEvictable(pod)
+					return evictable.IsEvictable(ctx, pod)
 				}
 			}
 			return false
@@ -114,7 +114,7 @@ func listOldPodsOnNode(
 	includedNamespaces, excludedNamespaces []string,
 	labelSelector *metav1.LabelSelector,
 	maxPodLifeTimeSeconds uint,
-	filter func(pod *v1.Pod) bool,
+	filter func(ctx context.Context, pod *v1.Pod) bool,
 ) []*v1.Pod {
 	pods, err := podutil.ListPodsOnANode(
 		ctx,

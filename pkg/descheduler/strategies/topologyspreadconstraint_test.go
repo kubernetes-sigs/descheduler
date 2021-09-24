@@ -484,6 +484,38 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			namespaces: []string{"ns1"},
 		},
 		{
+			name: "2 domains size [2 6], maxSkew=2, can't move any because node1 does not have enough CPU",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 200, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(2),
+				},
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+				{
+					count:  6,
+					node:   "n2",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 0,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					NodeFit: true,
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
+		{
 			// see https://github.com/kubernetes-sigs/descheduler/issues/564
 			name: "Multiple constraints (6 nodes/2 zones, 4 pods)",
 			nodes: []*v1.Node{

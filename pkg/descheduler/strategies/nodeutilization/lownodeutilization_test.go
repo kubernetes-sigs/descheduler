@@ -732,6 +732,66 @@ func TestLowNodeUtilization(t *testing.T) {
 			maxPodsToEvictPerNode: 0,
 			expectedPodsEvicted:   3,
 		},
+		{
+			name: "without priorities, but only other node doesn't match pod node affinity for p4 and p5",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			nodes: map[string]*v1.Node{
+				n1NodeName: test.BuildTestNode(n1NodeName, 500, 200, 9, nil),
+				n2NodeName: test.BuildTestNode(n2NodeName, 200, 200, 10, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeSelectorKey: notMatchingNodeSelectorValue,
+					}
+				}),
+			},
+			pods: map[string]*v1.PodList{
+				n1NodeName: {
+					Items: []v1.Pod{
+						*test.BuildTestPod("p1", 10, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p2", 10, 0, n1NodeName, test.SetRSOwnerRef),
+						*test.BuildTestPod("p3", 10, 0, n1NodeName, test.SetRSOwnerRef),
+						// These won't be evicted.
+						*test.BuildTestPod("p4", 400, 100, n1NodeName, func(pod *v1.Pod) {
+							// A pod that requests too much CPU
+							test.SetNormalOwnerRef(pod)
+						}),
+						*test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A pod with local storage.
+							test.SetNormalOwnerRef(pod)
+							pod.Spec.Volumes = []v1.Volume{
+								{
+									Name: "sample",
+									VolumeSource: v1.VolumeSource{
+										HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+										EmptyDir: &v1.EmptyDirVolumeSource{
+											SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									},
+								},
+							}
+							// A Mirror Pod.
+							pod.Annotations = test.GetMirrorPodAnnotation()
+						}),
+						*test.BuildTestPod("p6", 400, 0, n1NodeName, func(pod *v1.Pod) {
+							// A Critical Pod.
+							pod.Namespace = "kube-system"
+							priority := utils.SystemCriticalPriority
+							pod.Spec.Priority = &priority
+						}),
+					},
+				},
+				n2NodeName: {Items: []v1.Pod{
+					*test.BuildTestPod("p9", 0, 0, n2NodeName, test.SetRSOwnerRef),
+				}},
+			},
+			maxPodsToEvictPerNode: 0,
+			expectedPodsEvicted:   3,
+		},
 	}
 
 	for _, test := range testCases {

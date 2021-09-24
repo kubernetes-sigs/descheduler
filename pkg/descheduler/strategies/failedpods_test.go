@@ -2,11 +2,11 @@ package strategies
 
 import (
 	"context"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
@@ -166,13 +166,26 @@ func TestRemoveFailedPods(t *testing.T) {
 		{
 			description: "nodeFit=true, 1 unschedulable node, 1 container terminated with reason NodeAffinity, 0 eviction",
 			strategy:    createStrategy(true, false, nil, nil, nil, true),
-			nodes: []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, func(node *v1.Node) {
-				node.Spec.Unschedulable = true
-			})},
+			nodes: []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil),
+				test.BuildTestNode("node2", 2000, 2000, 10, func(node *v1.Node) {
+					node.Spec.Unschedulable = true
+				}),
+			},
 			expectedEvictedPodCount: 0,
 			pods: []v1.Pod{
 				buildTestPod("p1", "node1", nil, &v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{Reason: "NodeAffinity"},
+				}),
+			},
+		},
+		{
+			description:             "nodeFit=true, only available node does not have enough resources, 1 container terminated with reason CreateContainerConfigError, 0 eviction",
+			strategy:                createStrategy(true, false, []string{"CreateContainerConfigError"}, nil, nil, true),
+			nodes:                   []*v1.Node{test.BuildTestNode("node1", 1, 1, 10, nil), test.BuildTestNode("node2", 0, 0, 10, nil)},
+			expectedEvictedPodCount: 0,
+			pods: []v1.Pod{
+				buildTestPod("p1", "node1", nil, &v1.ContainerState{
+					Terminated: &v1.ContainerStateTerminated{Reason: "CreateContainerConfigError"},
 				}),
 			},
 		},

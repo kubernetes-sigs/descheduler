@@ -61,6 +61,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			Unschedulable: true,
 		}
 	})
+	node5 := test.BuildTestNode("n1", 1, 1, 1, nil)
 
 	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
 	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, nil)
@@ -197,7 +198,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
 			maxPodsToEvictPerNode:   0,
-			expectedEvictedPodCount: 0, //p2 gets evicted
+			expectedEvictedPodCount: 0, //p2 can't be evicted
 			nodeFit:                 true,
 		},
 		{
@@ -207,7 +208,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
 			maxPodsToEvictPerNode:   0,
-			expectedEvictedPodCount: 0, //p2 gets evicted
+			expectedEvictedPodCount: 0, //p2 can't be evicted
 			nodeFit:                 true,
 		},
 		{
@@ -217,7 +218,17 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
 			maxPodsToEvictPerNode:   0,
-			expectedEvictedPodCount: 0, //p2 gets evicted
+			expectedEvictedPodCount: 0, //p2 can't be evicted
+			nodeFit:                 true,
+		},
+		{
+			description:             "Critical and non critical pods, pods not tolerating node taint can't be evicted because the only available node does not have enough resources.",
+			pods:                    []v1.Pod{*p2, *p7, *p9, *p10},
+			nodes:                   []*v1.Node{node1, node5},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: true,
+			maxPodsToEvictPerNode:   0,
+			expectedEvictedPodCount: 0, //p2 and p7 can't be evicted
 			nodeFit:                 true,
 		},
 	}

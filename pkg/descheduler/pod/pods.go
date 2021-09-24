@@ -28,7 +28,7 @@ import (
 )
 
 type Options struct {
-	filter             func(pod *v1.Pod) bool
+	filter             func(ctx context.Context, pod *v1.Pod) bool
 	includedNamespaces []string
 	excludedNamespaces []string
 	labelSelector      *metav1.LabelSelector
@@ -36,7 +36,7 @@ type Options struct {
 
 // WithFilter sets a pod filter.
 // The filter function should return true if the pod should be returned from ListPodsOnANode
-func WithFilter(filter func(pod *v1.Pod) bool) func(opts *Options) {
+func WithFilter(filter func(ctx context.Context, pod *v1.Pod) bool) func(opts *Options) {
 	return func(opts *Options) {
 		opts.filter = filter
 	}
@@ -118,7 +118,7 @@ func ListPodsOnANodeWithFieldSelector(
 				return []*v1.Pod{}, err
 			}
 			for i := range podList.Items {
-				if options.filter != nil && !options.filter(&podList.Items[i]) {
+				if options.filter != nil && !options.filter(ctx, &podList.Items[i]) {
 					continue
 				}
 				pods = append(pods, &podList.Items[i])
@@ -156,7 +156,7 @@ func ListPodsOnANodeWithFieldSelector(
 		if podList.Items[i].Spec.NodeName != node.Name {
 			continue
 		}
-		if options.filter != nil && !options.filter(&podList.Items[i]) {
+		if options.filter != nil && !options.filter(ctx, &podList.Items[i]) {
 			continue
 		}
 		pods = append(pods, &podList.Items[i])
