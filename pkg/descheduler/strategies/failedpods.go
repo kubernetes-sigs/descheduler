@@ -90,7 +90,9 @@ func validateAndParseRemoveFailedPodsParams(
 	params *api.StrategyParameters,
 ) (*validatedFailedPodsStrategyParams, error) {
 	if params == nil {
-		return &validatedFailedPodsStrategyParams{}, nil
+		return &validatedFailedPodsStrategyParams{
+			ValidatedStrategyParams: validation.DefaultValidatedStrategyParams(),
+		}, nil
 	}
 
 	strategyParams, err := validation.ValidateAndParseStrategyParams(ctx, client, params)
