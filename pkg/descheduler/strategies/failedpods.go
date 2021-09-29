@@ -19,7 +19,7 @@ import (
 
 // validatedFailedPodsStrategyParams contains validated strategy parameters
 type validatedFailedPodsStrategyParams struct {
-	*validation.ValidatedStrategyParams
+	validation.ValidatedStrategyParams
 	includingInitContainers bool
 	reasons                 sets.String
 	excludeOwnerKinds       sets.String
@@ -46,9 +46,15 @@ func RemoveFailedPods(
 		evictions.WithLabelSelector(strategyParams.LabelSelector),
 	)
 
+	var labelSelector *metav1.LabelSelector
+	if strategy.Params != nil {
+		labelSelector = strategy.Params.LabelSelector
+	}
+
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		fieldSelectorString := "spec.nodeName=" + node.Name + ",status.phase=" + string(v1.PodFailed)
+
 		pods, err := podutil.ListPodsOnANodeWithFieldSelector(
 			ctx,
 			client,
@@ -57,7 +63,7 @@ func RemoveFailedPods(
 			podutil.WithFilter(evictable.IsEvictable),
 			podutil.WithNamespaces(strategyParams.IncludedNamespaces.UnsortedList()),
 			podutil.WithoutNamespaces(strategyParams.ExcludedNamespaces.UnsortedList()),
-			podutil.WithLabelSelector(strategy.Params.LabelSelector),
+			podutil.WithLabelSelector(labelSelector),
 		)
 		if err != nil {
 			klog.ErrorS(err, "Error listing a nodes failed pods", "node", klog.KObj(node))
@@ -84,7 +90,9 @@ func validateAndParseRemoveFailedPodsParams(
 	params *api.StrategyParameters,
 ) (*validatedFailedPodsStrategyParams, error) {
 	if params == nil {
-		return &validatedFailedPodsStrategyParams{}, nil
+		return &validatedFailedPodsStrategyParams{
+			ValidatedStrategyParams: validation.DefaultValidatedStrategyParams(),
+		}, nil
 	}
 
 	strategyParams, err := validation.ValidateAndParseStrategyParams(ctx, client, params)
@@ -103,7 +111,7 @@ func validateAndParseRemoveFailedPodsParams(
 	}
 
 	return &validatedFailedPodsStrategyParams{
-		ValidatedStrategyParams: strategyParams,
+		ValidatedStrategyParams: *strategyParams,
 		includingInitContainers: includingInitContainers,
 		reasons:                 reasons,
 		excludeOwnerKinds:       excludeOwnerKinds,
