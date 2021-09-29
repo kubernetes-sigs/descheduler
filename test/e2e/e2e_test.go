@@ -290,20 +290,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	waitForRCPodsRunning(ctx, t, clientSet, rc)
 
 	// Run LowNodeUtilization strategy
-	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
-	if err != nil || len(evictionPolicyGroupVersion) == 0 {
-		t.Fatalf("%v", err)
-	}
-	podEvictor := evictions.NewPodEvictor(
-		clientSet,
-		evictionPolicyGroupVersion,
-		false,
-		0,
-		nodes,
-		true,
-		false,
-		false,
-	)
+	podEvictor := initPodEvictorOrFail(t, clientSet, nodes)
 
 	podsOnMosttUtilizedNode, err := podutil.ListPodsOnANode(ctx, clientSet, workerNodes[0], podutil.WithFilter(podEvictor.Evictable().IsEvictable))
 	if err != nil {
@@ -1292,4 +1279,21 @@ func splitNodesAndWorkerNodes(nodes []v1.Node) ([]*v1.Node, []*v1.Node) {
 		}
 	}
 	return allNodes, workerNodes
+}
+
+func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, nodes []*v1.Node) *evictions.PodEvictor {
+	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
+	if err != nil || len(evictionPolicyGroupVersion) == 0 {
+		t.Fatalf("Error creating eviction policy group: %v", err)
+	}
+	return evictions.NewPodEvictor(
+		clientSet,
+		evictionPolicyGroupVersion,
+		false,
+		0,
+		nodes,
+		true,
+		false,
+		false,
+	)
 }
