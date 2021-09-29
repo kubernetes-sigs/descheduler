@@ -45,6 +45,13 @@ func TestRemoveFailedPods(t *testing.T) {
 		pods                    []v1.Pod
 	}{
 		{
+			description:             "default empty strategy, 0 failures, 0 evictions",
+			strategy:                api.DeschedulerStrategy{},
+			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
+			expectedEvictedPodCount: 0,
+			pods:                    []v1.Pod{}, // no pods come back with field selector phase=Failed
+		},
+		{
 			description:             "0 failures, 0 evictions",
 			strategy:                createStrategy(true, false, nil, nil, nil, false),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
@@ -225,6 +232,7 @@ func TestValidRemoveFailedPodsParams(t *testing.T) {
 		params *api.StrategyParameters
 	}{
 		{name: "validate nil params", params: nil},
+		{name: "validate empty params", params: &api.StrategyParameters{}},
 		{name: "validate reasons params", params: &api.StrategyParameters{FailedPods: &api.FailedPods{
 			Reasons: []string{"CreateContainerConfigError"},
 		}}},
