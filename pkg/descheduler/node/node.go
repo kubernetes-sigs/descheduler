@@ -104,7 +104,7 @@ func IsReady(node *v1.Node) bool {
 // NodeFit returns true if the provided pod can probably be scheduled onto the provided node.
 // This function is used when the NodeFit pod filtering feature of the Descheduler is enabled.
 // This function currently considers a subset of the Kubernetes Scheduler's predicates when
-// deciding if a pod would fit on a node, but more predicates may be added in the future.
+// deciding if a pod would fit on a node, but more predicates may be added in the future
 func NodeFit(ctx context.Context, client clientset.Interface, pod *v1.Pod, node *v1.Node) bool {
 	// Check node selector and required affinity
 	ok, err := utils.PodMatchNodeSelector(pod, node)
