@@ -75,7 +75,7 @@ func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 	}
 }
 
-// RcByNameContainer returns a ReplicationControoler with specified name and container
+// RcByNameContainer returns a ReplicationController with specified name and container
 func RcByNameContainer(name, namespace string, replicas int32, labels map[string]string, gracePeriod *int64, priorityClassName string) *v1.ReplicationController {
 	zeroGracePeriod := int64(0)
 
