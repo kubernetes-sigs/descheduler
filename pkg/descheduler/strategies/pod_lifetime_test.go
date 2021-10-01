@@ -125,6 +125,17 @@ func TestPodLifeTime(t *testing.T) {
 	p12.ObjectMeta.OwnerReferences = ownerRef1
 	p13.ObjectMeta.OwnerReferences = ownerRef1
 
+	p14 := test.BuildTestPod("p14", 100, 0, node1.Name, nil)
+	p15 := test.BuildTestPod("p15", 100, 0, node1.Name, nil)
+	p14.Namespace = "dev"
+	p15.Namespace = "dev"
+	p14.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p15.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p14.ObjectMeta.OwnerReferences = ownerRef1
+	p15.ObjectMeta.OwnerReferences = ownerRef1
+	p14.DeletionTimestamp = &metav1.Time{}
+	p15.DeletionTimestamp = &metav1.Time{}
+
 	var maxLifeTime uint = 600
 	testCases := []struct {
 		description             string
@@ -231,7 +242,7 @@ func TestPodLifeTime(t *testing.T) {
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description: "Two old pods with different labels, 1 selected by labelSelector",
+			description: "No pod to evicted since all pod terminating",
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
 				Params: &api.StrategyParameters{
@@ -246,11 +257,26 @@ func TestPodLifeTime(t *testing.T) {
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
 		},
+		{
+			description: "No pod should be evicted since pod terminating",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"foo": "bar"},
+					},
+				},
+			},
+			maxPodsToEvictPerNode:   5,
+			pods:                    []v1.Pod{*p14, *p15},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 0,
+		},
 	}
 
 	for _, tc := range testCases {
 		fakeClient := &fake.Clientset{}
-
 		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 			return true, &v1.PodList{Items: tc.pods}, nil
 		})

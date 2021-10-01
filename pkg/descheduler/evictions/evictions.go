@@ -290,6 +290,10 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 		checkErrs = append(checkErrs, fmt.Errorf("pod is a static pod"))
 	}
 
+	if utils.IsPodTerminating(pod) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is terminating"))
+	}
+
 	for _, c := range ev.constraints {
 		if err := c(pod); err != nil {
 			checkErrs = append(checkErrs, err)
