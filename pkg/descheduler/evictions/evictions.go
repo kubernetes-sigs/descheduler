@@ -278,7 +278,7 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 		checkErrs = append(checkErrs, fmt.Errorf("pod is a DaemonSet pod"))
 	}
 
-	if len(ownerRefList) == 0 {
+	if len(ownerRefList) == 0 && pod.Status.Phase != v1.PodFailed {
 		checkErrs = append(checkErrs, fmt.Errorf("pod does not have any ownerrefs"))
 	}
 
