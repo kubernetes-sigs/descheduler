@@ -456,9 +456,9 @@ strategies:
 
 This strategy makes sure that pods having too many restarts are removed from nodes. For example a pod with EBS/PD that
 can't get the volume/disk attached to the instance, then the pod should be re-scheduled to other nodes. Its parameters
-include `podRestartThreshold`, which is the number of restarts at which a pod should be evicted, and `includingInitContainers`,
-which determines whether init container restarts should be factored into that calculation.
-|`labelSelector`|(see [label filtering](#label-filtering))|
+include `podRestartThreshold`, which is the number of restarts (summed over all eligible containers) at which a pod
+should be evicted, and `includingInitContainers`, which determines whether init container restarts should be factored
+into that calculation.
 
 **Parameters:**
 
@@ -469,6 +469,7 @@ which determines whether init container restarts should be factored into that ca
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
 |`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
