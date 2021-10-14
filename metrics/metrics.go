@@ -38,6 +38,38 @@ var (
 			StabilityLevel: metrics.ALPHA,
 		}, []string{"result", "strategy", "namespace", "node"})
 
+	PodsEvictedSuccess = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Subsystem:      DeschedulerSubsystem,
+			Name:           "pods_evicted_success",
+			Help:           "Number of pods successfully evicted per strategy",
+			StabilityLevel: metrics.ALPHA,
+		}, []string{"strategy", "namespace"})
+
+	PodsEvictedFailed = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Subsystem:      DeschedulerSubsystem,
+			Name:           "pods_evicted_failed",
+			Help:           "Number of pods failed to evict per strategy",
+			StabilityLevel: metrics.ALPHA,
+		}, []string{"strategy", "namespace"})
+
+	TotalPodsEvicted = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Subsystem:      DeschedulerSubsystem,
+			Name:           "total_pods_evicted",
+			Help:           "Total pods evicted so far",
+			StabilityLevel: metrics.ALPHA,
+		}, []string{"result", "namespace"})
+
+	TotalPodsSkipped = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Subsystem:      DeschedulerSubsystem,
+			Name:           "total_pods_skipped",
+			Help:           "Total pods skipped for a single run",
+			StabilityLevel: metrics.ALPHA,
+		}, []string{"result", "namespace"})
+
 	buildInfo = metrics.NewGauge(
 		&metrics.GaugeOpts{
 			Subsystem:      DeschedulerSubsystem,
@@ -51,6 +83,10 @@ var (
 	metricsList = []metrics.Registerable{
 		PodsEvicted,
 		buildInfo,
+		PodsEvictedSuccess,
+		PodsEvictedFailed,
+		TotalPodsEvicted,
+		TotalPodsSkipped,
 	}
 )
 

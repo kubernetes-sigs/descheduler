@@ -124,29 +124,29 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		reason += " (" + strings.Join(reasons, ", ") + ")"
 	}
 	if pe.maxPodsToEvictPerNode != nil && pe.nodepodCount[node]+1 > *pe.maxPodsToEvictPerNode {
-		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
-		}
+		metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
+		metrics.TotalPodsSkipped.With(map[string]string{"result": "total pods skipped so far", "namespace": pod.Namespace}).Inc()
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", *pe.maxPodsToEvictPerNode, node.Name)
 	}
 
 	if pe.maxPodsToEvictPerNamespace != nil && pe.namespacePodCount[pod.Namespace]+1 > *pe.maxPodsToEvictPerNamespace {
-		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per namespace reached", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
-		}
+		metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per namespace reached", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
+		metrics.TotalPodsSkipped.With(map[string]string{"result": "total pods skipped so far", "namespace": pod.Namespace}).Inc()
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q namespace reached", *pe.maxPodsToEvictPerNamespace, pod.Namespace)
 	}
 
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion)
+	// increment TotalPodsEvicted
+	metrics.TotalPodsEvicted.With(map[string]string{"result": "total pods evicted so far", "namespace": pod.Namespace}).Inc()
 	if err != nil {
 		// err is used only for logging purposes
 		klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", reason)
-		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
-		}
+		metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
+		metrics.PodsEvictedFailed.With(map[string]string{"strategy": strategy, "namespace": pod.Namespace}).Inc()
 		return false, nil
 	}
 
+	metrics.PodsEvictedSuccess.With(map[string]string{"strategy": strategy, "namespace": pod.Namespace}).Inc()
 	pe.nodepodCount[node]++
 	pe.namespacePodCount[pod.Namespace]++
 
@@ -184,6 +184,7 @@ func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, poli
 	err := client.PolicyV1beta1().Evictions(eviction.Namespace).Evict(ctx, eviction)
 
 	if apierrors.IsTooManyRequests(err) {
+		metrics.TotalPodsSkipped.With(map[string]string{"result": "total pods skipped so far", "namespace": pod.Namespace}).Inc()
 		return fmt.Errorf("error when evicting pod (ignoring) %q: %v", pod.Name, err)
 	}
 	if apierrors.IsNotFound(err) {
