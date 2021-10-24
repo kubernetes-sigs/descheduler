@@ -194,27 +194,35 @@ strategies:
 
 ### LowNodeUtilization
 
-This strategy finds nodes that are under utilized and evicts pods, if possible, from other nodes
-in the hope that recreation of evicted pods will be scheduled on these underutilized nodes. The
-parameters of this strategy are configured under `nodeResourceUtilizationThresholds`.
+**Note**: The name might be misleading. This deschedules pods from overutilized nodes, based on allocation.
 
-The under utilization of nodes is determined by a configurable threshold `thresholds`. The threshold
-`thresholds` can be configured for cpu, memory, number of pods, and extended resources in terms of percentage (the percentage is
-calculated as the current resources requested on the node vs [total allocatable](https://kubernetes.io/docs/concepts/architecture/nodes/#capacity).
-For pods, this means the number of pods on the node as a fraction of the pod capacity set for that node).
+This strategy finds nodes that are overutilized and evicts pods from them, but
+only if there are underutilized nodes those pods might fit on. The hope is that
+the kubernetes scheduler will then place those pods on one of those
+underutilized nodes. The parameters of this strategy are configured under
+`nodeResourceUtilizationThresholds`.
 
-If a node's usage is below threshold for all (cpu, memory, number of pods and extended resources), the node is considered underutilized.
-Currently, pods request resource requirements are considered for computing node resource utilization.
+At which thresholds nodes are considered overutilized is configured through
+`targetThresholds`. Whether they're considered underutilized is configured
+through `thresholds`.  The thresholds can be configured per dimension (cpu,
+memory, number of pods, and extended resources) in terms of percentages (the
+percentage is calculated as the current resources *requested* on the node vs
+[total
+allocatable](https://kubernetes.io/docs/concepts/architecture/nodes/#capacity).
+For pods, this means the number of pods on the node as a fraction of the pod
+capacity set for that node).
 
-There is another configurable threshold, `targetThresholds`, that is used to compute those potential nodes
-from where pods could be evicted. If a node's usage is above targetThreshold for any (cpu, memory, number of pods, or extended resources),
-the node is considered over utilized. Any node between the thresholds, `thresholds` and `targetThresholds` is
-considered appropriately utilized and is not considered for eviction. The threshold, `targetThresholds`,
-can be configured for cpu, memory, and number of pods too in terms of percentage.
+A node is underutilized if it is below the `thresholds` for all dimensions
+(cpu, memory, etc).  A node is considered overutilized if it's above one of the
+`targetThresholds`.
 
-These thresholds, `thresholds` and `targetThresholds`, could be tuned as per your cluster requirements. Note that this
-strategy evicts pods from `overutilized nodes` (those with usage above `targetThresholds`) to `underutilized nodes`
-(those with usage below `thresholds`), it will abort if any number of `underutilized nodes` or `overutilized nodes` is zero.
+Currently, pods resource requests (rather than actual allocation) are
+considered for computing node resource utilization.
+
+Nodes between the `thresholds` and `targetThresholds` thresholds are considered
+appropriately utilized. Pods won't be evicted from them, but Descheduler also
+doesn't treat them as a viable destination when considering whether a pod could
+be rescheduled.
 
 **Parameters:**
 
@@ -238,13 +246,13 @@ strategies:
      params:
        nodeResourceUtilizationThresholds:
          thresholds:
-           "cpu" : 20
-           "memory": 20
-           "pods": 20
-         targetThresholds:
            "cpu" : 50
            "memory": 50
            "pods": 50
+         targetThresholds:
+           "cpu" : 70
+           "memory": 70
+           "pods": 70
 ```
 
 Policy should pass the following validation checks:

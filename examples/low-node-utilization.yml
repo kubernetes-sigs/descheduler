@@ -6,6 +6,6 @@ strategies:
     params:
       nodeResourceUtilizationThresholds:
         thresholds:
-          "memory": 20
+          "memory": 50
         targetThresholds:
           "memory": 70
