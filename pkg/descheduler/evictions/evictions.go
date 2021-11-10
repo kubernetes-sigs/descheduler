@@ -44,6 +44,10 @@ const (
 	evictPodAnnotationKey = "descheduler.alpha.kubernetes.io/evict"
 )
 
+const (
+	noEvictPodAnnotationKey = "descheduler.alpha.kubernetes.io/noevict"
+)
+
 // nodePodEvictedCount keeps count of pods evicted on node
 type nodePodEvictedCount map[*v1.Node]int
 
@@ -290,6 +294,10 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 		checkErrs = append(checkErrs, fmt.Errorf("pod is a static pod"))
 	}
 
+	if HaveDoNotEvictAnnotation(pod) {
+		checkErrs = append(checkErrs, fmt.Errorf("pod is excluded by annotation"))
+	}
+
 	for _, c := range ev.constraints {
 		if err := c(pod); err != nil {
 			checkErrs = append(checkErrs, err)
@@ -307,6 +315,12 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 // HaveEvictAnnotation checks if the pod have evict annotation
 func HaveEvictAnnotation(pod *v1.Pod) bool {
 	_, found := pod.ObjectMeta.Annotations[evictPodAnnotationKey]
+	return found
+}
+
+// HaveDoNotEvictAnnotation checks if the pod have evict annotation
+func HaveDoNotEvictAnnotation(pod *v1.Pod) bool {
+	_, found := pod.ObjectMeta.Annotations[noEvictPodAnnotationKey]
 	return found
 }
 

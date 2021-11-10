@@ -749,6 +749,8 @@ never evicted because these pods won't be recreated.
 best effort pods are evicted before burstable and guaranteed pods.
 * All types of pods with the annotation `descheduler.alpha.kubernetes.io/evict` are eligible for eviction. This
   annotation is used to override checks which prevent eviction and users can select which pod is evicted.
+* All types of pods with the annotation `descheduler.alpha.kubernetes.io/noevict` are NOT eligible for eviction. This
+  annotation is used to override pods that would otherwise be evicted
   Users should know how and if the pod will be recreated.
 
 Setting `--v=4` or greater on the Descheduler will log all reasons why any pod is not evictable.

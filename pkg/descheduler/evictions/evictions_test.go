@@ -142,6 +142,15 @@ func TestIsEvictable(t *testing.T) {
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
 			result:                  true,
+		}, { // Normal pod eviction with normal ownerRefs and descheduler.alpha.kubernetes.io/noevict annotation
+			pod: test.BuildTestPod("p20", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod, nodes []*v1.Node) {
+				pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/noevict": "true"}
+				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  false,
 		}, { // Pod not evicted because it is bound to a PV and evictLocalStoragePods = false
 			pod: test.BuildTestPod("p5", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod, nodes []*v1.Node) {
