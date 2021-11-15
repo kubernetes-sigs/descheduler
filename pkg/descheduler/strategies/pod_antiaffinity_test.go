@@ -55,6 +55,10 @@ func TestPodAntiAffinity(t *testing.T) {
 	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, nil)
 	p7 := test.BuildTestPod("p7", 100, 0, node1.Name, nil)
 	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, nil)
+	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, nil)
+	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, nil)
+	p9.DeletionTimestamp = &metav1.Time{}
+	p10.DeletionTimestamp = &metav1.Time{}
 
 	criticalPriority := utils.SystemCriticalPriority
 	nonEvictablePod := test.BuildTestPod("non-evict", 100, 0, node1.Name, func(pod *v1.Pod) {
@@ -72,6 +76,8 @@ func TestPodAntiAffinity(t *testing.T) {
 	test.SetNormalOwnerRef(p5)
 	test.SetNormalOwnerRef(p6)
 	test.SetNormalOwnerRef(p7)
+	test.SetNormalOwnerRef(p9)
+	test.SetNormalOwnerRef(p10)
 
 	// set pod anti affinity
 	setPodAntiAffinity(p1, "foo", "bar")
@@ -80,6 +86,8 @@ func TestPodAntiAffinity(t *testing.T) {
 	setPodAntiAffinity(p5, "foo1", "bar1")
 	setPodAntiAffinity(p6, "foo1", "bar1")
 	setPodAntiAffinity(p7, "foo", "bar")
+	setPodAntiAffinity(p9, "foo", "bar")
+	setPodAntiAffinity(p10, "foo", "bar")
 
 	// set pod priority
 	test.SetPodPriority(p5, 100)
@@ -149,6 +157,13 @@ func TestPodAntiAffinity(t *testing.T) {
 			nodes:                   []*v1.Node{node1, node3},
 			expectedEvictedPodCount: 0,
 			nodeFit:                 true,
+		},
+		{
+			description:             "No pod to evicted since all pod terminating",
+			maxPodsToEvictPerNode:   0,
+			pods:                    []v1.Pod{*p9, *p10},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 0,
 		},
 	}
 
