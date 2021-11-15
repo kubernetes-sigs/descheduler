@@ -141,10 +141,9 @@ func RemovePodsViolatingTopologySpreadConstraint(
 			var sumPods float64
 			for i := range namespacePods.Items {
 				// skip pods that are being deleted.
-				if namespacePods.Items[i].DeletionTimestamp != nil {
+				if utils.IsPodTerminating(&namespacePods.Items[i]) {
 					continue
 				}
-
 				// 4. if the pod matches this TopologySpreadConstraint LabelSelector
 				if !selector.Matches(labels.Set(namespacePods.Items[i].Labels)) {
 					continue
