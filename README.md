@@ -207,7 +207,7 @@ If a node's usage is below threshold for all (cpu, memory, number of pods and ex
 Currently, pods request resource requirements are considered for computing node resource utilization.
 
 There is another configurable threshold, `targetThresholds`, that is used to compute those potential nodes
-from where pods could be evicted. If a node's usage is above targetThreshold for any (cpu, memory, number of pods, or extended resources),
+from which pods could be evicted. If a node's usage is above targetThreshold for any (cpu, memory, number of pods, or extended resources),
 the node is considered over utilized. Any node between the thresholds, `thresholds` and `targetThresholds` is
 considered appropriately utilized and is not considered for eviction. The threshold, `targetThresholds`,
 can be configured for cpu, memory, and number of pods too in terms of percentage.
