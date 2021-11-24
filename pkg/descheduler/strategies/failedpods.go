@@ -147,6 +147,10 @@ func validateFailedPodShouldEvict(pod *v1.Pod, strategyParams validatedFailedPod
 	if len(strategyParams.reasons) > 0 {
 		reasons := getFailedContainerStatusReasons(pod.Status.ContainerStatuses)
 
+		if pod.Status.Phase == v1.PodFailed && pod.Status.Reason != "" {
+			reasons = append(reasons, pod.Status.Reason)
+		}
+
 		if strategyParams.includingInitContainers {
 			reasons = append(reasons, getFailedContainerStatusReasons(pod.Status.InitContainerStatuses)...)
 		}
