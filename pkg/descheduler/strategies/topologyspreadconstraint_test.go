@@ -20,7 +20,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 	testCases := []struct {
 		name                 string
 		pods                 []*v1.Pod
-		expectedEvictedCount int
+		expectedEvictedCount uint
 		nodes                []*v1.Node
 		strategy             api.DeschedulerStrategy
 		namespaces           []string
@@ -886,7 +886,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				fakeClient,
 				"v1",
 				false,
-				100,
+				nil,
 				tc.nodes,
 				false,
 				false,
