@@ -44,13 +44,12 @@ func TestHighNodeUtilization(t *testing.T) {
 	nodeSelectorValue := "west"
 
 	testCases := []struct {
-		name                  string
-		thresholds            api.ResourceThresholds
-		nodes                 map[string]*v1.Node
-		pods                  map[string]*v1.PodList
-		maxPodsToEvictPerNode int
-		expectedPodsEvicted   int
-		evictedPods           []string
+		name                string
+		thresholds          api.ResourceThresholds
+		nodes               map[string]*v1.Node
+		pods                map[string]*v1.PodList
+		expectedPodsEvicted uint
+		evictedPods         []string
 	}{
 		{
 			name: "no node below threshold usage",
@@ -89,8 +88,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					},
 				},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   0,
+			expectedPodsEvicted: 0,
 		},
 		{
 			name: "no evictable pods",
@@ -147,8 +145,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					},
 				},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   0,
+			expectedPodsEvicted: 0,
 		},
 		{
 			name: "no node to schedule evicted pods",
@@ -182,8 +179,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					},
 				},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   0,
+			expectedPodsEvicted: 0,
 		},
 		{
 			name: "without priorities",
@@ -224,9 +220,8 @@ func TestHighNodeUtilization(t *testing.T) {
 					},
 				},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   2,
-			evictedPods:           []string{"p1", "p7"},
+			expectedPodsEvicted: 2,
+			evictedPods:         []string{"p1", "p7"},
 		},
 		{
 			name: "without priorities stop when resource capacity is depleted",
@@ -260,8 +255,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					},
 				},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   1,
+			expectedPodsEvicted: 1,
 		},
 		{
 			name: "with priorities",
@@ -302,9 +296,8 @@ func TestHighNodeUtilization(t *testing.T) {
 					},
 				},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   1,
-			evictedPods:           []string{"p1"},
+			expectedPodsEvicted: 1,
+			evictedPods:         []string{"p1"},
 		},
 		{
 			name: "without priorities evicting best-effort pods only",
@@ -342,9 +335,8 @@ func TestHighNodeUtilization(t *testing.T) {
 					Items: []v1.Pod{},
 				},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   1,
-			evictedPods:           []string{"p1"},
+			expectedPodsEvicted: 1,
+			evictedPods:         []string{"p1"},
 		},
 		{
 			name: "with extended resource",
@@ -403,9 +395,8 @@ func TestHighNodeUtilization(t *testing.T) {
 					Items: []v1.Pod{},
 				},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   2,
-			evictedPods:           []string{"p1", "p2"},
+			expectedPodsEvicted: 2,
+			evictedPods:         []string{"p1", "p2"},
 		},
 		{
 			name: "with extended resource in some of nodes",
@@ -446,8 +437,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					Items: []v1.Pod{},
 				},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   0,
+			expectedPodsEvicted: 0,
 		},
 		{
 			name: "Other node match pod node selector",
@@ -484,8 +474,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					},
 				},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   1,
+			expectedPodsEvicted: 1,
 		},
 		{
 			name: "Other node does not match pod node selector",
@@ -518,8 +507,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					},
 				},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   0,
+			expectedPodsEvicted: 0,
 		},
 	}
 
@@ -577,7 +565,8 @@ func TestHighNodeUtilization(t *testing.T) {
 				fakeClient,
 				"v1",
 				false,
-				test.maxPodsToEvictPerNode,
+				nil,
+				nil,
 				nodes,
 				false,
 				false,
@@ -597,7 +586,7 @@ func TestHighNodeUtilization(t *testing.T) {
 
 			podsEvicted := podEvictor.TotalEvicted()
 			if test.expectedPodsEvicted != podsEvicted {
-				t.Errorf("Expected %#v pods to be evicted but %#v got evicted", test.expectedPodsEvicted, podsEvicted)
+				t.Errorf("Expected %v pods to be evicted but %v got evicted", test.expectedPodsEvicted, podsEvicted)
 			}
 			if evictionFailed {
 				t.Errorf("Pod evictions failed unexpectedly")
@@ -710,7 +699,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 		name              string
 		nodes             []*v1.Node
 		pods              []*v1.Pod
-		evictionsExpected int
+		evictionsExpected uint
 	}{
 		{
 			name:  "No taints",
@@ -767,7 +756,8 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 				fakeClient,
 				"policy/v1",
 				false,
-				item.evictionsExpected,
+				&item.evictionsExpected,
+				nil,
 				item.nodes,
 				false,
 				false,

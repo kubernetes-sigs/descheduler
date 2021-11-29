@@ -2,8 +2,9 @@ package strategies
 
 import (
 	"context"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"testing"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -41,7 +42,7 @@ func TestRemoveFailedPods(t *testing.T) {
 		description             string
 		nodes                   []*v1.Node
 		strategy                api.DeschedulerStrategy
-		expectedEvictedPodCount int
+		expectedEvictedPodCount uint
 		pods                    []v1.Pod
 	}{
 		{
@@ -220,7 +221,8 @@ func TestRemoveFailedPods(t *testing.T) {
 			fakeClient,
 			policyv1.SchemeGroupVersion.String(),
 			false,
-			100,
+			nil,
+			nil,
 			tc.nodes,
 			false,
 			false,

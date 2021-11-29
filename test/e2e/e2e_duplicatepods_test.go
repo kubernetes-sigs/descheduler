@@ -18,17 +18,18 @@ package e2e
 
 import (
 	"context"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/util/wait"
-	clientset "k8s.io/client-go/kubernetes"
 	"strings"
 	"testing"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
+	clientset "k8s.io/client-go/kubernetes"
+
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
@@ -87,7 +88,7 @@ func TestRemoveDuplicates(t *testing.T) {
 		description             string
 		replicasNum             int
 		beforeFunc              func(deployment *appsv1.Deployment)
-		expectedEvictedPodCount int
+		expectedEvictedPodCount uint
 	}{
 		{
 			description: "Evict Pod even Pods schedule to specific node",
@@ -143,7 +144,8 @@ func TestRemoveDuplicates(t *testing.T) {
 				clientSet,
 				evictionPolicyGroupVersion,
 				false,
-				0,
+				nil,
+				nil,
 				nodes,
 				true,
 				false,
