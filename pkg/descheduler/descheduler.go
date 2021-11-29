@@ -19,14 +19,13 @@ package descheduler
 import (
 	"context"
 	"fmt"
-	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/informers"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/metrics"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -35,6 +34,7 @@ import (
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
+	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
 )
 
 func Run(rs *options.DeschedulerServer) error {
@@ -86,12 +86,12 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		"RemoveFailedPods":                            strategies.RemoveFailedPods,
 	}
 
-	nodeSelector := rs.NodeSelector
+	var nodeSelector string
 	if deschedulerPolicy.NodeSelector != nil {
 		nodeSelector = *deschedulerPolicy.NodeSelector
 	}
 
-	evictLocalStoragePods := rs.EvictLocalStoragePods
+	var evictLocalStoragePods bool
 	if deschedulerPolicy.EvictLocalStoragePods != nil {
 		evictLocalStoragePods = *deschedulerPolicy.EvictLocalStoragePods
 	}
@@ -107,11 +107,6 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	ignorePvcPods := false
 	if deschedulerPolicy.IgnorePVCPods != nil {
 		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
-	}
-
-	maxNoOfPodsToEvictPerNode := rs.MaxNoOfPodsToEvictPerNode
-	if deschedulerPolicy.MaxNoOfPodsToEvictPerNode != nil {
-		maxNoOfPodsToEvictPerNode = *deschedulerPolicy.MaxNoOfPodsToEvictPerNode
 	}
 
 	wait.Until(func() {
@@ -132,7 +127,8 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			rs.Client,
 			evictionPolicyGroupVersion,
 			rs.DryRun,
-			maxNoOfPodsToEvictPerNode,
+			deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
+			deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
 			nodes,
 			evictLocalStoragePods,
 			evictSystemCriticalPods,

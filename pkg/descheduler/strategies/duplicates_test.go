@@ -173,15 +173,13 @@ func TestFindDuplicatePods(t *testing.T) {
 
 	testCases := []struct {
 		description             string
-		maxPodsToEvictPerNode   int
 		pods                    []v1.Pod
 		nodes                   []*v1.Node
-		expectedEvictedPodCount int
+		expectedEvictedPodCount uint
 		strategy                api.DeschedulerStrategy
 	}{
 		{
 			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet. 1 should be evicted.",
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p1, *p2, *p3},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 1,
@@ -189,7 +187,6 @@ func TestFindDuplicatePods(t *testing.T) {
 		},
 		{
 			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet, but ReplicaSet kind is excluded. 0 should be evicted.",
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p1, *p2, *p3},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
@@ -197,7 +194,6 @@ func TestFindDuplicatePods(t *testing.T) {
 		},
 		{
 			description:             "Three Pods in the `test` Namespace, bound to same ReplicaSet. 1 should be evicted.",
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p8, *p9, *p10},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 1,
@@ -205,7 +201,6 @@ func TestFindDuplicatePods(t *testing.T) {
 		},
 		{
 			description:             "Three Pods in the `dev` Namespace, three Pods in the `test` Namespace. Bound to ReplicaSet with same name. 4 should be evicted.",
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p1, *p2, *p3, *p8, *p9, *p10},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
@@ -213,7 +208,6 @@ func TestFindDuplicatePods(t *testing.T) {
 		},
 		{
 			description:             "Pods are: part of DaemonSet, with local storage, mirror pod annotation, critical pod annotation - none should be evicted.",
-			maxPodsToEvictPerNode:   2,
 			pods:                    []v1.Pod{*p4, *p5, *p6, *p7},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
@@ -221,7 +215,6 @@ func TestFindDuplicatePods(t *testing.T) {
 		},
 		{
 			description:             "Test all Pods: 4 should be evicted.",
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p1, *p2, *p3, *p4, *p5, *p6, *p7, *p8, *p9, *p10},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
@@ -229,7 +222,6 @@ func TestFindDuplicatePods(t *testing.T) {
 		},
 		{
 			description:             "Pods with the same owner but different images should not be evicted",
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p11, *p12},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
@@ -237,7 +229,6 @@ func TestFindDuplicatePods(t *testing.T) {
 		},
 		{
 			description:             "Pods with multiple containers should not match themselves",
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p13},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
@@ -245,7 +236,6 @@ func TestFindDuplicatePods(t *testing.T) {
 		},
 		{
 			description:             "Pods with matching ownerrefs and at not all matching image should not trigger an eviction",
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p11, *p13},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
@@ -253,7 +243,6 @@ func TestFindDuplicatePods(t *testing.T) {
 		},
 		{
 			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet. Only node available has a taint, and nodeFit set to true. 0 should be evicted.",
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p1, *p2, *p3},
 			nodes:                   []*v1.Node{node1, node3},
 			expectedEvictedPodCount: 0,
@@ -261,7 +250,6 @@ func TestFindDuplicatePods(t *testing.T) {
 		},
 		{
 			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet, all with a nodeSelector. Only node available has an incorrect node label, and nodeFit set to true. 0 should be evicted.",
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p15, *p16, *p17},
 			nodes:                   []*v1.Node{node1, node4},
 			expectedEvictedPodCount: 0,
@@ -269,7 +257,6 @@ func TestFindDuplicatePods(t *testing.T) {
 		},
 		{
 			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available is not schedulable, and nodeFit set to true. 0 should be evicted.",
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p1, *p2, *p3},
 			nodes:                   []*v1.Node{node1, node5},
 			expectedEvictedPodCount: 0,
@@ -287,7 +274,8 @@ func TestFindDuplicatePods(t *testing.T) {
 				fakeClient,
 				"v1",
 				false,
-				testCase.maxPodsToEvictPerNode,
+				nil,
+				nil,
 				testCase.nodes,
 				false,
 				false,
@@ -432,10 +420,9 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 
 	testCases := []struct {
 		description             string
-		maxPodsToEvictPerNode   int
 		pods                    []v1.Pod
 		nodes                   []*v1.Node
-		expectedEvictedPodCount int
+		expectedEvictedPodCount uint
 		strategy                api.DeschedulerStrategy
 	}{
 		{
@@ -695,7 +682,8 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
 				false,
-				testCase.maxPodsToEvictPerNode,
+				nil,
+				nil,
 				testCase.nodes,
 				false,
 				false,

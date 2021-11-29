@@ -2,15 +2,16 @@ package e2e
 
 import (
 	"context"
+	"strings"
+	"testing"
+	"time"
+
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
-	"strings"
-	"testing"
-	"time"
 
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
@@ -34,7 +35,7 @@ func TestFailedPods(t *testing.T) {
 	}
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 	testCases := map[string]struct {
-		expectedEvictedCount int
+		expectedEvictedCount uint
 		strategyParams       *deschedulerapi.StrategyParameters
 	}{
 		"test-failed-pods-nil-strategy": {

@@ -43,6 +43,9 @@ type DeschedulerPolicy struct {
 
 	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
 	MaxNoOfPodsToEvictPerNode *int `json:"maxNoOfPodsToEvictPerNode,omitempty"`
+
+	// MaxNoOfPodsToEvictPerNamespace restricts maximum of pods to be evicted per namespace.
+	MaxNoOfPodsToEvictPerNamespace *int `json:"maxNoOfPodsToEvictPerNamespace,omitempty"`
 }
 
 type StrategyName string

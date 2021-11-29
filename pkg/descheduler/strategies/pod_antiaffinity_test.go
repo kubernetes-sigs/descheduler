@@ -99,52 +99,61 @@ func TestPodAntiAffinity(t *testing.T) {
 		"datacenter": "west",
 	}
 
+	var uint1 uint = 1
+	var uint3 uint = 3
+
 	tests := []struct {
-		description             string
-		maxPodsToEvictPerNode   int
-		pods                    []v1.Pod
-		expectedEvictedPodCount int
-		nodeFit                 bool
-		nodes                   []*v1.Node
+		description                    string
+		maxPodsToEvictPerNode          *uint
+		maxNoOfPodsToEvictPerNamespace *uint
+		pods                           []v1.Pod
+		expectedEvictedPodCount        uint
+		nodeFit                        bool
+		nodes                          []*v1.Node
 	}{
 		{
 			description:             "Maximum pods to evict - 0",
-			maxPodsToEvictPerNode:   0,
 			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 3,
 		},
 		{
 			description:             "Maximum pods to evict - 3",
-			maxPodsToEvictPerNode:   3,
+			maxPodsToEvictPerNode:   &uint3,
 			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 3,
 		},
 		{
+			description:                    "Maximum pods to evict (maxPodsToEvictPerNamespace=3) - 3",
+			maxNoOfPodsToEvictPerNamespace: &uint3,
+			pods:                           []v1.Pod{*p1, *p2, *p3, *p4},
+			nodes:                          []*v1.Node{node1},
+			expectedEvictedPodCount:        3,
+		},
+		{
 			description:             "Evict only 1 pod after sorting",
-			maxPodsToEvictPerNode:   0,
 			pods:                    []v1.Pod{*p5, *p6, *p7},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
 		},
 		{
 			description:             "Evicts pod that conflicts with critical pod (but does not evict critical pod)",
-			maxPodsToEvictPerNode:   1,
+			maxPodsToEvictPerNode:   &uint1,
 			pods:                    []v1.Pod{*p1, *nonEvictablePod},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
 		},
 		{
 			description:             "Evicts pod that conflicts with critical pod (but does not evict critical pod)",
-			maxPodsToEvictPerNode:   1,
+			maxPodsToEvictPerNode:   &uint1,
 			pods:                    []v1.Pod{*p1, *nonEvictablePod},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
 		},
 		{
 			description:             "Won't evict pods because node selectors don't match available nodes",
-			maxPodsToEvictPerNode:   1,
+			maxPodsToEvictPerNode:   &uint1,
 			pods:                    []v1.Pod{*p8, *nonEvictablePod},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
@@ -152,7 +161,7 @@ func TestPodAntiAffinity(t *testing.T) {
 		},
 		{
 			description:             "Won't evict pods because only other node is not schedulable",
-			maxPodsToEvictPerNode:   1,
+			maxPodsToEvictPerNode:   &uint1,
 			pods:                    []v1.Pod{*p8, *nonEvictablePod},
 			nodes:                   []*v1.Node{node1, node3},
 			expectedEvictedPodCount: 0,
@@ -160,7 +169,6 @@ func TestPodAntiAffinity(t *testing.T) {
 		},
 		{
 			description:             "No pod to evicted since all pod terminating",
-			maxPodsToEvictPerNode:   0,
 			pods:                    []v1.Pod{*p9, *p10},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
@@ -182,6 +190,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			policyv1.SchemeGroupVersion.String(),
 			false,
 			test.maxPodsToEvictPerNode,
+			test.maxNoOfPodsToEvictPerNamespace,
 			test.nodes,
 			false,
 			false,

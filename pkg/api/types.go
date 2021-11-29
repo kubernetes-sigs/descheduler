@@ -42,7 +42,10 @@ type DeschedulerPolicy struct {
 	IgnorePVCPods *bool
 
 	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
-	MaxNoOfPodsToEvictPerNode *int
+	MaxNoOfPodsToEvictPerNode *uint
+
+	// MaxNoOfPodsToEvictPerNamespace restricts maximum of pods to be evicted per namespace.
+	MaxNoOfPodsToEvictPerNamespace *uint
 }
 
 type StrategyName string

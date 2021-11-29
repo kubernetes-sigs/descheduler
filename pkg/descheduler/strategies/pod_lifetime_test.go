@@ -140,10 +140,9 @@ func TestPodLifeTime(t *testing.T) {
 	testCases := []struct {
 		description             string
 		strategy                api.DeschedulerStrategy
-		maxPodsToEvictPerNode   int
 		pods                    []v1.Pod
 		nodes                   []*v1.Node
-		expectedEvictedPodCount int
+		expectedEvictedPodCount uint
 		ignorePvcPods           bool
 	}{
 		{
@@ -154,7 +153,6 @@ func TestPodLifeTime(t *testing.T) {
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p1, *p2},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
@@ -167,7 +165,6 @@ func TestPodLifeTime(t *testing.T) {
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p3, *p4},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
@@ -180,7 +177,6 @@ func TestPodLifeTime(t *testing.T) {
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p5, *p6},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
@@ -193,7 +189,6 @@ func TestPodLifeTime(t *testing.T) {
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p7, *p8},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
@@ -209,7 +204,6 @@ func TestPodLifeTime(t *testing.T) {
 					},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p9, *p10},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
@@ -222,7 +216,6 @@ func TestPodLifeTime(t *testing.T) {
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p11},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
@@ -236,7 +229,6 @@ func TestPodLifeTime(t *testing.T) {
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p11},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
@@ -252,7 +244,6 @@ func TestPodLifeTime(t *testing.T) {
 					},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p12, *p13},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
@@ -268,7 +259,6 @@ func TestPodLifeTime(t *testing.T) {
 					},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
 			pods:                    []v1.Pod{*p14, *p15},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
@@ -285,7 +275,8 @@ func TestPodLifeTime(t *testing.T) {
 			fakeClient,
 			policyv1.SchemeGroupVersion.String(),
 			false,
-			tc.maxPodsToEvictPerNode,
+			nil,
+			nil,
 			tc.nodes,
 			false,
 			false,
