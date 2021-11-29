@@ -45,14 +45,14 @@ const (
 )
 
 // nodePodEvictedCount keeps count of pods evicted on node
-type nodePodEvictedCount map[*v1.Node]int
+type nodePodEvictedCount map[*v1.Node]uint
 
 type PodEvictor struct {
 	client                  clientset.Interface
 	nodes                   []*v1.Node
 	policyGroupVersion      string
 	dryRun                  bool
-	maxPodsToEvictPerNode   int
+	maxPodsToEvictPerNode   *uint
 	nodepodCount            nodePodEvictedCount
 	evictLocalStoragePods   bool
 	evictSystemCriticalPods bool
@@ -63,7 +63,7 @@ func NewPodEvictor(
 	client clientset.Interface,
 	policyGroupVersion string,
 	dryRun bool,
-	maxPodsToEvictPerNode int,
+	maxPodsToEvictPerNode *uint,
 	nodes []*v1.Node,
 	evictLocalStoragePods bool,
 	evictSystemCriticalPods bool,
@@ -89,13 +89,13 @@ func NewPodEvictor(
 }
 
 // NodeEvicted gives a number of pods evicted for node
-func (pe *PodEvictor) NodeEvicted(node *v1.Node) int {
+func (pe *PodEvictor) NodeEvicted(node *v1.Node) uint {
 	return pe.nodepodCount[node]
 }
 
 // TotalEvicted gives a number of pods evicted through all nodes
-func (pe *PodEvictor) TotalEvicted() int {
-	var total int
+func (pe *PodEvictor) TotalEvicted() uint {
+	var total uint
 	for _, count := range pe.nodepodCount {
 		total += count
 	}
@@ -110,9 +110,9 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 	if len(reasons) > 0 {
 		reason += " (" + strings.Join(reasons, ", ") + ")"
 	}
-	if pe.maxPodsToEvictPerNode > 0 && pe.nodepodCount[node]+1 > pe.maxPodsToEvictPerNode {
+	if pe.maxPodsToEvictPerNode != nil && pe.nodepodCount[node]+1 > *pe.maxPodsToEvictPerNode {
 		metrics.PodsEvicted.With(map[string]string{"result": "maximum number reached", "strategy": strategy, "namespace": pod.Namespace}).Inc()
-		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", pe.maxPodsToEvictPerNode, node.Name)
+		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", *pe.maxPodsToEvictPerNode, node.Name)
 	}
 
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, pe.dryRun)

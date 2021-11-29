@@ -114,89 +114,83 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		}
 	}
 
+	var uint3 uint = 3
+
 	tests := []struct {
 		description             string
 		nodes                   []*v1.Node
 		strategy                api.DeschedulerStrategy
-		expectedEvictedPodCount int
-		maxPodsToEvictPerNode   int
+		expectedEvictedPodCount uint
+		maxPodsToEvictPerNode   *uint
 	}{
 		{
 			description:             "All pods have total restarts under threshold, no pod evictions",
 			strategy:                createStrategy(true, true, 10000, false),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
-			maxPodsToEvictPerNode:   0,
 		},
 		{
 			description:             "Some pods have total restarts bigger than threshold",
 			strategy:                createStrategy(true, true, 1, false),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 6,
-			maxPodsToEvictPerNode:   0,
 		},
 		{
 			description:             "Nine pods have total restarts equals threshold(includingInitContainers=true), 6 pod evictions",
 			strategy:                createStrategy(true, true, 1*25, false),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 6,
-			maxPodsToEvictPerNode:   0,
 		},
 		{
 			description:             "Nine pods have total restarts equals threshold(includingInitContainers=false), 5 pod evictions",
 			strategy:                createStrategy(true, false, 1*25, false),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 5,
-			maxPodsToEvictPerNode:   0,
 		},
 		{
 			description:             "All pods have total restarts equals threshold(includingInitContainers=true), 6 pod evictions",
 			strategy:                createStrategy(true, true, 1*20, false),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 6,
-			maxPodsToEvictPerNode:   0,
 		},
 		{
 			description:             "Nine pods have total restarts equals threshold(includingInitContainers=false), 6 pod evictions",
 			strategy:                createStrategy(true, false, 1*20, false),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 6,
-			maxPodsToEvictPerNode:   0,
 		},
 		{
 			description:             "Five pods have total restarts bigger than threshold(includingInitContainers=true), but only 1 pod eviction",
 			strategy:                createStrategy(true, true, 5*25+1, false),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
-			maxPodsToEvictPerNode:   0,
 		},
 		{
 			description:             "Five pods have total restarts bigger than threshold(includingInitContainers=false), but only 1 pod eviction",
 			strategy:                createStrategy(true, false, 5*20+1, false),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
-			maxPodsToEvictPerNode:   0,
 		},
 		{
 			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3), 3 pod evictions",
 			strategy:                createStrategy(true, true, 1, false),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 3,
-			maxPodsToEvictPerNode:   3,
+			maxPodsToEvictPerNode:   &uint3,
 		},
 		{
 			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node is tained, 0 pod evictions",
 			strategy:                createStrategy(true, true, 1, true),
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
-			maxPodsToEvictPerNode:   3,
+			maxPodsToEvictPerNode:   &uint3,
 		},
 		{
 			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node is not schedulable, 0 pod evictions",
 			strategy:                createStrategy(true, true, 1, true),
 			nodes:                   []*v1.Node{node1, node3},
 			expectedEvictedPodCount: 0,
-			maxPodsToEvictPerNode:   3,
+			maxPodsToEvictPerNode:   &uint3,
 		},
 	}
 

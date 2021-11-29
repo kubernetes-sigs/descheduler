@@ -17,8 +17,9 @@ limitations under the License.
 package v1alpha1
 
 import (
-	componentbaseconfig "k8s.io/component-base/config"
 	"time"
+
+	componentbaseconfig "k8s.io/component-base/config"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

@@ -50,8 +50,7 @@ func TestLowNodeUtilization(t *testing.T) {
 		thresholds, targetThresholds api.ResourceThresholds
 		nodes                        map[string]*v1.Node
 		pods                         map[string]*v1.PodList
-		maxPodsToEvictPerNode        int
-		expectedPodsEvicted          int
+		expectedPodsEvicted          uint
 		evictedPods                  []string
 	}{
 		{
@@ -108,8 +107,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n3NodeName: {},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   0,
+			expectedPodsEvicted: 0,
 		},
 		{
 			name: "without priorities",
@@ -167,8 +165,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n3NodeName: {},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   4,
+			expectedPodsEvicted: 4,
 		},
 		{
 			name: "without priorities stop when cpu capacity is depleted",
@@ -226,7 +223,6 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n3NodeName: {},
 			},
-			maxPodsToEvictPerNode: 0,
 			// 4 pods available for eviction based on v1.ResourcePods, only 3 pods can be evicted before cpu is depleted
 			expectedPodsEvicted: 3,
 		},
@@ -305,8 +301,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n3NodeName: {},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   4,
+			expectedPodsEvicted: 4,
 		},
 		{
 			name: "without priorities evicting best-effort pods only",
@@ -381,9 +376,8 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n3NodeName: {},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   4,
-			evictedPods:           []string{"p1", "p2", "p4", "p5"},
+			expectedPodsEvicted: 4,
+			evictedPods:         []string{"p1", "p2", "p4", "p5"},
 		},
 		{
 			name: "with extended resource",
@@ -469,7 +463,6 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n3NodeName: {},
 			},
-			maxPodsToEvictPerNode: 0,
 			// 4 pods available for eviction based on v1.ResourcePods, only 3 pods can be evicted before extended resource is depleted
 			expectedPodsEvicted: 3,
 		},
@@ -507,7 +500,6 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n3NodeName: {},
 			},
-			maxPodsToEvictPerNode: 0,
 			// 0 pods available for eviction because there's no enough extended resource in node2
 			expectedPodsEvicted: 0,
 		},
@@ -561,8 +553,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   0,
+			expectedPodsEvicted: 0,
 		},
 		{
 			name: "without priorities, but only other node doesn't match pod node selector for p4 and p5",
@@ -630,8 +621,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				},
 				n2NodeName: {},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   3,
+			expectedPodsEvicted: 3,
 		},
 		{
 			name: "without priorities, but only other node doesn't match pod node affinity for p4 and p5",
@@ -729,8 +719,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					*test.BuildTestPod("p9", 0, 0, n2NodeName, test.SetRSOwnerRef),
 				}},
 			},
-			maxPodsToEvictPerNode: 0,
-			expectedPodsEvicted:   3,
+			expectedPodsEvicted: 3,
 		},
 	}
 
@@ -788,7 +777,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
 				false,
-				test.maxPodsToEvictPerNode,
+				nil,
 				nodes,
 				false,
 				false,
@@ -809,7 +798,7 @@ func TestLowNodeUtilization(t *testing.T) {
 
 			podsEvicted := podEvictor.TotalEvicted()
 			if test.expectedPodsEvicted != podsEvicted {
-				t.Errorf("Expected %#v pods to be evicted but %#v got evicted", test.expectedPodsEvicted, podsEvicted)
+				t.Errorf("Expected %v pods to be evicted but %v got evicted", test.expectedPodsEvicted, podsEvicted)
 			}
 			if evictionFailed {
 				t.Errorf("Pod evictions failed unexpectedly")
@@ -1013,7 +1002,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 		name              string
 		nodes             []*v1.Node
 		pods              []*v1.Pod
-		evictionsExpected int
+		evictionsExpected uint
 	}{
 		{
 			name:  "No taints",
@@ -1088,7 +1077,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
 				false,
-				item.evictionsExpected,
+				&item.evictionsExpected,
 				item.nodes,
 				false,
 				false,
