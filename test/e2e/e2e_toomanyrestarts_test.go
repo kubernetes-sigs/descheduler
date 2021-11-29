@@ -19,6 +19,10 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"strings"
+	"testing"
+	"time"
+
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,9 +32,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestTooManyRestarts(t *testing.T) {
@@ -108,7 +109,7 @@ func TestTooManyRestarts(t *testing.T) {
 		name                    string
 		podRestartThreshold     int32
 		includingInitContainers bool
-		expectedEvictedPodCount int
+		expectedEvictedPodCount uint
 	}{
 		{
 			name:                    "test-no-evictions",
@@ -133,7 +134,7 @@ func TestTooManyRestarts(t *testing.T) {
 				clientSet,
 				evictionPolicyGroupVersion,
 				false,
-				0,
+				nil,
 				nodes,
 				true,
 				false,
