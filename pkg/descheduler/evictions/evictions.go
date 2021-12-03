@@ -46,17 +46,20 @@ const (
 
 // nodePodEvictedCount keeps count of pods evicted on node
 type nodePodEvictedCount map[*v1.Node]uint
+type namespacePodEvictCount map[string]uint
 
 type PodEvictor struct {
-	client                  clientset.Interface
-	nodes                   []*v1.Node
-	policyGroupVersion      string
-	dryRun                  bool
-	maxPodsToEvictPerNode   *uint
-	nodepodCount            nodePodEvictedCount
-	evictLocalStoragePods   bool
-	evictSystemCriticalPods bool
-	ignorePvcPods           bool
+	client                     clientset.Interface
+	nodes                      []*v1.Node
+	policyGroupVersion         string
+	dryRun                     bool
+	maxPodsToEvictPerNode      *uint
+	maxPodsToEvictPerNamespace *uint
+	nodepodCount               nodePodEvictedCount
+	namespacePodCount          namespacePodEvictCount
+	evictLocalStoragePods      bool
+	evictSystemCriticalPods    bool
+	ignorePvcPods              bool
 }
 
 func NewPodEvictor(
@@ -64,27 +67,31 @@ func NewPodEvictor(
 	policyGroupVersion string,
 	dryRun bool,
 	maxPodsToEvictPerNode *uint,
+	maxPodsToEvictPerNamespace *uint,
 	nodes []*v1.Node,
 	evictLocalStoragePods bool,
 	evictSystemCriticalPods bool,
 	ignorePvcPods bool,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
+	var namespacePodCount = make(namespacePodEvictCount)
 	for _, node := range nodes {
 		// Initialize podsEvicted till now with 0.
 		nodePodCount[node] = 0
 	}
 
 	return &PodEvictor{
-		client:                  client,
-		nodes:                   nodes,
-		policyGroupVersion:      policyGroupVersion,
-		dryRun:                  dryRun,
-		maxPodsToEvictPerNode:   maxPodsToEvictPerNode,
-		nodepodCount:            nodePodCount,
-		evictLocalStoragePods:   evictLocalStoragePods,
-		evictSystemCriticalPods: evictSystemCriticalPods,
-		ignorePvcPods:           ignorePvcPods,
+		client:                     client,
+		nodes:                      nodes,
+		policyGroupVersion:         policyGroupVersion,
+		dryRun:                     dryRun,
+		maxPodsToEvictPerNode:      maxPodsToEvictPerNode,
+		maxPodsToEvictPerNamespace: maxPodsToEvictPerNamespace,
+		nodepodCount:               nodePodCount,
+		namespacePodCount:          namespacePodCount,
+		evictLocalStoragePods:      evictLocalStoragePods,
+		evictSystemCriticalPods:    evictSystemCriticalPods,
+		ignorePvcPods:              ignorePvcPods,
 	}
 }
 
@@ -111,8 +118,13 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		reason += " (" + strings.Join(reasons, ", ") + ")"
 	}
 	if pe.maxPodsToEvictPerNode != nil && pe.nodepodCount[node]+1 > *pe.maxPodsToEvictPerNode {
-		metrics.PodsEvicted.With(map[string]string{"result": "maximum number reached", "strategy": strategy, "namespace": pod.Namespace}).Inc()
+		metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": strategy, "namespace": pod.Namespace}).Inc()
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", *pe.maxPodsToEvictPerNode, node.Name)
+	}
+
+	if pe.maxPodsToEvictPerNamespace != nil && pe.namespacePodCount[pod.Namespace]+1 > *pe.maxPodsToEvictPerNamespace {
+		metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per namespace reached", "strategy": strategy, "namespace": pod.Namespace}).Inc()
+		return false, fmt.Errorf("Maximum number %v of evicted pods per %q namespace reached", *pe.maxPodsToEvictPerNamespace, pod.Namespace)
 	}
 
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, pe.dryRun)
@@ -124,6 +136,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 	}
 
 	pe.nodepodCount[node]++
+	pe.namespacePodCount[pod.Namespace]++
 	if pe.dryRun {
 		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", reason)
 	} else {

@@ -145,6 +145,7 @@ func TestRemoveDuplicates(t *testing.T) {
 				evictionPolicyGroupVersion,
 				false,
 				nil,
+				nil,
 				nodes,
 				true,
 				false,

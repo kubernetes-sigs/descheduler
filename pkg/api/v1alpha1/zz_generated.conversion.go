@@ -143,6 +143,13 @@ func autoConvert_v1alpha1_DeschedulerPolicy_To_api_DeschedulerPolicy(in *Desched
 	} else {
 		out.MaxNoOfPodsToEvictPerNode = nil
 	}
+	if in.MaxNoOfPodsToEvictPerNamespace != nil {
+		in, out := &in.MaxNoOfPodsToEvictPerNamespace, &out.MaxNoOfPodsToEvictPerNamespace
+		*out = new(uint)
+		**out = uint(**in)
+	} else {
+		out.MaxNoOfPodsToEvictPerNamespace = nil
+	}
 	return nil
 }
 
@@ -163,6 +170,13 @@ func autoConvert_api_DeschedulerPolicy_To_v1alpha1_DeschedulerPolicy(in *api.Des
 		**out = int(**in)
 	} else {
 		out.MaxNoOfPodsToEvictPerNode = nil
+	}
+	if in.MaxNoOfPodsToEvictPerNamespace != nil {
+		in, out := &in.MaxNoOfPodsToEvictPerNamespace, &out.MaxNoOfPodsToEvictPerNamespace
+		*out = new(int)
+		**out = int(**in)
+	} else {
+		out.MaxNoOfPodsToEvictPerNamespace = nil
 	}
 	return nil
 }

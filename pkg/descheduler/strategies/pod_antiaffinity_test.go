@@ -103,12 +103,13 @@ func TestPodAntiAffinity(t *testing.T) {
 	var uint3 uint = 3
 
 	tests := []struct {
-		description             string
-		maxPodsToEvictPerNode   *uint
-		pods                    []v1.Pod
-		expectedEvictedPodCount uint
-		nodeFit                 bool
-		nodes                   []*v1.Node
+		description                    string
+		maxPodsToEvictPerNode          *uint
+		maxNoOfPodsToEvictPerNamespace *uint
+		pods                           []v1.Pod
+		expectedEvictedPodCount        uint
+		nodeFit                        bool
+		nodes                          []*v1.Node
 	}{
 		{
 			description:             "Maximum pods to evict - 0",
@@ -122,6 +123,13 @@ func TestPodAntiAffinity(t *testing.T) {
 			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 3,
+		},
+		{
+			description:                    "Maximum pods to evict (maxPodsToEvictPerNamespace=3) - 3",
+			maxNoOfPodsToEvictPerNamespace: &uint3,
+			pods:                           []v1.Pod{*p1, *p2, *p3, *p4},
+			nodes:                          []*v1.Node{node1},
+			expectedEvictedPodCount:        3,
 		},
 		{
 			description:             "Evict only 1 pod after sorting",
@@ -182,6 +190,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			policyv1.SchemeGroupVersion.String(),
 			false,
 			test.maxPodsToEvictPerNode,
+			test.maxNoOfPodsToEvictPerNamespace,
 			test.nodes,
 			false,
 			false,

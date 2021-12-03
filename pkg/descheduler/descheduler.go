@@ -128,6 +128,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			evictionPolicyGroupVersion,
 			rs.DryRun,
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
+			deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
 			nodes,
 			evictLocalStoragePods,
 			evictSystemCriticalPods,
