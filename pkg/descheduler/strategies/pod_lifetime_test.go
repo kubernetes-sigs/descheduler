@@ -276,6 +276,7 @@ func TestPodLifeTime(t *testing.T) {
 			policyv1.SchemeGroupVersion.String(),
 			false,
 			nil,
+			nil,
 			tc.nodes,
 			false,
 			false,

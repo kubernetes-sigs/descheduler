@@ -117,11 +117,12 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 	var uint3 uint = 3
 
 	tests := []struct {
-		description             string
-		nodes                   []*v1.Node
-		strategy                api.DeschedulerStrategy
-		expectedEvictedPodCount uint
-		maxPodsToEvictPerNode   *uint
+		description                    string
+		nodes                          []*v1.Node
+		strategy                       api.DeschedulerStrategy
+		expectedEvictedPodCount        uint
+		maxPodsToEvictPerNode          *uint
+		maxNoOfPodsToEvictPerNamespace *uint
 	}{
 		{
 			description:             "All pods have total restarts under threshold, no pod evictions",
@@ -179,6 +180,13 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			maxPodsToEvictPerNode:   &uint3,
 		},
 		{
+			description:                    "All pods have total restarts equals threshold(maxNoOfPodsToEvictPerNamespace=3), 3 pod evictions",
+			strategy:                       createStrategy(true, true, 1, false),
+			nodes:                          []*v1.Node{node1},
+			expectedEvictedPodCount:        3,
+			maxNoOfPodsToEvictPerNamespace: &uint3,
+		},
+		{
 			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node is tained, 0 pod evictions",
 			strategy:                createStrategy(true, true, 1, true),
 			nodes:                   []*v1.Node{node1, node2},
@@ -206,6 +214,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			policyv1.SchemeGroupVersion.String(),
 			false,
 			tc.maxPodsToEvictPerNode,
+			tc.maxNoOfPodsToEvictPerNamespace,
 			tc.nodes,
 			false,
 			false,

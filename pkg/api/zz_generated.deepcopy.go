@@ -62,6 +62,11 @@ func (in *DeschedulerPolicy) DeepCopyInto(out *DeschedulerPolicy) {
 		*out = new(uint)
 		**out = **in
 	}
+	if in.MaxNoOfPodsToEvictPerNamespace != nil {
+		in, out := &in.MaxNoOfPodsToEvictPerNamespace, &out.MaxNoOfPodsToEvictPerNamespace
+		*out = new(uint)
+		**out = **in
+	}
 	return
 }
 

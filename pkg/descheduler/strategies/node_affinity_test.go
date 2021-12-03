@@ -104,12 +104,13 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 
 	var uint1 uint = 1
 	tests := []struct {
-		description             string
-		nodes                   []*v1.Node
-		pods                    []v1.Pod
-		strategy                api.DeschedulerStrategy
-		expectedEvictedPodCount uint
-		maxPodsToEvictPerNode   *uint
+		description                    string
+		nodes                          []*v1.Node
+		pods                           []v1.Pod
+		strategy                       api.DeschedulerStrategy
+		expectedEvictedPodCount        uint
+		maxPodsToEvictPerNode          *uint
+		maxNoOfPodsToEvictPerNamespace *uint
 	}{
 		{
 			description: "Invalid strategy type, should not evict any pods",
@@ -156,6 +157,22 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			maxPodsToEvictPerNode:   &uint1,
 		},
 		{
+			description:                    "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 1, should not be evicted",
+			expectedEvictedPodCount:        1,
+			strategy:                       requiredDuringSchedulingIgnoredDuringExecutionStrategy,
+			pods:                           addPodsToNode(nodeWithoutLabels, nil),
+			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxNoOfPodsToEvictPerNamespace: &uint1,
+		},
+		{
+			description:                    "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 1, no pod evicted since pod terminting",
+			expectedEvictedPodCount:        1,
+			strategy:                       requiredDuringSchedulingIgnoredDuringExecutionStrategy,
+			pods:                           addPodsToNode(nodeWithoutLabels, &metav1.Time{}),
+			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxNoOfPodsToEvictPerNamespace: &uint1,
+		},
+		{
 			description:             "Pod is scheduled on node without matching labels, but no node where pod fits is available, should not evict",
 			expectedEvictedPodCount: 0,
 			strategy:                requiredDuringSchedulingIgnoredDuringExecutionWithNodeFitStrategy,
@@ -184,6 +201,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			policyv1.SchemeGroupVersion.String(),
 			false,
 			tc.maxPodsToEvictPerNode,
+			tc.maxNoOfPodsToEvictPerNamespace,
 			tc.nodes,
 			false,
 			false,

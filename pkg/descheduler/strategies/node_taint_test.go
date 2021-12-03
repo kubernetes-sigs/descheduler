@@ -119,14 +119,15 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	var uint1 uint = 1
 
 	tests := []struct {
-		description             string
-		nodes                   []*v1.Node
-		pods                    []v1.Pod
-		evictLocalStoragePods   bool
-		evictSystemCriticalPods bool
-		maxPodsToEvictPerNode   *uint
-		expectedEvictedPodCount uint
-		nodeFit                 bool
+		description                    string
+		nodes                          []*v1.Node
+		pods                           []v1.Pod
+		evictLocalStoragePods          bool
+		evictSystemCriticalPods        bool
+		maxPodsToEvictPerNode          *uint
+		maxNoOfPodsToEvictPerNamespace *uint
+		expectedEvictedPodCount        uint
+		nodeFit                        bool
 	}{
 
 		{
@@ -153,6 +154,15 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			evictSystemCriticalPods: false,
 			maxPodsToEvictPerNode:   &uint1,
 			expectedEvictedPodCount: 1, //p5 or p6 gets evicted
+		},
+		{
+			description:                    "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
+			pods:                           []v1.Pod{*p1, *p5, *p6},
+			nodes:                          []*v1.Node{node1},
+			evictLocalStoragePods:          false,
+			evictSystemCriticalPods:        false,
+			maxNoOfPodsToEvictPerNamespace: &uint1,
+			expectedEvictedPodCount:        1, //p5 or p6 gets evicted
 		},
 		{
 			description:             "Critical pods not tolerating node taint should not be evicted",
@@ -228,6 +238,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			policyv1.SchemeGroupVersion.String(),
 			false,
 			tc.maxPodsToEvictPerNode,
+			tc.maxNoOfPodsToEvictPerNamespace,
 			tc.nodes,
 			tc.evictLocalStoragePods,
 			tc.evictSystemCriticalPods,
