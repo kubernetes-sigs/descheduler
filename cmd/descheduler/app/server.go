@@ -49,7 +49,6 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 		Long:  `The descheduler evicts pods which may be bound to less desired nodes`,
 		Run: func(cmd *cobra.Command, args []string) {
 			s.Logs.Config.Format = s.Logging.Format
-			s.Logs.Apply()
 
 			// LoopbackClientConfig is a config for a privileged loopback connection
 			var LoopbackClientConfig *restclient.Config
@@ -59,7 +58,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 				return
 			}
 
-			if err := s.Validate(); err != nil {
+			if err := s.ValidateAndApply(); err != nil {
 				klog.ErrorS(err, "failed to validate server configuration")
 				return
 			}

@@ -62,9 +62,9 @@ func NewDeschedulerServer() (*DeschedulerServer, error) {
 }
 
 // Validation checks for DeschedulerServer.
-func (s *DeschedulerServer) Validate() error {
+func (s *DeschedulerServer) ValidateAndApply() error {
 	var errs []error
-	errs = append(errs, s.Logs.Validate()...)
+	errs = append(errs, s.Logs.ValidateAndApply())
 	return utilerrors.NewAggregate(errs)
 }
 
