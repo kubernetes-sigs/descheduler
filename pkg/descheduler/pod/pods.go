@@ -22,13 +22,13 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/labels"
+	corelisterv1 "k8s.io/client-go/listers/core/v1"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 type Options struct {
-	filter             func(pod *v1.Pod) bool
+	filters            []func(pod *v1.Pod) bool
 	includedNamespaces []string
 	excludedNamespaces []string
 	labelSelector      *metav1.LabelSelector
@@ -38,7 +38,15 @@ type Options struct {
 // The filter function should return true if the pod should be returned from ListPodsOnANode
 func WithFilter(filter func(pod *v1.Pod) bool) func(opts *Options) {
 	return func(opts *Options) {
-		opts.filter = filter
+		opts.filters = append(opts.filters, filter)
+	}
+}
+
+func WithRunningPodsFilter() func(opts *Options) {
+	return func(opts *Options) {
+		opts.filters = append(opts.filters, func(pod *v1.Pod) bool {
+			return pod.Status.Phase != v1.PodSucceeded && pod.Status.Phase != v1.PodFailed
+		})
 	}
 }
 
@@ -69,21 +77,8 @@ func WithLabelSelector(labelSelector *metav1.LabelSelector) func(opts *Options) 
 // be used by strategies to extend it if there are further restrictions, such as with NodeAffinity).
 func ListPodsOnANode(
 	ctx context.Context,
-	client clientset.Interface,
+	podLister corelisterv1.PodLister,
 	node *v1.Node,
-	opts ...func(opts *Options),
-) ([]*v1.Pod, error) {
-	fieldSelectorString := "spec.nodeName=" + node.Name + ",status.phase!=" + string(v1.PodSucceeded) + ",status.phase!=" + string(v1.PodFailed)
-
-	return ListPodsOnANodeWithFieldSelector(ctx, client, node, fieldSelectorString, opts...)
-}
-
-// ListPodsOnANodeWithFieldSelector lists all of the pods on a node using the filter selectors
-func ListPodsOnANodeWithFieldSelector(
-	ctx context.Context,
-	client clientset.Interface,
-	node *v1.Node,
-	fieldSelectorString string,
 	opts ...func(opts *Options),
 ) ([]*v1.Pod, error) {
 	options := &Options{}
@@ -93,73 +88,88 @@ func ListPodsOnANodeWithFieldSelector(
 
 	pods := make([]*v1.Pod, 0)
 
-	labelSelectorString := ""
+	labelSelector := labels.Everything()
 	if options.labelSelector != nil {
 		selector, err := metav1.LabelSelectorAsSelector(options.labelSelector)
 		if err != nil {
 			return []*v1.Pod{}, err
 		}
-		labelSelectorString = selector.String()
+		labelSelector = selector
 	}
 
 	if len(options.includedNamespaces) > 0 {
-		fieldSelector, err := fields.ParseSelector(fieldSelectorString)
-		if err != nil {
-			return []*v1.Pod{}, err
-		}
-
 		for _, namespace := range options.includedNamespaces {
-			podList, err := client.CoreV1().Pods(namespace).List(ctx,
-				metav1.ListOptions{
-					FieldSelector: fieldSelector.String(),
-					LabelSelector: labelSelectorString,
-				})
+			podList, err := podLister.Pods(namespace).List(labelSelector)
 			if err != nil {
 				return []*v1.Pod{}, err
 			}
-			for i := range podList.Items {
-				if options.filter != nil && !options.filter(&podList.Items[i]) {
+		filterLoopInN:
+			for i := range podList {
+				if podList[i].Spec.NodeName != node.Name {
 					continue
 				}
-				pods = append(pods, &podList.Items[i])
+				if options.filters != nil {
+					for _, filter := range options.filters {
+						if !filter(podList[i]) {
+							continue filterLoopInN
+						}
+					}
+				}
+				pods = append(pods, podList[i])
 			}
 		}
 		return pods, nil
 	}
 
 	if len(options.excludedNamespaces) > 0 {
-		for _, namespace := range options.excludedNamespaces {
-			fieldSelectorString += ",metadata.namespace!=" + namespace
+		podList, err := podLister.Pods(metav1.NamespaceAll).List(labelSelector)
+		if err != nil {
+			return []*v1.Pod{}, err
 		}
-	}
-
-	fieldSelector, err := fields.ParseSelector(fieldSelectorString)
-	if err != nil {
-		return []*v1.Pod{}, err
+	filterLoopExN:
+		for i := range podList {
+			if podList[i].Spec.NodeName != node.Name {
+				continue
+			}
+			for _, namespace := range options.excludedNamespaces {
+				if podList[i].Namespace == namespace {
+					continue filterLoopExN
+				}
+			}
+			if options.filters != nil {
+				for _, filter := range options.filters {
+					if !filter(podList[i]) {
+						continue filterLoopExN
+					}
+				}
+			}
+			pods = append(pods, podList[i])
+		}
+		return pods, nil
 	}
 
 	// INFO(jchaloup): field selectors do not work properly with listers
 	// Once the descheduler switches to pod listers (through informers),
 	// We need to flip to client-side filtering.
-	podList, err := client.CoreV1().Pods(v1.NamespaceAll).List(ctx,
-		metav1.ListOptions{
-			FieldSelector: fieldSelector.String(),
-			LabelSelector: labelSelectorString,
-		})
+	podList, err := podLister.Pods(v1.NamespaceAll).List(labelSelector)
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
-
-	for i := range podList.Items {
+filterLoop:
+	for i := range podList {
 		// fake client does not support field selectors
 		// so let's filter based on the node name as well (quite cheap)
-		if podList.Items[i].Spec.NodeName != node.Name {
+		if podList[i].Spec.NodeName != node.Name {
 			continue
 		}
-		if options.filter != nil && !options.filter(&podList.Items[i]) {
-			continue
+		if options.filters != nil {
+			for _, filter := range options.filters {
+				if !filter(podList[i]) {
+					continue filterLoop
+				}
+			}
 		}
-		pods = append(pods, &podList.Items[i])
+		pods = append(pods, podList[i])
 	}
 	return pods, nil
 }
