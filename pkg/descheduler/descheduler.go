@@ -271,6 +271,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			evictSystemCriticalPods,
 			ignorePvcPods,
 			evictBarePods,
+			!rs.DisableMetrics,
 		)
 
 		for name, strategy := range deschedulerPolicy.Strategies {
