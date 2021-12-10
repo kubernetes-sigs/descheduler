@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
@@ -49,7 +50,7 @@ func validateRemovePodsHavingTooManyRestartsParams(params *api.StrategyParameter
 // RemovePodsHavingTooManyRestarts removes the pods that have too many restarts on node.
 // There are too many cases leading this issue: Volume mount failed, app error due to nodes' different settings.
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
-func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	if err := validateRemovePodsHavingTooManyRestartsParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsHavingTooManyRestarts parameters")
 		return
@@ -61,10 +62,10 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 		return
 	}
 
-	var includedNamespaces, excludedNamespaces []string
+	var includedNamespaces, excludedNamespaces sets.String
 	if strategy.Params.Namespaces != nil {
-		includedNamespaces = strategy.Params.Namespaces.Include
-		excludedNamespaces = strategy.Params.Namespaces.Exclude
+		includedNamespaces = sets.NewString(strategy.Params.Namespaces.Include...)
+		excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
 	}
 
 	nodeFit := false
@@ -74,17 +75,20 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
 
+	podFilter, err := podutil.NewOptions().
+		WithFilter(evictable.IsEvictable).
+		WithNamespaces(includedNamespaces).
+		WithoutNamespaces(excludedNamespaces).
+		WithLabelSelector(strategy.Params.LabelSelector).
+		BuildFilterFunc()
+	if err != nil {
+		klog.ErrorS(err, "Error initializing pod filter function")
+		return
+	}
+
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
-		pods, err := podutil.ListPodsOnANode(
-			ctx,
-			client,
-			node,
-			podutil.WithFilter(evictable.IsEvictable),
-			podutil.WithNamespaces(includedNamespaces),
-			podutil.WithoutNamespaces(excludedNamespaces),
-			podutil.WithLabelSelector(strategy.Params.LabelSelector),
-		)
+		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, podFilter)
 		if err != nil {
 			klog.ErrorS(err, "Error listing a nodes pods", "node", klog.KObj(node))
 			continue
