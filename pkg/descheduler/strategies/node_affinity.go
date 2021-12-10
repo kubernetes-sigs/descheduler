@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
@@ -47,7 +48,7 @@ func validatePodsViolatingNodeAffinityParams(params *api.StrategyParameters) err
 }
 
 // RemovePodsViolatingNodeAffinity evicts pods on nodes which violate node affinity
-func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	if err := validatePodsViolatingNodeAffinityParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsViolatingNodeAffinity parameters")
 		return
@@ -58,10 +59,10 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 		return
 	}
 
-	var includedNamespaces, excludedNamespaces []string
+	var includedNamespaces, excludedNamespaces sets.String
 	if strategy.Params.Namespaces != nil {
-		includedNamespaces = strategy.Params.Namespaces.Include
-		excludedNamespaces = strategy.Params.Namespaces.Exclude
+		includedNamespaces = sets.NewString(strategy.Params.Namespaces.Include...)
+		excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
 	}
 
 	nodeFit := false
@@ -70,6 +71,16 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 	}
 
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
+
+	podFilter, err := podutil.NewOptions().
+		WithNamespaces(includedNamespaces).
+		WithoutNamespaces(excludedNamespaces).
+		WithLabelSelector(strategy.Params.LabelSelector).
+		BuildFilterFunc()
+	if err != nil {
+		klog.ErrorS(err, "Error initializing pod filter function")
+		return
+	}
 
 	for _, nodeAffinity := range strategy.Params.NodeAffinityType {
 		klog.V(2).InfoS("Executing for nodeAffinityType", "nodeAffinity", nodeAffinity)
@@ -80,17 +91,13 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 				klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 
 				pods, err := podutil.ListPodsOnANode(
-					ctx,
-					client,
-					node,
-					podutil.WithFilter(func(pod *v1.Pod) bool {
+					node.Name,
+					getPodsAssignedToNode,
+					podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
 						return evictable.IsEvictable(pod) &&
 							!nodeutil.PodFitsCurrentNode(pod, node) &&
 							nodeutil.PodFitsAnyNode(pod, nodes)
 					}),
-					podutil.WithNamespaces(includedNamespaces),
-					podutil.WithoutNamespaces(excludedNamespaces),
-					podutil.WithLabelSelector(strategy.Params.LabelSelector),
 				)
 				if err != nil {
 					klog.ErrorS(err, "Failed to get pods", "node", klog.KObj(node))
