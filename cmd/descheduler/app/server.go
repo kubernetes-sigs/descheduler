@@ -19,7 +19,6 @@ package app
 
 import (
 	"context"
-	"flag"
 	"io"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
@@ -30,7 +29,6 @@ import (
 	apiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/server/mux"
 	restclient "k8s.io/client-go/rest"
-	aflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/klog/v2"
 )
@@ -82,8 +80,6 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 	}
 	cmd.SetOut(out)
 	flags := cmd.Flags()
-	flags.SetNormalizeFunc(aflag.WordSepNormalizeFunc)
-	flags.AddGoFlagSet(flag.CommandLine)
 	s.AddFlags(flags)
 	return cmd
 }
