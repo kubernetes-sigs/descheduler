@@ -39,7 +39,7 @@ import (
 func TestRemoveDuplicates(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, _, stopCh := initializeClient(t)
+	clientSet, _, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
@@ -164,6 +164,7 @@ func TestRemoveDuplicates(t *testing.T) {
 				},
 				workerNodes,
 				podEvictor,
+				getPodsAssignedToNode,
 			)
 
 			waitForTerminatingPodsToDisappear(ctx, t, clientSet, testNamespace.Name)
