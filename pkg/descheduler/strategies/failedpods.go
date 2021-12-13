@@ -3,12 +3,14 @@ package strategies
 import (
 	"context"
 	"fmt"
+
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	clientset "k8s.io/client-go/kubernetes"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -30,6 +32,7 @@ type validatedFailedPodsStrategyParams struct {
 func RemoveFailedPods(
 	ctx context.Context,
 	client clientset.Interface,
+	podLister listersv1.PodLister,
 	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
@@ -53,13 +56,14 @@ func RemoveFailedPods(
 
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
-		fieldSelectorString := "spec.nodeName=" + node.Name + ",status.phase=" + string(v1.PodFailed)
 
-		pods, err := podutil.ListPodsOnANodeWithFieldSelector(
+		pods, err := podutil.ListPodsOnANode(
 			ctx,
-			client,
+			podLister,
 			node,
-			fieldSelectorString,
+			podutil.WithFilter(func(pod *v1.Pod) bool {
+				return pod.Status.Phase == v1.PodFailed
+			}),
 			podutil.WithFilter(evictable.IsEvictable),
 			podutil.WithNamespaces(strategyParams.IncludedNamespaces.UnsortedList()),
 			podutil.WithoutNamespaces(strategyParams.ExcludedNamespaces.UnsortedList()),

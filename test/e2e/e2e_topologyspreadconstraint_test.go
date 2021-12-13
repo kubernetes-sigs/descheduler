@@ -9,6 +9,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/informers"
 
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
@@ -79,11 +80,15 @@ func TestTopologySpreadConstraint(t *testing.T) {
 
 			podEvictor := initPodEvictorOrFail(t, clientSet, nodes)
 
+			sharedInformerFactory := informers.NewSharedInformerFactory(clientSet, 0)
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 			// Run TopologySpreadConstraint strategy
 			t.Logf("Running RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
 			strategies.RemovePodsViolatingTopologySpreadConstraint(
 				ctx,
 				clientSet,
+				sharedInformerFactory.Core().V1().Pods().Lister(),
 				deschedulerapi.DeschedulerStrategy{
 					Enabled: true,
 					Params: &deschedulerapi.StrategyParameters{

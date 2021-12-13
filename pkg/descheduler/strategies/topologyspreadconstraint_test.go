@@ -9,7 +9,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	core "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/test"
@@ -893,7 +895,17 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				false,
 				false,
 			)
-			RemovePodsViolatingTopologySpreadConstraint(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor)
+
+			indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
+				cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
+			})
+			for _, pod := range tc.pods {
+				if err := indexer.Add(pod); err != nil {
+					t.Fatal(err.Error())
+				}
+			}
+
+			RemovePodsViolatingTopologySpreadConstraint(ctx, fakeClient, listersv1.NewPodLister(indexer), tc.strategy, tc.nodes, podEvictor)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != tc.expectedEvictedCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.name, tc.expectedEvictedCount, podsEvicted)

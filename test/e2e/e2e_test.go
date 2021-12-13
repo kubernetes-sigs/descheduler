@@ -147,10 +147,15 @@ func runPodLifetimeStrategy(
 		t.Fatalf("%v", err)
 	}
 
+	sharedInformerFactory := informers.NewSharedInformerFactory(clientset, 0)
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
 	maxPodLifeTimeSeconds := uint(1)
 	strategies.PodLifeTime(
 		ctx,
 		clientset,
+		sharedInformerFactory.Core().V1().Pods().Lister(),
 		deschedulerapi.DeschedulerStrategy{
 			Enabled: true,
 			Params: &deschedulerapi.StrategyParameters{
@@ -293,7 +298,13 @@ func TestLowNodeUtilization(t *testing.T) {
 	// Run LowNodeUtilization strategy
 	podEvictor := initPodEvictorOrFail(t, clientSet, nodes)
 
-	podsOnMosttUtilizedNode, err := podutil.ListPodsOnANode(ctx, clientSet, workerNodes[0], podutil.WithFilter(podEvictor.Evictable().IsEvictable))
+	sharedInformerFactory := informers.NewSharedInformerFactory(clientSet, 0)
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	podLister := sharedInformerFactory.Core().V1().Pods().Lister()
+
+	podsOnMosttUtilizedNode, err := podutil.ListPodsOnANode(ctx, podLister, workerNodes[0], podutil.WithRunningPodsFilter(), podutil.WithFilter(podEvictor.Evictable().IsEvictable))
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}
@@ -303,6 +314,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	nodeutilization.LowNodeUtilization(
 		ctx,
 		clientSet,
+		podLister,
 		deschedulerapi.DeschedulerStrategy{
 			Enabled: true,
 			Params: &deschedulerapi.StrategyParameters{
@@ -322,7 +334,7 @@ func TestLowNodeUtilization(t *testing.T) {
 
 	waitForTerminatingPodsToDisappear(ctx, t, clientSet, rc.Namespace)
 
-	podsOnMosttUtilizedNode, err = podutil.ListPodsOnANode(ctx, clientSet, workerNodes[0], podutil.WithFilter(podEvictor.Evictable().IsEvictable))
+	podsOnMosttUtilizedNode, err = podutil.ListPodsOnANode(ctx, podLister, workerNodes[0], podutil.WithRunningPodsFilter(), podutil.WithFilter(podEvictor.Evictable().IsEvictable))
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}

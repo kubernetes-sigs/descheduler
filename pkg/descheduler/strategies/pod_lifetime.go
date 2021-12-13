@@ -23,6 +23,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -56,7 +57,7 @@ func validatePodLifeTimeParams(params *api.StrategyParameters) error {
 }
 
 // PodLifeTime evicts pods on nodes that were created more than strategy.Params.MaxPodLifeTimeSeconds seconds ago.
-func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+func PodLifeTime(ctx context.Context, client clientset.Interface, podLister listersv1.PodLister, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	if err := validatePodLifeTimeParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid PodLifeTime parameters")
 		return
@@ -91,7 +92,7 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 
-		pods := listOldPodsOnNode(ctx, client, node, includedNamespaces, excludedNamespaces, strategy.Params.LabelSelector, *strategy.Params.PodLifeTime.MaxPodLifeTimeSeconds, filter)
+		pods := listOldPodsOnNode(ctx, podLister, node, includedNamespaces, excludedNamespaces, strategy.Params.LabelSelector, *strategy.Params.PodLifeTime.MaxPodLifeTimeSeconds, filter)
 		for _, pod := range pods {
 			success, err := podEvictor.EvictPod(ctx, pod, node, "PodLifeTime")
 			if success {
@@ -109,7 +110,7 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 
 func listOldPodsOnNode(
 	ctx context.Context,
-	client clientset.Interface,
+	podLister listersv1.PodLister,
 	node *v1.Node,
 	includedNamespaces, excludedNamespaces []string,
 	labelSelector *metav1.LabelSelector,
@@ -118,7 +119,7 @@ func listOldPodsOnNode(
 ) []*v1.Pod {
 	pods, err := podutil.ListPodsOnANode(
 		ctx,
-		client,
+		podLister,
 		node,
 		podutil.WithFilter(filter),
 		podutil.WithNamespaces(includedNamespaces),

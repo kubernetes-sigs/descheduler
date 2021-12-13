@@ -25,16 +25,16 @@ import (
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	core "k8s.io/client-go/testing"
+	listersv1 "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/test"
 )
 
-func initPods(node *v1.Node) []v1.Pod {
-	pods := make([]v1.Pod, 0)
+func initPods(node *v1.Node) []*v1.Pod {
+	pods := make([]*v1.Pod, 0)
 
 	for i := int32(0); i <= 9; i++ {
 		pod := test.BuildTestPod(fmt.Sprintf("pod-%d", i), 100, 0, node.Name, nil)
@@ -56,7 +56,7 @@ func initPods(node *v1.Node) []v1.Pod {
 				},
 			},
 		}
-		pods = append(pods, *pod)
+		pods = append(pods, pod)
 	}
 
 	// The following 3 pods won't get evicted.
@@ -98,8 +98,6 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			Unschedulable: true,
 		}
 	})
-
-	pods := initPods(node1)
 
 	createStrategy := func(enabled, includingInitContainers bool, restartThresholds int32, nodeFit bool) api.DeschedulerStrategy {
 		return api.DeschedulerStrategy{
@@ -203,12 +201,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-
 		fakeClient := &fake.Clientset{}
-		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-			return true, &v1.PodList{Items: pods}, nil
-		})
-
 		podEvictor := evictions.NewPodEvictor(
 			fakeClient,
 			policyv1.SchemeGroupVersion.String(),
@@ -220,8 +213,16 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			false,
 			false,
 		)
+		indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
+			cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
+		})
+		for _, pod := range initPods(node1) {
+			if err := indexer.Add(pod); err != nil {
+				t.Fatal(err.Error())
+			}
+		}
 
-		RemovePodsHavingTooManyRestarts(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor)
+		RemovePodsHavingTooManyRestarts(ctx, fakeClient, listersv1.NewPodLister(indexer), tc.strategy, tc.nodes, podEvictor)
 		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)

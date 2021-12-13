@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
@@ -64,11 +65,12 @@ func Run(rs *options.DeschedulerServer) error {
 	return RunDeschedulerStrategies(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel)
 }
 
-type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor)
+type strategyFunction func(ctx context.Context, client clientset.Interface, podLister listersv1.PodLister, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor)
 
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, stopChannel chan struct{}) error {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
 	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
+	podLister := sharedInformerFactory.Core().V1().Pods().Lister()
 
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
@@ -138,7 +140,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		for name, strategy := range deschedulerPolicy.Strategies {
 			if f, ok := strategyFuncs[name]; ok {
 				if strategy.Enabled {
-					f(ctx, rs.Client, strategy, nodes, podEvictor)
+					f(ctx, rs.Client, podLister, strategy, nodes, podEvictor)
 				}
 			} else {
 				klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)

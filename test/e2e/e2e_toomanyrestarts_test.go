@@ -27,6 +27,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -141,11 +142,15 @@ func TestTooManyRestarts(t *testing.T) {
 				false,
 				false,
 			)
+			sharedInformerFactory := informers.NewSharedInformerFactory(clientSet, 0)
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 			// Run RemovePodsHavingTooManyRestarts strategy
 			t.Log("Running RemovePodsHavingTooManyRestarts strategy")
 			strategies.RemovePodsHavingTooManyRestarts(
 				ctx,
 				clientSet,
+				sharedInformerFactory.Core().V1().Pods().Lister(),
 				deschedulerapi.DeschedulerStrategy{
 					Enabled: true,
 					Params: &deschedulerapi.StrategyParameters{

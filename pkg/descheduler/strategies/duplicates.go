@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -63,6 +64,7 @@ type podOwner struct {
 func RemoveDuplicatePods(
 	ctx context.Context,
 	client clientset.Interface,
+	podLister listersv1.PodLister,
 	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
@@ -98,8 +100,9 @@ func RemoveDuplicatePods(
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListPodsOnANode(ctx,
-			client,
+			podLister,
 			node,
+			podutil.WithRunningPodsFilter(),
 			podutil.WithFilter(evictable.IsEvictable),
 			podutil.WithNamespaces(includedNamespaces),
 			podutil.WithoutNamespaces(excludedNamespaces),

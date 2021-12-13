@@ -22,6 +22,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -47,7 +48,7 @@ func validatePodsViolatingNodeAffinityParams(params *api.StrategyParameters) err
 }
 
 // RemovePodsViolatingNodeAffinity evicts pods on nodes which violate node affinity
-func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, podLister listersv1.PodLister, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	if err := validatePodsViolatingNodeAffinityParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsViolatingNodeAffinity parameters")
 		return
@@ -81,7 +82,7 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 
 				pods, err := podutil.ListPodsOnANode(
 					ctx,
-					client,
+					podLister,
 					node,
 					podutil.WithFilter(func(pod *v1.Pod) bool {
 						return evictable.IsEvictable(pod) &&

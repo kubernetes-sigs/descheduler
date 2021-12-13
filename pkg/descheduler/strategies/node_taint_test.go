@@ -8,9 +8,9 @@ import (
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	core "k8s.io/client-go/testing"
+	listersv1 "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -121,7 +121,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	tests := []struct {
 		description                    string
 		nodes                          []*v1.Node
-		pods                           []v1.Pod
+		pods                           []*v1.Pod
 		evictLocalStoragePods          bool
 		evictSystemCriticalPods        bool
 		maxPodsToEvictPerNode          *uint
@@ -132,7 +132,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 
 		{
 			description:             "Pods not tolerating node taint should be evicted",
-			pods:                    []v1.Pod{*p1, *p2, *p3},
+			pods:                    []*v1.Pod{p1, p2, p3},
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
@@ -140,7 +140,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description:             "Pods with tolerations but not tolerating node taint should be evicted",
-			pods:                    []v1.Pod{*p1, *p3, *p4},
+			pods:                    []*v1.Pod{p1, p3, p4},
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
@@ -148,7 +148,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description:             "Only <maxPodsToEvictPerNode> number of Pods not tolerating node taint should be evicted",
-			pods:                    []v1.Pod{*p1, *p5, *p6},
+			pods:                    []*v1.Pod{p1, p5, p6},
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
@@ -157,7 +157,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description:                    "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
-			pods:                           []v1.Pod{*p1, *p5, *p6},
+			pods:                           []*v1.Pod{p1, p5, p6},
 			nodes:                          []*v1.Node{node1},
 			evictLocalStoragePods:          false,
 			evictSystemCriticalPods:        false,
@@ -166,7 +166,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description:             "Critical pods not tolerating node taint should not be evicted",
-			pods:                    []v1.Pod{*p7, *p8, *p9, *p10},
+			pods:                    []*v1.Pod{p7, p8, p9, p10},
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
@@ -174,7 +174,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description:             "Critical pods except storage pods not tolerating node taint should not be evicted",
-			pods:                    []v1.Pod{*p7, *p8, *p9, *p10},
+			pods:                    []*v1.Pod{p7, p8, p9, p10},
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   true,
 			evictSystemCriticalPods: false,
@@ -182,7 +182,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description:             "Critical and non critical pods, only non critical pods not tolerating node taint should be evicted",
-			pods:                    []v1.Pod{*p7, *p8, *p10, *p11},
+			pods:                    []*v1.Pod{p7, p8, p10, p11},
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
@@ -190,7 +190,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description:             "Critical and non critical pods, pods not tolerating node taint should be evicted even if they are critical",
-			pods:                    []v1.Pod{*p2, *p7, *p9, *p10},
+			pods:                    []*v1.Pod{p2, p7, p9, p10},
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: true,
@@ -198,7 +198,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description:             "Pod p2 doesn't tolerate taint on it's node, but also doesn't tolerate taints on other nodes",
-			pods:                    []v1.Pod{*p1, *p2, *p3},
+			pods:                    []*v1.Pod{p1, p2, p3},
 			nodes:                   []*v1.Node{node1, node2},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
@@ -207,7 +207,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description:             "Pod p12 doesn't tolerate taint on it's node, but other nodes don't match it's selector",
-			pods:                    []v1.Pod{*p1, *p3, *p12},
+			pods:                    []*v1.Pod{p1, p3, p12},
 			nodes:                   []*v1.Node{node1, node3},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
@@ -216,7 +216,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description:             "Pod p2 doesn't tolerate taint on it's node, but other nodes are unschedulable",
-			pods:                    []v1.Pod{*p1, *p2, *p3},
+			pods:                    []*v1.Pod{p1, p2, p3},
 			nodes:                   []*v1.Node{node1, node4},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
@@ -229,9 +229,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 
 		// create fake client
 		fakeClient := &fake.Clientset{}
-		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-			return true, &v1.PodList{Items: tc.pods}, nil
-		})
 
 		podEvictor := evictions.NewPodEvictor(
 			fakeClient,
@@ -245,13 +242,22 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			false,
 		)
 
+		indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
+			cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
+		})
+		for _, pod := range tc.pods {
+			if err := indexer.Add(pod); err != nil {
+				t.Fatal(err.Error())
+			}
+		}
+
 		strategy := api.DeschedulerStrategy{
 			Params: &api.StrategyParameters{
 				NodeFit: tc.nodeFit,
 			},
 		}
 
-		RemovePodsViolatingNodeTaints(ctx, fakeClient, strategy, tc.nodes, podEvictor)
+		RemovePodsViolatingNodeTaints(ctx, fakeClient, listersv1.NewPodLister(indexer), strategy, tc.nodes, podEvictor)
 		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)

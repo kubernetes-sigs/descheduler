@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -51,6 +52,7 @@ type topology struct {
 func RemovePodsViolatingTopologySpreadConstraint(
 	ctx context.Context,
 	client clientset.Interface,
+	podLister listersv1.PodLister,
 	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
@@ -98,7 +100,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 			(len(strategyParams.ExcludedNamespaces) > 0 && strategyParams.ExcludedNamespaces.Has(namespace.Name)) {
 			continue
 		}
-		namespacePods, err := client.CoreV1().Pods(namespace.Name).List(ctx, metav1.ListOptions{})
+		namespacePods, err := podLister.Pods(namespace.Name).List(labels.Everything())
 		if err != nil {
 			klog.ErrorS(err, "Couldn't list pods in namespace", "namespace", namespace)
 			continue
@@ -106,7 +108,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 
 		// ...where there is a topology constraint
 		namespaceTopologySpreadConstraints := make(map[v1.TopologySpreadConstraint]struct{})
-		for _, pod := range namespacePods.Items {
+		for _, pod := range namespacePods {
 			for _, constraint := range pod.Spec.TopologySpreadConstraints {
 				// Ignore soft topology constraints if they are not included
 				if constraint.WhenUnsatisfiable == v1.ScheduleAnyway && (strategy.Params == nil || !strategy.Params.IncludeSoftConstraints) {
@@ -139,18 +141,18 @@ func RemovePodsViolatingTopologySpreadConstraint(
 			// 3. for each evictable pod in that namespace
 			// (this loop is where we count the number of pods per topologyValue that match this constraint's selector)
 			var sumPods float64
-			for i := range namespacePods.Items {
+			for i := range namespacePods {
 				// skip pods that are being deleted.
-				if utils.IsPodTerminating(&namespacePods.Items[i]) {
+				if utils.IsPodTerminating(namespacePods[i]) {
 					continue
 				}
 				// 4. if the pod matches this TopologySpreadConstraint LabelSelector
-				if !selector.Matches(labels.Set(namespacePods.Items[i].Labels)) {
+				if !selector.Matches(labels.Set(namespacePods[i].Labels)) {
 					continue
 				}
 
 				// 5. If the pod's node matches this constraint'selector topologyKey, create a topoPair and add the pod
-				node, ok := nodeMap[namespacePods.Items[i].Spec.NodeName]
+				node, ok := nodeMap[namespacePods[i].Spec.NodeName]
 				if !ok {
 					// If ok is false, node is nil in which case node.Labels will panic. In which case a pod is yet to be scheduled. So it's safe to just continue here.
 					continue
@@ -162,7 +164,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 				// 6. create a topoPair with key as this TopologySpreadConstraint
 				topoPair := topologyPair{key: constraint.TopologyKey, value: nodeValue}
 				// 7. add the pod with key as this topoPair
-				constraintTopologies[topoPair] = append(constraintTopologies[topoPair], &namespacePods.Items[i])
+				constraintTopologies[topoPair] = append(constraintTopologies[topoPair], namespacePods[i])
 				sumPods++
 			}
 			if topologyIsBalanced(constraintTopologies, constraint) {

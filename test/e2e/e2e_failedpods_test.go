@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
@@ -85,10 +86,15 @@ func TestFailedPods(t *testing.T) {
 
 			podEvictor := initPodEvictorOrFail(t, clientSet, nodes)
 
+			sharedInformerFactory := informers.NewSharedInformerFactory(clientSet, 0)
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
 			t.Logf("Running RemoveFailedPods strategy for %s", name)
 			strategies.RemoveFailedPods(
 				ctx,
 				clientSet,
+				sharedInformerFactory.Core().V1().Pods().Lister(),
 				deschedulerapi.DeschedulerStrategy{
 					Enabled: true,
 					Params:  tc.strategyParams,

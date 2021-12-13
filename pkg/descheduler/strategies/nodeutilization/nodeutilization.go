@@ -19,15 +19,16 @@ package nodeutilization
 import (
 	"context"
 	"fmt"
+	"sort"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	clientset "k8s.io/client-go/kubernetes"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
-	"sort"
 )
 
 // NodeUsage stores a node's info, pods on it, thresholds and its resource usage
@@ -78,7 +79,7 @@ func validateThresholds(thresholds api.ResourceThresholds) error {
 
 func getNodeUsage(
 	ctx context.Context,
-	client clientset.Interface,
+	podLister listersv1.PodLister,
 	nodes []*v1.Node,
 	lowThreshold, highThreshold api.ResourceThresholds,
 	resourceNames []v1.ResourceName,
@@ -86,7 +87,7 @@ func getNodeUsage(
 	var nodeUsageList []NodeUsage
 
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(ctx, client, node)
+		pods, err := podutil.ListPodsOnANode(ctx, podLister, node)
 		if err != nil {
 			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
 			continue

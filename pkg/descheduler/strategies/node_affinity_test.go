@@ -23,9 +23,9 @@ import (
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	core "k8s.io/client-go/testing"
+	listersv1 "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/test"
@@ -63,7 +63,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	unschedulableNodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
 	unschedulableNodeWithLabels.Spec.Unschedulable = true
 
-	addPodsToNode := func(node *v1.Node, deletionTimestamp *metav1.Time) []v1.Pod {
+	addPodsToNode := func(node *v1.Node, deletionTimestamp *metav1.Time) []*v1.Pod {
 		podWithNodeAffinity := test.BuildTestPod("podWithNodeAffinity", 100, 0, node.Name, nil)
 		podWithNodeAffinity.Spec.Affinity = &v1.Affinity{
 			NodeAffinity: &v1.NodeAffinity{
@@ -95,10 +95,10 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		pod1.DeletionTimestamp = deletionTimestamp
 		pod2.DeletionTimestamp = deletionTimestamp
 
-		return []v1.Pod{
-			*podWithNodeAffinity,
-			*pod1,
-			*pod2,
+		return []*v1.Pod{
+			podWithNodeAffinity,
+			pod1,
+			pod2,
 		}
 	}
 
@@ -106,7 +106,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	tests := []struct {
 		description                    string
 		nodes                          []*v1.Node
-		pods                           []v1.Pod
+		pods                           []*v1.Pod
 		strategy                       api.DeschedulerStrategy
 		expectedEvictedPodCount        uint
 		maxPodsToEvictPerNode          *uint
@@ -190,12 +190,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-
 		fakeClient := &fake.Clientset{}
-		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-			return true, &v1.PodList{Items: tc.pods}, nil
-		})
-
 		podEvictor := evictions.NewPodEvictor(
 			fakeClient,
 			policyv1.SchemeGroupVersion.String(),
@@ -208,7 +203,16 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			false,
 		)
 
-		RemovePodsViolatingNodeAffinity(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor)
+		indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
+			cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
+		})
+		for _, pod := range tc.pods {
+			if err := indexer.Add(pod); err != nil {
+				t.Fatal(err.Error())
+			}
+		}
+
+		RemovePodsViolatingNodeAffinity(ctx, fakeClient, listersv1.NewPodLister(indexer), tc.strategy, tc.nodes, podEvictor)
 		actualEvictedPodCount := podEvictor.TotalEvicted()
 		if actualEvictedPodCount != tc.expectedEvictedPodCount {
 			t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)
