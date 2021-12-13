@@ -110,7 +110,7 @@ type PodLifeTime struct {
 
 type FailedPods struct {
 	ExcludeOwnerKinds       []string `json:"excludeOwnerKinds,omitempty"`
-	MinPodLifetimeSeconds   *uint    `json:"minPodLifetimeSeconds,omitempty"`
+	MinPodLifeTimeSeconds   *uint    `json:"minPodLifeTimeSeconds,omitempty"`
 	Reasons                 []string `json:"reasons,omitempty"`
 	IncludingInitContainers bool     `json:"includingInitContainers,omitempty"`
 }

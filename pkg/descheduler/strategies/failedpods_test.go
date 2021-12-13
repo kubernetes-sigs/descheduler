@@ -31,7 +31,7 @@ func TestRemoveFailedPods(t *testing.T) {
 					Reasons:                 reasons,
 					IncludingInitContainers: includingInitContainers,
 					ExcludeOwnerKinds:       excludeKinds,
-					MinPodLifetimeSeconds:   minAgeSeconds,
+					MinPodLifeTimeSeconds:   minAgeSeconds,
 				},
 				NodeFit: nodeFit,
 			},
@@ -256,7 +256,7 @@ func TestValidRemoveFailedPodsParams(t *testing.T) {
 			ExcludeOwnerKinds: []string{"Job"},
 		}}},
 		{name: "validate excludeOwnerKinds params", params: &api.StrategyParameters{FailedPods: &api.FailedPods{
-			MinPodLifetimeSeconds: &OneHourInSeconds,
+			MinPodLifeTimeSeconds: &OneHourInSeconds,
 		}}},
 	}
 	for _, tc := range testCases {

@@ -524,7 +524,7 @@ strategies:
 This strategy evicts pods that are in failed status phase.
 You can provide an optional parameter to filter by failed `reasons`.
 `reasons` can be expanded to include reasons of InitContainers as well by setting the optional parameter `includingInitContainers` to `true`.
-You can specify an optional parameter `minPodLifetimeSeconds` to evict pods that are older than specified seconds.
+You can specify an optional parameter `minPodLifeTimeSeconds` to evict pods that are older than specified seconds.
 Lastly, you can specify the optional parameter `excludeOwnerKinds` and if a pod
 has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
 
@@ -532,7 +532,7 @@ has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considere
 
 |Name|Type|
 |---|---|
-|`minPodLifetimeSeconds`|uint|
+|`minPodLifeTimeSeconds`|uint|
 |`excludeOwnerKinds`|list(string)|
 |`reasons`|list(string)|
 |`includingInitContainers`|bool|
@@ -557,7 +557,7 @@ strategies:
          includingInitContainers: true
          excludeOwnerKinds:
          - "Job"
-         minPodLifetimeSeconds: 3600
+         minPodLifeTimeSeconds: 3600
 ```
 
 ## Filter Pods

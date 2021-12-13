@@ -11,4 +11,4 @@ strategies:
         includingInitContainers: true
         excludeOwnerKinds:
         - "Job"
-        minPodLifetimeSeconds: 3600 # 1 hour
+        minPodLifeTimeSeconds: 3600 # 1 hour

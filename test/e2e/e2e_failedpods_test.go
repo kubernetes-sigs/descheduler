@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 )
 
-var oneHourPodLifetimeSeconds uint = 3600
+var oneHourPodLifeTimeSeconds uint = 3600
 
 func TestFailedPods(t *testing.T) {
 	ctx := context.Background()
@@ -61,7 +61,7 @@ func TestFailedPods(t *testing.T) {
 		"test-failed-pods-min-age-unmet": {
 			expectedEvictedCount: 0,
 			strategyParams: &deschedulerapi.StrategyParameters{
-				FailedPods: &deschedulerapi.FailedPods{MinPodLifetimeSeconds: &oneHourPodLifetimeSeconds},
+				FailedPods: &deschedulerapi.FailedPods{MinPodLifeTimeSeconds: &oneHourPodLifeTimeSeconds},
 			},
 		},
 		"test-failed-pods-exclude-job-kind": {

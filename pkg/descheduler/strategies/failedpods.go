@@ -3,6 +3,7 @@ package strategies
 import (
 	"context"
 	"fmt"
+
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	v1 "k8s.io/api/core/v1"
@@ -23,7 +24,7 @@ type validatedFailedPodsStrategyParams struct {
 	includingInitContainers bool
 	reasons                 sets.String
 	excludeOwnerKinds       sets.String
-	minPodLifetimeSeconds   *uint
+	minPodLifeTimeSeconds   *uint
 }
 
 // RemoveFailedPods removes Pods that are in failed status phase.
@@ -102,12 +103,12 @@ func validateAndParseRemoveFailedPodsParams(
 
 	var reasons, excludeOwnerKinds sets.String
 	var includingInitContainers bool
-	var minPodLifetimeSeconds *uint
+	var minPodLifeTimeSeconds *uint
 	if params.FailedPods != nil {
 		reasons = sets.NewString(params.FailedPods.Reasons...)
 		includingInitContainers = params.FailedPods.IncludingInitContainers
 		excludeOwnerKinds = sets.NewString(params.FailedPods.ExcludeOwnerKinds...)
-		minPodLifetimeSeconds = params.FailedPods.MinPodLifetimeSeconds
+		minPodLifeTimeSeconds = params.FailedPods.MinPodLifeTimeSeconds
 	}
 
 	return &validatedFailedPodsStrategyParams{
@@ -115,7 +116,7 @@ func validateAndParseRemoveFailedPodsParams(
 		includingInitContainers: includingInitContainers,
 		reasons:                 reasons,
 		excludeOwnerKinds:       excludeOwnerKinds,
-		minPodLifetimeSeconds:   minPodLifetimeSeconds,
+		minPodLifeTimeSeconds:   minPodLifeTimeSeconds,
 	}, nil
 }
 
@@ -124,10 +125,10 @@ func validateAndParseRemoveFailedPodsParams(
 func validateFailedPodShouldEvict(pod *v1.Pod, strategyParams validatedFailedPodsStrategyParams) error {
 	var errs []error
 
-	if strategyParams.minPodLifetimeSeconds != nil {
+	if strategyParams.minPodLifeTimeSeconds != nil {
 		podAgeSeconds := uint(metav1.Now().Sub(pod.GetCreationTimestamp().Local()).Seconds())
-		if podAgeSeconds < *strategyParams.minPodLifetimeSeconds {
-			errs = append(errs, fmt.Errorf("pod does not exceed the min age seconds of %d", *strategyParams.minPodLifetimeSeconds))
+		if podAgeSeconds < *strategyParams.minPodLifeTimeSeconds {
+			errs = append(errs, fmt.Errorf("pod does not exceed the min age seconds of %d", *strategyParams.minPodLifeTimeSeconds))
 		}
 	}
 

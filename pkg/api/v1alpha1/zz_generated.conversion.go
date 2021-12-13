@@ -212,7 +212,7 @@ func Convert_api_DeschedulerStrategy_To_v1alpha1_DeschedulerStrategy(in *api.Des
 
 func autoConvert_v1alpha1_FailedPods_To_api_FailedPods(in *FailedPods, out *api.FailedPods, s conversion.Scope) error {
 	out.ExcludeOwnerKinds = *(*[]string)(unsafe.Pointer(&in.ExcludeOwnerKinds))
-	out.MinPodLifetimeSeconds = (*uint)(unsafe.Pointer(in.MinPodLifetimeSeconds))
+	out.MinPodLifeTimeSeconds = (*uint)(unsafe.Pointer(in.MinPodLifeTimeSeconds))
 	out.Reasons = *(*[]string)(unsafe.Pointer(&in.Reasons))
 	out.IncludingInitContainers = in.IncludingInitContainers
 	return nil
@@ -225,7 +225,7 @@ func Convert_v1alpha1_FailedPods_To_api_FailedPods(in *FailedPods, out *api.Fail
 
 func autoConvert_api_FailedPods_To_v1alpha1_FailedPods(in *api.FailedPods, out *FailedPods, s conversion.Scope) error {
 	out.ExcludeOwnerKinds = *(*[]string)(unsafe.Pointer(&in.ExcludeOwnerKinds))
-	out.MinPodLifetimeSeconds = (*uint)(unsafe.Pointer(in.MinPodLifetimeSeconds))
+	out.MinPodLifeTimeSeconds = (*uint)(unsafe.Pointer(in.MinPodLifeTimeSeconds))
 	out.Reasons = *(*[]string)(unsafe.Pointer(&in.Reasons))
 	out.IncludingInitContainers = in.IncludingInitContainers
 	return nil

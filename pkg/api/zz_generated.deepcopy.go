@@ -117,8 +117,8 @@ func (in *FailedPods) DeepCopyInto(out *FailedPods) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	if in.MinPodLifetimeSeconds != nil {
-		in, out := &in.MinPodLifetimeSeconds, &out.MinPodLifetimeSeconds
+	if in.MinPodLifeTimeSeconds != nil {
+		in, out := &in.MinPodLifeTimeSeconds, &out.MinPodLifeTimeSeconds
 		*out = new(uint)
 		**out = **in
 	}

@@ -112,7 +112,7 @@ type PodLifeTime struct {
 
 type FailedPods struct {
 	ExcludeOwnerKinds       []string
-	MinPodLifetimeSeconds   *uint
+	MinPodLifeTimeSeconds   *uint
 	Reasons                 []string
 	IncludingInitContainers bool
 }
