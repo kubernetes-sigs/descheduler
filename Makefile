@@ -24,7 +24,7 @@ ARCHS = amd64 arm arm64
 
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitbranch=${BRANCH} -X ${LDFLAG_LOCATION}.gitsha1=${SHA1}"
 
-GOLANGCI_VERSION := v1.30.0
+GOLANGCI_VERSION := v1.43.0
 HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint 2> /dev/null)
 
 # REGISTRY is the container registry to push
@@ -131,7 +131,7 @@ verify-gen:
 
 lint:
 ifndef HAS_GOLANGCI
-	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b ./_output/bin ${GOLANGCI_VERSION}
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./_output/bin ${GOLANGCI_VERSION}
 endif
 	./_output/bin/golangci-lint run
 
