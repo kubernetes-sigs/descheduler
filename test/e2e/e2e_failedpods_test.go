@@ -21,7 +21,7 @@ var oneHourPodLifetimeSeconds uint = 3600
 
 func TestFailedPods(t *testing.T) {
 	ctx := context.Background()
-	clientSet, _, stopCh := initializeClient(t)
+	clientSet, _, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -95,6 +95,7 @@ func TestFailedPods(t *testing.T) {
 				},
 				nodes,
 				podEvictor,
+				getPodsAssignedToNode,
 			)
 			t.Logf("Finished RemoveFailedPods strategy for %s", name)
 

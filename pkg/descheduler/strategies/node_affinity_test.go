@@ -24,15 +24,16 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	core "k8s.io/client-go/testing"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/test"
 )
 
 func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
-	ctx := context.Background()
 	requiredDuringSchedulingIgnoredDuringExecutionStrategy := api.DeschedulerStrategy{
 		Enabled: true,
 		Params: &api.StrategyParameters{
@@ -63,7 +64,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	unschedulableNodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
 	unschedulableNodeWithLabels.Spec.Unschedulable = true
 
-	addPodsToNode := func(node *v1.Node, deletionTimestamp *metav1.Time) []v1.Pod {
+	addPodsToNode := func(node *v1.Node, deletionTimestamp *metav1.Time) []*v1.Pod {
 		podWithNodeAffinity := test.BuildTestPod("podWithNodeAffinity", 100, 0, node.Name, nil)
 		podWithNodeAffinity.Spec.Affinity = &v1.Affinity{
 			NodeAffinity: &v1.NodeAffinity{
@@ -95,10 +96,10 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		pod1.DeletionTimestamp = deletionTimestamp
 		pod2.DeletionTimestamp = deletionTimestamp
 
-		return []v1.Pod{
-			*podWithNodeAffinity,
-			*pod1,
-			*pod2,
+		return []*v1.Pod{
+			podWithNodeAffinity,
+			pod1,
+			pod2,
 		}
 	}
 
@@ -106,7 +107,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	tests := []struct {
 		description                    string
 		nodes                          []*v1.Node
-		pods                           []v1.Pod
+		pods                           []*v1.Pod
 		strategy                       api.DeschedulerStrategy
 		expectedEvictedPodCount        uint
 		maxPodsToEvictPerNode          *uint
@@ -190,28 +191,47 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-		fakeClient := &fake.Clientset{}
-		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-			return true, &v1.PodList{Items: tc.pods}, nil
+			var objs []runtime.Object
+			for _, node := range tc.nodes {
+				objs = append(objs, node)
+			}
+			for _, pod := range tc.pods {
+				objs = append(objs, pod)
+			}
+			fakeClient := fake.NewSimpleClientset(objs...)
+
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			podInformer := sharedInformerFactory.Core().V1().Pods()
+
+			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			if err != nil {
+				t.Errorf("Build get pods assigned to node function error: %v", err)
+			}
+
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+			podEvictor := evictions.NewPodEvictor(
+				fakeClient,
+				policyv1.SchemeGroupVersion.String(),
+				false,
+				tc.maxPodsToEvictPerNode,
+				tc.maxNoOfPodsToEvictPerNamespace,
+				tc.nodes,
+				false,
+				false,
+				false,
+			)
+
+			RemovePodsViolatingNodeAffinity(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+			actualEvictedPodCount := podEvictor.TotalEvicted()
+			if actualEvictedPodCount != tc.expectedEvictedPodCount {
+				t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)
+			}
 		})
-
-		podEvictor := evictions.NewPodEvictor(
-			fakeClient,
-			policyv1.SchemeGroupVersion.String(),
-			false,
-			tc.maxPodsToEvictPerNode,
-			tc.maxNoOfPodsToEvictPerNamespace,
-			tc.nodes,
-			false,
-			false,
-			false,
-		)
-
-		RemovePodsViolatingNodeAffinity(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor)
-		actualEvictedPodCount := podEvictor.TotalEvicted()
-		if actualEvictedPodCount != tc.expectedEvictedPodCount {
-			t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)
-		}
 	}
 }
