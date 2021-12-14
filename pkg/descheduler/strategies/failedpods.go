@@ -3,11 +3,11 @@ package strategies
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/util/sets"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
@@ -33,6 +33,7 @@ func RemoveFailedPods(
 	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
+	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 ) {
 	strategyParams, err := validateAndParseRemoveFailedPodsParams(ctx, client, strategy.Params)
 	if err != nil {
@@ -51,20 +52,23 @@ func RemoveFailedPods(
 		labelSelector = strategy.Params.LabelSelector
 	}
 
+	podFilter, err := podutil.NewOptions().
+		WithFilter(evictable.IsEvictable).
+		WithNamespaces(strategyParams.IncludedNamespaces).
+		WithoutNamespaces(strategyParams.ExcludedNamespaces).
+		WithLabelSelector(labelSelector).
+		BuildFilterFunc()
+	if err != nil {
+		klog.ErrorS(err, "Error initializing pod filter function")
+		return
+	}
+	// Only list failed pods
+	phaseFilter := func(pod *v1.Pod) bool { return pod.Status.Phase == v1.PodFailed }
+	podFilter = podutil.WrapFilterFuncs(phaseFilter, podFilter)
+
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
-		fieldSelectorString := "spec.nodeName=" + node.Name + ",status.phase=" + string(v1.PodFailed)
-
-		pods, err := podutil.ListPodsOnANodeWithFieldSelector(
-			ctx,
-			client,
-			node,
-			fieldSelectorString,
-			podutil.WithFilter(evictable.IsEvictable),
-			podutil.WithNamespaces(strategyParams.IncludedNamespaces.UnsortedList()),
-			podutil.WithoutNamespaces(strategyParams.ExcludedNamespaces.UnsortedList()),
-			podutil.WithLabelSelector(labelSelector),
-		)
+		pods, err := podutil.ListAllPodsOnANode(node.Name, getPodsAssignedToNode, podFilter)
 		if err != nil {
 			klog.ErrorS(err, "Error listing a nodes failed pods", "node", klog.KObj(node))
 			continue

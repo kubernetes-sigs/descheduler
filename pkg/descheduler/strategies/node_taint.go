@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -48,18 +49,18 @@ func validateRemovePodsViolatingNodeTaintsParams(params *api.StrategyParameters)
 }
 
 // RemovePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
-func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	if err := validateRemovePodsViolatingNodeTaintsParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsViolatingNodeTaints parameters")
 		return
 	}
 
-	var includedNamespaces, excludedNamespaces []string
+	var includedNamespaces, excludedNamespaces sets.String
 	var labelSelector *metav1.LabelSelector
 	if strategy.Params != nil {
 		if strategy.Params.Namespaces != nil {
-			includedNamespaces = strategy.Params.Namespaces.Include
-			excludedNamespaces = strategy.Params.Namespaces.Exclude
+			includedNamespaces = sets.NewString(strategy.Params.Namespaces.Include...)
+			excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
 		}
 		labelSelector = strategy.Params.LabelSelector
 	}
@@ -77,17 +78,20 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
 
+	podFilter, err := podutil.NewOptions().
+		WithFilter(evictable.IsEvictable).
+		WithNamespaces(includedNamespaces).
+		WithoutNamespaces(excludedNamespaces).
+		WithLabelSelector(labelSelector).
+		BuildFilterFunc()
+	if err != nil {
+		klog.ErrorS(err, "Error initializing pod filter function")
+		return
+	}
+
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
-		pods, err := podutil.ListPodsOnANode(
-			ctx,
-			client,
-			node,
-			podutil.WithFilter(evictable.IsEvictable),
-			podutil.WithNamespaces(includedNamespaces),
-			podutil.WithoutNamespaces(excludedNamespaces),
-			podutil.WithLabelSelector(labelSelector),
-		)
+		pods, err := podutil.ListAllPodsOnANode(node.Name, getPodsAssignedToNode, podFilter)
 		if err != nil {
 			//no pods evicted as error encountered retrieving evictable Pods
 			return

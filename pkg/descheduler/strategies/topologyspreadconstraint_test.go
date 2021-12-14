@@ -8,15 +8,16 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	core "k8s.io/client-go/testing"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/test"
 )
 
 func TestTopologySpreadConstraint(t *testing.T) {
-	ctx := context.Background()
 	testCases := []struct {
 		name                 string
 		pods                 []*v1.Pod
@@ -870,17 +871,29 @@ func TestTopologySpreadConstraint(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			fakeClient := &fake.Clientset{}
-			fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-				podList := make([]v1.Pod, 0, len(tc.pods))
-				for _, pod := range tc.pods {
-					podList = append(podList, *pod)
-				}
-				return true, &v1.PodList{Items: podList}, nil
-			})
-			fakeClient.Fake.AddReactor("list", "namespaces", func(action core.Action) (bool, runtime.Object, error) {
-				return true, &v1.NamespaceList{Items: []v1.Namespace{{ObjectMeta: metav1.ObjectMeta{Name: "ns1", Namespace: "ns1"}}}}, nil
-			})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var objs []runtime.Object
+			for _, node := range tc.nodes {
+				objs = append(objs, node)
+			}
+			for _, pod := range tc.pods {
+				objs = append(objs, pod)
+			}
+			objs = append(objs, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns1"}})
+			fakeClient := fake.NewSimpleClientset(objs...)
+
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			podInformer := sharedInformerFactory.Core().V1().Pods()
+
+			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			if err != nil {
+				t.Errorf("Build get pods assigned to node function error: %v", err)
+			}
+
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
@@ -893,7 +906,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				false,
 				false,
 			)
-			RemovePodsViolatingTopologySpreadConstraint(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor)
+			RemovePodsViolatingTopologySpreadConstraint(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != tc.expectedEvictedCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.name, tc.expectedEvictedCount, podsEvicted)

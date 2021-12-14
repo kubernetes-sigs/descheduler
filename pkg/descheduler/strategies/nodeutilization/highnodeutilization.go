@@ -24,15 +24,17 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 // HighNodeUtilization evicts pods from under utilized nodes so that scheduler can schedule according to its strategy.
 // Note that CPU/Memory requests are used to calculate nodes' utilization and not the actual resource usage.
-func HighNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+func HighNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	if err := validateNodeUtilizationParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid HighNodeUtilization parameters")
 		return
@@ -61,7 +63,7 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 	resourceNames := getResourceNames(targetThresholds)
 
 	sourceNodes, highNodes := classifyNodes(
-		getNodeUsage(ctx, client, nodes, thresholds, targetThresholds, resourceNames),
+		getNodeUsage(nodes, thresholds, targetThresholds, resourceNames, getPodsAssignedToNode),
 		func(node *v1.Node, usage NodeUsage) bool {
 			return isNodeWithLowUtilization(usage)
 		},

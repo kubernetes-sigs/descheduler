@@ -66,6 +66,7 @@ func RemoveDuplicatePods(
 	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
+	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 ) {
 	if err := validateRemoveDuplicatePodsParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemoveDuplicatePods parameters")
@@ -77,10 +78,10 @@ func RemoveDuplicatePods(
 		return
 	}
 
-	var includedNamespaces, excludedNamespaces []string
+	var includedNamespaces, excludedNamespaces sets.String
 	if strategy.Params != nil && strategy.Params.Namespaces != nil {
-		includedNamespaces = strategy.Params.Namespaces.Include
-		excludedNamespaces = strategy.Params.Namespaces.Exclude
+		includedNamespaces = sets.NewString(strategy.Params.Namespaces.Include...)
+		excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
 	}
 
 	nodeFit := false
@@ -95,15 +96,19 @@ func RemoveDuplicatePods(
 	nodeCount := 0
 	nodeMap := make(map[string]*v1.Node)
 
+	podFilter, err := podutil.NewOptions().
+		WithFilter(evictable.IsEvictable).
+		WithNamespaces(includedNamespaces).
+		WithoutNamespaces(excludedNamespaces).
+		BuildFilterFunc()
+	if err != nil {
+		klog.ErrorS(err, "Error initializing pod filter function")
+		return
+	}
+
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
-		pods, err := podutil.ListPodsOnANode(ctx,
-			client,
-			node,
-			podutil.WithFilter(evictable.IsEvictable),
-			podutil.WithNamespaces(includedNamespaces),
-			podutil.WithoutNamespaces(excludedNamespaces),
-		)
+		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, podFilter)
 		if err != nil {
 			klog.ErrorS(err, "Error listing evictable pods on node", "node", klog.KObj(node))
 			continue

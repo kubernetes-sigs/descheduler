@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
 )
@@ -64,11 +65,17 @@ func Run(rs *options.DeschedulerServer) error {
 	return RunDeschedulerStrategies(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel)
 }
 
-type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor)
+type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc)
 
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, stopChannel chan struct{}) error {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
 	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
+	podInformer := sharedInformerFactory.Core().V1().Pods()
+
+	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+	if err != nil {
+		return fmt.Errorf("build get pods assigned to node function error: %v", err)
+	}
 
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
@@ -138,7 +145,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		for name, strategy := range deschedulerPolicy.Strategies {
 			if f, ok := strategyFuncs[name]; ok {
 				if strategy.Enabled {
-					f(ctx, rs.Client, strategy, nodes, podEvictor)
+					f(ctx, rs.Client, strategy, nodes, podEvictor, getPodsAssignedToNode)
 				}
 			} else {
 				klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
