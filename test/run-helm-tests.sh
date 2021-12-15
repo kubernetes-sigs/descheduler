@@ -18,7 +18,7 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-K8S_VERSION=${KUBERNETES_VERSION:-v1.21.1}
+K8S_VERSION=${KUBERNETES_VERSION:-v1.23.0}
 IMAGE_REPO=${HELM_IMAGE_REPO:-descheduler}
 IMAGE_TAG=${HELM_IMAGE_TAG:-helm-test}
 CHART_LOCATION=${HELM_CHART_LOCATION:-./charts/descheduler}

@@ -20,10 +20,8 @@ package options
 import (
 	"github.com/spf13/pflag"
 
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	apiserveroptions "k8s.io/apiserver/pkg/server/options"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/component-base/logs"
 
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
@@ -39,7 +37,6 @@ type DeschedulerServer struct {
 	componentconfig.DeschedulerConfiguration
 
 	Client         clientset.Interface
-	Logs           *logs.Options
 	SecureServing  *apiserveroptions.SecureServingOptionsWithLoopback
 	DisableMetrics bool
 }
@@ -56,16 +53,8 @@ func NewDeschedulerServer() (*DeschedulerServer, error) {
 
 	return &DeschedulerServer{
 		DeschedulerConfiguration: *cfg,
-		Logs:                     logs.NewOptions(),
 		SecureServing:            secureServing,
 	}, nil
-}
-
-// Validation checks for DeschedulerServer.
-func (s *DeschedulerServer) Validate() error {
-	var errs []error
-	errs = append(errs, s.Logs.Validate()...)
-	return utilerrors.NewAggregate(errs)
 }
 
 func newDefaultComponentConfig() (*componentconfig.DeschedulerConfiguration, error) {
