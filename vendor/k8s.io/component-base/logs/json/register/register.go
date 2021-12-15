@@ -1,5 +1,5 @@
 /*
-Copyright 2017 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,25 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package register
 
 import (
-	"os"
-
-	"k8s.io/component-base/cli"
-	"k8s.io/klog/v2"
-	"sigs.k8s.io/descheduler/cmd/descheduler/app"
+	"k8s.io/component-base/logs"
+	json "k8s.io/component-base/logs/json"
+	"k8s.io/component-base/logs/registry"
 )
 
 func init() {
-	klog.InitFlags(nil)
-}
-
-func main() {
-	out := os.Stdout
-	cmd := app.NewDeschedulerCommand(out)
-	cmd.AddCommand(app.NewVersionCommand())
-
-	code := cli.Run(cmd)
-	os.Exit(code)
+	// JSON format is optional klog format
+	registry.LogRegistry.Register(logs.JSONLogFormat, json.Factory{})
 }
