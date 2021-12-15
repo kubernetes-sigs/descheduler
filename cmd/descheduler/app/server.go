@@ -29,6 +29,9 @@ import (
 	apiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/server/mux"
 	restclient "k8s.io/client-go/rest"
+	"k8s.io/component-base/config"
+	_ "k8s.io/component-base/logs/json/register"
+	"k8s.io/component-base/logs/registry"
 	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/klog/v2"
 )
@@ -46,7 +49,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 		Short: "descheduler",
 		Long:  `The descheduler evicts pods which may be bound to less desired nodes`,
 		Run: func(cmd *cobra.Command, args []string) {
-			s.Logs.Config.Format = s.Logging.Format
+			// s.Logs.Config.Format = s.Logging.Format
 
 			// LoopbackClientConfig is a config for a privileged loopback connection
 			var LoopbackClientConfig *restclient.Config
@@ -56,9 +59,13 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 				return
 			}
 
-			if err := s.ValidateAndApply(); err != nil {
-				klog.ErrorS(err, "failed to validate server configuration")
-				return
+			factory, _ := registry.LogRegistry.Get(s.Logging.Format)
+			if factory == nil {
+				klog.ClearLogger()
+			} else {
+				log, logrFlush := factory.Create(config.FormatOptions{})
+				defer logrFlush()
+				klog.SetLogger(log)
 			}
 
 			if !s.DisableMetrics {
