@@ -25,6 +25,7 @@ import (
 )
 
 func init() {
+	klog.SetOutput(os.Stdout)
 	klog.InitFlags(nil)
 }
 
