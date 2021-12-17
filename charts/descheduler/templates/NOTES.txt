@@ -1,1 +1,5 @@
+{{- if eq .Values.kind "CronJob" }}
 Descheduler installed as a cron job.
+{{- else if eq .Values.kind "Deployment" }}
+Descheduler installed as a deployment.
+{{- end }}
