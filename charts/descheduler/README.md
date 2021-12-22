@@ -69,3 +69,4 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `nodeSelector`                 | Node selectors to run the descheduler cronjob on specific nodes                                                       | `nil`                                |
 | `tolerations`                  | tolerations to run the descheduler cronjob on specific nodes                                                          | `nil`                                |
 | `suspend`                      | Set spec.suspend in descheduler cronjob                                                                               | `false`                              |
+| `tests.enabled`                | If `true`, will execute helm test                                                                                     | `true`                               |
