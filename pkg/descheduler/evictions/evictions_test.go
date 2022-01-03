@@ -83,6 +83,7 @@ func TestIsEvictable(t *testing.T) {
 		pod                     *v1.Pod
 		nodes                   []*v1.Node
 		runBefore               func(*v1.Pod, []*v1.Node)
+		evictFailedBarePods     bool
 		evictLocalStoragePods   bool
 		evictSystemCriticalPods bool
 		priorityThreshold       *int32
@@ -91,7 +92,27 @@ func TestIsEvictable(t *testing.T) {
 	}
 
 	testCases := []testCase{
-		{ // Normal pod eviction with normal ownerRefs
+		{ // Failed pod eviction with no ownerRefs.
+			pod: test.BuildTestPod("bare_pod_failed", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod, nodes []*v1.Node) {
+				pod.Status.Phase = v1.PodFailed
+			},
+			evictFailedBarePods: false,
+			result:              false,
+		}, { // Normal pod eviction with no ownerRefs and evictFailedBarePods enabled
+			pod: test.BuildTestPod("bare_pod", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod, nodes []*v1.Node) {
+			},
+			evictFailedBarePods: true,
+			result:              false,
+		}, { // Failed pod eviction with no ownerRefs
+			pod: test.BuildTestPod("bare_pod_failed_but_can_be_evicted", 400, 0, n1.Name, nil),
+			runBefore: func(pod *v1.Pod, nodes []*v1.Node) {
+				pod.Status.Phase = v1.PodFailed
+			},
+			evictFailedBarePods: true,
+			result:              true,
+		}, { // Normal pod eviction with normal ownerRefs
 			pod: test.BuildTestPod("p1", 400, 0, n1.Name, nil),
 			runBefore: func(pod *v1.Pod, nodes []*v1.Node) {
 				pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -417,6 +438,7 @@ func TestIsEvictable(t *testing.T) {
 		podEvictor := &PodEvictor{
 			evictLocalStoragePods:   test.evictLocalStoragePods,
 			evictSystemCriticalPods: test.evictSystemCriticalPods,
+			evictFailedBarePods:     test.evictFailedBarePods,
 			nodes:                   nodes,
 		}
 

@@ -225,6 +225,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 				false,
 				false,
 				false,
+				false,
 			)
 
 			RemovePodsViolatingNodeAffinity(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
