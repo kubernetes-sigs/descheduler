@@ -128,7 +128,30 @@ func initializeClient(t *testing.T) (clientset.Interface, coreinformers.NodeInfo
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 
+	waitForNodesReady(context.Background(), t, clientSet, nodeInformer)
 	return clientSet, nodeInformer, getPodsAssignedToNode, stopChannel
+}
+
+func waitForNodesReady(ctx context.Context, t *testing.T, clientSet clientset.Interface, nodeInformer coreinformers.NodeInformer) {
+	if err := wait.PollImmediate(5*time.Second, 30*time.Second, func() (bool, error) {
+		nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return false, err
+		}
+
+		readyNodes, err := nodeutil.ReadyNodes(ctx, clientSet, nodeInformer, "")
+		if err != nil {
+			return false, err
+		}
+		if len(nodeList.Items) != len(readyNodes) {
+			t.Logf("%v/%v nodes are ready. Waiting for all nodes to be ready...", len(readyNodes), len(nodeList.Items))
+			return false, nil
+		}
+
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for nodes to be ready: %v", err)
+	}
 }
 
 func runPodLifetimeStrategy(
