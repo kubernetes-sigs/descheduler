@@ -33,6 +33,14 @@ spec:
           ports:
           - containerPort: 10258
             protocol: TCP
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 10258
+              scheme: HTTPS
+            initialDelaySeconds: 3
+            periodSeconds: 3
           resources:
             requests:
               cpu: 500m
