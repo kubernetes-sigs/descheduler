@@ -150,6 +150,7 @@ func TestRemoveDuplicates(t *testing.T) {
 				true,
 				false,
 				false,
+				false,
 			)
 
 			t.Log("Running DeschedulerStrategy strategy")

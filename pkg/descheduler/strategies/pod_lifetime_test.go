@@ -301,6 +301,7 @@ func TestPodLifeTime(t *testing.T) {
 				false,
 				false,
 				tc.ignorePvcPods,
+				false,
 			)
 
 			PodLifeTime(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
