@@ -140,6 +140,7 @@ func TestTooManyRestarts(t *testing.T) {
 				true,
 				false,
 				false,
+				false,
 			)
 			// Run RemovePodsHavingTooManyRestarts strategy
 			t.Log("Running RemovePodsHavingTooManyRestarts strategy")
