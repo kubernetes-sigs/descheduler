@@ -116,7 +116,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
 	}
 
-	wait.Until(func() {
+	wait.NonSlidingUntil(func() {
 		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, nodeSelector)
 		if err != nil {
 			klog.V(1).InfoS("Unable to get ready nodes", "err", err)
