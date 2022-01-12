@@ -739,6 +739,7 @@ The following strategies accept a `nodeFit` boolean parameter which can optimize
 - A `nodeSelector` on the pod
 - Any `Tolerations` on the pod and any `Taints` on the other nodes
 - `nodeAffinity` on the pod
+- Resource `Requests` made by the pod and the resources available on other nodes 
 - Whether any of the other nodes are marked as `unschedulable`
 
 E.g.

@@ -70,6 +70,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			Unschedulable: true,
 		}
 	})
+	node5 := test.BuildTestNode("n5", 1, 1, 1, nil)
 
 	node5 := test.BuildTestNode("n5", 2000, 3000, 10, nil)
 	node5.Spec.Taints = []v1.Taint{
@@ -289,6 +290,15 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			excludedTaints:          []string{"testTaint1=test2"},
 			expectedEvictedPodCount: 1, // pod gets evicted, as excluded taint value does not match node1's taint value
 		},
+		{
+			description:             "Critical and non critical pods, pods not tolerating node taint can't be evicted because the only available node does not have enough resources.",
+			pods:                    []*v1.Pod{p2, p7, p9, p10},
+			nodes:                   []*v1.Node{node1, node5},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: true,
+			expectedEvictedPodCount: 0, //p2 and p7 can't be evicted
+			nodeFit:                 true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -324,6 +334,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				tc.maxPodsToEvictPerNode,
 				tc.maxNoOfPodsToEvictPerNamespace,
 				tc.nodes,
+				getPodsAssignedToNode,
 				tc.evictLocalStoragePods,
 				tc.evictSystemCriticalPods,
 				false,

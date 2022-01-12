@@ -83,7 +83,7 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 		"Pods", thresholds[v1.ResourcePods],
 	}
 	for name := range thresholds {
-		if !isBasicResource(name) {
+		if !nodeutil.IsBasicResource(name) {
 			keysAndValues = append(keysAndValues, string(name), int64(thresholds[name]))
 		}
 	}
@@ -164,7 +164,7 @@ func setDefaultForThresholds(thresholds, targetThresholds api.ResourceThresholds
 	targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
 
 	for name := range thresholds {
-		if !isBasicResource(name) {
+		if !nodeutil.IsBasicResource(name) {
 			targetThresholds[name] = MaxResourcePercentage
 		}
 	}
