@@ -36,7 +36,7 @@ spec:
               port: 10258
               scheme: HTTPS
             initialDelaySeconds: 3
-            periodSeconds: 3
+            periodSeconds: 10
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

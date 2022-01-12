@@ -94,3 +94,12 @@ serviceAccount:
   # The name of the ServiceAccount to use.
   # If not set and create is true, a name is generated using the fullname template
   name:
+
+livenessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /healthz
+    port: 10258
+    scheme: HTTPS
+  initialDelaySeconds: 3
+  periodSeconds: 10
