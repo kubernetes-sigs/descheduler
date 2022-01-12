@@ -68,6 +68,8 @@ spec:
                 - {{ $value | quote }}
                 {{- end }}
                 {{- end }}
+              livenessProbe:
+                {{- toYaml .Values.livenessProbe | nindent 16 }}
               resources:
                 {{- toYaml .Values.resources | nindent 16 }}
               securityContext:
