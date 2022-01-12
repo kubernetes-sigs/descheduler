@@ -145,6 +145,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
 			nodes,
+			getPodsAssignedToNode,
 			evictLocalStoragePods,
 			evictSystemCriticalPods,
 			ignorePvcPods,

@@ -94,7 +94,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		"Pods", thresholds[v1.ResourcePods],
 	}
 	for name := range thresholds {
-		if !isBasicResource(name) {
+		if !nodeutil.IsBasicResource(name) {
 			keysAndValues = append(keysAndValues, string(name), int64(thresholds[name]))
 		}
 	}
@@ -108,7 +108,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		"Pods", targetThresholds[v1.ResourcePods],
 	}
 	for name := range targetThresholds {
-		if !isBasicResource(name) {
+		if !nodeutil.IsBasicResource(name) {
 			keysAndValues = append(keysAndValues, string(name), int64(targetThresholds[name]))
 		}
 	}

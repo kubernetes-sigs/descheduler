@@ -39,7 +39,6 @@ import (
 	v1qos "k8s.io/kubectl/pkg/util/qos"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
-	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
@@ -199,6 +198,7 @@ func runPodLifetimeStrategy(
 			nil,
 			nil,
 			nodes,
+			getPodsAssignedToNode,
 			false,
 			evictCritical,
 			false,
@@ -323,7 +323,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	waitForRCPodsRunning(ctx, t, clientSet, rc)
 
 	// Run LowNodeUtilization strategy
-	podEvictor := initPodEvictorOrFail(t, clientSet, nodes)
+	podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
 
 	podFilter, err := podutil.NewOptions().WithFilter(podEvictor.Evictable().IsEvictable).BuildFilterFunc()
 	if err != nil {
@@ -885,17 +885,6 @@ func TestEvictAnnotation(t *testing.T) {
 	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
-	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		t.Errorf("Error listing node with %v", err)
-	}
-
-	var nodes []*v1.Node
-	for i := range nodeList.Items {
-		node := nodeList.Items[i]
-		nodes = append(nodes, &node)
-	}
-
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
 	if _, err := clientSet.CoreV1().Namespaces().Create(ctx, testNamespace, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Unable to create ns %v", testNamespace.Name)
@@ -975,7 +964,7 @@ func TestDeschedulingInterval(t *testing.T) {
 	}
 	s.Client = clientSet
 
-	deschedulerPolicy := &api.DeschedulerPolicy{}
+	deschedulerPolicy := &deschedulerapi.DeschedulerPolicy{}
 
 	c := make(chan bool, 1)
 	go func() {
@@ -1325,7 +1314,7 @@ func splitNodesAndWorkerNodes(nodes []v1.Node) ([]*v1.Node, []*v1.Node) {
 	return allNodes, workerNodes
 }
 
-func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, nodes []*v1.Node) *evictions.PodEvictor {
+func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, nodes []*v1.Node) *evictions.PodEvictor {
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		t.Fatalf("Error creating eviction policy group: %v", err)
@@ -1337,6 +1326,7 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, nodes []*
 		nil,
 		nil,
 		nodes,
+		getPodsAssignedToNode,
 		true,
 		false,
 		false,

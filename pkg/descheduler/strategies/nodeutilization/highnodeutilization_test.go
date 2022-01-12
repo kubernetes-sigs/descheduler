@@ -385,6 +385,50 @@ func TestHighNodeUtilization(t *testing.T) {
 			},
 			expectedPodsEvicted: 0,
 		},
+		{
+			name: "Other node does not have enough Memory",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 200, 9, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 50, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 50, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 50, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 400, 50, n1NodeName, test.SetDSOwnerRef),
+				test.BuildTestPod("p5", 400, 100, n2NodeName, func(pod *v1.Pod) {
+					// A pod requesting more memory than is available on node1
+					test.SetRSOwnerRef(pod)
+				}),
+			},
+			expectedPodsEvicted: 0,
+		},
+		{
+			name: "Other node does not have enough Memory",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 200, 9, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 50, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 50, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 50, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 400, 50, n1NodeName, test.SetDSOwnerRef),
+				test.BuildTestPod("p5", 400, 100, n2NodeName, func(pod *v1.Pod) {
+					// A pod requesting more memory than is available on node1
+					test.SetRSOwnerRef(pod)
+				}),
+			},
+			expectedPodsEvicted: 0,
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -463,6 +507,7 @@ func TestHighNodeUtilization(t *testing.T) {
 				nil,
 				nil,
 				testCase.nodes,
+				getPodsAssignedToNode,
 				false,
 				false,
 				false,
@@ -667,6 +712,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 				&item.evictionsExpected,
 				nil,
 				item.nodes,
+				getPodsAssignedToNode,
 				false,
 				false,
 				false,

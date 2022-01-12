@@ -147,6 +147,7 @@ func TestRemoveDuplicates(t *testing.T) {
 				nil,
 				nil,
 				nodes,
+				getPodsAssignedToNode,
 				true,
 				false,
 				false,

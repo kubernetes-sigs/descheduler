@@ -222,6 +222,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 				tc.maxPodsToEvictPerNode,
 				tc.maxNoOfPodsToEvictPerNamespace,
 				tc.nodes,
+				getPodsAssignedToNode,
 				false,
 				false,
 				false,

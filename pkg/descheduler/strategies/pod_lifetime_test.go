@@ -298,6 +298,7 @@ func TestPodLifeTime(t *testing.T) {
 				nil,
 				nil,
 				tc.nodes,
+				getPodsAssignedToNode,
 				false,
 				false,
 				tc.ignorePvcPods,

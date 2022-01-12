@@ -18,13 +18,16 @@ package node
 
 import (
 	"context"
+	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -96,32 +99,91 @@ func IsReady(node *v1.Node) bool {
 	return true
 }
 
-// PodFitsAnyOtherNode checks if the given pod fits any of the given nodes, besides the node
-// the pod is already running on. The node fit is based on multiple criteria, like, pod node selector
-// matching the node label (including affinity), the taints on the node, and the node being schedulable or not.
-func PodFitsAnyOtherNode(pod *v1.Pod, nodes []*v1.Node) bool {
+// NodeFit returns true if the provided pod can probably be scheduled onto the provided node.
+// This function is used when the NodeFit pod filtering feature of the Descheduler is enabled.
+// This function currently considers a subset of the Kubernetes Scheduler's predicates when
+// deciding if a pod would fit on a node, but more predicates may be added in the future.
+func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) []error {
+	// Check node selector and required affinity
+	var errors []error
+	ok, err := utils.PodMatchNodeSelector(pod, node)
+	if err != nil {
+		errors = append(errors, err)
+	} else if !ok {
+		errors = append(errors, fmt.Errorf("pod node selector does not match the node label"))
+	}
+	// Check taints (we only care about NoSchedule and NoExecute taints)
+	ok = utils.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, func(taint *v1.Taint) bool {
+		return taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectNoExecute
+	})
+	if !ok {
+		errors = append(errors, fmt.Errorf("pod does not tolerate taints on the node"))
+	}
+	// Check if the pod can fit on a node based off it's requests
+	ok, reqErrors := FitsRequest(nodeIndexer, pod, node)
+	if !ok {
+		errors = append(errors, reqErrors...)
+	}
+	// Check if node is schedulable
+	if IsNodeUnschedulable(node) {
+		errors = append(errors, fmt.Errorf("node is not schedulable"))
+	}
 
+	return errors
+}
+
+// PodFitsAnyOtherNode checks if the given pod will probably fit any of the given nodes, besides the node
+// the pod is already running on. The predicates used to determine if the pod will fit can be found in the NodeFit function.
+func PodFitsAnyOtherNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node) bool {
 	for _, node := range nodes {
 		// Skip node pod is already on
 		if node.Name == pod.Spec.NodeName {
 			continue
 		}
-		// Check node selector and required affinity
-		ok, err := utils.PodMatchNodeSelector(pod, node)
-		if err != nil || !ok {
-			continue
-		}
-		// Check taints (we only care about NoSchedule and NoExecute taints)
-		ok = utils.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, func(taint *v1.Taint) bool {
-			return taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectNoExecute
-		})
-		if !ok {
-			continue
-		}
-		// Check if node is schedulable
-		if !IsNodeUnschedulable(node) {
-			klog.V(2).InfoS("Pod can possibly be scheduled on a different node", "pod", klog.KObj(pod), "node", klog.KObj(node))
+
+		errors := NodeFit(nodeIndexer, pod, node)
+		if len(errors) == 0 {
+			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			return true
+		} else {
+			klog.V(4).InfoS("Pod does not fit on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
+			for _, err := range errors {
+				klog.V(4).InfoS(err.Error())
+			}
+		}
+	}
+	return false
+}
+
+// PodFitsAnyNode checks if the given pod will probably fit any of the given nodes. The predicates used
+// to determine if the pod will fit can be found in the NodeFit function.
+func PodFitsAnyNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node) bool {
+	for _, node := range nodes {
+		errors := NodeFit(nodeIndexer, pod, node)
+		if len(errors) == 0 {
+			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
+			return true
+		} else {
+			klog.V(4).InfoS("Pod does not fit on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
+			for _, err := range errors {
+				klog.V(4).InfoS(err.Error())
+			}
+		}
+	}
+	return false
+}
+
+// PodFitsCurrentNode checks if the given pod will probably fit onto the given node. The predicates used
+// to determine if the pod will fit can be found in the NodeFit function.
+func PodFitsCurrentNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) bool {
+	errors := NodeFit(nodeIndexer, pod, node)
+	if len(errors) == 0 {
+		klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
+		return true
+	} else {
+		klog.V(4).InfoS("Pod does not fit on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
+		for _, err := range errors {
+			klog.V(4).InfoS(err.Error())
 		}
 	}
 	return false
@@ -133,39 +195,102 @@ func IsNodeUnschedulable(node *v1.Node) bool {
 	return node.Spec.Unschedulable
 }
 
-// PodFitsAnyNode checks if the given pod fits any of the given nodes, based on
-// multiple criteria, like, pod node selector matching the node label, node
-// being schedulable or not.
-func PodFitsAnyNode(pod *v1.Pod, nodes []*v1.Node) bool {
-	for _, node := range nodes {
+// FitsRequest determines if a pod can fit on a node based on that pod's requests. It returns true if
+// the pod will fit.
+func FitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, []error) {
+	var insufficientResources []error
 
-		ok, err := utils.PodMatchNodeSelector(pod, node)
-		if err != nil || !ok {
-			continue
+	// Get pod requests
+	podRequests, _ := utils.PodRequestsAndLimits(pod)
+	resourceNames := make([]v1.ResourceName, 0, len(podRequests))
+	for name := range podRequests {
+		resourceNames = append(resourceNames, name)
+	}
+
+	availableResources, err := NodeAvailableResources(nodeIndexer, node, resourceNames)
+	if err != nil {
+		return false, []error{err}
+	}
+
+	podFitsOnNode := true
+	for _, resource := range resourceNames {
+		podResourceRequest := podRequests[resource]
+		var requestTooLarge bool
+		switch resource {
+		case v1.ResourceCPU:
+			requestTooLarge = podResourceRequest.MilliValue() > availableResources[resource].MilliValue()
+		default:
+			requestTooLarge = podResourceRequest.Value() > availableResources[resource].Value()
 		}
-		if !IsNodeUnschedulable(node) {
-			klog.V(2).InfoS("Pod can possibly be scheduled on a different node", "pod", klog.KObj(pod), "node", klog.KObj(node))
-			return true
+
+		if requestTooLarge {
+			insufficientResources = append(insufficientResources, fmt.Errorf("insufficient %v", resource))
+			podFitsOnNode = false
 		}
 	}
-	return false
+	return podFitsOnNode, insufficientResources
 }
 
-// PodFitsCurrentNode checks if the given pod fits on the given node if the pod
-// node selector matches the node label.
-func PodFitsCurrentNode(pod *v1.Pod, node *v1.Node) bool {
-	ok, err := utils.PodMatchNodeSelector(pod, node)
-
+// NodeAvailableResources returns resources mapped to the quanitity available on the node.
+func NodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node *v1.Node, resourceNames []v1.ResourceName) (map[v1.ResourceName]*resource.Quantity, error) {
+	podsOnNode, err := podutil.ListPodsOnANode(node.Name, nodeIndexer, nil)
 	if err != nil {
-		klog.ErrorS(err, "Failed to match node selector")
-		return false
+		return nil, err
+	}
+	aggregatePodRequests := AggregatePodRequests(podsOnNode, resourceNames)
+	return nodeRemainingResources(node, aggregatePodRequests, resourceNames), nil
+}
+
+// AggregatePodRequests returns the resources requested by the given pods. Only resources supplied in the resourceNames parameter are calculated.
+func AggregatePodRequests(pods []*v1.Pod, resourceNames []v1.ResourceName) map[v1.ResourceName]*resource.Quantity {
+	totalReqs := map[v1.ResourceName]*resource.Quantity{
+		v1.ResourceCPU:    resource.NewMilliQuantity(0, resource.DecimalSI),
+		v1.ResourceMemory: resource.NewQuantity(0, resource.BinarySI),
+		v1.ResourcePods:   resource.NewQuantity(int64(len(pods)), resource.DecimalSI),
+	}
+	for _, name := range resourceNames {
+		if !IsBasicResource(name) {
+			totalReqs[name] = resource.NewQuantity(0, resource.DecimalSI)
+		}
 	}
 
-	if !ok {
-		klog.V(2).InfoS("Pod does not fit on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
-		return false
+	for _, pod := range pods {
+		req, _ := utils.PodRequestsAndLimits(pod)
+		for _, name := range resourceNames {
+			quantity, ok := req[name]
+			if ok && name != v1.ResourcePods {
+				// As Quantity.Add says: Add adds the provided y quantity to the current value. If the current value is zero,
+				// the format of the quantity will be updated to the format of y.
+				totalReqs[name].Add(quantity)
+			}
+		}
 	}
 
-	klog.V(2).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
-	return true
+	return totalReqs
+}
+
+func nodeRemainingResources(node *v1.Node, aggregatePodRequests map[v1.ResourceName]*resource.Quantity, resourceNames []v1.ResourceName) map[v1.ResourceName]*resource.Quantity {
+	remainingResources := map[v1.ResourceName]*resource.Quantity{
+		v1.ResourceCPU:    resource.NewMilliQuantity(node.Status.Allocatable.Cpu().MilliValue()-aggregatePodRequests[v1.ResourceCPU].MilliValue(), resource.DecimalSI),
+		v1.ResourceMemory: resource.NewQuantity(node.Status.Allocatable.Memory().Value()-aggregatePodRequests[v1.ResourceMemory].Value(), resource.BinarySI),
+		v1.ResourcePods:   resource.NewQuantity(node.Status.Allocatable.Pods().Value()-aggregatePodRequests[v1.ResourcePods].Value(), resource.DecimalSI),
+	}
+	for _, name := range resourceNames {
+		if !IsBasicResource(name) {
+			allocatableResource := node.Status.Allocatable[name]
+			remainingResources[name] = resource.NewQuantity(allocatableResource.Value()-aggregatePodRequests[name].Value(), resource.DecimalSI)
+		}
+	}
+
+	return remainingResources
+}
+
+// IsBasicResource checks if resource is basic native.
+func IsBasicResource(name v1.ResourceName) bool {
+	switch name {
+	case v1.ResourceCPU, v1.ResourceMemory, v1.ResourcePods:
+		return true
+	default:
+		return false
+	}
 }

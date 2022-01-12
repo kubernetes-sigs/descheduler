@@ -18,11 +18,12 @@ package nodeutilization
 
 import (
 	"fmt"
+	"math"
+	"testing"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"math"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"testing"
 )
 
 var (

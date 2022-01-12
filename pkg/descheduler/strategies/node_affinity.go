@@ -95,8 +95,8 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 					getPodsAssignedToNode,
 					podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
 						return evictable.IsEvictable(pod) &&
-							!nodeutil.PodFitsCurrentNode(pod, node) &&
-							nodeutil.PodFitsAnyNode(pod, nodes)
+							!nodeutil.PodFitsCurrentNode(getPodsAssignedToNode, pod, node) &&
+							nodeutil.PodFitsAnyNode(getPodsAssignedToNode, pod, nodes)
 					}),
 				)
 				if err != nil {
