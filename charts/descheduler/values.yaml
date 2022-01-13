@@ -96,3 +96,13 @@ serviceAccount:
   name:
   # Specifies custom annotations for the serviceAccount
   annotations: {}
+
+livenessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /healthz
+    port: 10258
+    scheme: HTTPS
+  initialDelaySeconds: 3
+  periodSeconds: 10
+

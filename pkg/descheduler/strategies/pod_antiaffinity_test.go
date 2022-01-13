@@ -212,6 +212,7 @@ func TestPodAntiAffinity(t *testing.T) {
 				false,
 				false,
 				false,
+				false,
 			)
 			strategy := api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{

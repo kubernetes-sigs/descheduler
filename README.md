@@ -132,6 +132,7 @@ The policy includes a common configuration that applies to all the strategies:
 | `evictSystemCriticalPods` | `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
 | `ignorePvcPods` | `false` | set whether PVC pods should be evicted or ignored |
 | `maxNoOfPodsToEvictPerNode` | `nil` | maximum number of pods evicted from each node (summed through all strategies) |
+| `evictFailedBarePods` | `false` | allow eviction of pods without owner references and in failed phase |
 
 As part of the policy, the parameters associated with each strategy can be configured.
 See each strategy for details on available parameters.
@@ -142,6 +143,7 @@ See each strategy for details on available parameters.
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 nodeSelector: prod=dev
+evictFailedBarePods: false
 evictLocalStoragePods: true
 evictSystemCriticalPods: true
 maxNoOfPodsToEvictPerNode: 40
@@ -740,8 +742,8 @@ Using Deployments instead of ReplicationControllers provides an automated rollou
 When the descheduler decides to evict pods from a node, it employs the following general mechanism:
 
 * [Critical pods](https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/) (with priorityClassName set to system-cluster-critical or system-node-critical) are never evicted (unless `evictSystemCriticalPods: true` is set).
-* Pods (static or mirrored pods or stand alone pods) not part of an ReplicationController, ReplicaSet(Deployment), StatefulSet, or Job are
-never evicted because these pods won't be recreated.
+* Pods (static or mirrored pods or standalone pods) not part of an ReplicationController, ReplicaSet(Deployment), StatefulSet, or Job are
+never evicted because these pods won't be recreated. (Standalone pods in failed status phase can be evicted by setting `evictFailedBarePods: true`)
 * Pods associated with DaemonSets are never evicted.
 * Pods with local storage are never evicted (unless `evictLocalStoragePods: true` is set).
 * Pods with PVCs are evicted (unless `ignorePvcPods: true` is set).

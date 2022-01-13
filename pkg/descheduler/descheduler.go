@@ -103,6 +103,14 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		evictLocalStoragePods = *deschedulerPolicy.EvictLocalStoragePods
 	}
 
+	evictBarePods := false
+	if deschedulerPolicy.EvictFailedBarePods != nil {
+		evictBarePods = *deschedulerPolicy.EvictFailedBarePods
+		if evictBarePods {
+			klog.V(1).InfoS("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
+		}
+	}
+
 	evictSystemCriticalPods := false
 	if deschedulerPolicy.EvictSystemCriticalPods != nil {
 		evictSystemCriticalPods = *deschedulerPolicy.EvictSystemCriticalPods
@@ -140,6 +148,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			evictLocalStoragePods,
 			evictSystemCriticalPods,
 			ignorePvcPods,
+			evictBarePods,
 		)
 
 		for name, strategy := range deschedulerPolicy.Strategies {
