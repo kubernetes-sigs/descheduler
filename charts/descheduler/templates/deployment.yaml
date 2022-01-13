@@ -48,13 +48,7 @@ spec:
             - containerPort: 10258
               protocol: TCP
           livenessProbe:
-            failureThreshold: 3
-            httpGet:
-              path: /healthz
-              port: 10258
-              scheme: HTTPS
-            initialDelaySeconds: 3
-            periodSeconds: 3
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
