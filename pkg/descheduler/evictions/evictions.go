@@ -57,6 +57,7 @@ type PodEvictor struct {
 	maxPodsToEvictPerNamespace *uint
 	nodepodCount               nodePodEvictedCount
 	namespacePodCount          namespacePodEvictCount
+	evictFailedBarePods        bool
 	evictLocalStoragePods      bool
 	evictSystemCriticalPods    bool
 	ignorePvcPods              bool
@@ -72,6 +73,7 @@ func NewPodEvictor(
 	evictLocalStoragePods bool,
 	evictSystemCriticalPods bool,
 	ignorePvcPods bool,
+	evictFailedBarePods bool,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
 	var namespacePodCount = make(namespacePodEvictCount)
@@ -91,6 +93,7 @@ func NewPodEvictor(
 		namespacePodCount:          namespacePodCount,
 		evictLocalStoragePods:      evictLocalStoragePods,
 		evictSystemCriticalPods:    evictSystemCriticalPods,
+		evictFailedBarePods:        evictFailedBarePods,
 		ignorePvcPods:              ignorePvcPods,
 	}
 }
@@ -228,6 +231,25 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 	}
 
 	ev := &evictable{}
+	if pe.evictFailedBarePods {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			ownerRefList := podutil.OwnerRef(pod)
+			// Enable evictFailedBarePods to evict bare pods in failed phase
+			if len(ownerRefList) == 0 && pod.Status.Phase != v1.PodFailed {
+				return fmt.Errorf("pod does not have any ownerRefs and is not in failed phase")
+			}
+			return nil
+		})
+	} else {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			ownerRefList := podutil.OwnerRef(pod)
+			// Moved from IsEvictable function for backward compatibility
+			if len(ownerRefList) == 0 {
+				return fmt.Errorf("pod does not have any ownerRefs")
+			}
+			return nil
+		})
+	}
 	if !pe.evictSystemCriticalPods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			// Moved from IsEvictable function to allow for disabling
@@ -289,10 +311,6 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 	ownerRefList := podutil.OwnerRef(pod)
 	if utils.IsDaemonsetPod(ownerRefList) {
 		checkErrs = append(checkErrs, fmt.Errorf("pod is a DaemonSet pod"))
-	}
-
-	if len(ownerRefList) == 0 {
-		checkErrs = append(checkErrs, fmt.Errorf("pod does not have any ownerrefs"))
 	}
 
 	if utils.IsMirrorPod(pod) {

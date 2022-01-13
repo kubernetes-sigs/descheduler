@@ -237,6 +237,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 				false,
 				false,
 				false,
+				false,
 			)
 
 			RemovePodsHavingTooManyRestarts(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)

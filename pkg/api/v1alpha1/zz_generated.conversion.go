@@ -133,6 +133,7 @@ func RegisterConversions(s *runtime.Scheme) error {
 func autoConvert_v1alpha1_DeschedulerPolicy_To_api_DeschedulerPolicy(in *DeschedulerPolicy, out *api.DeschedulerPolicy, s conversion.Scope) error {
 	out.Strategies = *(*api.StrategyList)(unsafe.Pointer(&in.Strategies))
 	out.NodeSelector = (*string)(unsafe.Pointer(in.NodeSelector))
+	out.EvictFailedBarePods = (*bool)(unsafe.Pointer(in.EvictFailedBarePods))
 	out.EvictLocalStoragePods = (*bool)(unsafe.Pointer(in.EvictLocalStoragePods))
 	out.EvictSystemCriticalPods = (*bool)(unsafe.Pointer(in.EvictSystemCriticalPods))
 	out.IgnorePVCPods = (*bool)(unsafe.Pointer(in.IgnorePVCPods))
@@ -161,6 +162,7 @@ func Convert_v1alpha1_DeschedulerPolicy_To_api_DeschedulerPolicy(in *Descheduler
 func autoConvert_api_DeschedulerPolicy_To_v1alpha1_DeschedulerPolicy(in *api.DeschedulerPolicy, out *DeschedulerPolicy, s conversion.Scope) error {
 	out.Strategies = *(*StrategyList)(unsafe.Pointer(&in.Strategies))
 	out.NodeSelector = (*string)(unsafe.Pointer(in.NodeSelector))
+	out.EvictFailedBarePods = (*bool)(unsafe.Pointer(in.EvictFailedBarePods))
 	out.EvictLocalStoragePods = (*bool)(unsafe.Pointer(in.EvictLocalStoragePods))
 	out.EvictSystemCriticalPods = (*bool)(unsafe.Pointer(in.EvictSystemCriticalPods))
 	out.IgnorePVCPods = (*bool)(unsafe.Pointer(in.IgnorePVCPods))
