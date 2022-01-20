@@ -21,10 +21,19 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	policy "k8s.io/api/policy/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
+	fakeclientset "k8s.io/client-go/kubernetes/fake"
+	core "k8s.io/client-go/testing"
 	"k8s.io/klog/v2"
+
+	corev1informers "k8s.io/client-go/informers/core/v1"
+	schedulingv1informers "k8s.io/client-go/informers/scheduling/v1"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/metrics"
@@ -67,10 +76,92 @@ func Run(rs *options.DeschedulerServer) error {
 
 type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc)
 
+func cachedClient(
+	realClient clientset.Interface,
+	podInformer corev1informers.PodInformer,
+	nodeInformer corev1informers.NodeInformer,
+	namespaceInformer corev1informers.NamespaceInformer,
+	priorityClassInformer schedulingv1informers.PriorityClassInformer,
+) (clientset.Interface, error) {
+	fakeClient := fakeclientset.NewSimpleClientset()
+	// simulate a pod eviction by deleting a pod
+	fakeClient.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() == "eviction" {
+			createAct, matched := action.(core.CreateActionImpl)
+			if !matched {
+				return false, nil, fmt.Errorf("unable to convert action to core.CreateActionImpl")
+			}
+			eviction, matched := createAct.Object.(*policy.Eviction)
+			if !matched {
+				return false, nil, fmt.Errorf("unable to convert action object into *policy.Eviction")
+			}
+			if err := fakeClient.Tracker().Delete(action.GetResource(), eviction.GetNamespace(), eviction.GetName()); err != nil {
+				return false, nil, fmt.Errorf("unable to delete pod %v/%v: %v", eviction.GetNamespace(), eviction.GetName(), err)
+			}
+			return true, nil, nil
+		}
+		// fallback to the default reactor
+		return false, nil, nil
+	})
+
+	klog.V(3).Infof("Pulling resources for the cached client from the cluster")
+	pods, err := podInformer.Lister().List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("unable to list pods: %v", err)
+	}
+
+	for _, item := range pods {
+		if _, err := fakeClient.CoreV1().Pods(item.Namespace).Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
+			return nil, fmt.Errorf("unable to copy pod: %v", err)
+		}
+	}
+
+	nodes, err := nodeInformer.Lister().List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("unable to list nodes: %v", err)
+	}
+
+	for _, item := range nodes {
+		if _, err := fakeClient.CoreV1().Nodes().Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
+			return nil, fmt.Errorf("unable to copy node: %v", err)
+		}
+	}
+
+	namespaces, err := namespaceInformer.Lister().List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("unable to list namespaces: %v", err)
+	}
+
+	for _, item := range namespaces {
+		if _, err := fakeClient.CoreV1().Namespaces().Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
+			return nil, fmt.Errorf("unable to copy node: %v", err)
+		}
+	}
+
+	priorityClasses, err := priorityClassInformer.Lister().List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("unable to list priorityclasses: %v", err)
+	}
+
+	for _, item := range priorityClasses {
+		if _, err := fakeClient.SchedulingV1().PriorityClasses().Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
+			return nil, fmt.Errorf("unable to copy priorityclass: %v", err)
+		}
+	}
+
+	return fakeClient, nil
+}
+
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, stopChannel chan struct{}) error {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
 	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
 	podInformer := sharedInformerFactory.Core().V1().Pods()
+	namespaceInformer := sharedInformerFactory.Core().V1().Namespaces()
+	priorityClassInformer := sharedInformerFactory.Scheduling().V1().PriorityClasses()
+
+	// create the informers
+	namespaceInformer.Informer()
+	priorityClassInformer.Informer()
 
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
@@ -138,8 +229,39 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			return
 		}
 
+		var podEvictorClient clientset.Interface
+		// When the dry mode is enable, collect all the relevant objects (mostly pods) under a fake client.
+		// So when evicting pods while running multiple strategies in a row have the cummulative effect
+		// as is when evicting pods for real.
+		if rs.DryRun {
+			klog.V(3).Infof("Building a cached client from the cluster for the dry run")
+			// Create a new cache so we start from scratch without any leftovers
+			fakeClient, err := cachedClient(rs.Client, podInformer, nodeInformer, namespaceInformer, priorityClassInformer)
+			if err != nil {
+				klog.Error(err)
+				return
+			}
+
+			fakeSharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			getPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(fakeSharedInformerFactory.Core().V1().Pods())
+			if err != nil {
+				klog.Errorf("build get pods assigned to node function error: %v", err)
+				return
+			}
+
+			fakeCtx, cncl := context.WithCancel(context.TODO())
+			defer cncl()
+			fakeSharedInformerFactory.Start(fakeCtx.Done())
+			fakeSharedInformerFactory.WaitForCacheSync(fakeCtx.Done())
+
+			podEvictorClient = fakeClient
+		} else {
+			podEvictorClient = rs.Client
+		}
+
+		klog.V(3).Infof("Building a pod evictor")
 		podEvictor := evictions.NewPodEvictor(
-			rs.Client,
+			podEvictorClient,
 			evictionPolicyGroupVersion,
 			rs.DryRun,
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
