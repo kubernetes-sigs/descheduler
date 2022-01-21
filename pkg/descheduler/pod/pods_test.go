@@ -18,16 +18,15 @@ package pod
 
 import (
 	"context"
-	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	core "k8s.io/client-go/testing"
+
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -39,19 +38,17 @@ var (
 func TestListPodsOnANode(t *testing.T) {
 	testCases := []struct {
 		name             string
-		pods             map[string][]v1.Pod
+		pods             []*v1.Pod
 		node             *v1.Node
 		labelSelector    *metav1.LabelSelector
 		expectedPodCount int
 	}{
 		{
 			name: "test listing pods on a node",
-			pods: map[string][]v1.Pod{
-				"n1": {
-					*test.BuildTestPod("pod1", 100, 0, "n1", nil),
-					*test.BuildTestPod("pod2", 100, 0, "n1", nil),
-				},
-				"n2": {*test.BuildTestPod("pod3", 100, 0, "n2", nil)},
+			pods: []*v1.Pod{
+				test.BuildTestPod("pod1", 100, 0, "n1", nil),
+				test.BuildTestPod("pod2", 100, 0, "n1", nil),
+				test.BuildTestPod("pod3", 100, 0, "n2", nil),
 			},
 			node:             test.BuildTestNode("n1", 2000, 3000, 10, nil),
 			labelSelector:    nil,
@@ -59,17 +56,15 @@ func TestListPodsOnANode(t *testing.T) {
 		},
 		{
 			name: "test listing pods with label selector",
-			pods: map[string][]v1.Pod{
-				"n1": {
-					*test.BuildTestPod("pod1", 100, 0, "n1", nil),
-					*test.BuildTestPod("pod2", 100, 0, "n1", func(pod *v1.Pod) {
-						pod.Labels = map[string]string{"foo": "bar"}
-					}),
-					*test.BuildTestPod("pod3", 100, 0, "n1", func(pod *v1.Pod) {
-						pod.Labels = map[string]string{"foo": "bar1"}
-					}),
-				},
-				"n2": {*test.BuildTestPod("pod4", 100, 0, "n2", nil)},
+			pods: []*v1.Pod{
+				test.BuildTestPod("pod1", 100, 0, "n1", nil),
+				test.BuildTestPod("pod2", 100, 0, "n1", func(pod *v1.Pod) {
+					pod.Labels = map[string]string{"foo": "bar"}
+				}),
+				test.BuildTestPod("pod3", 100, 0, "n1", func(pod *v1.Pod) {
+					pod.Labels = map[string]string{"foo": "bar1"}
+				}),
+				test.BuildTestPod("pod4", 100, 0, "n2", nil),
 			},
 			node: test.BuildTestNode("n1", 2000, 3000, 10, nil),
 			labelSelector: &metav1.LabelSelector{
@@ -85,21 +80,38 @@ func TestListPodsOnANode(t *testing.T) {
 		},
 	}
 	for _, testCase := range testCases {
-		fakeClient := &fake.Clientset{}
-		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-			list := action.(core.ListAction)
-			fieldString := list.GetListRestrictions().Fields.String()
-			if strings.Contains(fieldString, "n1") {
-				return true, &v1.PodList{Items: testCase.pods["n1"]}, nil
-			} else if strings.Contains(fieldString, "n2") {
-				return true, &v1.PodList{Items: testCase.pods["n2"]}, nil
+		t.Run(testCase.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var objs []runtime.Object
+			objs = append(objs, testCase.node)
+			for _, pod := range testCase.pods {
+				objs = append(objs, pod)
 			}
-			return true, nil, fmt.Errorf("Failed to list: %v", list)
+			fakeClient := fake.NewSimpleClientset(objs...)
+
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			podInformer := sharedInformerFactory.Core().V1().Pods()
+
+			getPodsAssignedToNode, err := BuildGetPodsAssignedToNodeFunc(podInformer)
+			if err != nil {
+				t.Errorf("Build get pods assigned to node function error: %v", err)
+			}
+
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+			filter, err := NewOptions().WithLabelSelector(testCase.labelSelector).BuildFilterFunc()
+			if err != nil {
+				t.Errorf("Build filter function error: %v", err)
+			}
+
+			pods, _ := ListPodsOnANode(testCase.node.Name, getPodsAssignedToNode, filter)
+			if len(pods) != testCase.expectedPodCount {
+				t.Errorf("Expected %v pods on node %v, got %+v", testCase.expectedPodCount, testCase.node.Name, len(pods))
+			}
 		})
-		pods, _ := ListPodsOnANode(context.TODO(), fakeClient, testCase.node, WithLabelSelector(testCase.labelSelector))
-		if len(pods) != testCase.expectedPodCount {
-			t.Errorf("expected %v pods on node %v, got %+v", testCase.expectedPodCount, testCase.node.Name, len(pods))
-		}
 	}
 }
 

@@ -22,17 +22,17 @@ import (
 	"math"
 	"sort"
 
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/validation"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
@@ -54,6 +54,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
+	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 ) {
 	strategyParams, err := validation.ValidateAndParseStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
@@ -140,6 +141,10 @@ func RemovePodsViolatingTopologySpreadConstraint(
 			// (this loop is where we count the number of pods per topologyValue that match this constraint's selector)
 			var sumPods float64
 			for i := range namespacePods.Items {
+				// skip pods that are being deleted.
+				if utils.IsPodTerminating(&namespacePods.Items[i]) {
+					continue
+				}
 				// 4. if the pod matches this TopologySpreadConstraint LabelSelector
 				if !selector.Matches(labels.Set(namespacePods.Items[i].Labels)) {
 					continue

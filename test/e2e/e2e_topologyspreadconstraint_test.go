@@ -11,8 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 )
 
@@ -20,7 +18,7 @@ const zoneTopologyKey string = "topology.kubernetes.io/zone"
 
 func TestTopologySpreadConstraint(t *testing.T) {
 	ctx := context.Background()
-	clientSet, _, stopCh := initializeClient(t)
+	clientSet, _, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -79,22 +77,9 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			defer deleteRC(ctx, t, clientSet, violatorRc)
 			waitForRCPodsRunning(ctx, t, clientSet, violatorRc)
 
-			// Run TopologySpreadConstraint strategy
-			evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
-			if err != nil || len(evictionPolicyGroupVersion) == 0 {
-				t.Fatalf("Error creating eviction policy group for %s: %v", name, err)
-			}
-			podEvictor := evictions.NewPodEvictor(
-				clientSet,
-				evictionPolicyGroupVersion,
-				false,
-				0,
-				nodes,
-				true,
-				false,
-				false,
-			)
+			podEvictor := initPodEvictorOrFail(t, clientSet, nodes)
 
+			// Run TopologySpreadConstraint strategy
 			t.Logf("Running RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
 			strategies.RemovePodsViolatingTopologySpreadConstraint(
 				ctx,
@@ -107,6 +92,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 				nodes,
 				podEvictor,
+				getPodsAssignedToNode,
 			)
 			t.Logf("Finished RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
 
@@ -118,6 +104,9 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			} else {
 				t.Fatalf("Pods were not evicted for %s TopologySpreadConstraint", name)
 			}
+
+			// Ensure recently evicted Pod are rescheduled and running before asserting for a balanced topology spread
+			waitForRCPodsRunning(ctx, t, clientSet, rc)
 
 			pods, err := clientSet.CoreV1().Pods(testNamespace.Name).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", tc.labelKey, tc.labelValue)})
 			if err != nil {

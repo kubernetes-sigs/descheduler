@@ -89,6 +89,11 @@ func IsMirrorPod(pod *v1.Pod) bool {
 	return ok
 }
 
+// IsPodTerminating returns true if the pod DeletionTimestamp is set.
+func IsPodTerminating(pod *v1.Pod) bool {
+	return pod.DeletionTimestamp != nil
+}
+
 // IsStaticPod returns true if the pod is a static pod.
 func IsStaticPod(pod *v1.Pod) bool {
 	source, err := GetPodSource(pod)

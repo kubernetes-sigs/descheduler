@@ -19,8 +19,8 @@ package app
 
 import (
 	"context"
-	"flag"
 	"io"
+	"k8s.io/apiserver/pkg/server/healthz"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
@@ -30,7 +30,9 @@ import (
 	apiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/server/mux"
 	restclient "k8s.io/client-go/rest"
-	aflag "k8s.io/component-base/cli/flag"
+	"k8s.io/component-base/config"
+	_ "k8s.io/component-base/logs/json/register"
+	"k8s.io/component-base/logs/registry"
 	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/klog/v2"
 )
@@ -48,8 +50,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 		Short: "descheduler",
 		Long:  `The descheduler evicts pods which may be bound to less desired nodes`,
 		Run: func(cmd *cobra.Command, args []string) {
-			s.Logs.Config.Format = s.Logging.Format
-			s.Logs.Apply()
+			// s.Logs.Config.Format = s.Logging.Format
 
 			// LoopbackClientConfig is a config for a privileged loopback connection
 			var LoopbackClientConfig *restclient.Config
@@ -59,20 +60,26 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 				return
 			}
 
-			if err := s.Validate(); err != nil {
-				klog.ErrorS(err, "failed to validate server configuration")
-				return
+			factory, _ := registry.LogRegistry.Get(s.Logging.Format)
+			if factory == nil {
+				klog.ClearLogger()
+			} else {
+				log, logrFlush := factory.Create(config.FormatOptions{})
+				defer logrFlush()
+				klog.SetLogger(log)
 			}
 
+			ctx := context.TODO()
+			pathRecorderMux := mux.NewPathRecorderMux("descheduler")
 			if !s.DisableMetrics {
-				ctx := context.TODO()
-				pathRecorderMux := mux.NewPathRecorderMux("descheduler")
 				pathRecorderMux.Handle("/metrics", legacyregistry.HandlerWithReset())
+			}
 
-				if _, err := SecureServing.Serve(pathRecorderMux, 0, ctx.Done()); err != nil {
-					klog.Fatalf("failed to start secure server: %v", err)
-					return
-				}
+			healthz.InstallHandler(pathRecorderMux, healthz.NamedCheck("Descheduler", healthz.PingHealthz.Check))
+
+			if _, err := SecureServing.Serve(pathRecorderMux, 0, ctx.Done()); err != nil {
+				klog.Fatalf("failed to start secure server: %v", err)
+				return
 			}
 
 			err := Run(s)
@@ -83,8 +90,6 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 	}
 	cmd.SetOut(out)
 	flags := cmd.Flags()
-	flags.SetNormalizeFunc(aflag.WordSepNormalizeFunc)
-	flags.AddGoFlagSet(flag.CommandLine)
 	s.AddFlags(flags)
 	return cmd
 }

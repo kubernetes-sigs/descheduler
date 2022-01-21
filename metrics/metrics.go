@@ -34,9 +34,9 @@ var (
 		&metrics.CounterOpts{
 			Subsystem:      DeschedulerSubsystem,
 			Name:           "pods_evicted",
-			Help:           "Number of evicted pods, by the result, by the strategy, by the namespace. 'failed' result means a pod could not be evicted",
+			Help:           "Number of evicted pods, by the result, by the strategy, by the namespace, by the node name. 'error' result means a pod could not be evicted",
 			StabilityLevel: metrics.ALPHA,
-		}, []string{"result", "strategy", "namespace"})
+		}, []string{"result", "strategy", "namespace", "node"})
 
 	buildInfo = metrics.NewGauge(
 		&metrics.GaugeOpts{
