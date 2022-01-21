@@ -2,16 +2,18 @@ package strategies
 
 import (
 	"context"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	core "k8s.io/client-go/testing"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -20,8 +22,6 @@ var (
 )
 
 func TestRemoveFailedPods(t *testing.T) {
-	ctx := context.Background()
-
 	createStrategy := func(enabled, includingInitContainers bool, reasons, excludeKinds []string, minAgeSeconds *uint, nodeFit bool) api.DeschedulerStrategy {
 		return api.DeschedulerStrategy{
 			Enabled: enabled,
@@ -41,25 +41,32 @@ func TestRemoveFailedPods(t *testing.T) {
 		description             string
 		nodes                   []*v1.Node
 		strategy                api.DeschedulerStrategy
-		expectedEvictedPodCount int
-		pods                    []v1.Pod
+		expectedEvictedPodCount uint
+		pods                    []*v1.Pod
 	}{
+		{
+			description:             "default empty strategy, 0 failures, 0 evictions",
+			strategy:                api.DeschedulerStrategy{},
+			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
+			expectedEvictedPodCount: 0,
+			pods:                    []*v1.Pod{}, // no pods come back with field selector phase=Failed
+		},
 		{
 			description:             "0 failures, 0 evictions",
 			strategy:                createStrategy(true, false, nil, nil, nil, false),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
-			pods:                    []v1.Pod{}, // no pods come back with field selector phase=Failed
+			pods:                    []*v1.Pod{}, // no pods come back with field selector phase=Failed
 		},
 		{
 			description:             "1 container terminated with reason NodeAffinity, 1 eviction",
 			strategy:                createStrategy(true, false, nil, nil, nil, false),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 1,
-			pods: []v1.Pod{
-				buildTestPod("p1", "node1", nil, &v1.ContainerState{
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("", "", nil, &v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{Reason: "NodeAffinity"},
-				}),
+				}), nil),
 			},
 		},
 		{
@@ -67,10 +74,10 @@ func TestRemoveFailedPods(t *testing.T) {
 			strategy:                createStrategy(true, true, nil, nil, nil, false),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 1,
-			pods: []v1.Pod{
-				buildTestPod("p1", "node1", &v1.ContainerState{
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("", "", &v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{Reason: "NodeAffinity"},
-				}, nil),
+				}, nil), nil),
 			},
 		},
 		{
@@ -78,10 +85,10 @@ func TestRemoveFailedPods(t *testing.T) {
 			strategy:                createStrategy(true, true, nil, nil, nil, false),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 1,
-			pods: []v1.Pod{
-				buildTestPod("p1", "node1", &v1.ContainerState{
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("", "", &v1.ContainerState{
 					Waiting: &v1.ContainerStateWaiting{Reason: "CreateContainerConfigError"},
-				}, nil),
+				}, nil), nil),
 			},
 		},
 		{
@@ -92,13 +99,13 @@ func TestRemoveFailedPods(t *testing.T) {
 				test.BuildTestNode("node2", 2000, 3000, 10, nil),
 			},
 			expectedEvictedPodCount: 2,
-			pods: []v1.Pod{
-				buildTestPod("p1", "node1", &v1.ContainerState{
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("", "", &v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{Reason: "CreateContainerConfigError"},
-				}, nil),
-				buildTestPod("p2", "node2", &v1.ContainerState{
+				}, nil), nil),
+				buildTestPod("p2", "node2", newPodStatus("", "", &v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{Reason: "CreateContainerConfigError"},
-				}, nil),
+				}, nil), nil),
 			},
 		},
 		{
@@ -106,10 +113,10 @@ func TestRemoveFailedPods(t *testing.T) {
 			strategy:                createStrategy(true, false, []string{"CreateContainerConfigError"}, nil, nil, false),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 1,
-			pods: []v1.Pod{
-				buildTestPod("p1", "node1", nil, &v1.ContainerState{
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("", "", nil, &v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{Reason: "CreateContainerConfigError"},
-				}),
+				}), nil),
 			},
 		},
 		{
@@ -117,10 +124,10 @@ func TestRemoveFailedPods(t *testing.T) {
 			strategy:                createStrategy(true, false, []string{"CreateContainerConfigError", "NodeAffinity"}, nil, nil, false),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 1,
-			pods: []v1.Pod{
-				buildTestPod("p1", "node1", nil, &v1.ContainerState{
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("", "", nil, &v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{Reason: "CreateContainerConfigError"},
-				}),
+				}), nil),
 			},
 		},
 		{
@@ -128,10 +135,10 @@ func TestRemoveFailedPods(t *testing.T) {
 			strategy:                createStrategy(true, false, []string{"CreateContainerConfigError"}, nil, nil, false),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
-			pods: []v1.Pod{
-				buildTestPod("p1", "node1", nil, &v1.ContainerState{
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("", "", nil, &v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{Reason: "NodeAffinity"},
-				}),
+				}), nil),
 			},
 		},
 		{
@@ -139,10 +146,10 @@ func TestRemoveFailedPods(t *testing.T) {
 			strategy:                createStrategy(true, false, []string{"CreateContainerConfigError"}, nil, nil, false),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
-			pods: []v1.Pod{
-				buildTestPod("p1", "node1", &v1.ContainerState{
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("", "", &v1.ContainerState{
 					Waiting: &v1.ContainerStateWaiting{Reason: "CreateContainerConfigError"},
-				}, nil),
+				}, nil), nil),
 			},
 		},
 		{
@@ -150,10 +157,10 @@ func TestRemoveFailedPods(t *testing.T) {
 			strategy:                createStrategy(true, false, nil, nil, &OneHourInSeconds, false),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
-			pods: []v1.Pod{
-				buildTestPod("p1", "node1", nil, &v1.ContainerState{
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("", "", nil, &v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{Reason: "NodeAffinity"},
-				}),
+				}), nil),
 			},
 		},
 		{
@@ -163,10 +170,10 @@ func TestRemoveFailedPods(t *testing.T) {
 				node.Spec.Unschedulable = true
 			})},
 			expectedEvictedPodCount: 0,
-			pods: []v1.Pod{
-				buildTestPod("p1", "node1", nil, &v1.ContainerState{
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("", "", nil, &v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{Reason: "NodeAffinity"},
-				}),
+				}), nil),
 			},
 		},
 		{
@@ -174,10 +181,10 @@ func TestRemoveFailedPods(t *testing.T) {
 			strategy:                createStrategy(true, true, nil, []string{"ReplicaSet"}, nil, false),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
-			pods: []v1.Pod{
-				buildTestPod("p1", "node1", &v1.ContainerState{
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("", "", &v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{Reason: "NodeAffinity"},
-				}, nil),
+				}, nil), nil),
 			},
 		},
 		{
@@ -185,35 +192,88 @@ func TestRemoveFailedPods(t *testing.T) {
 			strategy:                createStrategy(true, true, nil, []string{"DaemonSet"}, nil, false),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 1,
-			pods: []v1.Pod{
-				buildTestPod("p1", "node1", &v1.ContainerState{
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("", "", &v1.ContainerState{
 					Terminated: &v1.ContainerStateTerminated{Reason: "NodeAffinity"},
-				}, nil),
+				}, nil), nil),
+			},
+		},
+		{
+			description:             "excluded owner kind=DaemonSet, 1 init container terminated with owner kind=ReplicaSet, 1 pod in termination; nothing should be moved",
+			strategy:                createStrategy(true, true, nil, []string{"DaemonSet"}, nil, false),
+			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
+			expectedEvictedPodCount: 0,
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("", "", &v1.ContainerState{
+					Terminated: &v1.ContainerStateTerminated{Reason: "NodeAffinity"},
+				}, nil), &metav1.Time{}),
+			},
+		},
+		{
+			description:             "1 container terminated with reason ShutDown, 0 evictions",
+			strategy:                createStrategy(true, false, nil, nil, nil, true),
+			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
+			expectedEvictedPodCount: 0,
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("Shutdown", v1.PodFailed, nil, nil), nil),
+			},
+		},
+		{
+			description:             "include reason=Shutdown, 2 containers terminated with reason ShutDown, 2 evictions",
+			strategy:                createStrategy(true, false, []string{"Shutdown"}, nil, nil, false),
+			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
+			expectedEvictedPodCount: 2,
+			pods: []*v1.Pod{
+				buildTestPod("p1", "node1", newPodStatus("Shutdown", v1.PodFailed, nil, nil), nil),
+				buildTestPod("p2", "node1", newPodStatus("Shutdown", v1.PodFailed, nil, nil), nil),
 			},
 		},
 	}
 	for _, tc := range tests {
-		fakeClient := &fake.Clientset{}
-		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-			return true, &v1.PodList{Items: tc.pods}, nil
+		t.Run(tc.description, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var objs []runtime.Object
+			for _, node := range tc.nodes {
+				objs = append(objs, node)
+			}
+			for _, pod := range tc.pods {
+				objs = append(objs, pod)
+			}
+			fakeClient := fake.NewSimpleClientset(objs...)
+
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			podInformer := sharedInformerFactory.Core().V1().Pods()
+
+			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			if err != nil {
+				t.Errorf("Build get pods assigned to node function error: %v", err)
+			}
+
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+			podEvictor := evictions.NewPodEvictor(
+				fakeClient,
+				policyv1.SchemeGroupVersion.String(),
+				false,
+				nil,
+				nil,
+				tc.nodes,
+				false,
+				false,
+				false,
+				false,
+				false,
+			)
+
+			RemoveFailedPods(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+			actualEvictedPodCount := podEvictor.TotalEvicted()
+			if actualEvictedPodCount != tc.expectedEvictedPodCount {
+				t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)
+			}
 		})
-
-		podEvictor := evictions.NewPodEvictor(
-			fakeClient,
-			policyv1.SchemeGroupVersion.String(),
-			false,
-			100,
-			tc.nodes,
-			false,
-			false,
-			false,
-		)
-
-		RemoveFailedPods(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor)
-		actualEvictedPodCount := podEvictor.TotalEvicted()
-		if actualEvictedPodCount != tc.expectedEvictedPodCount {
-			t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)
-		}
 	}
 }
 
@@ -225,6 +285,7 @@ func TestValidRemoveFailedPodsParams(t *testing.T) {
 		params *api.StrategyParameters
 	}{
 		{name: "validate nil params", params: nil},
+		{name: "validate empty params", params: &api.StrategyParameters{}},
 		{name: "validate reasons params", params: &api.StrategyParameters{FailedPods: &api.FailedPods{
 			Reasons: []string{"CreateContainerConfigError"},
 		}}},
@@ -252,23 +313,31 @@ func TestValidRemoveFailedPodsParams(t *testing.T) {
 	}
 }
 
-func buildTestPod(podName, nodeName string, initContainerState, containerState *v1.ContainerState) v1.Pod {
+func newPodStatus(reason string, phase v1.PodPhase, initContainerState, containerState *v1.ContainerState) v1.PodStatus {
+	ps := v1.PodStatus{
+		Reason: reason,
+		Phase:  phase,
+	}
+
+	if initContainerState != nil {
+		ps.InitContainerStatuses = []v1.ContainerStatus{{State: *initContainerState}}
+		ps.Phase = v1.PodFailed
+	}
+
+	if containerState != nil {
+		ps.ContainerStatuses = []v1.ContainerStatus{{State: *containerState}}
+		ps.Phase = v1.PodFailed
+	}
+
+	return ps
+}
+
+func buildTestPod(podName, nodeName string, podStatus v1.PodStatus, deletionTimestamp *metav1.Time) *v1.Pod {
 	pod := test.BuildTestPod(podName, 1, 1, nodeName, func(p *v1.Pod) {
-		ps := v1.PodStatus{}
-
-		if initContainerState != nil {
-			ps.InitContainerStatuses = []v1.ContainerStatus{{State: *initContainerState}}
-			ps.Phase = v1.PodFailed
-		}
-
-		if containerState != nil {
-			ps.ContainerStatuses = []v1.ContainerStatus{{State: *containerState}}
-			ps.Phase = v1.PodFailed
-		}
-
-		p.Status = ps
+		p.Status = podStatus
 	})
 	pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	pod.ObjectMeta.SetCreationTimestamp(metav1.Now())
-	return *pod
+	pod.DeletionTimestamp = deletionTimestamp
+	return pod
 }

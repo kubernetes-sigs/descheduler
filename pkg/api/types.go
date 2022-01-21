@@ -32,6 +32,9 @@ type DeschedulerPolicy struct {
 	// NodeSelector for a set of nodes to operate over
 	NodeSelector *string
 
+	// EvictFailedBarePods allows pods without ownerReferences and in failed phase to be evicted.
+	EvictFailedBarePods *bool
+
 	// EvictLocalStoragePods allows pods using local storage to be evicted.
 	EvictLocalStoragePods *bool
 
@@ -42,7 +45,10 @@ type DeschedulerPolicy struct {
 	IgnorePVCPods *bool
 
 	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
-	MaxNoOfPodsToEvictPerNode *int
+	MaxNoOfPodsToEvictPerNode *uint
+
+	// MaxNoOfPodsToEvictPerNamespace restricts maximum of pods to be evicted per namespace.
+	MaxNoOfPodsToEvictPerNamespace *uint
 }
 
 type StrategyName string

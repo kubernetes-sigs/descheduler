@@ -24,16 +24,17 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	core "k8s.io/client-go/testing"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
 
 func TestPodAntiAffinity(t *testing.T) {
-	ctx := context.Background()
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, func(node *v1.Node) {
 		node.ObjectMeta.Labels = map[string]string{
@@ -55,6 +56,10 @@ func TestPodAntiAffinity(t *testing.T) {
 	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, nil)
 	p7 := test.BuildTestPod("p7", 100, 0, node1.Name, nil)
 	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, nil)
+	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, nil)
+	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, nil)
+	p9.DeletionTimestamp = &metav1.Time{}
+	p10.DeletionTimestamp = &metav1.Time{}
 
 	criticalPriority := utils.SystemCriticalPriority
 	nonEvictablePod := test.BuildTestPod("non-evict", 100, 0, node1.Name, func(pod *v1.Pod) {
@@ -72,6 +77,8 @@ func TestPodAntiAffinity(t *testing.T) {
 	test.SetNormalOwnerRef(p5)
 	test.SetNormalOwnerRef(p6)
 	test.SetNormalOwnerRef(p7)
+	test.SetNormalOwnerRef(p9)
+	test.SetNormalOwnerRef(p10)
 
 	// set pod anti affinity
 	setPodAntiAffinity(p1, "foo", "bar")
@@ -80,6 +87,8 @@ func TestPodAntiAffinity(t *testing.T) {
 	setPodAntiAffinity(p5, "foo1", "bar1")
 	setPodAntiAffinity(p6, "foo1", "bar1")
 	setPodAntiAffinity(p7, "foo", "bar")
+	setPodAntiAffinity(p9, "foo", "bar")
+	setPodAntiAffinity(p10, "foo", "bar")
 
 	// set pod priority
 	test.SetPodPriority(p5, 100)
@@ -91,98 +100,133 @@ func TestPodAntiAffinity(t *testing.T) {
 		"datacenter": "west",
 	}
 
+	var uint1 uint = 1
+	var uint3 uint = 3
+
 	tests := []struct {
-		description             string
-		maxPodsToEvictPerNode   int
-		pods                    []v1.Pod
-		expectedEvictedPodCount int
-		nodeFit                 bool
-		nodes                   []*v1.Node
+		description                    string
+		maxPodsToEvictPerNode          *uint
+		maxNoOfPodsToEvictPerNamespace *uint
+		pods                           []*v1.Pod
+		expectedEvictedPodCount        uint
+		nodeFit                        bool
+		nodes                          []*v1.Node
 	}{
 		{
 			description:             "Maximum pods to evict - 0",
-			maxPodsToEvictPerNode:   0,
-			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
+			pods:                    []*v1.Pod{p1, p2, p3, p4},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 3,
 		},
 		{
 			description:             "Maximum pods to evict - 3",
-			maxPodsToEvictPerNode:   3,
-			pods:                    []v1.Pod{*p1, *p2, *p3, *p4},
+			maxPodsToEvictPerNode:   &uint3,
+			pods:                    []*v1.Pod{p1, p2, p3, p4},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 3,
 		},
 		{
+			description:                    "Maximum pods to evict (maxPodsToEvictPerNamespace=3) - 3",
+			maxNoOfPodsToEvictPerNamespace: &uint3,
+			pods:                           []*v1.Pod{p1, p2, p3, p4},
+			nodes:                          []*v1.Node{node1},
+			expectedEvictedPodCount:        3,
+		},
+		{
 			description:             "Evict only 1 pod after sorting",
-			maxPodsToEvictPerNode:   0,
-			pods:                    []v1.Pod{*p5, *p6, *p7},
+			pods:                    []*v1.Pod{p5, p6, p7},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
 		},
 		{
 			description:             "Evicts pod that conflicts with critical pod (but does not evict critical pod)",
-			maxPodsToEvictPerNode:   1,
-			pods:                    []v1.Pod{*p1, *nonEvictablePod},
+			maxPodsToEvictPerNode:   &uint1,
+			pods:                    []*v1.Pod{p1, nonEvictablePod},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
 		},
 		{
 			description:             "Evicts pod that conflicts with critical pod (but does not evict critical pod)",
-			maxPodsToEvictPerNode:   1,
-			pods:                    []v1.Pod{*p1, *nonEvictablePod},
+			maxPodsToEvictPerNode:   &uint1,
+			pods:                    []*v1.Pod{p1, nonEvictablePod},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
 		},
 		{
 			description:             "Won't evict pods because node selectors don't match available nodes",
-			maxPodsToEvictPerNode:   1,
-			pods:                    []v1.Pod{*p8, *nonEvictablePod},
+			maxPodsToEvictPerNode:   &uint1,
+			pods:                    []*v1.Pod{p8, nonEvictablePod},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
 			nodeFit:                 true,
 		},
 		{
 			description:             "Won't evict pods because only other node is not schedulable",
-			maxPodsToEvictPerNode:   1,
-			pods:                    []v1.Pod{*p8, *nonEvictablePod},
+			maxPodsToEvictPerNode:   &uint1,
+			pods:                    []*v1.Pod{p8, nonEvictablePod},
 			nodes:                   []*v1.Node{node1, node3},
 			expectedEvictedPodCount: 0,
 			nodeFit:                 true,
 		},
+		{
+			description:             "No pod to evicted since all pod terminating",
+			pods:                    []*v1.Pod{p9, p10},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 0,
+		},
 	}
 
 	for _, test := range tests {
-		// create fake client
-		fakeClient := &fake.Clientset{}
-		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-			return true, &v1.PodList{Items: test.pods}, nil
-		})
-		fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
-			return true, node1, nil
-		})
+		t.Run(test.description, func(t *testing.T) {
 
-		podEvictor := evictions.NewPodEvictor(
-			fakeClient,
-			policyv1.SchemeGroupVersion.String(),
-			false,
-			test.maxPodsToEvictPerNode,
-			test.nodes,
-			false,
-			false,
-			false,
-		)
-		strategy := api.DeschedulerStrategy{
-			Params: &api.StrategyParameters{
-				NodeFit: test.nodeFit,
-			},
-		}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-		RemovePodsViolatingInterPodAntiAffinity(ctx, fakeClient, strategy, test.nodes, podEvictor)
-		podsEvicted := podEvictor.TotalEvicted()
-		if podsEvicted != test.expectedEvictedPodCount {
-			t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, test.expectedEvictedPodCount)
-		}
+			var objs []runtime.Object
+			for _, node := range test.nodes {
+				objs = append(objs, node)
+			}
+			for _, pod := range test.pods {
+				objs = append(objs, pod)
+			}
+			fakeClient := fake.NewSimpleClientset(objs...)
+
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			podInformer := sharedInformerFactory.Core().V1().Pods()
+
+			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			if err != nil {
+				t.Errorf("Build get pods assigned to node function error: %v", err)
+			}
+
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+			podEvictor := evictions.NewPodEvictor(
+				fakeClient,
+				policyv1.SchemeGroupVersion.String(),
+				false,
+				test.maxPodsToEvictPerNode,
+				test.maxNoOfPodsToEvictPerNamespace,
+				test.nodes,
+				false,
+				false,
+				false,
+				false,
+				false,
+			)
+			strategy := api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					NodeFit: test.nodeFit,
+				},
+			}
+
+			RemovePodsViolatingInterPodAntiAffinity(ctx, fakeClient, strategy, test.nodes, podEvictor, getPodsAssignedToNode)
+			podsEvicted := podEvictor.TotalEvicted()
+			if podsEvicted != test.expectedEvictedPodCount {
+				t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, test.expectedEvictedPodCount)
+			}
+		})
 	}
 }
 

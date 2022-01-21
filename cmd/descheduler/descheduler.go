@@ -17,22 +17,23 @@ limitations under the License.
 package main
 
 import (
-	"fmt"
-	"k8s.io/component-base/logs"
 	"os"
+
+	"k8s.io/component-base/cli"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app"
 )
+
+func init() {
+	klog.SetOutput(os.Stdout)
+	klog.InitFlags(nil)
+}
 
 func main() {
 	out := os.Stdout
 	cmd := app.NewDeschedulerCommand(out)
 	cmd.AddCommand(app.NewVersionCommand())
 
-	logs.InitLogs()
-	defer logs.FlushLogs()
-
-	if err := cmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	code := cli.Run(cmd)
+	os.Exit(code)
 }

@@ -17,150 +17,174 @@ limitations under the License.
 package pod
 
 import (
-	"context"
 	"sort"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/sets"
+	coreinformers "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/tools/cache"
+
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+const (
+	nodeNameKeyIndex = "spec.nodeName"
+)
+
+// FilterFunc is a filter for a pod.
+type FilterFunc func(*v1.Pod) bool
+
+// GetPodsAssignedToNodeFunc is a function which accept a node name and a pod filter function
+// as input and returns the pods that assigned to the node.
+type GetPodsAssignedToNodeFunc func(string, FilterFunc) ([]*v1.Pod, error)
+
+// WrapFilterFuncs wraps a set of FilterFunc in one.
+func WrapFilterFuncs(filters ...FilterFunc) FilterFunc {
+	return func(pod *v1.Pod) bool {
+		for _, filter := range filters {
+			if filter != nil && !filter(pod) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
 type Options struct {
-	filter             func(pod *v1.Pod) bool
-	includedNamespaces []string
-	excludedNamespaces []string
+	filter             FilterFunc
+	includedNamespaces sets.String
+	excludedNamespaces sets.String
 	labelSelector      *metav1.LabelSelector
+}
+
+// NewOptions returns an empty Options.
+func NewOptions() *Options {
+	return &Options{}
 }
 
 // WithFilter sets a pod filter.
 // The filter function should return true if the pod should be returned from ListPodsOnANode
-func WithFilter(filter func(pod *v1.Pod) bool) func(opts *Options) {
-	return func(opts *Options) {
-		opts.filter = filter
-	}
+func (o *Options) WithFilter(filter FilterFunc) *Options {
+	o.filter = filter
+	return o
 }
 
 // WithNamespaces sets included namespaces
-func WithNamespaces(namespaces []string) func(opts *Options) {
-	return func(opts *Options) {
-		opts.includedNamespaces = namespaces
-	}
+func (o *Options) WithNamespaces(namespaces sets.String) *Options {
+	o.includedNamespaces = namespaces
+	return o
 }
 
 // WithoutNamespaces sets excluded namespaces
-func WithoutNamespaces(namespaces []string) func(opts *Options) {
-	return func(opts *Options) {
-		opts.excludedNamespaces = namespaces
-	}
+func (o *Options) WithoutNamespaces(namespaces sets.String) *Options {
+	o.excludedNamespaces = namespaces
+	return o
 }
 
 // WithLabelSelector sets a pod label selector
-func WithLabelSelector(labelSelector *metav1.LabelSelector) func(opts *Options) {
-	return func(opts *Options) {
-		opts.labelSelector = labelSelector
-	}
+func (o *Options) WithLabelSelector(labelSelector *metav1.LabelSelector) *Options {
+	o.labelSelector = labelSelector
+	return o
 }
 
-// ListPodsOnANode lists all of the pods on a node
-// It also accepts an optional "filter" function which can be used to further limit the pods that are returned.
-// (Usually this is podEvictor.Evictable().IsEvictable, in order to only list the evictable pods on a node, but can
-// be used by strategies to extend it if there are further restrictions, such as with NodeAffinity).
-func ListPodsOnANode(
-	ctx context.Context,
-	client clientset.Interface,
-	node *v1.Node,
-	opts ...func(opts *Options),
-) ([]*v1.Pod, error) {
-	fieldSelectorString := "spec.nodeName=" + node.Name + ",status.phase!=" + string(v1.PodSucceeded) + ",status.phase!=" + string(v1.PodFailed)
-
-	return ListPodsOnANodeWithFieldSelector(ctx, client, node, fieldSelectorString, opts...)
+// BuildFilterFunc builds a final FilterFunc based on Options.
+func (o *Options) BuildFilterFunc() (FilterFunc, error) {
+	var s labels.Selector
+	var err error
+	if o.labelSelector != nil {
+		s, err = metav1.LabelSelectorAsSelector(o.labelSelector)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return func(pod *v1.Pod) bool {
+		if o.filter != nil && !o.filter(pod) {
+			return false
+		}
+		if len(o.includedNamespaces) > 0 && !o.includedNamespaces.Has(pod.Namespace) {
+			return false
+		}
+		if len(o.excludedNamespaces) > 0 && o.excludedNamespaces.Has(pod.Namespace) {
+			return false
+		}
+		if s != nil && !s.Matches(labels.Set(pod.GetLabels())) {
+			return false
+		}
+		return true
+	}, nil
 }
 
-// ListPodsOnANodeWithFieldSelector lists all of the pods on a node using the filter selectors
-func ListPodsOnANodeWithFieldSelector(
-	ctx context.Context,
-	client clientset.Interface,
-	node *v1.Node,
-	fieldSelectorString string,
-	opts ...func(opts *Options),
-) ([]*v1.Pod, error) {
-	options := &Options{}
-	for _, opt := range opts {
-		opt(options)
-	}
-
-	pods := make([]*v1.Pod, 0)
-
-	labelSelectorString := ""
-	if options.labelSelector != nil {
-		selector, err := metav1.LabelSelectorAsSelector(options.labelSelector)
-		if err != nil {
-			return []*v1.Pod{}, err
-		}
-		labelSelectorString = selector.String()
-	}
-
-	if len(options.includedNamespaces) > 0 {
-		fieldSelector, err := fields.ParseSelector(fieldSelectorString)
-		if err != nil {
-			return []*v1.Pod{}, err
-		}
-
-		for _, namespace := range options.includedNamespaces {
-			podList, err := client.CoreV1().Pods(namespace).List(ctx,
-				metav1.ListOptions{
-					FieldSelector: fieldSelector.String(),
-					LabelSelector: labelSelectorString,
-				})
-			if err != nil {
-				return []*v1.Pod{}, err
+// BuildGetPodsAssignedToNodeFunc establishes an indexer to map the pods and their assigned nodes.
+// It returns a function to help us get all the pods that assigned to a node based on the indexer.
+func BuildGetPodsAssignedToNodeFunc(podInformer coreinformers.PodInformer) (GetPodsAssignedToNodeFunc, error) {
+	// Establish an indexer to map the pods and their assigned nodes.
+	err := podInformer.Informer().AddIndexers(cache.Indexers{
+		nodeNameKeyIndex: func(obj interface{}) ([]string, error) {
+			pod, ok := obj.(*v1.Pod)
+			if !ok {
+				return []string{}, nil
 			}
-			for i := range podList.Items {
-				if options.filter != nil && !options.filter(&podList.Items[i]) {
-					continue
-				}
-				pods = append(pods, &podList.Items[i])
+			if len(pod.Spec.NodeName) == 0 {
+				return []string{}, nil
+			}
+			return []string{pod.Spec.NodeName}, nil
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// The indexer helps us get all the pods that assigned to a node.
+	podIndexer := podInformer.Informer().GetIndexer()
+	getPodsAssignedToNode := func(nodeName string, filter FilterFunc) ([]*v1.Pod, error) {
+		objs, err := podIndexer.ByIndex(nodeNameKeyIndex, nodeName)
+		if err != nil {
+			return nil, err
+		}
+		pods := make([]*v1.Pod, 0, len(objs))
+		for _, obj := range objs {
+			pod, ok := obj.(*v1.Pod)
+			if !ok {
+				continue
+			}
+			if filter(pod) {
+				pods = append(pods, pod)
 			}
 		}
 		return pods, nil
 	}
+	return getPodsAssignedToNode, nil
+}
 
-	if len(options.excludedNamespaces) > 0 {
-		for _, namespace := range options.excludedNamespaces {
-			fieldSelectorString += ",metadata.namespace!=" + namespace
-		}
+// ListPodsOnANode lists all pods on a node.
+// It also accepts a "filter" function which can be used to further limit the pods that are returned.
+// (Usually this is podEvictor.Evictable().IsEvictable, in order to only list the evictable pods on a node, but can
+// be used by strategies to extend it if there are further restrictions, such as with NodeAffinity).
+func ListPodsOnANode(
+	nodeName string,
+	getPodsAssignedToNode GetPodsAssignedToNodeFunc,
+	filter FilterFunc,
+) ([]*v1.Pod, error) {
+	// Succeeded and failed pods are not considered because they don't occupy any resource.
+	f := func(pod *v1.Pod) bool {
+		return pod.Status.Phase != v1.PodSucceeded && pod.Status.Phase != v1.PodFailed
 	}
+	return ListAllPodsOnANode(nodeName, getPodsAssignedToNode, WrapFilterFuncs(f, filter))
+}
 
-	fieldSelector, err := fields.ParseSelector(fieldSelectorString)
+// ListAllPodsOnANode lists all the pods on a node no matter what the phase of the pod is.
+func ListAllPodsOnANode(
+	nodeName string,
+	getPodsAssignedToNode GetPodsAssignedToNodeFunc,
+	filter FilterFunc,
+) ([]*v1.Pod, error) {
+	pods, err := getPodsAssignedToNode(nodeName, filter)
 	if err != nil {
 		return []*v1.Pod{}, err
 	}
 
-	// INFO(jchaloup): field selectors do not work properly with listers
-	// Once the descheduler switches to pod listers (through informers),
-	// We need to flip to client-side filtering.
-	podList, err := client.CoreV1().Pods(v1.NamespaceAll).List(ctx,
-		metav1.ListOptions{
-			FieldSelector: fieldSelector.String(),
-			LabelSelector: labelSelectorString,
-		})
-	if err != nil {
-		return []*v1.Pod{}, err
-	}
-
-	for i := range podList.Items {
-		// fake client does not support field selectors
-		// so let's filter based on the node name as well (quite cheap)
-		if podList.Items[i].Spec.NodeName != node.Name {
-			continue
-		}
-		if options.filter != nil && !options.filter(&podList.Items[i]) {
-			continue
-		}
-		pods = append(pods, &podList.Items[i])
-	}
 	return pods, nil
 }
 

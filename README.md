@@ -132,6 +132,7 @@ The policy includes a common configuration that applies to all the strategies:
 | `evictSystemCriticalPods` | `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
 | `ignorePvcPods` | `false` | set whether PVC pods should be evicted or ignored |
 | `maxNoOfPodsToEvictPerNode` | `nil` | maximum number of pods evicted from each node (summed through all strategies) |
+| `evictFailedBarePods` | `false` | allow eviction of pods without owner references and in failed phase |
 
 As part of the policy, the parameters associated with each strategy can be configured.
 See each strategy for details on available parameters.
@@ -142,6 +143,7 @@ See each strategy for details on available parameters.
 apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 nodeSelector: prod=dev
+evictFailedBarePods: false
 evictLocalStoragePods: true
 evictSystemCriticalPods: true
 maxNoOfPodsToEvictPerNode: 40
@@ -456,9 +458,9 @@ strategies:
 
 This strategy makes sure that pods having too many restarts are removed from nodes. For example a pod with EBS/PD that
 can't get the volume/disk attached to the instance, then the pod should be re-scheduled to other nodes. Its parameters
-include `podRestartThreshold`, which is the number of restarts at which a pod should be evicted, and `includingInitContainers`,
-which determines whether init container restarts should be factored into that calculation.
-|`labelSelector`|(see [label filtering](#label-filtering))|
+include `podRestartThreshold`, which is the number of restarts (summed over all eligible containers) at which a pod
+should be evicted, and `includingInitContainers`, which determines whether init container restarts should be factored
+into that calculation.
 
 **Parameters:**
 
@@ -469,6 +471,7 @@ which determines whether init container restarts should be factored into that ca
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
 |`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
@@ -523,7 +526,7 @@ strategies:
 This strategy evicts pods that are in failed status phase.
 You can provide an optional parameter to filter by failed `reasons`.
 `reasons` can be expanded to include reasons of InitContainers as well by setting the optional parameter `includingInitContainers` to `true`.
-You can specify an optional parameter `minPodLifeTimeSeconds` to evict pods that are older than specified seconds.
+You can specify an optional parameter `minPodLifetimeSeconds` to evict pods that are older than specified seconds.
 Lastly, you can specify the optional parameter `excludeOwnerKinds` and if a pod
 has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
 
@@ -531,7 +534,7 @@ has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considere
 
 |Name|Type|
 |---|---|
-|`minPodLifeTimeSeconds`|uint|
+|`minPodLifetimeSeconds`|uint|
 |`excludeOwnerKinds`|list(string)|
 |`reasons`|list(string)|
 |`includingInitContainers`|bool|
@@ -556,7 +559,7 @@ strategies:
          includingInitContainers: true
          excludeOwnerKinds:
          - "Job"
-         minPodLifeTimeSeconds: 3600
+         minPodLifetimeSeconds: 3600
 ```
 
 ## Filter Pods
@@ -739,8 +742,8 @@ Using Deployments instead of ReplicationControllers provides an automated rollou
 When the descheduler decides to evict pods from a node, it employs the following general mechanism:
 
 * [Critical pods](https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/) (with priorityClassName set to system-cluster-critical or system-node-critical) are never evicted (unless `evictSystemCriticalPods: true` is set).
-* Pods (static or mirrored pods or stand alone pods) not part of an ReplicationController, ReplicaSet(Deployment), StatefulSet, or Job are
-never evicted because these pods won't be recreated.
+* Pods (static or mirrored pods or standalone pods) not part of an ReplicationController, ReplicaSet(Deployment), StatefulSet, or Job are
+never evicted because these pods won't be recreated. (Standalone pods in failed status phase can be evicted by setting `evictFailedBarePods: true`)
 * Pods associated with DaemonSets are never evicted.
 * Pods with local storage are never evicted (unless `evictLocalStoragePods: true` is set).
 * Pods with PVCs are evicted (unless `ignorePvcPods: true` is set).
@@ -749,6 +752,7 @@ best effort pods are evicted before burstable and guaranteed pods.
 * All types of pods with the annotation `descheduler.alpha.kubernetes.io/evict` are eligible for eviction. This
   annotation is used to override checks which prevent eviction and users can select which pod is evicted.
   Users should know how and if the pod will be recreated.
+* Pods with a non-nil DeletionTimestamp are not evicted by default.
 
 Setting `--v=4` or greater on the Descheduler will log all reasons why any pod is not evictable.
 

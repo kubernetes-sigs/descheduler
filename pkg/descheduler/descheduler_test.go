@@ -55,7 +55,7 @@ func TestTaintsUpdated(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Unable to run descheduler strategies: %v", err)
 		}
-	case <-time.After(300 * time.Millisecond):
+	case <-time.After(1 * time.Second):
 		// Wait for few cycles and then verify the only pod still exists
 	}
 

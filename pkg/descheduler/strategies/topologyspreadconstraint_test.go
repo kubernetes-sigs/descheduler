@@ -5,23 +5,23 @@ import (
 	"fmt"
 	"testing"
 
-	"sigs.k8s.io/descheduler/pkg/api"
-
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	core "k8s.io/client-go/testing"
+
+	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/test"
 )
 
 func TestTopologySpreadConstraint(t *testing.T) {
-	ctx := context.Background()
 	testCases := []struct {
 		name                 string
 		pods                 []*v1.Pod
-		expectedEvictedCount int
+		expectedEvictedCount uint
 		nodes                []*v1.Node
 		strategy             api.DeschedulerStrategy
 		namespaces           []string
@@ -832,33 +832,83 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			namespaces: []string{"ns1"},
 		},
+		{
+			name: "2 domains, sizes [4,2], maxSkew=1, 2 pods in termination; nothing should be moved",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       2,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:             2,
+					node:              "n1",
+					labels:            map[string]string{"foo": "bar"},
+					constraints:       getDefaultTopologyConstraints(1),
+					deletionTimestamp: &metav1.Time{},
+				},
+				{
+					count:       2,
+					node:        "n2",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+			}),
+			expectedEvictedCount: 0,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					LabelSelector: getLabelSelector("foo", []string{"bar"}, metav1.LabelSelectorOpIn),
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			fakeClient := &fake.Clientset{}
-			fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-				podList := make([]v1.Pod, 0, len(tc.pods))
-				for _, pod := range tc.pods {
-					podList = append(podList, *pod)
-				}
-				return true, &v1.PodList{Items: podList}, nil
-			})
-			fakeClient.Fake.AddReactor("list", "namespaces", func(action core.Action) (bool, runtime.Object, error) {
-				return true, &v1.NamespaceList{Items: []v1.Namespace{{ObjectMeta: metav1.ObjectMeta{Name: "ns1", Namespace: "ns1"}}}}, nil
-			})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var objs []runtime.Object
+			for _, node := range tc.nodes {
+				objs = append(objs, node)
+			}
+			for _, pod := range tc.pods {
+				objs = append(objs, pod)
+			}
+			objs = append(objs, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns1"}})
+			fakeClient := fake.NewSimpleClientset(objs...)
+
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			podInformer := sharedInformerFactory.Core().V1().Pods()
+
+			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			if err != nil {
+				t.Errorf("Build get pods assigned to node function error: %v", err)
+			}
+
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
 				"v1",
 				false,
-				100,
+				nil,
+				nil,
 				tc.nodes,
 				false,
 				false,
 				false,
+				false,
+				false,
 			)
-			RemovePodsViolatingTopologySpreadConstraint(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor)
+			RemovePodsViolatingTopologySpreadConstraint(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != tc.expectedEvictedCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.name, tc.expectedEvictedCount, podsEvicted)
@@ -868,14 +918,15 @@ func TestTopologySpreadConstraint(t *testing.T) {
 }
 
 type testPodList struct {
-	count        int
-	node         string
-	labels       map[string]string
-	constraints  []v1.TopologySpreadConstraint
-	nodeSelector map[string]string
-	nodeAffinity *v1.Affinity
-	noOwners     bool
-	tolerations  []v1.Toleration
+	count             int
+	node              string
+	labels            map[string]string
+	constraints       []v1.TopologySpreadConstraint
+	nodeSelector      map[string]string
+	nodeAffinity      *v1.Affinity
+	noOwners          bool
+	tolerations       []v1.Toleration
+	deletionTimestamp *metav1.Time
 }
 
 func createTestPods(testPods []testPodList) []*v1.Pod {
@@ -896,6 +947,7 @@ func createTestPods(testPods []testPodList) []*v1.Pod {
 					p.Spec.NodeSelector = tp.nodeSelector
 					p.Spec.Affinity = tp.nodeAffinity
 					p.Spec.Tolerations = tp.tolerations
+					p.ObjectMeta.DeletionTimestamp = tp.deletionTimestamp
 				}))
 			podNum++
 		}

@@ -75,7 +75,7 @@ func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 	}
 }
 
-// RcByNameContainer returns a ReplicationControoler with specified name and container
+// RcByNameContainer returns a ReplicationController with specified name and container
 func RcByNameContainer(name, namespace string, replicas int32, labels map[string]string, gracePeriod *int64, priorityClassName string) *v1.ReplicationController {
 	zeroGracePeriod := int64(0)
 
@@ -108,7 +108,7 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 	}
 }
 
-func initializeClient(t *testing.T) (clientset.Interface, coreinformers.NodeInformer, chan struct{}) {
+func initializeClient(t *testing.T) (clientset.Interface, coreinformers.NodeInformer, podutil.GetPodsAssignedToNodeFunc, chan struct{}) {
 	clientSet, err := client.CreateClient(os.Getenv("KUBECONFIG"))
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
@@ -117,12 +117,41 @@ func initializeClient(t *testing.T) (clientset.Interface, coreinformers.NodeInfo
 	stopChannel := make(chan struct{})
 
 	sharedInformerFactory := informers.NewSharedInformerFactory(clientSet, 0)
+	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
+	podInformer := sharedInformerFactory.Core().V1().Pods()
+
+	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+	if err != nil {
+		t.Errorf("build get pods assigned to node function error: %v", err)
+	}
+
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 
-	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
+	waitForNodesReady(context.Background(), t, clientSet, nodeInformer)
+	return clientSet, nodeInformer, getPodsAssignedToNode, stopChannel
+}
 
-	return clientSet, nodeInformer, stopChannel
+func waitForNodesReady(ctx context.Context, t *testing.T, clientSet clientset.Interface, nodeInformer coreinformers.NodeInformer) {
+	if err := wait.PollImmediate(5*time.Second, 30*time.Second, func() (bool, error) {
+		nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return false, err
+		}
+
+		readyNodes, err := nodeutil.ReadyNodes(ctx, clientSet, nodeInformer, "")
+		if err != nil {
+			return false, err
+		}
+		if len(nodeList.Items) != len(readyNodes) {
+			t.Logf("%v/%v nodes are ready. Waiting for all nodes to be ready...", len(readyNodes), len(nodeList.Items))
+			return false, nil
+		}
+
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for nodes to be ready: %v", err)
+	}
 }
 
 func runPodLifetimeStrategy(
@@ -135,6 +164,7 @@ func runPodLifetimeStrategy(
 	priority *int32,
 	evictCritical bool,
 	labelSelector *metav1.LabelSelector,
+	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 ) {
 	// Run descheduler.
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientset)
@@ -166,12 +196,16 @@ func runPodLifetimeStrategy(
 			clientset,
 			evictionPolicyGroupVersion,
 			false,
-			0,
+			nil,
+			nil,
 			nodes,
 			false,
 			evictCritical,
 			false,
+			false,
+			false,
 		),
+		getPodsAssignedToNode,
 	)
 }
 
@@ -201,7 +235,7 @@ func intersectStrings(lista, listb []string) []string {
 func TestLowNodeUtilization(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, _, stopCh := initializeClient(t)
+	clientSet, _, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
@@ -290,22 +324,14 @@ func TestLowNodeUtilization(t *testing.T) {
 	waitForRCPodsRunning(ctx, t, clientSet, rc)
 
 	// Run LowNodeUtilization strategy
-	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
-	if err != nil || len(evictionPolicyGroupVersion) == 0 {
-		t.Fatalf("%v", err)
-	}
-	podEvictor := evictions.NewPodEvictor(
-		clientSet,
-		evictionPolicyGroupVersion,
-		false,
-		0,
-		nodes,
-		true,
-		false,
-		false,
-	)
+	podEvictor := initPodEvictorOrFail(t, clientSet, nodes)
 
-	podsOnMosttUtilizedNode, err := podutil.ListPodsOnANode(ctx, clientSet, workerNodes[0], podutil.WithFilter(podEvictor.Evictable().IsEvictable))
+	podFilter, err := podutil.NewOptions().WithFilter(podEvictor.Evictable().IsEvictable).BuildFilterFunc()
+	if err != nil {
+		t.Errorf("Error initializing pod filter function, %v", err)
+	}
+
+	podsOnMosttUtilizedNode, err := podutil.ListPodsOnANode(workerNodes[0].Name, getPodsAssignedToNode, podFilter)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}
@@ -330,11 +356,17 @@ func TestLowNodeUtilization(t *testing.T) {
 		},
 		workerNodes,
 		podEvictor,
+		getPodsAssignedToNode,
 	)
 
 	waitForTerminatingPodsToDisappear(ctx, t, clientSet, rc.Namespace)
 
-	podsOnMosttUtilizedNode, err = podutil.ListPodsOnANode(ctx, clientSet, workerNodes[0], podutil.WithFilter(podEvictor.Evictable().IsEvictable))
+	podFilter, err = podutil.NewOptions().WithFilter(podEvictor.Evictable().IsEvictable).BuildFilterFunc()
+	if err != nil {
+		t.Errorf("Error initializing pod filter function, %v", err)
+	}
+
+	podsOnMosttUtilizedNode, err = podutil.ListPodsOnANode(workerNodes[0].Name, getPodsAssignedToNode, podFilter)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}
@@ -351,7 +383,7 @@ func TestLowNodeUtilization(t *testing.T) {
 func TestNamespaceConstraintsInclude(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, nodeInformer, stopCh := initializeClient(t)
+	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -386,7 +418,7 @@ func TestNamespaceConstraintsInclude(t *testing.T) {
 	t.Logf("set the strategy to delete pods from %v namespace", rc.Namespace)
 	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, &deschedulerapi.Namespaces{
 		Include: []string{rc.Namespace},
-	}, "", nil, false, nil)
+	}, "", nil, false, nil, getPodsAssignedToNode)
 
 	// All pods are supposed to be deleted, wait until all the old pods are deleted
 	if err := wait.PollImmediate(time.Second, 20*time.Second, func() (bool, error) {
@@ -422,7 +454,7 @@ func TestNamespaceConstraintsInclude(t *testing.T) {
 func TestNamespaceConstraintsExclude(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, nodeInformer, stopCh := initializeClient(t)
+	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -457,7 +489,7 @@ func TestNamespaceConstraintsExclude(t *testing.T) {
 	t.Logf("set the strategy to delete pods from namespaces except the %v namespace", rc.Namespace)
 	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, &deschedulerapi.Namespaces{
 		Exclude: []string{rc.Namespace},
-	}, "", nil, false, nil)
+	}, "", nil, false, nil, getPodsAssignedToNode)
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
@@ -489,7 +521,7 @@ func testEvictSystemCritical(t *testing.T, isPriorityClass bool) {
 	var lowPriority = int32(500)
 	ctx := context.Background()
 
-	clientSet, nodeInformer, stopCh := initializeClient(t)
+	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -570,9 +602,9 @@ func testEvictSystemCritical(t *testing.T, isPriorityClass bool) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	if isPriorityClass {
-		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, true, nil)
+		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, true, nil, getPodsAssignedToNode)
 	} else {
-		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, true, nil)
+		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, true, nil, getPodsAssignedToNode)
 	}
 
 	// All pods are supposed to be deleted, wait until all pods in the test namespace are terminating
@@ -619,7 +651,7 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 	var lowPriority = int32(500)
 	ctx := context.Background()
 
-	clientSet, nodeInformer, stopCh := initializeClient(t)
+	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -689,10 +721,10 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 
 	if isPriorityClass {
 		t.Logf("set the strategy to delete pods with priority lower than priority class %s", highPriorityClass.Name)
-		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, false, nil)
+		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, false, nil, getPodsAssignedToNode)
 	} else {
 		t.Logf("set the strategy to delete pods with priority lower than %d", highPriority)
-		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, false, nil)
+		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, false, nil, getPodsAssignedToNode)
 	}
 
 	t.Logf("Waiting 10s")
@@ -748,7 +780,7 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 func TestPodLabelSelector(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, nodeInformer, stopCh := initializeClient(t)
+	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -796,7 +828,7 @@ func TestPodLabelSelector(t *testing.T) {
 	t.Logf("Pods not expected to be evicted: %v, pods expected to be evicted: %v", expectReservePodNames, expectEvictPodNames)
 
 	t.Logf("set the strategy to delete pods with label test:podlifetime-evict")
-	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", nil, false, &metav1.LabelSelector{MatchLabels: map[string]string{"test": "podlifetime-evict"}})
+	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", nil, false, &metav1.LabelSelector{MatchLabels: map[string]string{"test": "podlifetime-evict"}}, getPodsAssignedToNode)
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
@@ -851,7 +883,7 @@ func TestPodLabelSelector(t *testing.T) {
 func TestEvictAnnotation(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, nodeInformer, stopCh := initializeClient(t)
+	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
@@ -906,7 +938,7 @@ func TestEvictAnnotation(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Log("Running PodLifetime strategy")
-	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", nil, false, nil)
+	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", nil, false, nil, getPodsAssignedToNode)
 
 	if err := wait.PollImmediate(5*time.Second, time.Minute, func() (bool, error) {
 		podList, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
@@ -1292,4 +1324,24 @@ func splitNodesAndWorkerNodes(nodes []v1.Node) ([]*v1.Node, []*v1.Node) {
 		}
 	}
 	return allNodes, workerNodes
+}
+
+func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, nodes []*v1.Node) *evictions.PodEvictor {
+	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
+	if err != nil || len(evictionPolicyGroupVersion) == 0 {
+		t.Fatalf("Error creating eviction policy group: %v", err)
+	}
+	return evictions.NewPodEvictor(
+		clientSet,
+		evictionPolicyGroupVersion,
+		false,
+		nil,
+		nil,
+		nodes,
+		true,
+		false,
+		false,
+		false,
+		false,
+	)
 }

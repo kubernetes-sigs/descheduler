@@ -25,15 +25,16 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	core "k8s.io/client-go/testing"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/test"
 )
 
 func TestPodLifeTime(t *testing.T) {
-	ctx := context.Background()
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	olderPodCreationTime := metav1.NewTime(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
 	newerPodCreationTime := metav1.NewTime(time.Now())
@@ -125,14 +126,24 @@ func TestPodLifeTime(t *testing.T) {
 	p12.ObjectMeta.OwnerReferences = ownerRef1
 	p13.ObjectMeta.OwnerReferences = ownerRef1
 
+	p14 := test.BuildTestPod("p14", 100, 0, node1.Name, nil)
+	p15 := test.BuildTestPod("p15", 100, 0, node1.Name, nil)
+	p14.Namespace = "dev"
+	p15.Namespace = "dev"
+	p14.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p15.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p14.ObjectMeta.OwnerReferences = ownerRef1
+	p15.ObjectMeta.OwnerReferences = ownerRef1
+	p14.DeletionTimestamp = &metav1.Time{}
+	p15.DeletionTimestamp = &metav1.Time{}
+
 	var maxLifeTime uint = 600
 	testCases := []struct {
 		description             string
 		strategy                api.DeschedulerStrategy
-		maxPodsToEvictPerNode   int
-		pods                    []v1.Pod
+		pods                    []*v1.Pod
 		nodes                   []*v1.Node
-		expectedEvictedPodCount int
+		expectedEvictedPodCount uint
 		ignorePvcPods           bool
 	}{
 		{
@@ -143,8 +154,7 @@ func TestPodLifeTime(t *testing.T) {
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
-			pods:                    []v1.Pod{*p1, *p2},
+			pods:                    []*v1.Pod{p1, p2},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
 		},
@@ -156,8 +166,7 @@ func TestPodLifeTime(t *testing.T) {
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
-			pods:                    []v1.Pod{*p3, *p4},
+			pods:                    []*v1.Pod{p3, p4},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
 		},
@@ -169,8 +178,7 @@ func TestPodLifeTime(t *testing.T) {
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
-			pods:                    []v1.Pod{*p5, *p6},
+			pods:                    []*v1.Pod{p5, p6},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
 		},
@@ -182,8 +190,7 @@ func TestPodLifeTime(t *testing.T) {
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
-			pods:                    []v1.Pod{*p7, *p8},
+			pods:                    []*v1.Pod{p7, p8},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
 		},
@@ -198,8 +205,7 @@ func TestPodLifeTime(t *testing.T) {
 					},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
-			pods:                    []v1.Pod{*p9, *p10},
+			pods:                    []*v1.Pod{p9, p10},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
 		},
@@ -211,8 +217,7 @@ func TestPodLifeTime(t *testing.T) {
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
-			pods:                    []v1.Pod{*p11},
+			pods:                    []*v1.Pod{p11},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
 			ignorePvcPods:           true,
@@ -225,13 +230,12 @@ func TestPodLifeTime(t *testing.T) {
 					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
-			pods:                    []v1.Pod{*p11},
+			pods:                    []*v1.Pod{p11},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description: "Two old pods with different labels, 1 selected by labelSelector",
+			description: "No pod to evicted since all pod terminating",
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
 				Params: &api.StrategyParameters{
@@ -241,36 +245,71 @@ func TestPodLifeTime(t *testing.T) {
 					},
 				},
 			},
-			maxPodsToEvictPerNode:   5,
-			pods:                    []v1.Pod{*p12, *p13},
+			pods:                    []*v1.Pod{p12, p13},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "No pod should be evicted since pod terminating",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"foo": "bar"},
+					},
+				},
+			},
+			pods:                    []*v1.Pod{p14, p15},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 0,
 		},
 	}
 
 	for _, tc := range testCases {
-		fakeClient := &fake.Clientset{}
+		t.Run(tc.description, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-			return true, &v1.PodList{Items: tc.pods}, nil
+			var objs []runtime.Object
+			for _, node := range tc.nodes {
+				objs = append(objs, node)
+			}
+			for _, pod := range tc.pods {
+				objs = append(objs, pod)
+			}
+			fakeClient := fake.NewSimpleClientset(objs...)
+
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			podInformer := sharedInformerFactory.Core().V1().Pods()
+
+			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			if err != nil {
+				t.Errorf("Build get pods assigned to node function error: %v", err)
+			}
+
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+			podEvictor := evictions.NewPodEvictor(
+				fakeClient,
+				policyv1.SchemeGroupVersion.String(),
+				false,
+				nil,
+				nil,
+				tc.nodes,
+				false,
+				false,
+				tc.ignorePvcPods,
+				false,
+				false,
+			)
+
+			PodLifeTime(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+			podsEvicted := podEvictor.TotalEvicted()
+			if podsEvicted != tc.expectedEvictedPodCount {
+				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.description, tc.expectedEvictedPodCount, podsEvicted)
+			}
 		})
-
-		podEvictor := evictions.NewPodEvictor(
-			fakeClient,
-			policyv1.SchemeGroupVersion.String(),
-			false,
-			tc.maxPodsToEvictPerNode,
-			tc.nodes,
-			false,
-			false,
-			tc.ignorePvcPods,
-		)
-
-		PodLifeTime(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor)
-		podsEvicted := podEvictor.TotalEvicted()
-		if podsEvicted != tc.expectedEvictedPodCount {
-			t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.description, tc.expectedEvictedPodCount, podsEvicted)
-		}
 	}
-
 }

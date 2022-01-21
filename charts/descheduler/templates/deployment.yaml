@@ -47,6 +47,8 @@ spec:
           ports:
             - containerPort: 10258
               protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:

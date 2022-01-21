@@ -22,20 +22,22 @@ type ValidatedStrategyParams struct {
 	NodeFit            bool
 }
 
+func DefaultValidatedStrategyParams() ValidatedStrategyParams {
+	return ValidatedStrategyParams{ThresholdPriority: utils.SystemCriticalPriority}
+}
+
 func ValidateAndParseStrategyParams(
 	ctx context.Context,
 	client clientset.Interface,
 	params *api.StrategyParameters,
 ) (*ValidatedStrategyParams, error) {
-	var includedNamespaces, excludedNamespaces sets.String
 	if params == nil {
-		return &ValidatedStrategyParams{
-			IncludedNamespaces: includedNamespaces,
-			ExcludedNamespaces: excludedNamespaces,
-		}, nil
+		defaultValidatedStrategyParams := DefaultValidatedStrategyParams()
+		return &defaultValidatedStrategyParams, nil
 	}
 
 	// At most one of include/exclude can be set
+	var includedNamespaces, excludedNamespaces sets.String
 	if params.Namespaces != nil && len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
 		return nil, fmt.Errorf("only one of Include/Exclude namespaces can be set")
 	}
