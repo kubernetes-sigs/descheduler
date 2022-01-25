@@ -20,6 +20,9 @@ package app
 import (
 	"context"
 	"io"
+	"os/signal"
+	"syscall"
+
 	"k8s.io/apiserver/pkg/server/healthz"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
@@ -69,7 +72,8 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 				klog.SetLogger(log)
 			}
 
-			ctx := context.TODO()
+			ctx, done := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			defer done()
 			pathRecorderMux := mux.NewPathRecorderMux("descheduler")
 			if !s.DisableMetrics {
 				pathRecorderMux.Handle("/metrics", legacyregistry.HandlerWithReset())
@@ -82,7 +86,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 				return
 			}
 
-			err := Run(s)
+			err := Run(ctx, s)
 			if err != nil {
 				klog.ErrorS(err, "descheduler server")
 			}
@@ -94,6 +98,6 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 	return cmd
 }
 
-func Run(rs *options.DeschedulerServer) error {
-	return descheduler.Run(rs)
+func Run(ctx context.Context, rs *options.DeschedulerServer) error {
+	return descheduler.Run(ctx, rs)
 }
