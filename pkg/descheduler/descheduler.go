@@ -65,6 +65,10 @@ func Run(rs *options.DeschedulerServer) error {
 		return fmt.Errorf("deschedulerPolicy is nil")
 	}
 
+	for name, strategy := range deschedulerPolicy.Strategies {
+		klog.V(1).InfoS("Strategy config", "name", name, "enabled", strategy.Enabled)
+	}
+
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(rs.Client)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		return err
@@ -277,6 +281,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		for name, strategy := range deschedulerPolicy.Strategies {
 			if f, ok := strategyFuncs[name]; ok {
 				if strategy.Enabled {
+					klog.V(1).InfoS("Strategy run", "name", name)
 					f(ctx, rs.Client, strategy, nodes, podEvictor, getPodsAssignedToNode)
 				}
 			} else {
