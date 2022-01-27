@@ -66,7 +66,10 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `resources`                    | Descheduler container CPU and memory requests/limits                                                                  | _see values.yaml_                    |
 | `serviceAccount.create`        | If `true`, create a service account for the cron job                                                                  | `true`                               |
 | `serviceAccount.name`          | The name of the service account to use, if not set and create is true a name is generated using the fullname template | `nil`                                |
-| `nodeSelector`                 | Node selectors to run the descheduler cronjob on specific nodes                                                       | `nil`                                |
-| `tolerations`                  | tolerations to run the descheduler cronjob on specific nodes                                                          | `nil`                                |
+| `serviceAccount.annotations`   | Specifies custom annotations for the serviceAccount                                                                   | `{}`                                 |
+| `nodeSelector`                 | Node selectors to run the descheduler cronjob/deployment on specific nodes                                            | `nil`                                |
+| `affinity`                     | Node affinity to run the descheduler cronjob/deployment on specific nodes                                             | `nil`                                |
+| `tolerations`                  | tolerations to run the descheduler cronjob/deployment on specific nodes                                               | `nil`                                |
 | `suspend`                      | Set spec.suspend in descheduler cronjob                                                                               | `false`                              |
 | `commonLabels`                 | Labels to apply to all resources                                                                                      | `{}`                                 |
+| `livenessProbe`                | Liveness probe configuration for the descheduler container                                                            | _see values.yaml_                    |
