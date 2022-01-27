@@ -74,6 +74,17 @@ priorityClassName: system-cluster-critical
 nodeSelector: {}
 #  foo: bar
 
+affinity: {}
+# nodeAffinity:
+#   requiredDuringSchedulingIgnoredDuringExecution:
+#     nodeSelectorTerms:
+#     - matchExpressions:
+#       - key: kubernetes.io/e2e-az-name
+#         operator: In
+#         values:
+#         - e2e-az1
+#         - e2e-az2
+
 tolerations: []
 # - key: 'management'
 #   operator: 'Equal'
