@@ -47,10 +47,9 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
 )
 
-func Run(rs *options.DeschedulerServer) error {
+func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	metrics.Register()
 
-	ctx := context.Background()
 	rsclient, err := client.CreateClient(rs.KubeconfigFile)
 	if err != nil {
 		return err
@@ -70,7 +69,12 @@ func Run(rs *options.DeschedulerServer) error {
 		return err
 	}
 
+	// tie in root ctx with our wait stopChannel
 	stopChannel := make(chan struct{})
+	go func() {
+		<-ctx.Done()
+		close(stopChannel)
+	}()
 	return RunDeschedulerStrategies(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel)
 }
 
