@@ -10,6 +10,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 )
@@ -81,19 +82,16 @@ func TestTopologySpreadConstraint(t *testing.T) {
 
 			// Run TopologySpreadConstraint strategy
 			t.Logf("Running RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
-			strategies.RemovePodsViolatingTopologySpreadConstraint(
-				ctx,
-				clientSet,
-				deschedulerapi.DeschedulerStrategy{
-					Enabled: true,
-					Params: &deschedulerapi.StrategyParameters{
-						IncludeSoftConstraints: tc.constraint != v1.DoNotSchedule,
-					},
+
+			strategyConfig := deschedulerapi.DeschedulerStrategy{
+				Enabled: true,
+				Params: &deschedulerapi.StrategyParameters{
+					IncludeSoftConstraints: tc.constraint != v1.DoNotSchedule,
 				},
-				nodes,
-				podEvictor,
-				getPodsAssignedToNode,
-			)
+			}
+			s, _ := strategies.NewRemovePodsViolatingTopologySpreadConstraintStrategy(clientSet, api.StrategyList{strategies.RemovePodsViolatingTopologySpreadConstraint: strategyConfig})
+			s.Run(ctx, nodes, podEvictor, getPodsAssignedToNode)
+
 			t.Logf("Finished RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
 
 			t.Logf("Wait for terminating pods of %s to disappear", name)

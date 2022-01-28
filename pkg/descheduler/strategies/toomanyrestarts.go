@@ -84,27 +84,27 @@ func (s *RemovePodsHavingTooManyRestartsStrategy) Validate() error {
 // RemovePodsHavingTooManyRestarts removes the pods that have too many restarts on node.
 // There are too many cases leading this issue: Volume mount failed, app error due to nodes' different settings.
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
-func (s *RemovePodsHavingTooManyRestartsStrategy) Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
-	if err := validateRemovePodsHavingTooManyRestartsParams(strategy.Params); err != nil {
+func (s *RemovePodsHavingTooManyRestartsStrategy) Run(ctx context.Context, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+	if err := validateRemovePodsHavingTooManyRestartsParams(s.strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsHavingTooManyRestarts parameters")
 		return
 	}
 
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
+	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, s.client, s.strategy.Params)
 	if err != nil {
 		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
 	var includedNamespaces, excludedNamespaces sets.String
-	if strategy.Params.Namespaces != nil {
-		includedNamespaces = sets.NewString(strategy.Params.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
+	if s.strategy.Params.Namespaces != nil {
+		includedNamespaces = sets.NewString(s.strategy.Params.Namespaces.Include...)
+		excludedNamespaces = sets.NewString(s.strategy.Params.Namespaces.Exclude...)
 	}
 
 	nodeFit := false
-	if strategy.Params != nil {
-		nodeFit = strategy.Params.NodeFit
+	if s.strategy.Params != nil {
+		nodeFit = s.strategy.Params.NodeFit
 	}
 
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
@@ -113,7 +113,7 @@ func (s *RemovePodsHavingTooManyRestartsStrategy) Run(ctx context.Context, clien
 		WithFilter(evictable.IsEvictable).
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
-		WithLabelSelector(strategy.Params.LabelSelector).
+		WithLabelSelector(s.strategy.Params.LabelSelector).
 		BuildFilterFunc()
 	if err != nil {
 		klog.ErrorS(err, "Error initializing pod filter function")
@@ -130,11 +130,11 @@ func (s *RemovePodsHavingTooManyRestartsStrategy) Run(ctx context.Context, clien
 
 		for i, pod := range pods {
 			restarts, initRestarts := calcContainerRestarts(pod)
-			if strategy.Params.PodsHavingTooManyRestarts.IncludingInitContainers {
-				if restarts+initRestarts < strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold {
+			if s.strategy.Params.PodsHavingTooManyRestarts.IncludingInitContainers {
+				if restarts+initRestarts < s.strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold {
 					continue
 				}
-			} else if restarts < strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold {
+			} else if restarts < s.strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold {
 				continue
 			}
 			if _, err := podEvictor.EvictPod(ctx, pods[i], node, "TooManyRestarts"); err != nil {

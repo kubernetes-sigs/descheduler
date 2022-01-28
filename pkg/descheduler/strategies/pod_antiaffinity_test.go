@@ -222,7 +222,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			}
 
 			s, _ := NewRemovePodsViolatingInterPodAntiAffinityStrategy(fakeClient, api.StrategyList{RemovePodsViolatingInterPodAntiAffinity: strategy})
-			s.Run(ctx, fakeClient, strategy, test.nodes, podEvictor, getPodsAssignedToNode)
+			s.Run(ctx, test.nodes, podEvictor, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != test.expectedEvictedPodCount {
 				t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, test.expectedEvictedPodCount)

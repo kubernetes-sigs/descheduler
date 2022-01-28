@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
@@ -145,22 +146,18 @@ func TestTooManyRestarts(t *testing.T) {
 			)
 			// Run RemovePodsHavingTooManyRestarts strategy
 			t.Log("Running RemovePodsHavingTooManyRestarts strategy")
-			strategies.RemovePodsHavingTooManyRestarts(
-				ctx,
-				clientSet,
-				deschedulerapi.DeschedulerStrategy{
-					Enabled: true,
-					Params: &deschedulerapi.StrategyParameters{
-						PodsHavingTooManyRestarts: &deschedulerapi.PodsHavingTooManyRestarts{
-							PodRestartThreshold:     tc.podRestartThreshold,
-							IncludingInitContainers: tc.includingInitContainers,
-						},
+
+			strategyConfig := deschedulerapi.DeschedulerStrategy{
+				Enabled: true,
+				Params: &deschedulerapi.StrategyParameters{
+					PodsHavingTooManyRestarts: &deschedulerapi.PodsHavingTooManyRestarts{
+						PodRestartThreshold:     tc.podRestartThreshold,
+						IncludingInitContainers: tc.includingInitContainers,
 					},
 				},
-				workerNodes,
-				podEvictor,
-				getPodsAssignedToNode,
-			)
+			}
+			s, _ := strategies.NewRemovePodsHavingTooManyRestartsStrategy(clientSet, api.StrategyList{strategies.RemovePodsHavingTooManyRestarts: strategyConfig})
+			s.Run(ctx, workerNodes, podEvictor, getPodsAssignedToNode)
 
 			waitForTerminatingPodsToDisappear(ctx, t, clientSet, testNamespace.Name)
 			actualEvictedPodCount := podEvictor.TotalEvicted()

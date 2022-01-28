@@ -84,7 +84,7 @@ type Strategy interface {
 	Name() api.StrategyName
 	Enabled() bool
 	Validate() error
-	Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc)
+	Run(ctx context.Context, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc)
 }
 
 func cachedClient(
@@ -213,8 +213,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
 	}
 
-	// initialize stratagies
-	strategyList, err := initializeStratagies(rs.Client, deschedulerPolicy.Strategies)
+	strategyList, err := initializeStrategies(rs.Client, deschedulerPolicy.Strategies)
 	if err != nil {
 		return err
 	}
@@ -297,7 +296,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	return nil
 }
 
-func initializeStratagies(client clientset.Interface, strategyList api.StrategyList) ([]Strategy, error) {
+func initializeStrategies(client clientset.Interface, strategyList api.StrategyList) ([]Strategy, error) {
 	var stats []Strategy
 	removeDuplicatePods, err := strategies.NewRemoveDuplicatesStrategy(client, strategyList)
 	if err != nil {

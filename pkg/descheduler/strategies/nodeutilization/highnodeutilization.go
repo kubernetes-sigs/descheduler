@@ -68,25 +68,25 @@ func (s *HighNodeUtilizationStrategy) Validate() error {
 
 // Run evicts pods from under utilized nodes so that scheduler can schedule according to its strategy.
 // Note that CPU/Memory requests are used to calculate nodes' utilization and not the actual resource usage.
-func (n *HighNodeUtilizationStrategy) Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
-	if err := validateNodeUtilizationParams(strategy.Params); err != nil {
+func (s *HighNodeUtilizationStrategy) Run(ctx context.Context, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+	if err := validateNodeUtilizationParams(s.strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid HighNodeUtilization parameters")
 		return
 	}
 
 	nodeFit := false
-	if strategy.Params != nil {
-		nodeFit = strategy.Params.NodeFit
+	if s.strategy.Params != nil {
+		nodeFit = s.strategy.Params.NodeFit
 	}
 
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
+	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, s.client, s.strategy.Params)
 	if err != nil {
 		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
-	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
-	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
+	thresholds := s.strategy.Params.NodeResourceUtilizationThresholds.Thresholds
+	targetThresholds := s.strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
 	if err := validateHighUtilizationStrategyConfig(thresholds, targetThresholds); err != nil {
 		klog.ErrorS(err, "HighNodeUtilization config is not valid")
 		return
@@ -128,8 +128,8 @@ func (n *HighNodeUtilizationStrategy) Run(ctx context.Context, client clientset.
 		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
 		return
 	}
-	if len(sourceNodes) <= strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
-		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(sourceNodes), "numberOfNodes", strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
+	if len(sourceNodes) <= s.strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
+		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(sourceNodes), "numberOfNodes", s.strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
 		return
 	}
 	if len(sourceNodes) == len(nodes) {

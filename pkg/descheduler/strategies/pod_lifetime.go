@@ -91,30 +91,30 @@ func (s *PodLifeTimeStrategy) Validate() error {
 }
 
 // Run evicts pods on nodes that were created more than strategy.Params.MaxPodLifeTimeSeconds seconds ago.
-func (s *PodLifeTimeStrategy) Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
-	if err := validatePodLifeTimeParams(strategy.Params); err != nil {
+func (s *PodLifeTimeStrategy) Run(ctx context.Context, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+	if err := validatePodLifeTimeParams(s.strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid PodLifeTime parameters")
 		return
 	}
 
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
+	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, s.client, s.strategy.Params)
 	if err != nil {
 		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
 	var includedNamespaces, excludedNamespaces sets.String
-	if strategy.Params.Namespaces != nil {
-		includedNamespaces = sets.NewString(strategy.Params.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
+	if s.strategy.Params.Namespaces != nil {
+		includedNamespaces = sets.NewString(s.strategy.Params.Namespaces.Include...)
+		excludedNamespaces = sets.NewString(s.strategy.Params.Namespaces.Exclude...)
 	}
 
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
 
 	filter := evictable.IsEvictable
-	if strategy.Params.PodLifeTime.PodStatusPhases != nil {
+	if s.strategy.Params.PodLifeTime.PodStatusPhases != nil {
 		filter = func(pod *v1.Pod) bool {
-			for _, phase := range strategy.Params.PodLifeTime.PodStatusPhases {
+			for _, phase := range s.strategy.Params.PodLifeTime.PodStatusPhases {
 				if string(pod.Status.Phase) == phase {
 					return evictable.IsEvictable(pod)
 				}
@@ -127,7 +127,7 @@ func (s *PodLifeTimeStrategy) Run(ctx context.Context, client clientset.Interfac
 		WithFilter(filter).
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
-		WithLabelSelector(strategy.Params.LabelSelector).
+		WithLabelSelector(s.strategy.Params.LabelSelector).
 		BuildFilterFunc()
 	if err != nil {
 		klog.ErrorS(err, "Error initializing pod filter function")
@@ -137,11 +137,11 @@ func (s *PodLifeTimeStrategy) Run(ctx context.Context, client clientset.Interfac
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 
-		pods := listOldPodsOnNode(node.Name, getPodsAssignedToNode, podFilter, *strategy.Params.PodLifeTime.MaxPodLifeTimeSeconds)
+		pods := listOldPodsOnNode(node.Name, getPodsAssignedToNode, podFilter, *s.strategy.Params.PodLifeTime.MaxPodLifeTimeSeconds)
 		for _, pod := range pods {
 			success, err := podEvictor.EvictPod(ctx, pod, node, "PodLifeTime")
 			if success {
-				klog.V(1).InfoS("Evicted pod because it exceeded its lifetime", "pod", klog.KObj(pod), "maxPodLifeTime", *strategy.Params.PodLifeTime.MaxPodLifeTimeSeconds)
+				klog.V(1).InfoS("Evicted pod because it exceeded its lifetime", "pod", klog.KObj(pod), "maxPodLifeTime", *s.strategy.Params.PodLifeTime.MaxPodLifeTimeSeconds)
 			}
 
 			if err != nil {

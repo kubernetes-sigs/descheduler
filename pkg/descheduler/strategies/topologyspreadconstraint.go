@@ -84,13 +84,11 @@ func (s *RemovePodsViolatingTopologySpreadConstraintStrategy) Validate() error {
 
 func (s *RemovePodsViolatingTopologySpreadConstraintStrategy) Run(
 	ctx context.Context,
-	client clientset.Interface,
-	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 ) {
-	strategyParams, err := validation.ValidateAndParseStrategyParams(ctx, client, strategy.Params)
+	strategyParams, err := validation.ValidateAndParseStrategyParams(ctx, s.client, s.strategy.Params)
 	if err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsViolatingTopologySpreadConstraintStrategy parameters")
 		return
@@ -120,7 +118,7 @@ func (s *RemovePodsViolatingTopologySpreadConstraintStrategy) Run(
 	// if diff > maxSkew, add this pod in the current bucket for eviction
 
 	// First record all of the constraints by namespace
-	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	namespaces, err := s.client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		klog.ErrorS(err, "Couldn't list namespaces")
 		return
@@ -133,7 +131,7 @@ func (s *RemovePodsViolatingTopologySpreadConstraintStrategy) Run(
 			(len(strategyParams.ExcludedNamespaces) > 0 && strategyParams.ExcludedNamespaces.Has(namespace.Name)) {
 			continue
 		}
-		namespacePods, err := client.CoreV1().Pods(namespace.Name).List(ctx, metav1.ListOptions{})
+		namespacePods, err := s.client.CoreV1().Pods(namespace.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			klog.ErrorS(err, "Couldn't list pods in namespace", "namespace", namespace)
 			continue
@@ -144,7 +142,7 @@ func (s *RemovePodsViolatingTopologySpreadConstraintStrategy) Run(
 		for _, pod := range namespacePods.Items {
 			for _, constraint := range pod.Spec.TopologySpreadConstraints {
 				// Ignore soft topology constraints if they are not included
-				if constraint.WhenUnsatisfiable == v1.ScheduleAnyway && (strategy.Params == nil || !strategy.Params.IncludeSoftConstraints) {
+				if constraint.WhenUnsatisfiable == v1.ScheduleAnyway && (s.strategy.Params == nil || !s.strategy.Params.IncludeSoftConstraints) {
 					continue
 				}
 				namespaceTopologySpreadConstraints[constraint] = struct{}{}

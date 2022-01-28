@@ -242,7 +242,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			)
 
 			s, _ := NewRemovePodsHavingTooManyRestartsStrategy(fakeClient, api.StrategyList{PodLifeTime: tc.strategy})
-			s.Run(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+			s.Run(ctx, tc.nodes, podEvictor, getPodsAssignedToNode)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)

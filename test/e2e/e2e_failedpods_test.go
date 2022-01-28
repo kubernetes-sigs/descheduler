@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 
+	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 )
@@ -86,17 +87,13 @@ func TestFailedPods(t *testing.T) {
 			podEvictor := initPodEvictorOrFail(t, clientSet, nodes)
 
 			t.Logf("Running RemoveFailedPods strategy for %s", name)
-			strategies.RemoveFailedPods(
-				ctx,
-				clientSet,
-				deschedulerapi.DeschedulerStrategy{
-					Enabled: true,
-					Params:  tc.strategyParams,
-				},
-				nodes,
-				podEvictor,
-				getPodsAssignedToNode,
-			)
+
+			strategyConfig := deschedulerapi.DeschedulerStrategy{
+				Enabled: true,
+				Params:  tc.strategyParams,
+			}
+			s, _ := strategies.NewRemoveFailedPodsStrategy(clientSet, api.StrategyList{strategies.RemoveFailedPods: strategyConfig})
+			s.Run(ctx, nodes, podEvictor, getPodsAssignedToNode)
 			t.Logf("Finished RemoveFailedPods strategy for %s", name)
 
 			if actualEvictedCount := podEvictor.TotalEvicted(); actualEvictedCount == tc.expectedEvictedCount {

@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 
+	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
@@ -155,19 +156,15 @@ func TestRemoveDuplicates(t *testing.T) {
 			)
 
 			t.Log("Running DeschedulerStrategy strategy")
-			strategies.RemoveDuplicatePods(
-				ctx,
-				clientSet,
-				deschedulerapi.DeschedulerStrategy{
-					Enabled: true,
-					Params: &deschedulerapi.StrategyParameters{
-						RemoveDuplicates: &deschedulerapi.RemoveDuplicates{},
-					},
+
+			strategyConfig := deschedulerapi.DeschedulerStrategy{
+				Enabled: true,
+				Params: &deschedulerapi.StrategyParameters{
+					RemoveDuplicates: &deschedulerapi.RemoveDuplicates{},
 				},
-				workerNodes,
-				podEvictor,
-				getPodsAssignedToNode,
-			)
+			}
+			s, _ := strategies.NewRemoveDuplicatesStrategy(clientSet, api.StrategyList{strategies.RemoveDuplicates: strategyConfig})
+			s.Run(ctx, workerNodes, podEvictor, getPodsAssignedToNode)
 
 			waitForTerminatingPodsToDisappear(ctx, t, clientSet, testNamespace.Name)
 			actualEvictedPodCount := podEvictor.TotalEvicted()

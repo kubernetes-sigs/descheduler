@@ -82,26 +82,26 @@ func (s *RemovePodsViolatingNodeAffinityStrategy) Validate() error {
 }
 
 // Run evicts pods on nodes which violate node affinity
-func (s *RemovePodsViolatingNodeAffinityStrategy) Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
-	if err := validatePodsViolatingNodeAffinityParams(strategy.Params); err != nil {
+func (s *RemovePodsViolatingNodeAffinityStrategy) Run(ctx context.Context, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+	if err := validatePodsViolatingNodeAffinityParams(s.strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsViolatingNodeAffinity parameters")
 		return
 	}
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
+	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, s.client, s.strategy.Params)
 	if err != nil {
 		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
 	var includedNamespaces, excludedNamespaces sets.String
-	if strategy.Params.Namespaces != nil {
-		includedNamespaces = sets.NewString(strategy.Params.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
+	if s.strategy.Params.Namespaces != nil {
+		includedNamespaces = sets.NewString(s.strategy.Params.Namespaces.Include...)
+		excludedNamespaces = sets.NewString(s.strategy.Params.Namespaces.Exclude...)
 	}
 
 	nodeFit := false
-	if strategy.Params != nil {
-		nodeFit = strategy.Params.NodeFit
+	if s.strategy.Params != nil {
+		nodeFit = s.strategy.Params.NodeFit
 	}
 
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
@@ -109,14 +109,14 @@ func (s *RemovePodsViolatingNodeAffinityStrategy) Run(ctx context.Context, clien
 	podFilter, err := podutil.NewOptions().
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
-		WithLabelSelector(strategy.Params.LabelSelector).
+		WithLabelSelector(s.strategy.Params.LabelSelector).
 		BuildFilterFunc()
 	if err != nil {
 		klog.ErrorS(err, "Error initializing pod filter function")
 		return
 	}
 
-	for _, nodeAffinity := range strategy.Params.NodeAffinityType {
+	for _, nodeAffinity := range s.strategy.Params.NodeAffinityType {
 		klog.V(2).InfoS("Executing for nodeAffinityType", "nodeAffinity", nodeAffinity)
 
 		switch nodeAffinity {

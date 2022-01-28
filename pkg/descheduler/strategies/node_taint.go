@@ -83,31 +83,31 @@ func (s *RemovePodsViolatingNodeTaintsStrategy) Validate() error {
 }
 
 // Run evicts pods on the node which violate NoSchedule Taints on nodes
-func (s *RemovePodsViolatingNodeTaintsStrategy) Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
-	if err := validateRemovePodsViolatingNodeTaintsParams(strategy.Params); err != nil {
+func (s *RemovePodsViolatingNodeTaintsStrategy) Run(ctx context.Context, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+	if err := validateRemovePodsViolatingNodeTaintsParams(s.strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsViolatingNodeTaints parameters")
 		return
 	}
 
 	var includedNamespaces, excludedNamespaces sets.String
 	var labelSelector *metav1.LabelSelector
-	if strategy.Params != nil {
-		if strategy.Params.Namespaces != nil {
-			includedNamespaces = sets.NewString(strategy.Params.Namespaces.Include...)
-			excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
+	if s.strategy.Params != nil {
+		if s.strategy.Params.Namespaces != nil {
+			includedNamespaces = sets.NewString(s.strategy.Params.Namespaces.Include...)
+			excludedNamespaces = sets.NewString(s.strategy.Params.Namespaces.Exclude...)
 		}
-		labelSelector = strategy.Params.LabelSelector
+		labelSelector = s.strategy.Params.LabelSelector
 	}
 
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
+	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, s.client, s.strategy.Params)
 	if err != nil {
 		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
 	nodeFit := false
-	if strategy.Params != nil {
-		nodeFit = strategy.Params.NodeFit
+	if s.strategy.Params != nil {
+		nodeFit = s.strategy.Params.NodeFit
 	}
 
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))

@@ -306,7 +306,7 @@ func TestPodLifeTime(t *testing.T) {
 			)
 
 			s, _ := NewPodLifeTimeStrategy(fakeClient, api.StrategyList{PodLifeTime: tc.strategy})
-			s.Run(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+			s.Run(ctx, tc.nodes, podEvictor, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != tc.expectedEvictedPodCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.description, tc.expectedEvictedPodCount, podsEvicted)

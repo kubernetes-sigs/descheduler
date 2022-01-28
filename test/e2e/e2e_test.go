@@ -178,35 +178,30 @@ func runPodLifetimeStrategy(
 	}
 
 	maxPodLifeTimeSeconds := uint(1)
-	strategies.PodLifeTime(
-		ctx,
-		clientset,
-		deschedulerapi.DeschedulerStrategy{
-			Enabled: true,
-			Params: &deschedulerapi.StrategyParameters{
-				PodLifeTime:                &deschedulerapi.PodLifeTime{MaxPodLifeTimeSeconds: &maxPodLifeTimeSeconds},
-				Namespaces:                 namespaces,
-				ThresholdPriority:          priority,
-				ThresholdPriorityClassName: priorityClass,
-				LabelSelector:              labelSelector,
-			},
+	strategyConfig := deschedulerapi.DeschedulerStrategy{
+		Enabled: true,
+		Params: &deschedulerapi.StrategyParameters{
+			PodLifeTime:                &deschedulerapi.PodLifeTime{MaxPodLifeTimeSeconds: &maxPodLifeTimeSeconds},
+			Namespaces:                 namespaces,
+			ThresholdPriority:          priority,
+			ThresholdPriorityClassName: priorityClass,
+			LabelSelector:              labelSelector,
 		},
+	}
+	s, _ := strategies.NewPodLifeTimeStrategy(clientset, api.StrategyList{strategies.PodLifeTime: strategyConfig})
+	s.Run(ctx, nodes, evictions.NewPodEvictor(
+		clientset,
+		evictionPolicyGroupVersion,
+		false,
+		nil,
+		nil,
 		nodes,
-		evictions.NewPodEvictor(
-			clientset,
-			evictionPolicyGroupVersion,
-			false,
-			nil,
-			nil,
-			nodes,
-			false,
-			evictCritical,
-			false,
-			false,
-			false,
-		),
-		getPodsAssignedToNode,
-	)
+		false,
+		evictCritical,
+		false,
+		false,
+		false,
+	), getPodsAssignedToNode)
 }
 
 func getPodNames(pods []v1.Pod) []string {
@@ -338,26 +333,22 @@ func TestLowNodeUtilization(t *testing.T) {
 	podsBefore := len(podsOnMosttUtilizedNode)
 
 	t.Log("Running LowNodeUtilization strategy")
-	nodeutilization.LowNodeUtilization(
-		ctx,
-		clientSet,
-		deschedulerapi.DeschedulerStrategy{
-			Enabled: true,
-			Params: &deschedulerapi.StrategyParameters{
-				NodeResourceUtilizationThresholds: &deschedulerapi.NodeResourceUtilizationThresholds{
-					Thresholds: deschedulerapi.ResourceThresholds{
-						v1.ResourceCPU: 70,
-					},
-					TargetThresholds: deschedulerapi.ResourceThresholds{
-						v1.ResourceCPU: 80,
-					},
+
+	strategyConfig := deschedulerapi.DeschedulerStrategy{
+		Enabled: true,
+		Params: &deschedulerapi.StrategyParameters{
+			NodeResourceUtilizationThresholds: &deschedulerapi.NodeResourceUtilizationThresholds{
+				Thresholds: deschedulerapi.ResourceThresholds{
+					v1.ResourceCPU: 70,
+				},
+				TargetThresholds: deschedulerapi.ResourceThresholds{
+					v1.ResourceCPU: 80,
 				},
 			},
 		},
-		workerNodes,
-		podEvictor,
-		getPodsAssignedToNode,
-	)
+	}
+	s, _ := nodeutilization.NewLowNodeUtilizationStrategy(clientSet, api.StrategyList{nodeutilization.LowNodeUtilization: strategyConfig})
+	s.Run(ctx, nodes, podEvictor, getPodsAssignedToNode)
 
 	waitForTerminatingPodsToDisappear(ctx, t, clientSet, rc.Namespace)
 

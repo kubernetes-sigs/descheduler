@@ -34,8 +34,8 @@ import (
 )
 
 type LowNodeUtilizationStrategy struct {
-	strategy api.DeschedulerStrategy
 	client   clientset.Interface
+	strategy api.DeschedulerStrategy
 }
 
 func NewLowNodeUtilizationStrategy(client clientset.Interface, strategyList api.StrategyList) (*LowNodeUtilizationStrategy, error) {
@@ -68,25 +68,25 @@ func (s *LowNodeUtilizationStrategy) Validate() error {
 
 // Run evicts pods from overutilized nodes to underutilized nodes. Note that CPU/Memory requests are used
 // to calculate nodes' utilization and not the actual resource usage.
-func (s *LowNodeUtilizationStrategy) Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+func (s *LowNodeUtilizationStrategy) Run(ctx context.Context, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
-	if err := validateNodeUtilizationParams(strategy.Params); err != nil {
+	if err := validateNodeUtilizationParams(s.strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid LowNodeUtilization parameters")
 		return
 	}
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
+	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, s.client, s.strategy.Params)
 	if err != nil {
 		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
 	nodeFit := false
-	if strategy.Params != nil {
-		nodeFit = strategy.Params.NodeFit
+	if s.strategy.Params != nil {
+		nodeFit = s.strategy.Params.NodeFit
 	}
 
-	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
-	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
+	thresholds := s.strategy.Params.NodeResourceUtilizationThresholds.Thresholds
+	targetThresholds := s.strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
 	if err := validateLowUtilizationStrategyConfig(thresholds, targetThresholds); err != nil {
 		klog.ErrorS(err, "LowNodeUtilization config is not valid")
 		return
@@ -154,8 +154,8 @@ func (s *LowNodeUtilizationStrategy) Run(ctx context.Context, client clientset.I
 		return
 	}
 
-	if len(lowNodes) <= strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
-		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(lowNodes), "numberOfNodes", strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
+	if len(lowNodes) <= s.strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
+		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(lowNodes), "numberOfNodes", s.strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
 		return
 	}
 

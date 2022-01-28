@@ -67,13 +67,11 @@ func (s *RemoveFailedPodsStrategy) Validate() error {
 // Run removes Pods that are in failed status phase.
 func (s *RemoveFailedPodsStrategy) Run(
 	ctx context.Context,
-	client clientset.Interface,
-	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 ) {
-	strategyParams, err := validateAndParseRemoveFailedPodsParams(ctx, client, strategy.Params)
+	strategyParams, err := validateAndParseRemoveFailedPodsParams(ctx, s.client, s.strategy.Params)
 	if err != nil {
 		klog.ErrorS(err, "Invalid RemoveFailedPods parameters")
 		return
@@ -86,8 +84,8 @@ func (s *RemoveFailedPodsStrategy) Run(
 	)
 
 	var labelSelector *metav1.LabelSelector
-	if strategy.Params != nil {
-		labelSelector = strategy.Params.LabelSelector
+	if s.strategy.Params != nil {
+		labelSelector = s.strategy.Params.LabelSelector
 	}
 
 	podFilter, err := podutil.NewOptions().

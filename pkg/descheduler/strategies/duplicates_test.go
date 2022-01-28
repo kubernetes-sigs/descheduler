@@ -305,7 +305,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			)
 
 			s, _ := NewRemoveDuplicatesStrategy(fakeClient, api.StrategyList{RemoveDuplicates: testCase.strategy})
-			s.Run(ctx, fakeClient, testCase.strategy, testCase.nodes, podEvictor, getPodsAssignedToNode)
+			s.Run(ctx, testCase.nodes, podEvictor, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != testCase.expectedEvictedPodCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)
@@ -733,7 +733,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			)
 
 			s, _ := NewRemoveDuplicatesStrategy(fakeClient, api.StrategyList{RemoveDuplicates: testCase.strategy})
-			s.Run(ctx, fakeClient, testCase.strategy, testCase.nodes, podEvictor, getPodsAssignedToNode)
+			s.Run(ctx, testCase.nodes, podEvictor, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != testCase.expectedEvictedPodCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)
