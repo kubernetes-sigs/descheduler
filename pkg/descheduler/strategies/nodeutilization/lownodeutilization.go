@@ -18,6 +18,7 @@ package nodeutilization
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -32,9 +33,42 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
-// LowNodeUtilization evicts pods from overutilized nodes to underutilized nodes. Note that CPU/Memory requests are used
+type LowNodeUtilizationStrategy struct {
+	strategy api.DeschedulerStrategy
+	client   clientset.Interface
+}
+
+func NewLowNodeUtilizationStrategy(client clientset.Interface, strategyList api.StrategyList) (*LowNodeUtilizationStrategy, error) {
+	s := &LowNodeUtilizationStrategy{}
+	strategy, ok := strategyList[s.Name()]
+	if !ok {
+		return nil, errors.New("")
+	}
+	s.strategy = strategy
+
+	return s, nil
+}
+
+func (s *LowNodeUtilizationStrategy) Name() api.StrategyName {
+	return LowNodeUtilization
+}
+
+func (s *LowNodeUtilizationStrategy) Enabled() bool {
+	return s.strategy.Enabled
+}
+
+func (s *LowNodeUtilizationStrategy) Validate() error {
+	err := validateNodeUtilizationParams(s.strategy.Params)
+	if err != nil {
+		klog.ErrorS(err, "Invalid LowNodeUtilizationStrategy parameters")
+		return err
+	}
+	return nil
+}
+
+// Run evicts pods from overutilized nodes to underutilized nodes. Note that CPU/Memory requests are used
 // to calculate nodes' utilization and not the actual resource usage.
-func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+func (s *LowNodeUtilizationStrategy) Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
 	if err := validateNodeUtilizationParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid LowNodeUtilization parameters")

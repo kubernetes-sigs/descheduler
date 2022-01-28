@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -56,8 +57,41 @@ func validatePodLifeTimeParams(params *api.StrategyParameters) error {
 	return nil
 }
 
-// PodLifeTime evicts pods on nodes that were created more than strategy.Params.MaxPodLifeTimeSeconds seconds ago.
-func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+type PodLifeTimeStrategy struct {
+	strategy api.DeschedulerStrategy
+	client   clientset.Interface
+}
+
+func NewPodLifeTimeStrategy(client clientset.Interface, strategyList api.StrategyList) (*PodLifeTimeStrategy, error) {
+	s := &PodLifeTimeStrategy{}
+	strategy, ok := strategyList[s.Name()]
+	if !ok {
+		return nil, errors.New("")
+	}
+	s.strategy = strategy
+
+	return s, nil
+}
+
+func (s *PodLifeTimeStrategy) Name() api.StrategyName {
+	return PodLifeTime
+}
+
+func (s *PodLifeTimeStrategy) Enabled() bool {
+	return s.strategy.Enabled
+}
+
+func (s *PodLifeTimeStrategy) Validate() error {
+	err := validatePodLifeTimeParams(s.strategy.Params)
+	if err != nil {
+		klog.ErrorS(err, "Invalid PodLifeTime parameters")
+		return err
+	}
+	return nil
+}
+
+// Run evicts pods on nodes that were created more than strategy.Params.MaxPodLifeTimeSeconds seconds ago.
+func (s *PodLifeTimeStrategy) Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	if err := validatePodLifeTimeParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid PodLifeTime parameters")
 		return

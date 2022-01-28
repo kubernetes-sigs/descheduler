@@ -2,6 +2,7 @@ package strategies
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -26,8 +27,45 @@ type validatedFailedPodsStrategyParams struct {
 	minPodLifetimeSeconds   *uint
 }
 
-// RemoveFailedPods removes Pods that are in failed status phase.
-func RemoveFailedPods(
+type RemoveFailedPodsStrategy struct {
+	strategy       api.DeschedulerStrategy
+	client         clientset.Interface
+	strategyParams *validatedFailedPodsStrategyParams
+}
+
+func NewRemoveFailedPodsStrategy(client clientset.Interface, strategyList api.StrategyList) (*RemoveFailedPodsStrategy, error) {
+	s := &RemoveFailedPodsStrategy{
+		client: client,
+	}
+	strategy, ok := strategyList[s.Name()]
+	if !ok {
+		return nil, errors.New("todo")
+	}
+	s.strategy = strategy
+
+	return s, nil
+}
+
+func (s *RemoveFailedPodsStrategy) Name() api.StrategyName {
+	return RemoveFailedPods
+}
+
+func (s *RemoveFailedPodsStrategy) Enabled() bool {
+	return s.strategy.Enabled
+}
+
+func (s *RemoveFailedPodsStrategy) Validate() error {
+	strategyParams, err := validateAndParseRemoveFailedPodsParams(context.TODO(), s.client, s.strategy.Params)
+	if err != nil {
+		klog.ErrorS(err, "Invalid RemoveFailedPods parameters")
+		return err
+	}
+	s.strategyParams = strategyParams
+	return nil
+}
+
+// Run removes Pods that are in failed status phase.
+func (s *RemoveFailedPodsStrategy) Run(
 	ctx context.Context,
 	client clientset.Interface,
 	strategy api.DeschedulerStrategy,

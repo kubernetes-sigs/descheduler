@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -47,10 +48,43 @@ func validateRemovePodsHavingTooManyRestartsParams(params *api.StrategyParameter
 	return nil
 }
 
+type RemovePodsHavingTooManyRestartsStrategy struct {
+	strategy api.DeschedulerStrategy
+	client   clientset.Interface
+}
+
+func NewRemovePodsHavingTooManyRestartsStrategy(client clientset.Interface, strategyList api.StrategyList) (*RemovePodsHavingTooManyRestartsStrategy, error) {
+	s := &RemovePodsHavingTooManyRestartsStrategy{}
+	strategy, ok := strategyList[s.Name()]
+	if !ok {
+		return nil, errors.New("")
+	}
+	s.strategy = strategy
+
+	return s, nil
+}
+
+func (s *RemovePodsHavingTooManyRestartsStrategy) Name() api.StrategyName {
+	return RemovePodsHavingTooManyRestarts
+}
+
+func (s *RemovePodsHavingTooManyRestartsStrategy) Enabled() bool {
+	return s.strategy.Enabled
+}
+
+func (s *RemovePodsHavingTooManyRestartsStrategy) Validate() error {
+	err := validateRemovePodsHavingTooManyRestartsParams(s.strategy.Params)
+	if err != nil {
+		klog.ErrorS(err, "Invalid RemovePodsHavingTooManyRestarts parameters")
+		return err
+	}
+	return nil
+}
+
 // RemovePodsHavingTooManyRestarts removes the pods that have too many restarts on node.
 // There are too many cases leading this issue: Volume mount failed, app error due to nodes' different settings.
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
-func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+func (s *RemovePodsHavingTooManyRestartsStrategy) Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	if err := validateRemovePodsHavingTooManyRestartsParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsHavingTooManyRestarts parameters")
 		return

@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -56,11 +57,42 @@ type podOwner struct {
 	imagesHash            string
 }
 
-// RemoveDuplicatePods removes the duplicate pods on node. This strategy evicts all duplicate pods on node.
+type RemoveDuplicatesStrategy struct {
+	strategy api.DeschedulerStrategy
+}
+
+func NewRemoveDuplicatesStrategy(client clientset.Interface, strategyList api.StrategyList) (*RemoveDuplicatesStrategy, error) {
+	s := &RemoveDuplicatesStrategy{}
+	strategy, ok := strategyList[s.Name()]
+	if !ok {
+		return nil, errors.New("")
+	}
+	s.strategy = strategy
+
+	return s, nil
+}
+
+func (s *RemoveDuplicatesStrategy) Name() api.StrategyName {
+	return RemoveDuplicates
+}
+
+func (s *RemoveDuplicatesStrategy) Enabled() bool {
+	return s.strategy.Enabled
+}
+
+func (s *RemoveDuplicatesStrategy) Validate() error {
+	if err := validateRemoveDuplicatePodsParams(s.strategy.Params); err != nil {
+		klog.ErrorS(err, "Invalid RemoveDuplicatePods parameters")
+		return err
+	}
+	return nil
+}
+
+// Run removes the duplicate pods on node. This strategy evicts all duplicate pods on node.
 // A pod is said to be a duplicate of other if both of them are from same creator, kind and are within the same
 // namespace, and have at least one container with the same image.
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
-func RemoveDuplicatePods(
+func (s *RemoveDuplicatesStrategy) Run(
 	ctx context.Context,
 	client clientset.Interface,
 	strategy api.DeschedulerStrategy,

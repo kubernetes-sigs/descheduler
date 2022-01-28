@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -47,8 +48,41 @@ func validatePodsViolatingNodeAffinityParams(params *api.StrategyParameters) err
 	return nil
 }
 
-// RemovePodsViolatingNodeAffinity evicts pods on nodes which violate node affinity
-func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+type RemovePodsViolatingNodeAffinityStrategy struct {
+	strategy api.DeschedulerStrategy
+	client   clientset.Interface
+}
+
+func NewRemovePodsViolatingNodeAffinityStrategy(client clientset.Interface, strategyList api.StrategyList) (*RemovePodsViolatingNodeAffinityStrategy, error) {
+	s := &RemovePodsViolatingNodeAffinityStrategy{}
+	strategy, ok := strategyList[s.Name()]
+	if !ok {
+		return nil, errors.New("")
+	}
+	s.strategy = strategy
+
+	return s, nil
+}
+
+func (s *RemovePodsViolatingNodeAffinityStrategy) Name() api.StrategyName {
+	return RemovePodsViolatingNodeAffinity
+}
+
+func (s *RemovePodsViolatingNodeAffinityStrategy) Enabled() bool {
+	return s.strategy.Enabled
+}
+
+func (s *RemovePodsViolatingNodeAffinityStrategy) Validate() error {
+	err := validatePodsViolatingNodeAffinityParams(s.strategy.Params)
+	if err != nil {
+		klog.ErrorS(err, "Invalid RemovePodsViolatingNodeAffinity parameters")
+		return err
+	}
+	return nil
+}
+
+// Run evicts pods on nodes which violate node affinity
+func (s *RemovePodsViolatingNodeAffinityStrategy) Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	if err := validatePodsViolatingNodeAffinityParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsViolatingNodeAffinity parameters")
 		return

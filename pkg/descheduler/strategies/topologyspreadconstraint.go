@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -48,7 +49,40 @@ type topology struct {
 	pods []*v1.Pod
 }
 
-func RemovePodsViolatingTopologySpreadConstraint(
+type RemovePodsViolatingTopologySpreadConstraintStrategy struct {
+	strategy api.DeschedulerStrategy
+	client   clientset.Interface
+}
+
+func NewRemovePodsViolatingTopologySpreadConstraintStrategy(client clientset.Interface, strategyList api.StrategyList) (*RemovePodsViolatingTopologySpreadConstraintStrategy, error) {
+	s := &RemovePodsViolatingTopologySpreadConstraintStrategy{}
+	strategy, ok := strategyList[s.Name()]
+	if !ok {
+		return nil, errors.New("")
+	}
+	s.strategy = strategy
+
+	return s, nil
+}
+
+func (s *RemovePodsViolatingTopologySpreadConstraintStrategy) Name() api.StrategyName {
+	return RemovePodsViolatingTopologySpreadConstraint
+}
+
+func (s *RemovePodsViolatingTopologySpreadConstraintStrategy) Enabled() bool {
+	return s.strategy.Enabled
+}
+
+func (s *RemovePodsViolatingTopologySpreadConstraintStrategy) Validate() error {
+	err := validateRemovePodsHavingTooManyRestartsParams(s.strategy.Params)
+	if err != nil {
+		klog.ErrorS(err, "Invalid RemovePodsHavingTooManyRestarts parameters")
+		return err
+	}
+	return nil
+}
+
+func (s *RemovePodsViolatingTopologySpreadConstraintStrategy) Run(
 	ctx context.Context,
 	client clientset.Interface,
 	strategy api.DeschedulerStrategy,
@@ -58,7 +92,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 ) {
 	strategyParams, err := validation.ValidateAndParseStrategyParams(ctx, client, strategy.Params)
 	if err != nil {
-		klog.ErrorS(err, "Invalid RemovePodsViolatingTopologySpreadConstraint parameters")
+		klog.ErrorS(err, "Invalid RemovePodsViolatingTopologySpreadConstraintStrategy parameters")
 		return
 	}
 

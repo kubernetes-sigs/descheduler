@@ -479,8 +479,9 @@ func TestHighNodeUtilization(t *testing.T) {
 					NodeFit: true,
 				},
 			}
-			HighNodeUtilization(ctx, fakeClient, strategy, testCase.nodes, podEvictor, getPodsAssignedToNode)
 
+			s, _ := NewHighNodeUtilizationStrategy(fakeClient, api.StrategyList{HighNodeUtilization: strategy})
+			s.Run(ctx, fakeClient, strategy, testCase.nodes, podEvictor, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()
 			if testCase.expectedPodsEvicted != podsEvicted {
 				t.Errorf("Expected %v pods to be evicted but %v got evicted", testCase.expectedPodsEvicted, podsEvicted)
@@ -675,8 +676,8 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 				false,
 			)
 
-			HighNodeUtilization(ctx, fakeClient, strategy, item.nodes, podEvictor, getPodsAssignedToNode)
-
+			s, _ := NewHighNodeUtilizationStrategy(fakeClient, api.StrategyList{HighNodeUtilization: strategy})
+			s.Run(ctx, fakeClient, strategy, item.nodes, podEvictor, getPodsAssignedToNode)
 			if item.evictionsExpected != podEvictor.TotalEvicted() {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, podEvictor.TotalEvicted())
 			}

@@ -80,6 +80,13 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 
 type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc)
 
+type Strategy interface {
+	Name() api.StrategyName
+	Enabled() bool
+	Validate() error
+	Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc)
+}
+
 func cachedClient(
 	realClient clientset.Interface,
 	podInformer corev1informers.PodInformer,
@@ -175,19 +182,6 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 
-	strategyFuncs := map[api.StrategyName]strategyFunction{
-		"RemoveDuplicates":                            strategies.RemoveDuplicatePods,
-		"LowNodeUtilization":                          nodeutilization.LowNodeUtilization,
-		"HighNodeUtilization":                         nodeutilization.HighNodeUtilization,
-		"RemovePodsViolatingInterPodAntiAffinity":     strategies.RemovePodsViolatingInterPodAntiAffinity,
-		"RemovePodsViolatingNodeAffinity":             strategies.RemovePodsViolatingNodeAffinity,
-		"RemovePodsViolatingNodeTaints":               strategies.RemovePodsViolatingNodeTaints,
-		"RemovePodsHavingTooManyRestarts":             strategies.RemovePodsHavingTooManyRestarts,
-		"PodLifeTime":                                 strategies.PodLifeTime,
-		"RemovePodsViolatingTopologySpreadConstraint": strategies.RemovePodsViolatingTopologySpreadConstraint,
-		"RemoveFailedPods":                            strategies.RemoveFailedPods,
-	}
-
 	var nodeSelector string
 	if deschedulerPolicy.NodeSelector != nil {
 		nodeSelector = *deschedulerPolicy.NodeSelector
@@ -217,6 +211,12 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	ignorePvcPods := false
 	if deschedulerPolicy.IgnorePVCPods != nil {
 		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
+	}
+
+	// initialize stratagies
+	strategyList, err := initializeStratagies(rs.Client, deschedulerPolicy.Strategies)
+	if err != nil {
+		return err
 	}
 
 	wait.NonSlidingUntil(func() {
@@ -278,13 +278,11 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			!rs.DisableMetrics,
 		)
 
-		for name, strategy := range deschedulerPolicy.Strategies {
-			if f, ok := strategyFuncs[name]; ok {
-				if strategy.Enabled {
-					f(ctx, rs.Client, strategy, nodes, podEvictor, getPodsAssignedToNode)
-				}
+		for _, strategy := range strategyList {
+			if strategy.Enabled() {
+				strategy.Run(ctx, nodes, podEvictor, getPodsAssignedToNode)
 			} else {
-				klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
+				klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", strategy.Name())
 			}
 		}
 
@@ -297,4 +295,69 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	}, rs.DeschedulingInterval, stopChannel)
 
 	return nil
+}
+
+func initializeStratagies(client clientset.Interface, strategyList api.StrategyList) ([]Strategy, error) {
+	var stats []Strategy
+	removeDuplicatePods, err := strategies.NewRemoveDuplicatesStrategy(client, strategyList)
+	if err != nil {
+		return nil, err
+	}
+	stats = append(stats, removeDuplicatePods)
+
+	lowNodeUtilization, err := nodeutilization.NewLowNodeUtilizationStrategy(client, strategyList)
+	if err != nil {
+		return nil, err
+	}
+	stats = append(stats, lowNodeUtilization)
+
+	highNodeUtilization, err := nodeutilization.NewHighNodeUtilizationStrategy(client, strategyList)
+	if err != nil {
+		return nil, err
+	}
+	stats = append(stats, highNodeUtilization)
+
+	removePodsViolatingInterPodAntiAffinity, err := strategies.NewRemovePodsViolatingInterPodAntiAffinityStrategy(client, strategyList)
+	if err != nil {
+		return nil, err
+	}
+	stats = append(stats, removePodsViolatingInterPodAntiAffinity)
+
+	removePodsViolatingNodeAffinity, err := strategies.NewRemovePodsViolatingNodeAffinityStrategy(client, strategyList)
+	if err != nil {
+		return nil, err
+	}
+	stats = append(stats, removePodsViolatingNodeAffinity)
+
+	removePodsViolatingNodeTaints, err := strategies.NewRemovePodsViolatingNodeTaintsStrategy(client, strategyList)
+	if err != nil {
+		return nil, err
+	}
+	stats = append(stats, removePodsViolatingNodeTaints)
+
+	removePodsHavingTooManyRestarts, err := strategies.NewRemovePodsHavingTooManyRestartsStrategy(client, strategyList)
+	if err != nil {
+		return nil, err
+	}
+	stats = append(stats, removePodsHavingTooManyRestarts)
+
+	podLifeTime, err := strategies.NewPodLifeTimeStrategy(client, strategyList)
+	if err != nil {
+		return nil, err
+	}
+	stats = append(stats, podLifeTime)
+
+	removePodsViolatingTopologySpreadConstraint, err := strategies.NewRemovePodsViolatingTopologySpreadConstraintStrategy(client, strategyList)
+	if err != nil {
+		return nil, err
+	}
+	stats = append(stats, removePodsViolatingTopologySpreadConstraint)
+
+	removeFailedPods, err := strategies.NewRemoveFailedPodsStrategy(client, strategyList)
+	if err != nil {
+		return nil, err
+	}
+	stats = append(stats, removeFailedPods)
+
+	return stats, nil
 }

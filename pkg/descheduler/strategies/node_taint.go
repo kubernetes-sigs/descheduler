@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -48,8 +49,41 @@ func validateRemovePodsViolatingNodeTaintsParams(params *api.StrategyParameters)
 	return nil
 }
 
-// RemovePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
-func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+type RemovePodsViolatingNodeTaintsStrategy struct {
+	strategy api.DeschedulerStrategy
+	client   clientset.Interface
+}
+
+func NewRemovePodsViolatingNodeTaintsStrategy(client clientset.Interface, strategyList api.StrategyList) (*RemovePodsViolatingNodeTaintsStrategy, error) {
+	s := &RemovePodsViolatingNodeTaintsStrategy{}
+	strategy, ok := strategyList[s.Name()]
+	if !ok {
+		return nil, errors.New("")
+	}
+	s.strategy = strategy
+
+	return s, nil
+}
+
+func (s *RemovePodsViolatingNodeTaintsStrategy) Name() api.StrategyName {
+	return RemovePodsViolatingNodeTaints
+}
+
+func (s *RemovePodsViolatingNodeTaintsStrategy) Enabled() bool {
+	return s.strategy.Enabled
+}
+
+func (s *RemovePodsViolatingNodeTaintsStrategy) Validate() error {
+	err := validateRemovePodsViolatingNodeTaintsParams(s.strategy.Params)
+	if err != nil {
+		klog.ErrorS(err, "Invalid RemovePodsViolatingNodeTaints parameters")
+		return err
+	}
+	return nil
+}
+
+// Run evicts pods on the node which violate NoSchedule Taints on nodes
+func (s *RemovePodsViolatingNodeTaintsStrategy) Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	if err := validateRemovePodsViolatingNodeTaintsParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsViolatingNodeTaints parameters")
 		return

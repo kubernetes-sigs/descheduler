@@ -18,6 +18,7 @@ package nodeutilization
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -32,9 +33,42 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
-// HighNodeUtilization evicts pods from under utilized nodes so that scheduler can schedule according to its strategy.
+type HighNodeUtilizationStrategy struct {
+	strategy api.DeschedulerStrategy
+	client   clientset.Interface
+}
+
+func NewHighNodeUtilizationStrategy(client clientset.Interface, strategyList api.StrategyList) (*HighNodeUtilizationStrategy, error) {
+	s := &HighNodeUtilizationStrategy{}
+	strategy, ok := strategyList[s.Name()]
+	if !ok {
+		return nil, errors.New("")
+	}
+	s.strategy = strategy
+
+	return s, nil
+}
+
+func (s *HighNodeUtilizationStrategy) Name() api.StrategyName {
+	return HighNodeUtilization
+}
+
+func (s *HighNodeUtilizationStrategy) Enabled() bool {
+	return s.strategy.Enabled
+}
+
+func (s *HighNodeUtilizationStrategy) Validate() error {
+	err := validateNodeUtilizationParams(s.strategy.Params)
+	if err != nil {
+		klog.ErrorS(err, "Invalid HighNodeUtilization parameters")
+		return err
+	}
+	return nil
+}
+
+// Run evicts pods from under utilized nodes so that scheduler can schedule according to its strategy.
 // Note that CPU/Memory requests are used to calculate nodes' utilization and not the actual resource usage.
-func HighNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+func (n *HighNodeUtilizationStrategy) Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	if err := validateNodeUtilizationParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid HighNodeUtilization parameters")
 		return

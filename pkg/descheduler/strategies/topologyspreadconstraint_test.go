@@ -908,7 +908,9 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				false,
 				false,
 			)
-			RemovePodsViolatingTopologySpreadConstraint(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+
+			s, _ := NewRemovePodsViolatingTopologySpreadConstraintStrategy(fakeClient, api.StrategyList{PodLifeTime: tc.strategy})
+			s.Run(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != tc.expectedEvictedCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.name, tc.expectedEvictedCount, podsEvicted)

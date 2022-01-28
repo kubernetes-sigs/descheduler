@@ -31,6 +31,11 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+const (
+	LowNodeUtilization  api.StrategyName = "LowNodeUtilization"
+	HighNodeUtilization api.StrategyName = "HighNodeUtilization"
+)
+
 // NodeUsage stores a node's info, pods on it, thresholds and its resource usage
 type NodeUsage struct {
 	node    *v1.Node

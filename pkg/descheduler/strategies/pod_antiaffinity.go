@@ -18,6 +18,7 @@ package strategies
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -48,8 +49,41 @@ func validateRemovePodsViolatingInterPodAntiAffinityParams(params *api.StrategyP
 	return nil
 }
 
-// RemovePodsViolatingInterPodAntiAffinity evicts pods on the node which are having a pod affinity rules.
-func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+type RemovePodsViolatingInterPodAntiAffinityStrategy struct {
+	strategy api.DeschedulerStrategy
+	client   clientset.Interface
+}
+
+func NewRemovePodsViolatingInterPodAntiAffinityStrategy(client clientset.Interface, strategyList api.StrategyList) (*RemovePodsViolatingInterPodAntiAffinityStrategy, error) {
+	s := &RemovePodsViolatingInterPodAntiAffinityStrategy{}
+	strategy, ok := strategyList[s.Name()]
+	if !ok {
+		return nil, errors.New("")
+	}
+	s.strategy = strategy
+
+	return s, nil
+}
+
+func (s *RemovePodsViolatingInterPodAntiAffinityStrategy) Name() api.StrategyName {
+	return RemovePodsViolatingInterPodAntiAffinity
+}
+
+func (s *RemovePodsViolatingInterPodAntiAffinityStrategy) Enabled() bool {
+	return s.strategy.Enabled
+}
+
+func (s *RemovePodsViolatingInterPodAntiAffinityStrategy) Validate() error {
+	err := validateRemovePodsViolatingInterPodAntiAffinityParams(s.strategy.Params)
+	if err != nil {
+		klog.ErrorS(err, "Invalid RemovePodsViolatingInterPodAntiAffinity parameters")
+		return err
+	}
+	return nil
+}
+
+// Run evicts pods on the node which are having a pod affinity rules.
+func (s *RemovePodsViolatingInterPodAntiAffinityStrategy) Run(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	if err := validateRemovePodsViolatingInterPodAntiAffinityParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsViolatingInterPodAntiAffinity parameters")
 		return
