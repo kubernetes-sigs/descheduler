@@ -33,12 +33,16 @@ import (
 func TestEvictPod(t *testing.T) {
 	ctx := context.Background()
 	node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
+	pv1 := test.BuildTestPV("pv1", "localFastSSD", nil)
+	pvc1 := test.BuildTestPVC("pvc1", "pv1", "localFastSSD", nil)
 	pod1 := test.BuildTestPod("p1", 400, 0, "node1", nil)
 	tests := []struct {
 		description string
 		node        *v1.Node
 		pod         *v1.Pod
 		pods        []v1.Pod
+		pvs         []v1.PersistentVolume
+		pvcs        []v1.PersistentVolumeClaim
 		want        error
 	}{
 		{
@@ -54,6 +58,19 @@ func TestEvictPod(t *testing.T) {
 			pod:         pod1,
 			pods:        []v1.Pod{*test.BuildTestPod("p2", 400, 0, "node1", nil), *test.BuildTestPod("p3", 450, 0, "node1", nil)},
 			want:        nil,
+		},
+		{
+			description: "test pod eviction - pod has local pvc storage",
+			node:        node1,
+			pod:         pod1,
+			pvs:         []v1.PersistentVolume{*pv1},
+			pvcs:        []v1.PersistentVolumeClaim{*pvc1},
+			pods: []v1.Pod{*test.BuildTestPod("p1", 400, 0, "node1",
+				func(pod *v1.Pod) {
+					test.SetPodLocalPVCVolume(pod, "test-vol", "pvc1")
+				}),
+			},
+			want: nil,
 		},
 	}
 

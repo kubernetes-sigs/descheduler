@@ -42,6 +42,9 @@ func BuildTestPod(name string, cpu int64, memory int64, nodeName string, apply f
 				},
 			},
 			NodeName: nodeName,
+			Volumes: []v1.Volume{
+				{},
+			},
 		},
 	}
 	if cpu >= 0 {
@@ -124,6 +127,54 @@ func BuildTestNode(name string, millicpu int64, mem int64, pods int64, apply fun
 	return node
 }
 
+// BuildTestPV creates a Bound Local PV of the specified name / storageClass
+func BuildTestPV(name string, storageClassName string, apply func(*v1.PersistentVolume)) *v1.PersistentVolume {
+	pv := &v1.PersistentVolume{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:     name,
+			SelfLink: fmt.Sprintf("/api/v1/persistentvolume/%s", name),
+			Labels:   map[string]string{},
+		},
+		Status: v1.PersistentVolumeStatus{
+
+			Phase: v1.VolumeBound,
+		},
+		Spec: v1.PersistentVolumeSpec{
+			StorageClassName: storageClassName,
+			PersistentVolumeSource: v1.PersistentVolumeSource{
+				Local: &v1.LocalVolumeSource{
+					Path: fmt.Sprintf("/tmp/%s", name),
+				},
+			},
+		},
+	}
+	if apply != nil {
+		apply(pv)
+	}
+	return pv
+}
+
+// BuildTestPVC creates a Bound PVC of the specified name / storageClass / pv
+func BuildTestPVC(name string, pvName string, storageClassName string, apply func(*v1.PersistentVolumeClaim)) *v1.PersistentVolumeClaim {
+	pvc := &v1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: map[string]string{},
+		},
+		Status: v1.PersistentVolumeClaimStatus{
+			Phase: v1.ClaimBound,
+		},
+		Spec: v1.PersistentVolumeClaimSpec{
+			VolumeName:       pvName,
+			StorageClassName: &storageClassName,
+		},
+	}
+	if apply != nil {
+		apply(pvc)
+	}
+	return pvc
+}
+
 // MakeBestEffortPod makes the given pod a BestEffort pod
 func MakeBestEffortPod(pod *v1.Pod) {
 	pod.Spec.Containers[0].Resources.Requests = nil
@@ -183,4 +234,12 @@ func SetPodExtendedResourceRequest(pod *v1.Pod, resourceName v1.ResourceName, re
 func SetNodeExtendedResource(node *v1.Node, resourceName v1.ResourceName, requestQuantity int64) {
 	node.Status.Capacity[resourceName] = *resource.NewQuantity(requestQuantity, resource.DecimalSI)
 	node.Status.Allocatable[resourceName] = *resource.NewQuantity(requestQuantity, resource.DecimalSI)
+}
+
+// setPodLocalPVCVolume sets a pod volume and pvc name
+func SetPodLocalPVCVolume(pod *v1.Pod, volumeName string, pvcName string) {
+	pod.Spec.Volumes[0].Name = volumeName
+	pod.Spec.Volumes[0].PersistentVolumeClaim = &v1.PersistentVolumeClaimVolumeSource{
+		ClaimName: pvcName,
+	}
 }
