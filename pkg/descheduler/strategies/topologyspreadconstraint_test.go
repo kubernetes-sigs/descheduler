@@ -907,6 +907,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				false,
 				false,
 				false,
+				true,
 			)
 			RemovePodsViolatingTopologySpreadConstraint(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()

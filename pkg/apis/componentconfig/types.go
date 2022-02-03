@@ -53,6 +53,10 @@ type DeschedulerConfiguration struct {
 	// IgnorePVCPods sets whether PVC pods should be allowed to be evicted
 	IgnorePVCPods bool
 
+	// IgnoreLocalPVCPods sets whether Local PVC pods should be allowed to be evicted
+	// when EvictLocalStoragePods is also true.
+	IgnoreLocalPVCPods bool
+
 	// Logging specifies the options of logging.
 	// Refer [Logs Options](https://github.com/kubernetes/component-base/blob/master/logs/options.go) for more information.
 	Logging componentbaseconfig.LoggingConfiguration

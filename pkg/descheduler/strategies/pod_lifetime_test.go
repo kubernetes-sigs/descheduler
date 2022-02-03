@@ -301,6 +301,7 @@ func TestPodLifeTime(t *testing.T) {
 				false,
 				false,
 				tc.ignorePvcPods,
+				true,
 				false,
 				false,
 			)

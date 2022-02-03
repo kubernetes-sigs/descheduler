@@ -62,6 +62,7 @@ type PodEvictor struct {
 	evictSystemCriticalPods    bool
 	ignorePvcPods              bool
 	metricsEnabled             bool
+	ignoreLocalPvcPods         bool
 }
 
 func NewPodEvictor(
@@ -76,6 +77,7 @@ func NewPodEvictor(
 	ignorePvcPods bool,
 	evictFailedBarePods bool,
 	metricsEnabled bool,
+	ignoreLocalPvcPods bool,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
 	var namespacePodCount = make(namespacePodEvictCount)
@@ -97,6 +99,7 @@ func NewPodEvictor(
 		evictSystemCriticalPods:    evictSystemCriticalPods,
 		evictFailedBarePods:        evictFailedBarePods,
 		ignorePvcPods:              ignorePvcPods,
+		ignoreLocalPvcPods:         ignoreLocalPvcPods,
 		metricsEnabled:             metricsEnabled,
 	}
 }
@@ -137,7 +140,18 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q namespace reached", *pe.maxPodsToEvictPerNamespace, pod.Namespace)
 	}
 
-	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion)
+	if !pe.ignoreLocalPvcPods {
+		// TODO
+		// 1. get PVC for POD
+		// 2. get PV for PVC
+		// if PV is Local type:
+		//   call evictPod w/ dryRun: true
+		//   if err != nil (pod would be evicted):
+		//     delete PVC
+	}
+
+	// evictPod dryRun: false
+	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, false)
 	if err != nil {
 		// err is used only for logging purposes
 		klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", reason)
@@ -167,8 +181,12 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 	return true, nil
 }
 
-func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string) error {
+func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string, dryRun bool) error {
 	deleteOptions := &metav1.DeleteOptions{}
+	// Not sure if Fake respects DryRun. e2e only?
+	if dryRun {
+		deleteOptions.DryRun = append(deleteOptions.DryRun, "All")
+	}
 	// GracePeriodSeconds ?
 	eviction := &policy.Eviction{
 		TypeMeta: metav1.TypeMeta{
@@ -287,6 +305,14 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 		})
 	}
 	if pe.ignorePvcPods {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			if utils.IsPodWithPVC(pod) {
+				return fmt.Errorf("pod has a PVC and descheduler is configured to ignore PVC pods")
+			}
+			return nil
+		})
+	}
+	if pe.ignoreLocalPvcPods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			if utils.IsPodWithPVC(pod) {
 				return fmt.Errorf("pod has a PVC and descheduler is configured to ignore PVC pods")

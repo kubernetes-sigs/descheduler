@@ -44,6 +44,10 @@ type DeschedulerPolicy struct {
 	// IgnorePVCPods prevents pods with PVCs from being evicted.
 	IgnorePVCPods *bool
 
+	// IgnoreLocalPVCPods sets whether Local PVC pods should be allowed to be evicted
+	// when EvictLocalStoragePods is also true.
+	IgnoreLocalPVCPods *bool
+
 	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
 	MaxNoOfPodsToEvictPerNode *uint
 

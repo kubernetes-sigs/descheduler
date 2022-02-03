@@ -266,6 +266,7 @@ func TestRemoveFailedPods(t *testing.T) {
 				false,
 				false,
 				false,
+				true,
 			)
 
 			RemoveFailedPods(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)

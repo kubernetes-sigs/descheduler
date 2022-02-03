@@ -219,6 +219,11 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
 	}
 
+	ignoreLocalPvcPods := true
+	if deschedulerPolicy.IgnoreLocalPVCPods != nil {
+		ignoreLocalPvcPods = *deschedulerPolicy.IgnoreLocalPVCPods
+	}
+
 	wait.NonSlidingUntil(func() {
 		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, nodeSelector)
 		if err != nil {
@@ -276,6 +281,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			ignorePvcPods,
 			evictBarePods,
 			!rs.DisableMetrics,
+			ignoreLocalPvcPods,
 		)
 
 		for name, strategy := range deschedulerPolicy.Strategies {

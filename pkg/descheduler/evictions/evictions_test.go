@@ -79,7 +79,13 @@ func TestEvictPod(t *testing.T) {
 		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 			return true, &v1.PodList{Items: test.pods}, nil
 		})
-		got := evictPod(ctx, fakeClient, test.pod, "v1")
+		fakeClient.Fake.AddReactor("list", "persistentvolumes", func(action core.Action) (bool, runtime.Object, error) {
+			return true, &v1.PersistentVolumeList{Items: test.pvs}, nil
+		})
+		fakeClient.Fake.AddReactor("list", "persistentvolumeclaims", func(action core.Action) (bool, runtime.Object, error) {
+			return true, &v1.PersistentVolumeClaimList{Items: test.pvcs}, nil
+		})
+		got := evictPod(ctx, fakeClient, test.pod, "v1", false)
 		if got != test.want {
 			t.Errorf("Test error for Desc: %s. Expected %v pod eviction to be %v, got %v", test.description, test.pod.Name, test.want, got)
 		}
