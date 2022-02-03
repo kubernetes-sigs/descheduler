@@ -141,13 +141,20 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 	}
 
 	if !pe.ignoreLocalPvcPods {
-		// TODO
-		// 1. get PVC for POD
-		// 2. get PV for PVC
-		// if PV is Local type:
-		//   call evictPod w/ dryRun: true
-		//   if err != nil (pod would be evicted):
-		//     delete PVC
+		// dry run true
+		// only check LocalPVC if pod would have been evicted
+		// "ignoreLocalPvcPods" not an accurate option name since when true
+		// they will still be evicted unless we do this for ALL evictions
+		// implying we dryrun everything first
+		err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, true)
+		if err != nil {
+			isPodWithLocalPVC, err := utils.IsPodWithLocalPVC(ctx, pe.client, pod)
+			if isPodWithLocalPVC && err == nil {
+				// TODO
+				// delete PVC here (will enter Terminating state)
+				// then the eviction later on will fire and delete the pod and pvc
+			}
+		}
 	}
 
 	// evictPod dryRun: false
@@ -314,8 +321,9 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 	}
 	if pe.ignoreLocalPvcPods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
-			if utils.IsPodWithPVC(pod) {
-				return fmt.Errorf("pod has a PVC and descheduler is configured to ignore PVC pods")
+			isPVCLocal, err := utils.IsPodWithLocalPVC(context.TODO(), pe.client, pod)
+			if isPVCLocal && err == nil {
+				return fmt.Errorf("pod has a Local PVC and descheduler is configured to ignore Local PVC pods")
 			}
 			return nil
 		})

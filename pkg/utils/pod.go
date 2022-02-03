@@ -1,12 +1,14 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/component-base/featuregate"
 	"k8s.io/klog/v2"
 )
@@ -136,16 +138,26 @@ func IsPodWithPVC(pod *v1.Pod) bool {
 	return false
 }
 
-// // IsPodWithLocalPVCStorage returns true if the pod has claimed a persistent volume
-// // that is a Local type
-// func IsPodWithLocalPVC(pod *v1.Pod) bool {
-// 	for _, volume := range pod.Spec.Volumes {
-// 		if volume.PersistentVolumeClaim != nil {
-// 			pvcNam
-// 		}
-// 	}
-// 	return false
-// }
+// IsPodWithLocalPVCStorage returns true if the pod has claimed a Persistent Volume
+// that is a Local type
+func IsPodWithLocalPVC(ctx context.Context, client kubernetes.Interface, pod *v1.Pod) (isPVCLocal bool, err error) {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.PersistentVolumeClaim != nil {
+			pvc, err := GetPVC(ctx, client, volume.PersistentVolumeClaim.ClaimName, pod.Namespace)
+			if pvc != nil {
+				isPVCLocal, err := IsPVCLocal(ctx, client, pvc)
+				if err == nil {
+					return isPVCLocal, err
+				}
+			}
+			if err != nil {
+				return false, err
+			}
+		}
+	}
+	// there were no volumes to look at
+	return false, nil
+}
 
 // GetPodSource returns the source of the pod based on the annotation.
 func GetPodSource(pod *v1.Pod) (string, error) {
