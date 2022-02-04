@@ -54,7 +54,6 @@ type DeschedulerConfiguration struct {
 	IgnorePVCPods bool
 
 	// IgnoreLocalPVCPods sets whether Local PVC pods should be allowed to be evicted
-	// when EvictLocalStoragePods is also true.
 	IgnoreLocalPVCPods bool
 
 	// Logging specifies the options of logging.
