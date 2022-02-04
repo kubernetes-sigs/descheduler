@@ -146,8 +146,8 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 	// they will still be evicted unless we do this for ALL evictions
 	// implying we dryrun everything first
 	klog.Info("checking if pod has local PVC Storage")
-	dryRunerr := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, true)
-	if dryRunerr == nil {
+	dryRunErr := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, true)
+	if dryRunErr == nil {
 		klog.Info("checking IsPodWithLocalPVC")
 		isPodWithLocalPVC, err := utils.IsPodWithLocalPVC(ctx, pe.client, pod)
 		if isPodWithLocalPVC && err == nil {
