@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -136,6 +137,14 @@ func TestPodLifeTime(t *testing.T) {
 	p15.ObjectMeta.OwnerReferences = ownerRef1
 	p14.DeletionTimestamp = &metav1.Time{}
 	p15.DeletionTimestamp = &metav1.Time{}
+	pv1 := test.BuildTestPV("pv1", "localFastSSD", nil)
+	pvc1 := test.BuildTestPVC("pvc1", "pv1", "localFastSSD", nil)
+	p16 := test.BuildTestPod("p16", 100, 0, node1.Name, func(pod *v1.Pod) {
+		test.SetPodLocalPVCVolume(pod, "test-vol", pvc1.Name)
+		pod.Namespace = "testpvc"
+		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
 
 	var maxLifeTime uint = 600
 	testCases := []struct {
@@ -143,8 +152,11 @@ func TestPodLifeTime(t *testing.T) {
 		strategy                api.DeschedulerStrategy
 		pods                    []*v1.Pod
 		nodes                   []*v1.Node
+		pvs                     []*v1.PersistentVolume
+		pvcs                    []*v1.PersistentVolumeClaim
 		expectedEvictedPodCount uint
 		ignorePvcPods           bool
+		ignoreLocalPvcPods      bool
 	}{
 		{
 			description: "Two pods in the `dev` Namespace, 1 is new and 1 very is old. 1 should be evicted.",
@@ -264,6 +276,36 @@ func TestPodLifeTime(t *testing.T) {
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
 		},
+		{
+			description: "No pod should be evicted since pod has local PVC Storage and ignoreLocalPvcPods is true",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
+				},
+			},
+			pods:                    []*v1.Pod{p16},
+			nodes:                   []*v1.Node{node1},
+			pvs:                     []*v1.PersistentVolume{pv1},
+			pvcs:                    []*v1.PersistentVolumeClaim{pvc1},
+			ignoreLocalPvcPods:      true,
+			expectedEvictedPodCount: 0,
+		},
+		{
+			description: "Pod should be evicted since pod has local PVC Storage and ignoreLocalPvcPods is false",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
+				},
+			},
+			pods:                    []*v1.Pod{p16},
+			nodes:                   []*v1.Node{node1},
+			pvs:                     []*v1.PersistentVolume{pv1},
+			pvcs:                    []*v1.PersistentVolumeClaim{pvc1},
+			ignoreLocalPvcPods:      true,
+			expectedEvictedPodCount: 1,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -278,6 +320,13 @@ func TestPodLifeTime(t *testing.T) {
 			for _, pod := range tc.pods {
 				objs = append(objs, pod)
 			}
+			for _, pv := range tc.pvs {
+				objs = append(objs, pv)
+			}
+			for _, pvc := range tc.pvcs {
+				objs = append(objs, pvc)
+			}
+			klog.Info("Loading FakeClient with objects")
 			fakeClient := fake.NewSimpleClientset(objs...)
 
 			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
@@ -303,7 +352,7 @@ func TestPodLifeTime(t *testing.T) {
 				tc.ignorePvcPods,
 				true,
 				false,
-				false,
+				tc.ignoreLocalPvcPods,
 			)
 
 			PodLifeTime(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)

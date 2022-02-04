@@ -103,15 +103,16 @@ func TestIsEvictable(t *testing.T) {
 	nodeLabelKey := "datacenter"
 	nodeLabelValue := "east"
 	type testCase struct {
-		pod                     *v1.Pod
-		nodes                   []*v1.Node
-		runBefore               func(*v1.Pod, []*v1.Node)
-		evictFailedBarePods     bool
-		evictLocalStoragePods   bool
-		evictSystemCriticalPods bool
-		priorityThreshold       *int32
-		nodeFit                 bool
-		result                  bool
+		pod                      *v1.Pod
+		nodes                    []*v1.Node
+		runBefore                func(*v1.Pod, []*v1.Node)
+		evictFailedBarePods      bool
+		evictLocalStoragePods    bool
+		evictSystemCriticalPods  bool
+		priorityThreshold        *int32
+		nodeFit                  bool
+		result                   bool
+		evictLocalPVCStoragePods bool
 	}
 
 	testCases := []testCase{

@@ -86,6 +86,8 @@ func cachedClient(
 	nodeInformer corev1informers.NodeInformer,
 	namespaceInformer corev1informers.NamespaceInformer,
 	priorityClassInformer schedulingv1informers.PriorityClassInformer,
+	pvInformer corev1informers.PersistentVolumeInformer,
+	pvcInformer corev1informers.PersistentVolumeClaimInformer,
 ) (clientset.Interface, error) {
 	fakeClient := fakeclientset.NewSimpleClientset()
 	// simulate a pod eviction by deleting a pod
@@ -138,7 +140,29 @@ func cachedClient(
 
 	for _, item := range namespaces {
 		if _, err := fakeClient.CoreV1().Namespaces().Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
-			return nil, fmt.Errorf("unable to copy node: %v", err)
+			return nil, fmt.Errorf("unable to copy namespace: %v", err)
+		}
+	}
+
+	persistentVolumes, err := pvInformer.Lister().List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("unable to list persistentvolumes: %v", err)
+	}
+
+	for _, item := range persistentVolumes {
+		if _, err := fakeClient.CoreV1().PersistentVolumes().Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
+			return nil, fmt.Errorf("unable to copy persistentVolume: %v", err)
+		}
+	}
+
+	persistentVolumeClaims, err := pvcInformer.Lister().List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("unable to list persistentvolumeclaims: %v", err)
+	}
+
+	for _, item := range persistentVolumeClaims {
+		if _, err := fakeClient.CoreV1().PersistentVolumeClaims(item.Namespace).Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
+			return nil, fmt.Errorf("unable to copy persistentvolumeclaim: %v", err)
 		}
 	}
 
@@ -162,10 +186,14 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	podInformer := sharedInformerFactory.Core().V1().Pods()
 	namespaceInformer := sharedInformerFactory.Core().V1().Namespaces()
 	priorityClassInformer := sharedInformerFactory.Scheduling().V1().PriorityClasses()
+	pvInformer := sharedInformerFactory.Core().V1().PersistentVolumes()
+	pvcInformer := sharedInformerFactory.Core().V1().PersistentVolumeClaims()
 
 	// create the informers
 	namespaceInformer.Informer()
 	priorityClassInformer.Informer()
+	pvInformer.Informer()
+	pvcInformer.Informer()
 
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
@@ -245,7 +273,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		if rs.DryRun {
 			klog.V(3).Infof("Building a cached client from the cluster for the dry run")
 			// Create a new cache so we start from scratch without any leftovers
-			fakeClient, err := cachedClient(rs.Client, podInformer, nodeInformer, namespaceInformer, priorityClassInformer)
+			fakeClient, err := cachedClient(rs.Client, podInformer, nodeInformer, namespaceInformer, priorityClassInformer, pvInformer, pvcInformer)
 			if err != nil {
 				klog.Error(err)
 				return

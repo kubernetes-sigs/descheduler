@@ -140,16 +140,19 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q namespace reached", *pe.maxPodsToEvictPerNamespace, pod.Namespace)
 	}
 
-	if !pe.ignoreLocalPvcPods {
-		// dry run true
-		// only check LocalPVC if pod would have been evicted
-		// "ignoreLocalPvcPods" not an accurate option name since when true
-		// they will still be evicted unless we do this for ALL evictions
-		// implying we dryrun everything first
-		err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, true)
-		if err != nil {
-			isPodWithLocalPVC, err := utils.IsPodWithLocalPVC(ctx, pe.client, pod)
-			if isPodWithLocalPVC && err == nil {
+	// dry run true
+	// only check LocalPVC if pod would have been evicted
+	// "ignoreLocalPvcPods" not an accurate option name since when true
+	// they will still be evicted unless we do this for ALL evictions
+	// implying we dryrun everything first
+	klog.Info("checking if pod has local PVC Storage")
+	dryRunerr := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, true)
+	if dryRunerr == nil {
+		klog.Info("checking IsPodWithLocalPVC")
+		isPodWithLocalPVC, err := utils.IsPodWithLocalPVC(ctx, pe.client, pod)
+		if isPodWithLocalPVC && err == nil {
+			if !pe.ignoreLocalPvcPods {
+				klog.Info("We would evict this pod with Local PVC")
 				// TODO
 				// delete PVC here (will enter Terminating state)
 				// then the eviction later on will fire and delete the pod and pvc
