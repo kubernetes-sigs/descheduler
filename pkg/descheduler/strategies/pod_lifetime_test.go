@@ -303,7 +303,7 @@ func TestPodLifeTime(t *testing.T) {
 			nodes:                   []*v1.Node{node1},
 			pvs:                     []*v1.PersistentVolume{pv1},
 			pvcs:                    []*v1.PersistentVolumeClaim{pvc1},
-			ignoreLocalPvcPods:      true,
+			ignoreLocalPvcPods:      false,
 			expectedEvictedPodCount: 1,
 		},
 	}
