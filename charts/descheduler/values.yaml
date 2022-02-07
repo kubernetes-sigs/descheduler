@@ -39,11 +39,12 @@ deschedulingInterval: 5m
 
 cmdOptions:
   v: 3
-  # evict-local-storage-pods:
-  # max-pods-to-evict-per-node: 10
-  # node-selector: "key1=value1,key2=value2"
 
 deschedulerPolicy:
+  # nodeSelector: "key1=value1,key2=value2"
+  # maxNoOfPodsToEvictPerNode: 10
+  # ignorePvcPods: true
+  # evictLocalStoragePods: true
   strategies:
     RemoveDuplicates:
       enabled: true
