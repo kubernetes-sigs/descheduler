@@ -138,6 +138,29 @@ func IsPodWithPVC(pod *v1.Pod) bool {
 	return false
 }
 
+// DeleteLocalPVCSForPod will loop through a pods Volumes and delete any PVCs that are of Local type
+// These PVCs will likely be in Terminating state until the pod is evicted.
+func DeleteLocalPVCsForPod(ctx context.Context, client kubernetes.Interface, pod *v1.Pod) (err error) {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.PersistentVolumeClaim != nil {
+			pvc, err := GetPVC(ctx, client, volume.PersistentVolumeClaim.ClaimName, pod.Namespace)
+			if pvc != nil && err == nil {
+				isPVCLocal, err := IsPVCLocal(ctx, client, pvc)
+				if isPVCLocal && err == nil {
+					// delete the PVC immediately, no grace period
+					err = client.CoreV1().PersistentVolumeClaims(pod.Namespace).Delete(ctx, pvc.Name, *metav1.NewDeleteOptions(0))
+
+				}
+			}
+			// bail on first error instead of continuing with any other Local PVCs
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // IsPodWithLocalPVCStorage returns true if the pod has claimed a Persistent Volume
 // that is a Local type
 func IsPodWithLocalPVC(ctx context.Context, client kubernetes.Interface, pod *v1.Pod) (isPVCLocal bool, err error) {

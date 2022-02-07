@@ -140,22 +140,43 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q namespace reached", *pe.maxPodsToEvictPerNamespace, pod.Namespace)
 	}
 
-	// dry run true
-	// only check LocalPVC if pod would have been evicted
-	// "ignoreLocalPvcPods" not an accurate option name since when true
-	// they will still be evicted unless we do this for ALL evictions
-	// implying we dryrun everything first
-	klog.Info("checking if pod has local PVC Storage")
-	dryRunErr := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, true)
-	if dryRunErr == nil {
-		klog.Info("checking IsPodWithLocalPVC")
+	if pe.ignoreLocalPvcPods || !pe.evictLocalStoragePods {
+		klog.V(1).InfoS("checking if pod has Local PVC Storage")
+		isPodWithLocalPVC, _ := utils.IsPodWithLocalPVC(ctx, pe.client, pod)
+		if isPodWithLocalPVC {
+			return false, fmt.Errorf("This pod %q/%q has Local PVC Storage and ignoreLocalPvcPods is set to true or evictLocalStoragePods is false", pod.Namespace, pod.Name)
+		}
+	}
+
+	// only check for and delete PVC if all options are specified
+	// We want to evict/delete local storage
+	// We want to evict PVC pods
+	// We want to evict/delete local PVC Pods
+	if !pe.ignoreLocalPvcPods && !pe.ignorePvcPods && pe.evictLocalStoragePods {
+		klog.V(1).InfoS("checking if pod has Local PVC Storage")
 		isPodWithLocalPVC, err := utils.IsPodWithLocalPVC(ctx, pe.client, pod)
-		if isPodWithLocalPVC && err == nil {
-			if !pe.ignoreLocalPvcPods {
-				klog.Info("We would evict this pod with Local PVC")
-				// TODO
-				// delete PVC here (will enter Terminating state)
-				// then the eviction later on will fire and delete the pod and pvc
+		if err != nil {
+			klog.InfoS("Error checking for Local PVC for pod", "pod", klog.KObj(pod), "error", err)
+			return false, err
+		}
+		if isPodWithLocalPVC {
+			klog.V(1).InfoS("Pod HAS Local PVC Storage")
+		} else {
+			klog.V(1).InfoS("Pod does NOT have Local PVC Storage")
+		}
+		if isPodWithLocalPVC {
+			// dry run first to see if we should delete the PVC
+			klog.V(1).InfoS("Pod has Local PVC, performing dryrun eviction")
+			dryRunErr := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, true)
+			if dryRunErr == nil {
+				klog.V(1).InfoS("Deleting all Local PVCs for Pod")
+				err := utils.DeleteLocalPVCsForPod(ctx, pe.client, pod)
+				// if we have an error, throw here instead of continuing with eviction
+				// there may be PVCs left dangling in a Terminating state
+				if err != nil {
+					klog.ErrorS(err, "Error deleting Local PVCS for pod", "pod", klog.KObj(pod), "reason", reason, "error", err)
+					return false, err
+				}
 			}
 		}
 	}

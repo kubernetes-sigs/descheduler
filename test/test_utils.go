@@ -155,11 +155,12 @@ func BuildTestPV(name string, storageClassName string, apply func(*v1.Persistent
 }
 
 // BuildTestPVC creates a Bound PVC of the specified name / storageClass / pv
-func BuildTestPVC(name string, pvName string, storageClassName string, apply func(*v1.PersistentVolumeClaim)) *v1.PersistentVolumeClaim {
+func BuildTestPVC(name string, namespace string, pvName string, storageClassName string, apply func(*v1.PersistentVolumeClaim)) *v1.PersistentVolumeClaim {
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   name,
-			Labels: map[string]string{},
+			Name:      name,
+			Namespace: namespace,
+			Labels:    map[string]string{},
 		},
 		Status: v1.PersistentVolumeClaimStatus{
 			Phase: v1.ClaimBound,

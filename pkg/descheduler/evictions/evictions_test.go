@@ -34,7 +34,7 @@ func TestEvictPod(t *testing.T) {
 	ctx := context.Background()
 	node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
 	pv1 := test.BuildTestPV("pv1", "localFastSSD", nil)
-	pvc1 := test.BuildTestPVC("pvc1", "pv1", "localFastSSD", nil)
+	pvc1 := test.BuildTestPVC("pvc1", "default", "pv1", "localFastSSD", nil)
 	pod1 := test.BuildTestPod("p1", 400, 0, "node1", nil)
 	tests := []struct {
 		description string
@@ -103,16 +103,15 @@ func TestIsEvictable(t *testing.T) {
 	nodeLabelKey := "datacenter"
 	nodeLabelValue := "east"
 	type testCase struct {
-		pod                      *v1.Pod
-		nodes                    []*v1.Node
-		runBefore                func(*v1.Pod, []*v1.Node)
-		evictFailedBarePods      bool
-		evictLocalStoragePods    bool
-		evictSystemCriticalPods  bool
-		priorityThreshold        *int32
-		nodeFit                  bool
-		result                   bool
-		evictLocalPVCStoragePods bool
+		pod                     *v1.Pod
+		nodes                   []*v1.Node
+		runBefore               func(*v1.Pod, []*v1.Node)
+		evictFailedBarePods     bool
+		evictLocalStoragePods   bool
+		evictSystemCriticalPods bool
+		priorityThreshold       *int32
+		nodeFit                 bool
+		result                  bool
 	}
 
 	testCases := []testCase{

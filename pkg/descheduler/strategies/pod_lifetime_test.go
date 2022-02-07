@@ -138,9 +138,18 @@ func TestPodLifeTime(t *testing.T) {
 	p14.DeletionTimestamp = &metav1.Time{}
 	p15.DeletionTimestamp = &metav1.Time{}
 	pv1 := test.BuildTestPV("pv1", "localFastSSD", nil)
-	pvc1 := test.BuildTestPVC("pvc1", "pv1", "localFastSSD", nil)
+	pv2 := test.BuildTestPV("pv2", "localFastSSD", nil)
+	pvc1 := test.BuildTestPVC("pvc1", "testpvc", "pv1", "localFastSSD", nil)
+	pvc2 := test.BuildTestPVC("pvc2", "testpvc", "pv2", "localFastSSD", nil)
 	p16 := test.BuildTestPod("p16", 100, 0, node1.Name, func(pod *v1.Pod) {
 		test.SetPodLocalPVCVolume(pod, "test-vol", pvc1.Name)
+		pod.Namespace = "testpvc"
+		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
+	p17 := test.BuildTestPod("p17", 100, 0, node1.Name, func(pod *v1.Pod) {
+		test.SetPodLocalPVCVolume(pod, "test-vol", pvc1.Name)
+		test.SetPodLocalPVCVolume(pod, "test-vol2", pvc2.Name)
 		pod.Namespace = "testpvc"
 		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 		pod.ObjectMeta.OwnerReferences = ownerRef1
@@ -157,6 +166,7 @@ func TestPodLifeTime(t *testing.T) {
 		expectedEvictedPodCount uint
 		ignorePvcPods           bool
 		ignoreLocalPvcPods      bool
+		evictLocalStoragePods   bool
 	}{
 		{
 			description: "Two pods in the `dev` Namespace, 1 is new and 1 very is old. 1 should be evicted.",
@@ -288,7 +298,8 @@ func TestPodLifeTime(t *testing.T) {
 			nodes:                   []*v1.Node{node1},
 			pvs:                     []*v1.PersistentVolume{pv1},
 			pvcs:                    []*v1.PersistentVolumeClaim{pvc1},
-			ignorePvcPods:           true,
+			ignorePvcPods:           false,
+			evictLocalStoragePods:   true,
 			ignoreLocalPvcPods:      true,
 			expectedEvictedPodCount: 0,
 		},
@@ -306,7 +317,59 @@ func TestPodLifeTime(t *testing.T) {
 			pvcs:                    []*v1.PersistentVolumeClaim{pvc1},
 			ignorePvcPods:           false,
 			ignoreLocalPvcPods:      false,
+			evictLocalStoragePods:   true,
 			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "Pod should be evicted since pod has local PVC Storage (2) and ignoreLocalPvcPods is false",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
+				},
+			},
+			pods:                    []*v1.Pod{p17},
+			nodes:                   []*v1.Node{node1},
+			pvs:                     []*v1.PersistentVolume{pv1, pv2},
+			pvcs:                    []*v1.PersistentVolumeClaim{pvc1, pvc2},
+			ignorePvcPods:           false,
+			ignoreLocalPvcPods:      false,
+			evictLocalStoragePods:   true,
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "Pod should not be evicted since pod has local PVC Storage and evictLocalStoragePods is false",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
+				},
+			},
+			pods:                    []*v1.Pod{p16},
+			nodes:                   []*v1.Node{node1},
+			pvs:                     []*v1.PersistentVolume{pv1},
+			pvcs:                    []*v1.PersistentVolumeClaim{pvc1},
+			ignorePvcPods:           false,
+			ignoreLocalPvcPods:      false,
+			evictLocalStoragePods:   false,
+			expectedEvictedPodCount: 0,
+		},
+		{
+			description: "Pod should not be not evicted since pod has local PVC Storage and ignorePvcPods is true",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
+				},
+			},
+			pods:                    []*v1.Pod{p16},
+			nodes:                   []*v1.Node{node1},
+			pvs:                     []*v1.PersistentVolume{pv1},
+			pvcs:                    []*v1.PersistentVolumeClaim{pvc1},
+			ignorePvcPods:           true,
+			ignoreLocalPvcPods:      false,
+			evictLocalStoragePods:   false,
+			expectedEvictedPodCount: 0,
 		},
 	}
 
@@ -349,7 +412,7 @@ func TestPodLifeTime(t *testing.T) {
 				nil,
 				nil,
 				tc.nodes,
-				false,
+				tc.evictLocalStoragePods,
 				false,
 				tc.ignorePvcPods,
 				true,
