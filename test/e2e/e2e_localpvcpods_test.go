@@ -63,7 +63,7 @@ func TestRemoveLocalPVCPods(t *testing.T) {
 	var bindingMode storagev1.VolumeBindingMode
 	bindingMode = "WaitForFirstConsumer"
 	var reclaimPolicy v1.PersistentVolumeReclaimPolicy
-	reclaimPolicy = "Retain"
+	reclaimPolicy = "Delete"
 
 	storageClassObj := &storagev1.StorageClass{
 		ObjectMeta: metav1.ObjectMeta{
@@ -95,10 +95,6 @@ func TestRemoveLocalPVCPods(t *testing.T) {
 			SelfLink: fmt.Sprintf("/api/v1/persistentvolume/%s", "pv1"),
 			Labels:   map[string]string{},
 		},
-		Status: v1.PersistentVolumeStatus{
-
-			Phase: v1.VolumeBound,
-		},
 		Spec: v1.PersistentVolumeSpec{
 			StorageClassName: "local-ssd",
 			PersistentVolumeSource: v1.PersistentVolumeSource{
@@ -106,6 +102,7 @@ func TestRemoveLocalPVCPods(t *testing.T) {
 					Path: fmt.Sprintf("/tmp/%s", "pv1"),
 				},
 			},
+			PersistentVolumeReclaimPolicy: "Delete",
 			Capacity: v1.ResourceList{
 				v1.ResourceName(v1.ResourceStorage): resource.MustParse("2G"),
 			},
@@ -145,10 +142,6 @@ func TestRemoveLocalPVCPods(t *testing.T) {
 			SelfLink: fmt.Sprintf("/api/v1/persistentvolume/%s", "pv2"),
 			Labels:   map[string]string{},
 		},
-		Status: v1.PersistentVolumeStatus{
-
-			Phase: v1.VolumeBound,
-		},
 		Spec: v1.PersistentVolumeSpec{
 			StorageClassName: "local-ssd",
 			PersistentVolumeSource: v1.PersistentVolumeSource{
@@ -159,7 +152,8 @@ func TestRemoveLocalPVCPods(t *testing.T) {
 			Capacity: v1.ResourceList{
 				v1.ResourceName(v1.ResourceStorage): resource.MustParse("2G"),
 			},
-			AccessModes: []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
+			PersistentVolumeReclaimPolicy: "Delete",
+			AccessModes:                   []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
 			NodeAffinity: &v1.VolumeNodeAffinity{
 				&v1.NodeSelector{
 					NodeSelectorTerms: []v1.NodeSelectorTerm{
@@ -213,9 +207,6 @@ func TestRemoveLocalPVCPods(t *testing.T) {
 					VolumeName:       "www",
 					StorageClassName: &storageClassObj.Name,
 					Resources: v1.ResourceRequirements{
-						Limits: v1.ResourceList{
-							"storage": resource.MustParse("1G"),
-						},
 						Requests: v1.ResourceList{
 							"storage": resource.MustParse("1G"),
 						},
