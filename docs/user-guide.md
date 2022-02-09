@@ -2,14 +2,15 @@
 
 Starting with descheduler release v0.10.0 container images are available in the official k8s container registry.
 
-Descheduler Version | Container Image                                     | Architectures           |
-------------------- |-----------------------------------------------------|-------------------------|
-v0.22.0             | k8s.gcr.io/descheduler/descheduler:v0.22.0          | AMD64<br>ARM64<br>ARMv7 |
-v0.21.0             | k8s.gcr.io/descheduler/descheduler:v0.21.0          | AMD64<br>ARM64<br>ARMv7 |
-v0.20.0             | k8s.gcr.io/descheduler/descheduler:v0.20.0          | AMD64<br>ARM64          |
-v0.19.0             | k8s.gcr.io/descheduler/descheduler:v0.19.0          | AMD64                   |
-v0.18.0             | k8s.gcr.io/descheduler/descheduler:v0.18.0          | AMD64                   |
-v0.10.0             | k8s.gcr.io/descheduler/descheduler:v0.10.0          | AMD64                   |
+Descheduler Version | Container Image                            | Architectures           |
+------------------- |--------------------------------------------|-------------------------|
+v0.23.0             | k8s.gcr.io/descheduler/descheduler:v0.23.0 | AMD64<br>ARM64<br>ARMv7 |
+v0.22.0             | k8s.gcr.io/descheduler/descheduler:v0.22.0 | AMD64<br>ARM64<br>ARMv7 |
+v0.21.0             | k8s.gcr.io/descheduler/descheduler:v0.21.0 | AMD64<br>ARM64<br>ARMv7 |
+v0.20.0             | k8s.gcr.io/descheduler/descheduler:v0.20.0 | AMD64<br>ARM64          |
+v0.19.0             | k8s.gcr.io/descheduler/descheduler:v0.19.0 | AMD64                   |
+v0.18.0             | k8s.gcr.io/descheduler/descheduler:v0.18.0 | AMD64                   |
+v0.10.0             | k8s.gcr.io/descheduler/descheduler:v0.10.0 | AMD64                   |
 
 Note that multi-arch container images cannot be pulled by [kind](https://kind.sigs.k8s.io) from a registry. Therefore
 starting with descheduler release v0.20.0 use the below process to download the official descheduler
