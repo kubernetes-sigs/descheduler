@@ -27,6 +27,10 @@ spec:
       priorityClassName: {{ .Values.priorityClassName }}
       {{- end }}
       serviceAccountName: {{ template "descheduler.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+      {{- toYaml . | nindent 10 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (printf "v%s" .Chart.AppVersion) }}"
