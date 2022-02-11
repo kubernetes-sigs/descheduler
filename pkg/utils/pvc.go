@@ -10,17 +10,22 @@ import (
 )
 
 // IsPVCLocal returns true if the pod has claimed a Persistent Volume
-// that is a Local type
+// that is a Local or HostPath type
 func IsPVCLocal(ctx context.Context, client clientset.Interface, pvc *v1.PersistentVolumeClaim) (isPVCLocal bool, err error) {
 	pv, err := GetPV(ctx, client, pvc.Spec.VolumeName)
 	if pv != nil {
-		return pv.Spec.Local != nil, nil
+		// consider both Local and HostPast as "local"
+		if pv.Spec.Local != nil {
+			return true, nil
+		}
+		if pv.Spec.HostPath != nil {
+			return true, nil
+		}
 	}
 	if err != nil {
 		klog.ErrorS(err, "Failed to get PV for PVC")
 		return false, err
 	}
-
 	return false, nil
 }
 
