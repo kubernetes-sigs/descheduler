@@ -44,7 +44,7 @@ The command removes all the Kubernetes components associated with the chart and 
 The following table lists the configurable parameters of the _descheduler_ chart and their default values.
 
 | Parameter                      | Description                                                                                                           | Default                              |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+|--------------------------------|-----------------------------------------------------------------------------------------------------------------------|--------------------------------------|
 | `kind`                         | Use as CronJob or Deployment                                                                                          | `CronJob`                            |
 | `image.repository`             | Docker repository to use                                                                                              | `k8s.gcr.io/descheduler/descheduler` |
 | `image.tag`                    | Docker tag to use                                                                                                     | `v[chart appVersion]`                |
@@ -58,6 +58,8 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `successfulJobsHistoryLimit`   | If set, configure `successfulJobsHistoryLimit` for the _descheduler_ job                                              | `nil`                                |
 | `failedJobsHistoryLimit`       | If set, configure `failedJobsHistoryLimit` for the _descheduler_ job                                                  | `nil`                                |
 | `deschedulingInterval`         | If using kind:Deployment, sets time between consecutive descheduler executions.                                       | `5m`                                 |
+| `replicas`                     | The replica count for Deployment                                                                                      | `1`                                  |
+| `leaderElection`               | The options for high availability when running replicated components                                                  | _see values.yaml_                    |
 | `cmdOptions`                   | The options to pass to the _descheduler_ command                                                                      | _see values.yaml_                    |
 | `deschedulerPolicy.strategies` | The _descheduler_ strategies to apply                                                                                 | _see values.yaml_                    |
 | `priorityClassName`            | The name of the priority class to add to pods                                                                         | `system-cluster-critical`            |

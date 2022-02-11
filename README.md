@@ -50,6 +50,8 @@ Table of Contents
   - [Node Fit filtering](#node-fit-filtering)
 - [Pod Evictions](#pod-evictions)
   - [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
+- [High Availability](#high-availability)
+  - [Configure HA Mode](#configure-ha-mode)
 - [Metrics](#metrics)
 - [Compatibility Matrix](#compatibility-matrix)
 - [Getting Involved and Contributing](#getting-involved-and-contributing)
@@ -773,6 +775,23 @@ Setting `--v=4` or greater on the Descheduler will log all reasons why any pod i
 Pods subject to a Pod Disruption Budget(PDB) are not evicted if descheduling violates its PDB. The pods
 are evicted by using the eviction subresource to handle PDB.
 
+## High Availability
+
+In High Availability mode, Descheduler starts [leader election](https://github.com/kubernetes/client-go/tree/master/tools/leaderelection) process in Kubernetes. You can activate HA mode
+if you choose to deploy your application as Deployment.
+
+Deployment starts with 1 replica by default. If you want to use more than 1 replica, you must consider
+enable High Availability mode since we don't want to run descheduler pods simultaneously.
+
+### Configure HA Mode
+
+The leader election process can be enabled by setting `--leader-elect` in the CLI. You can also set
+`--set=leaderElection.enabled=true` flag if you are using Helm.
+
+To get best results from HA mode some additional configurations might require:
+* Configure a [podAntiAffinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node) rule if you want to schedule onto a node only if that node is in the same zone as at least one already-running descheduler
+* Set the replica count greater than 1
+
 ## Metrics
 
 | name	| type	| description |
@@ -792,17 +811,16 @@ v0.18 should work with k8s v1.18, v1.17, and v1.16.
 Starting with descheduler release v0.18 the minor version of descheduler matches the minor version of the k8s client
 packages that it is compiled with.
 
-Descheduler  | Supported Kubernetes Version
--------------|-----------------------------
-v0.22        | v1.22
-v0.21        | v1.21
-v0.20        | v1.20
-v0.19        | v1.19
-v0.18        | v1.18
-v0.10        | v1.17
-v0.4-v0.9    | v1.9+
-v0.1-v0.3    | v1.7-v1.8
-
+| Descheduler | Supported Kubernetes Version |
+|-------------|------------------------------|
+| v0.22       | v1.22                        |
+| v0.21       | v1.21                        |
+| v0.20       | v1.20                        |
+| v0.19       | v1.19                        |
+| v0.18       | v1.18                        |
+| v0.10       | v1.17                        |
+| v0.4-v0.9   | v1.9+                        |
+| v0.1-v0.3   | v1.7-v1.8                    |
 
 ## Getting Involved and Contributing
 

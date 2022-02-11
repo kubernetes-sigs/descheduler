@@ -69,7 +69,22 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 		return err
 	}
 
-	return RunDeschedulerStrategies(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion)
+	runFn := func() error {
+		return RunDeschedulerStrategies(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion)
+	}
+
+	if rs.LeaderElection.LeaderElect && rs.DeschedulingInterval.Seconds() == 0 {
+		return fmt.Errorf("leaderElection must be used with deschedulingInterval")
+	}
+
+	if rs.LeaderElection.LeaderElect && !rs.DryRun {
+		if err := NewLeaderElection(runFn, rsclient, &rs.LeaderElection, ctx); err != nil {
+			return fmt.Errorf("leaderElection: %w", err)
+		}
+		return nil
+	}
+
+	return runFn()
 }
 
 type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc)

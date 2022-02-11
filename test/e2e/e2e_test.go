@@ -517,8 +517,8 @@ func TestEvictSystemCriticalPriorityClass(t *testing.T) {
 }
 
 func testEvictSystemCritical(t *testing.T, isPriorityClass bool) {
-	var highPriority = int32(1000)
-	var lowPriority = int32(500)
+	highPriority := int32(1000)
+	lowPriority := int32(500)
 	ctx := context.Background()
 
 	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
@@ -647,8 +647,8 @@ func TestThresholdPriorityClass(t *testing.T) {
 }
 
 func testPriority(t *testing.T, isPriorityClass bool) {
-	var highPriority = int32(1000)
-	var lowPriority = int32(500)
+	highPriority := int32(1000)
+	lowPriority := int32(500)
 	ctx := context.Background()
 
 	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
@@ -745,7 +745,7 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 		t.Fatalf("None of %v high priority pods are expected to be deleted", expectReservePodNames)
 	}
 
-	//check if all pods with low priority class are evicted
+	// check if all pods with low priority class are evicted
 	if err := wait.PollImmediate(time.Second, 30*time.Second, func() (bool, error) {
 		podListLowPriority, err := clientSet.CoreV1().Pods(rcLowPriority.Namespace).List(
 			ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcLowPriority.Spec.Template.Labels).String()})
@@ -848,7 +848,7 @@ func TestPodLabelSelector(t *testing.T) {
 		t.Fatalf("None of %v unevictable pods are expected to be deleted", expectReservePodNames)
 	}
 
-	//check if all selected pods are evicted
+	// check if all selected pods are evicted
 	if err := wait.PollImmediate(time.Second, 30*time.Second, func() (bool, error) {
 		podListEvict, err := clientSet.CoreV1().Pods(rcEvict.Namespace).List(
 			ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcEvict.Spec.Template.Labels).String()})
@@ -911,7 +911,8 @@ func TestEvictAnnotation(t *testing.T) {
 			Name: "sample",
 			VolumeSource: v1.VolumeSource{
 				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+				},
 			},
 		},
 	}
@@ -1143,8 +1144,8 @@ func createBalancedPodForNodes(
 
 	// find the max, if the node has the max,use the one, if not,use the ratio parameter
 	var maxCPUFraction, maxMemFraction float64 = ratio, ratio
-	var cpuFractionMap = make(map[string]float64)
-	var memFractionMap = make(map[string]float64)
+	cpuFractionMap := make(map[string]float64)
+	memFractionMap := make(map[string]float64)
 
 	for _, node := range nodes {
 		cpuFraction, memFraction, _, _ := computeCPUMemFraction(t, cs, node, podRequestedResource)
@@ -1181,7 +1182,7 @@ func createBalancedPodForNodes(
 		// add crioMinMemLimit to ensure that all pods are setting at least that much for a limit, while keeping the same ratios
 		needCreateResource[v1.ResourceMemory] = *resource.NewQuantity(int64((ratio-memFraction)*float64(memAllocatableVal)+float64(crioMinMemLimit)), resource.BinarySI)
 
-		var gracePeriod = int64(1)
+		gracePeriod := int64(1)
 		// Don't set OwnerReferences to avoid pod eviction
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1308,6 +1309,30 @@ func waitForPodRunning(ctx context.Context, t *testing.T, clientSet clientset.In
 		return true, nil
 	}); err != nil {
 		t.Fatalf("Error waiting for pod running: %v", err)
+	}
+}
+
+func waitForPodsRunning(ctx context.Context, t *testing.T, clientSet clientset.Interface, labelMap map[string]string, desireRunningPodNum int, namespace string) {
+	if err := wait.PollImmediate(10*time.Second, 60*time.Second, func() (bool, error) {
+		podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: labels.SelectorFromSet(labelMap).String(),
+		})
+		if err != nil {
+			return false, err
+		}
+		if len(podList.Items) != desireRunningPodNum {
+			t.Logf("Waiting for %v pods to be running, got %v instead", desireRunningPodNum, len(podList.Items))
+			return false, nil
+		}
+		for _, pod := range podList.Items {
+			if pod.Status.Phase != v1.PodRunning {
+				t.Logf("Pod %v not running yet, is %v instead", pod.Name, pod.Status.Phase)
+				return false, nil
+			}
+		}
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for pods running: %v", err)
 	}
 }
 

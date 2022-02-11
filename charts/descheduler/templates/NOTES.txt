@@ -1,1 +1,7 @@
-Descheduler installed as a {{ .Values.kind }} .
+Descheduler installed as a {{ .Values.kind }}.
+
+{{- if eq .Values.kind "Deployment" }}
+{{- if eq .Values.replicas 1.0}}
+WARNING: You set replica count as 1 and workload kind as Deployment however leaderElection is not enabled. Consider enabling Leader Election for HA mode.
+{{- end}}
+{{- end}}
