@@ -62,6 +62,11 @@ func (in *DeschedulerPolicy) DeepCopyInto(out *DeschedulerPolicy) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.IgnoreLocalPVCPods != nil {
+		in, out := &in.IgnoreLocalPVCPods, &out.IgnoreLocalPVCPods
+		*out = new(bool)
+		**out = **in
+	}
 	if in.MaxNoOfPodsToEvictPerNode != nil {
 		in, out := &in.MaxNoOfPodsToEvictPerNode, &out.MaxNoOfPodsToEvictPerNode
 		*out = new(uint)

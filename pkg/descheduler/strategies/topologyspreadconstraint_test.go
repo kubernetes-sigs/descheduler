@@ -360,12 +360,12 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					constraints: getDefaultTopologyConstraints(1),
 				},
 				{
-					count:  100,
+					count:  80,
 					node:   "n3",
 					labels: map[string]string{"foo": "bar"},
 				},
 			}),
-			expectedEvictedCount: 66,
+			expectedEvictedCount: 53,
 			strategy:             api.DeschedulerStrategy{},
 			namespaces:           []string{"ns1"},
 		},
@@ -907,6 +907,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				false,
 				false,
 				false,
+				true,
 			)
 			RemovePodsViolatingTopologySpreadConstraint(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()

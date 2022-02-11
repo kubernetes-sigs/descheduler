@@ -46,6 +46,8 @@ deschedulerPolicy:
   # maxNoOfPodsToEvictPerNode: 10
   # ignorePvcPods: true
   # evictLocalStoragePods: true
+  ignoreLocalPvcPods: true
+  evictLocalStoragePods: false
   strategies:
     RemoveDuplicates:
       enabled: true

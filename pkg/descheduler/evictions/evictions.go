@@ -62,6 +62,7 @@ type PodEvictor struct {
 	evictSystemCriticalPods    bool
 	ignorePvcPods              bool
 	metricsEnabled             bool
+	ignoreLocalPvcPods         bool
 }
 
 func NewPodEvictor(
@@ -76,6 +77,7 @@ func NewPodEvictor(
 	ignorePvcPods bool,
 	evictFailedBarePods bool,
 	metricsEnabled bool,
+	ignoreLocalPvcPods bool,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
 	var namespacePodCount = make(namespacePodEvictCount)
@@ -97,6 +99,7 @@ func NewPodEvictor(
 		evictSystemCriticalPods:    evictSystemCriticalPods,
 		evictFailedBarePods:        evictFailedBarePods,
 		ignorePvcPods:              ignorePvcPods,
+		ignoreLocalPvcPods:         ignoreLocalPvcPods,
 		metricsEnabled:             metricsEnabled,
 	}
 }
@@ -137,7 +140,48 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q namespace reached", *pe.maxPodsToEvictPerNamespace, pod.Namespace)
 	}
 
-	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion)
+	if pe.ignoreLocalPvcPods {
+		klog.V(1).InfoS("checking if pod has Local PVC Storage")
+		isPodWithLocalPVC, _ := utils.IsPodWithLocalPVC(ctx, pe.client, pod)
+		if isPodWithLocalPVC {
+			return false, fmt.Errorf("This pod %q/%q has Local PVC Storage and ignoreLocalPvcPods is set to true", pod.Namespace, pod.Name)
+		}
+	}
+
+	// only check for and delete PVC if
+	// We want to evict PVC pods and
+	// We want to evict pod and delete local PVC
+	if !pe.ignoreLocalPvcPods && !pe.ignorePvcPods {
+		klog.V(1).InfoS("checking if pod has Local PVC Storage")
+		isPodWithLocalPVC, err := utils.IsPodWithLocalPVC(ctx, pe.client, pod)
+		if err != nil {
+			klog.InfoS("Error checking for Local PVC for pod", "pod", klog.KObj(pod), "error", err)
+			return false, err
+		}
+		if isPodWithLocalPVC {
+			klog.V(1).InfoS("Pod HAS Local PVC Storage")
+		} else {
+			klog.V(1).InfoS("Pod does NOT have Local PVC Storage")
+		}
+		if isPodWithLocalPVC {
+			// dry run first to see if we should delete the PVC
+			klog.V(1).InfoS("Pod has Local PVC, performing dryrun eviction")
+			dryRunErr := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, true)
+			if dryRunErr == nil {
+				klog.V(1).InfoS("Deleting all Local PVCs for Pod")
+				err := utils.DeleteLocalPVCsForPod(ctx, pe.client, pod)
+				// if we have an error, throw here instead of continuing with eviction
+				// there may be PVCs left dangling in a Terminating state
+				if err != nil {
+					klog.ErrorS(err, "Error deleting Local PVCS for pod", "pod", klog.KObj(pod), "reason", reason, "error", err)
+					return false, err
+				}
+			}
+		}
+	}
+
+	// evictPod dryRun: false
+	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, false)
 	if err != nil {
 		// err is used only for logging purposes
 		klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", reason)
@@ -167,8 +211,12 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 	return true, nil
 }
 
-func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string) error {
+func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string, dryRun bool) error {
 	deleteOptions := &metav1.DeleteOptions{}
+	// Not sure if Fake respects DryRun. e2e only?
+	if dryRun {
+		deleteOptions.DryRun = append(deleteOptions.DryRun, "All")
+	}
 	// GracePeriodSeconds ?
 	eviction := &policy.Eviction{
 		TypeMeta: metav1.TypeMeta{
@@ -290,6 +338,15 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			if utils.IsPodWithPVC(pod) {
 				return fmt.Errorf("pod has a PVC and descheduler is configured to ignore PVC pods")
+			}
+			return nil
+		})
+	}
+	if pe.ignoreLocalPvcPods {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			isPVCLocal, err := utils.IsPodWithLocalPVC(context.TODO(), pe.client, pod)
+			if isPVCLocal && err == nil {
+				return fmt.Errorf("pod has a Local PVC and descheduler is configured to ignore Local PVC pods")
 			}
 			return nil
 		})

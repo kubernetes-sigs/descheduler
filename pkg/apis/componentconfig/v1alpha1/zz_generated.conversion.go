@@ -58,6 +58,7 @@ func autoConvert_v1alpha1_DeschedulerConfiguration_To_componentconfig_Deschedule
 	out.MaxNoOfPodsToEvictPerNode = in.MaxNoOfPodsToEvictPerNode
 	out.EvictLocalStoragePods = in.EvictLocalStoragePods
 	out.IgnorePVCPods = in.IgnorePVCPods
+	out.IgnoreLocalPVCPods = in.IgnoreLocalPVCPods
 	out.Logging = in.Logging
 	return nil
 }
@@ -76,6 +77,7 @@ func autoConvert_componentconfig_DeschedulerConfiguration_To_v1alpha1_Deschedule
 	out.MaxNoOfPodsToEvictPerNode = in.MaxNoOfPodsToEvictPerNode
 	out.EvictLocalStoragePods = in.EvictLocalStoragePods
 	out.IgnorePVCPods = in.IgnorePVCPods
+	out.IgnoreLocalPVCPods = in.IgnoreLocalPVCPods
 	out.Logging = in.Logging
 	return nil
 }

@@ -1,12 +1,14 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/component-base/featuregate"
 	"k8s.io/klog/v2"
 )
@@ -126,7 +128,7 @@ func IsPodWithLocalStorage(pod *v1.Pod) bool {
 	return false
 }
 
-// IsPodWithLocalStorage returns true if the pod has claimed a persistent volume.
+// IsPodWithPVC returns true if the pod has claimed a persistent volume.
 func IsPodWithPVC(pod *v1.Pod) bool {
 	for _, volume := range pod.Spec.Volumes {
 		if volume.PersistentVolumeClaim != nil {
@@ -134,6 +136,50 @@ func IsPodWithPVC(pod *v1.Pod) bool {
 		}
 	}
 	return false
+}
+
+// DeleteLocalPVCSForPod will loop through a pods Volumes and delete any PVCs that are of Local type
+// These PVCs will likely be in Terminating state until the pod is evicted.
+func DeleteLocalPVCsForPod(ctx context.Context, client kubernetes.Interface, pod *v1.Pod) (err error) {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.PersistentVolumeClaim != nil {
+			pvc, err := GetPVC(ctx, client, volume.PersistentVolumeClaim.ClaimName, pod.Namespace)
+			if pvc != nil && err == nil {
+				isPVCLocal, err := IsPVCLocal(ctx, client, pvc)
+				if isPVCLocal && err == nil {
+					// delete the PVC immediately, no grace period
+					err = client.CoreV1().PersistentVolumeClaims(pod.Namespace).Delete(ctx, pvc.Name, *metav1.NewDeleteOptions(0))
+
+				}
+			}
+			// bail on first error instead of continuing with any other Local PVCs
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// IsPodWithLocalPVCStorage returns true if the pod has claimed a Persistent Volume
+// that is a local or hostPath type
+func IsPodWithLocalPVC(ctx context.Context, client kubernetes.Interface, pod *v1.Pod) (isPVCLocal bool, err error) {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.PersistentVolumeClaim != nil {
+			pvc, err := GetPVC(ctx, client, volume.PersistentVolumeClaim.ClaimName, pod.Namespace)
+			if pvc != nil {
+				isPVCLocal, err := IsPVCLocal(ctx, client, pvc)
+				if err == nil {
+					return isPVCLocal, err
+				}
+			}
+			if err != nil {
+				return false, err
+			}
+		}
+	}
+	// there were no volumes to look at
+	return false, nil
 }
 
 // GetPodSource returns the source of the pod based on the annotation.

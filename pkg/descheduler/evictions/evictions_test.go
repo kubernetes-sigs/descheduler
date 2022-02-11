@@ -33,12 +33,16 @@ import (
 func TestEvictPod(t *testing.T) {
 	ctx := context.Background()
 	node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
+	pv1 := test.BuildTestPV("pv1", "localFastSSD", nil)
+	pvc1 := test.BuildTestPVC("pvc1", "default", "pv1", "localFastSSD", nil)
 	pod1 := test.BuildTestPod("p1", 400, 0, "node1", nil)
 	tests := []struct {
 		description string
 		node        *v1.Node
 		pod         *v1.Pod
 		pods        []v1.Pod
+		pvs         []v1.PersistentVolume
+		pvcs        []v1.PersistentVolumeClaim
 		want        error
 	}{
 		{
@@ -55,6 +59,19 @@ func TestEvictPod(t *testing.T) {
 			pods:        []v1.Pod{*test.BuildTestPod("p2", 400, 0, "node1", nil), *test.BuildTestPod("p3", 450, 0, "node1", nil)},
 			want:        nil,
 		},
+		{
+			description: "test pod eviction - pod has local pvc storage",
+			node:        node1,
+			pod:         pod1,
+			pvs:         []v1.PersistentVolume{*pv1},
+			pvcs:        []v1.PersistentVolumeClaim{*pvc1},
+			pods: []v1.Pod{*test.BuildTestPod("p2", 400, 0, "node1",
+				func(pod *v1.Pod) {
+					test.SetPodPVCVolume(pod, "test-vol", "pvc1")
+				}),
+			},
+			want: nil,
+		},
 	}
 
 	for _, test := range tests {
@@ -62,7 +79,13 @@ func TestEvictPod(t *testing.T) {
 		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
 			return true, &v1.PodList{Items: test.pods}, nil
 		})
-		got := evictPod(ctx, fakeClient, test.pod, "v1")
+		fakeClient.Fake.AddReactor("list", "persistentvolumes", func(action core.Action) (bool, runtime.Object, error) {
+			return true, &v1.PersistentVolumeList{Items: test.pvs}, nil
+		})
+		fakeClient.Fake.AddReactor("list", "persistentvolumeclaims", func(action core.Action) (bool, runtime.Object, error) {
+			return true, &v1.PersistentVolumeClaimList{Items: test.pvcs}, nil
+		})
+		got := evictPod(ctx, fakeClient, test.pod, "v1", false)
 		if got != test.want {
 			t.Errorf("Test error for Desc: %s. Expected %v pod eviction to be %v, got %v", test.description, test.pod.Name, test.want, got)
 		}

@@ -24,6 +24,12 @@ rules:
 - apiGroups: ["scheduling.k8s.io"]
   resources: ["priorityclasses"]
   verbs: ["get", "watch", "list"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "watch", "list", "delete"]
+- apiGroups: [""]
+  resources: ["persistentvolumes"]
+  verbs: ["get", "watch", "list"]
 {{- if .Values.podSecurityPolicy.create }}
 - apiGroups: ['policy']
   resources: ['podsecuritypolicies']
