@@ -255,6 +255,7 @@ func TestPodLifeTime(t *testing.T) {
 			pods:                    []*v1.Pod{p11},
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
+			ignoreLocalPvcPods:      true, // allow test to work w/o a real pvc attached to pod
 		},
 		{
 			description: "No pod to evicted since all pod terminating",
@@ -299,8 +300,8 @@ func TestPodLifeTime(t *testing.T) {
 			pvs:                     []*v1.PersistentVolume{pv1},
 			pvcs:                    []*v1.PersistentVolumeClaim{pvc1},
 			ignorePvcPods:           false,
-			evictLocalStoragePods:   true,
 			ignoreLocalPvcPods:      true,
+			evictLocalStoragePods:   true,
 			expectedEvictedPodCount: 0,
 		},
 		{
@@ -317,7 +318,7 @@ func TestPodLifeTime(t *testing.T) {
 			pvcs:                    []*v1.PersistentVolumeClaim{pvc1},
 			ignorePvcPods:           false,
 			ignoreLocalPvcPods:      false,
-			evictLocalStoragePods:   true,
+			evictLocalStoragePods:   false,
 			expectedEvictedPodCount: 1,
 		},
 		{
@@ -336,23 +337,6 @@ func TestPodLifeTime(t *testing.T) {
 			ignoreLocalPvcPods:      false,
 			evictLocalStoragePods:   true,
 			expectedEvictedPodCount: 1,
-		},
-		{
-			description: "Pod should not be evicted since pod has local PVC Storage and evictLocalStoragePods is false",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
-				},
-			},
-			pods:                    []*v1.Pod{p16},
-			nodes:                   []*v1.Node{node1},
-			pvs:                     []*v1.PersistentVolume{pv1},
-			pvcs:                    []*v1.PersistentVolumeClaim{pvc1},
-			ignorePvcPods:           false,
-			ignoreLocalPvcPods:      false,
-			evictLocalStoragePods:   false,
-			expectedEvictedPodCount: 0,
 		},
 		{
 			description: "Pod should not be not evicted since pod has local PVC Storage and ignorePvcPods is true",

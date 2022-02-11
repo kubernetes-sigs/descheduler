@@ -67,7 +67,7 @@ func TestEvictPod(t *testing.T) {
 			pvcs:        []v1.PersistentVolumeClaim{*pvc1},
 			pods: []v1.Pod{*test.BuildTestPod("p2", 400, 0, "node1",
 				func(pod *v1.Pod) {
-					test.SetPodLocalPVCVolume(pod, "test-vol", "pvc1")
+					test.SetPodPVCVolume(pod, "test-vol", "pvc1")
 				}),
 			},
 			want: nil,

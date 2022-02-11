@@ -162,7 +162,7 @@ func DeleteLocalPVCsForPod(ctx context.Context, client kubernetes.Interface, pod
 }
 
 // IsPodWithLocalPVCStorage returns true if the pod has claimed a Persistent Volume
-// that is a Local type
+// that is a local or hostPath type
 func IsPodWithLocalPVC(ctx context.Context, client kubernetes.Interface, pod *v1.Pod) (isPVCLocal bool, err error) {
 	for _, volume := range pod.Spec.Volumes {
 		if volume.PersistentVolumeClaim != nil {

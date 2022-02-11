@@ -140,19 +140,18 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q namespace reached", *pe.maxPodsToEvictPerNamespace, pod.Namespace)
 	}
 
-	if pe.ignoreLocalPvcPods || !pe.evictLocalStoragePods {
+	if pe.ignoreLocalPvcPods {
 		klog.V(1).InfoS("checking if pod has Local PVC Storage")
 		isPodWithLocalPVC, _ := utils.IsPodWithLocalPVC(ctx, pe.client, pod)
 		if isPodWithLocalPVC {
-			return false, fmt.Errorf("This pod %q/%q has Local PVC Storage and ignoreLocalPvcPods is set to true or evictLocalStoragePods is false", pod.Namespace, pod.Name)
+			return false, fmt.Errorf("This pod %q/%q has Local PVC Storage and ignoreLocalPvcPods is set to true", pod.Namespace, pod.Name)
 		}
 	}
 
-	// only check for and delete PVC if all options are specified
-	// We want to evict/delete local storage
-	// We want to evict PVC pods
-	// We want to evict/delete local PVC Pods
-	if !pe.ignoreLocalPvcPods && !pe.ignorePvcPods && pe.evictLocalStoragePods {
+	// only check for and delete PVC if
+	// We want to evict PVC pods and
+	// We want to evict pod and delete local PVC
+	if !pe.ignoreLocalPvcPods && !pe.ignorePvcPods {
 		klog.V(1).InfoS("checking if pod has Local PVC Storage")
 		isPodWithLocalPVC, err := utils.IsPodWithLocalPVC(ctx, pe.client, pod)
 		if err != nil {
