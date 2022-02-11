@@ -142,14 +142,14 @@ func TestPodLifeTime(t *testing.T) {
 	pvc1 := test.BuildTestPVC("pvc1", "testpvc", "pv1", "localFastSSD", nil)
 	pvc2 := test.BuildTestPVC("pvc2", "testpvc", "pv2", "localFastSSD", nil)
 	p16 := test.BuildTestPod("p16", 100, 0, node1.Name, func(pod *v1.Pod) {
-		test.SetPodLocalPVCVolume(pod, "test-vol", pvc1.Name)
+		test.SetPodPVCVolume(pod, "test-vol", pvc1.Name)
 		pod.Namespace = "testpvc"
 		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 		pod.ObjectMeta.OwnerReferences = ownerRef1
 	})
 	p17 := test.BuildTestPod("p17", 100, 0, node1.Name, func(pod *v1.Pod) {
-		test.SetPodLocalPVCVolume(pod, "test-vol", pvc1.Name)
-		test.SetPodLocalPVCVolume(pod, "test-vol2", pvc2.Name)
+		test.SetPodPVCVolume(pod, "test-vol", pvc1.Name)
+		test.SetPodPVCVolume(pod, "test-vol2", pvc2.Name)
 		pod.Namespace = "testpvc"
 		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 		pod.ObjectMeta.OwnerReferences = ownerRef1

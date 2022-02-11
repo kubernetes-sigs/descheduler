@@ -237,8 +237,8 @@ func SetNodeExtendedResource(node *v1.Node, resourceName v1.ResourceName, reques
 	node.Status.Allocatable[resourceName] = *resource.NewQuantity(requestQuantity, resource.DecimalSI)
 }
 
-// setPodLocalPVCVolume sets a pod volume and pvc name
-func SetPodLocalPVCVolume(pod *v1.Pod, volumeName string, pvcName string) {
+// setPodPVCVolume sets a pod volume and pvc name
+func SetPodPVCVolume(pod *v1.Pod, volumeName string, pvcName string) {
 	pod.Spec.Volumes[0].Name = volumeName
 	pod.Spec.Volumes[0].PersistentVolumeClaim = &v1.PersistentVolumeClaimVolumeSource{
 		ClaimName: pvcName,
