@@ -11,7 +11,8 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
-imagePullSecrets: []
+imagePullSecrets:
+#   - name: container-registry-secret
 
 resources:
   requests:
