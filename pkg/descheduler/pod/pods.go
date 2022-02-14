@@ -17,6 +17,7 @@ limitations under the License.
 package pod
 
 import (
+	"math/rand"
 	"sort"
 
 	v1 "k8s.io/api/core/v1"
@@ -26,11 +27,16 @@ import (
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/tools/cache"
 
+	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 const (
 	nodeNameKeyIndex = "spec.nodeName"
+)
+
+var (
+	EvictionStrategy = api.EvictionStrategy{}
 )
 
 // FilterFunc is a filter for a pod.
@@ -193,22 +199,44 @@ func OwnerRef(pod *v1.Pod) []metav1.OwnerReference {
 	return pod.ObjectMeta.GetOwnerReferences()
 }
 
-func IsBestEffortPod(pod *v1.Pod) bool {
+func isBestEffortPod(pod *v1.Pod) bool {
 	return utils.GetPodQOS(pod) == v1.PodQOSBestEffort
 }
 
-func IsBurstablePod(pod *v1.Pod) bool {
+func isBurstablePod(pod *v1.Pod) bool {
 	return utils.GetPodQOS(pod) == v1.PodQOSBurstable
 }
 
-func IsGuaranteedPod(pod *v1.Pod) bool {
+func isGuaranteedPod(pod *v1.Pod) bool {
 	return utils.GetPodQOS(pod) == v1.PodQOSGuaranteed
+}
+
+func isQOSEqual(pa, pb *v1.Pod) bool {
+	return utils.GetPodQOS(pa) == utils.GetPodQOS(pb)
+}
+
+// sortPodsBasedOnEvictionSortStrategy sorts pods based on the evictionSort strategy.
+// if the evictionSort strategy is empty, pods will be sorted in alphabetical order.
+// if the evictionSort strategy is None, pods will be sorted in random order.
+// if the evictionSort strategy is OldestFirst, pods will be sorted in order of age.
+func sortPodsBasedOnEvictionSortStrategy(pods []*v1.Pod) {
+	if EvictionStrategy.None {
+		rand.Shuffle(len(pods), func(i, j int) {
+			pods[i], pods[j] = pods[j], pods[i]
+		})
+	}
+	if EvictionStrategy.OldestFirst {
+		sort.Slice(pods, func(i, j int) bool {
+			return pods[i].CreationTimestamp.Before(&pods[j].CreationTimestamp)
+		})
+	}
 }
 
 // SortPodsBasedOnPriorityLowToHigh sorts pods based on their priorities from low to high.
 // If pods have same priorities, they will be sorted by QoS in the following order:
 // BestEffort, Burstable, Guaranteed
 func SortPodsBasedOnPriorityLowToHigh(pods []*v1.Pod) {
+	sortPodsBasedOnEvictionSortStrategy(pods)
 	sort.Slice(pods, func(i, j int) bool {
 		if pods[i].Spec.Priority == nil && pods[j].Spec.Priority != nil {
 			return true
@@ -217,10 +245,14 @@ func SortPodsBasedOnPriorityLowToHigh(pods []*v1.Pod) {
 			return false
 		}
 		if (pods[j].Spec.Priority == nil && pods[i].Spec.Priority == nil) || (*pods[i].Spec.Priority == *pods[j].Spec.Priority) {
-			if IsBestEffortPod(pods[i]) {
+			// if both pods share the same priority and QoS level, the original order remains.
+			if isQOSEqual(pods[i], pods[j]) {
+				return i < j
+			}
+			if isBestEffortPod(pods[i]) {
 				return true
 			}
-			if IsBurstablePod(pods[i]) && IsGuaranteedPod(pods[j]) {
+			if isBurstablePod(pods[i]) && isGuaranteedPod(pods[j]) {
 				return true
 			}
 			return false

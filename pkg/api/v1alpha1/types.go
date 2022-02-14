@@ -49,6 +49,9 @@ type DeschedulerPolicy struct {
 
 	// MaxNoOfPodsToEvictPerNamespace restricts maximum of pods to be evicted per namespace.
 	MaxNoOfPodsToEvictPerNamespace *int `json:"maxNoOfPodsToEvictPerNamespace,omitempty"`
+
+	// EvictionStrategy determine pods eviction order when pods have the same priorities and QoS.
+	EvictionStrategy *EvictionStrategy `json:"evictionStrategy,omitempty"`
 }
 
 type StrategyName string
@@ -116,4 +119,9 @@ type FailedPods struct {
 	MinPodLifetimeSeconds   *uint    `json:"minPodLifetimeSeconds,omitempty"`
 	Reasons                 []string `json:"reasons,omitempty"`
 	IncludingInitContainers bool     `json:"includingInitContainers,omitempty"`
+}
+
+type EvictionStrategy struct {
+	None        bool `json:"none,omitempty"`
+	OldestFirst bool `json:"oldestFirst,omitempty"`
 }

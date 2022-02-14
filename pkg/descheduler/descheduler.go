@@ -219,6 +219,10 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
 	}
 
+	if deschedulerPolicy.EvictionStrategy != nil {
+		podutil.EvictionStrategy = *deschedulerPolicy.EvictionStrategy
+	}
+
 	wait.NonSlidingUntil(func() {
 		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, nodeSelector)
 		if err != nil {

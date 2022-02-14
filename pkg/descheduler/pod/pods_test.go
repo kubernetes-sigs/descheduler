@@ -144,13 +144,22 @@ func TestSortPodsBasedOnPriorityLowToHigh(t *testing.T) {
 	p5 := test.BuildTestPod("p5", 400, 100, n1.Name, test.MakeBestEffortPod)
 	p5.Spec.Priority = nil
 
-	p6 := test.BuildTestPod("p6", 400, 100, n1.Name, test.MakeGuaranteedPod)
+	// Pods with the same priorities and QoS as p5, but newer than p5.
+	p6 := test.BuildTestPod("p6", 400, 100, n1.Name, test.MakeBestEffortPod)
 	p6.Spec.Priority = nil
 
-	podList := []*v1.Pod{p4, p3, p2, p1, p6, p5}
+	p7 := test.BuildTestPod("p7", 400, 100, n1.Name, test.MakeGuaranteedPod)
+	p7.Spec.Priority = nil
 
+	podList := []*v1.Pod{p4, p3, p2, p1, p7, p6, p5}
+
+	EvictionStrategy.OldestFirst = true
 	SortPodsBasedOnPriorityLowToHigh(podList)
 	if !reflect.DeepEqual(podList[len(podList)-1], p4) {
-		t.Errorf("Expected last pod in sorted list to be %v which of highest priority and guaranteed but got %v", p4, podList[len(podList)-1])
+		t.Errorf("Expected last pod in sorted list to be %s which of highest priority and guaranteed but got %s", p4.Name, podList[len(podList)-1].Name)
 	}
+	if !reflect.DeepEqual(podList[0], p5) {
+		t.Errorf("Expected pods have same priorities and QoS should be sorted in creation time order, the first pod will be %s but got %s", p5.Name, podList[0].Name)
+	}
+
 }

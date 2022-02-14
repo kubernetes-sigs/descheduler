@@ -133,6 +133,7 @@ The policy includes a common configuration that applies to all the strategies:
 | `ignorePvcPods` | `false` | set whether PVC pods should be evicted or ignored |
 | `maxNoOfPodsToEvictPerNode` | `nil` | maximum number of pods evicted from each node (summed through all strategies) |
 | `evictFailedBarePods` | `false` | allow eviction of pods without owner references and in failed phase |
+| `evictionStrategy` | `nil` | set the eviction order when pods share the same priority and QoS (in alphabetical order by default, `none`: in random order, `oldestFirst`: in order of age) |
 
 As part of the policy, the parameters associated with each strategy can be configured.
 See each strategy for details on available parameters.
@@ -148,6 +149,9 @@ evictLocalStoragePods: true
 evictSystemCriticalPods: true
 maxNoOfPodsToEvictPerNode: 40
 ignorePvcPods: false
+evictionStrategy:
+  none: false
+  oldestFirst: false
 strategies:
   ...
 ```

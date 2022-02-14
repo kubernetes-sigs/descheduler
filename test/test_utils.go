@@ -18,6 +18,7 @@ package test
 
 import (
 	"fmt"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -31,6 +32,9 @@ func BuildTestPod(name string, cpu int64, memory int64, nodeName string, apply f
 			Namespace: "default",
 			Name:      name,
 			SelfLink:  fmt.Sprintf("/api/v1/namespaces/default/pods/%s", name),
+			CreationTimestamp: metav1.Time{
+				Time: time.Now(),
+			},
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
