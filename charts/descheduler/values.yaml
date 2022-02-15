@@ -46,6 +46,10 @@ cmdOptions:
 
 deschedulerPolicy:
   strategies:
+    RemovePodsViolatingTopologySpreadConstraint:
+      enabled: true
+      params:
+        includeSoftConstraints: false
     RemoveDuplicates:
       enabled: true
     RemovePodsViolatingNodeTaints:
