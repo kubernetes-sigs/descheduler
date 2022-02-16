@@ -48,7 +48,7 @@ func TestReadyNodes(t *testing.T) {
 		t.Errorf("Expected %v to be ready", node3.Name)
 	}
 	if IsReady(node4) {
-		t.Errorf("Expected %v to be bot ready", node4.Name)
+		t.Errorf("Expected %v to be not ready", node4.Name)
 	}
 	if IsReady(node5) {
 		t.Errorf("Expected %v to be not ready", node5.Name)
