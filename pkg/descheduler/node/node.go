@@ -89,10 +89,10 @@ func IsReady(node *v1.Node) bool {
 		}*/
 	}
 	// Ignore nodes that are marked unschedulable
-	/*if node.Spec.Unschedulable {
-		klog.V(4).InfoS("Ignoring node since it is unschedulable", "node", klog.KObj(node.Name))
+	if node.Spec.Unschedulable {
+		klog.V(4).InfoS("Ignoring node since it is unschedulable", "node", klog.KObj(node))
 		return false
-	}*/
+	}
 	return true
 }
 
