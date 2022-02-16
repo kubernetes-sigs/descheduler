@@ -39,16 +39,16 @@ func TestReadyNodes(t *testing.T) {
 	node5.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeReady, Status: v1.ConditionFalse}}
 
 	if !IsReady(node1) {
-		t.Errorf("Expected %v to be ready", node2.Name)
+		t.Errorf("Expected %v to be ready", node1.Name)
 	}
 	if !IsReady(node2) {
-		t.Errorf("Expected %v to be ready", node3.Name)
+		t.Errorf("Expected %v to be ready", node2.Name)
 	}
 	if !IsReady(node3) {
-		t.Errorf("Expected %v to be ready", node4.Name)
+		t.Errorf("Expected %v to be ready", node3.Name)
 	}
-	if !IsReady(node4) {
-		t.Errorf("Expected %v to be ready", node5.Name)
+	if IsReady(node4) {
+		t.Errorf("Expected %v to be bot ready", node4.Name)
 	}
 	if IsReady(node5) {
 		t.Errorf("Expected %v to be not ready", node5.Name)
