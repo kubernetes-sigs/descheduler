@@ -145,3 +145,25 @@ livenessProbe:
   initialDelaySeconds: 3
   periodSeconds: 10
 
+service:
+  enabled: false
+
+serviceMonitor:
+  enabled: false
+  # The namespace where Prometheus expects to find service monitors.
+  # namespace: ""
+  interval: ""
+  # honorLabels: true
+  insecureSkipVerify: true
+  serverName: null
+  metricRelabelings: []
+    # - action: keep
+    #   regex: 'descheduler_(build_info|pods_evicted)'
+    #   sourceLabels: [__name__]
+  relabelings: []
+    # - sourceLabels: [__meta_kubernetes_pod_node_name]
+    #   separator: ;
+    #   regex: ^(.*)$
+    #   targetLabel: nodename
+    #   replacement: $1
+    #   action: replace

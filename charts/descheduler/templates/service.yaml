@@ -1,0 +1,21 @@
+{{- if eq .Values.kind "Deployment" }}
+{{- if eq .Values.service.enabled true }}
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    {{- include "descheduler.labels" . | nindent 4 }}
+  name: {{ template "descheduler.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  clusterIP: None
+  ports:
+  - name: http-metrics
+    port: 10258
+    protocol: TCP
+    targetPort: 10258
+  selector:
+    {{- include "descheduler.selectorLabels" . | nindent 4 }}
+  type: ClusterIP
+{{- end }}
+{{- end }}

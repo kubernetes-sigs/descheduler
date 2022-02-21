@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
     name: descheduler-test-pod
+    namespace: {{ .Release.Namespace }}
     annotations:
       "helm.sh/hook": test
 spec:
@@ -26,4 +27,4 @@ spec:
             curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl &&
             chmod +x ./kubectl &&
             mv ./kubectl /usr/local/bin/kubectl &&
-            /usr/local/bin/kubectl get pods --namespace kube-system --token "$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" | grep "descheduler" | grep "Completed"
+            /usr/local/bin/kubectl get pods --namespace {{ .Release.Namespace }} --token "$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" | grep "descheduler" | grep "Completed"
