@@ -26,10 +26,10 @@ rules:
   verbs: ["get", "watch", "list"]
 - apiGroups: [""]
   resources: ["persistentvolumeclaims"]
-{{- if .Values.deschedulerPolicy.ignoreLocalPvcPods }}
-  verbs: ["get", "watch", "list"]
-{{- else }}
+{{- if and (hasKey .Values.deschedulerPolicy "ignoreLocalPvcPods") (not .Values.deschedulerPolicy.ignoreLocalPvcPods) }}
   verbs: ["get", "watch", "list", "delete"]
+{{- else }}
+  verbs: ["get", "watch", "list"]
 {{- end }}
 - apiGroups: [""]
   resources: ["persistentvolumes"]
