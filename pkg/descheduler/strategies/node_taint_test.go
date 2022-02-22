@@ -262,9 +262,9 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				tc.evictLocalStoragePods,
 				tc.evictSystemCriticalPods,
 				false,
-				false,
-				false,
 				true,
+				false,
+				false,
 			)
 
 			strategy := api.DeschedulerStrategy{

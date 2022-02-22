@@ -318,9 +318,9 @@ func TestRemoveLocalPVCPods(t *testing.T) {
 				tc.evictLocalStoragePods,
 				false,
 				tc.ignorePvcPods,
-				false,
-				false,
 				tc.ignoreLocalPvcPods,
+				false,
+				false,
 			)
 			t.Log("Running DeschedulerStrategy strategy")
 			strategies.PodLifeTime(

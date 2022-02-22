@@ -300,9 +300,9 @@ func TestFindDuplicatePods(t *testing.T) {
 				false,
 				false,
 				false,
-				false,
-				false,
 				true,
+				false,
+				false,
 			)
 
 			RemoveDuplicatePods(ctx, fakeClient, testCase.strategy, testCase.nodes, podEvictor, getPodsAssignedToNode)

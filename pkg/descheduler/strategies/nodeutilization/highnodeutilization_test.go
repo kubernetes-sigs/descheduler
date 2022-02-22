@@ -466,9 +466,9 @@ func TestHighNodeUtilization(t *testing.T) {
 				false,
 				false,
 				false,
-				false,
-				false,
 				true,
+				false,
+				false,
 			)
 
 			strategy := api.DeschedulerStrategy{
@@ -672,9 +672,9 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 				false,
 				false,
 				false,
-				false,
-				false,
 				true,
+				false,
+				false,
 			)
 
 			HighNodeUtilization(ctx, fakeClient, strategy, item.nodes, podEvictor, getPodsAssignedToNode)

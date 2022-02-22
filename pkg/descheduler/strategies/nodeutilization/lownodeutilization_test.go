@@ -723,9 +723,9 @@ func TestLowNodeUtilization(t *testing.T) {
 				false,
 				false,
 				false,
-				false,
-				false,
 				true,
+				false,
+				false,
 			)
 
 			strategy := api.DeschedulerStrategy{
@@ -1037,9 +1037,9 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				false,
 				false,
 				false,
-				false,
-				false,
 				true,
+				false,
+				false,
 			)
 
 			LowNodeUtilization(ctx, fakeClient, strategy, item.nodes, podEvictor, getPodsAssignedToNode)

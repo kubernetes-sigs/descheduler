@@ -399,9 +399,9 @@ func TestPodLifeTime(t *testing.T) {
 				tc.evictLocalStoragePods,
 				false,
 				tc.ignorePvcPods,
+				tc.ignoreLocalPvcPods,
 				true,
 				false,
-				tc.ignoreLocalPvcPods,
 			)
 
 			PodLifeTime(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)

@@ -202,9 +202,9 @@ func runPodLifetimeStrategy(
 			false,
 			evictCritical,
 			false,
-			false,
-			false,
 			true,
+			false,
+			false,
 		),
 		getPodsAssignedToNode,
 	)
@@ -1342,8 +1342,8 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, nodes []*
 		true,
 		false,
 		false,
-		false,
-		false,
 		true,
+		false,
+		false,
 	)
 }

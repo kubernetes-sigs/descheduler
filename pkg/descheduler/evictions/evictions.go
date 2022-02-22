@@ -61,8 +61,8 @@ type PodEvictor struct {
 	evictLocalStoragePods      bool
 	evictSystemCriticalPods    bool
 	ignorePvcPods              bool
-	metricsEnabled             bool
 	ignoreLocalPvcPods         bool
+	metricsEnabled             bool
 }
 
 func NewPodEvictor(
@@ -75,9 +75,9 @@ func NewPodEvictor(
 	evictLocalStoragePods bool,
 	evictSystemCriticalPods bool,
 	ignorePvcPods bool,
+	ignoreLocalPvcPods bool,
 	evictFailedBarePods bool,
 	metricsEnabled bool,
-	ignoreLocalPvcPods bool,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
 	var namespacePodCount = make(namespacePodEvictCount)
