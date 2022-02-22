@@ -218,6 +218,12 @@ These thresholds, `thresholds` and `targetThresholds`, could be tuned as per you
 strategy evicts pods from `overutilized nodes` (those with usage above `targetThresholds`) to `underutilized nodes`
 (those with usage below `thresholds`), it will abort if any number of `underutilized nodes` or `overutilized nodes` is zero.
 
+**NOTE:** Node resource consumption is determined by the requests and limits of pods, not actual usage. 
+This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same 
+design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands 
+like `kubectl top`) may differ from the calculated consumption, due to these components reporting 
+actual usage metrics. Implementing metrics-based descheduling is currently TODO for the project.
+
 **Parameters:**
 
 |Name|Type|
@@ -284,6 +290,12 @@ The `thresholds` param could be tuned as per your cluster requirements. Note tha
 strategy evicts pods from `underutilized nodes` (those with usage below `thresholds`)
 so that they can be recreated in appropriately utilized nodes.
 The strategy will abort if any number of `underutilized nodes` or `appropriately utilized nodes` is zero.
+
+**NOTE:** Node resource consumption is determined by the requests and limits of pods, not actual usage. 
+This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same 
+design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands 
+like `kubectl top`) may differ from the calculated consumption, due to these components reporting 
+actual usage metrics. Implementing metrics-based descheduling is currently TODO for the project.
 
 **Parameters:**
 
