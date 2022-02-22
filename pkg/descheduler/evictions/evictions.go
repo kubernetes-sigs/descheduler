@@ -144,7 +144,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		klog.V(1).InfoS("checking if pod has Local PVC Storage")
 		isPodWithLocalPVC, _ := utils.IsPodWithLocalPVC(ctx, pe.client, pod)
 		if isPodWithLocalPVC {
-			return false, fmt.Errorf("This pod %q/%q has Local PVC Storage and ignoreLocalPvcPods is set to true", pod.Namespace, pod.Name)
+			return false, fmt.Errorf("Pod %q/%q has Local PVC Storage and ignoreLocalPvcPods is set to true", pod.Namespace, pod.Name)
 		}
 	}
 
