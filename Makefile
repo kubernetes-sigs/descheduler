@@ -15,14 +15,14 @@
 .PHONY: test
 
 # VERSION is based on a date stamp plus the last commit
-VERSION?=v$(shell date +%Y%m%d)-$(shell git describe --tags --match "v*")
+VERSION?=$(shell git describe --tags --match "v*" --abbrev=0)
 BRANCH?=$(shell git branch --show-current)
 SHA1?=$(shell git rev-parse HEAD)
-BUILD=$(shell date +%FT%T%z)
+BUILD_DATE=$(shell date +%FT%T%z)
 LDFLAG_LOCATION=sigs.k8s.io/descheduler/pkg/version
 ARCHS = amd64 arm arm64
 
-LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitbranch=${BRANCH} -X ${LDFLAG_LOCATION}.gitsha1=${SHA1}"
+LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD_DATE} -X ${LDFLAG_LOCATION}.gitbranch=${BRANCH} -X ${LDFLAG_LOCATION}.gitsha1=${SHA1}"
 
 GOLANGCI_VERSION := v1.43.0
 HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint 2> /dev/null)
