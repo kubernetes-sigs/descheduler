@@ -8,7 +8,7 @@ kind: CronJob
 image:
   repository: k8s.gcr.io/descheduler/descheduler
   # Overrides the image tag whose default is the chart version
-  tag: ""
+  tag: "v20220127-v0.22.0-79-gafb1d75ce"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
