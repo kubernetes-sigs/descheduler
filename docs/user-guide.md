@@ -118,7 +118,7 @@ strategies:
 
 #### Balance low utilization nodes
 Using `HighNodeUtilization`, descheduler will rebalance the cluster based on memory by evicting pods
-from nodes with memory utilization lower than 20%. This should be used along with scheduler strategy `MostRequestedPriority`.
+from nodes with memory utilization lower than 20%. This should be use `NodeResourcesFit` with the `MostAllocated` scoring strategy based on these [doc](https://kubernetes.io/docs/reference/scheduling/config/#scheduling-plugins).
 The evicted pods will be compacted into minimal set of nodes.
 
 ```
