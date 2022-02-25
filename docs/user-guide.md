@@ -137,7 +137,14 @@ strategies:
 Descheduler's `RemovePodsViolatingNodeTaints` strategy can be combined with
 [Node Problem Detector](https://github.com/kubernetes/node-problem-detector/) and
 [Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler) to automatically remove
-Nodes which have problems. Node Problem Detector can detect specific Node problems and taint any Nodes which have those
-problems. The Descheduler will then deschedule workloads from those Nodes. Finally, if the descheduled Node's resource
+Nodes which have problems. Node Problem Detector can detect specific Node problems and report them to the API server.
+There is a feature called TaintNodeByCondition of the node controller that takes some conditions and turns them into taints. Currently, this only works for the default node conditions: PIDPressure, MemoryPressure, DiskPressure, Ready, and some cloud provider specific conditions.
+The Descheduler will then deschedule workloads from those Nodes. Finally, if the descheduled Node's resource
 allocation falls below the Cluster Autoscaler's scale down threshold, the Node will become a scale down candidate
 and can be removed by Cluster Autoscaler. These three components form an autohealing cycle for Node problems.
+---
+**NOTE**
+
+Once [kubernetes/node-problem-detector#565](https://github.com/kubernetes/node-problem-detector/pull/565) is available in NPD, we need to update this section.
+
+---
