@@ -984,9 +984,7 @@ func TestDeschedulingInterval(t *testing.T) {
 		if err != nil || len(evictionPolicyGroupVersion) == 0 {
 			t.Errorf("Error when checking support for eviction: %v", err)
 		}
-
-		stopChannel := make(chan struct{})
-		if err := descheduler.RunDeschedulerStrategies(ctx, s, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel); err != nil {
+		if err := descheduler.RunDeschedulerStrategies(ctx, s, deschedulerPolicy, evictionPolicyGroupVersion); err != nil {
 			t.Errorf("Error running descheduler strategies: %+v", err)
 		}
 		c <- true
