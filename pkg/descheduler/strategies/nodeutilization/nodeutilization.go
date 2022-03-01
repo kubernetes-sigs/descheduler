@@ -84,12 +84,30 @@ func validateThresholds(thresholds api.ResourceThresholds) error {
 	return nil
 }
 
+func normalizePercentage(percent api.Percentage) api.Percentage {
+	if percent > MaxResourcePercentage {
+		return MaxResourcePercentage
+	}
+	if percent < MinResourcePercentage {
+		return MinResourcePercentage
+	}
+	return percent
+}
+
 func getNodeThresholds(
 	nodes []*v1.Node,
 	lowThreshold, highThreshold api.ResourceThresholds,
 	resourceNames []v1.ResourceName,
+	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
+	useDeviationThresholds bool,
 ) map[string]NodeThresholds {
 	nodeThresholdsMap := map[string]NodeThresholds{}
+
+	averageResourceUsagePercent := api.ResourceThresholds{}
+	if useDeviationThresholds {
+		averageResourceUsagePercent = averageNodeBasicresources(nodes, getPodsAssignedToNode, resourceNames)
+	}
+
 	for _, node := range nodes {
 		nodeCapacity := node.Status.Capacity
 		if len(node.Status.Allocatable) > 0 {
@@ -102,8 +120,19 @@ func getNodeThresholds(
 		}
 
 		for _, resourceName := range resourceNames {
-			nodeThresholdsMap[node.Name].lowResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, lowThreshold[resourceName])
-			nodeThresholdsMap[node.Name].highResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, highThreshold[resourceName])
+			if useDeviationThresholds {
+				cap := nodeCapacity[resourceName]
+				if lowThreshold[resourceName] == MinResourcePercentage {
+					nodeThresholdsMap[node.Name].lowResourceThreshold[resourceName] = &cap
+					nodeThresholdsMap[node.Name].highResourceThreshold[resourceName] = &cap
+				} else {
+					nodeThresholdsMap[node.Name].lowResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, normalizePercentage(averageResourceUsagePercent[resourceName]-lowThreshold[resourceName]))
+					nodeThresholdsMap[node.Name].highResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, normalizePercentage(averageResourceUsagePercent[resourceName]+highThreshold[resourceName]))
+				}
+			} else {
+				nodeThresholdsMap[node.Name].lowResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, lowThreshold[resourceName])
+				nodeThresholdsMap[node.Name].highResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, highThreshold[resourceName])
+			}
 		}
 
 	}
@@ -429,4 +458,35 @@ func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*
 	}
 
 	return nonRemovablePods, removablePods
+}
+
+func averageNodeBasicresources(nodes []*v1.Node, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, resourceNames []v1.ResourceName) api.ResourceThresholds {
+	total := api.ResourceThresholds{}
+	average := api.ResourceThresholds{}
+	numberOfNodes := len(nodes)
+	for _, node := range nodes {
+		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, nil)
+		if err != nil {
+			numberOfNodes--
+			continue
+		}
+		usage := nodeUtilization(node, pods, resourceNames)
+		nodeCapacity := node.Status.Capacity
+		if len(node.Status.Allocatable) > 0 {
+			nodeCapacity = node.Status.Allocatable
+		}
+		for resource, value := range usage {
+			nodeCapacityValue := nodeCapacity[resource]
+			if resource == v1.ResourceCPU {
+				total[resource] += api.Percentage(value.MilliValue()) / api.Percentage(nodeCapacityValue.MilliValue()) * 100.0
+			} else {
+				total[resource] += api.Percentage(value.Value()) / api.Percentage(nodeCapacityValue.Value()) * 100.0
+
+			}
+		}
+	}
+	for resource, value := range total {
+		average[resource] = value / api.Percentage(numberOfNodes)
+	}
+	return average
 }

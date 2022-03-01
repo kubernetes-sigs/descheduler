@@ -64,7 +64,7 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 
 	sourceNodes, highNodes := classifyNodes(
 		getNodeUsage(nodes, resourceNames, getPodsAssignedToNode),
-		getNodeThresholds(nodes, thresholds, targetThresholds, resourceNames),
+		getNodeThresholds(nodes, thresholds, targetThresholds, resourceNames, getPodsAssignedToNode, false),
 		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			return isNodeWithLowUtilization(usage, threshold.lowResourceThreshold)
 		},
