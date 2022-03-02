@@ -131,6 +131,7 @@ The policy includes a common configuration that applies to all the strategies:
 | `evictLocalStoragePods` | `false` | allows eviction of pods with local storage |
 | `evictSystemCriticalPods` | `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
 | `ignorePvcPods` | `false` | set whether PVC pods should be evicted or ignored |
+| `ignoreLocalPvcPods` | `true` | set whether PVC pods with local storage (via PVC w/ local or hostPath PV) should be evicted or ignored |
 | `maxNoOfPodsToEvictPerNode` | `nil` | maximum number of pods evicted from each node (summed through all strategies) |
 | `evictFailedBarePods` | `false` | allow eviction of pods without owner references and in failed phase |
 
@@ -148,6 +149,7 @@ evictLocalStoragePods: true
 evictSystemCriticalPods: true
 maxNoOfPodsToEvictPerNode: 40
 ignorePvcPods: false
+ignoreLocalPvcPods: true
 strategies:
   ...
 ```
