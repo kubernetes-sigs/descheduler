@@ -132,6 +132,7 @@ The policy includes a common configuration that applies to all the strategies:
 | `evictSystemCriticalPods` | `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
 | `ignorePvcPods` | `false` | set whether PVC pods should be evicted or ignored |
 | `maxNoOfPodsToEvictPerNode` | `nil` | maximum number of pods evicted from each node (summed through all strategies) |
+| `maxNoOfPodsToEvictPerNamespace` | `nil` | maximum number of pods evicted from each namespace (summed through all strategies) |
 | `evictFailedBarePods` | `false` | allow eviction of pods without owner references and in failed phase |
 
 As part of the policy, the parameters associated with each strategy can be configured.
