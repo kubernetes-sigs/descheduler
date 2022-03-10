@@ -207,12 +207,31 @@ func maxResourceList(list, new v1.ResourceList) {
 
 // PodToleratesTaints returns true if a pod tolerates one node's taints
 func PodToleratesTaints(pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
-	for nodeName, taintsForNode := range taintsOfNodes {
-		if len(pod.Spec.Tolerations) >= len(taintsForNode) && TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taintsForNode, nil) {
-			return true
-		}
-		klog.V(5).InfoS("Pod doesn't tolerate nodes taint", "pod", klog.KObj(pod), "nodeName", nodeName)
-	}
 
+	for nodeName, taintsForNode := range taintsOfNodes {
+		if len(pod.Spec.Tolerations) >= len(taintsForNode) {
+
+			if TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taintsForNode, nil) {
+				return true
+			}
+
+			if klog.V(5).Enabled() {
+				for i := range taintsForNode {
+					if !TolerationsTolerateTaint(pod.Spec.Tolerations, &taintsForNode[i]) {
+						klog.V(5).InfoS("Pod doesn't tolerate node taint",
+							"pod", klog.KObj(pod),
+							"nodeName", nodeName,
+							"taint", fmt.Sprintf("%s:%s=%s", taintsForNode[i].Key, taintsForNode[i].Value, taintsForNode[i].Effect),
+						)
+					}
+				}
+			}
+		} else {
+			klog.V(5).InfoS("Pod doesn't tolerate nodes taint, count mismatch",
+				"pod", klog.KObj(pod),
+				"nodeName", nodeName,
+			)
+		}
+	}
 	return false
 }
