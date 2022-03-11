@@ -183,13 +183,17 @@ func waitPodRestartCount(ctx context.Context, clientSet clientset.Interface, nam
 			podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 				LabelSelector: labels.SelectorFromSet(labels.Set(map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"})).String(),
 			})
-			if podList.Items[0].Status.ContainerStatuses[0].RestartCount >= 4 && podList.Items[1].Status.ContainerStatuses[0].RestartCount >= 4 && podList.Items[2].Status.ContainerStatuses[0].RestartCount >= 4 && podList.Items[3].Status.ContainerStatuses[0].RestartCount >= 4 {
-				t.Log("Pod restartCount as expected")
-				return true, nil
-			}
 			if err != nil {
 				t.Fatalf("Unexpected err: %v", err)
 				return false, err
+			}
+			if len(podList.Items) < 4 {
+				t.Log("Waiting for 4 pods")
+				return false, nil
+			}
+			if podList.Items[0].Status.ContainerStatuses[0].RestartCount >= 4 && podList.Items[1].Status.ContainerStatuses[0].RestartCount >= 4 && podList.Items[2].Status.ContainerStatuses[0].RestartCount >= 4 && podList.Items[3].Status.ContainerStatuses[0].RestartCount >= 4 {
+				t.Log("Pod restartCount as expected")
+				return true, nil
 			}
 		}
 	}
