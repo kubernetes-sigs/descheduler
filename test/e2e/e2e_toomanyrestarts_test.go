@@ -27,6 +27,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -192,7 +193,14 @@ func waitPodRestartCount(ctx context.Context, clientSet clientset.Interface, nam
 				return false, nil
 			}
 			for i := 0; i < 4; i++ {
-				if len(podList.Items[0].Status.ContainerStatuses) < 1 {
+				wait.Poll(5*time.Second, 2*time.Minute, func() (bool, error) {
+					t.Logf("Waiting for podList.Items[%v] to be scheduled , now pod status is [%v]", podList.Items[i].Name, podList.Items[i].Status.Phase)
+					if podList.Items[i].Status.Phase != v1.PodPending {
+						return true, nil
+					}
+					return false, nil
+				})
+				if len(podList.Items[i].Status.ContainerStatuses) < 1 {
 					t.Logf("Waiting for podList.Items[%v].Status.ContainerStatuses to be populated", i)
 					return false, nil
 				}

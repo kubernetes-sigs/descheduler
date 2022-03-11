@@ -999,7 +999,7 @@ func TestDeschedulingInterval(t *testing.T) {
 }
 
 func waitForRCPodsRunning(ctx context.Context, t *testing.T, clientSet clientset.Interface, rc *v1.ReplicationController) {
-	if err := wait.PollImmediate(5*time.Second, 30*time.Second, func() (bool, error) {
+	if err := wait.PollImmediate(5*time.Second, 5*time.Minute, func() (bool, error) {
 		podList, err := clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: labels.SelectorFromSet(labels.Set(rc.Spec.Template.ObjectMeta.Labels)).String(),
 		})
@@ -1010,6 +1010,7 @@ func waitForRCPodsRunning(ctx context.Context, t *testing.T, clientSet clientset
 			t.Logf("Waiting for %v pods to be created, got %v instead", *rc.Spec.Replicas, len(podList.Items))
 			return false, nil
 		}
+
 		for _, pod := range podList.Items {
 			if pod.Status.Phase != v1.PodRunning {
 				t.Logf("Pod %v not running yet, is %v instead", pod.Name, pod.Status.Phase)
