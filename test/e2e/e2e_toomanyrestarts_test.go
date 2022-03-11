@@ -191,6 +191,13 @@ func waitPodRestartCount(ctx context.Context, clientSet clientset.Interface, nam
 				t.Log("Waiting for 4 pods")
 				return false, nil
 			}
+			for i := 0; i < 4; i++ {
+				if len(podList.Items[0].Status.ContainerStatuses) < 1 {
+					t.Logf("Waiting for podList.Items[%v].Status.ContainerStatuses to be populated", i)
+					return false, nil
+				}
+			}
+
 			if podList.Items[0].Status.ContainerStatuses[0].RestartCount >= 4 && podList.Items[1].Status.ContainerStatuses[0].RestartCount >= 4 && podList.Items[2].Status.ContainerStatuses[0].RestartCount >= 4 && podList.Items[3].Status.ContainerStatuses[0].RestartCount >= 4 {
 				t.Log("Pod restartCount as expected")
 				return true, nil
