@@ -92,33 +92,28 @@ func getNodeUsage(
 			continue
 		}
 
-		// A threshold is in percentages but in <0;100> interval.
-		// Performing `threshold * 0.01` will convert <0;100> interval into <0;1>.
-		// Multiplying it with capacity will give fraction of the capacity corresponding to the given high/low resource threshold in Quantity units.
 		nodeCapacity := node.Status.Capacity
 		if len(node.Status.Allocatable) > 0 {
 			nodeCapacity = node.Status.Allocatable
 		}
 		lowResourceThreshold := map[v1.ResourceName]*resource.Quantity{
-			v1.ResourceCPU:    resource.NewMilliQuantity(int64(float64(lowThreshold[v1.ResourceCPU])*float64(nodeCapacity.Cpu().MilliValue())*0.01), resource.DecimalSI),
-			v1.ResourceMemory: resource.NewQuantity(int64(float64(lowThreshold[v1.ResourceMemory])*float64(nodeCapacity.Memory().Value())*0.01), resource.BinarySI),
-			v1.ResourcePods:   resource.NewQuantity(int64(float64(lowThreshold[v1.ResourcePods])*float64(nodeCapacity.Pods().Value())*0.01), resource.DecimalSI),
+			v1.ResourceCPU:    resourceThreshold(nodeCapacity, v1.ResourceCPU, lowThreshold[v1.ResourceCPU]),
+			v1.ResourceMemory: resourceThreshold(nodeCapacity, v1.ResourceMemory, lowThreshold[v1.ResourceMemory]),
+			v1.ResourcePods:   resourceThreshold(nodeCapacity, v1.ResourcePods, lowThreshold[v1.ResourcePods]),
 		}
 		for _, name := range resourceNames {
 			if !isBasicResource(name) {
-				cap := nodeCapacity[name]
-				lowResourceThreshold[name] = resource.NewQuantity(int64(float64(lowThreshold[name])*float64(cap.Value())*0.01), resource.DecimalSI)
+				lowResourceThreshold[name] = resourceThreshold(nodeCapacity, name, lowThreshold[name])
 			}
 		}
 		highResourceThreshold := map[v1.ResourceName]*resource.Quantity{
-			v1.ResourceCPU:    resource.NewMilliQuantity(int64(float64(highThreshold[v1.ResourceCPU])*float64(nodeCapacity.Cpu().MilliValue())*0.01), resource.DecimalSI),
-			v1.ResourceMemory: resource.NewQuantity(int64(float64(highThreshold[v1.ResourceMemory])*float64(nodeCapacity.Memory().Value())*0.01), resource.BinarySI),
-			v1.ResourcePods:   resource.NewQuantity(int64(float64(highThreshold[v1.ResourcePods])*float64(nodeCapacity.Pods().Value())*0.01), resource.DecimalSI),
+			v1.ResourceCPU:    resourceThreshold(nodeCapacity, v1.ResourceCPU, highThreshold[v1.ResourceCPU]),
+			v1.ResourceMemory: resourceThreshold(nodeCapacity, v1.ResourceMemory, highThreshold[v1.ResourceMemory]),
+			v1.ResourcePods:   resourceThreshold(nodeCapacity, v1.ResourcePods, highThreshold[v1.ResourcePods]),
 		}
 		for _, name := range resourceNames {
 			if !isBasicResource(name) {
-				cap := nodeCapacity[name]
-				highResourceThreshold[name] = resource.NewQuantity(int64(float64(highThreshold[name])*float64(cap.Value())*0.01), resource.DecimalSI)
+				highResourceThreshold[name] = resourceThreshold(nodeCapacity, name, highThreshold[name])
 			}
 		}
 
@@ -132,6 +127,27 @@ func getNodeUsage(
 	}
 
 	return nodeUsageList
+}
+
+func resourceThreshold(nodeCapacity v1.ResourceList, resourceName v1.ResourceName, threshold api.Percentage) *resource.Quantity {
+	defaultFormat := resource.DecimalSI
+	if resourceName == v1.ResourceMemory {
+		defaultFormat = resource.BinarySI
+	}
+
+	resourceCapacityFraction := func(resourceNodeCapacity int64) int64 {
+		// A threshold is in percentages but in <0;100> interval.
+		// Performing `threshold * 0.01` will convert <0;100> interval into <0;1>.
+		// Multiplying it with capacity will give fraction of the capacity corresponding to the given resource threshold in Quantity units.
+		return int64(float64(threshold) * 0.01 * float64(resourceNodeCapacity))
+	}
+
+	resourceCapacityQuantity := nodeCapacity.Name(resourceName, defaultFormat)
+
+	if resourceName == v1.ResourceCPU {
+		return resource.NewMilliQuantity(resourceCapacityFraction(resourceCapacityQuantity.MilliValue()), defaultFormat)
+	}
+	return resource.NewQuantity(resourceCapacityFraction(resourceCapacityQuantity.Value()), defaultFormat)
 }
 
 func resourceUsagePercentages(nodeUsage NodeUsage) map[v1.ResourceName]float64 {
