@@ -27,6 +27,14 @@ func createNoScheduleTaint(key, value string, index int) v1.Taint {
 	}
 }
 
+func createPreferNoScheduleTaint(key, value string, index int) v1.Taint {
+	return v1.Taint{
+		Key:    "testTaint" + fmt.Sprintf("%v", index),
+		Value:  "test" + fmt.Sprintf("%v", index),
+		Effect: v1.TaintEffectPreferNoSchedule,
+	}
+}
+
 func addTaintsToNode(node *v1.Node, key, value string, indices []int) *v1.Node {
 	taints := []v1.Taint{}
 	for _, index := range indices {
@@ -36,12 +44,12 @@ func addTaintsToNode(node *v1.Node, key, value string, indices []int) *v1.Node {
 	return node
 }
 
-func addTolerationToPod(pod *v1.Pod, key, value string, index int) *v1.Pod {
+func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.TaintEffect) *v1.Pod {
 	if pod.Annotations == nil {
 		pod.Annotations = map[string]string{}
 	}
 
-	pod.Spec.Tolerations = []v1.Toleration{{Key: key + fmt.Sprintf("%v", index), Value: value + fmt.Sprintf("%v", index), Effect: v1.TaintEffectNoSchedule}}
+	pod.Spec.Tolerations = []v1.Toleration{{Key: key + fmt.Sprintf("%v", index), Value: value + fmt.Sprintf("%v", index), Effect: effect}}
 
 	return pod
 }
@@ -62,6 +70,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			Unschedulable: true,
 		}
 	})
+
+	node5 := test.BuildTestNode("n5", 2000, 3000, 10, nil)
+	node5.Spec.Taints = []v1.Taint{
+		createPreferNoScheduleTaint("testTaint", "test", 1),
+	}
 
 	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
 	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, nil)
@@ -109,13 +122,19 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	// A Mirror Pod.
 	p10.Annotations = test.GetMirrorPodAnnotation()
 
-	p1 = addTolerationToPod(p1, "testTaint", "test", 1)
-	p3 = addTolerationToPod(p3, "testTaint", "test", 1)
-	p4 = addTolerationToPod(p4, "testTaintX", "testX", 1)
+	p1 = addTolerationToPod(p1, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
+	p3 = addTolerationToPod(p3, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
+	p4 = addTolerationToPod(p4, "testTaintX", "testX", 1, v1.TaintEffectNoSchedule)
 
 	p12.Spec.NodeSelector = map[string]string{
 		"datacenter": "west",
 	}
+
+	p13 := test.BuildTestPod("p13", 100, 0, node5.Name, nil)
+	p13.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	// node5 has PreferNoSchedule:testTaint1=test1, so the p13 has to have
+	// PreferNoSchedule:testTaint0=test0 so the pod is not tolarated
+	p13 = addTolerationToPod(p13, "testTaint", "test", 0, v1.TaintEffectPreferNoSchedule)
 
 	var uint1 uint = 1
 
@@ -129,6 +148,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		maxNoOfPodsToEvictPerNamespace *uint
 		expectedEvictedPodCount        uint
 		nodeFit                        bool
+		includePreferNoSchedule        bool
 	}{
 
 		{
@@ -224,6 +244,23 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			expectedEvictedPodCount: 0, //p2 gets evicted
 			nodeFit:                 true,
 		},
+		{
+			description:             "Pods not tolerating PreferNoSchedule node taint should not be evicted when not enabled",
+			pods:                    []*v1.Pod{p13},
+			nodes:                   []*v1.Node{node5},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			expectedEvictedPodCount: 0,
+		},
+		{
+			description:             "Pods not tolerating PreferNoSchedule node taint should be evicted when enabled",
+			pods:                    []*v1.Pod{p13},
+			nodes:                   []*v1.Node{node5},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			includePreferNoSchedule: true,
+			expectedEvictedPodCount: 1, // p13 gets evicted
+		},
 	}
 
 	for _, tc := range tests {
@@ -268,7 +305,8 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 
 			strategy := api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: tc.nodeFit,
+					NodeFit:                 tc.nodeFit,
+					IncludePreferNoSchedule: tc.includePreferNoSchedule,
 				},
 			}
 
