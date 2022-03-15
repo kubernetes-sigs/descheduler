@@ -88,6 +88,7 @@ type StrategyParameters struct {
 	ThresholdPriorityClassName        string
 	LabelSelector                     *metav1.LabelSelector
 	NodeFit                           bool
+	IncludePreferNoSchedule           bool
 }
 
 type Percentage float64

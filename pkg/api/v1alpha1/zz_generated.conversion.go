@@ -361,6 +361,7 @@ func autoConvert_v1alpha1_StrategyParameters_To_api_StrategyParameters(in *Strat
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
 	out.LabelSelector = (*v1.LabelSelector)(unsafe.Pointer(in.LabelSelector))
 	out.NodeFit = in.NodeFit
+	out.IncludePreferNoSchedule = in.IncludePreferNoSchedule
 	return nil
 }
 
@@ -382,6 +383,7 @@ func autoConvert_api_StrategyParameters_To_v1alpha1_StrategyParameters(in *api.S
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
 	out.LabelSelector = (*v1.LabelSelector)(unsafe.Pointer(in.LabelSelector))
 	out.NodeFit = in.NodeFit
+	out.IncludePreferNoSchedule = in.IncludePreferNoSchedule
 	return nil
 }
 

@@ -86,6 +86,7 @@ type StrategyParameters struct {
 	ThresholdPriorityClassName        string                             `json:"thresholdPriorityClassName"`
 	LabelSelector                     *metav1.LabelSelector              `json:"labelSelector"`
 	NodeFit                           bool                               `json:"nodeFit"`
+	IncludePreferNoSchedule           bool                               `json:"includePreferNoSchedule"`
 }
 
 type Percentage float64
