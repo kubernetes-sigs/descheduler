@@ -73,17 +73,18 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 	resourceNames := getResourceNames(thresholds)
 
 	lowNodes, sourceNodes := classifyNodes(
-		getNodeUsage(nodes, thresholds, targetThresholds, resourceNames, getPodsAssignedToNode),
+		getNodeUsage(nodes, resourceNames, getPodsAssignedToNode),
+		getNodeThresholds(nodes, thresholds, targetThresholds, resourceNames),
 		// The node has to be schedulable (to be able to move workload there)
-		func(node *v1.Node, usage NodeUsage) bool {
+		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			if nodeutil.IsNodeUnschedulable(node) {
 				klog.V(2).InfoS("Node is unschedulable, thus not considered as underutilized", "node", klog.KObj(node))
 				return false
 			}
-			return isNodeWithLowUtilization(usage)
+			return isNodeWithLowUtilization(usage, threshold.lowResourceThreshold)
 		},
-		func(node *v1.Node, usage NodeUsage) bool {
-			return isNodeAboveTargetUtilization(usage)
+		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
+			return isNodeAboveTargetUtilization(usage, threshold.highResourceThreshold)
 		},
 	)
 
@@ -138,8 +139,8 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
 
 	// stop if node utilization drops below target threshold or any of required capacity (cpu, memory, pods) is moved
-	continueEvictionCond := func(nodeUsage NodeUsage, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool {
-		if !isNodeAboveTargetUtilization(nodeUsage) {
+	continueEvictionCond := func(nodeInfo NodeInfo, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool {
+		if !isNodeAboveTargetUtilization(nodeInfo.NodeUsage, nodeInfo.thresholds.highResourceThreshold) {
 			return false
 		}
 		for name := range totalAvailableUsage {
