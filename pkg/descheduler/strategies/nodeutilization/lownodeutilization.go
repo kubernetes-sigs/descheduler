@@ -152,6 +152,9 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		return true
 	}
 
+	// Sort the nodes by the usage in descending order
+	sortNodesByUsage(sourceNodes, false)
+
 	evictPodsFromSourceNodes(
 		ctx,
 		sourceNodes,

@@ -212,9 +212,6 @@ func evictPodsFromSourceNodes(
 	strategy string,
 	continueEviction continueEvictionCond,
 ) {
-
-	sortNodesByUsage(sourceNodes)
-
 	// upper bound on total number of pods/cpu/memory and optional extended resources to be moved
 	totalAvailableUsage := map[v1.ResourceName]*resource.Quantity{
 		v1.ResourcePods:   {},
@@ -327,8 +324,8 @@ func evictPods(
 	}
 }
 
-// sortNodesByUsage sorts nodes based on usage in descending order
-func sortNodesByUsage(nodes []NodeInfo) {
+// sortNodesByUsage sorts nodes based on usage according to the given strategy.
+func sortNodesByUsage(nodes []NodeInfo, ascending bool) {
 	sort.Slice(nodes, func(i, j int) bool {
 		ti := nodes[i].usage[v1.ResourceMemory].Value() + nodes[i].usage[v1.ResourceCPU].MilliValue() + nodes[i].usage[v1.ResourcePods].Value()
 		tj := nodes[j].usage[v1.ResourceMemory].Value() + nodes[j].usage[v1.ResourceCPU].MilliValue() + nodes[j].usage[v1.ResourcePods].Value()
@@ -341,7 +338,12 @@ func sortNodesByUsage(nodes []NodeInfo) {
 			}
 		}
 
-		// To return sorted in descending order
+		// Return ascending order for HighNodeUtilization strategy
+		if ascending {
+			return ti < tj
+		}
+
+		// Return descending order for LowNodeUtilization strategy
 		return ti > tj
 	})
 }
