@@ -412,10 +412,17 @@ pod "podA" with a toleration to tolerate a taint ``key=value:NoSchedule`` schedu
 node. If the node's taint is subsequently updated/removed, taint is no longer satisfied by its pods' tolerations
 and will be evicted.
 
+Node taints can be excluded from consideration by specifying a list of excludedTaints. If a node taint key **or**
+key=value matches an excludedTaints entry, the taint will be ignored.
+
+For example, excludedTaints entry "dedicated" would match all taints with key "dedicated", regardless of value.
+excludedTaints entry "dedicated=special-user" would match taints with key "dedicated" and value "special-user".
+
 **Parameters:**
 
 |Name|Type|
 |---|---|
+|`excludedTaints`|list(string)|
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
@@ -430,6 +437,10 @@ kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingNodeTaints":
     enabled: true
+    params:
+      excludedTaints:
+      - dedicated=special-user # exclude taints with key "dedicated" and value "special-user"
+      - reserved # exclude all taints with key "reserved"
 ````
 
 ### RemovePodsViolatingTopologySpreadConstraint
