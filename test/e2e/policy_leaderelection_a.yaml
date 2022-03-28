@@ -1,0 +1,11 @@
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+    enabled: true
+    params:
+      podLifeTime:
+        maxPodLifeTimeSeconds: 5
+      namespaces:
+        include:
+          - "e2e-testleaderelection-a"

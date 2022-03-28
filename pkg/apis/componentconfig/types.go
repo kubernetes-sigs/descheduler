@@ -53,6 +53,9 @@ type DeschedulerConfiguration struct {
 	// IgnorePVCPods sets whether PVC pods should be allowed to be evicted
 	IgnorePVCPods bool
 
+	// LeaderElection starts Deployment using leader election loop
+	LeaderElection componentbaseconfig.LeaderElectionConfiguration
+
 	// Logging specifies the options of logging.
 	// Refer [Logs Options](https://github.com/kubernetes/component-base/blob/master/logs/options.go) for more information.
 	Logging componentbaseconfig.LoggingConfiguration

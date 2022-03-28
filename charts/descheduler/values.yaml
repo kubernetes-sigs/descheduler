@@ -38,6 +38,23 @@ suspend: false
 # Required when running as a Deployment
 deschedulingInterval: 5m
 
+# Specifies the replica count for Deployment
+# Set leaderElection if you want to use more than 1 replica
+# Set affinity.podAntiAffinity rule if you want to schedule onto a node
+# only if that node is in the same zone as at least one already-running descheduler
+replicas: 1
+
+# Specifies whether Leader Election resources should be created
+# Required when running as a Deployment
+leaderElection: {}
+#  enabled: true
+#  leaseDuration: 15
+#  renewDeadline: 10
+#  retryPeriod: 2
+#  resourceLock: "leases"
+#  resourceName: "descheduler"
+#  resourceNamescape: "kube-system"
+
 cmdOptions:
   v: 3
 
@@ -87,7 +104,15 @@ affinity: {}
 #         values:
 #         - e2e-az1
 #         - e2e-az2
-
+#  podAntiAffinity:
+#    requiredDuringSchedulingIgnoredDuringExecution:
+#      - labelSelector:
+#          matchExpressions:
+#            - key: app.kubernetes.io/name
+#              operator: In
+#              values:
+#                - descheduler
+#        topologyKey: "kubernetes.io/hostname"
 tolerations: []
 # - key: 'management'
 #   operator: 'Equal'

@@ -29,6 +29,7 @@ import (
 func (in *DeschedulerConfiguration) DeepCopyInto(out *DeschedulerConfiguration) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
+	out.LeaderElection = in.LeaderElection
 	in.Logging.DeepCopyInto(&out.Logging)
 	return
 }

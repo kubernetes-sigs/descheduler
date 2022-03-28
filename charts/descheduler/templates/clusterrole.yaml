@@ -24,6 +24,15 @@ rules:
 - apiGroups: ["scheduling.k8s.io"]
   resources: ["priorityclasses"]
   verbs: ["get", "watch", "list"]
+{{- if .Values.leaderElection.enabled }}
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["create"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  resourceNames: ["descheduler"]
+  verbs: ["get", "patch", "delete"]
+{{- end }}
 {{- if .Values.podSecurityPolicy.create }}
 - apiGroups: ['policy']
   resources: ['podsecuritypolicies']
