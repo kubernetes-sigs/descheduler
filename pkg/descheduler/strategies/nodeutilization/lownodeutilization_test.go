@@ -48,6 +48,7 @@ func TestLowNodeUtilization(t *testing.T) {
 
 	testCases := []struct {
 		name                         string
+		useDeviationThresholds       bool
 		thresholds, targetThresholds api.ResourceThresholds
 		nodes                        []*v1.Node
 		pods                         []*v1.Pod
@@ -643,6 +644,57 @@ func TestLowNodeUtilization(t *testing.T) {
 			},
 			expectedPodsEvicted: 3,
 		},
+		{
+			name: "deviation thresholds",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  5,
+				v1.ResourcePods: 5,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  5,
+				v1.ResourcePods: 5,
+			},
+			useDeviationThresholds: true,
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p5", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				// These won't be evicted.
+				test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
+				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					// A pod with local storage.
+					test.SetNormalOwnerRef(pod)
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "sample",
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+								EmptyDir: &v1.EmptyDirVolumeSource{
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+							},
+						},
+					}
+					// A Mirror Pod.
+					pod.Annotations = test.GetMirrorPodAnnotation()
+				}),
+				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					// A Critical Pod.
+					pod.Namespace = "kube-system"
+					priority := utils.SystemCriticalPriority
+					pod.Spec.Priority = &priority
+				}),
+				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
+			},
+			expectedPodsEvicted: 2,
+			evictedPods:         []string{},
+		},
 	}
 
 	for _, test := range testCases {
@@ -731,8 +783,9 @@ func TestLowNodeUtilization(t *testing.T) {
 				Enabled: true,
 				Params: &api.StrategyParameters{
 					NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
-						Thresholds:       test.thresholds,
-						TargetThresholds: test.targetThresholds,
+						Thresholds:             test.thresholds,
+						TargetThresholds:       test.targetThresholds,
+						UseDeviationThresholds: test.useDeviationThresholds,
 					},
 					NodeFit: true,
 				},
@@ -890,7 +943,7 @@ func TestValidateLowNodeUtilizationStrategyConfig(t *testing.T) {
 	}
 
 	for _, testCase := range tests {
-		validateErr := validateLowUtilizationStrategyConfig(testCase.thresholds, testCase.targetThresholds)
+		validateErr := validateLowUtilizationStrategyConfig(testCase.thresholds, testCase.targetThresholds, false)
 
 		if validateErr == nil || testCase.errInfo == nil {
 			if validateErr != testCase.errInfo {

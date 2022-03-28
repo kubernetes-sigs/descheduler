@@ -94,9 +94,10 @@ type Percentage float64
 type ResourceThresholds map[v1.ResourceName]Percentage
 
 type NodeResourceUtilizationThresholds struct {
-	Thresholds       ResourceThresholds `json:"thresholds,omitempty"`
-	TargetThresholds ResourceThresholds `json:"targetThresholds,omitempty"`
-	NumberOfNodes    int                `json:"numberOfNodes,omitempty"`
+	UseDeviationThresholds bool               `json:"useDeviationThresholds,omitempty"`
+	Thresholds             ResourceThresholds `json:"thresholds,omitempty"`
+	TargetThresholds       ResourceThresholds `json:"targetThresholds,omitempty"`
+	NumberOfNodes          int                `json:"numberOfNodes,omitempty"`
 }
 
 type PodsHavingTooManyRestarts struct {

@@ -219,6 +219,11 @@ These thresholds, `thresholds` and `targetThresholds`, could be tuned as per you
 strategy evicts pods from `overutilized nodes` (those with usage above `targetThresholds`) to `underutilized nodes`
 (those with usage below `thresholds`), it will abort if any number of `underutilized nodes` or `overutilized nodes` is zero.
 
+Additionally, the strategy accepts a `useDeviationThresholds` parameter.
+If that parameter is set to `true`, the thresholds are considered as percentage deviations from mean resource usage.
+`thresholds` will be deducted from the mean among all nodes and `targetThresholds` will be added to the mean.
+A resource consumption above (resp. below) this window is considered as overutilization (resp. underutilization).
+
 **NOTE:** Node resource consumption is determined by the requests and limits of pods, not actual usage. 
 This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same 
 design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands 
@@ -232,6 +237,7 @@ actual usage metrics. Implementing metrics-based descheduling is currently TODO 
 |`thresholds`|map(string:int)|
 |`targetThresholds`|map(string:int)|
 |`numberOfNodes`|int|
+|`useDeviationThresholds`|bool|
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
