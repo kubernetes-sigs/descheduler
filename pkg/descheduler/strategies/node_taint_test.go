@@ -149,6 +149,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		expectedEvictedPodCount        uint
 		nodeFit                        bool
 		includePreferNoSchedule        bool
+		excludedTaints                 []string
 	}{
 
 		{
@@ -261,6 +262,33 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			includePreferNoSchedule: true,
 			expectedEvictedPodCount: 1, // p13 gets evicted
 		},
+		{
+			description:             "Pods not tolerating excluded node taints (by key) should not be evicted",
+			pods:                    []*v1.Pod{p2},
+			nodes:                   []*v1.Node{node1},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			excludedTaints:          []string{"excludedTaint1", "testTaint1"},
+			expectedEvictedPodCount: 0, // nothing gets evicted, as one of the specified excludedTaints matches the key of node1's taint
+		},
+		{
+			description:             "Pods not tolerating excluded node taints (by key and value) should not be evicted",
+			pods:                    []*v1.Pod{p2},
+			nodes:                   []*v1.Node{node1},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			excludedTaints:          []string{"testTaint1=test1"},
+			expectedEvictedPodCount: 0, // nothing gets evicted, as both the key and value of the excluded taint match node1's taint
+		},
+		{
+			description:             "The excluded taint matches the key of node1's taint, but does not match the value",
+			pods:                    []*v1.Pod{p2},
+			nodes:                   []*v1.Node{node1},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			excludedTaints:          []string{"testTaint1=test2"},
+			expectedEvictedPodCount: 1, // pod gets evicted, as excluded taint value does not match node1's taint value
+		},
 	}
 
 	for _, tc := range tests {
@@ -307,6 +335,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				Params: &api.StrategyParameters{
 					NodeFit:                 tc.nodeFit,
 					IncludePreferNoSchedule: tc.includePreferNoSchedule,
+					ExcludedTaints:          tc.excludedTaints,
 				},
 			}
 

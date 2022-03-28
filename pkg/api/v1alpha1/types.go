@@ -87,6 +87,7 @@ type StrategyParameters struct {
 	LabelSelector                     *metav1.LabelSelector              `json:"labelSelector"`
 	NodeFit                           bool                               `json:"nodeFit"`
 	IncludePreferNoSchedule           bool                               `json:"includePreferNoSchedule"`
+	ExcludedTaints                    []string                           `json:"excludedTaints,omitempty"`
 }
 
 type Percentage float64

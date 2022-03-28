@@ -89,6 +89,7 @@ type StrategyParameters struct {
 	LabelSelector                     *metav1.LabelSelector
 	NodeFit                           bool
 	IncludePreferNoSchedule           bool
+	ExcludedTaints                    []string
 }
 
 type Percentage float64

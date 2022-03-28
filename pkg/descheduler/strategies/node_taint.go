@@ -55,12 +55,15 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 		return
 	}
 
-	var includedNamespaces, excludedNamespaces sets.String
+	var includedNamespaces, excludedNamespaces, excludedTaints sets.String
 	var labelSelector *metav1.LabelSelector
 	if strategy.Params != nil {
 		if strategy.Params.Namespaces != nil {
 			includedNamespaces = sets.NewString(strategy.Params.Namespaces.Include...)
 			excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
+		}
+		if strategy.Params.ExcludedTaints != nil {
+			excludedTaints = sets.NewString(strategy.Params.ExcludedTaints...)
 		}
 		labelSelector = strategy.Params.LabelSelector
 	}
@@ -89,10 +92,15 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 		return
 	}
 
-	taintFilterFnc := func(taint *v1.Taint) bool { return taint.Effect == v1.TaintEffectNoSchedule }
+	excludeTaint := func(taint *v1.Taint) bool {
+		// Exclude taints by key *or* key=value
+		return excludedTaints.Has(taint.Key) || (taint.Value != "" && excludedTaints.Has(fmt.Sprintf("%s=%s", taint.Key, taint.Value)))
+	}
+
+	taintFilterFnc := func(taint *v1.Taint) bool { return (taint.Effect == v1.TaintEffectNoSchedule) && !excludeTaint(taint) }
 	if strategy.Params != nil && strategy.Params.IncludePreferNoSchedule {
 		taintFilterFnc = func(taint *v1.Taint) bool {
-			return taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectPreferNoSchedule
+			return (taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectPreferNoSchedule) && !excludeTaint(taint)
 		}
 	}
 
