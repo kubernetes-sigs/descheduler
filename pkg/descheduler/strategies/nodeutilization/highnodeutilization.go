@@ -120,6 +120,10 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 
 		return true
 	}
+
+	// Sort the nodes by the usage in ascending order
+	sortNodesByUsage(sourceNodes, true)
+
 	evictPodsFromSourceNodes(
 		ctx,
 		sourceNodes,
