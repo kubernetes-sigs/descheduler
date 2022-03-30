@@ -3,6 +3,7 @@ apiVersion: {{ .Values.cronJobApiVersion | default "batch/v1" }}
 kind: CronJob
 metadata:
   name: {{ template "descheduler.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "descheduler.labels" . | nindent 4 }}
 spec:

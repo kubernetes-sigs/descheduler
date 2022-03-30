@@ -1,0 +1,41 @@
+{{- if eq .Values.kind "Deployment" }}
+{{- if eq .Values.serviceMonitor.enabled true }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ template "descheduler.fullname" . }}-servicemonitor
+  namespace: {{ .Values.serviceMonitor.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "descheduler.labels" . | nindent 4 }}
+spec:
+  jobLabel: jobLabel
+  namespaceSelector:
+    matchNames:
+    - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "descheduler.selectorLabels" . | nindent 6 }}
+  endpoints:
+  - honorLabels: {{ .Values.serviceMonitor.honorLabels | default true }}
+    port: http-metrics
+    {{- if .Values.serviceMonitor.interval }}
+    interval: {{ .Values.serviceMonitor.interval }}
+    {{- end }}
+    scheme: https
+    tlsConfig:
+      {{- if eq .Values.serviceMonitor.insecureSkipVerify true }}
+      insecureSkipVerify: true
+      {{- end }}
+      {{- if .Values.serviceMonitor.serverName }}
+      serverName: {{ .Values.serviceMonitor.serverName }}
+      {{- end}}
+{{- if .Values.serviceMonitor.metricRelabelings }}
+    metricRelabelings:
+{{ tpl (toYaml .Values.serviceMonitor.metricRelabelings | indent 4) . }}
+{{- end }}
+{{- if .Values.serviceMonitor.relabelings }}
+    relabelings:
+{{ tpl (toYaml .Values.serviceMonitor.relabelings | indent 4) . }}
+{{- end }}
+{{- end }}
+{{- end }}
