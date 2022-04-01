@@ -1,0 +1,23 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: descheduler-policy-configmap
+  namespace: kube-system
+data:
+  policy.yaml: |
+    apiVersion: "descheduler/v1alpha1"
+    kind: "DeschedulerPolicy"
+    strategies:
+      "RemoveDuplicates":
+         enabled: true
+      "LowNodeUtilization":
+         enabled: true
+         params:
+           nodeResourceUtilizationThresholds:
+             thresholds:
+               "memory": 20
+               "cpu": 40
+             targetThresholds:
+               "memory": 70
+               "cpu": 40

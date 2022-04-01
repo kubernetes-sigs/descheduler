@@ -1,11 +1,11 @@
 ---
-apiVersion: batch/v1  # for k8s version < 1.21.0, use batch/v1beta1
+apiVersion: batch/v1beta1  # for k8s version < 1.21.0, use batch/v1beta1
 kind: CronJob
 metadata:
   name: descheduler-cronjob
   namespace: kube-system
 spec:
-  schedule: "*/2 * * * *"
+  schedule: "* 10 * * *"
   concurrencyPolicy: "Forbid"
   jobTemplate:
     spec:

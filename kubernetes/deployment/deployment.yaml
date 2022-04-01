@@ -27,9 +27,9 @@ spec:
             - "--policy-config-file"
             - "/policy-dir/policy.yaml"
             - "--descheduling-interval"
-            - "5m"
+            - "12h"
             - "--v"
-            - "3"
+            - "4"
           ports:
           - containerPort: 10258
             protocol: TCP
