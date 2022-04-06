@@ -72,6 +72,11 @@ type Namespaces struct {
 	Exclude []string
 }
 
+type PriorityThreshold struct {
+	Value *int32
+	Name  string
+}
+
 // Besides Namespaces only one of its members may be specified
 // TODO(jchaloup): move Namespaces ThresholdPriority and ThresholdPriorityClassName to individual strategies
 //  once the policy version is bumped to v1alpha2

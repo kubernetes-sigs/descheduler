@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package strategies
+package removeduplicatepods
 
 import (
 	"context"
@@ -26,75 +26,61 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
-	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
-func validateRemoveDuplicatePodsParams(params *api.StrategyParameters) error {
-	if params == nil {
-		return nil
-	}
-	// At most one of include/exclude can be set
-	if params.Namespaces != nil && len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
-		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
-	}
-	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
-		return fmt.Errorf("only one of thresholdPriority and thresholdPriorityClassName can be set")
-	}
-
-	return nil
-}
-
-type podOwner struct {
-	namespace, kind, name string
-	imagesHash            string
-}
+const PluginName = "RemoveDuplicatePods"
 
 // RemoveDuplicatePods removes the duplicate pods on node. This strategy evicts all duplicate pods on node.
 // A pod is said to be a duplicate of other if both of them are from same creator, kind and are within the same
 // namespace, and have at least one container with the same image.
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
-func RemoveDuplicatePods(
-	ctx context.Context,
-	client clientset.Interface,
-	strategy api.DeschedulerStrategy,
-	nodes []*v1.Node,
-	podEvictor *evictions.PodEvictor,
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
-) {
-	if err := validateRemoveDuplicatePodsParams(strategy.Params); err != nil {
-		klog.ErrorS(err, "Invalid RemoveDuplicatePods parameters")
-		return
+type RemoveDuplicatePods struct {
+	handle            framework.Handle
+	args              *framework.RemoveDuplicatePodsArg
+	excludeOwnerKinds []string
+	podFilter         podutil.FilterFunc
+}
+
+var _ framework.Plugin = &RemoveDuplicatePods{}
+var _ framework.DeschedulePlugin = &RemoveDuplicatePods{}
+
+func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+	duplicatesArg, ok := args.(*framework.RemoveDuplicatePodsArg)
+	if !ok {
+		return nil, fmt.Errorf("want args to be of type RemoveDuplicatePodsArg, got %T", args)
 	}
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
+
+	// At most one of include/exclude can be set
+	if duplicatesArg.Namespaces != nil && len(duplicatesArg.Namespaces.Include) > 0 && len(duplicatesArg.Namespaces.Exclude) > 0 {
+		return nil, fmt.Errorf("only one of Include/Exclude namespaces can be set")
+	}
+	if duplicatesArg.PriorityThreshold != nil && duplicatesArg.PriorityThreshold.Value != nil && duplicatesArg.PriorityThreshold.Name != "" {
+		return nil, fmt.Errorf("only one of priorityThreshold fields can be set")
+	}
+
+	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), duplicatesArg.PriorityThreshold)
 	if err != nil {
-		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
-		return
+		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
 	}
+
+	evictable := handle.PodEvictor().Evictable(
+		evictions.WithPriorityThreshold(thresholdPriority),
+		evictions.WithNodeFit(duplicatesArg.NodeFit),
+	)
 
 	var includedNamespaces, excludedNamespaces sets.String
-	if strategy.Params != nil && strategy.Params.Namespaces != nil {
-		includedNamespaces = sets.NewString(strategy.Params.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
+	if duplicatesArg.Namespaces != nil {
+		includedNamespaces = sets.NewString(duplicatesArg.Namespaces.Include...)
+		excludedNamespaces = sets.NewString(duplicatesArg.Namespaces.Exclude...)
 	}
-
-	nodeFit := false
-	if strategy.Params != nil {
-		nodeFit = strategy.Params.NodeFit
-	}
-
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
-
-	duplicatePods := make(map[podOwner]map[string][]*v1.Pod)
-	ownerKeyOccurence := make(map[podOwner]int32)
-	nodeCount := 0
-	nodeMap := make(map[string]*v1.Node)
 
 	podFilter, err := podutil.NewOptions().
 		WithFilter(evictable.IsEvictable).
@@ -102,13 +88,34 @@ func RemoveDuplicatePods(
 		WithoutNamespaces(excludedNamespaces).
 		BuildFilterFunc()
 	if err != nil {
-		klog.ErrorS(err, "Error initializing pod filter function")
-		return
+		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
 	}
+
+	return &RemoveDuplicatePods{
+		handle:            handle,
+		excludeOwnerKinds: duplicatesArg.ExcludeOwnerKinds,
+		podFilter:         podFilter,
+	}, nil
+}
+
+func (d *RemoveDuplicatePods) Name() string {
+	return PluginName
+}
+
+type podOwner struct {
+	namespace, kind, name string
+	imagesHash            string
+}
+
+func (d *RemoveDuplicatePods) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+	duplicatePods := make(map[podOwner]map[string][]*v1.Pod)
+	ownerKeyOccurence := make(map[podOwner]int32)
+	nodeCount := 0
+	nodeMap := make(map[string]*v1.Node)
 
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
-		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, podFilter)
+		pods, err := podutil.ListPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			klog.ErrorS(err, "Error listing evictable pods on node", "node", klog.KObj(node))
 			continue
@@ -131,7 +138,7 @@ func RemoveDuplicatePods(
 		duplicateKeysMap := map[string][][]string{}
 		for _, pod := range pods {
 			ownerRefList := podutil.OwnerRef(pod)
-			if hasExcludedOwnerRefKind(ownerRefList, strategy) || len(ownerRefList) == 0 {
+			if len(ownerRefList) == 0 || hasExcludedOwnerRefKind(ownerRefList, d.excludeOwnerKinds) {
 				continue
 			}
 			podContainerKeys := make([]string, 0, len(ownerRefList)*len(pod.Spec.Containers))
@@ -210,7 +217,7 @@ func RemoveDuplicatePods(
 				// It's assumed all duplicated pods are in the same priority class
 				// TODO(jchaloup): check if the pod has a different node to lend to
 				for _, pod := range pods[upperAvg-1:] {
-					if _, err := podEvictor.EvictPod(ctx, pod, nodeMap[nodeName], "RemoveDuplicatePods"); err != nil {
+					if _, err := d.handle.PodEvictor().EvictPod(ctx, pod, nodeMap[nodeName], "RemoveDuplicatePods"); err != nil {
 						klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
 						break
 					}
@@ -218,6 +225,8 @@ func RemoveDuplicatePods(
 			}
 		}
 	}
+
+	return nil
 }
 
 func getNodeAffinityNodeSelector(pod *v1.Pod) *v1.NodeSelector {
@@ -287,11 +296,12 @@ func getTargetNodes(podNodes map[string][]*v1.Pod, nodes []*v1.Node) []*v1.Node 
 	return targetNodes
 }
 
-func hasExcludedOwnerRefKind(ownerRefs []metav1.OwnerReference, strategy api.DeschedulerStrategy) bool {
-	if strategy.Params == nil || strategy.Params.RemoveDuplicates == nil {
+func hasExcludedOwnerRefKind(ownerRefs []metav1.OwnerReference, ExcludeOwnerKinds []string) bool {
+	if len(ExcludeOwnerKinds) == 0 {
 		return false
 	}
-	exclude := sets.NewString(strategy.Params.RemoveDuplicates.ExcludeOwnerKinds...)
+
+	exclude := sets.NewString(ExcludeOwnerKinds...)
 	for _, owner := range ownerRefs {
 		if exclude.Has(owner.Kind) {
 			return true
