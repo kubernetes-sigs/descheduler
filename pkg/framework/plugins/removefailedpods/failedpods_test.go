@@ -54,12 +54,6 @@ func TestRemoveFailedPods(t *testing.T) {
 		nodeFit                 bool
 	}{
 		{
-			description:             "default empty strategy, 0 failures, 0 evictions",
-			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
-			expectedEvictedPodCount: 0,
-			pods:                    []*v1.Pod{}, // no pods come back with field selector phase=Failed
-		},
-		{
 			description:             "0 failures, 0 evictions",
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,

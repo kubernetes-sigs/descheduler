@@ -30,6 +30,9 @@ type RemoveFailedPods struct {
 	podFilter         podutil.FilterFunc
 }
 
+var _ framework.Plugin = &RemoveFailedPods{}
+var _ framework.DeschedulePlugin = &RemoveFailedPods{}
+
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
 	failedPodsArg, ok := args.(*framework.RemoveFailedPodsArg)
 	if !ok {

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package strategies
+package removepodsviolatingnodeaffinity
 
 import (
 	"context"
@@ -25,34 +25,32 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/test"
 )
 
+type frameworkHandle struct {
+	clientset                 clientset.Interface
+	podEvictor                *evictions.PodEvictor
+	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
+}
+
+func (f frameworkHandle) ClientSet() clientset.Interface {
+	return f.clientset
+}
+func (f frameworkHandle) PodEvictor() *evictions.PodEvictor {
+	return f.podEvictor
+}
+func (f frameworkHandle) GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc {
+	return f.getPodsAssignedToNodeFunc
+}
+
 func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
-	requiredDuringSchedulingIgnoredDuringExecutionStrategy := api.DeschedulerStrategy{
-		Enabled: true,
-		Params: &api.StrategyParameters{
-			NodeAffinityType: []string{
-				"requiredDuringSchedulingIgnoredDuringExecution",
-			},
-		},
-	}
-
-	requiredDuringSchedulingIgnoredDuringExecutionWithNodeFitStrategy := api.DeschedulerStrategy{
-		Enabled: true,
-		Params: &api.StrategyParameters{
-			NodeAffinityType: []string{
-				"requiredDuringSchedulingIgnoredDuringExecution",
-			},
-			NodeFit: true,
-		},
-	}
-
 	nodeLabelKey := "kubernetes.io/desiredNode"
 	nodeLabelValue := "yes"
 	nodeWithLabels := test.BuildTestNode("nodeWithLabels", 2000, 3000, 10, nil)
@@ -108,28 +106,23 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		description                    string
 		nodes                          []*v1.Node
 		pods                           []*v1.Pod
-		strategy                       api.DeschedulerStrategy
 		expectedEvictedPodCount        uint
 		maxPodsToEvictPerNode          *uint
 		maxNoOfPodsToEvictPerNamespace *uint
+
+		nodeAffinityType []string
+		nodeFit          bool
 	}{
 		{
-			description: "Invalid strategy type, should not evict any pods",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					NodeAffinityType: []string{
-						"requiredDuringSchedulingRequiredDuringExecution",
-					},
-				},
-			},
+			description:             "Invalid strategy type, should not evict any pods",
+			nodeAffinityType:        []string{"requiredDuringSchedulingRequiredDuringExecution"},
 			expectedEvictedPodCount: 0,
 			pods:                    addPodsToNode(nodeWithoutLabels, nil),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 		},
 		{
 			description:             "Pod is correctly scheduled on node, no eviction expected",
-			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
+			nodeAffinityType:        []string{"requiredDuringSchedulingIgnoredDuringExecution"},
 			expectedEvictedPodCount: 0,
 			pods:                    addPodsToNode(nodeWithLabels, nil),
 			nodes:                   []*v1.Node{nodeWithLabels},
@@ -137,14 +130,14 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		{
 			description:             "Pod is scheduled on node without matching labels, another schedulable node available, should be evicted",
 			expectedEvictedPodCount: 1,
-			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
+			nodeAffinityType:        []string{"requiredDuringSchedulingIgnoredDuringExecution"},
 			pods:                    addPodsToNode(nodeWithoutLabels, nil),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 		},
 		{
 			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvictPerNode set to 1, should not be evicted",
 			expectedEvictedPodCount: 1,
-			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
+			nodeAffinityType:        []string{"requiredDuringSchedulingIgnoredDuringExecution"},
 			pods:                    addPodsToNode(nodeWithoutLabels, nil),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 			maxPodsToEvictPerNode:   &uint1,
@@ -152,7 +145,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		{
 			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvictPerNode set to 1, no pod evicted since pod terminting",
 			expectedEvictedPodCount: 1,
-			strategy:                requiredDuringSchedulingIgnoredDuringExecutionStrategy,
+			nodeAffinityType:        []string{"requiredDuringSchedulingIgnoredDuringExecution"},
 			pods:                    addPodsToNode(nodeWithoutLabels, &metav1.Time{}),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 			maxPodsToEvictPerNode:   &uint1,
@@ -160,7 +153,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		{
 			description:                    "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 1, should not be evicted",
 			expectedEvictedPodCount:        1,
-			strategy:                       requiredDuringSchedulingIgnoredDuringExecutionStrategy,
+			nodeAffinityType:               []string{"requiredDuringSchedulingIgnoredDuringExecution"},
 			pods:                           addPodsToNode(nodeWithoutLabels, nil),
 			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 			maxNoOfPodsToEvictPerNamespace: &uint1,
@@ -168,7 +161,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		{
 			description:                    "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 1, no pod evicted since pod terminting",
 			expectedEvictedPodCount:        1,
-			strategy:                       requiredDuringSchedulingIgnoredDuringExecutionStrategy,
+			nodeAffinityType:               []string{"requiredDuringSchedulingIgnoredDuringExecution"},
 			pods:                           addPodsToNode(nodeWithoutLabels, &metav1.Time{}),
 			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 			maxNoOfPodsToEvictPerNamespace: &uint1,
@@ -176,14 +169,16 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		{
 			description:             "Pod is scheduled on node without matching labels, but no node where pod fits is available, should not evict",
 			expectedEvictedPodCount: 0,
-			strategy:                requiredDuringSchedulingIgnoredDuringExecutionWithNodeFitStrategy,
+			nodeAffinityType:        []string{"requiredDuringSchedulingIgnoredDuringExecution"},
+			nodeFit:                 true,
 			pods:                    addPodsToNode(nodeWithoutLabels, nil),
 			nodes:                   []*v1.Node{nodeWithoutLabels, unschedulableNodeWithLabels},
 		},
 		{
 			description:             "Pod is scheduled on node without matching labels, and node where pod fits is available, should evict",
 			expectedEvictedPodCount: 0,
-			strategy:                requiredDuringSchedulingIgnoredDuringExecutionWithNodeFitStrategy,
+			nodeAffinityType:        []string{"requiredDuringSchedulingIgnoredDuringExecution"},
+			nodeFit:                 true,
 			pods:                    addPodsToNode(nodeWithoutLabels, nil),
 			nodes:                   []*v1.Node{nodeWithLabels, unschedulableNodeWithLabels},
 			maxPodsToEvictPerNode:   &uint1,
@@ -229,7 +224,23 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 				false,
 			)
 
-			RemovePodsViolatingNodeAffinity(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+			plugin, err := New(&framework.RemovePodsViolatingNodeAffinityArg{
+				CommonArgs: framework.CommonArgs{
+					NodeFit: tc.nodeFit,
+				},
+				NodeAffinityType: tc.nodeAffinityType,
+			},
+				frameworkHandle{
+					clientset:                 fakeClient,
+					podEvictor:                podEvictor,
+					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
+				},
+			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
+			plugin.(interface{}).(framework.DeschedulePlugin).Deschedule(ctx, tc.nodes)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)

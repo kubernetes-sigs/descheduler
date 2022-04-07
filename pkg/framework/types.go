@@ -71,6 +71,20 @@ func (in *RemoveFailedPodsArg) DeepCopyObject() runtime.Object {
 	return nil
 }
 
+// RemovePodsViolatingNodeAffinityArg holds arguments used to configure the RemovePodsViolatingNodeAffinity plugin.
+type RemovePodsViolatingNodeAffinityArg struct {
+	metav1.TypeMeta
+
+	CommonArgs
+	LabelSelector    *metav1.LabelSelector
+	NodeAffinityType []string
+}
+
+// TODO(jchaloup): have this go generated
+func (in *RemovePodsViolatingNodeAffinityArg) DeepCopyObject() runtime.Object {
+	return nil
+}
+
 func ValidateCommonArgs(args CommonArgs) error {
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
