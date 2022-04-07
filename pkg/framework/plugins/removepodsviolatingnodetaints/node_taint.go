@@ -36,7 +36,7 @@ const PluginName = "RemovePodsViolatingNodeTaints"
 // RemovePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
 type RemovePodsViolatingNodeTaints struct {
 	handle         framework.Handle
-	args           *framework.RemovePodsViolatingNodeTaintsArg
+	args           *framework.RemovePodsViolatingNodeTaintsArgs
 	taintFilterFnc func(taint *v1.Taint) bool
 	podFilter      podutil.FilterFunc
 }
@@ -45,49 +45,49 @@ var _ framework.Plugin = &RemovePodsViolatingNodeTaints{}
 var _ framework.DeschedulePlugin = &RemovePodsViolatingNodeTaints{}
 
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	nodeTaintsArg, ok := args.(*framework.RemovePodsViolatingNodeTaintsArg)
+	nodeTaintsArgs, ok := args.(*framework.RemovePodsViolatingNodeTaintsArgs)
 	if !ok {
-		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingNodeTaintsArg, got %T", args)
+		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingNodeTaintsArgs, got %T", args)
 	}
 
-	if err := framework.ValidateCommonArgs(nodeTaintsArg.CommonArgs); err != nil {
+	if err := framework.ValidateCommonArgs(nodeTaintsArgs.CommonArgs); err != nil {
 		return nil, err
 	}
 
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), nodeTaintsArg.PriorityThreshold)
+	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), nodeTaintsArgs.PriorityThreshold)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
 	}
 
 	evictable := handle.PodEvictor().Evictable(
 		evictions.WithPriorityThreshold(thresholdPriority),
-		evictions.WithNodeFit(nodeTaintsArg.NodeFit),
+		evictions.WithNodeFit(nodeTaintsArgs.NodeFit),
 	)
 
 	var includedNamespaces, excludedNamespaces sets.String
-	if nodeTaintsArg.Namespaces != nil {
-		includedNamespaces = sets.NewString(nodeTaintsArg.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(nodeTaintsArg.Namespaces.Exclude...)
+	if nodeTaintsArgs.Namespaces != nil {
+		includedNamespaces = sets.NewString(nodeTaintsArgs.Namespaces.Include...)
+		excludedNamespaces = sets.NewString(nodeTaintsArgs.Namespaces.Exclude...)
 	}
 
 	podFilter, err := podutil.NewOptions().
 		WithFilter(evictable.IsEvictable).
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
-		WithLabelSelector(nodeTaintsArg.LabelSelector).
+		WithLabelSelector(nodeTaintsArgs.LabelSelector).
 		BuildFilterFunc()
 	if err != nil {
 		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
 	}
 
-	excludedTaints := sets.NewString(nodeTaintsArg.ExcludedTaints...)
+	excludedTaints := sets.NewString(nodeTaintsArgs.ExcludedTaints...)
 	excludeTaint := func(taint *v1.Taint) bool {
 		// Exclude taints by key *or* key=value
 		return excludedTaints.Has(taint.Key) || (taint.Value != "" && excludedTaints.Has(fmt.Sprintf("%s=%s", taint.Key, taint.Value)))
 	}
 
 	taintFilterFnc := func(taint *v1.Taint) bool { return (taint.Effect == v1.TaintEffectNoSchedule) && !excludeTaint(taint) }
-	if nodeTaintsArg.IncludePreferNoSchedule {
+	if nodeTaintsArgs.IncludePreferNoSchedule {
 		taintFilterFnc = func(taint *v1.Taint) bool {
 			return (taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectPreferNoSchedule) && !excludeTaint(taint)
 		}
@@ -96,7 +96,7 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	return &RemovePodsViolatingNodeTaints{
 		handle:         handle,
 		podFilter:      podFilter,
-		args:           nodeTaintsArg,
+		args:           nodeTaintsArgs,
 		taintFilterFnc: taintFilterFnc,
 	}, nil
 }
@@ -110,7 +110,7 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListAllPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
-			//no pods evicted as error encountered retrieving evictable Pods
+			// no pods evicted as error encountered retrieving evictable Pods
 			return &framework.Status{
 				Err: fmt.Errorf("error listing pods on a node: %v", err),
 			}

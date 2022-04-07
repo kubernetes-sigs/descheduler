@@ -316,7 +316,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				false,
 			)
 
-			plugin, err := New(&framework.RemoveDuplicatePodsArg{
+			plugin, err := New(&framework.RemoveDuplicatePodsArgs{
 				CommonArgs: framework.CommonArgs{
 					NodeFit: testCase.nodeFit,
 				},
@@ -759,7 +759,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				false,
 			)
 
-			plugin, err := New(&framework.RemoveDuplicatePodsArg{},
+			plugin, err := New(&framework.RemoveDuplicatePodsArgs{},
 				frameworkHandle{
 					clientset:                 fakeClient,
 					podEvictor:                podEvictor,

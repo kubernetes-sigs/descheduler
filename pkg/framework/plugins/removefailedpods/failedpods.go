@@ -24,7 +24,7 @@ const PluginName = "RemoveFailedPods"
 // RemoveFailedPods removes Pods that are in failed status phase.
 type RemoveFailedPods struct {
 	handle            framework.Handle
-	args              *framework.RemoveFailedPodsArg
+	args              *framework.RemoveFailedPodsArgs
 	reasons           sets.String
 	excludeOwnerKinds sets.String
 	podFilter         podutil.FilterFunc
@@ -34,23 +34,23 @@ var _ framework.Plugin = &RemoveFailedPods{}
 var _ framework.DeschedulePlugin = &RemoveFailedPods{}
 
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	failedPodsArg, ok := args.(*framework.RemoveFailedPodsArg)
+	failedPodsArgs, ok := args.(*framework.RemoveFailedPodsArgs)
 	if !ok {
-		return nil, fmt.Errorf("want args to be of type RemoveFailedPodsArg, got %T", args)
+		return nil, fmt.Errorf("want args to be of type RemoveFailedPodsArgs, got %T", args)
 	}
 
-	if err := framework.ValidateCommonArgs(failedPodsArg.CommonArgs); err != nil {
+	if err := framework.ValidateCommonArgs(failedPodsArgs.CommonArgs); err != nil {
 		return nil, err
 	}
 
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), failedPodsArg.PriorityThreshold)
+	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), failedPodsArgs.PriorityThreshold)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
 	}
 
 	var selector labels.Selector
-	if failedPodsArg.LabelSelector != nil {
-		selector, err = metav1.LabelSelectorAsSelector(failedPodsArg.LabelSelector)
+	if failedPodsArgs.LabelSelector != nil {
+		selector, err = metav1.LabelSelectorAsSelector(failedPodsArgs.LabelSelector)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get label selectors: %v", err)
 		}
@@ -58,21 +58,21 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 
 	evictable := handle.PodEvictor().Evictable(
 		evictions.WithPriorityThreshold(thresholdPriority),
-		evictions.WithNodeFit(failedPodsArg.NodeFit),
+		evictions.WithNodeFit(failedPodsArgs.NodeFit),
 		evictions.WithLabelSelector(selector),
 	)
 
 	var includedNamespaces, excludedNamespaces sets.String
-	if failedPodsArg.Namespaces != nil {
-		includedNamespaces = sets.NewString(failedPodsArg.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(failedPodsArg.Namespaces.Exclude...)
+	if failedPodsArgs.Namespaces != nil {
+		includedNamespaces = sets.NewString(failedPodsArgs.Namespaces.Include...)
+		excludedNamespaces = sets.NewString(failedPodsArgs.Namespaces.Exclude...)
 	}
 
 	podFilter, err := podutil.NewOptions().
 		WithFilter(evictable.IsEvictable).
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
-		WithLabelSelector(failedPodsArg.LabelSelector).
+		WithLabelSelector(failedPodsArgs.LabelSelector).
 		BuildFilterFunc()
 	if err != nil {
 		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
@@ -84,9 +84,9 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 
 	return &RemoveFailedPods{
 		handle:            handle,
-		args:              failedPodsArg,
-		excludeOwnerKinds: sets.NewString(failedPodsArg.ExcludeOwnerKinds...),
-		reasons:           sets.NewString(failedPodsArg.Reasons...),
+		args:              failedPodsArgs,
+		excludeOwnerKinds: sets.NewString(failedPodsArgs.ExcludeOwnerKinds...),
+		reasons:           sets.NewString(failedPodsArgs.Reasons...),
 		podFilter:         podFilter,
 	}, nil
 }

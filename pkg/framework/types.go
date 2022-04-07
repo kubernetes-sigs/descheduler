@@ -41,8 +41,8 @@ type CommonArgs struct {
 	NodeFit           bool
 }
 
-// RemoveDuplicatePodsArg holds arguments used to configure the RemoveDuplicatePods plugin.
-type RemoveDuplicatePodsArg struct {
+// RemoveDuplicatePodsArgs holds arguments used to configure the RemoveDuplicatePods plugin.
+type RemoveDuplicatePodsArgs struct {
 	metav1.TypeMeta
 
 	CommonArgs
@@ -50,12 +50,12 @@ type RemoveDuplicatePodsArg struct {
 }
 
 // TODO(jchaloup): have this go generated
-func (in *RemoveDuplicatePodsArg) DeepCopyObject() runtime.Object {
+func (in *RemoveDuplicatePodsArgs) DeepCopyObject() runtime.Object {
 	return nil
 }
 
-// RemoveFailedPodsArg holds arguments used to configure the RemoveFailedPods plugin.
-type RemoveFailedPodsArg struct {
+// RemoveFailedPodsArgs holds arguments used to configure the RemoveFailedPods plugin.
+type RemoveFailedPodsArgs struct {
 	metav1.TypeMeta
 
 	CommonArgs
@@ -67,12 +67,12 @@ type RemoveFailedPodsArg struct {
 }
 
 // TODO(jchaloup): have this go generated
-func (in *RemoveFailedPodsArg) DeepCopyObject() runtime.Object {
+func (in *RemoveFailedPodsArgs) DeepCopyObject() runtime.Object {
 	return nil
 }
 
-// RemovePodsViolatingNodeAffinityArg holds arguments used to configure the RemovePodsViolatingNodeAffinity plugin.
-type RemovePodsViolatingNodeAffinityArg struct {
+// RemovePodsViolatingNodeAffinityArgs holds arguments used to configure the RemovePodsViolatingNodeAffinity plugin.
+type RemovePodsViolatingNodeAffinityArgs struct {
 	metav1.TypeMeta
 
 	CommonArgs
@@ -81,12 +81,12 @@ type RemovePodsViolatingNodeAffinityArg struct {
 }
 
 // TODO(jchaloup): have this go generated
-func (in *RemovePodsViolatingNodeAffinityArg) DeepCopyObject() runtime.Object {
+func (in *RemovePodsViolatingNodeAffinityArgs) DeepCopyObject() runtime.Object {
 	return nil
 }
 
-// RemovePodsViolatingNodeTaintsArg holds arguments used to configure the RemovePodsViolatingNodeTaints plugin.
-type RemovePodsViolatingNodeTaintsArg struct {
+// RemovePodsViolatingNodeTaintsArgs holds arguments used to configure the RemovePodsViolatingNodeTaints plugin.
+type RemovePodsViolatingNodeTaintsArgs struct {
 	metav1.TypeMeta
 
 	CommonArgs
@@ -96,7 +96,20 @@ type RemovePodsViolatingNodeTaintsArg struct {
 }
 
 // TODO(jchaloup): have this go generated
-func (in *RemovePodsViolatingNodeTaintsArg) DeepCopyObject() runtime.Object {
+func (in *RemovePodsViolatingNodeTaintsArgs) DeepCopyObject() runtime.Object {
+	return nil
+}
+
+// RemovePodsViolatingInterPodAntiAffinityArgs holds arguments used to configure the RemovePodsViolatingInterPodAntiAffinity plugin.
+type RemovePodsViolatingInterPodAntiAffinityArgs struct {
+	metav1.TypeMeta
+
+	CommonArgs
+	LabelSelector *metav1.LabelSelector
+}
+
+// TODO(jchaloup): have this go generated
+func (in *RemovePodsViolatingInterPodAntiAffinityArgs) DeepCopyObject() runtime.Object {
 	return nil
 }
 

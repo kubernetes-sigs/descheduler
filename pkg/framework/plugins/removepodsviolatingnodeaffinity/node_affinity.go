@@ -37,7 +37,7 @@ const PluginName = "RemovePodsViolatingNodeAffinity"
 // RemovePodsViolatingNodeAffinity evicts pods on nodes which violate node affinity
 type RemovePodsViolatingNodeAffinity struct {
 	handle    framework.Handle
-	args      *framework.RemovePodsViolatingNodeAffinityArg
+	args      *framework.RemovePodsViolatingNodeAffinityArgs
 	podFilter podutil.FilterFunc
 }
 
@@ -45,40 +45,40 @@ var _ framework.Plugin = &RemovePodsViolatingNodeAffinity{}
 var _ framework.DeschedulePlugin = &RemovePodsViolatingNodeAffinity{}
 
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	nodeAffinityArg, ok := args.(*framework.RemovePodsViolatingNodeAffinityArg)
+	nodeAffinityArgs, ok := args.(*framework.RemovePodsViolatingNodeAffinityArgs)
 	if !ok {
-		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingNodeAffinityArg, got %T", args)
+		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingNodeAffinityArgs, got %T", args)
 	}
 
-	if err := framework.ValidateCommonArgs(nodeAffinityArg.CommonArgs); err != nil {
+	if err := framework.ValidateCommonArgs(nodeAffinityArgs.CommonArgs); err != nil {
 		return nil, err
 	}
 
-	if len(nodeAffinityArg.NodeAffinityType) == 0 {
+	if len(nodeAffinityArgs.NodeAffinityType) == 0 {
 		return nil, fmt.Errorf("NodeAffinityType is empty")
 	}
 
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), nodeAffinityArg.PriorityThreshold)
+	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), nodeAffinityArgs.PriorityThreshold)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
 	}
 
 	evictable := handle.PodEvictor().Evictable(
 		evictions.WithPriorityThreshold(thresholdPriority),
-		evictions.WithNodeFit(nodeAffinityArg.NodeFit),
+		evictions.WithNodeFit(nodeAffinityArgs.NodeFit),
 	)
 
 	var includedNamespaces, excludedNamespaces sets.String
-	if nodeAffinityArg.Namespaces != nil {
-		includedNamespaces = sets.NewString(nodeAffinityArg.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(nodeAffinityArg.Namespaces.Exclude...)
+	if nodeAffinityArgs.Namespaces != nil {
+		includedNamespaces = sets.NewString(nodeAffinityArgs.Namespaces.Include...)
+		excludedNamespaces = sets.NewString(nodeAffinityArgs.Namespaces.Exclude...)
 	}
 
 	podFilter, err := podutil.NewOptions().
 		WithFilter(evictable.IsEvictable).
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
-		WithLabelSelector(nodeAffinityArg.LabelSelector).
+		WithLabelSelector(nodeAffinityArgs.LabelSelector).
 		BuildFilterFunc()
 	if err != nil {
 		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
@@ -87,7 +87,7 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	return &RemovePodsViolatingNodeAffinity{
 		handle:    handle,
 		podFilter: podFilter,
-		args:      nodeAffinityArg,
+		args:      nodeAffinityArgs,
 	}, nil
 }
 

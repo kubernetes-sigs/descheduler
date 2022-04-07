@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package strategies
+package removepodsviolatinginterpodantiaffinity
 
 import (
 	"context"
@@ -25,14 +25,31 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
+
+type frameworkHandle struct {
+	clientset                 clientset.Interface
+	podEvictor                *evictions.PodEvictor
+	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
+}
+
+func (f frameworkHandle) ClientSet() clientset.Interface {
+	return f.clientset
+}
+func (f frameworkHandle) PodEvictor() *evictions.PodEvictor {
+	return f.podEvictor
+}
+func (f frameworkHandle) GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc {
+	return f.getPodsAssignedToNodeFunc
+}
 
 func TestPodAntiAffinity(t *testing.T) {
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
@@ -215,13 +232,23 @@ func TestPodAntiAffinity(t *testing.T) {
 				false,
 				false,
 			)
-			strategy := api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
+
+			plugin, err := New(&framework.RemovePodsViolatingInterPodAntiAffinityArgs{
+				CommonArgs: framework.CommonArgs{
 					NodeFit: test.nodeFit,
 				},
+			},
+				frameworkHandle{
+					clientset:                 fakeClient,
+					podEvictor:                podEvictor,
+					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
+				},
+			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			RemovePodsViolatingInterPodAntiAffinity(ctx, fakeClient, strategy, test.nodes, podEvictor, getPodsAssignedToNode)
+			plugin.(interface{}).(framework.DeschedulePlugin).Deschedule(ctx, test.nodes)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != test.expectedEvictedPodCount {
 				t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, test.expectedEvictedPodCount)

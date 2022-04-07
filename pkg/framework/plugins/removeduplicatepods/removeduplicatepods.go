@@ -44,7 +44,7 @@ const PluginName = "RemoveDuplicatePods"
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
 type RemoveDuplicatePods struct {
 	handle            framework.Handle
-	args              *framework.RemoveDuplicatePodsArg
+	args              *framework.RemoveDuplicatePodsArgs
 	excludeOwnerKinds []string
 	podFilter         podutil.FilterFunc
 }
@@ -53,29 +53,29 @@ var _ framework.Plugin = &RemoveDuplicatePods{}
 var _ framework.DeschedulePlugin = &RemoveDuplicatePods{}
 
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	duplicatesArg, ok := args.(*framework.RemoveDuplicatePodsArg)
+	duplicatesArgs, ok := args.(*framework.RemoveDuplicatePodsArgs)
 	if !ok {
-		return nil, fmt.Errorf("want args to be of type RemoveDuplicatePodsArg, got %T", args)
+		return nil, fmt.Errorf("want args to be of type RemoveDuplicatePodsArgs, got %T", args)
 	}
 
-	if err := framework.ValidateCommonArgs(duplicatesArg.CommonArgs); err != nil {
+	if err := framework.ValidateCommonArgs(duplicatesArgs.CommonArgs); err != nil {
 		return nil, err
 	}
 
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), duplicatesArg.PriorityThreshold)
+	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), duplicatesArgs.PriorityThreshold)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
 	}
 
 	evictable := handle.PodEvictor().Evictable(
 		evictions.WithPriorityThreshold(thresholdPriority),
-		evictions.WithNodeFit(duplicatesArg.NodeFit),
+		evictions.WithNodeFit(duplicatesArgs.NodeFit),
 	)
 
 	var includedNamespaces, excludedNamespaces sets.String
-	if duplicatesArg.Namespaces != nil {
-		includedNamespaces = sets.NewString(duplicatesArg.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(duplicatesArg.Namespaces.Exclude...)
+	if duplicatesArgs.Namespaces != nil {
+		includedNamespaces = sets.NewString(duplicatesArgs.Namespaces.Include...)
+		excludedNamespaces = sets.NewString(duplicatesArgs.Namespaces.Exclude...)
 	}
 
 	podFilter, err := podutil.NewOptions().
@@ -89,7 +89,7 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 
 	return &RemoveDuplicatePods{
 		handle:            handle,
-		excludeOwnerKinds: duplicatesArg.ExcludeOwnerKinds,
+		excludeOwnerKinds: duplicatesArgs.ExcludeOwnerKinds,
 		podFilter:         podFilter,
 	}, nil
 }

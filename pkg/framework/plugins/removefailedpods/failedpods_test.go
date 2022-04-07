@@ -271,7 +271,7 @@ func TestRemoveFailedPods(t *testing.T) {
 				false,
 			)
 
-			plugin, err := New(&framework.RemoveFailedPodsArg{
+			plugin, err := New(&framework.RemoveFailedPodsArgs{
 				CommonArgs: framework.CommonArgs{
 					NodeFit: tc.nodeFit,
 				},

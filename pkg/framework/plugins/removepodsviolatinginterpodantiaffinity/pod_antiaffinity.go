@@ -14,92 +14,100 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package strategies
+package removepodsviolatinginterpodantiaffinity
 
 import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/util/sets"
-	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/utils"
-
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
+
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
-func validateRemovePodsViolatingInterPodAntiAffinityParams(params *api.StrategyParameters) error {
-	if params == nil {
-		return nil
-	}
-
-	// At most one of include/exclude can be set
-	if params.Namespaces != nil && len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
-		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
-	}
-	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
-		return fmt.Errorf("only one of thresholdPriority and thresholdPriorityClassName can be set")
-	}
-
-	return nil
-}
+const PluginName = "RemovePodsViolatingInterPodAntiAffinity"
 
 // RemovePodsViolatingInterPodAntiAffinity evicts pods on the node which are having a pod affinity rules.
-func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
-	if err := validateRemovePodsViolatingInterPodAntiAffinityParams(strategy.Params); err != nil {
-		klog.ErrorS(err, "Invalid RemovePodsViolatingInterPodAntiAffinity parameters")
-		return
+type RemovePodsViolatingInterPodAntiAffinity struct {
+	handle      framework.Handle
+	args        *framework.RemovePodsViolatingInterPodAntiAffinityArgs
+	isEvictable func(pod *v1.Pod) bool
+	podFilter   podutil.FilterFunc
+}
+
+var _ framework.Plugin = &RemovePodsViolatingInterPodAntiAffinity{}
+var _ framework.DeschedulePlugin = &RemovePodsViolatingInterPodAntiAffinity{}
+
+func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+	podAffinityArgs, ok := args.(*framework.RemovePodsViolatingInterPodAntiAffinityArgs)
+	if !ok {
+		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingInterPodAntiAffinityArgs, got %T", args)
 	}
+
+	if err := framework.ValidateCommonArgs(podAffinityArgs.CommonArgs); err != nil {
+		return nil, err
+	}
+
+	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), podAffinityArgs.PriorityThreshold)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
+	}
+
+	evictable := handle.PodEvictor().Evictable(
+		evictions.WithPriorityThreshold(thresholdPriority),
+		evictions.WithNodeFit(podAffinityArgs.NodeFit),
+	)
 
 	var includedNamespaces, excludedNamespaces sets.String
-	var labelSelector *metav1.LabelSelector
-	if strategy.Params != nil {
-		if strategy.Params.Namespaces != nil {
-			includedNamespaces = sets.NewString(strategy.Params.Namespaces.Include...)
-			excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
-		}
-		labelSelector = strategy.Params.LabelSelector
+	if podAffinityArgs.Namespaces != nil {
+		includedNamespaces = sets.NewString(podAffinityArgs.Namespaces.Include...)
+		excludedNamespaces = sets.NewString(podAffinityArgs.Namespaces.Exclude...)
 	}
-
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
-	if err != nil {
-		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
-		return
-	}
-
-	nodeFit := false
-	if strategy.Params != nil {
-		nodeFit = strategy.Params.NodeFit
-	}
-
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
 
 	podFilter, err := podutil.NewOptions().
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
-		WithLabelSelector(labelSelector).
+		WithLabelSelector(podAffinityArgs.LabelSelector).
 		BuildFilterFunc()
 	if err != nil {
-		klog.ErrorS(err, "Error initializing pod filter function")
-		return
+		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
 	}
 
+	return &RemovePodsViolatingInterPodAntiAffinity{
+		handle:      handle,
+		args:        podAffinityArgs,
+		isEvictable: evictable.IsEvictable,
+		podFilter:   podFilter,
+	}, nil
+}
+
+func (d *RemovePodsViolatingInterPodAntiAffinity) Name() string {
+	return PluginName
+}
+
+func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
-		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, podFilter)
+		pods, err := podutil.ListPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
-			return
+			// no pods evicted as error encountered retrieving evictable Pods
+			return &framework.Status{
+				Err: fmt.Errorf("error listing pods on a node: %v", err),
+			}
 		}
 		// sort the evictable Pods based on priority, if there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(pods)
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
-			if checkPodsWithAntiAffinityExist(pods[i], pods) && evictable.IsEvictable(pods[i]) {
-				success, err := podEvictor.EvictPod(ctx, pods[i], node, "InterPodAntiAffinity")
+			if checkPodsWithAntiAffinityExist(pods[i], pods) && d.isEvictable(pods[i]) {
+				success, err := d.handle.PodEvictor().EvictPod(ctx, pods[i], node, "InterPodAntiAffinity")
 				if err != nil {
 					klog.ErrorS(err, "Error evicting pod")
 					break
@@ -116,6 +124,7 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 			}
 		}
 	}
+	return nil
 }
 
 // checkPodsWithAntiAffinityExist checks if there are other pods on the node that the current pod cannot tolerate.

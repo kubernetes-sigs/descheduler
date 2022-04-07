@@ -348,7 +348,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				false,
 			)
 
-			plugin, err := New(&framework.RemovePodsViolatingNodeTaintsArg{
+			plugin, err := New(&framework.RemovePodsViolatingNodeTaintsArgs{
 				CommonArgs: framework.CommonArgs{
 					NodeFit: tc.nodeFit,
 				},

@@ -224,7 +224,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 				false,
 			)
 
-			plugin, err := New(&framework.RemovePodsViolatingNodeAffinityArg{
+			plugin, err := New(&framework.RemovePodsViolatingNodeAffinityArgs{
 				CommonArgs: framework.CommonArgs{
 					NodeFit: tc.nodeFit,
 				},
