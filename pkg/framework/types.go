@@ -128,6 +128,21 @@ func (in *PodLifeTimeArgs) DeepCopyObject() runtime.Object {
 	return nil
 }
 
+// RemovePodsHavingTooManyRestartsArgs holds arguments used to configure the RemovePodsHavingTooManyRestarts plugin.
+type RemovePodsHavingTooManyRestartsArgs struct {
+	metav1.TypeMeta
+
+	CommonArgs
+	LabelSelector           *metav1.LabelSelector
+	PodRestartThreshold     int32
+	IncludingInitContainers bool
+}
+
+// TODO(jchaloup): have this go generated
+func (in *RemovePodsHavingTooManyRestartsArgs) DeepCopyObject() runtime.Object {
+	return nil
+}
+
 func ValidateCommonArgs(args CommonArgs) error {
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
