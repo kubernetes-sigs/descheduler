@@ -317,9 +317,9 @@ func TestFindDuplicatePods(t *testing.T) {
 			)
 
 			plugin, err := New(&framework.RemoveDuplicatePodsArg{
-				// Namespaces        *api.Namespaces
-				// PriorityThreshold *api.PriorityThreshold
-				NodeFit:           testCase.nodeFit,
+				CommonArgs: framework.CommonArgs{
+					NodeFit: testCase.nodeFit,
+				},
 				ExcludeOwnerKinds: testCase.excludeOwnerKinds,
 			},
 				frameworkHandle{

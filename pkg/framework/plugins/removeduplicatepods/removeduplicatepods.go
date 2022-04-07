@@ -58,12 +58,8 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 		return nil, fmt.Errorf("want args to be of type RemoveDuplicatePodsArg, got %T", args)
 	}
 
-	// At most one of include/exclude can be set
-	if duplicatesArg.Namespaces != nil && len(duplicatesArg.Namespaces.Include) > 0 && len(duplicatesArg.Namespaces.Exclude) > 0 {
-		return nil, fmt.Errorf("only one of Include/Exclude namespaces can be set")
-	}
-	if duplicatesArg.PriorityThreshold != nil && duplicatesArg.PriorityThreshold.Value != nil && duplicatesArg.PriorityThreshold.Name != "" {
-		return nil, fmt.Errorf("only one of priorityThreshold fields can be set")
+	if err := framework.ValidateCommonArgs(duplicatesArg.CommonArgs); err != nil {
+		return nil, err
 	}
 
 	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), duplicatesArg.PriorityThreshold)

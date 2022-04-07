@@ -2,6 +2,7 @@ package framework
 
 import (
 	"context"
+	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,17 +35,50 @@ type DeschedulePlugin interface {
 	Deschedule(ctx context.Context, nodes []*v1.Node) *Status
 }
 
+type CommonArgs struct {
+	Namespaces        *api.Namespaces
+	PriorityThreshold *api.PriorityThreshold
+	NodeFit           bool
+}
+
 // RemoveDuplicatePodsArg holds arguments used to configure the RemoveDuplicatePods plugin.
 type RemoveDuplicatePodsArg struct {
 	metav1.TypeMeta
 
-	Namespaces        *api.Namespaces
-	PriorityThreshold *api.PriorityThreshold
-	NodeFit           bool
+	CommonArgs
 	ExcludeOwnerKinds []string
 }
 
 // TODO(jchaloup): have this go generated
 func (in *RemoveDuplicatePodsArg) DeepCopyObject() runtime.Object {
+	return nil
+}
+
+// RemoveFailedPodsArg holds arguments used to configure the RemoveFailedPods plugin.
+type RemoveFailedPodsArg struct {
+	metav1.TypeMeta
+
+	CommonArgs
+	LabelSelector           *metav1.LabelSelector
+	MinPodLifetimeSeconds   *uint
+	Reasons                 []string
+	IncludingInitContainers bool
+	ExcludeOwnerKinds       []string
+}
+
+// TODO(jchaloup): have this go generated
+func (in *RemoveFailedPodsArg) DeepCopyObject() runtime.Object {
+	return nil
+}
+
+func ValidateCommonArgs(args CommonArgs) error {
+	// At most one of include/exclude can be set
+	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
+		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+	}
+	if args.PriorityThreshold != nil && args.PriorityThreshold.Value != nil && args.PriorityThreshold.Name != "" {
+		return fmt.Errorf("only one of priorityThreshold fields can be set")
+	}
+
 	return nil
 }
