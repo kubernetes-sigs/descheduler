@@ -157,6 +157,39 @@ func (in *RemovePodsViolatingTopologySpreadConstraintArgs) DeepCopyObject() runt
 	return nil
 }
 
+// LowNodeUtilizationArgs holds arguments used to configure the LowNodeUtilization plugin.
+type LowNodeUtilizationArgs struct {
+	metav1.TypeMeta
+
+	PriorityThreshold      *api.PriorityThreshold
+	NodeFit                bool
+	UseDeviationThresholds bool
+	Thresholds             api.ResourceThresholds
+	TargetThresholds       api.ResourceThresholds
+	NumberOfNodes          int
+}
+
+// TODO(jchaloup): have this go generated
+func (in *LowNodeUtilizationArgs) DeepCopyObject() runtime.Object {
+	return nil
+}
+
+// HighNodeUtilizationArgs holds arguments used to configure the HighNodeUtilization plugin.
+type HighNodeUtilizationArgs struct {
+	metav1.TypeMeta
+
+	PriorityThreshold *api.PriorityThreshold
+	NodeFit           bool
+	Thresholds        api.ResourceThresholds
+	TargetThresholds  api.ResourceThresholds
+	NumberOfNodes     int
+}
+
+// TODO(jchaloup): have this go generated
+func (in *HighNodeUtilizationArgs) DeepCopyObject() runtime.Object {
+	return nil
+}
+
 func ValidateCommonArgs(args CommonArgs) error {
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {

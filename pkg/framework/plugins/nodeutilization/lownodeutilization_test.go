@@ -27,15 +27,33 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
+
+type frameworkHandle struct {
+	clientset                 clientset.Interface
+	podEvictor                *evictions.PodEvictor
+	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
+}
+
+func (f frameworkHandle) ClientSet() clientset.Interface {
+	return f.clientset
+}
+func (f frameworkHandle) PodEvictor() *evictions.PodEvictor {
+	return f.podEvictor
+}
+func (f frameworkHandle) GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc {
+	return f.getPodsAssignedToNodeFunc
+}
 
 func TestLowNodeUtilization(t *testing.T) {
 	n1NodeName := "n1"
@@ -779,19 +797,23 @@ func TestLowNodeUtilization(t *testing.T) {
 				false,
 			)
 
-			strategy := api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
-						Thresholds:             test.thresholds,
-						TargetThresholds:       test.targetThresholds,
-						UseDeviationThresholds: test.useDeviationThresholds,
-					},
-					NodeFit: true,
+			plugin, err := NewLowNodeUtilization(&framework.LowNodeUtilizationArgs{
+				NodeFit:                true,
+				Thresholds:             test.thresholds,
+				TargetThresholds:       test.targetThresholds,
+				UseDeviationThresholds: test.useDeviationThresholds,
+			},
+				frameworkHandle{
+					clientset:                 fakeClient,
+					podEvictor:                podEvictor,
+					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
 				},
+			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
-			LowNodeUtilization(ctx, fakeClient, strategy, test.nodes, podEvictor, getPodsAssignedToNode)
 
+			plugin.(interface{}).(framework.DeschedulePlugin).Deschedule(ctx, test.nodes)
 			podsEvicted := podEvictor.TotalEvicted()
 			if test.expectedPodsEvicted != podsEvicted {
 				t.Errorf("Expected %v pods to be evicted but %v got evicted", test.expectedPodsEvicted, podsEvicted)
@@ -959,20 +981,6 @@ func TestValidateLowNodeUtilizationStrategyConfig(t *testing.T) {
 
 func TestLowNodeUtilizationWithTaints(t *testing.T) {
 	ctx := context.Background()
-	strategy := api.DeschedulerStrategy{
-		Enabled: true,
-		Params: &api.StrategyParameters{
-			NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
-				Thresholds: api.ResourceThresholds{
-					v1.ResourcePods: 20,
-				},
-				TargetThresholds: api.ResourceThresholds{
-					v1.ResourcePods: 70,
-				},
-			},
-			NodeFit: true,
-		},
-	}
 
 	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	n2 := test.BuildTestNode("n2", 1000, 3000, 10, nil)
@@ -1093,8 +1101,26 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				false,
 			)
 
-			LowNodeUtilization(ctx, fakeClient, strategy, item.nodes, podEvictor, getPodsAssignedToNode)
+			plugin, err := NewLowNodeUtilization(&framework.LowNodeUtilizationArgs{
+				NodeFit: true,
+				Thresholds: api.ResourceThresholds{
+					v1.ResourcePods: 20,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					v1.ResourcePods: 70,
+				},
+			},
+				frameworkHandle{
+					clientset:                 fakeClient,
+					podEvictor:                podEvictor,
+					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
+				},
+			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
 
+			plugin.(interface{}).(framework.DeschedulePlugin).Deschedule(ctx, item.nodes)
 			if item.evictionsExpected != podEvictor.TotalEvicted() {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, podEvictor.TotalEvicted())
 			}

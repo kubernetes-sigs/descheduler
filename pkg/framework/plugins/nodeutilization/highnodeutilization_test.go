@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -470,17 +471,21 @@ func TestHighNodeUtilization(t *testing.T) {
 				false,
 			)
 
-			strategy := api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
-						Thresholds: testCase.thresholds,
-					},
-					NodeFit: true,
+			plugin, err := NewHighNodeUtilization(&framework.HighNodeUtilizationArgs{
+				NodeFit:    true,
+				Thresholds: testCase.thresholds,
+			},
+				frameworkHandle{
+					clientset:                 fakeClient,
+					podEvictor:                podEvictor,
+					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
 				},
+			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
-			HighNodeUtilization(ctx, fakeClient, strategy, testCase.nodes, podEvictor, getPodsAssignedToNode)
 
+			plugin.(interface{}).(framework.DeschedulePlugin).Deschedule(ctx, testCase.nodes)
 			podsEvicted := podEvictor.TotalEvicted()
 			if testCase.expectedPodsEvicted != podsEvicted {
 				t.Errorf("Expected %v pods to be evicted but %v got evicted", testCase.expectedPodsEvicted, podsEvicted)
@@ -560,17 +565,6 @@ func TestValidateHighNodeUtilizationStrategyConfig(t *testing.T) {
 }
 
 func TestHighNodeUtilizationWithTaints(t *testing.T) {
-	strategy := api.DeschedulerStrategy{
-		Enabled: true,
-		Params: &api.StrategyParameters{
-			NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
-				Thresholds: api.ResourceThresholds{
-					v1.ResourceCPU: 40,
-				},
-			},
-		},
-	}
-
 	n1 := test.BuildTestNode("n1", 1000, 3000, 10, nil)
 	n2 := test.BuildTestNode("n2", 1000, 3000, 10, nil)
 	n3 := test.BuildTestNode("n3", 1000, 3000, 10, nil)
@@ -675,8 +669,23 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 				false,
 			)
 
-			HighNodeUtilization(ctx, fakeClient, strategy, item.nodes, podEvictor, getPodsAssignedToNode)
+			plugin, err := NewHighNodeUtilization(&framework.HighNodeUtilizationArgs{
+				NodeFit: true,
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU: 40,
+				},
+			},
+				frameworkHandle{
+					clientset:                 fakeClient,
+					podEvictor:                podEvictor,
+					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
+				},
+			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
 
+			plugin.(interface{}).(framework.DeschedulePlugin).Deschedule(ctx, item.nodes)
 			if item.evictionsExpected != podEvictor.TotalEvicted() {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, podEvictor.TotalEvicted())
 			}
