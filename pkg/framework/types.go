@@ -113,6 +113,21 @@ func (in *RemovePodsViolatingInterPodAntiAffinityArgs) DeepCopyObject() runtime.
 	return nil
 }
 
+// PodLifeTimeArgs holds arguments used to configure the PodLifeTime plugin.
+type PodLifeTimeArgs struct {
+	metav1.TypeMeta
+
+	CommonArgs
+	LabelSelector         *metav1.LabelSelector
+	MaxPodLifeTimeSeconds *uint
+	PodStatusPhases       []string
+}
+
+// TODO(jchaloup): have this go generated
+func (in *PodLifeTimeArgs) DeepCopyObject() runtime.Object {
+	return nil
+}
+
 func ValidateCommonArgs(args CommonArgs) error {
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
