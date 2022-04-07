@@ -1,4 +1,4 @@
-package strategies
+package removepodsviolatingnodetaints
 
 import (
 	"context"
@@ -10,14 +10,31 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
+
+type frameworkHandle struct {
+	clientset                 clientset.Interface
+	podEvictor                *evictions.PodEvictor
+	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
+}
+
+func (f frameworkHandle) ClientSet() clientset.Interface {
+	return f.clientset
+}
+func (f frameworkHandle) PodEvictor() *evictions.PodEvictor {
+	return f.podEvictor
+}
+func (f frameworkHandle) GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc {
+	return f.getPodsAssignedToNodeFunc
+}
 
 func createNoScheduleTaint(key, value string, index int) v1.Taint {
 	return v1.Taint{
@@ -331,15 +348,24 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				false,
 			)
 
-			strategy := api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					NodeFit:                 tc.nodeFit,
-					IncludePreferNoSchedule: tc.includePreferNoSchedule,
-					ExcludedTaints:          tc.excludedTaints,
+			plugin, err := New(&framework.RemovePodsViolatingNodeTaintsArg{
+				CommonArgs: framework.CommonArgs{
+					NodeFit: tc.nodeFit,
 				},
+				IncludePreferNoSchedule: tc.includePreferNoSchedule,
+				ExcludedTaints:          tc.excludedTaints,
+			},
+				frameworkHandle{
+					clientset:                 fakeClient,
+					podEvictor:                podEvictor,
+					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
+				},
+			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			RemovePodsViolatingNodeTaints(ctx, fakeClient, strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+			plugin.(interface{}).(framework.DeschedulePlugin).Deschedule(ctx, tc.nodes)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)

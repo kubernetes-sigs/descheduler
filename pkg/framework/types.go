@@ -23,7 +23,7 @@ type Handle interface {
 }
 
 type Status struct {
-	err error
+	Err error
 }
 
 // Plugin is the parent type for all the descheduling framework plugins.
@@ -82,6 +82,21 @@ type RemovePodsViolatingNodeAffinityArg struct {
 
 // TODO(jchaloup): have this go generated
 func (in *RemovePodsViolatingNodeAffinityArg) DeepCopyObject() runtime.Object {
+	return nil
+}
+
+// RemovePodsViolatingNodeTaintsArg holds arguments used to configure the RemovePodsViolatingNodeTaints plugin.
+type RemovePodsViolatingNodeTaintsArg struct {
+	metav1.TypeMeta
+
+	CommonArgs
+	LabelSelector           *metav1.LabelSelector
+	IncludePreferNoSchedule bool
+	ExcludedTaints          []string
+}
+
+// TODO(jchaloup): have this go generated
+func (in *RemovePodsViolatingNodeTaintsArg) DeepCopyObject() runtime.Object {
 	return nil
 }
 

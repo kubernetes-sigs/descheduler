@@ -47,7 +47,7 @@ var _ framework.DeschedulePlugin = &RemovePodsViolatingNodeAffinity{}
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
 	nodeAffinityArg, ok := args.(*framework.RemovePodsViolatingNodeAffinityArg)
 	if !ok {
-		return nil, fmt.Errorf("want args to be of type RemoveDuplicatePodsArg, got %T", args)
+		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingNodeAffinityArg, got %T", args)
 	}
 
 	if err := framework.ValidateCommonArgs(nodeAffinityArg.CommonArgs); err != nil {

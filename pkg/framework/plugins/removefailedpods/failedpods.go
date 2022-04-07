@@ -36,7 +36,7 @@ var _ framework.DeschedulePlugin = &RemoveFailedPods{}
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
 	failedPodsArg, ok := args.(*framework.RemoveFailedPodsArg)
 	if !ok {
-		return nil, fmt.Errorf("want args to be of type RemoveDuplicatePodsArg, got %T", args)
+		return nil, fmt.Errorf("want args to be of type RemoveFailedPodsArg, got %T", args)
 	}
 
 	if err := framework.ValidateCommonArgs(failedPodsArg.CommonArgs); err != nil {
