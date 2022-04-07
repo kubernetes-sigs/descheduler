@@ -1,4 +1,4 @@
-package strategies
+package removepodsviolatingtopologyspreadconstraint
 
 import (
 	"context"
@@ -9,13 +9,31 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/test"
 )
+
+type frameworkHandle struct {
+	clientset                 clientset.Interface
+	podEvictor                *evictions.PodEvictor
+	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
+}
+
+func (f frameworkHandle) ClientSet() clientset.Interface {
+	return f.clientset
+}
+func (f frameworkHandle) PodEvictor() *evictions.PodEvictor {
+	return f.podEvictor
+}
+func (f frameworkHandle) GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc {
+	return f.getPodsAssignedToNodeFunc
+}
 
 func TestTopologySpreadConstraint(t *testing.T) {
 	testCases := []struct {
@@ -23,8 +41,11 @@ func TestTopologySpreadConstraint(t *testing.T) {
 		pods                 []*v1.Pod
 		expectedEvictedCount uint
 		nodes                []*v1.Node
-		strategy             api.DeschedulerStrategy
-		namespaces           []string
+
+		namespaces             *api.Namespaces
+		nodeFit                bool
+		includeSoftConstraints bool
+		labelSelector          *metav1.LabelSelector
 	}{
 		{
 			name: "2 domains, sizes [2,1], maxSkew=1, move 0 pods",
@@ -58,12 +79,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 0,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					NodeFit: false,
-				},
-			},
-			namespaces: []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [3,1], maxSkew=1, move 1 pod to achieve [2,2]",
@@ -90,12 +105,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					NodeFit: false,
-				},
-			},
-			namespaces: []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [3,1], maxSkew=1, move 1 pod to achieve [2,2] (soft constraints)",
@@ -128,9 +137,8 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					labels: map[string]string{"foo": "bar"},
 				},
 			}),
-			expectedEvictedCount: 1,
-			strategy:             api.DeschedulerStrategy{Params: &api.StrategyParameters{IncludeSoftConstraints: true}},
-			namespaces:           []string{"ns1"},
+			expectedEvictedCount:   1,
+			includeSoftConstraints: true,
 		},
 		{
 			name: "2 domains, sizes [3,1], maxSkew=1, no pods eligible, move 0 pods",
@@ -160,12 +168,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 0,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					NodeFit: false,
-				},
-			},
-			namespaces: []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [3,1], maxSkew=1, move 1 pod to achieve [2,2], exclude kube-system namespace",
@@ -192,8 +194,8 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy:             api.DeschedulerStrategy{Enabled: true, Params: &api.StrategyParameters{NodeFit: true, Namespaces: &api.Namespaces{Exclude: []string{"kube-system"}}}},
-			namespaces:           []string{"ns1"},
+			nodeFit:              true,
+			namespaces:           &api.Namespaces{Exclude: []string{"kube-system"}},
 		},
 		{
 			name: "2 domains, sizes [5,2], maxSkew=1, move 1 pod to achieve [4,3]",
@@ -220,12 +222,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					NodeFit: false,
-				},
-			},
-			namespaces: []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [4,0], maxSkew=1, move 2 pods to achieve [2,2]",
@@ -247,12 +243,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 2,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					NodeFit: false,
-				},
-			},
-			namespaces: []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [4,0], maxSkew=1, only move 1 pod since pods with nodeSelector and nodeAffinity aren't evicted",
@@ -291,12 +281,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					NodeFit: true,
-				},
-			},
-			namespaces: []string{"ns1"},
+			nodeFit:              true,
 		},
 		{
 			name: "2 domains, sizes [4,0], maxSkew=1, move 2 pods since selector matches multiple nodes",
@@ -338,12 +323,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 2,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					NodeFit: false,
-				},
-			},
-			namespaces: []string{"ns1"},
 		},
 		{
 			name: "3 domains, sizes [0, 1, 100], maxSkew=1, move 66 pods to get [34, 33, 34]",
@@ -366,8 +345,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 66,
-			strategy:             api.DeschedulerStrategy{},
-			namespaces:           []string{"ns1"},
 		},
 		{
 			name: "4 domains, sizes [0, 1, 3, 5], should move 3 to get [2, 2, 3, 2]",
@@ -396,12 +373,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 3,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					NodeFit: false,
-				},
-			},
-			namespaces: []string{"ns1"},
 		},
 		{
 			name: "2 domains size [2 6], maxSkew=2, should move 1 to get [3 5]",
@@ -428,12 +399,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					NodeFit: false,
-				},
-			},
-			namespaces: []string{"ns1"},
 		},
 		{
 			name: "2 domains size [2 6], maxSkew=2, can't move any because of node taints",
@@ -476,12 +441,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 0,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					NodeFit: true,
-				},
-			},
-			namespaces: []string{"ns1"},
+			nodeFit:              true,
 		},
 		{
 			// see https://github.com/kubernetes-sigs/descheduler/issues/564
@@ -584,9 +544,8 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					},
 				},
 			}),
-			expectedEvictedCount: 1,
-			strategy:             api.DeschedulerStrategy{Params: &api.StrategyParameters{IncludeSoftConstraints: true}},
-			namespaces:           []string{"ns1"},
+			expectedEvictedCount:   1,
+			includeSoftConstraints: true,
 		},
 		{
 			name: "3 domains size [8 7 0], maxSkew=1, should move 5 to get [5 5 5]",
@@ -610,8 +569,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 5,
-			strategy:             api.DeschedulerStrategy{},
-			namespaces:           []string{"ns1"},
 		},
 		{
 			name: "3 domains size [5 5 5], maxSkew=1, should move 0 to retain [5 5 5]",
@@ -641,8 +598,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 0,
-			strategy:             api.DeschedulerStrategy{},
-			namespaces:           []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pod since pod tolerates the node with taint",
@@ -682,8 +637,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy:             api.DeschedulerStrategy{},
-			namespaces:           []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [2,0], maxSkew=1, move 0 pods since pod does not tolerate the tainted node",
@@ -715,8 +668,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 0,
-			strategy:             api.DeschedulerStrategy{},
-			namespaces:           []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pod for node with PreferNoSchedule Taint",
@@ -748,8 +699,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy:             api.DeschedulerStrategy{},
-			namespaces:           []string{"ns1"},
 		},
 		{
 			name: "2 domains, sizes [2,0], maxSkew=1, move 0 pod for node with unmatched label filtering",
@@ -771,12 +720,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 0,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					LabelSelector: getLabelSelector("foo", []string{"baz"}, metav1.LabelSelectorOpIn),
-				},
-			},
-			namespaces: []string{"ns1"},
+			labelSelector:        getLabelSelector("foo", []string{"baz"}, metav1.LabelSelectorOpIn),
 		},
 		{
 			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pod for node with matched label filtering",
@@ -798,12 +742,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					LabelSelector: getLabelSelector("foo", []string{"bar"}, metav1.LabelSelectorOpIn),
-				},
-			},
-			namespaces: []string{"ns1"},
+			labelSelector:        getLabelSelector("foo", []string{"bar"}, metav1.LabelSelectorOpIn),
 		},
 		{
 			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pod for node with matched label filtering (NotIn op)",
@@ -825,12 +764,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					LabelSelector: getLabelSelector("foo", []string{"baz"}, metav1.LabelSelectorOpNotIn),
-				},
-			},
-			namespaces: []string{"ns1"},
+			labelSelector:        getLabelSelector("foo", []string{"baz"}, metav1.LabelSelectorOpNotIn),
 		},
 		{
 			name: "2 domains, sizes [4,2], maxSkew=1, 2 pods in termination; nothing should be moved",
@@ -860,12 +794,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 0,
-			strategy: api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					LabelSelector: getLabelSelector("foo", []string{"bar"}, metav1.LabelSelectorOpIn),
-				},
-			},
-			namespaces: []string{"ns1"},
+			labelSelector:        getLabelSelector("foo", []string{"bar"}, metav1.LabelSelectorOpIn),
 		},
 	}
 
@@ -908,7 +837,26 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				false,
 				false,
 			)
-			RemovePodsViolatingTopologySpreadConstraint(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+
+			plugin, err := New(&framework.RemovePodsViolatingTopologySpreadConstraintArgs{
+				CommonArgs: framework.CommonArgs{
+					NodeFit:    tc.nodeFit,
+					Namespaces: tc.namespaces,
+				},
+				LabelSelector:          tc.labelSelector,
+				IncludeSoftConstraints: tc.includeSoftConstraints,
+			},
+				frameworkHandle{
+					clientset:                 fakeClient,
+					podEvictor:                podEvictor,
+					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
+				},
+			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
+			plugin.(interface{}).(framework.DeschedulePlugin).Deschedule(ctx, tc.nodes)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != tc.expectedEvictedCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.name, tc.expectedEvictedCount, podsEvicted)

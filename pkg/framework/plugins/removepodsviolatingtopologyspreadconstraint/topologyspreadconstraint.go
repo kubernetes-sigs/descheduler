@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package strategies
+package removepodsviolatingtopologyspreadconstraint
 
 import (
 	"context"
@@ -25,17 +25,78 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
-	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/validation"
+	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
+
+const PluginName = "RemovePodsViolatingTopologySpreadConstraint"
+
+// RemoveFailedPods removes Pods that are in failed status phase.
+type RemovePodsViolatingTopologySpreadConstraint struct {
+	handle             framework.Handle
+	args               *framework.RemovePodsViolatingTopologySpreadConstraintArgs
+	isEvictable        func(pod *v1.Pod) bool
+	includedNamespaces sets.String
+	excludedNamespaces sets.String
+}
+
+var _ framework.Plugin = &RemovePodsViolatingTopologySpreadConstraint{}
+var _ framework.DeschedulePlugin = &RemovePodsViolatingTopologySpreadConstraint{}
+
+func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+	topologyArgs, ok := args.(*framework.RemovePodsViolatingTopologySpreadConstraintArgs)
+	if !ok {
+		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingTopologySpreadConstraintArgs, got %T", args)
+	}
+
+	if err := framework.ValidateCommonArgs(topologyArgs.CommonArgs); err != nil {
+		return nil, err
+	}
+
+	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), topologyArgs.PriorityThreshold)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
+	}
+
+	var selector labels.Selector
+	if topologyArgs.LabelSelector != nil {
+		selector, err = metav1.LabelSelectorAsSelector(topologyArgs.LabelSelector)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get label selectors: %v", err)
+		}
+	}
+
+	evictable := handle.PodEvictor().Evictable(
+		evictions.WithPriorityThreshold(thresholdPriority),
+		evictions.WithNodeFit(topologyArgs.NodeFit),
+		evictions.WithLabelSelector(selector),
+	)
+
+	var includedNamespaces, excludedNamespaces sets.String
+	if topologyArgs.Namespaces != nil {
+		includedNamespaces = sets.NewString(topologyArgs.Namespaces.Include...)
+		excludedNamespaces = sets.NewString(topologyArgs.Namespaces.Exclude...)
+	}
+
+	return &RemovePodsViolatingTopologySpreadConstraint{
+		handle:             handle,
+		args:               topologyArgs,
+		isEvictable:        evictable.IsEvictable,
+		includedNamespaces: includedNamespaces,
+		excludedNamespaces: excludedNamespaces,
+	}, nil
+}
+
+func (d *RemovePodsViolatingTopologySpreadConstraint) Name() string {
+	return PluginName
+}
 
 // AntiAffinityTerm's topology key value used in predicate metadata
 type topologyPair struct {
@@ -48,26 +109,15 @@ type topology struct {
 	pods []*v1.Pod
 }
 
-func RemovePodsViolatingTopologySpreadConstraint(
-	ctx context.Context,
-	client clientset.Interface,
-	strategy api.DeschedulerStrategy,
-	nodes []*v1.Node,
-	podEvictor *evictions.PodEvictor,
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
-) {
-	strategyParams, err := validation.ValidateAndParseStrategyParams(ctx, client, strategy.Params)
-	if err != nil {
-		klog.ErrorS(err, "Invalid RemovePodsViolatingTopologySpreadConstraint parameters")
-		return
-	}
-
-	evictable := podEvictor.Evictable(
-		evictions.WithPriorityThreshold(strategyParams.ThresholdPriority),
-		evictions.WithNodeFit(strategyParams.NodeFit),
-		evictions.WithLabelSelector(strategyParams.LabelSelector),
-	)
-
+// func RemovePodsViolatingTopologySpreadConstraint(
+// 	ctx context.Context,
+// 	client clientset.Interface,
+// 	strategy api.DeschedulerStrategy,
+// 	nodes []*v1.Node,
+// 	podEvictor *evictions.PodEvictor,
+// 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
+// 	) {
+func (d *RemovePodsViolatingTopologySpreadConstraint) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
 	nodeMap := make(map[string]*v1.Node, len(nodes))
 	for _, node := range nodes {
 		nodeMap[node.Name] = node
@@ -86,20 +136,22 @@ func RemovePodsViolatingTopologySpreadConstraint(
 	// if diff > maxSkew, add this pod in the current bucket for eviction
 
 	// First record all of the constraints by namespace
-	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	namespaces, err := d.handle.ClientSet().CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		klog.ErrorS(err, "Couldn't list namespaces")
-		return
+		return &framework.Status{
+			Err: fmt.Errorf("couldn't list namespaces: %v", err),
+		}
 	}
 	klog.V(1).InfoS("Processing namespaces for topology spread constraints")
 	podsForEviction := make(map[*v1.Pod]struct{})
 	// 1. for each namespace...
 	for _, namespace := range namespaces.Items {
-		if (len(strategyParams.IncludedNamespaces) > 0 && !strategyParams.IncludedNamespaces.Has(namespace.Name)) ||
-			(len(strategyParams.ExcludedNamespaces) > 0 && strategyParams.ExcludedNamespaces.Has(namespace.Name)) {
+		if (len(d.includedNamespaces) > 0 && !d.includedNamespaces.Has(namespace.Name)) ||
+			(len(d.excludedNamespaces) > 0 && d.excludedNamespaces.Has(namespace.Name)) {
 			continue
 		}
-		namespacePods, err := client.CoreV1().Pods(namespace.Name).List(ctx, metav1.ListOptions{})
+		namespacePods, err := d.handle.ClientSet().CoreV1().Pods(namespace.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			klog.ErrorS(err, "Couldn't list pods in namespace", "namespace", namespace)
 			continue
@@ -110,7 +162,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		for _, pod := range namespacePods.Items {
 			for _, constraint := range pod.Spec.TopologySpreadConstraints {
 				// Ignore soft topology constraints if they are not included
-				if constraint.WhenUnsatisfiable == v1.ScheduleAnyway && (strategy.Params == nil || !strategy.Params.IncludeSoftConstraints) {
+				if constraint.WhenUnsatisfiable == v1.ScheduleAnyway && (!d.args.IncludeSoftConstraints) {
 					continue
 				}
 				namespaceTopologySpreadConstraints[constraint] = struct{}{}
@@ -170,19 +222,21 @@ func RemovePodsViolatingTopologySpreadConstraint(
 				klog.V(2).InfoS("Skipping topology constraint because it is already balanced", "constraint", constraint)
 				continue
 			}
-			balanceDomains(podsForEviction, constraint, constraintTopologies, sumPods, evictable.IsEvictable, nodeMap)
+			balanceDomains(podsForEviction, constraint, constraintTopologies, sumPods, d.isEvictable, nodeMap)
 		}
 	}
 
 	for pod := range podsForEviction {
-		if !evictable.IsEvictable(pod) {
+		if !d.isEvictable(pod) {
 			continue
 		}
-		if _, err := podEvictor.EvictPod(ctx, pod, nodeMap[pod.Spec.NodeName], "PodTopologySpread"); err != nil {
+		if _, err := d.handle.PodEvictor().EvictPod(ctx, pod, nodeMap[pod.Spec.NodeName], "PodTopologySpread"); err != nil {
 			klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
 			break
 		}
 	}
+
+	return nil
 }
 
 // topologyIsBalanced checks if any domains in the topology differ by more than the MaxSkew

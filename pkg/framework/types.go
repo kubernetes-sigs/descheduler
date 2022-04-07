@@ -143,6 +143,20 @@ func (in *RemovePodsHavingTooManyRestartsArgs) DeepCopyObject() runtime.Object {
 	return nil
 }
 
+// RemovePodsViolatingTopologySpreadConstraintArgs holds arguments used to configure the RemovePodsViolatingTopologySpreadConstraint plugin.
+type RemovePodsViolatingTopologySpreadConstraintArgs struct {
+	metav1.TypeMeta
+
+	CommonArgs
+	LabelSelector          *metav1.LabelSelector
+	IncludeSoftConstraints bool
+}
+
+// TODO(jchaloup): have this go generated
+func (in *RemovePodsViolatingTopologySpreadConstraintArgs) DeepCopyObject() runtime.Object {
+	return nil
+}
+
 func ValidateCommonArgs(args CommonArgs) error {
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
