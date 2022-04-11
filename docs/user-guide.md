@@ -111,7 +111,8 @@ strategies:
   "PodLifeTime":
     enabled: true
     params:
-      maxPodLifeTimeSeconds: 604800 # pods run for a maximum of 7 days
+      podLifeTime:
+        maxPodLifeTimeSeconds: 604800 # pods run for a maximum of 7 days
 ```
 
 ### Balance Cluster By Node Memory Utilization
