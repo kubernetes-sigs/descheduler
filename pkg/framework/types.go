@@ -7,19 +7,28 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
 type Handle interface {
 	// ClientSet returns a kubernetes clientSet.
 	ClientSet() clientset.Interface
-
-	PodEvictor() *evictions.PodEvictor
+	Evictor() Evictor
 	GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc
+	SharedInformerFactory() informers.SharedInformerFactory
+}
+
+type Evictor interface {
+	// Sort pods from the most to the least suitable for eviction
+	Sort([]*v1.Pod)
+	// Filter checks if a pod can be evicted
+	Filter(*v1.Pod) bool
+	// Evict evicts a pod (no pre-check performed)
+	Evict(context.Context, *v1.Pod) bool
 }
 
 type Status struct {
@@ -32,7 +41,29 @@ type Plugin interface {
 }
 
 type DeschedulePlugin interface {
+	Plugin
 	Deschedule(ctx context.Context, nodes []*v1.Node) *Status
+}
+
+type BalancePlugin interface {
+	Plugin
+	Balance(ctx context.Context, nodes []*v1.Node) *Status
+}
+
+// Sort plugin sorts pods
+type PreSortPlugin interface {
+	Plugin
+	PreLess(*v1.Pod, *v1.Pod) bool
+}
+
+type SortPlugin interface {
+	Plugin
+	Less(*v1.Pod, *v1.Pod) bool
+}
+
+type EvictPlugin interface {
+	Plugin
+	Filter(*v1.Pod) bool
 }
 
 type CommonArgs struct {
@@ -199,5 +230,25 @@ func ValidateCommonArgs(args CommonArgs) error {
 		return fmt.Errorf("only one of priorityThreshold fields can be set")
 	}
 
+	return nil
+}
+
+// DefaultEvictorArgs holds arguments used to configure the DefaultEvictor plugin.
+type DefaultEvictorArgs struct {
+	metav1.TypeMeta
+
+	EvictFailedBarePods     bool
+	EvictLocalStoragePods   bool
+	EvictSystemCriticalPods bool
+	IgnorePvcPods           bool
+	PriorityThreshold       *api.PriorityThreshold
+	NodeFit                 bool
+	LabelSelector           *metav1.LabelSelector
+	// TODO(jchaloup): turn it into *metav1.LabelSelector
+	NodeSelector string
+}
+
+// TODO(jchaloup): have this go generated
+func (in *DefaultEvictorArgs) DeepCopyObject() runtime.Object {
 	return nil
 }
