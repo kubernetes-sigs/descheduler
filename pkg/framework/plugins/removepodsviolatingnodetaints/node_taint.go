@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -54,16 +53,6 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 		return nil, err
 	}
 
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), nodeTaintsArgs.PriorityThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
-	}
-
-	evictable := handle.PodEvictor().Evictable(
-		evictions.WithPriorityThreshold(thresholdPriority),
-		evictions.WithNodeFit(nodeTaintsArgs.NodeFit),
-	)
-
 	var includedNamespaces, excludedNamespaces sets.String
 	if nodeTaintsArgs.Namespaces != nil {
 		includedNamespaces = sets.NewString(nodeTaintsArgs.Namespaces.Include...)
@@ -71,7 +60,7 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	}
 
 	podFilter, err := podutil.NewOptions().
-		WithFilter(evictable.IsEvictable).
+		WithFilter(handle.Evictor().Filter).
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
 		WithLabelSelector(nodeTaintsArgs.LabelSelector).
@@ -123,10 +112,7 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 				d.taintFilterFnc,
 			) {
 				klog.V(2).InfoS("Not all taints with NoSchedule effect are tolerated after update for pod on node", "pod", klog.KObj(pods[i]), "node", klog.KObj(node))
-				if _, err := d.handle.PodEvictor().EvictPod(ctx, pods[i], node, "NodeTaint"); err != nil {
-					klog.ErrorS(err, "Error evicting pod")
-					break
-				}
+				d.handle.Evictor().Evict(ctx, pods[i])
 			}
 		}
 	}

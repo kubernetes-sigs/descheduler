@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -48,7 +47,7 @@ type RemovePodsViolatingTopologySpreadConstraint struct {
 }
 
 var _ framework.Plugin = &RemovePodsViolatingTopologySpreadConstraint{}
-var _ framework.DeschedulePlugin = &RemovePodsViolatingTopologySpreadConstraint{}
+var _ framework.BalancePlugin = &RemovePodsViolatingTopologySpreadConstraint{}
 
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
 	topologyArgs, ok := args.(*framework.RemovePodsViolatingTopologySpreadConstraintArgs)
@@ -60,25 +59,6 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 		return nil, err
 	}
 
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), topologyArgs.PriorityThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
-	}
-
-	var selector labels.Selector
-	if topologyArgs.LabelSelector != nil {
-		selector, err = metav1.LabelSelectorAsSelector(topologyArgs.LabelSelector)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get label selectors: %v", err)
-		}
-	}
-
-	evictable := handle.PodEvictor().Evictable(
-		evictions.WithPriorityThreshold(thresholdPriority),
-		evictions.WithNodeFit(topologyArgs.NodeFit),
-		evictions.WithLabelSelector(selector),
-	)
-
 	var includedNamespaces, excludedNamespaces sets.String
 	if topologyArgs.Namespaces != nil {
 		includedNamespaces = sets.NewString(topologyArgs.Namespaces.Include...)
@@ -88,7 +68,6 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	return &RemovePodsViolatingTopologySpreadConstraint{
 		handle:             handle,
 		args:               topologyArgs,
-		isEvictable:        evictable.IsEvictable,
 		includedNamespaces: includedNamespaces,
 		excludedNamespaces: excludedNamespaces,
 	}, nil
@@ -109,15 +88,7 @@ type topology struct {
 	pods []*v1.Pod
 }
 
-// func RemovePodsViolatingTopologySpreadConstraint(
-// 	ctx context.Context,
-// 	client clientset.Interface,
-// 	strategy api.DeschedulerStrategy,
-// 	nodes []*v1.Node,
-// 	podEvictor *evictions.PodEvictor,
-// 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
-// 	) {
-func (d *RemovePodsViolatingTopologySpreadConstraint) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
 	nodeMap := make(map[string]*v1.Node, len(nodes))
 	for _, node := range nodes {
 		nodeMap[node.Name] = node
@@ -222,18 +193,15 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Deschedule(ctx context.Con
 				klog.V(2).InfoS("Skipping topology constraint because it is already balanced", "constraint", constraint)
 				continue
 			}
-			balanceDomains(podsForEviction, constraint, constraintTopologies, sumPods, d.isEvictable, nodeMap)
+			balanceDomains(podsForEviction, constraint, constraintTopologies, sumPods, d.handle.Evictor().Filter, nodeMap)
 		}
 	}
 
 	for pod := range podsForEviction {
-		if !d.isEvictable(pod) {
+		if !d.handle.Evictor().Filter(pod) {
 			continue
 		}
-		if _, err := d.handle.PodEvictor().EvictPod(ctx, pod, nodeMap[pod.Spec.NodeName], "PodTopologySpread"); err != nil {
-			klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
-			break
-		}
+		d.handle.Evictor().Evict(ctx, pod)
 	}
 
 	return nil

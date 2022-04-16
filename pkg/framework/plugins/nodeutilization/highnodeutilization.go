@@ -26,10 +26,8 @@ import (
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	"sigs.k8s.io/descheduler/pkg/framework"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 const HighNodeUtilizationPluginName = "HighNodeUtilization"
@@ -45,7 +43,7 @@ type HighNodeUtilization struct {
 }
 
 var _ framework.Plugin = &HighNodeUtilization{}
-var _ framework.DeschedulePlugin = &HighNodeUtilization{}
+var _ framework.BalancePlugin = &HighNodeUtilization{}
 
 func NewHighNodeUtilization(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
 	utilizationArgs, ok := args.(*framework.HighNodeUtilizationArgs)
@@ -61,16 +59,6 @@ func NewHighNodeUtilization(args runtime.Object, handle framework.Handle) (frame
 		return nil, fmt.Errorf("highNodeUtilization config is not valid: %v", err)
 	}
 
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), utilizationArgs.PriorityThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
-	}
-
-	evictable := handle.PodEvictor().Evictable(
-		evictions.WithPriorityThreshold(thresholdPriority),
-		evictions.WithNodeFit(utilizationArgs.NodeFit),
-	)
-
 	// TODO(jchaloup): set defaults before initializing the plugin?
 	utilizationArgs.TargetThresholds = make(api.ResourceThresholds)
 	setDefaultForThresholds(utilizationArgs.Thresholds, utilizationArgs.TargetThresholds)
@@ -78,7 +66,7 @@ func NewHighNodeUtilization(args runtime.Object, handle framework.Handle) (frame
 	return &HighNodeUtilization{
 		handle:        handle,
 		args:          utilizationArgs,
-		isEvictable:   evictable.IsEvictable,
+		isEvictable:   handle.Evictor().Filter,
 		resourceNames: getResourceNames(utilizationArgs.TargetThresholds),
 		// stop if the total available usage has dropped to zero - no more pods can be scheduled
 		continueEvictionCond: func(nodeInfo NodeInfo, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool {
@@ -97,8 +85,7 @@ func (d *HighNodeUtilization) Name() string {
 	return HighNodeUtilizationPluginName
 }
 
-// func HighNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
-func (d *HighNodeUtilization) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
 	sourceNodes, highNodes := classifyNodes(
 		getNodeUsage(nodes, d.resourceNames, d.handle.GetPodsAssignedToNodeFunc()),
 		getNodeThresholds(nodes, d.args.Thresholds, d.args.TargetThresholds, d.resourceNames, d.handle.GetPodsAssignedToNodeFunc(), false),
@@ -152,7 +139,7 @@ func (d *HighNodeUtilization) Deschedule(ctx context.Context, nodes []*v1.Node) 
 		ctx,
 		sourceNodes,
 		highNodes,
-		d.handle.PodEvictor(),
+		d.handle.Evictor(),
 		d.isEvictable,
 		d.resourceNames,
 		"HighNodeUtilization",

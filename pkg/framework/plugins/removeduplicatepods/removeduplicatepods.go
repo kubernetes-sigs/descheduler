@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -50,7 +49,7 @@ type RemoveDuplicatePods struct {
 }
 
 var _ framework.Plugin = &RemoveDuplicatePods{}
-var _ framework.DeschedulePlugin = &RemoveDuplicatePods{}
+var _ framework.BalancePlugin = &RemoveDuplicatePods{}
 
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
 	duplicatesArgs, ok := args.(*framework.RemoveDuplicatePodsArgs)
@@ -62,16 +61,6 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 		return nil, err
 	}
 
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), duplicatesArgs.PriorityThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
-	}
-
-	evictable := handle.PodEvictor().Evictable(
-		evictions.WithPriorityThreshold(thresholdPriority),
-		evictions.WithNodeFit(duplicatesArgs.NodeFit),
-	)
-
 	var includedNamespaces, excludedNamespaces sets.String
 	if duplicatesArgs.Namespaces != nil {
 		includedNamespaces = sets.NewString(duplicatesArgs.Namespaces.Include...)
@@ -79,7 +68,7 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	}
 
 	podFilter, err := podutil.NewOptions().
-		WithFilter(evictable.IsEvictable).
+		WithFilter(handle.Evictor().Filter).
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
 		BuildFilterFunc()
@@ -103,7 +92,7 @@ type podOwner struct {
 	imagesHash            string
 }
 
-func (d *RemoveDuplicatePods) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *RemoveDuplicatePods) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
 	duplicatePods := make(map[podOwner]map[string][]*v1.Pod)
 	ownerKeyOccurence := make(map[podOwner]int32)
 	nodeCount := 0
@@ -213,10 +202,7 @@ func (d *RemoveDuplicatePods) Deschedule(ctx context.Context, nodes []*v1.Node) 
 				// It's assumed all duplicated pods are in the same priority class
 				// TODO(jchaloup): check if the pod has a different node to lend to
 				for _, pod := range pods[upperAvg-1:] {
-					if _, err := d.handle.PodEvictor().EvictPod(ctx, pod, nodeMap[nodeName], "RemoveDuplicatePods"); err != nil {
-						klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
-						break
-					}
+					d.handle.Evictor().Evict(ctx, pod)
 				}
 			}
 		}

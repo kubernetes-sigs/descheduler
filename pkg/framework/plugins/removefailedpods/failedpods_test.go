@@ -9,35 +9,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
-	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	fakehandler "sigs.k8s.io/descheduler/pkg/framework/profile/fake"
 	"sigs.k8s.io/descheduler/test"
 )
 
 var (
 	OneHourInSeconds uint = 3600
 )
-
-type frameworkHandle struct {
-	clientset                 clientset.Interface
-	podEvictor                *evictions.PodEvictor
-	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
-}
-
-func (f frameworkHandle) ClientSet() clientset.Interface {
-	return f.clientset
-}
-func (f frameworkHandle) PodEvictor() *evictions.PodEvictor {
-	return f.podEvictor
-}
-func (f frameworkHandle) GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc {
-	return f.getPodsAssignedToNodeFunc
-}
 
 func TestRemoveFailedPods(t *testing.T) {
 	tests := []struct {
@@ -257,34 +241,39 @@ func TestRemoveFailedPods(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			podEvictor := evictions.NewPodEvictor(
+			podEvictor := framework.NewPodEvictor(
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
 				false,
 				nil,
 				nil,
-				tc.nodes,
-				false,
-				false,
-				false,
-				false,
 				false,
 			)
 
+			handle := &fakehandler.FrameworkHandle{
+				ClientsetImpl:                 fakeClient,
+				EvictorImpl:                   podEvictor,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				SharedInformerFactoryImpl:     sharedInformerFactory,
+			}
+
+			defaultEvictor, err := defaultevictor.New(&framework.DefaultEvictorArgs{
+				NodeFit: tc.nodeFit,
+			}, handle)
+			if err != nil {
+				t.Fatalf("Unable to initialize the default evictor: %v", err)
+			}
+
+			handle.EvictPlugin = defaultEvictor.(framework.EvictPlugin)
+			handle.SortPlugin = defaultEvictor.(framework.SortPlugin)
+
 			plugin, err := New(&framework.RemoveFailedPodsArgs{
-				CommonArgs: framework.CommonArgs{
-					NodeFit: tc.nodeFit,
-				},
 				ExcludeOwnerKinds:       tc.excludeOwnerKinds,
 				MinPodLifetimeSeconds:   tc.minPodLifetimeSeconds,
 				Reasons:                 tc.reasons,
 				IncludingInitContainers: tc.includingInitContainers,
 			},
-				frameworkHandle{
-					clientset:                 fakeClient,
-					podEvictor:                podEvictor,
-					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
-				},
+				handle,
 			)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)

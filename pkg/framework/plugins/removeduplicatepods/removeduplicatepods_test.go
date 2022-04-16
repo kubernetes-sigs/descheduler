@@ -29,10 +29,11 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	fakehandler "sigs.k8s.io/descheduler/pkg/framework/profile/fake"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -302,37 +303,42 @@ func TestFindDuplicatePods(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			podEvictor := evictions.NewPodEvictor(
+			podEvictor := framework.NewPodEvictor(
 				fakeClient,
-				"v1",
+				policyv1.SchemeGroupVersion.String(),
 				false,
 				nil,
 				nil,
-				testCase.nodes,
-				false,
-				false,
-				false,
-				false,
 				false,
 			)
 
+			handle := &fakehandler.FrameworkHandle{
+				ClientsetImpl:                 fakeClient,
+				EvictorImpl:                   podEvictor,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				SharedInformerFactoryImpl:     sharedInformerFactory,
+			}
+
+			defaultEvictor, err := defaultevictor.New(&framework.DefaultEvictorArgs{
+				NodeFit: testCase.nodeFit,
+			}, handle)
+			if err != nil {
+				t.Fatalf("Unable to initialize the default evictor: %v", err)
+			}
+
+			handle.EvictPlugin = defaultEvictor.(framework.EvictPlugin)
+			handle.SortPlugin = defaultEvictor.(framework.SortPlugin)
+
 			plugin, err := New(&framework.RemoveDuplicatePodsArgs{
-				CommonArgs: framework.CommonArgs{
-					NodeFit: testCase.nodeFit,
-				},
 				ExcludeOwnerKinds: testCase.excludeOwnerKinds,
 			},
-				frameworkHandle{
-					clientset:                 fakeClient,
-					podEvictor:                podEvictor,
-					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
-				},
+				handle,
 			)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin.(interface{}).(framework.DeschedulePlugin).Deschedule(ctx, testCase.nodes)
+			plugin.(framework.BalancePlugin).Balance(ctx, testCase.nodes)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != testCase.expectedEvictedPodCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)
@@ -471,7 +477,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 		pods                    []*v1.Pod
 		nodes                   []*v1.Node
 		expectedEvictedPodCount uint
-		strategy                api.DeschedulerStrategy
 	}{
 		{
 			description: "Evict pods uniformly",
@@ -493,7 +498,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 				test.BuildTestNode("n3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly with one node left out",
@@ -514,7 +518,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n1", 2000, 3000, 10, nil),
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly with two replica sets",
@@ -536,7 +539,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 				test.BuildTestNode("n3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly with two owner references",
@@ -568,7 +570,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 				test.BuildTestNode("n3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods with number of pods less than nodes",
@@ -583,7 +584,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 				test.BuildTestNode("n3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods with number of pods less than nodes, but ignore different pods with the same ownerref",
@@ -602,7 +602,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 				test.BuildTestNode("n3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods with a single pod with three nodes",
@@ -616,7 +615,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 				test.BuildTestNode("n3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly respecting taints",
@@ -641,7 +639,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("master2", 2000, 3000, 10, setMasterNoScheduleTaint),
 				test.BuildTestNode("master3", 2000, 3000, 10, setMasterNoScheduleTaint),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly respecting RequiredDuringSchedulingIgnoredDuringExecution node affinity",
@@ -666,7 +663,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("master2", 2000, 3000, 10, setMasterNoScheduleLabel),
 				test.BuildTestNode("master3", 2000, 3000, 10, setMasterNoScheduleLabel),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly respecting node selector",
@@ -691,7 +687,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("master2", 2000, 3000, 10, nil),
 				test.BuildTestNode("master3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly respecting node selector with zero target nodes",
@@ -716,7 +711,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("master2", 2000, 3000, 10, nil),
 				test.BuildTestNode("master3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 	}
 
@@ -745,32 +739,36 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			podEvictor := evictions.NewPodEvictor(
+			podEvictor := framework.NewPodEvictor(
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
 				false,
 				nil,
 				nil,
-				testCase.nodes,
-				false,
-				false,
-				false,
-				false,
 				false,
 			)
 
-			plugin, err := New(&framework.RemoveDuplicatePodsArgs{},
-				frameworkHandle{
-					clientset:                 fakeClient,
-					podEvictor:                podEvictor,
-					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
-				},
-			)
+			handle := &fakehandler.FrameworkHandle{
+				ClientsetImpl:                 fakeClient,
+				EvictorImpl:                   podEvictor,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				SharedInformerFactoryImpl:     sharedInformerFactory,
+			}
+
+			defaultEvictor, err := defaultevictor.New(&framework.DefaultEvictorArgs{}, handle)
+			if err != nil {
+				t.Fatalf("Unable to initialize the default evictor: %v", err)
+			}
+
+			handle.EvictPlugin = defaultEvictor.(framework.EvictPlugin)
+			handle.SortPlugin = defaultEvictor.(framework.SortPlugin)
+
+			plugin, err := New(&framework.RemoveDuplicatePodsArgs{}, handle)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin.(interface{}).(framework.DeschedulePlugin).Deschedule(ctx, testCase.nodes)
+			plugin.(framework.BalancePlugin).Balance(ctx, testCase.nodes)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != testCase.expectedEvictedPodCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)

@@ -26,8 +26,8 @@ import (
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -235,7 +235,7 @@ func classifyNodes(
 func evictPodsFromSourceNodes(
 	ctx context.Context,
 	sourceNodes, destinationNodes []NodeInfo,
-	podEvictor *evictions.PodEvictor,
+	podEvictor framework.Evictor,
 	podFilter func(pod *v1.Pod) bool,
 	resourceNames []v1.ResourceName,
 	strategy string,
@@ -288,8 +288,8 @@ func evictPodsFromSourceNodes(
 		klog.V(1).InfoS("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
-		evictPods(ctx, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, strategy, continueEviction)
-		klog.V(1).InfoS("Evicted pods from node", "node", klog.KObj(node.node), "evictedPods", podEvictor.NodeEvicted(node.node), "usage", node.usage)
+		evicted := evictPods(ctx, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, strategy, continueEviction)
+		klog.V(1).InfoS("Evicted pods from node", "node", klog.KObj(node.node), "evictedPods", evicted, "usage", node.usage)
 	}
 }
 
@@ -299,11 +299,12 @@ func evictPods(
 	nodeInfo NodeInfo,
 	totalAvailableUsage map[v1.ResourceName]*resource.Quantity,
 	taintsOfLowNodes map[string][]v1.Taint,
-	podEvictor *evictions.PodEvictor,
+	podEvictor framework.Evictor,
 	strategy string,
 	continueEviction continueEvictionCond,
-) {
+) uint {
 
+	evicted := uint(0)
 	if continueEviction(nodeInfo, totalAvailableUsage) {
 		for _, pod := range inputPods {
 			if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
@@ -311,14 +312,9 @@ func evictPods(
 				continue
 			}
 
-			success, err := podEvictor.EvictPod(ctx, pod, nodeInfo.node, strategy)
-			if err != nil {
-				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
-				break
-			}
-
-			if success {
-				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod), "err", err)
+			if podEvictor.Evict(ctx, pod) {
+				evicted++
+				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
 
 				for name := range totalAvailableUsage {
 					if name == v1.ResourcePods {
@@ -351,6 +347,7 @@ func evictPods(
 			}
 		}
 	}
+	return evicted
 }
 
 // sortNodesByUsage sorts nodes based on usage according to the given strategy.

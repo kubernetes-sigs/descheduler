@@ -12,10 +12,13 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
+	policyv1 "k8s.io/api/policy/v1"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	fakehandler "sigs.k8s.io/descheduler/pkg/framework/profile/fake"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -824,39 +827,46 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			podEvictor := evictions.NewPodEvictor(
+			podEvictor := framework.NewPodEvictor(
 				fakeClient,
-				"v1",
+				policyv1.SchemeGroupVersion.String(),
 				false,
 				nil,
 				nil,
-				tc.nodes,
-				false,
-				false,
-				false,
-				false,
 				false,
 			)
 
+			handle := &fakehandler.FrameworkHandle{
+				ClientsetImpl:                 fakeClient,
+				EvictorImpl:                   podEvictor,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				SharedInformerFactoryImpl:     sharedInformerFactory,
+			}
+
+			defaultEvictor, err := defaultevictor.New(&framework.DefaultEvictorArgs{
+				NodeFit:       tc.nodeFit,
+				LabelSelector: tc.labelSelector,
+			}, handle)
+			if err != nil {
+				t.Fatalf("Unable to initialize the default evictor: %v", err)
+			}
+
+			handle.EvictPlugin = defaultEvictor.(framework.EvictPlugin)
+			handle.SortPlugin = defaultEvictor.(framework.SortPlugin)
+
 			plugin, err := New(&framework.RemovePodsViolatingTopologySpreadConstraintArgs{
 				CommonArgs: framework.CommonArgs{
-					NodeFit:    tc.nodeFit,
 					Namespaces: tc.namespaces,
 				},
-				LabelSelector:          tc.labelSelector,
 				IncludeSoftConstraints: tc.includeSoftConstraints,
 			},
-				frameworkHandle{
-					clientset:                 fakeClient,
-					podEvictor:                podEvictor,
-					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
-				},
+				handle,
 			)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin.(interface{}).(framework.DeschedulePlugin).Deschedule(ctx, tc.nodes)
+			plugin.(framework.BalancePlugin).Balance(ctx, tc.nodes)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != tc.expectedEvictedCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.name, tc.expectedEvictedCount, podsEvicted)

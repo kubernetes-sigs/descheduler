@@ -25,11 +25,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 const PluginName = "RemovePodsViolatingNodeAffinity"
@@ -58,16 +56,6 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 		return nil, fmt.Errorf("NodeAffinityType is empty")
 	}
 
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), nodeAffinityArgs.PriorityThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
-	}
-
-	evictable := handle.PodEvictor().Evictable(
-		evictions.WithPriorityThreshold(thresholdPriority),
-		evictions.WithNodeFit(nodeAffinityArgs.NodeFit),
-	)
-
 	var includedNamespaces, excludedNamespaces sets.String
 	if nodeAffinityArgs.Namespaces != nil {
 		includedNamespaces = sets.NewString(nodeAffinityArgs.Namespaces.Include...)
@@ -75,7 +63,7 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	}
 
 	podFilter, err := podutil.NewOptions().
-		WithFilter(evictable.IsEvictable).
+		WithFilter(handle.Evictor().Filter).
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
 		WithLabelSelector(nodeAffinityArgs.LabelSelector).
@@ -119,10 +107,7 @@ func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes 
 				for _, pod := range pods {
 					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
 						klog.V(1).InfoS("Evicting pod", "pod", klog.KObj(pod))
-						if _, err := d.handle.PodEvictor().EvictPod(ctx, pod, node, "NodeAffinity"); err != nil {
-							klog.ErrorS(err, "Error evicting pod")
-							break
-						}
+						d.handle.Evictor().Evict(ctx, pod)
 					}
 				}
 			}

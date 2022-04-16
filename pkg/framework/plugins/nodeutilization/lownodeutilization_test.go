@@ -35,6 +35,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	fakehandler "sigs.k8s.io/descheduler/pkg/framework/profile/fake"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -783,37 +785,44 @@ func TestLowNodeUtilization(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			podEvictor := evictions.NewPodEvictor(
+			podEvictor := framework.NewPodEvictor(
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
 				false,
 				nil,
 				nil,
-				test.nodes,
-				false,
-				false,
-				false,
-				false,
 				false,
 			)
 
+			handle := &fakehandler.FrameworkHandle{
+				ClientsetImpl:                 fakeClient,
+				EvictorImpl:                   podEvictor,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				SharedInformerFactoryImpl:     sharedInformerFactory,
+			}
+
+			defaultEvictor, err := defaultevictor.New(&framework.DefaultEvictorArgs{
+				NodeFit: true,
+			}, handle)
+			if err != nil {
+				t.Fatalf("Unable to initialize the default evictor: %v", err)
+			}
+
+			handle.EvictPlugin = defaultEvictor.(framework.EvictPlugin)
+			handle.SortPlugin = defaultEvictor.(framework.SortPlugin)
+
 			plugin, err := NewLowNodeUtilization(&framework.LowNodeUtilizationArgs{
-				NodeFit:                true,
 				Thresholds:             test.thresholds,
 				TargetThresholds:       test.targetThresholds,
 				UseDeviationThresholds: test.useDeviationThresholds,
 			},
-				frameworkHandle{
-					clientset:                 fakeClient,
-					podEvictor:                podEvictor,
-					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
-				},
+				handle,
 			)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin.(interface{}).(framework.DeschedulePlugin).Deschedule(ctx, test.nodes)
+			plugin.(framework.BalancePlugin).Balance(ctx, test.nodes)
 			podsEvicted := podEvictor.TotalEvicted()
 			if test.expectedPodsEvicted != podsEvicted {
 				t.Errorf("Expected %v pods to be evicted but %v got evicted", test.expectedPodsEvicted, podsEvicted)
@@ -1087,22 +1096,33 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			podEvictor := evictions.NewPodEvictor(
+			podEvictor := framework.NewPodEvictor(
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
 				false,
 				&item.evictionsExpected,
 				nil,
-				item.nodes,
-				false,
-				false,
-				false,
-				false,
 				false,
 			)
 
-			plugin, err := NewLowNodeUtilization(&framework.LowNodeUtilizationArgs{
+			handle := &fakehandler.FrameworkHandle{
+				ClientsetImpl:                 fakeClient,
+				EvictorImpl:                   podEvictor,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				SharedInformerFactoryImpl:     sharedInformerFactory,
+			}
+
+			defaultEvictor, err := defaultevictor.New(&framework.DefaultEvictorArgs{
 				NodeFit: true,
+			}, handle)
+			if err != nil {
+				t.Fatalf("Unable to initialize the default evictor: %v", err)
+			}
+
+			handle.EvictPlugin = defaultEvictor.(framework.EvictPlugin)
+			handle.SortPlugin = defaultEvictor.(framework.SortPlugin)
+
+			plugin, err := NewLowNodeUtilization(&framework.LowNodeUtilizationArgs{
 				Thresholds: api.ResourceThresholds{
 					v1.ResourcePods: 20,
 				},
@@ -1110,17 +1130,13 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 					v1.ResourcePods: 70,
 				},
 			},
-				frameworkHandle{
-					clientset:                 fakeClient,
-					podEvictor:                podEvictor,
-					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
-				},
+				handle,
 			)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin.(interface{}).(framework.DeschedulePlugin).Deschedule(ctx, item.nodes)
+			plugin.(framework.BalancePlugin).Balance(ctx, item.nodes)
 			if item.evictionsExpected != podEvictor.TotalEvicted() {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, podEvictor.TotalEvicted())
 			}

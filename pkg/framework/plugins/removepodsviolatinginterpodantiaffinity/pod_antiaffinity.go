@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -36,10 +35,9 @@ const PluginName = "RemovePodsViolatingInterPodAntiAffinity"
 
 // RemovePodsViolatingInterPodAntiAffinity evicts pods on the node which are having a pod affinity rules.
 type RemovePodsViolatingInterPodAntiAffinity struct {
-	handle      framework.Handle
-	args        *framework.RemovePodsViolatingInterPodAntiAffinityArgs
-	isEvictable func(pod *v1.Pod) bool
-	podFilter   podutil.FilterFunc
+	handle    framework.Handle
+	args      *framework.RemovePodsViolatingInterPodAntiAffinityArgs
+	podFilter podutil.FilterFunc
 }
 
 var _ framework.Plugin = &RemovePodsViolatingInterPodAntiAffinity{}
@@ -54,16 +52,6 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	if err := framework.ValidateCommonArgs(podAffinityArgs.CommonArgs); err != nil {
 		return nil, err
 	}
-
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), podAffinityArgs.PriorityThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
-	}
-
-	evictable := handle.PodEvictor().Evictable(
-		evictions.WithPriorityThreshold(thresholdPriority),
-		evictions.WithNodeFit(podAffinityArgs.NodeFit),
-	)
 
 	var includedNamespaces, excludedNamespaces sets.String
 	if podAffinityArgs.Namespaces != nil {
@@ -81,10 +69,9 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	}
 
 	return &RemovePodsViolatingInterPodAntiAffinity{
-		handle:      handle,
-		args:        podAffinityArgs,
-		isEvictable: evictable.IsEvictable,
-		podFilter:   podFilter,
+		handle:    handle,
+		args:      podAffinityArgs,
+		podFilter: podFilter,
 	}, nil
 }
 
@@ -106,14 +93,8 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context
 		podutil.SortPodsBasedOnPriorityLowToHigh(pods)
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
-			if checkPodsWithAntiAffinityExist(pods[i], pods) && d.isEvictable(pods[i]) {
-				success, err := d.handle.PodEvictor().EvictPod(ctx, pods[i], node, "InterPodAntiAffinity")
-				if err != nil {
-					klog.ErrorS(err, "Error evicting pod")
-					break
-				}
-
-				if success {
+			if checkPodsWithAntiAffinityExist(pods[i], pods) && d.handle.Evictor().Filter(pods[i]) {
+				if d.handle.Evictor().Evict(ctx, pods[i]) {
 					// Since the current pod is evicted all other pods which have anti-affinity with this
 					// pod need not be evicted.
 					// Update pods.

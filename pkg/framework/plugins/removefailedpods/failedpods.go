@@ -6,17 +6,13 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/validation"
 	"sigs.k8s.io/descheduler/pkg/framework"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 const PluginName = "RemoveFailedPods"
@@ -43,25 +39,6 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 		return nil, err
 	}
 
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), failedPodsArgs.PriorityThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
-	}
-
-	var selector labels.Selector
-	if failedPodsArgs.LabelSelector != nil {
-		selector, err = metav1.LabelSelectorAsSelector(failedPodsArgs.LabelSelector)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get label selectors: %v", err)
-		}
-	}
-
-	evictable := handle.PodEvictor().Evictable(
-		evictions.WithPriorityThreshold(thresholdPriority),
-		evictions.WithNodeFit(failedPodsArgs.NodeFit),
-		evictions.WithLabelSelector(selector),
-	)
-
 	var includedNamespaces, excludedNamespaces sets.String
 	if failedPodsArgs.Namespaces != nil {
 		includedNamespaces = sets.NewString(failedPodsArgs.Namespaces.Include...)
@@ -69,7 +46,7 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	}
 
 	podFilter, err := podutil.NewOptions().
-		WithFilter(evictable.IsEvictable).
+		WithFilter(handle.Evictor().Filter).
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
 		WithLabelSelector(failedPodsArgs.LabelSelector).
@@ -110,22 +87,10 @@ func (d *RemoveFailedPods) Deschedule(ctx context.Context, nodes []*v1.Node) *fr
 				continue
 			}
 
-			if _, err = d.handle.PodEvictor().EvictPod(ctx, pods[i], node, "FailedPod"); err != nil {
-				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
-				break
-			}
+			d.handle.Evictor().Evict(ctx, pods[i])
 		}
 	}
 	return nil
-}
-
-// validatedFailedPodsStrategyParams contains validated strategy parameters
-type validatedFailedPodsStrategyParams struct {
-	validation.ValidatedStrategyParams
-	includingInitContainers bool
-	reasons                 sets.String
-	excludeOwnerKinds       sets.String
-	minPodLifetimeSeconds   *uint
 }
 
 // validateFailedPodShouldEvict looks at strategy params settings to see if the Pod

@@ -26,10 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 const PluginName = "PodLifeTime"
@@ -66,21 +64,12 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 		}
 	}
 
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), lifetimeArgs.PriorityThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
-	}
-
-	evictable := handle.PodEvictor().Evictable(
-		evictions.WithPriorityThreshold(thresholdPriority),
-	)
-
-	filter := evictable.IsEvictable
+	filter := handle.Evictor().Filter
 	if lifetimeArgs.PodStatusPhases != nil {
 		filter = func(pod *v1.Pod) bool {
 			for _, phase := range lifetimeArgs.PodStatusPhases {
 				if string(pod.Status.Phase) == phase {
-					return evictable.IsEvictable(pod)
+					return handle.Evictor().Filter(pod)
 				}
 			}
 			return false
@@ -120,17 +109,11 @@ func (d *PodLifeTime) Deschedule(ctx context.Context, nodes []*v1.Node) *framewo
 
 		pods := listOldPodsOnNode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter, *d.args.MaxPodLifeTimeSeconds)
 		for _, pod := range pods {
-			success, err := d.handle.PodEvictor().EvictPod(ctx, pod, node, "PodLifeTime")
-			if success {
+			// PodEvictor().EvictPod(ctx, pod, node, "PodLifeTime")
+			if d.handle.Evictor().Evict(ctx, pod) {
 				klog.V(1).InfoS("Evicted pod because it exceeded its lifetime", "pod", klog.KObj(pod), "maxPodLifeTime", *d.args.MaxPodLifeTimeSeconds)
 			}
-
-			if err != nil {
-				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
-				break
-			}
 		}
-
 	}
 	return nil
 }
@@ -145,7 +128,6 @@ func listOldPodsOnNode(
 	if err != nil {
 		return nil
 	}
-
 	var oldPods []*v1.Pod
 	for _, pod := range pods {
 		podAgeSeconds := uint(metav1.Now().Sub(pod.GetCreationTimestamp().Local()).Seconds())

@@ -26,10 +26,8 @@ import (
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	"sigs.k8s.io/descheduler/pkg/framework"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 const LowNodeUtilizationPluginName = "LowNodeUtilization"
@@ -40,12 +38,11 @@ type LowNodeUtilization struct {
 	handle               framework.Handle
 	args                 *framework.LowNodeUtilizationArgs
 	resourceNames        []v1.ResourceName
-	isEvictable          func(pod *v1.Pod) bool
 	continueEvictionCond func(nodeInfo NodeInfo, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool
 }
 
 var _ framework.Plugin = &LowNodeUtilization{}
-var _ framework.DeschedulePlugin = &LowNodeUtilization{}
+var _ framework.BalancePlugin = &LowNodeUtilization{}
 
 func NewLowNodeUtilization(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
 	utilizationArgs, ok := args.(*framework.LowNodeUtilizationArgs)
@@ -56,16 +53,6 @@ func NewLowNodeUtilization(args runtime.Object, handle framework.Handle) (framew
 	if utilizationArgs.PriorityThreshold != nil && utilizationArgs.PriorityThreshold.Value != nil && utilizationArgs.PriorityThreshold.Name != "" {
 		return nil, fmt.Errorf("only one of priorityThreshold fields can be set")
 	}
-
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), utilizationArgs.PriorityThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
-	}
-
-	evictable := handle.PodEvictor().Evictable(
-		evictions.WithPriorityThreshold(thresholdPriority),
-		evictions.WithNodeFit(utilizationArgs.NodeFit),
-	)
 
 	if err := validateLowUtilizationStrategyConfig(utilizationArgs.Thresholds, utilizationArgs.TargetThresholds, utilizationArgs.UseDeviationThresholds); err != nil {
 		return nil, fmt.Errorf("lowNodeUtilization config is not valid: %v", err)
@@ -103,7 +90,6 @@ func NewLowNodeUtilization(args runtime.Object, handle framework.Handle) (framew
 	return &LowNodeUtilization{
 		handle:        handle,
 		args:          utilizationArgs,
-		isEvictable:   evictable.IsEvictable,
 		resourceNames: getResourceNames(utilizationArgs.Thresholds),
 		// stop if node utilization drops below target threshold or any of required capacity (cpu, memory, pods) is moved
 		continueEvictionCond: func(nodeInfo NodeInfo, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool {
@@ -125,7 +111,7 @@ func (d *LowNodeUtilization) Name() string {
 	return LowNodeUtilizationPluginName
 }
 
-func (d *LowNodeUtilization) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
 	lowNodes, sourceNodes := classifyNodes(
 		getNodeUsage(nodes, d.resourceNames, d.handle.GetPodsAssignedToNodeFunc()),
 		getNodeThresholds(nodes, d.args.Thresholds, d.args.TargetThresholds, d.resourceNames, d.handle.GetPodsAssignedToNodeFunc(), d.args.UseDeviationThresholds),
@@ -197,13 +183,12 @@ func (d *LowNodeUtilization) Deschedule(ctx context.Context, nodes []*v1.Node) *
 		ctx,
 		sourceNodes,
 		lowNodes,
-		d.handle.PodEvictor(),
-		d.isEvictable,
+		d.handle.Evictor(),
+		d.handle.Evictor().Filter,
 		d.resourceNames,
 		"LowNodeUtilization",
 		d.continueEvictionCond)
 
-	klog.V(1).InfoS("Total number of pods evicted", "evictedPods", d.handle.PodEvictor().TotalEvicted())
 	return nil
 }
 

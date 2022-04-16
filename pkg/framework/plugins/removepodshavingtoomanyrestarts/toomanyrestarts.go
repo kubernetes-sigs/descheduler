@@ -25,10 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 const PluginName = "RemovePodsHavingTooManyRestarts"
@@ -61,16 +59,6 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 		return nil, fmt.Errorf("podsHavingTooManyRestarts threshold not set")
 	}
 
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), restartsArgs.PriorityThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get priority threshold: %v", err)
-	}
-
-	evictable := handle.PodEvictor().Evictable(
-		evictions.WithPriorityThreshold(thresholdPriority),
-		evictions.WithNodeFit(restartsArgs.NodeFit),
-	)
-
 	var includedNamespaces, excludedNamespaces sets.String
 	if restartsArgs.Namespaces != nil {
 		includedNamespaces = sets.NewString(restartsArgs.Namespaces.Include...)
@@ -78,7 +66,7 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	}
 
 	podFilter, err := podutil.NewOptions().
-		WithFilter(evictable.IsEvictable).
+		WithFilter(handle.Evictor().Filter).
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
 		WithLabelSelector(restartsArgs.LabelSelector).
@@ -116,10 +104,7 @@ func (d *RemovePodsHavingTooManyRestarts) Deschedule(ctx context.Context, nodes 
 			} else if restarts < d.args.PodRestartThreshold {
 				continue
 			}
-			if _, err := d.handle.PodEvictor().EvictPod(ctx, pods[i], node, "TooManyRestarts"); err != nil {
-				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
-				break
-			}
+			d.handle.Evictor().Evict(ctx, pods[i])
 		}
 	}
 	return nil
