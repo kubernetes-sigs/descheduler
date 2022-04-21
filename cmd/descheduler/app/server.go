@@ -67,7 +67,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 			if factory == nil {
 				klog.ClearLogger()
 			} else {
-				log, logrFlush := factory.Create(config.FormatOptions{})
+				log, logrFlush := factory.Create(config.LoggingConfiguration{})
 				defer logrFlush()
 				klog.SetLogger(log)
 			}
@@ -81,7 +81,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 
 			healthz.InstallHandler(pathRecorderMux, healthz.NamedCheck("Descheduler", healthz.PingHealthz.Check))
 
-			stoppedCh, err := SecureServing.Serve(pathRecorderMux, 0, ctx.Done())
+			stoppedCh, _, err := SecureServing.Serve(pathRecorderMux, 0, ctx.Done())
 			if err != nil {
 				klog.Fatalf("failed to start secure server: %v", err)
 				return
