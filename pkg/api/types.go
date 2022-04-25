@@ -19,6 +19,7 @@ package api
 import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -126,4 +127,156 @@ type FailedPods struct {
 	MinPodLifetimeSeconds   *uint
 	Reasons                 []string
 	IncludingInitContainers bool
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+type DeschedulerConfiguration struct {
+	metav1.TypeMeta
+
+	// Profiles
+	Profiles []Profile
+
+	// NodeSelector for a set of nodes to operate over
+	NodeSelector *string
+
+	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
+	MaxNoOfPodsToEvictPerNode *int
+
+	// MaxNoOfPodsToEvictPerNamespace restricts maximum of pods to be evicted per namespace.
+	MaxNoOfPodsToEvictPerNamespace *int
+}
+
+type Profile struct {
+	Name         string
+	PluginConfig []PluginConfig
+	Plugins      Plugins
+}
+
+type Plugins struct {
+	PreSort    Plugin
+	Deschedule Plugin
+	Balance    Plugin
+	Sort       Plugin
+	Evict      Plugin
+}
+
+type PluginConfig struct {
+	Name string
+	Args runtime.Object
+}
+
+type Plugin struct {
+	Enabled  []string
+	Disabled []string
+}
+
+// RemoveDuplicatePodsArgs holds arguments used to configure the RemoveDuplicatePods plugin.
+type RemoveDuplicatePodsArgs struct {
+	metav1.TypeMeta
+
+	Namespaces        *Namespaces
+	ExcludeOwnerKinds []string
+}
+
+// RemoveFailedPodsArgs holds arguments used to configure the RemoveFailedPods plugin.
+type RemoveFailedPodsArgs struct {
+	metav1.TypeMeta
+
+	Namespaces              *Namespaces
+	LabelSelector           *metav1.LabelSelector
+	MinPodLifetimeSeconds   *uint
+	Reasons                 []string
+	IncludingInitContainers bool
+	ExcludeOwnerKinds       []string
+}
+
+// RemovePodsViolatingNodeAffinityArgs holds arguments used to configure the RemovePodsViolatingNodeAffinity plugin.
+type RemovePodsViolatingNodeAffinityArgs struct {
+	metav1.TypeMeta
+
+	Namespaces       *Namespaces
+	LabelSelector    *metav1.LabelSelector
+	NodeAffinityType []string
+}
+
+// RemovePodsViolatingNodeTaintsArgs holds arguments used to configure the RemovePodsViolatingNodeTaints plugin.
+type RemovePodsViolatingNodeTaintsArgs struct {
+	metav1.TypeMeta
+
+	Namespaces              *Namespaces
+	LabelSelector           *metav1.LabelSelector
+	IncludePreferNoSchedule bool
+	ExcludedTaints          []string
+}
+
+// RemovePodsViolatingInterPodAntiAffinityArgs holds arguments used to configure the RemovePodsViolatingInterPodAntiAffinity plugin.
+type RemovePodsViolatingInterPodAntiAffinityArgs struct {
+	metav1.TypeMeta
+
+	Namespaces    *Namespaces
+	LabelSelector *metav1.LabelSelector
+}
+
+// PodLifeTimeArgs holds arguments used to configure the PodLifeTime plugin.
+type PodLifeTimeArgs struct {
+	metav1.TypeMeta
+
+	Namespaces            *Namespaces
+	LabelSelector         *metav1.LabelSelector
+	MaxPodLifeTimeSeconds *uint
+	PodStatusPhases       []string
+}
+
+// RemovePodsHavingTooManyRestartsArgs holds arguments used to configure the RemovePodsHavingTooManyRestarts plugin.
+type RemovePodsHavingTooManyRestartsArgs struct {
+	metav1.TypeMeta
+
+	Namespaces              *Namespaces
+	LabelSelector           *metav1.LabelSelector
+	PodRestartThreshold     int32
+	IncludingInitContainers bool
+}
+
+// RemovePodsViolatingTopologySpreadConstraintArgs holds arguments used to configure the RemovePodsViolatingTopologySpreadConstraint plugin.
+type RemovePodsViolatingTopologySpreadConstraintArgs struct {
+	metav1.TypeMeta
+
+	Namespaces             *Namespaces
+	LabelSelector          *metav1.LabelSelector
+	IncludeSoftConstraints bool
+}
+
+// LowNodeUtilizationArgs holds arguments used to configure the LowNodeUtilization plugin.
+type LowNodeUtilizationArgs struct {
+	metav1.TypeMeta
+
+	UseDeviationThresholds bool
+	Thresholds             ResourceThresholds
+	TargetThresholds       ResourceThresholds
+	NumberOfNodes          int
+}
+
+// HighNodeUtilizationArgs holds arguments used to configure the HighNodeUtilization plugin.
+type HighNodeUtilizationArgs struct {
+	metav1.TypeMeta
+
+	Thresholds       ResourceThresholds
+	TargetThresholds ResourceThresholds
+	NumberOfNodes    int
+}
+
+// DefaultEvictorArgs holds arguments used to configure the DefaultEvictor plugin.
+type DefaultEvictorArgs struct {
+	metav1.TypeMeta
+
+	EvictFailedBarePods     bool
+	EvictLocalStoragePods   bool
+	EvictSystemCriticalPods bool
+	IgnorePvcPods           bool
+	PriorityThreshold       *PriorityThreshold
+	NodeFit                 bool
+	LabelSelector           *metav1.LabelSelector
+	// TODO(jchaloup): turn it into *metav1.LabelSelector
+	NodeSelector string
 }
