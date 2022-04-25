@@ -1,4 +1,4 @@
-package framework
+package profile
 
 import (
 	"context"
@@ -78,7 +78,7 @@ func TestNewProfile(t *testing.T) {
 		false,
 	)
 
-	h, err := newProfile(cfg, reg, WithClientSet(fakeClient), WithSharedInformerFactory(sharedInformerFactory), WithPodEvictor(podEvictor))
+	h, err := NewProfile(cfg, reg, WithClientSet(fakeClient), WithSharedInformerFactory(sharedInformerFactory), WithPodEvictor(podEvictor))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,6 +86,6 @@ func TestNewProfile(t *testing.T) {
 	sharedInformerFactory.Start(ctx.Done())
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-	h.runDeschedulePlugins(ctx, []*v1.Node{node1})
-	h.runBalancePlugins(ctx, []*v1.Node{node1})
+	h.RunDeschedulePlugins(ctx, []*v1.Node{node1})
+	h.RunBalancePlugins(ctx, []*v1.Node{node1})
 }

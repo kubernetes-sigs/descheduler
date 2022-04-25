@@ -31,6 +31,10 @@ type Evictor interface {
 	Evict(context.Context, *v1.Pod) bool
 }
 
+type Evictable interface {
+	Evict(context.Context, *v1.Pod) bool
+}
+
 type Status struct {
 	Err error
 }

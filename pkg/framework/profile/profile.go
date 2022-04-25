@@ -1,4 +1,4 @@
-package framework
+package profile
 
 import (
 	"context"
@@ -25,7 +25,7 @@ type Option func(*handleImplOpts)
 type handleImplOpts struct {
 	clientSet             clientset.Interface
 	sharedInformerFactory informers.SharedInformerFactory
-	podEvictor            *framework.PodEvictor
+	podEvictor            framework.Evictable
 }
 
 // WithClientSet sets clientSet for the scheduling frameworkImpl.
@@ -41,7 +41,7 @@ func WithSharedInformerFactory(sharedInformerFactory informers.SharedInformerFac
 	}
 }
 
-func WithPodEvictor(podEvictor *framework.PodEvictor) Option {
+func WithPodEvictor(podEvictor framework.Evictable) Option {
 	return func(o *handleImplOpts) {
 		o.podEvictor = podEvictor
 	}
@@ -55,16 +55,18 @@ type handleImpl struct {
 	evictorImpl *evictorImpl
 }
 
-type profileImpl struct {
+type Profile struct {
 	handleImpl        *handleImpl
 	deschedulePlugins []framework.DeschedulePlugin
 	balancePlugins    []framework.BalancePlugin
 }
 
 type evictorImpl struct {
-	podEvictor  *framework.PodEvictor
+	podEvictor  framework.Evictable
 	evictPlugin framework.EvictPlugin
 	sortPlugin  framework.SortPlugin
+
+	evictedCounter uint
 }
 
 // Sort pods from the most to the least suitable for eviction
@@ -81,7 +83,11 @@ func (ei *evictorImpl) Filter(pod *v1.Pod) bool {
 
 // Evict evicts a pod (no pre-check performed)
 func (ei *evictorImpl) Evict(ctx context.Context, pod *v1.Pod) bool {
-	return ei.podEvictor.Evict(ctx, pod)
+	if ei.podEvictor.Evict(ctx, pod) {
+		ei.evictedCounter++
+		return true
+	}
+	return false
 }
 
 func (d *handleImpl) ClientSet() clientset.Interface {
@@ -100,14 +106,15 @@ func (d *handleImpl) SharedInformerFactory() informers.SharedInformerFactory {
 	return d.sharedInformerFactory
 }
 
-func (d profileImpl) runDeschedulePlugins(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d Profile) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node) *framework.Status {
 	errs := []error{}
 	for _, pl := range d.deschedulePlugins {
+		d.handleImpl.evictorImpl.evictedCounter = 0
 		status := pl.Deschedule(context.WithValue(ctx, "pluginName", pl.Name()), nodes)
 		if status != nil && status.Err != nil {
 			errs = append(errs, status.Err)
 		}
-		klog.V(1).InfoS("Total number of pods evicted", "evictedPods", d.handleImpl.evictorImpl.podEvictor.TotalEvicted())
+		klog.V(1).InfoS("Total number of pods evicted", "evictedPods", d.handleImpl.evictorImpl.evictedCounter)
 	}
 
 	aggrErr := errors.NewAggregate(errs)
@@ -120,14 +127,15 @@ func (d profileImpl) runDeschedulePlugins(ctx context.Context, nodes []*v1.Node)
 	}
 }
 
-func (d profileImpl) runBalancePlugins(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d Profile) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *framework.Status {
 	errs := []error{}
 	for _, pl := range d.balancePlugins {
+		d.handleImpl.evictorImpl.evictedCounter = 0
 		status := pl.Balance(context.WithValue(ctx, "pluginName", pl.Name()), nodes)
 		if status != nil && status.Err != nil {
 			errs = append(errs, status.Err)
 		}
-		klog.V(1).InfoS("Total number of pods evicted", "evictedPods", d.handleImpl.evictorImpl.podEvictor.TotalEvicted())
+		klog.V(1).InfoS("Total number of pods evicted", "evictedPods", d.handleImpl.evictorImpl.evictedCounter)
 	}
 
 	aggrErr := errors.NewAggregate(errs)
@@ -140,10 +148,22 @@ func (d profileImpl) runBalancePlugins(ctx context.Context, nodes []*v1.Node) *f
 	}
 }
 
-func newProfile(config v1alpha2.Profile, reg registry.Registry, opts ...Option) (*profileImpl, error) {
+func NewProfile(config v1alpha2.Profile, reg registry.Registry, opts ...Option) (*Profile, error) {
 	hOpts := &handleImplOpts{}
 	for _, optFnc := range opts {
 		optFnc(hOpts)
+	}
+
+	if hOpts.sharedInformerFactory == nil {
+		return nil, fmt.Errorf("SharedInformerFactory not set")
+	}
+
+	if hOpts.podEvictor == nil {
+		return nil, fmt.Errorf("PodEvictor not set")
+	}
+
+	if hOpts.clientSet == nil {
+		return nil, fmt.Errorf("ClientSet not set")
 	}
 
 	pluginArgs := map[string]runtime.Object{}
@@ -236,7 +256,7 @@ func newProfile(config v1alpha2.Profile, reg registry.Registry, opts ...Option) 
 	sortPluginName := config.Plugins.Evict.Enabled[0]
 	handle.evictorImpl.sortPlugin = pluginsMap[sortPluginName].(framework.SortPlugin)
 
-	return &profileImpl{
+	return &Profile{
 		handleImpl:        handle,
 		deschedulePlugins: deschedulePlugins,
 		balancePlugins:    balancePlugins,

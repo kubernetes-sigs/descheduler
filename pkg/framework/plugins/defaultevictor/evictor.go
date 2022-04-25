@@ -45,6 +45,7 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	constraints := []constraint{}
 
 	if evictorArgs.EvictFailedBarePods {
+		klog.V(1).InfoS("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
 		constraints = append(constraints, func(pod *v1.Pod) error {
 			ownerRefList := podutil.OwnerRef(pod)
 			// Enable evictFailedBarePods to evict bare pods in failed phase
@@ -65,6 +66,7 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	}
 
 	if !evictorArgs.EvictSystemCriticalPods {
+		klog.V(1).InfoS("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
 		constraints = append(constraints, func(pod *v1.Pod) error {
 			// Moved from IsEvictable function to allow for disabling
 			if utils.IsCriticalPriorityPod(pod) {

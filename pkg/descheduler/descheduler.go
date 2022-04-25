@@ -21,30 +21,32 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	policy "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
+	corev1informers "k8s.io/client-go/informers/core/v1"
+	schedulingv1informers "k8s.io/client-go/informers/scheduling/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/klog/v2"
 
-	corev1informers "k8s.io/client-go/informers/core/v1"
-	schedulingv1informers "k8s.io/client-go/informers/scheduling/v1"
-
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/metrics"
 	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/api/v1alpha2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
-	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
+	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/registry"
+	frameworkruntime "sigs.k8s.io/descheduler/pkg/framework/runtime"
 )
 
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
@@ -165,6 +167,104 @@ func cachedClient(
 	return fakeClient, nil
 }
 
+type Descheduler struct {
+	podEvictor   *framework.PodEvictor
+	framework    *frameworkruntime.Framework
+	nodeSelector string
+	clientSet    clientset.Interface
+	nodeInformer corev1informers.NodeInformer
+
+	nodepodCount      map[string]uint
+	namespacePodCount map[string]uint
+	evicted           uint
+
+	maxPodsToEvictPerNode      *uint
+	maxPodsToEvictPerNamespace *uint
+}
+
+func (d *Descheduler) Evict(ctx context.Context, pod *v1.Pod) bool {
+	if d.maxPodsToEvictPerNode != nil && d.nodepodCount[pod.Spec.NodeName]+1 > *d.maxPodsToEvictPerNode {
+		klog.ErrorS(fmt.Errorf("Maximum number of evicted pods per node reached"), "limit", *d.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
+		return false
+	}
+	if d.maxPodsToEvictPerNamespace != nil && d.namespacePodCount[pod.Namespace]+1 > *d.maxPodsToEvictPerNamespace {
+		klog.ErrorS(fmt.Errorf("Maximum number of evicted pods per namespace reached"), "limit", *d.maxPodsToEvictPerNamespace, "namespace", pod.Namespace)
+	}
+	if d.podEvictor.Evict(ctx, pod) {
+		d.nodepodCount[pod.Spec.NodeName]++
+		d.namespacePodCount[pod.Namespace]++
+		d.evicted++
+	}
+	return false
+}
+
+func (d *Descheduler) deschedulerOnce(ctx context.Context) error {
+	d.nodepodCount = make(map[string]uint)
+	d.namespacePodCount = make(map[string]uint)
+
+	nodes, err := nodeutil.ReadyNodes(ctx, d.clientSet, d.nodeInformer, d.nodeSelector)
+	if err != nil {
+		return fmt.Errorf("unable to get ready nodes: %v", err)
+	}
+
+	if len(nodes) <= 1 {
+		return fmt.Errorf("the cluster size is 0 or 1 meaning eviction causes service disruption or degradation")
+	}
+
+	if status := d.framework.RunDeschedulePlugins(ctx, nodes); status != nil && status.Err != nil {
+		return status.Err
+	}
+
+	if status := d.framework.RunBalancePlugins(ctx, nodes); status != nil && status.Err != nil {
+		return status.Err
+	}
+
+	return nil
+}
+
+func resetFramework(
+	desch *Descheduler,
+	config v1alpha2.DeschedulerConfiguration,
+	pluginReg registry.Registry,
+	realClient clientset.Interface,
+	podInformer corev1informers.PodInformer,
+	nodeInformer corev1informers.NodeInformer,
+	namespaceInformer corev1informers.NamespaceInformer,
+	priorityClassInformer schedulingv1informers.PriorityClassInformer,
+) (
+	context.CancelFunc,
+	error,
+) {
+	// When the dry mode is enable, collect all the relevant objects (mostly pods) under a fake client.
+	// So when evicting pods while running multiple strategies in a row have the cummulative effect
+	// as is when evicting pods for real.
+	klog.V(3).Infof("Building a cached client from the cluster for the dry run")
+	// Create a new cache so we start from scratch without any leftovers
+	fakeClient, err := cachedClient(realClient, podInformer, nodeInformer, namespaceInformer, priorityClassInformer)
+	if err != nil {
+		return nil, err
+	}
+
+	fakeSharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	fakeCtx, cncl := context.WithCancel(context.TODO())
+	fakeSharedInformerFactory.Start(fakeCtx.Done())
+	fakeSharedInformerFactory.WaitForCacheSync(fakeCtx.Done())
+
+	frmwrk, err := frameworkruntime.NewFramework(config,
+		frameworkruntime.WithClientSet(fakeClient),
+		frameworkruntime.WithSharedInformerFactory(fakeSharedInformerFactory),
+		frameworkruntime.WithPodEvictor(desch),
+		frameworkruntime.WithRegistry(pluginReg),
+	)
+	if err != nil {
+		cncl()
+		return cncl, err
+	}
+
+	desch.framework = frmwrk
+	return cncl, nil
+}
+
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string) error {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
 	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
@@ -172,139 +272,79 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	namespaceInformer := sharedInformerFactory.Core().V1().Namespaces()
 	priorityClassInformer := sharedInformerFactory.Scheduling().V1().PriorityClasses()
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// create the informers
+	// create the informers before starting the informer factory
 	namespaceInformer.Informer()
 	priorityClassInformer.Informer()
 
-	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
-	if err != nil {
-		return fmt.Errorf("build get pods assigned to node function error: %v", err)
-	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	sharedInformerFactory.Start(ctx.Done())
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-	strategyFuncs := map[api.StrategyName]strategyFunction{
-		"RemoveDuplicates":                            strategies.RemoveDuplicatePods,
-		"LowNodeUtilization":                          nodeutilization.LowNodeUtilization,
-		"HighNodeUtilization":                         nodeutilization.HighNodeUtilization,
-		"RemovePodsViolatingInterPodAntiAffinity":     strategies.RemovePodsViolatingInterPodAntiAffinity,
-		"RemovePodsViolatingNodeAffinity":             strategies.RemovePodsViolatingNodeAffinity,
-		"RemovePodsViolatingNodeTaints":               strategies.RemovePodsViolatingNodeTaints,
-		"RemovePodsHavingTooManyRestarts":             strategies.RemovePodsHavingTooManyRestarts,
-		"PodLifeTime":                                 strategies.PodLifeTime,
-		"RemovePodsViolatingTopologySpreadConstraint": strategies.RemovePodsViolatingTopologySpreadConstraint,
-		"RemoveFailedPods":                            strategies.RemoveFailedPods,
-	}
 
 	var nodeSelector string
 	if deschedulerPolicy.NodeSelector != nil {
 		nodeSelector = *deschedulerPolicy.NodeSelector
 	}
 
-	var evictLocalStoragePods bool
-	if deschedulerPolicy.EvictLocalStoragePods != nil {
-		evictLocalStoragePods = *deschedulerPolicy.EvictLocalStoragePods
+	klog.V(3).Infof("Building a pod evictor")
+	podEvictor := framework.NewPodEvictor(
+		rs.Client,
+		policyv1.SchemeGroupVersion.String(),
+		rs.DryRun,
+		nil,
+		nil,
+		!rs.DisableMetrics,
+	)
+
+	desch := &Descheduler{
+		podEvictor:                 podEvictor,
+		clientSet:                  rs.Client,
+		nodeInformer:               nodeInformer,
+		nodeSelector:               nodeSelector,
+		nodepodCount:               make(map[string]uint),
+		namespacePodCount:          make(map[string]uint),
+		maxPodsToEvictPerNode:      deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
+		maxPodsToEvictPerNamespace: deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
 	}
 
-	evictBarePods := false
-	if deschedulerPolicy.EvictFailedBarePods != nil {
-		evictBarePods = *deschedulerPolicy.EvictFailedBarePods
-		if evictBarePods {
-			klog.V(1).InfoS("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
+	pluginReg := registry.NewRegistry()
+
+	config := v1alpha2.DeschedulerConfiguration{}
+
+	if !rs.DryRun {
+		frmwrk, err := frameworkruntime.NewFramework(config,
+			frameworkruntime.WithClientSet(rs.Client),
+			frameworkruntime.WithSharedInformerFactory(sharedInformerFactory),
+			frameworkruntime.WithPodEvictor(desch),
+			frameworkruntime.WithRegistry(pluginReg),
+		)
+		if err != nil {
+			return fmt.Errorf("Unable to initialize framework: %v", err)
 		}
-	}
-
-	evictSystemCriticalPods := false
-	if deschedulerPolicy.EvictSystemCriticalPods != nil {
-		evictSystemCriticalPods = *deschedulerPolicy.EvictSystemCriticalPods
-		if evictSystemCriticalPods {
-			klog.V(1).InfoS("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
-		}
-	}
-
-	ignorePvcPods := false
-	if deschedulerPolicy.IgnorePVCPods != nil {
-		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
+		desch.framework = frmwrk
 	}
 
 	wait.NonSlidingUntil(func() {
-		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, nodeSelector)
-		if err != nil {
-			klog.V(1).InfoS("Unable to get ready nodes", "err", err)
-			cancel()
-			return
-		}
-
-		if len(nodes) <= 1 {
-			klog.V(1).InfoS("The cluster size is 0 or 1 meaning eviction causes service disruption or degradation. So aborting..")
-			cancel()
-			return
-		}
-
-		var podEvictorClient clientset.Interface
-		// When the dry mode is enable, collect all the relevant objects (mostly pods) under a fake client.
-		// So when evicting pods while running multiple strategies in a row have the cummulative effect
-		// as is when evicting pods for real.
 		if rs.DryRun {
-			klog.V(3).Infof("Building a cached client from the cluster for the dry run")
-			// Create a new cache so we start from scratch without any leftovers
-			fakeClient, err := cachedClient(rs.Client, podInformer, nodeInformer, namespaceInformer, priorityClassInformer)
+			cncl, err := resetFramework(desch, config, pluginReg, rs.Client, podInformer, nodeInformer, namespaceInformer, priorityClassInformer)
 			if err != nil {
 				klog.Error(err)
+				cancel()
 				return
 			}
-
-			fakeSharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			getPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(fakeSharedInformerFactory.Core().V1().Pods())
-			if err != nil {
-				klog.Errorf("build get pods assigned to node function error: %v", err)
-				return
-			}
-
-			fakeCtx, cncl := context.WithCancel(context.TODO())
 			defer cncl()
-			fakeSharedInformerFactory.Start(fakeCtx.Done())
-			fakeSharedInformerFactory.WaitForCacheSync(fakeCtx.Done())
-
-			podEvictorClient = fakeClient
-		} else {
-			podEvictorClient = rs.Client
+		}
+		if err := desch.deschedulerOnce(ctx); err != nil {
+			klog.Errorf("Error descheduling pods: %v", err)
 		}
 
-		klog.V(3).Infof("Building a pod evictor")
-		podEvictor := evictions.NewPodEvictor(
-			podEvictorClient,
-			evictionPolicyGroupVersion,
-			rs.DryRun,
-			deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
-			deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
-			nodes,
-			evictLocalStoragePods,
-			evictSystemCriticalPods,
-			ignorePvcPods,
-			evictBarePods,
-			!rs.DisableMetrics,
-		)
-
-		for name, strategy := range deschedulerPolicy.Strategies {
-			if f, ok := strategyFuncs[name]; ok {
-				if strategy.Enabled {
-					f(ctx, rs.Client, strategy, nodes, podEvictor, getPodsAssignedToNode)
-				}
-			} else {
-				klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
-			}
-		}
-
-		klog.V(1).InfoS("Number of evicted pods", "totalEvicted", podEvictor.TotalEvicted())
+		klog.V(1).InfoS("Number of evicted pods", "totalEvicted", desch.evicted)
 
 		// If there was no interval specified, send a signal to the stopChannel to end the wait.Until loop after 1 iteration
 		if rs.DeschedulingInterval.Seconds() == 0 {
 			cancel()
+			return
 		}
 	}, rs.DeschedulingInterval, ctx.Done())
 
