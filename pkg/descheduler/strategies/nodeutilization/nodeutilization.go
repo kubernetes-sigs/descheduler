@@ -157,7 +157,7 @@ func getNodeUsage(
 
 		nodeUsageList = append(nodeUsageList, NodeUsage{
 			node:    node,
-			usage:   nodeUtilization(node, pods, resourceNames),
+			usage:   nodeutil.NodeUtilization(pods, resourceNames),
 			allPods: pods,
 		})
 	}
@@ -279,7 +279,7 @@ func evictPodsFromSourceNodes(
 	for _, node := range sourceNodes {
 		klog.V(3).InfoS("Evicting pods from node", "node", klog.KObj(node.node), "usage", node.usage)
 
-		nonRemovablePods, removablePods := classifyPods(ctx, node.allPods, podFilter)
+		nonRemovablePods, removablePods := classifyPods(node.allPods, podFilter)
 		klog.V(2).InfoS("Pods on node", "node", klog.KObj(node.node), "allPods", len(node.allPods), "nonRemovablePods", len(nonRemovablePods), "removablePods", len(removablePods))
 
 		if len(removablePods) == 0 {
@@ -413,7 +413,7 @@ func getResourceNames(thresholds api.ResourceThresholds) []v1.ResourceName {
 	return resourceNames
 }
 
-func classifyPods(ctx context.Context, pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*v1.Pod) {
+func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*v1.Pod) {
 	var nonRemovablePods, removablePods []*v1.Pod
 
 	for _, pod := range pods {
@@ -437,7 +437,7 @@ func averageNodeBasicresources(nodes []*v1.Node, getPodsAssignedToNode podutil.G
 			numberOfNodes--
 			continue
 		}
-		usage := nodeUtilization(node, pods, resourceNames)
+		usage := nodeutil.NodeUtilization(pods, resourceNames)
 		nodeCapacity := node.Status.Capacity
 		if len(node.Status.Allocatable) > 0 {
 			nodeCapacity = node.Status.Allocatable

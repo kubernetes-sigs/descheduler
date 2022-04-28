@@ -99,28 +99,27 @@ func IsReady(node *v1.Node) bool {
 	return true
 }
 
-// NodeFit returns true if the provided pod can probably be scheduled onto the provided node.
+// NodeFit returns true if the provided pod can be scheduled onto the provided node.
 // This function is used when the NodeFit pod filtering feature of the Descheduler is enabled.
 // This function currently considers a subset of the Kubernetes Scheduler's predicates when
 // deciding if a pod would fit on a node, but more predicates may be added in the future.
 func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) []error {
 	// Check node selector and required affinity
 	var errors []error
-	ok, err := utils.PodMatchNodeSelector(pod, node)
-	if err != nil {
+	if ok, err := utils.PodMatchNodeSelector(pod, node); err != nil {
 		errors = append(errors, err)
 	} else if !ok {
 		errors = append(errors, fmt.Errorf("pod node selector does not match the node label"))
 	}
 	// Check taints (we only care about NoSchedule and NoExecute taints)
-	ok = utils.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, func(taint *v1.Taint) bool {
+	ok := utils.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, func(taint *v1.Taint) bool {
 		return taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectNoExecute
 	})
 	if !ok {
 		errors = append(errors, fmt.Errorf("pod does not tolerate taints on the node"))
 	}
 	// Check if the pod can fit on a node based off it's requests
-	ok, reqErrors := FitsRequest(nodeIndexer, pod, node)
+	ok, reqErrors := fitsRequest(nodeIndexer, pod, node)
 	if !ok {
 		errors = append(errors, reqErrors...)
 	}
@@ -132,7 +131,7 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 	return errors
 }
 
-// PodFitsAnyOtherNode checks if the given pod will probably fit any of the given nodes, besides the node
+// PodFitsAnyOtherNode checks if the given pod will fit any of the given nodes, besides the node
 // the pod is already running on. The predicates used to determine if the pod will fit can be found in the NodeFit function.
 func PodFitsAnyOtherNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node) bool {
 	for _, node := range nodes {
@@ -155,7 +154,7 @@ func PodFitsAnyOtherNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.
 	return false
 }
 
-// PodFitsAnyNode checks if the given pod will probably fit any of the given nodes. The predicates used
+// PodFitsAnyNode checks if the given pod will fit any of the given nodes. The predicates used
 // to determine if the pod will fit can be found in the NodeFit function.
 func PodFitsAnyNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node) bool {
 	for _, node := range nodes {
@@ -173,7 +172,7 @@ func PodFitsAnyNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, 
 	return false
 }
 
-// PodFitsCurrentNode checks if the given pod will probably fit onto the given node. The predicates used
+// PodFitsCurrentNode checks if the given pod will fit onto the given node. The predicates used
 // to determine if the pod will fit can be found in the NodeFit function.
 func PodFitsCurrentNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) bool {
 	errors := NodeFit(nodeIndexer, pod, node)
@@ -195,9 +194,9 @@ func IsNodeUnschedulable(node *v1.Node) bool {
 	return node.Spec.Unschedulable
 }
 
-// FitsRequest determines if a pod can fit on a node based on that pod's requests. It returns true if
+// fitsRequest determines if a pod can fit on a node based on its resource requests. It returns true if
 // the pod will fit.
-func FitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, []error) {
+func fitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, []error) {
 	var insufficientResources []error
 
 	// Get pod requests
@@ -207,7 +206,7 @@ func FitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nod
 		resourceNames = append(resourceNames, name)
 	}
 
-	availableResources, err := NodeAvailableResources(nodeIndexer, node, resourceNames)
+	availableResources, err := nodeAvailableResources(nodeIndexer, node, resourceNames)
 	if err != nil {
 		return false, []error{err}
 	}
@@ -215,15 +214,8 @@ func FitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nod
 	podFitsOnNode := true
 	for _, resource := range resourceNames {
 		podResourceRequest := podRequests[resource]
-		var requestTooLarge bool
-		switch resource {
-		case v1.ResourceCPU:
-			requestTooLarge = podResourceRequest.MilliValue() > availableResources[resource].MilliValue()
-		default:
-			requestTooLarge = podResourceRequest.Value() > availableResources[resource].Value()
-		}
-
-		if requestTooLarge {
+		availableResource, ok := availableResources[resource]
+		if !ok || podResourceRequest.MilliValue() > availableResource.MilliValue() {
 			insufficientResources = append(insufficientResources, fmt.Errorf("insufficient %v", resource))
 			podFitsOnNode = false
 		}
@@ -231,18 +223,34 @@ func FitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nod
 	return podFitsOnNode, insufficientResources
 }
 
-// NodeAvailableResources returns resources mapped to the quanitity available on the node.
-func NodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node *v1.Node, resourceNames []v1.ResourceName) (map[v1.ResourceName]*resource.Quantity, error) {
+// nodeAvailableResources returns resources mapped to the quanitity available on the node.
+func nodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node *v1.Node, resourceNames []v1.ResourceName) (map[v1.ResourceName]*resource.Quantity, error) {
 	podsOnNode, err := podutil.ListPodsOnANode(node.Name, nodeIndexer, nil)
 	if err != nil {
 		return nil, err
 	}
-	aggregatePodRequests := AggregatePodRequests(podsOnNode, resourceNames)
-	return nodeRemainingResources(node, aggregatePodRequests, resourceNames), nil
+	nodeUtilization := NodeUtilization(podsOnNode, resourceNames)
+	remainingResources := map[v1.ResourceName]*resource.Quantity{
+		v1.ResourceCPU:    resource.NewMilliQuantity(node.Status.Allocatable.Cpu().MilliValue()-nodeUtilization[v1.ResourceCPU].MilliValue(), resource.DecimalSI),
+		v1.ResourceMemory: resource.NewQuantity(node.Status.Allocatable.Memory().Value()-nodeUtilization[v1.ResourceMemory].Value(), resource.BinarySI),
+		v1.ResourcePods:   resource.NewQuantity(node.Status.Allocatable.Pods().Value()-nodeUtilization[v1.ResourcePods].Value(), resource.DecimalSI),
+	}
+	for _, name := range resourceNames {
+		if !IsBasicResource(name) {
+			if _, exists := node.Status.Allocatable[name]; exists {
+				allocatableResource := node.Status.Allocatable[name]
+				remainingResources[name] = resource.NewQuantity(allocatableResource.Value()-nodeUtilization[name].Value(), resource.DecimalSI)
+			} else {
+				remainingResources[name] = resource.NewQuantity(0, resource.DecimalSI)
+			}
+		}
+	}
+
+	return remainingResources, nil
 }
 
-// AggregatePodRequests returns the resources requested by the given pods. Only resources supplied in the resourceNames parameter are calculated.
-func AggregatePodRequests(pods []*v1.Pod, resourceNames []v1.ResourceName) map[v1.ResourceName]*resource.Quantity {
+// NodeUtilization returns the resources requested by the given pods. Only resources supplied in the resourceNames parameter are calculated.
+func NodeUtilization(pods []*v1.Pod, resourceNames []v1.ResourceName) map[v1.ResourceName]*resource.Quantity {
 	totalReqs := map[v1.ResourceName]*resource.Quantity{
 		v1.ResourceCPU:    resource.NewMilliQuantity(0, resource.DecimalSI),
 		v1.ResourceMemory: resource.NewQuantity(0, resource.BinarySI),
@@ -267,22 +275,6 @@ func AggregatePodRequests(pods []*v1.Pod, resourceNames []v1.ResourceName) map[v
 	}
 
 	return totalReqs
-}
-
-func nodeRemainingResources(node *v1.Node, aggregatePodRequests map[v1.ResourceName]*resource.Quantity, resourceNames []v1.ResourceName) map[v1.ResourceName]*resource.Quantity {
-	remainingResources := map[v1.ResourceName]*resource.Quantity{
-		v1.ResourceCPU:    resource.NewMilliQuantity(node.Status.Allocatable.Cpu().MilliValue()-aggregatePodRequests[v1.ResourceCPU].MilliValue(), resource.DecimalSI),
-		v1.ResourceMemory: resource.NewQuantity(node.Status.Allocatable.Memory().Value()-aggregatePodRequests[v1.ResourceMemory].Value(), resource.BinarySI),
-		v1.ResourcePods:   resource.NewQuantity(node.Status.Allocatable.Pods().Value()-aggregatePodRequests[v1.ResourcePods].Value(), resource.DecimalSI),
-	}
-	for _, name := range resourceNames {
-		if !IsBasicResource(name) {
-			allocatableResource := node.Status.Allocatable[name]
-			remainingResources[name] = resource.NewQuantity(allocatableResource.Value()-aggregatePodRequests[name].Value(), resource.DecimalSI)
-		}
-	}
-
-	return remainingResources
 }
 
 // IsBasicResource checks if resource is basic native.

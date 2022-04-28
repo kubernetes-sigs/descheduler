@@ -168,7 +168,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 				klog.V(2).InfoS("Skipping topology constraint because it is already balanced", "constraint", constraint)
 				continue
 			}
-			balanceDomains(ctx, client, getPodsAssignedToNode, podsForEviction, constraint, constraintTopologies, sumPods, evictable.IsEvictable, nodes)
+			balanceDomains(client, getPodsAssignedToNode, podsForEviction, constraint, constraintTopologies, sumPods, evictable.IsEvictable, nodes)
 		}
 	}
 
@@ -223,7 +223,6 @@ func topologyIsBalanced(topology map[topologyPair][]*v1.Pod, constraint v1.Topol
 // [5, 5, 5, 5, 5, 5]
 // (assuming even distribution by the scheduler of the evicted pods)
 func balanceDomains(
-	ctx context.Context,
 	client clientset.Interface,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 	podsForEviction map[*v1.Pod]struct{},
@@ -234,7 +233,7 @@ func balanceDomains(
 	nodes []*v1.Node) {
 
 	idealAvg := sumPods / float64(len(constraintTopologies))
-	sortedDomains := sortDomains(ctx, constraintTopologies, isEvictable)
+	sortedDomains := sortDomains(constraintTopologies, isEvictable)
 	// i is the index for belowOrEqualAvg
 	// j is the index for aboveAvg
 	i := 0
@@ -274,6 +273,17 @@ func balanceDomains(
 		// also (just for tracking), add them to the list of pods in the lower topology
 		aboveToEvict := sortedDomains[j].pods[len(sortedDomains[j].pods)-movePods:]
 		for k := range aboveToEvict {
+			// PodFitsAnyOtherNode excludes the current node because, for the sake of domain balancing only, we care about if there is any other
+			// place it could theoretically fit.
+			// If the pod doesn't fit on its current node, that is a job for RemovePodsViolatingNodeAffinity, and irrelevant to Topology Spreading
+			// Also, if the pod has a hard nodeAffinity/nodeSelector/toleration that only matches this node,
+			// don't bother evicting it as it will just end up back on the same node
+			// however we still account for it "being evicted" so the algorithm can complete
+			// TODO(@damemi): Since we don't order pods wrt their affinities, we should refactor this to skip the current pod
+			// but still try to get the required # of movePods (instead of just chopping that value off the slice above).
+			// In other words, PTS can perform suboptimally if some of its chosen pods don't fit on other nodes.
+			// This is because the chosen pods aren't sorted, but immovable pods still count as "evicted" toward the PTS algorithm.
+			// So, a better selection heuristic could improve performance.
 			if !node.PodFitsAnyOtherNode(getPodsAssignedToNode, aboveToEvict[k], nodes) {
 				klog.V(2).InfoS("ignoring pod for eviction as it does not fit on any other node", "pod", klog.KObj(aboveToEvict[k]))
 				continue
@@ -293,7 +303,7 @@ func balanceDomains(
 // 3. pods in descending priority
 // 4. all other pods
 // We then pop pods off the back of the list for eviction
-func sortDomains(ctx context.Context, constraintTopologyPairs map[topologyPair][]*v1.Pod, isEvictable func(pod *v1.Pod) bool) []topology {
+func sortDomains(constraintTopologyPairs map[topologyPair][]*v1.Pod, isEvictable func(pod *v1.Pod) bool) []topology {
 	sortedTopologies := make([]topology, 0, len(constraintTopologyPairs))
 	// sort the topologies and return 2 lists: those <= the average and those > the average (> list inverted)
 	for pair, list := range constraintTopologyPairs {

@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	core "k8s.io/client-go/testing"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -195,11 +194,6 @@ func TestPodFitsCurrentNode(t *testing.T) {
 			success: false,
 		},
 	}
-
-	fakeClient := &fake.Clientset{}
-	fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-		return true, &v1.PodList{Items: nil}, nil
-	})
 
 	for _, tc := range tests {
 		t.Run(tc.description, func(t *testing.T) {
