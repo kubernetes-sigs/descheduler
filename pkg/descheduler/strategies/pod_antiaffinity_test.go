@@ -47,6 +47,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			Unschedulable: true,
 		}
 	})
+	node4 := test.BuildTestNode("n4", 2, 2, 1, nil)
 
 	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
 	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, nil)
@@ -174,6 +175,14 @@ func TestPodAntiAffinity(t *testing.T) {
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
 		},
+		{
+			description:             "Won't evict pods because only other node doesn't have enough resources",
+			maxPodsToEvictPerNode:   &uint3,
+			pods:                    []*v1.Pod{p1, p2, p3, p4},
+			nodes:                   []*v1.Node{node1, node4},
+			expectedEvictedPodCount: 0,
+			nodeFit:                 true,
+		},
 	}
 
 	for _, test := range tests {
@@ -209,6 +218,7 @@ func TestPodAntiAffinity(t *testing.T) {
 				test.maxPodsToEvictPerNode,
 				test.maxNoOfPodsToEvictPerNamespace,
 				test.nodes,
+				getPodsAssignedToNode,
 				false,
 				false,
 				false,

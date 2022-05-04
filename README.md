@@ -226,10 +226,10 @@ If that parameter is set to `true`, the thresholds are considered as percentage 
 `thresholds` will be deducted from the mean among all nodes and `targetThresholds` will be added to the mean.
 A resource consumption above (resp. below) this window is considered as overutilization (resp. underutilization).
 
-**NOTE:** Node resource consumption is determined by the requests and limits of pods, not actual usage. 
-This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same 
-design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands 
-like `kubectl top`) may differ from the calculated consumption, due to these components reporting 
+**NOTE:** Node resource consumption is determined by the requests and limits of pods, not actual usage.
+This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same
+design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands
+like `kubectl top`) may differ from the calculated consumption, due to these components reporting
 actual usage metrics. Implementing metrics-based descheduling is currently TODO for the project.
 
 **Parameters:**
@@ -280,8 +280,8 @@ under utilized frequently or for a short period of time. By default, `numberOfNo
 
 ### HighNodeUtilization
 
-This strategy finds nodes that are under utilized and evicts pods from the nodes in the hope that these pods will be 
-scheduled compactly into fewer nodes.  Used in conjunction with node auto-scaling, this strategy is intended to help 
+This strategy finds nodes that are under utilized and evicts pods from the nodes in the hope that these pods will be
+scheduled compactly into fewer nodes.  Used in conjunction with node auto-scaling, this strategy is intended to help
 trigger down scaling of under utilized nodes.
 This strategy **must** be used with the scheduler scoring strategy `MostAllocated`. The parameters of this strategy are
 configured under `nodeResourceUtilizationThresholds`.
@@ -300,10 +300,10 @@ strategy evicts pods from `underutilized nodes` (those with usage below `thresho
 so that they can be recreated in appropriately utilized nodes.
 The strategy will abort if any number of `underutilized nodes` or `appropriately utilized nodes` is zero.
 
-**NOTE:** Node resource consumption is determined by the requests and limits of pods, not actual usage. 
-This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same 
-design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands 
-like `kubectl top`) may differ from the calculated consumption, due to these components reporting 
+**NOTE:** Node resource consumption is determined by the requests and limits of pods, not actual usage.
+This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same
+design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands
+like `kubectl top`) may differ from the calculated consumption, due to these components reporting
 actual usage metrics. Implementing metrics-based descheduling is currently TODO for the project.
 
 **Parameters:**
@@ -737,8 +737,9 @@ The following strategies accept a `nodeFit` boolean parameter which can optimize
 
  If set to `true` the descheduler will consider whether or not the pods that meet eviction criteria will fit on other nodes before evicting them. If a pod cannot be rescheduled to another node, it will not be evicted. Currently the following criteria are considered when setting `nodeFit` to `true`:
 - A `nodeSelector` on the pod
-- Any `Tolerations` on the pod and any `Taints` on the other nodes
+- Any `tolerations` on the pod and any `taints` on the other nodes
 - `nodeAffinity` on the pod
+- Resource `requests` made by the pod and the resources available on other nodes
 - Whether any of the other nodes are marked as `unschedulable`
 
 E.g.

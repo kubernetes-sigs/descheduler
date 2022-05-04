@@ -27,6 +27,8 @@ import (
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	"sigs.k8s.io/descheduler/pkg/descheduler/node"
+	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
@@ -155,7 +157,7 @@ func getNodeUsage(
 
 		nodeUsageList = append(nodeUsageList, NodeUsage{
 			node:    node,
-			usage:   nodeUtilization(node, pods, resourceNames),
+			usage:   nodeutil.NodeUtilization(pods, resourceNames),
 			allPods: pods,
 		})
 	}
@@ -268,7 +270,7 @@ func evictPodsFromSourceNodes(
 		"Pods", totalAvailableUsage[v1.ResourcePods].Value(),
 	}
 	for name := range totalAvailableUsage {
-		if !isBasicResource(name) {
+		if !node.IsBasicResource(name) {
 			keysAndValues = append(keysAndValues, string(name), totalAvailableUsage[name].Value())
 		}
 	}
@@ -338,7 +340,7 @@ func evictPods(
 					"Pods", nodeInfo.usage[v1.ResourcePods].Value(),
 				}
 				for name := range totalAvailableUsage {
-					if !isBasicResource(name) {
+					if !nodeutil.IsBasicResource(name) {
 						keysAndValues = append(keysAndValues, string(name), totalAvailableUsage[name].Value())
 					}
 				}
@@ -361,7 +363,7 @@ func sortNodesByUsage(nodes []NodeInfo, ascending bool) {
 
 		// extended resources
 		for name := range nodes[i].usage {
-			if !isBasicResource(name) {
+			if !nodeutil.IsBasicResource(name) {
 				ti = ti + nodes[i].usage[name].Value()
 				tj = tj + nodes[j].usage[name].Value()
 			}
@@ -411,43 +413,6 @@ func getResourceNames(thresholds api.ResourceThresholds) []v1.ResourceName {
 	return resourceNames
 }
 
-// isBasicResource checks if resource is basic native.
-func isBasicResource(name v1.ResourceName) bool {
-	switch name {
-	case v1.ResourceCPU, v1.ResourceMemory, v1.ResourcePods:
-		return true
-	default:
-		return false
-	}
-}
-
-func nodeUtilization(node *v1.Node, pods []*v1.Pod, resourceNames []v1.ResourceName) map[v1.ResourceName]*resource.Quantity {
-	totalReqs := map[v1.ResourceName]*resource.Quantity{
-		v1.ResourceCPU:    resource.NewMilliQuantity(0, resource.DecimalSI),
-		v1.ResourceMemory: resource.NewQuantity(0, resource.BinarySI),
-		v1.ResourcePods:   resource.NewQuantity(int64(len(pods)), resource.DecimalSI),
-	}
-	for _, name := range resourceNames {
-		if !isBasicResource(name) {
-			totalReqs[name] = resource.NewQuantity(0, resource.DecimalSI)
-		}
-	}
-
-	for _, pod := range pods {
-		req, _ := utils.PodRequestsAndLimits(pod)
-		for _, name := range resourceNames {
-			quantity, ok := req[name]
-			if ok && name != v1.ResourcePods {
-				// As Quantity.Add says: Add adds the provided y quantity to the current value. If the current value is zero,
-				// the format of the quantity will be updated to the format of y.
-				totalReqs[name].Add(quantity)
-			}
-		}
-	}
-
-	return totalReqs
-}
-
 func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*v1.Pod) {
 	var nonRemovablePods, removablePods []*v1.Pod
 
@@ -472,7 +437,7 @@ func averageNodeBasicresources(nodes []*v1.Node, getPodsAssignedToNode podutil.G
 			numberOfNodes--
 			continue
 		}
-		usage := nodeUtilization(node, pods, resourceNames)
+		usage := nodeutil.NodeUtilization(pods, resourceNames)
 		nodeCapacity := node.Status.Capacity
 		if len(node.Status.Allocatable) > 0 {
 			nodeCapacity = node.Status.Allocatable
