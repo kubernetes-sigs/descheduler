@@ -28,7 +28,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -516,7 +516,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
 						Thresholds: testCase.thresholds,
 					},
-					NodeFit: true,
+					NodeFit: pointer.Bool(true),
 				},
 			}
 
@@ -527,7 +527,7 @@ func TestHighNodeUtilization(t *testing.T) {
 				false,
 				false,
 				false,
-				evictions.WithNodeFit(strategy.Params.NodeFit),
+				evictions.WithNodeFit(*strategy.Params.NodeFit),
 			)
 
 			HighNodeUtilization(ctx, fakeClient, strategy, testCase.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)

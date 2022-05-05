@@ -356,6 +356,11 @@ func (in *StrategyParameters) DeepCopyInto(out *StrategyParameters) {
 		*out = new(v1.LabelSelector)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.NodeFit != nil {
+		in, out := &in.NodeFit, &out.NodeFit
+		*out = new(bool)
+		**out = **in
+	}
 	if in.ExcludedTaints != nil {
 		in, out := &in.ExcludedTaints, &out.ExcludedTaints
 		*out = make([]string, len(*in))

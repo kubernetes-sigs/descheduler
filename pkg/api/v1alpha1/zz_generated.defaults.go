@@ -29,5 +29,10 @@ import (
 // Public to allow building arbitrary schemes.
 // All generated defaulters are covering - they call all nested defaulters.
 func RegisterDefaults(scheme *runtime.Scheme) error {
+	scheme.AddTypeDefaultingFunc(&DeschedulerPolicy{}, func(obj interface{}) { SetObjectDefaults_DeschedulerPolicy(obj.(*DeschedulerPolicy)) })
 	return nil
+}
+
+func SetObjectDefaults_DeschedulerPolicy(in *DeschedulerPolicy) {
+	SetDefaults_DeschedulerPolicy(in)
 }

@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -49,7 +50,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			NodeAffinityType: []string{
 				"requiredDuringSchedulingIgnoredDuringExecution",
 			},
-			NodeFit: true,
+			NodeFit: pointer.Bool(true),
 		},
 	}
 
@@ -226,8 +227,8 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			)
 
 			nodeFit := false
-			if tc.strategy.Params != nil {
-				nodeFit = tc.strategy.Params.NodeFit
+			if tc.strategy.Params != nil && tc.strategy.Params.NodeFit != nil {
+				nodeFit = *tc.strategy.Params.NodeFit
 			}
 
 			evictorFilter := evictions.NewEvictorFilter(

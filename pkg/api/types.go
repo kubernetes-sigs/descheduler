@@ -87,7 +87,7 @@ type StrategyParameters struct {
 	ThresholdPriority                 *int32
 	ThresholdPriorityClassName        string
 	LabelSelector                     *metav1.LabelSelector
-	NodeFit                           bool
+	NodeFit                           *bool
 	IncludePreferNoSchedule           bool
 	ExcludedTaints                    []string
 }

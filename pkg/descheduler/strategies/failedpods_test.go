@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -32,7 +33,7 @@ func TestRemoveFailedPods(t *testing.T) {
 					ExcludeOwnerKinds:       excludeKinds,
 					MinPodLifetimeSeconds:   minAgeSeconds,
 				},
-				NodeFit: nodeFit,
+				NodeFit: &nodeFit,
 			},
 		}
 	}
@@ -46,7 +47,7 @@ func TestRemoveFailedPods(t *testing.T) {
 	}{
 		{
 			description:             "default empty strategy, 0 failures, 0 evictions",
-			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: false}},
+			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: pointer.Bool(false)}},
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
 			pods:                    []*v1.Pod{}, // no pods come back with field selector phase=Failed
@@ -285,7 +286,7 @@ func TestRemoveFailedPods(t *testing.T) {
 				false,
 				false,
 				false,
-				evictions.WithNodeFit(tc.strategy.Params.NodeFit),
+				evictions.WithNodeFit(*tc.strategy.Params.NodeFit),
 			)
 
 			RemoveFailedPods(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)

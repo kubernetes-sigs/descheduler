@@ -110,7 +110,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 					PodRestartThreshold:     restartThresholds,
 					IncludingInitContainers: includingInitContainers,
 				},
-				NodeFit: nodeFit,
+				NodeFit: &nodeFit,
 			},
 		}
 	}
@@ -260,7 +260,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 				false,
 				false,
 				false,
-				evictions.WithNodeFit(tc.strategy.Params.NodeFit),
+				evictions.WithNodeFit(*tc.strategy.Params.NodeFit),
 			)
 
 			RemovePodsHavingTooManyRestarts(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)

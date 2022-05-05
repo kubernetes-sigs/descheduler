@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -60,7 +61,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 0,
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: false,
+					NodeFit: pointer.Bool(false),
 				},
 			},
 			namespaces: []string{"ns1"},
@@ -92,7 +93,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 1,
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: false,
+					NodeFit: pointer.Bool(false),
 				},
 			},
 			namespaces: []string{"ns1"},
@@ -162,7 +163,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 0,
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: false,
+					NodeFit: pointer.Bool(false),
 				},
 			},
 			namespaces: []string{"ns1"},
@@ -192,7 +193,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
-			strategy:             api.DeschedulerStrategy{Enabled: true, Params: &api.StrategyParameters{NodeFit: true, Namespaces: &api.Namespaces{Exclude: []string{"kube-system"}}}},
+			strategy:             api.DeschedulerStrategy{Enabled: true, Params: &api.StrategyParameters{NodeFit: pointer.Bool(true), Namespaces: &api.Namespaces{Exclude: []string{"kube-system"}}}},
 			namespaces:           []string{"ns1"},
 		},
 		{
@@ -222,7 +223,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 1,
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: false,
+					NodeFit: pointer.Bool(false),
 				},
 			},
 			namespaces: []string{"ns1"},
@@ -249,7 +250,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 2,
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: false,
+					NodeFit: pointer.Bool(false),
 				},
 			},
 			namespaces: []string{"ns1"},
@@ -293,7 +294,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 1,
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: true,
+					NodeFit: pointer.Bool(true),
 				},
 			},
 			namespaces: []string{"ns1"},
@@ -340,7 +341,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 2,
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: false,
+					NodeFit: pointer.Bool(false),
 				},
 			},
 			namespaces: []string{"ns1"},
@@ -398,7 +399,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 3,
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: false,
+					NodeFit: pointer.Bool(false),
 				},
 			},
 			namespaces: []string{"ns1"},
@@ -430,7 +431,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 1,
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: false,
+					NodeFit: pointer.Bool(false),
 				},
 			},
 			namespaces: []string{"ns1"},
@@ -478,7 +479,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 0,
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: true,
+					NodeFit: pointer.Bool(true),
 				},
 			},
 			namespaces: []string{"ns1"},
@@ -510,7 +511,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 0,
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: true,
+					NodeFit: pointer.Bool(true),
 				},
 			},
 			namespaces: []string{"ns1"},
@@ -782,7 +783,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 0,
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: true,
+					NodeFit: pointer.Bool(true),
 				},
 			},
 			namespaces: []string{"ns1"},
@@ -975,8 +976,8 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			)
 
 			nodeFit := false
-			if tc.strategy.Params != nil {
-				nodeFit = tc.strategy.Params.NodeFit
+			if tc.strategy.Params != nil && tc.strategy.Params.NodeFit != nil {
+				nodeFit = *tc.strategy.Params.NodeFit
 			}
 
 			evictorFilter := evictions.NewEvictorFilter(

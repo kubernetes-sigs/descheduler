@@ -154,24 +154,6 @@ func PodFitsAnyOtherNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.
 	return false
 }
 
-// PodFitsAnyNode checks if the given pod will fit any of the given nodes. The predicates used
-// to determine if the pod will fit can be found in the NodeFit function.
-func PodFitsAnyNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node) bool {
-	for _, node := range nodes {
-		errors := NodeFit(nodeIndexer, pod, node)
-		if len(errors) == 0 {
-			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
-			return true
-		} else {
-			klog.V(4).InfoS("Pod does not fit on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
-			for _, err := range errors {
-				klog.V(4).InfoS(err.Error())
-			}
-		}
-	}
-	return false
-}
-
 // PodFitsCurrentNode checks if the given pod will fit onto the given node. The predicates used
 // to determine if the pod will fit can be found in the NodeFit function.
 func PodFitsCurrentNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) bool {

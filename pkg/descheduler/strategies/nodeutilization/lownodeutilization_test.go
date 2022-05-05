@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -783,7 +784,7 @@ func TestLowNodeUtilization(t *testing.T) {
 						TargetThresholds:       test.targetThresholds,
 						UseDeviationThresholds: test.useDeviationThresholds,
 					},
-					NodeFit: true,
+					NodeFit: pointer.Bool(true),
 				},
 			}
 
@@ -794,7 +795,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				false,
 				false,
 				false,
-				evictions.WithNodeFit(strategy.Params.NodeFit),
+				evictions.WithNodeFit(*strategy.Params.NodeFit),
 			)
 
 			LowNodeUtilization(ctx, fakeClient, strategy, test.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
@@ -977,7 +978,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 					v1.ResourcePods: 70,
 				},
 			},
-			NodeFit: true,
+			NodeFit: pointer.Bool(true),
 		},
 	}
 

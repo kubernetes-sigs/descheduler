@@ -60,12 +60,16 @@ func ValidateAndParseStrategyParams(
 			return nil, fmt.Errorf("failed to get label selectors from strategy's params: %+v", err)
 		}
 	}
+	nodeFit := false
+	if params.NodeFit != nil {
+		nodeFit = *params.NodeFit
+	}
 
 	return &ValidatedStrategyParams{
 		ThresholdPriority:  thresholdPriority,
 		IncludedNamespaces: includedNamespaces,
 		ExcludedNamespaces: excludedNamespaces,
 		LabelSelector:      selector,
-		NodeFit:            params.NodeFit,
+		NodeFit:            nodeFit,
 	}, nil
 }

@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -256,35 +257,35 @@ func TestFindDuplicatePods(t *testing.T) {
 			pods:                    []*v1.Pod{p1, p2, p3},
 			nodes:                   []*v1.Node{node1, node3},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
+			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: pointer.Bool(true)}},
 		},
 		{
 			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet, all with a nodeSelector. Only node available has an incorrect node label, and nodeFit set to true. 0 should be evicted.",
 			pods:                    []*v1.Pod{p15, p16, p17},
 			nodes:                   []*v1.Node{node1, node4},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
+			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: pointer.Bool(true)}},
 		},
 		{
 			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available is not schedulable, and nodeFit set to true. 0 should be evicted.",
 			pods:                    []*v1.Pod{p1, p2, p3},
 			nodes:                   []*v1.Node{node1, node5},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
+			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: pointer.Bool(true)}},
 		},
 		{
 			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available does not have enough CPU, and nodeFit set to true. 0 should be evicted.",
 			pods:                    []*v1.Pod{p1, p2, p3, p19},
 			nodes:                   []*v1.Node{node1, node6},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
+			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: pointer.Bool(true)}},
 		},
 		{
 			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available has enough CPU, and nodeFit set to true. 1 should be evicted.",
 			pods:                    []*v1.Pod{p1, p2, p3, p20},
 			nodes:                   []*v1.Node{node1, node6},
 			expectedEvictedPodCount: 1,
-			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
+			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: pointer.Bool(true)}},
 		},
 	}
 
@@ -324,8 +325,8 @@ func TestFindDuplicatePods(t *testing.T) {
 			)
 
 			nodeFit := false
-			if testCase.strategy.Params != nil {
-				nodeFit = testCase.strategy.Params.NodeFit
+			if testCase.strategy.Params != nil && testCase.strategy.Params.NodeFit != nil {
+				nodeFit = *testCase.strategy.Params.NodeFit
 			}
 
 			evictorFilter := evictions.NewEvictorFilter(

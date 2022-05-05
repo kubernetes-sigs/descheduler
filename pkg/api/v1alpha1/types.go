@@ -85,7 +85,7 @@ type StrategyParameters struct {
 	ThresholdPriority                 *int32                             `json:"thresholdPriority"`
 	ThresholdPriorityClassName        string                             `json:"thresholdPriorityClassName"`
 	LabelSelector                     *metav1.LabelSelector              `json:"labelSelector"`
-	NodeFit                           bool                               `json:"nodeFit"`
+	NodeFit                           *bool                              `json:"nodeFit"`
 	IncludePreferNoSchedule           bool                               `json:"includePreferNoSchedule"`
 	ExcludedTaints                    []string                           `json:"excludedTaints,omitempty"`
 }

@@ -362,7 +362,7 @@ func autoConvert_v1alpha1_StrategyParameters_To_api_StrategyParameters(in *Strat
 	out.ThresholdPriority = (*int32)(unsafe.Pointer(in.ThresholdPriority))
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
 	out.LabelSelector = (*v1.LabelSelector)(unsafe.Pointer(in.LabelSelector))
-	out.NodeFit = in.NodeFit
+	out.NodeFit = (*bool)(unsafe.Pointer(in.NodeFit))
 	out.IncludePreferNoSchedule = in.IncludePreferNoSchedule
 	out.ExcludedTaints = *(*[]string)(unsafe.Pointer(&in.ExcludedTaints))
 	return nil
@@ -385,7 +385,7 @@ func autoConvert_api_StrategyParameters_To_v1alpha1_StrategyParameters(in *api.S
 	out.ThresholdPriority = (*int32)(unsafe.Pointer(in.ThresholdPriority))
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
 	out.LabelSelector = (*v1.LabelSelector)(unsafe.Pointer(in.LabelSelector))
-	out.NodeFit = in.NodeFit
+	out.NodeFit = (*bool)(unsafe.Pointer(in.NodeFit))
 	out.IncludePreferNoSchedule = in.IncludePreferNoSchedule
 	out.ExcludedTaints = *(*[]string)(unsafe.Pointer(&in.ExcludedTaints))
 	return nil

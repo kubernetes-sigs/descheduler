@@ -6,6 +6,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 )
@@ -23,7 +24,7 @@ func TestValidStrategyParams(t *testing.T) {
 	}{
 		{name: "validate nil params", params: nil},
 		{name: "validate empty params", params: &api.StrategyParameters{}},
-		{name: "validate params with NodeFit", params: &api.StrategyParameters{NodeFit: true}},
+		{name: "validate params with NodeFit", params: &api.StrategyParameters{NodeFit: pointer.Bool(true)}},
 		{name: "validate params with ThresholdPriority", params: &api.StrategyParameters{ThresholdPriority: &thresholdPriority}},
 		{name: "validate params with priorityClassName", params: &api.StrategyParameters{ThresholdPriorityClassName: "high-priority"}},
 		{name: "validate params with excluded namespace", params: &api.StrategyParameters{Namespaces: &api.Namespaces{Exclude: []string{"excluded-ns"}}}},

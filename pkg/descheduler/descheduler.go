@@ -292,8 +292,8 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 				if strategy.Enabled {
 					nodeFit := false
 					if name != "PodLifeTime" {
-						if strategy.Params != nil {
-							nodeFit = strategy.Params.NodeFit
+						if strategy.Params != nil && strategy.Params.NodeFit != nil {
+							nodeFit = *strategy.Params.NodeFit
 						}
 					}
 					thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, rs.Client, strategy.Params)

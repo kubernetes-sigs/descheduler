@@ -735,6 +735,9 @@ The following strategies accept a `nodeFit` boolean parameter which can optimize
 * `RemovePodsHavingTooManyRestarts`
 * `RemoveFailedPods`
 
+If omitted, the `nodeFit` boolean will default to `false` except for `RemovePodsViolatingNodeAffinity`
+for which it defaults to `true` due to backwards compatibility reasons.
+
  If set to `true` the descheduler will consider whether or not the pods that meet eviction criteria will fit on other nodes before evicting them. If a pod cannot be rescheduled to another node, it will not be evicted. Currently the following criteria are considered when setting `nodeFit` to `true`:
 - A `nodeSelector` on the pod
 - Any `tolerations` on the pod and any `taints` on the other nodes

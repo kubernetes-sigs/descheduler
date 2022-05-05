@@ -222,7 +222,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			)
 			strategy := api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit: test.nodeFit,
+					NodeFit: &test.nodeFit,
 				},
 			}
 

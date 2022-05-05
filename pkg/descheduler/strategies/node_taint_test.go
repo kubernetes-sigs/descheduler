@@ -343,7 +343,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 
 			strategy := api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
-					NodeFit:                 tc.nodeFit,
+					NodeFit:                 &tc.nodeFit,
 					IncludePreferNoSchedule: tc.includePreferNoSchedule,
 					ExcludedTaints:          tc.excludedTaints,
 				},
