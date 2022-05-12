@@ -1331,7 +1331,7 @@ func splitNodesAndWorkerNodes(nodes []v1.Node) ([]*v1.Node, []*v1.Node) {
 	for i := range nodes {
 		node := nodes[i]
 		allNodes = append(allNodes, &node)
-		if _, exists := node.Labels["node-role.kubernetes.io/master"]; !exists {
+		if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; !exists {
 			workerNodes = append(workerNodes, &node)
 		}
 	}
