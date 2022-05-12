@@ -20,9 +20,9 @@ set -o nounset
 
 # This just runs e2e tests.
 if [ -n "$KIND_E2E" ]; then
-    K8S_VERSION=${KUBERNETES_VERSION:-v1.21.1}
+    K8S_VERSION=${KUBERNETES_VERSION:-v1.24.0}
     curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/${K8S_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/
-    wget https://github.com/kubernetes-sigs/kind/releases/download/v0.11.0/kind-linux-amd64
+    wget https://github.com/kubernetes-sigs/kind/releases/download/v0.13.0/kind-linux-amd64
     chmod +x kind-linux-amd64
     mv kind-linux-amd64 kind
     export PATH=$PATH:$PWD

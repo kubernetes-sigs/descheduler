@@ -378,7 +378,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 		node.Spec.Taints = []v1.Taint{
 			{
 				Effect: v1.TaintEffectNoSchedule,
-				Key:    "node-role.kubernetes.io/master",
+				Key:    "node-role.kubernetes.io/control-plane",
 			},
 		}
 	}
@@ -387,7 +387,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 		if node.ObjectMeta.Labels == nil {
 			node.ObjectMeta.Labels = map[string]string{}
 		}
-		node.ObjectMeta.Labels["node-role.kubernetes.io/master"] = ""
+		node.ObjectMeta.Labels["node-role.kubernetes.io/control-plane"] = ""
 	}
 
 	setWorkerLabel := func(node *v1.Node) {
@@ -407,7 +407,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 						{
 							MatchExpressions: []v1.NodeSelectorRequirement{
 								{
-									Key:      "node-role.kubernetes.io/master",
+									Key:      "node-role.kubernetes.io/control-plane",
 									Operator: v1.NodeSelectorOpDoesNotExist,
 								},
 								{
@@ -431,7 +431,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 						{
 							MatchExpressions: []v1.NodeSelectorRequirement{
 								{
-									Key:      "node-role.kubernetes.io/master",
+									Key:      "node-role.kubernetes.io/control-plane",
 									Operator: v1.NodeSelectorOpDoesNotExist,
 								},
 								{
