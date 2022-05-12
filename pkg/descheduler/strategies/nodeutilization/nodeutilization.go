@@ -75,7 +75,7 @@ func validateNodeUtilizationParams(params *api.StrategyParameters) error {
 
 // validateThresholds checks if thresholds have valid resource name and resource percentage configured
 func validateThresholds(thresholds api.ResourceThresholds) error {
-	if thresholds == nil || len(thresholds) == 0 {
+	if len(thresholds) == 0 {
 		return fmt.Errorf("no resource threshold is configured")
 	}
 	for name, percent := range thresholds {
