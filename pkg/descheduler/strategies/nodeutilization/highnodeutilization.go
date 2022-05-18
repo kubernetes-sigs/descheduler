@@ -63,16 +63,17 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 	resourceNames := getResourceNames(targetThresholds)
 
 	sourceNodes, highNodes := classifyNodes(
-		getNodeUsage(nodes, thresholds, targetThresholds, resourceNames, getPodsAssignedToNode),
-		func(node *v1.Node, usage NodeUsage) bool {
-			return isNodeWithLowUtilization(usage)
+		getNodeUsage(nodes, resourceNames, getPodsAssignedToNode),
+		getNodeThresholds(nodes, thresholds, targetThresholds, resourceNames, getPodsAssignedToNode, false),
+		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
+			return isNodeWithLowUtilization(usage, threshold.lowResourceThreshold)
 		},
-		func(node *v1.Node, usage NodeUsage) bool {
+		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			if nodeutil.IsNodeUnschedulable(node) {
 				klog.V(2).InfoS("Node is unschedulable", "node", klog.KObj(node))
 				return false
 			}
-			return !isNodeWithLowUtilization(usage)
+			return !isNodeWithLowUtilization(usage, threshold.lowResourceThreshold)
 		})
 
 	// log message in one line
@@ -82,7 +83,7 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 		"Pods", thresholds[v1.ResourcePods],
 	}
 	for name := range thresholds {
-		if !isBasicResource(name) {
+		if !nodeutil.IsBasicResource(name) {
 			keysAndValues = append(keysAndValues, string(name), int64(thresholds[name]))
 		}
 	}
@@ -110,7 +111,7 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
 
 	// stop if the total available usage has dropped to zero - no more pods can be scheduled
-	continueEvictionCond := func(nodeUsage NodeUsage, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool {
+	continueEvictionCond := func(nodeInfo NodeInfo, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool {
 		for name := range totalAvailableUsage {
 			if totalAvailableUsage[name].CmpInt64(0) < 1 {
 				return false
@@ -119,6 +120,10 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 
 		return true
 	}
+
+	// Sort the nodes by the usage in ascending order
+	sortNodesByUsage(sourceNodes, true)
+
 	evictPodsFromSourceNodes(
 		ctx,
 		sourceNodes,
@@ -159,7 +164,7 @@ func setDefaultForThresholds(thresholds, targetThresholds api.ResourceThresholds
 	targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
 
 	for name := range thresholds {
-		if !isBasicResource(name) {
+		if !nodeutil.IsBasicResource(name) {
 			targetThresholds[name] = MaxResourcePercentage
 		}
 	}

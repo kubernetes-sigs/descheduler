@@ -6,23 +6,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
-	"k8s.io/component-base/featuregate"
 	"k8s.io/klog/v2"
-)
-
-const (
-	// owner: @jinxu
-	// beta: v1.10
-	//
-	// New local storage types to support local storage capacity isolation
-	LocalStorageCapacityIsolation featuregate.Feature = "LocalStorageCapacityIsolation"
-
-	// owner: @egernst
-	// alpha: v1.16
-	//
-	// Enables PodOverhead, for accounting pod overheads which are specific to a given RuntimeClass
-	PodOverhead featuregate.Feature = "PodOverhead"
 )
 
 // GetResourceRequest finds and returns the request value for a specific resource.
@@ -53,11 +37,6 @@ func GetResourceRequestQuantity(pod *v1.Pod, resourceName v1.ResourceName) resou
 		requestQuantity = resource.Quantity{Format: resource.DecimalSI}
 	}
 
-	if resourceName == v1.ResourceEphemeralStorage && !utilfeature.DefaultFeatureGate.Enabled(LocalStorageCapacityIsolation) {
-		// if the local storage capacity isolation feature gate is disabled, pods request 0 disk
-		return requestQuantity
-	}
-
 	for _, container := range pod.Spec.Containers {
 		if rQuantity, ok := container.Resources.Requests[resourceName]; ok {
 			requestQuantity.Add(rQuantity)
@@ -72,9 +51,9 @@ func GetResourceRequestQuantity(pod *v1.Pod, resourceName v1.ResourceName) resou
 		}
 	}
 
-	// if PodOverhead feature is supported, add overhead for running a pod
-	// to the total requests if the resource total is non-zero
-	if pod.Spec.Overhead != nil && utilfeature.DefaultFeatureGate.Enabled(PodOverhead) {
+	// We assume pod overhead feature gate is enabled.
+	// We can't import the scheduler settings so we will inherit the default.
+	if pod.Spec.Overhead != nil {
 		if podOverhead, ok := pod.Spec.Overhead[resourceName]; ok && !requestQuantity.IsZero() {
 			requestQuantity.Add(podOverhead)
 		}
@@ -162,9 +141,9 @@ func PodRequestsAndLimits(pod *v1.Pod) (reqs, limits v1.ResourceList) {
 		maxResourceList(limits, container.Resources.Limits)
 	}
 
-	// if PodOverhead feature is supported, add overhead for running a pod
-	// to the sum of reqeuests and to non-zero limits:
-	if pod.Spec.Overhead != nil && utilfeature.DefaultFeatureGate.Enabled(PodOverhead) {
+	// We assume pod overhead feature gate is enabled.
+	// We can't import the scheduler settings so we will inherit the default.
+	if pod.Spec.Overhead != nil {
 		addResourceList(reqs, pod.Spec.Overhead)
 
 		for name, quantity := range pod.Spec.Overhead {
@@ -207,12 +186,31 @@ func maxResourceList(list, new v1.ResourceList) {
 
 // PodToleratesTaints returns true if a pod tolerates one node's taints
 func PodToleratesTaints(pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
-	for nodeName, taintsForNode := range taintsOfNodes {
-		if len(pod.Spec.Tolerations) >= len(taintsForNode) && TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taintsForNode, nil) {
-			return true
-		}
-		klog.V(5).InfoS("Pod doesn't tolerate nodes taint", "pod", klog.KObj(pod), "nodeName", nodeName)
-	}
 
+	for nodeName, taintsForNode := range taintsOfNodes {
+		if len(pod.Spec.Tolerations) >= len(taintsForNode) {
+
+			if TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taintsForNode, nil) {
+				return true
+			}
+
+			if klog.V(5).Enabled() {
+				for i := range taintsForNode {
+					if !TolerationsTolerateTaint(pod.Spec.Tolerations, &taintsForNode[i]) {
+						klog.V(5).InfoS("Pod doesn't tolerate node taint",
+							"pod", klog.KObj(pod),
+							"nodeName", nodeName,
+							"taint", fmt.Sprintf("%s:%s=%s", taintsForNode[i].Key, taintsForNode[i].Value, taintsForNode[i].Effect),
+						)
+					}
+				}
+			}
+		} else {
+			klog.V(5).InfoS("Pod doesn't tolerate nodes taint, count mismatch",
+				"pod", klog.KObj(pod),
+				"nodeName", nodeName,
+			)
+		}
+	}
 	return false
 }

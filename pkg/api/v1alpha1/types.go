@@ -86,15 +86,18 @@ type StrategyParameters struct {
 	ThresholdPriorityClassName        string                             `json:"thresholdPriorityClassName"`
 	LabelSelector                     *metav1.LabelSelector              `json:"labelSelector"`
 	NodeFit                           bool                               `json:"nodeFit"`
+	IncludePreferNoSchedule           bool                               `json:"includePreferNoSchedule"`
+	ExcludedTaints                    []string                           `json:"excludedTaints,omitempty"`
 }
 
 type Percentage float64
 type ResourceThresholds map[v1.ResourceName]Percentage
 
 type NodeResourceUtilizationThresholds struct {
-	Thresholds       ResourceThresholds `json:"thresholds,omitempty"`
-	TargetThresholds ResourceThresholds `json:"targetThresholds,omitempty"`
-	NumberOfNodes    int                `json:"numberOfNodes,omitempty"`
+	UseDeviationThresholds bool               `json:"useDeviationThresholds,omitempty"`
+	Thresholds             ResourceThresholds `json:"thresholds,omitempty"`
+	TargetThresholds       ResourceThresholds `json:"targetThresholds,omitempty"`
+	NumberOfNodes          int                `json:"numberOfNodes,omitempty"`
 }
 
 type PodsHavingTooManyRestarts struct {

@@ -47,10 +47,9 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
 )
 
-func Run(rs *options.DeschedulerServer) error {
+func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	metrics.Register()
 
-	ctx := context.Background()
 	rsclient, err := client.CreateClient(rs.KubeconfigFile)
 	if err != nil {
 		return err
@@ -70,8 +69,22 @@ func Run(rs *options.DeschedulerServer) error {
 		return err
 	}
 
-	stopChannel := make(chan struct{})
-	return RunDeschedulerStrategies(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel)
+	runFn := func() error {
+		return RunDeschedulerStrategies(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion)
+	}
+
+	if rs.LeaderElection.LeaderElect && rs.DeschedulingInterval.Seconds() == 0 {
+		return fmt.Errorf("leaderElection must be used with deschedulingInterval")
+	}
+
+	if rs.LeaderElection.LeaderElect && !rs.DryRun {
+		if err := NewLeaderElection(runFn, rsclient, &rs.LeaderElection, ctx); err != nil {
+			return fmt.Errorf("leaderElection: %w", err)
+		}
+		return nil
+	}
+
+	return runFn()
 }
 
 type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc)
@@ -152,12 +165,15 @@ func cachedClient(
 	return fakeClient, nil
 }
 
-func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, stopChannel chan struct{}) error {
+func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string) error {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
 	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
 	podInformer := sharedInformerFactory.Core().V1().Pods()
 	namespaceInformer := sharedInformerFactory.Core().V1().Namespaces()
 	priorityClassInformer := sharedInformerFactory.Scheduling().V1().PriorityClasses()
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	// create the informers
 	namespaceInformer.Informer()
@@ -168,8 +184,8 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		return fmt.Errorf("build get pods assigned to node function error: %v", err)
 	}
 
-	sharedInformerFactory.Start(stopChannel)
-	sharedInformerFactory.WaitForCacheSync(stopChannel)
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
 	strategyFuncs := map[api.StrategyName]strategyFunction{
 		"RemoveDuplicates":                            strategies.RemoveDuplicatePods,
@@ -219,13 +235,13 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, nodeSelector)
 		if err != nil {
 			klog.V(1).InfoS("Unable to get ready nodes", "err", err)
-			close(stopChannel)
+			cancel()
 			return
 		}
 
 		if len(nodes) <= 1 {
 			klog.V(1).InfoS("The cluster size is 0 or 1 meaning eviction causes service disruption or degradation. So aborting..")
-			close(stopChannel)
+			cancel()
 			return
 		}
 
@@ -267,6 +283,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
 			nodes,
+			getPodsAssignedToNode,
 			evictLocalStoragePods,
 			evictSystemCriticalPods,
 			ignorePvcPods,
@@ -288,9 +305,9 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 
 		// If there was no interval specified, send a signal to the stopChannel to end the wait.Until loop after 1 iteration
 		if rs.DeschedulingInterval.Seconds() == 0 {
-			close(stopChannel)
+			cancel()
 		}
-	}, rs.DeschedulingInterval, stopChannel)
+	}, rs.DeschedulingInterval, ctx.Done())
 
 	return nil
 }

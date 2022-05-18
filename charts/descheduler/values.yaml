@@ -11,7 +11,8 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
-imagePullSecrets: []
+imagePullSecrets:
+#   - name: container-registry-secret
 
 resources:
   requests:
@@ -37,13 +38,32 @@ suspend: false
 # Required when running as a Deployment
 deschedulingInterval: 5m
 
+# Specifies the replica count for Deployment
+# Set leaderElection if you want to use more than 1 replica
+# Set affinity.podAntiAffinity rule if you want to schedule onto a node
+# only if that node is in the same zone as at least one already-running descheduler
+replicas: 1
+
+# Specifies whether Leader Election resources should be created
+# Required when running as a Deployment
+leaderElection: {}
+#  enabled: true
+#  leaseDuration: 15
+#  renewDeadline: 10
+#  retryPeriod: 2
+#  resourceLock: "leases"
+#  resourceName: "descheduler"
+#  resourceNamescape: "kube-system"
+
 cmdOptions:
   v: 3
-  # evict-local-storage-pods:
-  # max-pods-to-evict-per-node: 10
-  # node-selector: "key1=value1,key2=value2"
 
 deschedulerPolicy:
+  # nodeSelector: "key1=value1,key2=value2"
+  # maxNoOfPodsToEvictPerNode: 10
+  # maxNoOfPodsToEvictPerNamespace: 10
+  # ignorePvcPods: true
+  # evictLocalStoragePods: true
   strategies:
     RemoveDuplicates:
       enabled: true
@@ -74,6 +94,25 @@ priorityClassName: system-cluster-critical
 nodeSelector: {}
 #  foo: bar
 
+affinity: {}
+# nodeAffinity:
+#   requiredDuringSchedulingIgnoredDuringExecution:
+#     nodeSelectorTerms:
+#     - matchExpressions:
+#       - key: kubernetes.io/e2e-az-name
+#         operator: In
+#         values:
+#         - e2e-az1
+#         - e2e-az2
+#  podAntiAffinity:
+#    requiredDuringSchedulingIgnoredDuringExecution:
+#      - labelSelector:
+#          matchExpressions:
+#            - key: app.kubernetes.io/name
+#              operator: In
+#              values:
+#                - descheduler
+#        topologyKey: "kubernetes.io/hostname"
 tolerations: []
 # - key: 'management'
 #   operator: 'Equal'
@@ -94,6 +133,8 @@ serviceAccount:
   # The name of the ServiceAccount to use.
   # If not set and create is true, a name is generated using the fullname template
   name:
+  # Specifies custom annotations for the serviceAccount
+  annotations: {}
 
 livenessProbe:
   failureThreshold: 3
@@ -103,3 +144,26 @@ livenessProbe:
     scheme: HTTPS
   initialDelaySeconds: 3
   periodSeconds: 10
+
+service:
+  enabled: false
+
+serviceMonitor:
+  enabled: false
+  # The namespace where Prometheus expects to find service monitors.
+  # namespace: ""
+  interval: ""
+  # honorLabels: true
+  insecureSkipVerify: true
+  serverName: null
+  metricRelabelings: []
+    # - action: keep
+    #   regex: 'descheduler_(build_info|pods_evicted)'
+    #   sourceLabels: [__name__]
+  relabelings: []
+    # - sourceLabels: [__meta_kubernetes_pod_node_name]
+    #   separator: ;
+    #   regex: ^(.*)$
+    #   targetLabel: nodename
+    #   replacement: $1
+    #   action: replace

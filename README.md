@@ -50,6 +50,8 @@ Table of Contents
   - [Node Fit filtering](#node-fit-filtering)
 - [Pod Evictions](#pod-evictions)
   - [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
+- [High Availability](#high-availability)
+  - [Configure HA Mode](#configure-ha-mode)
 - [Metrics](#metrics)
 - [Compatibility Matrix](#compatibility-matrix)
 - [Getting Involved and Contributing](#getting-involved-and-contributing)
@@ -103,17 +105,17 @@ See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/ku
 
 Run As A Job
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.22.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.24.0' | kubectl apply -f -
 ```
 
 Run As A CronJob
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.22.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.24.0' | kubectl apply -f -
 ```
 
 Run As A Deployment
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.22.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.24.0' | kubectl apply -f -
 ```
 
 ## User Guide
@@ -132,6 +134,7 @@ The policy includes a common configuration that applies to all the strategies:
 | `evictSystemCriticalPods` | `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
 | `ignorePvcPods` | `false` | set whether PVC pods should be evicted or ignored |
 | `maxNoOfPodsToEvictPerNode` | `nil` | maximum number of pods evicted from each node (summed through all strategies) |
+| `maxNoOfPodsToEvictPerNamespace` | `nil` | maximum number of pods evicted from each namespace (summed through all strategies) |
 | `evictFailedBarePods` | `false` | allow eviction of pods without owner references and in failed phase |
 
 As part of the policy, the parameters associated with each strategy can be configured.
@@ -218,6 +221,17 @@ These thresholds, `thresholds` and `targetThresholds`, could be tuned as per you
 strategy evicts pods from `overutilized nodes` (those with usage above `targetThresholds`) to `underutilized nodes`
 (those with usage below `thresholds`), it will abort if any number of `underutilized nodes` or `overutilized nodes` is zero.
 
+Additionally, the strategy accepts a `useDeviationThresholds` parameter.
+If that parameter is set to `true`, the thresholds are considered as percentage deviations from mean resource usage.
+`thresholds` will be deducted from the mean among all nodes and `targetThresholds` will be added to the mean.
+A resource consumption above (resp. below) this window is considered as overutilization (resp. underutilization).
+
+**NOTE:** Node resource consumption is determined by the requests and limits of pods, not actual usage.
+This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same
+design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands
+like `kubectl top`) may differ from the calculated consumption, due to these components reporting
+actual usage metrics. Implementing metrics-based descheduling is currently TODO for the project.
+
 **Parameters:**
 
 |Name|Type|
@@ -225,6 +239,7 @@ strategy evicts pods from `overutilized nodes` (those with usage above `targetTh
 |`thresholds`|map(string:int)|
 |`targetThresholds`|map(string:int)|
 |`numberOfNodes`|int|
+|`useDeviationThresholds`|bool|
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
@@ -265,10 +280,10 @@ under utilized frequently or for a short period of time. By default, `numberOfNo
 
 ### HighNodeUtilization
 
-This strategy finds nodes that are under utilized and evicts pods from the nodes in the hope that these pods will be 
-scheduled compactly into fewer nodes.  Used in conjunction with node auto-scaling, this strategy is intended to help 
+This strategy finds nodes that are under utilized and evicts pods from the nodes in the hope that these pods will be
+scheduled compactly into fewer nodes.  Used in conjunction with node auto-scaling, this strategy is intended to help
 trigger down scaling of under utilized nodes.
-This strategy **must** be used with the scheduler strategy `MostRequestedPriority`. The parameters of this strategy are 
+This strategy **must** be used with the scheduler scoring strategy `MostAllocated`. The parameters of this strategy are
 configured under `nodeResourceUtilizationThresholds`.
 
 The under utilization of nodes is determined by a configurable threshold `thresholds`. The threshold
@@ -284,6 +299,12 @@ The `thresholds` param could be tuned as per your cluster requirements. Note tha
 strategy evicts pods from `underutilized nodes` (those with usage below `thresholds`)
 so that they can be recreated in appropriately utilized nodes.
 The strategy will abort if any number of `underutilized nodes` or `appropriately utilized nodes` is zero.
+
+**NOTE:** Node resource consumption is determined by the requests and limits of pods, not actual usage.
+This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same
+design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands
+like `kubectl top`) may differ from the calculated consumption, due to these components reporting
+actual usage metrics. Implementing metrics-based descheduling is currently TODO for the project.
 
 **Parameters:**
 
@@ -399,10 +420,17 @@ pod "podA" with a toleration to tolerate a taint ``key=value:NoSchedule`` schedu
 node. If the node's taint is subsequently updated/removed, taint is no longer satisfied by its pods' tolerations
 and will be evicted.
 
+Node taints can be excluded from consideration by specifying a list of excludedTaints. If a node taint key **or**
+key=value matches an excludedTaints entry, the taint will be ignored.
+
+For example, excludedTaints entry "dedicated" would match all taints with key "dedicated", regardless of value.
+excludedTaints entry "dedicated=special-user" would match taints with key "dedicated" and value "special-user".
+
 **Parameters:**
 
 |Name|Type|
 |---|---|
+|`excludedTaints`|list(string)|
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
@@ -417,6 +445,10 @@ kind: "DeschedulerPolicy"
 strategies:
   "RemovePodsViolatingNodeTaints":
     enabled: true
+    params:
+      excludedTaints:
+      - dedicated=special-user # exclude taints with key "dedicated" and value "special-user"
+      - reserved # exclude all taints with key "reserved"
 ````
 
 ### RemovePodsViolatingTopologySpreadConstraint
@@ -657,7 +689,7 @@ does not exist, descheduler won't create it and will throw an error.
 
 ### Label filtering
 
-The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.22/#labelselector-v1-meta)
+The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.24/#labelselector-v1-meta)
 to filter pods by their labels:
 
 * `PodLifeTime`
@@ -705,8 +737,9 @@ The following strategies accept a `nodeFit` boolean parameter which can optimize
 
  If set to `true` the descheduler will consider whether or not the pods that meet eviction criteria will fit on other nodes before evicting them. If a pod cannot be rescheduled to another node, it will not be evicted. Currently the following criteria are considered when setting `nodeFit` to `true`:
 - A `nodeSelector` on the pod
-- Any `Tolerations` on the pod and any `Taints` on the other nodes
+- Any `tolerations` on the pod and any `taints` on the other nodes
 - `nodeAffinity` on the pod
+- Resource `requests` made by the pod and the resources available on other nodes
 - Whether any of the other nodes are marked as `unschedulable`
 
 E.g.
@@ -716,17 +749,17 @@ apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
 strategies:
   "LowNodeUtilization":
-     enabled: true
-     params:
-       nodeResourceUtilizationThresholds:
-         thresholds:
-           "cpu" : 20
-           "memory": 20
-           "pods": 20
-         targetThresholds:
-           "cpu" : 50
-           "memory": 50
-           "pods": 50
+    enabled: true
+    params:
+      nodeResourceUtilizationThresholds:
+        thresholds:
+          "cpu": 20
+          "memory": 20
+          "pods": 20
+        targetThresholds:
+          "cpu": 50
+          "memory": 50
+          "pods": 50
         nodeFit: true
 ```
 
@@ -761,6 +794,23 @@ Setting `--v=4` or greater on the Descheduler will log all reasons why any pod i
 Pods subject to a Pod Disruption Budget(PDB) are not evicted if descheduling violates its PDB. The pods
 are evicted by using the eviction subresource to handle PDB.
 
+## High Availability
+
+In High Availability mode, Descheduler starts [leader election](https://github.com/kubernetes/client-go/tree/master/tools/leaderelection) process in Kubernetes. You can activate HA mode
+if you choose to deploy your application as Deployment.
+
+Deployment starts with 1 replica by default. If you want to use more than 1 replica, you must consider
+enable High Availability mode since we don't want to run descheduler pods simultaneously.
+
+### Configure HA Mode
+
+The leader election process can be enabled by setting `--leader-elect` in the CLI. You can also set
+`--set=leaderElection.enabled=true` flag if you are using Helm.
+
+To get best results from HA mode some additional configurations might require:
+* Configure a [podAntiAffinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node) rule if you want to schedule onto a node only if that node is in the same zone as at least one already-running descheduler
+* Set the replica count greater than 1
+
 ## Metrics
 
 | name	| type	| description |
@@ -780,17 +830,18 @@ v0.18 should work with k8s v1.18, v1.17, and v1.16.
 Starting with descheduler release v0.18 the minor version of descheduler matches the minor version of the k8s client
 packages that it is compiled with.
 
-Descheduler  | Supported Kubernetes Version
--------------|-----------------------------
-v0.22        | v1.22
-v0.21        | v1.21
-v0.20        | v1.20
-v0.19        | v1.19
-v0.18        | v1.18
-v0.10        | v1.17
-v0.4-v0.9    | v1.9+
-v0.1-v0.3    | v1.7-v1.8
-
+| Descheduler | Supported Kubernetes Version |
+|-------------|------------------------------|
+| v0.24       | v1.24                        |
+| v0.23       | v1.23                        |
+| v0.22       | v1.22                        |
+| v0.21       | v1.21                        |
+| v0.20       | v1.20                        |
+| v0.19       | v1.19                        |
+| v0.18       | v1.18                        |
+| v0.10       | v1.17                        |
+| v0.4-v0.9   | v1.9+                        |
+| v0.1-v0.3   | v1.7-v1.8                    |
 
 ## Getting Involved and Contributing
 

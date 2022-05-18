@@ -51,6 +51,7 @@ type namespacePodEvictCount map[string]uint
 type PodEvictor struct {
 	client                     clientset.Interface
 	nodes                      []*v1.Node
+	nodeIndexer                podutil.GetPodsAssignedToNodeFunc
 	policyGroupVersion         string
 	dryRun                     bool
 	maxPodsToEvictPerNode      *uint
@@ -71,6 +72,7 @@ func NewPodEvictor(
 	maxPodsToEvictPerNode *uint,
 	maxPodsToEvictPerNamespace *uint,
 	nodes []*v1.Node,
+	nodeIndexer podutil.GetPodsAssignedToNodeFunc,
 	evictLocalStoragePods bool,
 	evictSystemCriticalPods bool,
 	ignorePvcPods bool,
@@ -87,6 +89,7 @@ func NewPodEvictor(
 	return &PodEvictor{
 		client:                     client,
 		nodes:                      nodes,
+		nodeIndexer:                nodeIndexer,
 		policyGroupVersion:         policyGroupVersion,
 		dryRun:                     dryRun,
 		maxPodsToEvictPerNode:      maxPodsToEvictPerNode,
@@ -155,9 +158,9 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 	}
 
 	if pe.dryRun {
-		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", reason)
+		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", reason, "strategy", strategy, "node", node.Name)
 	} else {
-		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", reason)
+		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", reason, "strategy", strategy, "node", node.Name)
 		eventBroadcaster := record.NewBroadcaster()
 		eventBroadcaster.StartStructuredLogging(3)
 		eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: pe.client.CoreV1().Events(pod.Namespace)})
@@ -296,7 +299,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 	}
 	if options.nodeFit {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
-			if !nodeutil.PodFitsAnyOtherNode(pod, pe.nodes) {
+			if !nodeutil.PodFitsAnyOtherNode(pe.nodeIndexer, pod, pe.nodes) {
 				return fmt.Errorf("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable")
 			}
 			return nil

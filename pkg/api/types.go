@@ -88,15 +88,18 @@ type StrategyParameters struct {
 	ThresholdPriorityClassName        string
 	LabelSelector                     *metav1.LabelSelector
 	NodeFit                           bool
+	IncludePreferNoSchedule           bool
+	ExcludedTaints                    []string
 }
 
 type Percentage float64
 type ResourceThresholds map[v1.ResourceName]Percentage
 
 type NodeResourceUtilizationThresholds struct {
-	Thresholds       ResourceThresholds
-	TargetThresholds ResourceThresholds
-	NumberOfNodes    int
+	UseDeviationThresholds bool
+	Thresholds             ResourceThresholds
+	TargetThresholds       ResourceThresholds
+	NumberOfNodes          int
 }
 
 type PodsHavingTooManyRestarts struct {
