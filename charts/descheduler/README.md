@@ -84,3 +84,4 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `suspend`                           | Set spec.suspend in descheduler cronjob                                                                               | `false`                              |
 | `commonLabels`                      | Labels to apply to all resources                                                                                      | `{}`                                 |
 | `livenessProbe`                     | Liveness probe configuration for the descheduler container                                                            | _see values.yaml_                    |
+| `tests.enabled`                     | Disables tests from being generated, can also be done with --skip-tests via the helm cli                              | `true`                               |

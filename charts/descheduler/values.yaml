@@ -167,3 +167,6 @@ serviceMonitor:
     #   targetLabel: nodename
     #   replacement: $1
     #   action: replace
+
+tests:
+  enabled: true
