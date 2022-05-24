@@ -136,6 +136,10 @@ serviceAccount:
   # Specifies custom annotations for the serviceAccount
   annotations: {}
 
+podAnnotations: {}
+
+podLabels: {}
+
 livenessProbe:
   failureThreshold: 3
   httpGet:
