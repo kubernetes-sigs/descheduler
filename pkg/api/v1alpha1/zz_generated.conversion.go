@@ -261,6 +261,7 @@ func Convert_api_Namespaces_To_v1alpha1_Namespaces(in *api.Namespaces, out *Name
 }
 
 func autoConvert_v1alpha1_NodeResourceUtilizationThresholds_To_api_NodeResourceUtilizationThresholds(in *NodeResourceUtilizationThresholds, out *api.NodeResourceUtilizationThresholds, s conversion.Scope) error {
+	out.UseDeviationThresholds = in.UseDeviationThresholds
 	out.Thresholds = *(*api.ResourceThresholds)(unsafe.Pointer(&in.Thresholds))
 	out.TargetThresholds = *(*api.ResourceThresholds)(unsafe.Pointer(&in.TargetThresholds))
 	out.NumberOfNodes = in.NumberOfNodes
@@ -273,6 +274,7 @@ func Convert_v1alpha1_NodeResourceUtilizationThresholds_To_api_NodeResourceUtili
 }
 
 func autoConvert_api_NodeResourceUtilizationThresholds_To_v1alpha1_NodeResourceUtilizationThresholds(in *api.NodeResourceUtilizationThresholds, out *NodeResourceUtilizationThresholds, s conversion.Scope) error {
+	out.UseDeviationThresholds = in.UseDeviationThresholds
 	out.Thresholds = *(*ResourceThresholds)(unsafe.Pointer(&in.Thresholds))
 	out.TargetThresholds = *(*ResourceThresholds)(unsafe.Pointer(&in.TargetThresholds))
 	out.NumberOfNodes = in.NumberOfNodes
@@ -361,6 +363,8 @@ func autoConvert_v1alpha1_StrategyParameters_To_api_StrategyParameters(in *Strat
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
 	out.LabelSelector = (*v1.LabelSelector)(unsafe.Pointer(in.LabelSelector))
 	out.NodeFit = in.NodeFit
+	out.IncludePreferNoSchedule = in.IncludePreferNoSchedule
+	out.ExcludedTaints = *(*[]string)(unsafe.Pointer(&in.ExcludedTaints))
 	return nil
 }
 
@@ -382,6 +386,8 @@ func autoConvert_api_StrategyParameters_To_v1alpha1_StrategyParameters(in *api.S
 	out.ThresholdPriorityClassName = in.ThresholdPriorityClassName
 	out.LabelSelector = (*v1.LabelSelector)(unsafe.Pointer(in.LabelSelector))
 	out.NodeFit = in.NodeFit
+	out.IncludePreferNoSchedule = in.IncludePreferNoSchedule
+	out.ExcludedTaints = *(*[]string)(unsafe.Pointer(&in.ExcludedTaints))
 	return nil
 }
 

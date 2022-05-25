@@ -3,10 +3,18 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "descheduler.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "descheduler.labels" . | nindent 4 }}
 spec:
+  {{- if gt .Values.replicas 1.0}}
+  {{- if not .Values.leaderElection.enabled }}
+  {{- fail "You must set leaderElection to use more than 1 replica"}}
+  {{- end}}
+  replicas: {{ required "leaderElection required for running more than one replica" .Values.replicas }}
+  {{- else }}
   replicas: 1
+  {{- end }}
   selector:
     matchLabels:
       {{- include "descheduler.selectorLabels" . | nindent 6 }}
@@ -27,6 +35,10 @@ spec:
       priorityClassName: {{ .Values.priorityClassName }}
       {{- end }}
       serviceAccountName: {{ template "descheduler.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+      {{- toYaml . | nindent 10 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (printf "v%s" .Chart.AppVersion) }}"
@@ -44,6 +56,7 @@ spec:
             - {{ $value | quote }}
             {{- end }}
             {{- end }}
+            {{- include "descheduler.leaderElection" . | nindent 12 }}
           ports:
             - containerPort: 10258
               protocol: TCP
@@ -68,6 +81,10 @@ spec:
             name: {{ template "descheduler.fullname" . }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.tolerations }}

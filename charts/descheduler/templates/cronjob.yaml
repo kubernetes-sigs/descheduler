@@ -3,6 +3,7 @@ apiVersion: {{ .Values.cronJobApiVersion | default "batch/v1" }}
 kind: CronJob
 metadata:
   name: {{ template "descheduler.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "descheduler.labels" . | nindent 4 }}
 spec:
@@ -38,6 +39,10 @@ spec:
         spec:
           {{- with .Values.nodeSelector }}
           nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- with .Values.tolerations }}

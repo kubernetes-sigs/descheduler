@@ -27,6 +27,8 @@ import (
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	"sigs.k8s.io/descheduler/pkg/descheduler/node"
+	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
@@ -36,12 +38,19 @@ type NodeUsage struct {
 	node    *v1.Node
 	usage   map[v1.ResourceName]*resource.Quantity
 	allPods []*v1.Pod
+}
 
+type NodeThresholds struct {
 	lowResourceThreshold  map[v1.ResourceName]*resource.Quantity
 	highResourceThreshold map[v1.ResourceName]*resource.Quantity
 }
 
-type continueEvictionCond func(nodeUsage NodeUsage, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool
+type NodeInfo struct {
+	NodeUsage
+	thresholds NodeThresholds
+}
+
+type continueEvictionCond func(nodeInfo NodeInfo, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool
 
 // NodePodsMap is a set of (node, pods) pairs
 type NodePodsMap map[*v1.Node][]*v1.Pod
@@ -66,7 +75,7 @@ func validateNodeUtilizationParams(params *api.StrategyParameters) error {
 
 // validateThresholds checks if thresholds have valid resource name and resource percentage configured
 func validateThresholds(thresholds api.ResourceThresholds) error {
-	if thresholds == nil || len(thresholds) == 0 {
+	if len(thresholds) == 0 {
 		return fmt.Errorf("no resource threshold is configured")
 	}
 	for name, percent := range thresholds {
@@ -77,9 +86,63 @@ func validateThresholds(thresholds api.ResourceThresholds) error {
 	return nil
 }
 
-func getNodeUsage(
+func normalizePercentage(percent api.Percentage) api.Percentage {
+	if percent > MaxResourcePercentage {
+		return MaxResourcePercentage
+	}
+	if percent < MinResourcePercentage {
+		return MinResourcePercentage
+	}
+	return percent
+}
+
+func getNodeThresholds(
 	nodes []*v1.Node,
 	lowThreshold, highThreshold api.ResourceThresholds,
+	resourceNames []v1.ResourceName,
+	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
+	useDeviationThresholds bool,
+) map[string]NodeThresholds {
+	nodeThresholdsMap := map[string]NodeThresholds{}
+
+	averageResourceUsagePercent := api.ResourceThresholds{}
+	if useDeviationThresholds {
+		averageResourceUsagePercent = averageNodeBasicresources(nodes, getPodsAssignedToNode, resourceNames)
+	}
+
+	for _, node := range nodes {
+		nodeCapacity := node.Status.Capacity
+		if len(node.Status.Allocatable) > 0 {
+			nodeCapacity = node.Status.Allocatable
+		}
+
+		nodeThresholdsMap[node.Name] = NodeThresholds{
+			lowResourceThreshold:  map[v1.ResourceName]*resource.Quantity{},
+			highResourceThreshold: map[v1.ResourceName]*resource.Quantity{},
+		}
+
+		for _, resourceName := range resourceNames {
+			if useDeviationThresholds {
+				cap := nodeCapacity[resourceName]
+				if lowThreshold[resourceName] == MinResourcePercentage {
+					nodeThresholdsMap[node.Name].lowResourceThreshold[resourceName] = &cap
+					nodeThresholdsMap[node.Name].highResourceThreshold[resourceName] = &cap
+				} else {
+					nodeThresholdsMap[node.Name].lowResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, normalizePercentage(averageResourceUsagePercent[resourceName]-lowThreshold[resourceName]))
+					nodeThresholdsMap[node.Name].highResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, normalizePercentage(averageResourceUsagePercent[resourceName]+highThreshold[resourceName]))
+				}
+			} else {
+				nodeThresholdsMap[node.Name].lowResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, lowThreshold[resourceName])
+				nodeThresholdsMap[node.Name].highResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, highThreshold[resourceName])
+			}
+		}
+
+	}
+	return nodeThresholdsMap
+}
+
+func getNodeUsage(
+	nodes []*v1.Node,
 	resourceNames []v1.ResourceName,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 ) []NodeUsage {
@@ -92,46 +155,35 @@ func getNodeUsage(
 			continue
 		}
 
-		// A threshold is in percentages but in <0;100> interval.
-		// Performing `threshold * 0.01` will convert <0;100> interval into <0;1>.
-		// Multiplying it with capacity will give fraction of the capacity corresponding to the given high/low resource threshold in Quantity units.
-		nodeCapacity := node.Status.Capacity
-		if len(node.Status.Allocatable) > 0 {
-			nodeCapacity = node.Status.Allocatable
-		}
-		lowResourceThreshold := map[v1.ResourceName]*resource.Quantity{
-			v1.ResourceCPU:    resource.NewMilliQuantity(int64(float64(lowThreshold[v1.ResourceCPU])*float64(nodeCapacity.Cpu().MilliValue())*0.01), resource.DecimalSI),
-			v1.ResourceMemory: resource.NewQuantity(int64(float64(lowThreshold[v1.ResourceMemory])*float64(nodeCapacity.Memory().Value())*0.01), resource.BinarySI),
-			v1.ResourcePods:   resource.NewQuantity(int64(float64(lowThreshold[v1.ResourcePods])*float64(nodeCapacity.Pods().Value())*0.01), resource.DecimalSI),
-		}
-		for _, name := range resourceNames {
-			if !isBasicResource(name) {
-				cap := nodeCapacity[name]
-				lowResourceThreshold[name] = resource.NewQuantity(int64(float64(lowThreshold[name])*float64(cap.Value())*0.01), resource.DecimalSI)
-			}
-		}
-		highResourceThreshold := map[v1.ResourceName]*resource.Quantity{
-			v1.ResourceCPU:    resource.NewMilliQuantity(int64(float64(highThreshold[v1.ResourceCPU])*float64(nodeCapacity.Cpu().MilliValue())*0.01), resource.DecimalSI),
-			v1.ResourceMemory: resource.NewQuantity(int64(float64(highThreshold[v1.ResourceMemory])*float64(nodeCapacity.Memory().Value())*0.01), resource.BinarySI),
-			v1.ResourcePods:   resource.NewQuantity(int64(float64(highThreshold[v1.ResourcePods])*float64(nodeCapacity.Pods().Value())*0.01), resource.DecimalSI),
-		}
-		for _, name := range resourceNames {
-			if !isBasicResource(name) {
-				cap := nodeCapacity[name]
-				highResourceThreshold[name] = resource.NewQuantity(int64(float64(highThreshold[name])*float64(cap.Value())*0.01), resource.DecimalSI)
-			}
-		}
-
 		nodeUsageList = append(nodeUsageList, NodeUsage{
-			node:                  node,
-			usage:                 nodeUtilization(node, pods, resourceNames),
-			allPods:               pods,
-			lowResourceThreshold:  lowResourceThreshold,
-			highResourceThreshold: highResourceThreshold,
+			node:    node,
+			usage:   nodeutil.NodeUtilization(pods, resourceNames),
+			allPods: pods,
 		})
 	}
 
 	return nodeUsageList
+}
+
+func resourceThreshold(nodeCapacity v1.ResourceList, resourceName v1.ResourceName, threshold api.Percentage) *resource.Quantity {
+	defaultFormat := resource.DecimalSI
+	if resourceName == v1.ResourceMemory {
+		defaultFormat = resource.BinarySI
+	}
+
+	resourceCapacityFraction := func(resourceNodeCapacity int64) int64 {
+		// A threshold is in percentages but in <0;100> interval.
+		// Performing `threshold * 0.01` will convert <0;100> interval into <0;1>.
+		// Multiplying it with capacity will give fraction of the capacity corresponding to the given resource threshold in Quantity units.
+		return int64(float64(threshold) * 0.01 * float64(resourceNodeCapacity))
+	}
+
+	resourceCapacityQuantity := nodeCapacity.Name(resourceName, defaultFormat)
+
+	if resourceName == v1.ResourceCPU {
+		return resource.NewMilliQuantity(resourceCapacityFraction(resourceCapacityQuantity.MilliValue()), defaultFormat)
+	}
+	return resource.NewQuantity(resourceCapacityFraction(resourceCapacityQuantity.Value()), defaultFormat)
 }
 
 func resourceUsagePercentages(nodeUsage NodeUsage) map[v1.ResourceName]float64 {
@@ -155,19 +207,24 @@ func resourceUsagePercentages(nodeUsage NodeUsage) map[v1.ResourceName]float64 {
 // low and high thresholds, it is simply ignored.
 func classifyNodes(
 	nodeUsages []NodeUsage,
-	lowThresholdFilter, highThresholdFilter func(node *v1.Node, usage NodeUsage) bool,
-) ([]NodeUsage, []NodeUsage) {
-	lowNodes, highNodes := []NodeUsage{}, []NodeUsage{}
+	nodeThresholds map[string]NodeThresholds,
+	lowThresholdFilter, highThresholdFilter func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool,
+) ([]NodeInfo, []NodeInfo) {
+	lowNodes, highNodes := []NodeInfo{}, []NodeInfo{}
 
 	for _, nodeUsage := range nodeUsages {
-		if lowThresholdFilter(nodeUsage.node, nodeUsage) {
-			klog.V(2).InfoS("Node is underutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
-			lowNodes = append(lowNodes, nodeUsage)
-		} else if highThresholdFilter(nodeUsage.node, nodeUsage) {
-			klog.V(2).InfoS("Node is overutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
-			highNodes = append(highNodes, nodeUsage)
+		nodeInfo := NodeInfo{
+			NodeUsage:  nodeUsage,
+			thresholds: nodeThresholds[nodeUsage.node.Name],
+		}
+		if lowThresholdFilter(nodeUsage.node, nodeUsage, nodeThresholds[nodeUsage.node.Name]) {
+			klog.InfoS("Node is underutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
+			lowNodes = append(lowNodes, nodeInfo)
+		} else if highThresholdFilter(nodeUsage.node, nodeUsage, nodeThresholds[nodeUsage.node.Name]) {
+			klog.InfoS("Node is overutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
+			highNodes = append(highNodes, nodeInfo)
 		} else {
-			klog.V(2).InfoS("Node is appropriately utilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
+			klog.InfoS("Node is appropriately utilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
 		}
 	}
 
@@ -179,16 +236,13 @@ func classifyNodes(
 // TODO: @ravig Break this function into smaller functions.
 func evictPodsFromSourceNodes(
 	ctx context.Context,
-	sourceNodes, destinationNodes []NodeUsage,
+	sourceNodes, destinationNodes []NodeInfo,
 	podEvictor *evictions.PodEvictor,
 	podFilter func(pod *v1.Pod) bool,
 	resourceNames []v1.ResourceName,
 	strategy string,
 	continueEviction continueEvictionCond,
 ) {
-
-	sortNodesByUsage(sourceNodes)
-
 	// upper bound on total number of pods/cpu/memory and optional extended resources to be moved
 	totalAvailableUsage := map[v1.ResourceName]*resource.Quantity{
 		v1.ResourcePods:   {},
@@ -204,7 +258,7 @@ func evictPodsFromSourceNodes(
 			if _, ok := totalAvailableUsage[name]; !ok {
 				totalAvailableUsage[name] = resource.NewQuantity(0, resource.DecimalSI)
 			}
-			totalAvailableUsage[name].Add(*node.highResourceThreshold[name])
+			totalAvailableUsage[name].Add(*node.thresholds.highResourceThreshold[name])
 			totalAvailableUsage[name].Sub(*node.usage[name])
 		}
 	}
@@ -216,7 +270,7 @@ func evictPodsFromSourceNodes(
 		"Pods", totalAvailableUsage[v1.ResourcePods].Value(),
 	}
 	for name := range totalAvailableUsage {
-		if !isBasicResource(name) {
+		if !node.IsBasicResource(name) {
 			keysAndValues = append(keysAndValues, string(name), totalAvailableUsage[name].Value())
 		}
 	}
@@ -244,7 +298,7 @@ func evictPodsFromSourceNodes(
 func evictPods(
 	ctx context.Context,
 	inputPods []*v1.Pod,
-	nodeUsage NodeUsage,
+	nodeInfo NodeInfo,
 	totalAvailableUsage map[v1.ResourceName]*resource.Quantity,
 	taintsOfLowNodes map[string][]v1.Taint,
 	podEvictor *evictions.PodEvictor,
@@ -252,14 +306,14 @@ func evictPods(
 	continueEviction continueEvictionCond,
 ) {
 
-	if continueEviction(nodeUsage, totalAvailableUsage) {
+	if continueEviction(nodeInfo, totalAvailableUsage) {
 		for _, pod := range inputPods {
 			if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
 				klog.V(3).InfoS("Skipping eviction for pod, doesn't tolerate node taint", "pod", klog.KObj(pod))
 				continue
 			}
 
-			success, err := podEvictor.EvictPod(ctx, pod, nodeUsage.node, strategy)
+			success, err := podEvictor.EvictPod(ctx, pod, nodeInfo.node, strategy)
 			if err != nil {
 				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
 				break
@@ -270,30 +324,30 @@ func evictPods(
 
 				for name := range totalAvailableUsage {
 					if name == v1.ResourcePods {
-						nodeUsage.usage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
+						nodeInfo.usage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
 						totalAvailableUsage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
 					} else {
 						quantity := utils.GetResourceRequestQuantity(pod, name)
-						nodeUsage.usage[name].Sub(quantity)
+						nodeInfo.usage[name].Sub(quantity)
 						totalAvailableUsage[name].Sub(quantity)
 					}
 				}
 
 				keysAndValues := []interface{}{
-					"node", nodeUsage.node.Name,
-					"CPU", nodeUsage.usage[v1.ResourceCPU].MilliValue(),
-					"Mem", nodeUsage.usage[v1.ResourceMemory].Value(),
-					"Pods", nodeUsage.usage[v1.ResourcePods].Value(),
+					"node", nodeInfo.node.Name,
+					"CPU", nodeInfo.usage[v1.ResourceCPU].MilliValue(),
+					"Mem", nodeInfo.usage[v1.ResourceMemory].Value(),
+					"Pods", nodeInfo.usage[v1.ResourcePods].Value(),
 				}
 				for name := range totalAvailableUsage {
-					if !isBasicResource(name) {
+					if !nodeutil.IsBasicResource(name) {
 						keysAndValues = append(keysAndValues, string(name), totalAvailableUsage[name].Value())
 					}
 				}
 
 				klog.V(3).InfoS("Updated node usage", keysAndValues...)
 				// check if pods can be still evicted
-				if !continueEviction(nodeUsage, totalAvailableUsage) {
+				if !continueEviction(nodeInfo, totalAvailableUsage) {
 					break
 				}
 			}
@@ -301,31 +355,36 @@ func evictPods(
 	}
 }
 
-// sortNodesByUsage sorts nodes based on usage in descending order
-func sortNodesByUsage(nodes []NodeUsage) {
+// sortNodesByUsage sorts nodes based on usage according to the given strategy.
+func sortNodesByUsage(nodes []NodeInfo, ascending bool) {
 	sort.Slice(nodes, func(i, j int) bool {
 		ti := nodes[i].usage[v1.ResourceMemory].Value() + nodes[i].usage[v1.ResourceCPU].MilliValue() + nodes[i].usage[v1.ResourcePods].Value()
 		tj := nodes[j].usage[v1.ResourceMemory].Value() + nodes[j].usage[v1.ResourceCPU].MilliValue() + nodes[j].usage[v1.ResourcePods].Value()
 
 		// extended resources
 		for name := range nodes[i].usage {
-			if !isBasicResource(name) {
+			if !nodeutil.IsBasicResource(name) {
 				ti = ti + nodes[i].usage[name].Value()
 				tj = tj + nodes[j].usage[name].Value()
 			}
 		}
 
-		// To return sorted in descending order
+		// Return ascending order for HighNodeUtilization strategy
+		if ascending {
+			return ti < tj
+		}
+
+		// Return descending order for LowNodeUtilization strategy
 		return ti > tj
 	})
 }
 
 // isNodeAboveTargetUtilization checks if a node is overutilized
 // At least one resource has to be above the high threshold
-func isNodeAboveTargetUtilization(usage NodeUsage) bool {
+func isNodeAboveTargetUtilization(usage NodeUsage, threshold map[v1.ResourceName]*resource.Quantity) bool {
 	for name, nodeValue := range usage.usage {
 		// usage.highResourceThreshold[name] < nodeValue
-		if usage.highResourceThreshold[name].Cmp(*nodeValue) == -1 {
+		if threshold[name].Cmp(*nodeValue) == -1 {
 			return true
 		}
 	}
@@ -334,10 +393,10 @@ func isNodeAboveTargetUtilization(usage NodeUsage) bool {
 
 // isNodeWithLowUtilization checks if a node is underutilized
 // All resources have to be below the low threshold
-func isNodeWithLowUtilization(usage NodeUsage) bool {
+func isNodeWithLowUtilization(usage NodeUsage, threshold map[v1.ResourceName]*resource.Quantity) bool {
 	for name, nodeValue := range usage.usage {
 		// usage.lowResourceThreshold[name] < nodeValue
-		if usage.lowResourceThreshold[name].Cmp(*nodeValue) == -1 {
+		if threshold[name].Cmp(*nodeValue) == -1 {
 			return false
 		}
 	}
@@ -354,43 +413,6 @@ func getResourceNames(thresholds api.ResourceThresholds) []v1.ResourceName {
 	return resourceNames
 }
 
-// isBasicResource checks if resource is basic native.
-func isBasicResource(name v1.ResourceName) bool {
-	switch name {
-	case v1.ResourceCPU, v1.ResourceMemory, v1.ResourcePods:
-		return true
-	default:
-		return false
-	}
-}
-
-func nodeUtilization(node *v1.Node, pods []*v1.Pod, resourceNames []v1.ResourceName) map[v1.ResourceName]*resource.Quantity {
-	totalReqs := map[v1.ResourceName]*resource.Quantity{
-		v1.ResourceCPU:    resource.NewMilliQuantity(0, resource.DecimalSI),
-		v1.ResourceMemory: resource.NewQuantity(0, resource.BinarySI),
-		v1.ResourcePods:   resource.NewQuantity(int64(len(pods)), resource.DecimalSI),
-	}
-	for _, name := range resourceNames {
-		if !isBasicResource(name) {
-			totalReqs[name] = resource.NewQuantity(0, resource.DecimalSI)
-		}
-	}
-
-	for _, pod := range pods {
-		req, _ := utils.PodRequestsAndLimits(pod)
-		for _, name := range resourceNames {
-			quantity, ok := req[name]
-			if ok && name != v1.ResourcePods {
-				// As Quantity.Add says: Add adds the provided y quantity to the current value. If the current value is zero,
-				// the format of the quantity will be updated to the format of y.
-				totalReqs[name].Add(quantity)
-			}
-		}
-	}
-
-	return totalReqs
-}
-
 func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*v1.Pod) {
 	var nonRemovablePods, removablePods []*v1.Pod
 
@@ -403,4 +425,35 @@ func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*
 	}
 
 	return nonRemovablePods, removablePods
+}
+
+func averageNodeBasicresources(nodes []*v1.Node, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, resourceNames []v1.ResourceName) api.ResourceThresholds {
+	total := api.ResourceThresholds{}
+	average := api.ResourceThresholds{}
+	numberOfNodes := len(nodes)
+	for _, node := range nodes {
+		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, nil)
+		if err != nil {
+			numberOfNodes--
+			continue
+		}
+		usage := nodeutil.NodeUtilization(pods, resourceNames)
+		nodeCapacity := node.Status.Capacity
+		if len(node.Status.Allocatable) > 0 {
+			nodeCapacity = node.Status.Allocatable
+		}
+		for resource, value := range usage {
+			nodeCapacityValue := nodeCapacity[resource]
+			if resource == v1.ResourceCPU {
+				total[resource] += api.Percentage(value.MilliValue()) / api.Percentage(nodeCapacityValue.MilliValue()) * 100.0
+			} else {
+				total[resource] += api.Percentage(value.Value()) / api.Percentage(nodeCapacityValue.Value()) * 100.0
+
+			}
+		}
+	}
+	for resource, value := range total {
+		average[resource] = value / api.Percentage(numberOfNodes)
+	}
+	return average
 }

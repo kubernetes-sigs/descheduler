@@ -65,3 +65,37 @@ Create the name of the service account to use
     {{ default "default" .Values.serviceAccount.name }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Leader Election
+*/}}
+{{- define "descheduler.leaderElection"}}
+{{- if .Values.leaderElection -}}
+- --leader-elect
+- {{ default false .Values.leaderElection.enabled }}
+{{- if .Values.leaderElection.leaseDuration }}
+- --leader-elect-lease-duration
+- {{ .Values.leaderElection.leaseDuration }}
+{{- end }}
+{{- if .Values.leaderElection.renewDeadline }}
+- --leader-elect-renew-deadline
+- {{ .Values.leaderElection.renewDeadline }}
+{{- end }}
+{{- if .Values.leaderElection.retryPeriod }}
+- --leader-elect-retry-period
+- {{ .Values.leaderElection.retryPeriod }}
+{{- end }}
+{{- if .Values.leaderElection.resourceLock }}
+- --leader-elect-resource-lock
+- {{ .Values.leaderElection.resourceLock }}
+{{- end }}
+{{- if .Values.leaderElection.resourceName }}
+- --leader-elect-resource-name
+- {{ .Values.leaderElection.resourceName }}
+{{- end }}
+{{- if .Values.leaderElection.resourceNamescape }}
+- --leader-elect-resource-namespace
+- {{ .Values.leaderElection.resourceNamescape }}
+{{- end -}}
+{{- end }}
+{{- end }}

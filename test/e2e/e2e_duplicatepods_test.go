@@ -20,16 +20,12 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/wait"
-	clientset "k8s.io/client-go/kubernetes"
-
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
@@ -109,7 +105,8 @@ func TestRemoveDuplicates(t *testing.T) {
 						Name: "sample",
 						VolumeSource: v1.VolumeSource{
 							EmptyDir: &v1.EmptyDirVolumeSource{
-								SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+								SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+							},
 						},
 					},
 				}
@@ -147,6 +144,7 @@ func TestRemoveDuplicates(t *testing.T) {
 				nil,
 				nil,
 				nodes,
+				getPodsAssignedToNode,
 				true,
 				false,
 				false,
@@ -175,29 +173,5 @@ func TestRemoveDuplicates(t *testing.T) {
 				t.Errorf("Test error for description: %s. Unexpected number of pods have been evicted, got %v, expected %v", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)
 			}
 		})
-	}
-}
-
-func waitForPodsRunning(ctx context.Context, t *testing.T, clientSet clientset.Interface, labelMap map[string]string, desireRunningPodNum int, namespace string) {
-	if err := wait.PollImmediate(10*time.Second, 60*time.Second, func() (bool, error) {
-		podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: labels.SelectorFromSet(labelMap).String(),
-		})
-		if err != nil {
-			return false, err
-		}
-		if len(podList.Items) != desireRunningPodNum {
-			t.Logf("Waiting for %v pods to be running, got %v instead", desireRunningPodNum, len(podList.Items))
-			return false, nil
-		}
-		for _, pod := range podList.Items {
-			if pod.Status.Phase != v1.PodRunning {
-				t.Logf("Pod %v not running yet, is %v instead", pod.Name, pod.Status.Phase)
-				return false, nil
-			}
-		}
-		return true, nil
-	}); err != nil {
-		t.Fatalf("Error waiting for pods running: %v", err)
 	}
 }

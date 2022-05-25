@@ -19,13 +19,15 @@ package options
 
 import (
 	"github.com/spf13/pflag"
-
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiserveroptions "k8s.io/apiserver/pkg/server/options"
 	clientset "k8s.io/client-go/kubernetes"
-
+	componentbaseconfig "k8s.io/component-base/config"
+	componentbaseoptions "k8s.io/component-base/config/options"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
 	deschedulerscheme "sigs.k8s.io/descheduler/pkg/descheduler/scheme"
+	"time"
 )
 
 const (
@@ -58,7 +60,17 @@ func NewDeschedulerServer() (*DeschedulerServer, error) {
 }
 
 func newDefaultComponentConfig() (*componentconfig.DeschedulerConfiguration, error) {
-	versionedCfg := v1alpha1.DeschedulerConfiguration{}
+	versionedCfg := v1alpha1.DeschedulerConfiguration{
+		LeaderElection: componentbaseconfig.LeaderElectionConfiguration{
+			LeaderElect:       false,
+			LeaseDuration:     metav1.Duration{Duration: 137 * time.Second},
+			RenewDeadline:     metav1.Duration{Duration: 107 * time.Second},
+			RetryPeriod:       metav1.Duration{Duration: 26 * time.Second},
+			ResourceLock:      "leases",
+			ResourceName:      "descheduler",
+			ResourceNamespace: "kube-system",
+		},
+	}
 	deschedulerscheme.Scheme.Default(&versionedCfg)
 	cfg := componentconfig.DeschedulerConfiguration{}
 	if err := deschedulerscheme.Scheme.Convert(&versionedCfg, &cfg, nil); err != nil {
@@ -75,6 +87,8 @@ func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&rs.PolicyConfigFile, "policy-config-file", rs.PolicyConfigFile, "File with descheduler policy configuration.")
 	fs.BoolVar(&rs.DryRun, "dry-run", rs.DryRun, "execute descheduler in dry run mode.")
 	fs.BoolVar(&rs.DisableMetrics, "disable-metrics", rs.DisableMetrics, "Disables metrics. The metrics are by default served through https://localhost:10258/metrics. Secure address, resp. port can be changed through --bind-address, resp. --secure-port flags.")
+
+	componentbaseoptions.BindLeaderElectionFlags(&rs.LeaderElection, fs)
 
 	rs.SecureServing.AddFlags(fs)
 }

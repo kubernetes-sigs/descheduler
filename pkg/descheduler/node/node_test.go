@@ -21,9 +21,12 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -147,13 +150,13 @@ func TestPodFitsCurrentNode(t *testing.T) {
 					},
 				},
 			},
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					},
-				},
-			},
+			node: test.BuildTestNode("node1", 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+				node.ObjectMeta.Labels = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+
+				node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+			}),
 			success: true,
 		},
 		{
@@ -181,27 +184,48 @@ func TestPodFitsCurrentNode(t *testing.T) {
 					},
 				},
 			},
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						nodeLabelKey: "no",
-					},
-				},
-			},
+			node: test.BuildTestNode("node1", 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+				node.ObjectMeta.Labels = map[string]string{
+					nodeLabelKey: "no",
+				}
+
+				node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+			}),
 			success: false,
 		},
 	}
 
 	for _, tc := range tests {
-		actual := PodFitsCurrentNode(tc.pod, tc.node)
-		if actual != tc.success {
-			t.Errorf("Test %#v failed", tc.description)
-		}
+		t.Run(tc.description, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var objs []runtime.Object
+			objs = append(objs, tc.node)
+			objs = append(objs, tc.pod)
+
+			fakeClient := fake.NewSimpleClientset(objs...)
+
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			podInformer := sharedInformerFactory.Core().V1().Pods()
+
+			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			if err != nil {
+				t.Errorf("Build get pods assigned to node function error: %v", err)
+			}
+
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+			actual := PodFitsCurrentNode(getPodsAssignedToNode, tc.pod, tc.node)
+			if actual != tc.success {
+				t.Errorf("Test %#v failed", tc.description)
+			}
+		})
 	}
 }
 
 func TestPodFitsAnyOtherNode(t *testing.T) {
-
 	nodeLabelKey := "kubernetes.io/desiredNode"
 	nodeLabelValue := "yes"
 	nodeTaintKey := "hardware"
@@ -215,238 +239,527 @@ func TestPodFitsAnyOtherNode(t *testing.T) {
 		pod         *v1.Pod
 		nodes       []*v1.Node
 		success     bool
+		podsOnNodes []*v1.Pod
 	}{
 		{
 			description: "Pod fits another node matching node affinity",
-			pod:         createPodManifest(nodeNames[2], nodeLabelKey, nodeLabelValue),
+			pod: test.BuildTestPod("p1", 0, 0, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+			}),
 			nodes: []*v1.Node{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[0],
-						Labels: map[string]string{
-							nodeLabelKey: nodeLabelValue,
-						},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[1],
-						Labels: map[string]string{
-							nodeLabelKey: "no",
-						},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[2],
-					},
-				},
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[1], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: "no",
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 0, 0, 0, nil),
 			},
-			success: true,
+			podsOnNodes: []*v1.Pod{},
+			success:     true,
 		},
 		{
 			description: "Pod expected to fit one of the nodes",
-			pod:         createPodManifest(nodeNames[2], nodeLabelKey, nodeLabelValue),
+			pod: test.BuildTestPod("p1", 0, 0, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+			}),
 			nodes: []*v1.Node{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[0],
-						Labels: map[string]string{
-							nodeLabelKey: "no",
-						},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[1],
-						Labels: map[string]string{
-							nodeLabelKey: nodeLabelValue,
-						},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[2],
-					},
-				},
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: "no",
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[1], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 0, 0, 0, nil),
 			},
-			success: true,
+			podsOnNodes: []*v1.Pod{},
+			success:     true,
 		},
 		{
 			description: "Pod expected to fit none of the nodes",
-			pod:         createPodManifest(nodeNames[2], nodeLabelKey, nodeLabelValue),
+			pod: test.BuildTestPod("p1", 0, 0, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+			}),
 			nodes: []*v1.Node{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[0],
-						Labels: map[string]string{
-							nodeLabelKey: "unfit1",
-						},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[1],
-						Labels: map[string]string{
-							nodeLabelKey: "unfit2",
-						},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[2],
-					},
-				},
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: "unfit1",
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[1], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: "unfit2",
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 0, 0, 0, nil),
 			},
-			success: false,
+			podsOnNodes: []*v1.Pod{},
+			success:     false,
 		},
 		{
 			description: "Nodes are unschedulable but labels match, should fail",
-			pod:         createPodManifest(nodeNames[2], nodeLabelKey, nodeLabelValue),
+			pod: test.BuildTestPod("p1", 0, 0, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+			}),
 			nodes: []*v1.Node{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[0],
-						Labels: map[string]string{
-							nodeLabelKey: nodeLabelValue,
-						},
-					},
-					Spec: v1.NodeSpec{
-						Unschedulable: true,
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[1],
-						Labels: map[string]string{
-							nodeLabelKey: "no",
-						},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[2],
-					},
-				},
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+					node.Spec.Unschedulable = true
+				}),
+				test.BuildTestNode(nodeNames[1], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: "no",
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 0, 0, 0, nil),
 			},
-			success: false,
+			podsOnNodes: []*v1.Pod{},
+			success:     false,
 		},
 		{
-			description: "Two nodes matches node selector, one of them is tained, should pass",
-			pod:         createPodManifest(nodeNames[2], nodeLabelKey, nodeLabelValue),
+			description: "Both nodes are tained, should fail",
+			pod: test.BuildTestPod("p1", 2000, 2*1000*1000*1000, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+				pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+			}),
 			nodes: []*v1.Node{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[0],
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    nodeTaintKey,
+							Value:  nodeTaintValue,
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+				test.BuildTestNode(nodeNames[1], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    nodeTaintKey,
+							Value:  nodeTaintValue,
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+				test.BuildTestNode(nodeNames[2], 0, 0, 0, nil),
+			},
+			podsOnNodes: []*v1.Pod{},
+			success:     false,
+		},
+		{
+			description: "Two nodes matches node selector, one of them is tained, there is a pod on the available node, and requests are low, should pass",
+			pod: test.BuildTestPod("p1", 2000, 2*1000*1000*1000, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+				pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+			}),
+			nodes: []*v1.Node{
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    nodeTaintKey,
+							Value:  nodeTaintValue,
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+				test.BuildTestNode(nodeNames[1], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 0, 0, 0, nil),
+			},
+			podsOnNodes: []*v1.Pod{
+				test.BuildTestPod("test-pod", 12*1000, 20*1000*1000*1000, nodeNames[1], func(pod *v1.Pod) {
+					pod.ObjectMeta = metav1.ObjectMeta{
+						Namespace: "test",
 						Labels: map[string]string{
-							nodeLabelKey: nodeLabelValue,
+							"test": "true",
 						},
-					},
-					Spec: v1.NodeSpec{
-						Taints: []v1.Taint{
-							{
-								Key:    nodeTaintKey,
-								Value:  nodeTaintValue,
-								Effect: v1.TaintEffectNoSchedule,
-							},
-						},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[1],
-						Labels: map[string]string{
-							nodeLabelKey: nodeLabelValue,
-						},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[2],
-					},
-				},
+					}
+					pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(40*1000*1000*1000, resource.DecimalSI)
+				}),
 			},
 			success: true,
 		},
 		{
-			description: "Both nodes are tained, should fail",
-			pod:         createPodManifest(nodeNames[2], nodeLabelKey, nodeLabelValue),
+			description: "Two nodes matches node selector, one of them is tained, but CPU requests are too big, should fail",
+			pod: test.BuildTestPod("p1", 2000, 2*1000*1000*1000, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+				pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+			}),
 			nodes: []*v1.Node{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[0],
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    nodeTaintKey,
+							Value:  nodeTaintValue,
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+				// Notice that this node only has 4 cores, the pod already on the node below requests 3 cores, and the pod above requests 2 cores
+				test.BuildTestNode(nodeNames[1], 4000, 8*1000*1000*1000, 12, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(200*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 0, 0, 0, nil),
+			},
+			podsOnNodes: []*v1.Pod{
+				test.BuildTestPod("3-core-pod", 3000, 4*1000*1000*1000, nodeNames[1], func(pod *v1.Pod) {
+					pod.ObjectMeta = metav1.ObjectMeta{
+						Namespace: "test",
 						Labels: map[string]string{
-							nodeLabelKey: nodeLabelValue,
+							"test": "true",
 						},
-					},
-					Spec: v1.NodeSpec{
-						Taints: []v1.Taint{
-							{
-								Key:    nodeTaintKey,
-								Value:  nodeTaintValue,
-								Effect: v1.TaintEffectNoSchedule,
-							},
+					}
+					pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+				}),
+			},
+			success: false,
+		},
+		{
+			description: "Two nodes matches node selector, one of them is tained, but memory requests are too big, should fail",
+			pod: test.BuildTestPod("p1", 2000, 5*1000*1000*1000, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+				pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+			}),
+			nodes: []*v1.Node{
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    nodeTaintKey,
+							Value:  nodeTaintValue,
+							Effect: v1.TaintEffectNoSchedule,
 						},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[1],
+					}
+				}),
+				// Notice that this node only has 8GB of memory, the pod already on the node below requests 4GB, and the pod above requests 5GB
+				test.BuildTestNode(nodeNames[1], 10*1000, 8*1000*1000*1000, 12, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(200*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 0, 0, 0, nil),
+			},
+			podsOnNodes: []*v1.Pod{
+				test.BuildTestPod("4GB-mem-pod", 2000, 4*1000*1000*1000, nodeNames[1], func(pod *v1.Pod) {
+					pod.ObjectMeta = metav1.ObjectMeta{
+						Namespace: "test",
 						Labels: map[string]string{
-							nodeLabelKey: nodeLabelValue,
+							"test": "true",
 						},
-					},
-					Spec: v1.NodeSpec{
-						Taints: []v1.Taint{
-							{
-								Key:    nodeTaintKey,
-								Value:  nodeTaintValue,
-								Effect: v1.TaintEffectNoExecute,
-							},
+					}
+					pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+				}),
+			},
+			success: false,
+		},
+		{
+			description: "Two nodes matches node selector, one of them is tained, but ephemeral storage requests are too big, should fail",
+			pod: test.BuildTestPod("p1", 2000, 4*1000*1000*1000, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+				pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+			}),
+			nodes: []*v1.Node{
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    nodeTaintKey,
+							Value:  nodeTaintValue,
+							Effect: v1.TaintEffectNoSchedule,
 						},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: nodeNames[2],
-					},
-				},
+					}
+				}),
+				// Notice that this node only has 20GB of storage, the pod already on the node below requests 11GB, and the pod above requests 10GB
+				test.BuildTestNode(nodeNames[1], 10*1000, 8*1000*1000*1000, 12, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(20*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 0, 0, 0, nil),
+			},
+			podsOnNodes: []*v1.Pod{
+				test.BuildTestPod("11GB-storage-pod", 2000, 4*1000*1000*1000, nodeNames[1], func(pod *v1.Pod) {
+					pod.ObjectMeta = metav1.ObjectMeta{
+						Namespace: "test",
+						Labels: map[string]string{
+							"test": "true",
+						},
+					}
+					pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(11*1000*1000*1000, resource.DecimalSI)
+				}),
+			},
+			success: false,
+		},
+		{
+			description: "Two nodes matches node selector, one of them is tained, but custom resource requests are too big, should fail",
+			pod: test.BuildTestPod("p1", 2000, 2*1000*1000*1000, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+				pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+				pod.Spec.Containers[0].Resources.Requests["example.com/custom-resource"] = *resource.NewQuantity(10, resource.DecimalSI)
+			}),
+			nodes: []*v1.Node{
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    nodeTaintKey,
+							Value:  nodeTaintValue,
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+					node.Status.Allocatable["example.com/custom-resource"] = *resource.NewQuantity(15, resource.DecimalSI)
+				}),
+				// Notice that this node only has 15 of the custom resource, the pod already on the node below requests 10, and the pod above requests 10
+				test.BuildTestNode(nodeNames[1], 10*1000, 8*1000*1000*1000, 12, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(200*1000*1000*1000, resource.DecimalSI)
+					node.Status.Allocatable["example.com/custom-resource"] = *resource.NewQuantity(15, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 0, 0, 0, nil),
+			},
+			podsOnNodes: []*v1.Pod{
+				test.BuildTestPod("10-custom-resource-pod", 0, 0, nodeNames[1], func(pod *v1.Pod) {
+					pod.ObjectMeta = metav1.ObjectMeta{
+						Namespace: "test",
+						Labels: map[string]string{
+							"test": "true",
+						},
+					}
+					pod.Spec.Containers[0].Resources.Requests["example.com/custom-resource"] = *resource.NewQuantity(10, resource.DecimalSI)
+				}),
+			},
+			success: false,
+		},
+		{
+			description: "Two nodes matches node selector, one of them is tained, CPU requests will fit, and pod Overhead is low enough, should pass",
+			pod: test.BuildTestPod("p1", 1000, 2*1000*1000*1000, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+				pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+			}),
+			nodes: []*v1.Node{
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    nodeTaintKey,
+							Value:  nodeTaintValue,
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+				// Notice that this node has 5 CPU cores, the pod below requests 2 cores, and has CPU overhead of 1 cores, and the pod above requests 1 core
+				test.BuildTestNode(nodeNames[1], 5000, 8*1000*1000*1000, 12, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(200*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 0, 0, 0, nil),
+			},
+			podsOnNodes: []*v1.Pod{
+				test.BuildTestPod("3-core-pod", 2000, 4*1000*1000*1000, nodeNames[1], func(pod *v1.Pod) {
+					pod.ObjectMeta = metav1.ObjectMeta{
+						Namespace: "test",
+						Labels: map[string]string{
+							"test": "true",
+						},
+					}
+					pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+					pod.Spec.Overhead = createResourceList(1000, 1000*1000*1000, 1000*1000*1000)
+				}),
+			},
+			success: true,
+		},
+		{
+			description: "Two nodes matches node selector, one of them is tained, CPU requests will fit, but pod Overhead is too high, should fail",
+			pod: test.BuildTestPod("p1", 2000, 2*1000*1000*1000, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+				pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+			}),
+			nodes: []*v1.Node{
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    nodeTaintKey,
+							Value:  nodeTaintValue,
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+				// Notice that this node only has 5 CPU cores, the pod below requests 2 cores, but has CPU overhead of 2 cores, and the pod above requests 2 cores
+				test.BuildTestNode(nodeNames[1], 5000, 8*1000*1000*1000, 12, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(200*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 0, 0, 0, nil),
+			},
+			podsOnNodes: []*v1.Pod{
+				test.BuildTestPod("3-core-pod", 2000, 4*1000*1000*1000, nodeNames[1], func(pod *v1.Pod) {
+					pod.ObjectMeta = metav1.ObjectMeta{
+						Namespace: "test",
+						Labels: map[string]string{
+							"test": "true",
+						},
+					}
+					pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+					pod.Spec.Overhead = createResourceList(2000, 1000*1000*1000, 1000*1000*1000)
+				}),
 			},
 			success: false,
 		},
 	}
 
 	for _, tc := range tests {
-		actual := PodFitsAnyOtherNode(tc.pod, tc.nodes)
-		if actual != tc.success {
-			t.Errorf("Test %#v failed", tc.description)
-		}
+		t.Run(tc.description, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var objs []runtime.Object
+			for _, node := range tc.nodes {
+				objs = append(objs, node)
+			}
+			for _, pod := range tc.podsOnNodes {
+				objs = append(objs, pod)
+			}
+			objs = append(objs, tc.pod)
+
+			fakeClient := fake.NewSimpleClientset(objs...)
+
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			podInformer := sharedInformerFactory.Core().V1().Pods()
+
+			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			if err != nil {
+				t.Errorf("Build get pods assigned to node function error: %v", err)
+			}
+
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+			actual := PodFitsAnyOtherNode(getPodsAssignedToNode, tc.pod, tc.nodes)
+			if actual != tc.success {
+				t.Errorf("Test %#v failed", tc.description)
+			}
+		})
 	}
 }
 
-func createPodManifest(nodeName string, nodeSelectorKey string, nodeSelectorValue string) *v1.Pod {
-	return (&v1.Pod{
-		Spec: v1.PodSpec{
-			NodeName: nodeName,
-			Affinity: &v1.Affinity{
-				NodeAffinity: &v1.NodeAffinity{
-					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-						NodeSelectorTerms: []v1.NodeSelectorTerm{
-							{
-								MatchExpressions: []v1.NodeSelectorRequirement{
-									{
-										Key:      nodeSelectorKey,
-										Operator: "In",
-										Values: []string{
-											nodeSelectorValue,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	})
+// createResourceList builds a small resource list of core resources
+func createResourceList(cpu int64, memory int64, ephemeralStorage int64) v1.ResourceList {
+	resourceList := make(map[v1.ResourceName]resource.Quantity)
+	resourceList[v1.ResourceCPU] = *resource.NewMilliQuantity(cpu, resource.DecimalSI)
+	resourceList[v1.ResourceMemory] = *resource.NewQuantity(memory, resource.DecimalSI)
+	resourceList[v1.ResourceEphemeralStorage] = *resource.NewQuantity(ephemeralStorage, resource.DecimalSI)
+	return resourceList
 }

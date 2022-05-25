@@ -39,7 +39,6 @@ import (
 	v1qos "k8s.io/kubectl/pkg/util/qos"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
-	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
@@ -199,6 +198,7 @@ func runPodLifetimeStrategy(
 			nil,
 			nil,
 			nodes,
+			getPodsAssignedToNode,
 			false,
 			evictCritical,
 			false,
@@ -324,7 +324,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	waitForRCPodsRunning(ctx, t, clientSet, rc)
 
 	// Run LowNodeUtilization strategy
-	podEvictor := initPodEvictorOrFail(t, clientSet, nodes)
+	podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
 
 	podFilter, err := podutil.NewOptions().WithFilter(podEvictor.Evictable().IsEvictable).BuildFilterFunc()
 	if err != nil {
@@ -517,8 +517,8 @@ func TestEvictSystemCriticalPriorityClass(t *testing.T) {
 }
 
 func testEvictSystemCritical(t *testing.T, isPriorityClass bool) {
-	var highPriority = int32(1000)
-	var lowPriority = int32(500)
+	highPriority := int32(1000)
+	lowPriority := int32(500)
 	ctx := context.Background()
 
 	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
@@ -647,8 +647,8 @@ func TestThresholdPriorityClass(t *testing.T) {
 }
 
 func testPriority(t *testing.T, isPriorityClass bool) {
-	var highPriority = int32(1000)
-	var lowPriority = int32(500)
+	highPriority := int32(1000)
+	lowPriority := int32(500)
 	ctx := context.Background()
 
 	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
@@ -745,7 +745,7 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 		t.Fatalf("None of %v high priority pods are expected to be deleted", expectReservePodNames)
 	}
 
-	//check if all pods with low priority class are evicted
+	// check if all pods with low priority class are evicted
 	if err := wait.PollImmediate(time.Second, 30*time.Second, func() (bool, error) {
 		podListLowPriority, err := clientSet.CoreV1().Pods(rcLowPriority.Namespace).List(
 			ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcLowPriority.Spec.Template.Labels).String()})
@@ -848,7 +848,7 @@ func TestPodLabelSelector(t *testing.T) {
 		t.Fatalf("None of %v unevictable pods are expected to be deleted", expectReservePodNames)
 	}
 
-	//check if all selected pods are evicted
+	// check if all selected pods are evicted
 	if err := wait.PollImmediate(time.Second, 30*time.Second, func() (bool, error) {
 		podListEvict, err := clientSet.CoreV1().Pods(rcEvict.Namespace).List(
 			ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rcEvict.Spec.Template.Labels).String()})
@@ -886,17 +886,6 @@ func TestEvictAnnotation(t *testing.T) {
 	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
-	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		t.Errorf("Error listing node with %v", err)
-	}
-
-	var nodes []*v1.Node
-	for i := range nodeList.Items {
-		node := nodeList.Items[i]
-		nodes = append(nodes, &node)
-	}
-
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
 	if _, err := clientSet.CoreV1().Namespaces().Create(ctx, testNamespace, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Unable to create ns %v", testNamespace.Name)
@@ -911,7 +900,8 @@ func TestEvictAnnotation(t *testing.T) {
 			Name: "sample",
 			VolumeSource: v1.VolumeSource{
 				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+				},
 			},
 		},
 	}
@@ -976,7 +966,7 @@ func TestDeschedulingInterval(t *testing.T) {
 	}
 	s.Client = clientSet
 
-	deschedulerPolicy := &api.DeschedulerPolicy{}
+	deschedulerPolicy := &deschedulerapi.DeschedulerPolicy{}
 
 	c := make(chan bool, 1)
 	go func() {
@@ -984,9 +974,7 @@ func TestDeschedulingInterval(t *testing.T) {
 		if err != nil || len(evictionPolicyGroupVersion) == 0 {
 			t.Errorf("Error when checking support for eviction: %v", err)
 		}
-
-		stopChannel := make(chan struct{})
-		if err := descheduler.RunDeschedulerStrategies(ctx, s, deschedulerPolicy, evictionPolicyGroupVersion, stopChannel); err != nil {
+		if err := descheduler.RunDeschedulerStrategies(ctx, s, deschedulerPolicy, evictionPolicyGroupVersion); err != nil {
 			t.Errorf("Error running descheduler strategies: %+v", err)
 		}
 		c <- true
@@ -1145,8 +1133,8 @@ func createBalancedPodForNodes(
 
 	// find the max, if the node has the max,use the one, if not,use the ratio parameter
 	var maxCPUFraction, maxMemFraction float64 = ratio, ratio
-	var cpuFractionMap = make(map[string]float64)
-	var memFractionMap = make(map[string]float64)
+	cpuFractionMap := make(map[string]float64)
+	memFractionMap := make(map[string]float64)
 
 	for _, node := range nodes {
 		cpuFraction, memFraction, _, _ := computeCPUMemFraction(t, cs, node, podRequestedResource)
@@ -1183,7 +1171,7 @@ func createBalancedPodForNodes(
 		// add crioMinMemLimit to ensure that all pods are setting at least that much for a limit, while keeping the same ratios
 		needCreateResource[v1.ResourceMemory] = *resource.NewQuantity(int64((ratio-memFraction)*float64(memAllocatableVal)+float64(crioMinMemLimit)), resource.BinarySI)
 
-		var gracePeriod = int64(1)
+		gracePeriod := int64(1)
 		// Don't set OwnerReferences to avoid pod eviction
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1313,20 +1301,44 @@ func waitForPodRunning(ctx context.Context, t *testing.T, clientSet clientset.In
 	}
 }
 
+func waitForPodsRunning(ctx context.Context, t *testing.T, clientSet clientset.Interface, labelMap map[string]string, desireRunningPodNum int, namespace string) {
+	if err := wait.PollImmediate(10*time.Second, 60*time.Second, func() (bool, error) {
+		podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: labels.SelectorFromSet(labelMap).String(),
+		})
+		if err != nil {
+			return false, err
+		}
+		if len(podList.Items) != desireRunningPodNum {
+			t.Logf("Waiting for %v pods to be running, got %v instead", desireRunningPodNum, len(podList.Items))
+			return false, nil
+		}
+		for _, pod := range podList.Items {
+			if pod.Status.Phase != v1.PodRunning {
+				t.Logf("Pod %v not running yet, is %v instead", pod.Name, pod.Status.Phase)
+				return false, nil
+			}
+		}
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for pods running: %v", err)
+	}
+}
+
 func splitNodesAndWorkerNodes(nodes []v1.Node) ([]*v1.Node, []*v1.Node) {
 	var allNodes []*v1.Node
 	var workerNodes []*v1.Node
 	for i := range nodes {
 		node := nodes[i]
 		allNodes = append(allNodes, &node)
-		if _, exists := node.Labels["node-role.kubernetes.io/master"]; !exists {
+		if _, exists := node.Labels["node-role.kubernetes.io/control-plane"]; !exists {
 			workerNodes = append(workerNodes, &node)
 		}
 	}
 	return allNodes, workerNodes
 }
 
-func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, nodes []*v1.Node) *evictions.PodEvictor {
+func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, nodes []*v1.Node) *evictions.PodEvictor {
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		t.Fatalf("Error creating eviction policy group: %v", err)
@@ -1338,6 +1350,7 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, nodes []*
 		nil,
 		nil,
 		nodes,
+		getPodsAssignedToNode,
 		true,
 		false,
 		false,

@@ -50,40 +50,57 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 	if strategy.Params != nil {
 		nodeFit = strategy.Params.NodeFit
 	}
-
+	useDeviationThresholds := strategy.Params.NodeResourceUtilizationThresholds.UseDeviationThresholds
 	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
 	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
-	if err := validateLowUtilizationStrategyConfig(thresholds, targetThresholds); err != nil {
+	if err := validateLowUtilizationStrategyConfig(thresholds, targetThresholds, useDeviationThresholds); err != nil {
 		klog.ErrorS(err, "LowNodeUtilization config is not valid")
 		return
 	}
+
 	// check if Pods/CPU/Mem are set, if not, set them to 100
 	if _, ok := thresholds[v1.ResourcePods]; !ok {
-		thresholds[v1.ResourcePods] = MaxResourcePercentage
-		targetThresholds[v1.ResourcePods] = MaxResourcePercentage
+		if useDeviationThresholds {
+			thresholds[v1.ResourcePods] = MinResourcePercentage
+			targetThresholds[v1.ResourcePods] = MinResourcePercentage
+		} else {
+			thresholds[v1.ResourcePods] = MaxResourcePercentage
+			targetThresholds[v1.ResourcePods] = MaxResourcePercentage
+		}
 	}
 	if _, ok := thresholds[v1.ResourceCPU]; !ok {
-		thresholds[v1.ResourceCPU] = MaxResourcePercentage
-		targetThresholds[v1.ResourceCPU] = MaxResourcePercentage
+		if useDeviationThresholds {
+			thresholds[v1.ResourceCPU] = MinResourcePercentage
+			targetThresholds[v1.ResourceCPU] = MinResourcePercentage
+		} else {
+			thresholds[v1.ResourceCPU] = MaxResourcePercentage
+			targetThresholds[v1.ResourceCPU] = MaxResourcePercentage
+		}
 	}
 	if _, ok := thresholds[v1.ResourceMemory]; !ok {
-		thresholds[v1.ResourceMemory] = MaxResourcePercentage
-		targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
+		if useDeviationThresholds {
+			thresholds[v1.ResourceMemory] = MinResourcePercentage
+			targetThresholds[v1.ResourceMemory] = MinResourcePercentage
+		} else {
+			thresholds[v1.ResourceMemory] = MaxResourcePercentage
+			targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
+		}
 	}
 	resourceNames := getResourceNames(thresholds)
 
 	lowNodes, sourceNodes := classifyNodes(
-		getNodeUsage(nodes, thresholds, targetThresholds, resourceNames, getPodsAssignedToNode),
+		getNodeUsage(nodes, resourceNames, getPodsAssignedToNode),
+		getNodeThresholds(nodes, thresholds, targetThresholds, resourceNames, getPodsAssignedToNode, useDeviationThresholds),
 		// The node has to be schedulable (to be able to move workload there)
-		func(node *v1.Node, usage NodeUsage) bool {
+		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			if nodeutil.IsNodeUnschedulable(node) {
 				klog.V(2).InfoS("Node is unschedulable, thus not considered as underutilized", "node", klog.KObj(node))
 				return false
 			}
-			return isNodeWithLowUtilization(usage)
+			return isNodeWithLowUtilization(usage, threshold.lowResourceThreshold)
 		},
-		func(node *v1.Node, usage NodeUsage) bool {
-			return isNodeAboveTargetUtilization(usage)
+		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
+			return isNodeAboveTargetUtilization(usage, threshold.highResourceThreshold)
 		},
 	)
 
@@ -94,7 +111,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		"Pods", thresholds[v1.ResourcePods],
 	}
 	for name := range thresholds {
-		if !isBasicResource(name) {
+		if !nodeutil.IsBasicResource(name) {
 			keysAndValues = append(keysAndValues, string(name), int64(thresholds[name]))
 		}
 	}
@@ -108,7 +125,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		"Pods", targetThresholds[v1.ResourcePods],
 	}
 	for name := range targetThresholds {
-		if !isBasicResource(name) {
+		if !nodeutil.IsBasicResource(name) {
 			keysAndValues = append(keysAndValues, string(name), int64(targetThresholds[name]))
 		}
 	}
@@ -138,8 +155,8 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
 
 	// stop if node utilization drops below target threshold or any of required capacity (cpu, memory, pods) is moved
-	continueEvictionCond := func(nodeUsage NodeUsage, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool {
-		if !isNodeAboveTargetUtilization(nodeUsage) {
+	continueEvictionCond := func(nodeInfo NodeInfo, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool {
+		if !isNodeAboveTargetUtilization(nodeInfo.NodeUsage, nodeInfo.thresholds.highResourceThreshold) {
 			return false
 		}
 		for name := range totalAvailableUsage {
@@ -150,6 +167,9 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 
 		return true
 	}
+
+	// Sort the nodes by the usage in descending order
+	sortNodesByUsage(sourceNodes, false)
 
 	evictPodsFromSourceNodes(
 		ctx,
@@ -165,7 +185,7 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 }
 
 // validateLowUtilizationStrategyConfig checks if the strategy's config is valid
-func validateLowUtilizationStrategyConfig(thresholds, targetThresholds api.ResourceThresholds) error {
+func validateLowUtilizationStrategyConfig(thresholds, targetThresholds api.ResourceThresholds, useDeviationThresholds bool) error {
 	// validate thresholds and targetThresholds config
 	if err := validateThresholds(thresholds); err != nil {
 		return fmt.Errorf("thresholds config is not valid: %v", err)
@@ -181,7 +201,7 @@ func validateLowUtilizationStrategyConfig(thresholds, targetThresholds api.Resou
 	for resourceName, value := range thresholds {
 		if targetValue, ok := targetThresholds[resourceName]; !ok {
 			return fmt.Errorf("thresholds and targetThresholds configured different resources")
-		} else if value > targetValue {
+		} else if value > targetValue && !useDeviationThresholds {
 			return fmt.Errorf("thresholds' %v percentage is greater than targetThresholds'", resourceName)
 		}
 	}
