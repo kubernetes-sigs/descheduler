@@ -27,7 +27,7 @@ rules:
 {{- if .Values.leaderElection.enabled }}
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
-  verbs: ["create"]
+  verbs: ["create", "update"]
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
   resourceNames: ["descheduler"]

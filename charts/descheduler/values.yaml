@@ -48,9 +48,9 @@ replicas: 1
 # Required when running as a Deployment
 leaderElection: {}
 #  enabled: true
-#  leaseDuration: 15
-#  renewDeadline: 10
-#  retryPeriod: 2
+#  leaseDuration: 15s
+#  renewDeadline: 10s
+#  retryPeriod: 2s
 #  resourceLock: "leases"
 #  resourceName: "descheduler"
 #  resourceNamescape: "kube-system"
@@ -135,6 +135,10 @@ serviceAccount:
   name:
   # Specifies custom annotations for the serviceAccount
   annotations: {}
+
+podAnnotations: {}
+
+podLabels: {}
 
 livenessProbe:
   failureThreshold: 3
