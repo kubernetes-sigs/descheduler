@@ -12,6 +12,7 @@ Before publishing each release, the following code updates must be made:
 - [ ] Bump `k8s.io` dependencies to GA tags once they are published (following the upstream release). [Example](https://github.com/kubernetes-sigs/descheduler/pull/615)
 - [ ] Ensure that Go is updated to the same version as upstream. [Example](https://github.com/kubernetes-sigs/descheduler/pull/801)
 - [ ] Make CI changes in [github.com/kubernetes/test-infra](https://github.com/kubernetes/test-infra) to add the new version's tests (note, this may also include a Go bump). [Example](https://github.com/kubernetes/test-infra/pull/25833)
+- [ ] Update local CI versions for utils (such as golang-ci), kind, and go. [Example - e2e](https://github.com/kubernetes-sigs/descheduler/commit/ac4d576df8831c0c399ee8fff1e85469e90b8c44), [Example - helm](https://github.com/kubernetes-sigs/descheduler/pull/821)
 - [ ] Update version references in docs and Readme. [Example](https://github.com/kubernetes-sigs/descheduler/pull/617)
 
 ## Release Process
@@ -46,6 +47,8 @@ These automated image builds are snapshots of the code in place at the time of e
 tagged with the latest git SHA at the time of the build. To create a final release image, the desired 
 auto-built image SHA is added to a [file upstream](https://github.com/kubernetes/k8s.io/blob/e9e971c/k8s.gcr.io/images/k8s-staging-descheduler/images.yaml) which 
 copies that image to a public registry.
+
+Automatic builds can be monitored and re-triggered with the [`post-descheduler-push-images` job](https://prow.k8s.io/?job=post-descheduler-push-images) on prow.k8s.io.
 
 Note that images can also be manually built and pushed using `VERSION=$VERSION make push-all` by [users with access](https://github.com/kubernetes/k8s.io/blob/fbee8f67b70304241e613a672c625ad972998ad7/groups/sig-scheduling/groups.yaml#L33-L43).
 
