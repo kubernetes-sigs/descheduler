@@ -38,6 +38,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 		labelKey     string
 		labelValue   string
 		constraint   v1.UnsatisfiableConstraintAction
+		params       *deschedulerapi.StrategyParameters
 	}{
 		"test-rc-topology-spread-hard-constraint": {
 			replicaCount: 4,
@@ -45,6 +46,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			labelKey:     "test",
 			labelValue:   "topology-spread-hard-constraint",
 			constraint:   v1.DoNotSchedule,
+			params:       &deschedulerapi.StrategyParameters{IncludeSoftConstraints: false},
 		},
 		"test-rc-topology-spread-soft-constraint": {
 			replicaCount: 4,
@@ -52,6 +54,25 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			labelKey:     "test",
 			labelValue:   "topology-spread-soft-constraint",
 			constraint:   v1.ScheduleAnyway,
+			params:       &deschedulerapi.StrategyParameters{IncludeSoftConstraints: true},
+		},
+		"test-rc-topology-spread-default-constraint": {
+			replicaCount: 4,
+			maxSkew:      1,
+			labelKey:     "test",
+			labelValue:   "topology-spread-default-constraint",
+			constraint:   v1.ScheduleAnyway,
+			params: &deschedulerapi.StrategyParameters{
+				IncludeSoftConstraints: true,
+				TopologySpreadConstraint: &deschedulerapi.TopologySpreadConstraint{
+					DefaultConstraints: makeTopologySpreadConstraints(
+						1,
+						"test",
+						"topology-spread-default-constraint",
+						v1.ScheduleAnyway,
+					),
+				},
+			},
 		},
 	}
 	for name, tc := range testCases {
@@ -86,9 +107,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				clientSet,
 				deschedulerapi.DeschedulerStrategy{
 					Enabled: true,
-					Params: &deschedulerapi.StrategyParameters{
-						IncludeSoftConstraints: tc.constraint != v1.DoNotSchedule,
-					},
+					Params:  tc.params,
 				},
 				nodes,
 				podEvictor,

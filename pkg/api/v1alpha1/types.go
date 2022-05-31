@@ -80,6 +80,7 @@ type StrategyParameters struct {
 	PodLifeTime                       *PodLifeTime                       `json:"podLifeTime,omitempty"`
 	RemoveDuplicates                  *RemoveDuplicates                  `json:"removeDuplicates,omitempty"`
 	FailedPods                        *FailedPods                        `json:"failedPods,omitempty"`
+	TopologySpreadConstraint          *TopologySpreadConstraint          `json:"topologySpreadConstraint,omitempty"`
 	IncludeSoftConstraints            bool                               `json:"includeSoftConstraints"`
 	Namespaces                        *Namespaces                        `json:"namespaces"`
 	ThresholdPriority                 *int32                             `json:"thresholdPriority"`
@@ -119,4 +120,8 @@ type FailedPods struct {
 	MinPodLifetimeSeconds   *uint    `json:"minPodLifetimeSeconds,omitempty"`
 	Reasons                 []string `json:"reasons,omitempty"`
 	IncludingInitContainers bool     `json:"includingInitContainers,omitempty"`
+}
+
+type TopologySpreadConstraint struct {
+	DefaultConstraints []v1.TopologySpreadConstraint `json:"defaultConstraints,omitempty"`
 }

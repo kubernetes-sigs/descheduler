@@ -82,6 +82,7 @@ type StrategyParameters struct {
 	PodLifeTime                       *PodLifeTime
 	RemoveDuplicates                  *RemoveDuplicates
 	FailedPods                        *FailedPods
+	TopologySpreadConstraint          *TopologySpreadConstraint
 	IncludeSoftConstraints            bool
 	Namespaces                        *Namespaces
 	ThresholdPriority                 *int32
@@ -121,4 +122,8 @@ type FailedPods struct {
 	MinPodLifetimeSeconds   *uint
 	Reasons                 []string
 	IncludingInitContainers bool
+}
+
+type TopologySpreadConstraint struct {
+	DefaultConstraints []v1.TopologySpreadConstraint
 }

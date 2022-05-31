@@ -936,6 +936,93 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			namespaces: []string{"ns1"},
 		},
+		{
+			name: "2 domains, sizes [3,1], default maxSkew=1, move 1 pods to achieve [2,2]",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:  3,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+				{
+					count:  1,
+					node:   "n2",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					TopologySpreadConstraint: &api.TopologySpreadConstraint{
+						DefaultConstraints: getDefaultTopologyConstraints(1),
+					},
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [3,1], pod maxSkew=1, default maxSkew=2, move 1 pods to achieve [2,2] (as pod spec takes precedence)",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       3,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  1,
+					node:   "n2",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					TopologySpreadConstraint: &api.TopologySpreadConstraint{
+						DefaultConstraints: getDefaultTopologyConstraints(2),
+					},
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [3,1], pod maxSkew=2, default maxSkew=1, move 0 pods (as pod spec takes precedence)",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       3,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(2),
+				},
+				{
+					count:       1,
+					node:        "n2",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(2),
+				},
+			}),
+			expectedEvictedCount: 0,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					TopologySpreadConstraint: &api.TopologySpreadConstraint{
+						DefaultConstraints: getDefaultTopologyConstraints(1),
+					},
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
 	}
 
 	for _, tc := range testCases {

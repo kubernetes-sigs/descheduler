@@ -106,7 +106,8 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		// ...where there is a topology constraint
 		namespaceTopologySpreadConstraints := make(map[v1.TopologySpreadConstraint]struct{})
 		for _, pod := range namespacePods.Items {
-			for _, constraint := range pod.Spec.TopologySpreadConstraints {
+			topologySpreadConstraints := getTopologySpreadConstraints(pod, strategy)
+			for _, constraint := range topologySpreadConstraints {
 				// Ignore soft topology constraints if they are not included
 				if constraint.WhenUnsatisfiable == v1.ScheduleAnyway && (strategy.Params == nil || !strategy.Params.IncludeSoftConstraints) {
 					continue
@@ -329,7 +330,7 @@ func sortDomains(constraintTopologyPairs map[topologyPair][]*v1.Pod, isEvictable
 		sortedTopologies = append(sortedTopologies, topology{pair: pair, pods: list})
 	}
 
-	// create an ascending slice of all key-value toplogy pairs
+	// create an ascending slice of all key-value topology pairs
 	sort.Slice(sortedTopologies, func(i, j int) bool {
 		return len(sortedTopologies[i].pods) < len(sortedTopologies[j].pods)
 	})
@@ -358,4 +359,19 @@ func comparePodsByPriority(iPod, jPod *v1.Pod) bool {
 		// it doesn't matter. just return true
 		return true
 	}
+}
+
+// getTopologySpreadConstraints is a helper to get topology spread constraints in the following order:
+// - from Pod Spec (if defined)
+// - from the strategy params (if defined)
+func getTopologySpreadConstraints(pod v1.Pod, strategy api.DeschedulerStrategy) []v1.TopologySpreadConstraint {
+	if len(pod.Spec.TopologySpreadConstraints) > 0 {
+		return pod.Spec.TopologySpreadConstraints
+	}
+
+	if strategy.Params != nil && strategy.Params.TopologySpreadConstraint != nil && len(strategy.Params.TopologySpreadConstraint.DefaultConstraints) > 0 {
+		return strategy.Params.TopologySpreadConstraint.DefaultConstraints
+	}
+
+	return nil
 }

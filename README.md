@@ -460,6 +460,9 @@ This strategy requires k8s version 1.18 at a minimum.
 By default, this strategy only deals with hard constraints, setting parameter `includeSoftConstraints` to `true` will
 include soft constraints.
 
+The optional strategy parameter `topologySpreadConstraint` provides a `defaultConstraints` field in order to provide a list of
+[`TopologySpreadConstraints`](https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints) as a fallback when the Pod spec does not have any defined.
+
 Strategy parameter `labelSelector` is not utilized when balancing topology domains and is only applied during eviction to determine if the pod can be evicted.
 
 **Parameters:**
@@ -472,6 +475,7 @@ Strategy parameter `labelSelector` is not utilized when balancing topology domai
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
 |`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
+|`TopologySpreadConstraint`|(see description above)|
 
 **Example:**
 
@@ -483,6 +487,11 @@ strategies:
      enabled: true
      params:
        includeSoftConstraints: false
+       topologySpreadConstraint:
+         defaultConstraints:
+         - maxSkew: 1
+           topologyKey: topology.kubernetes.io/zone
+           whenUnsatisfiable: DoNotSchedule
 ```
 
 
