@@ -80,9 +80,19 @@ func splitVersion(version string) (string, string) {
 	// Version from an automated container build environment(not a tag) or a local build. For example v20201009-v0.18.0-46-g939c1c0.
 	m2, _ := regexp.MatchString(`^v\d{8}-v\d+\.\d+\.\d+-\w+-\w+$`, version)
 
+	// Version tagged by helm chart releaser action
+	helm, _ := regexp.MatchString(`^v\d{8}-descheduler-helm-chart-\d+\.\d+\.\d+$`, version)
+	// Dirty version where helm chart is the last known tag
+	helm2, _ := regexp.MatchString(`^v\d{8}-descheduler-helm-chart-\d+\.\d+\.\d+-\w+-\w+$`, version)
+
 	if m1 || m2 {
 		semVer := strings.Split(version, "-")[1]
-		return strings.Trim(strings.Split(semVer, ".")[0], "v"), strings.Split(semVer, ".")[1] + "+"
+		return strings.Trim(strings.Split(semVer, ".")[0], "v"), strings.Split(semVer, ".")[1] + "." + strings.Split(semVer, ".")[2]
+	}
+
+	if helm || helm2 {
+		semVer := strings.Split(version, "-")[4]
+		return strings.Split(semVer, ".")[0], strings.Split(semVer, ".")[1] + "." + strings.Split(semVer, ".")[2]
 	}
 
 	// Something went wrong
