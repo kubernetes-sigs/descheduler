@@ -2,6 +2,26 @@ apiVersion: v1
 entries:
   descheduler:
   - apiVersion: v1
+    appVersion: 0.24.1
+    created: "2022-05-31T13:39:20.603755914Z"
+    description: Descheduler for Kubernetes is used to rebalance clusters by evicting pods that can potentially be scheduled on better nodes. In the current implementation, descheduler does not schedule replacement of evicted pods but relies on the default scheduler for that.
+    digest: 3cec16a47c2416e5f5946eae473ce7fd073dfeb2ca49fa87e900886c57707fcf
+    home: https://github.com/kubernetes-sigs/descheduler
+    icon: https://kubernetes.io/images/favicon.png
+    keywords:
+    - kubernetes
+    - descheduler
+    - kube-scheduler
+    maintainers:
+    - email: kubernetes-sig-scheduling@googlegroups.com
+      name: Kubernetes SIG Scheduling
+    name: descheduler
+    sources:
+    - https://github.com/kubernetes-sigs/descheduler
+    urls:
+    - https://github.com/kubernetes-sigs/descheduler/releases/download/descheduler-helm-chart-0.24.1/descheduler-0.24.1.tgz
+    version: 0.24.1
+  - apiVersion: v1
     appVersion: 0.24.0
     created: "2022-05-23T14:14:10.037216155Z"
     description: Descheduler for Kubernetes is used to rebalance clusters by evicting pods that can potentially be scheduled on better nodes. In the current implementation, descheduler does not schedule replacement of evicted pods but relies on the default scheduler for that.
