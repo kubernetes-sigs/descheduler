@@ -18,12 +18,12 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-K8S_VERSION=${KUBERNETES_VERSION:-v1.23.0}
+K8S_VERSION=${KUBERNETES_VERSION:-v1.24.0}
 IMAGE_REPO=${HELM_IMAGE_REPO:-descheduler}
 IMAGE_TAG=${HELM_IMAGE_TAG:-helm-test}
 CHART_LOCATION=${HELM_CHART_LOCATION:-./charts/descheduler}
 VERSION=helm-test make image
-wget https://github.com/kubernetes-sigs/kind/releases/download/v0.11.0/kind-linux-amd64
+wget https://github.com/kubernetes-sigs/kind/releases/download/v0.13.0/kind-linux-amd64
 chmod +x kind-linux-amd64
 mv kind-linux-amd64 kind
 export PATH=$PATH:$PWD
