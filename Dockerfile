@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+ARG GORUNNER_VERSION=v2.3.1-go1.18.2-bullseye.0
+
 FROM golang:1.18.2
 
 WORKDIR /go/src/sigs.k8s.io/descheduler
@@ -19,12 +21,16 @@ ARG ARCH
 ARG VERSION
 RUN VERSION=${VERSION} make build.$ARCH
 
+FROM k8s.gcr.io/build-image/go-runner:${GORUNNER_VERSION} as build-base
+
 FROM scratch
 
-MAINTAINER Kubernetes SIG Scheduling <kubernetes-sig-scheduling@googlegroups.com>
+LABEL maintainer="Kubernetes SIG Scheduling <kubernetes-sig-scheduling@googlegroups.com>"
 
 USER 1000
 
+COPY --from=build-base /go-runner /
 COPY --from=0 /go/src/sigs.k8s.io/descheduler/_output/bin/descheduler /bin/descheduler
 
+ENTRYPOINT [ "/go-runner" ]
 CMD ["/bin/descheduler", "--help"]

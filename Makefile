@@ -21,6 +21,7 @@ SHA1?=$(shell git rev-parse HEAD)
 BUILD=$(shell date +%FT%T%z)
 LDFLAG_LOCATION=sigs.k8s.io/descheduler/pkg/version
 ARCHS = amd64 arm arm64
+GORUNNER_VERSION=v2.3.1-go1.18.2-bullseye.0
 
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitbranch=${BRANCH} -X ${LDFLAG_LOCATION}.gitsha1=${SHA1}"
 
@@ -60,19 +61,19 @@ build.arm64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ${LDFLAGS} -o _output/bin/descheduler sigs.k8s.io/descheduler/cmd/descheduler
 
 dev-image: build
-	docker build -f Dockerfile.dev -t $(IMAGE) .
+	docker build --build-arg GORUNNER_VERSION="$(GORUNNER_VERSION)" -f Dockerfile.dev -t $(IMAGE) .
 
 image:
-	docker build --build-arg VERSION="$(VERSION)" --build-arg ARCH="amd64" -t $(IMAGE) .
+	docker build --build-arg GORUNNER_VERSION="$(GORUNNER_VERSION)" --build-arg VERSION="$(VERSION)" --build-arg ARCH="amd64" -t $(IMAGE) .
 
 image.amd64:
-	docker build --build-arg VERSION="$(VERSION)" --build-arg ARCH="amd64" -t $(IMAGE)-amd64 .
+	docker build --build-arg GORUNNER_VERSION="$(GORUNNER_VERSION)" --build-arg VERSION="$(VERSION)" --build-arg ARCH="amd64" -t $(IMAGE)-amd64 .
 
 image.arm:
-	docker build --build-arg VERSION="$(VERSION)" --build-arg ARCH="arm" -t $(IMAGE)-arm .
+	docker build --build-arg GORUNNER_VERSION="$(GORUNNER_VERSION)" --build-arg VERSION="$(VERSION)" --build-arg ARCH="arm" -t $(IMAGE)-arm .
 
 image.arm64:
-	docker build --build-arg VERSION="$(VERSION)" --build-arg ARCH="arm64" -t $(IMAGE)-arm64 .
+	docker build --build-arg GORUNNER_VERSION="$(GORUNNER_VERSION)" --build-arg VERSION="$(VERSION)" --build-arg ARCH="arm64" -t $(IMAGE)-arm64 .
 
 push: image
 	gcloud auth configure-docker
