@@ -104,19 +104,33 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		},
 	)
 
-	// log message in one line
-	keysAndValues := []interface{}{
+	// log message for nodes with low utilization
+	underutilizationCriteria := []interface{}{
 		"CPU", thresholds[v1.ResourceCPU],
 		"Mem", thresholds[v1.ResourceMemory],
 		"Pods", thresholds[v1.ResourcePods],
 	}
 	for name := range thresholds {
 		if !nodeutil.IsBasicResource(name) {
-			keysAndValues = append(keysAndValues, string(name), int64(thresholds[name]))
+			underutilizationCriteria = append(underutilizationCriteria, string(name), int64(thresholds[name]))
 		}
 	}
-	klog.V(1).InfoS("Criteria for a node under utilization", keysAndValues...)
+	klog.V(1).InfoS("Criteria for a node under utilization", underutilizationCriteria...)
 	klog.V(1).InfoS("Number of underutilized nodes", "totalNumber", len(lowNodes))
+
+	// log message for over utilized nodes
+	overutilizationCriteria := []interface{}{
+		"CPU", targetThresholds[v1.ResourceCPU],
+		"Mem", targetThresholds[v1.ResourceMemory],
+		"Pods", targetThresholds[v1.ResourcePods],
+	}
+	for name := range targetThresholds {
+		if !nodeutil.IsBasicResource(name) {
+			overutilizationCriteria = append(overutilizationCriteria, string(name), int64(targetThresholds[name]))
+		}
+	}
+	klog.V(1).InfoS("Criteria for a node above target utilization", overutilizationCriteria...)
+	klog.V(1).InfoS("Number of overutilized nodes", "totalNumber", len(sourceNodes))
 
 	if len(lowNodes) == 0 {
 		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
