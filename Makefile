@@ -15,7 +15,7 @@
 .PHONY: test
 
 # VERSION is based on a date stamp plus the last commit
-VERSION?=v$(shell date +%Y%m%d)-$(shell git describe --tags --match "v*")
+VERSION?=v$(shell date +%Y%m%d)-$(shell git describe --tags)
 BRANCH?=$(shell git branch --show-current)
 SHA1?=$(shell git rev-parse HEAD)
 BUILD=$(shell date +%FT%T%z)
