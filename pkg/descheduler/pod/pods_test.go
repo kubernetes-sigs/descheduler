@@ -18,8 +18,11 @@ package pod
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"reflect"
 	"testing"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -152,5 +155,29 @@ func TestSortPodsBasedOnPriorityLowToHigh(t *testing.T) {
 	SortPodsBasedOnPriorityLowToHigh(podList)
 	if !reflect.DeepEqual(podList[len(podList)-1], p4) {
 		t.Errorf("Expected last pod in sorted list to be %v which of highest priority and guaranteed but got %v", p4, podList[len(podList)-1])
+	}
+}
+
+func TestSortPodsBasedOnAge(t *testing.T) {
+	podList := make([]*v1.Pod, 9)
+	n1 := test.BuildTestNode("n1", 4000, 3000, int64(len(podList)), nil)
+
+	for i := 0; i < len(podList); i++ {
+		podList[i] = test.BuildTestPod(fmt.Sprintf("p%d", i), 1, 32, n1.Name, func(pod *v1.Pod) {
+			creationTimestamp := metav1.Now().Add(time.Minute * time.Duration(i))
+			pod.ObjectMeta.SetCreationTimestamp(metav1.NewTime(creationTimestamp))
+		})
+	}
+
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(podList), func(i, j int) { podList[i], podList[j] = podList[j], podList[i] })
+
+	SortPodsBasedOnAge(podList)
+
+	for i := 0; i < len(podList); i++ {
+		expectedName := fmt.Sprintf("p%d", i)
+		if podList[i].GetName() != expectedName {
+			t.Errorf("Expected pod %s to be at index %d", expectedName, i)
+		}
 	}
 }
