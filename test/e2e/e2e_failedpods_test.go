@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/utils/pointer"
 
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
@@ -113,7 +114,6 @@ func initFailedJob(name, namespace string) *batchv1.Job {
 	podSpec.Containers[0].Command = []string{"/bin/false"}
 	podSpec.RestartPolicy = v1.RestartPolicyNever
 	labelsSet := labels.Set{"test": name, "name": name}
-	jobBackoffLimit := int32(0)
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:    labelsSet,
@@ -125,7 +125,7 @@ func initFailedJob(name, namespace string) *batchv1.Job {
 				Spec:       podSpec,
 				ObjectMeta: metav1.ObjectMeta{Labels: labelsSet},
 			},
-			BackoffLimit: &jobBackoffLimit,
+			BackoffLimit: pointer.Int32(0),
 		},
 	}
 }

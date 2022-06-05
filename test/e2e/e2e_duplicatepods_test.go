@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/utils/pointer"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
@@ -90,7 +91,7 @@ func TestRemoveDuplicates(t *testing.T) {
 			description: "Evict Pod even Pods schedule to specific node",
 			replicasNum: 4,
 			beforeFunc: func(deployment *appsv1.Deployment) {
-				deployment.Spec.Replicas = func(i int32) *int32 { return &i }(4)
+				deployment.Spec.Replicas = pointer.Int32(4)
 				deployment.Spec.Template.Spec.NodeName = workerNodes[0].Name
 			},
 			expectedEvictedPodCount: 2,
@@ -99,7 +100,7 @@ func TestRemoveDuplicates(t *testing.T) {
 			description: "Evict Pod even Pods with local storage",
 			replicasNum: 5,
 			beforeFunc: func(deployment *appsv1.Deployment) {
-				deployment.Spec.Replicas = func(i int32) *int32 { return &i }(5)
+				deployment.Spec.Replicas = pointer.Int32(5)
 				deployment.Spec.Template.Spec.Volumes = []v1.Volume{
 					{
 						Name: "sample",

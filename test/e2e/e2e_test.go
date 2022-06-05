@@ -37,6 +37,7 @@ import (
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	v1qos "k8s.io/kubectl/pkg/util/qos"
+	"k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
@@ -76,12 +77,10 @@ func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 
 // RcByNameContainer returns a ReplicationController with specified name and container
 func RcByNameContainer(name, namespace string, replicas int32, labels map[string]string, gracePeriod *int64, priorityClassName string) *v1.ReplicationController {
-	zeroGracePeriod := int64(0)
-
 	// Add "name": name to the labels, overwriting if it exists.
 	labels["name"] = name
 	if gracePeriod == nil {
-		gracePeriod = &zeroGracePeriod
+		gracePeriod = pointer.Int64(0)
 	}
 	return &v1.ReplicationController{
 		TypeMeta: metav1.TypeMeta{
@@ -93,7 +92,7 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 			Namespace: namespace,
 		},
 		Spec: v1.ReplicationControllerSpec{
-			Replicas: func(i int32) *int32 { return &i }(replicas),
+			Replicas: pointer.Int32(replicas),
 			Selector: map[string]string{
 				"name": name,
 			},
@@ -981,7 +980,7 @@ func TestPodLifeTimeOldestEvicted(t *testing.T) {
 	oldestPod := podList.Items[0]
 
 	t.Log("Scale the rs to 5 replicas with the 4 new pods having a more recent creation timestamp")
-	rc.Spec.Replicas = func(i int32) *int32 { return &i }(5)
+	rc.Spec.Replicas = pointer.Int32(5)
 	rc, err = clientSet.CoreV1().ReplicationControllers(rc.Namespace).Update(ctx, rc, metav1.UpdateOptions{})
 	if err != nil {
 		t.Errorf("Error updating deployment %v", err)
@@ -1094,7 +1093,7 @@ func waitForTerminatingPodsToDisappear(ctx context.Context, t *testing.T, client
 func deleteRC(ctx context.Context, t *testing.T, clientSet clientset.Interface, rc *v1.ReplicationController) {
 	// set number of replicas to 0
 	rcdeepcopy := rc.DeepCopy()
-	rcdeepcopy.Spec.Replicas = func(i int32) *int32 { return &i }(0)
+	rcdeepcopy.Spec.Replicas = pointer.Int32(0)
 	if _, err := clientSet.CoreV1().ReplicationControllers(rcdeepcopy.Namespace).Update(ctx, rcdeepcopy, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("Error updating replica controller %v", err)
 	}
