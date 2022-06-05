@@ -936,6 +936,127 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			namespaces: []string{"ns1"},
 		},
+		{
+			name: "3 domains, sizes [2,3,4], maxSkew=1, NodeFit is enabled, and not enough cpu on zoneA; nothing should be moved",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 250, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 1000, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+				test.BuildTestNode("n3", 1000, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneC" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       2,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:       3,
+					node:        "n2",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:       4,
+					node:        "n3",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+			}),
+			expectedEvictedCount: 0,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{NodeFit: true},
+			},
+			namespaces: []string{"ns1"},
+		},
+		{
+			name: "3 domains, sizes [[1,0], [1,1], [2,1]], maxSkew=1, NodeFit is enabled, and not enough cpu on ZoneA; nothing should be moved",
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 150, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 1000, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+				test.BuildTestNode("C1", 1000, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneC" }),
+				test.BuildTestNode("A2", 50, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B2", 1000, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+				test.BuildTestNode("C2", 1000, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneC" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:       1,
+					node:        "B1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:       1,
+					node:        "B2",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:       2,
+					node:        "C1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:       1,
+					node:        "C2",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+			}),
+			expectedEvictedCount: 0,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{NodeFit: true},
+			},
+			namespaces: []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [[1,4], [2,1]], maxSkew=1, NodeFit is enabled; should move 1",
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 1000, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("A2", 1000, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 1000, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+				test.BuildTestNode("B2", 1000, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:       4,
+					node:        "A2",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:       2,
+					node:        "B1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:       1,
+					node:        "B2",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+			}),
+			expectedEvictedCount: 1,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{NodeFit: true},
+			},
+			namespaces: []string{"ns1"},
+		},
 	}
 
 	for _, tc := range testCases {
