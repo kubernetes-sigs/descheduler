@@ -197,7 +197,61 @@ func TestPodLifeTime(t *testing.T) {
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description: "Two old pods with different status phases. 1 should be evicted.",
+			description: "Two pods, one with ContainerCreating state. 1 should be evicted.",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{
+						MaxPodLifeTimeSeconds: &maxLifeTime,
+						PodStatusPhases:       []string{"ContainerCreating"},
+					},
+				},
+			},
+			pods: []*v1.Pod{
+				p9,
+				test.BuildTestPod("container-creating-stuck", 0, 0, node1.Name, func(pod *v1.Pod) {
+					pod.Status.ContainerStatuses = []v1.ContainerStatus{
+						{
+							State: v1.ContainerState{
+								Waiting: &v1.ContainerStateWaiting{Reason: "ContainerCreating"},
+							},
+						},
+					}
+					pod.OwnerReferences = ownerRef1
+				}),
+			},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "Two pods, one with PodInitializing state. 1 should be evicted.",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{
+						MaxPodLifeTimeSeconds: &maxLifeTime,
+						PodStatusPhases:       []string{"PodInitializing"},
+					},
+				},
+			},
+			pods: []*v1.Pod{
+				p9,
+				test.BuildTestPod("pod-initializing-stuck", 0, 0, node1.Name, func(pod *v1.Pod) {
+					pod.Status.ContainerStatuses = []v1.ContainerStatus{
+						{
+							State: v1.ContainerState{
+								Waiting: &v1.ContainerStateWaiting{Reason: "PodInitializing"},
+							},
+						},
+					}
+					pod.OwnerReferences = ownerRef1
+				}),
+			},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "Two old pods with different states. 1 should be evicted.",
 			strategy: api.DeschedulerStrategy{
 				Enabled: true,
 				Params: &api.StrategyParameters{

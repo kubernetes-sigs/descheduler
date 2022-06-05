@@ -31,16 +31,25 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
+var (
+	podLifetimeAllowedPhases = sets.NewString(
+		string(v1.PodRunning),
+		string(v1.PodPending),
+
+		// Container state reason list: https://github.com/kubernetes/kubernetes/blob/release-1.24/pkg/kubelet/kubelet_pods.go#L76-L79
+		"PodInitializing",
+		"ContainerCreating",
+	)
+)
+
 func validatePodLifeTimeParams(params *api.StrategyParameters) error {
 	if params == nil || params.PodLifeTime == nil || params.PodLifeTime.MaxPodLifeTimeSeconds == nil {
 		return fmt.Errorf("MaxPodLifeTimeSeconds not set")
 	}
 
 	if params.PodLifeTime.PodStatusPhases != nil {
-		for _, phase := range params.PodLifeTime.PodStatusPhases {
-			if phase != string(v1.PodPending) && phase != string(v1.PodRunning) {
-				return fmt.Errorf("only Pending and Running phases are supported in PodLifeTime")
-			}
+		if !podLifetimeAllowedPhases.HasAll(params.PodLifeTime.PodStatusPhases...) {
+			return fmt.Errorf("PodStatusPhases must be one of %v", podLifetimeAllowedPhases.List())
 		}
 	}
 
@@ -75,7 +84,14 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 				if string(pod.Status.Phase) == phase {
 					return evictorFilter.Filter(pod)
 				}
+
+				for _, containerStatus := range pod.Status.ContainerStatuses {
+					if containerStatus.State.Waiting != nil && containerStatus.State.Waiting.Reason == phase {
+						return evictable.IsEvictable(pod)
+					}
+				}
 			}
+
 			return false
 		}
 	}
