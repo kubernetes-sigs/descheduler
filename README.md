@@ -462,6 +462,8 @@ include soft constraints.
 
 The optional strategy parameter `topologySpreadConstraint` provides a `defaultConstraints` field in order to provide a list of
 [`TopologySpreadConstraints`](https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints) as a fallback when the Pod spec does not have any defined.
+If there are any plugins defined for [`KubeSchedulerConfiguration`](https://kubernetes.io/docs/reference/scheduling/config/), any inconsistencies
+could potentially lead to infinite eviction loops as Scheduler and Descheduler may not agree on balancing the topology domain.
 
 Strategy parameter `labelSelector` is not utilized when balancing topology domains and is only applied during eviction to determine if the pod can be evicted.
 
@@ -492,6 +494,8 @@ strategies:
          - maxSkew: 1
            topologyKey: topology.kubernetes.io/zone
            whenUnsatisfiable: DoNotSchedule
+           labels:
+           - "app.kubernetes.io/name"
 ```
 
 

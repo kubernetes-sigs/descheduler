@@ -26,7 +26,7 @@ if [ -n "$KIND_E2E" ]; then
     chmod +x kind-linux-amd64
     mv kind-linux-amd64 kind
     export PATH=$PATH:$PWD
-    kind create cluster --image kindest/node:${K8S_VERSION} --config=./hack/kind_config.yaml
+    kind create cluster --image kindest/node:${K8S_VERSION} --config=./hack/kind/config.yaml
     docker pull kubernetes/pause
     kind load docker-image kubernetes/pause
     kind get kubeconfig > /tmp/admin.conf

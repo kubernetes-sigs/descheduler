@@ -76,7 +76,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:  2,
@@ -143,7 +143,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 					noOwners:    true,
 				},
 				{
@@ -178,7 +178,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:  2,
@@ -206,7 +206,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:  4,
@@ -238,7 +238,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:  3,
@@ -265,7 +265,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:        1,
 					node:         "n1",
 					labels:       map[string]string{"foo": "bar"},
-					constraints:  getDefaultTopologyConstraints(1),
+					constraints:  getTopologyConstraints(1),
 					nodeSelector: map[string]string{"zone": "zoneA"},
 				},
 				{
@@ -315,7 +315,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:        1,
 					node:         "n1",
 					labels:       map[string]string{"foo": "bar"},
-					constraints:  getDefaultTopologyConstraints(1),
+					constraints:  getTopologyConstraints(1),
 					nodeSelector: map[string]string{"region": "boston"},
 				},
 				{
@@ -357,7 +357,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n2",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:  100,
@@ -382,7 +382,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n2",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:  3,
@@ -414,7 +414,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(2),
+					constraints: getTopologyConstraints(2),
 				},
 				{
 					count:  1,
@@ -494,7 +494,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(2),
+					constraints: getTopologyConstraints(2),
 				},
 				{
 					count:  1,
@@ -632,13 +632,13 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       8,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:       7,
 					node:        "n2",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 			}),
 			expectedEvictedCount: 5,
@@ -657,19 +657,19 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       5,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:       5,
 					node:        "n2",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:       5,
 					node:        "n3",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 			}),
 			expectedEvictedCount: 0,
@@ -696,7 +696,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 					tolerations: []v1.Toleration{
 						{
 							Key:      "taint-test",
@@ -737,7 +737,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:        1,
@@ -770,7 +770,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:        1,
@@ -807,7 +807,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:        1,
@@ -831,7 +831,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:  1,
@@ -858,7 +858,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:  1,
@@ -885,7 +885,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       1,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:  1,
@@ -912,20 +912,20 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       2,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:             2,
 					node:              "n1",
 					labels:            map[string]string{"foo": "bar"},
-					constraints:       getDefaultTopologyConstraints(1),
+					constraints:       getTopologyConstraints(1),
 					deletionTimestamp: &metav1.Time{},
 				},
 				{
 					count:       2,
 					node:        "n2",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 			}),
 			expectedEvictedCount: 0,
@@ -958,7 +958,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
 					TopologySpreadConstraint: &api.TopologySpreadConstraint{
-						DefaultConstraints: getDefaultTopologyConstraints(1),
+						DefaultConstraints: getPolicyDefaultTopologyConstraint(1, "foo"),
 					},
 				},
 			},
@@ -975,7 +975,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       3,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(1),
+					constraints: getTopologyConstraints(1),
 				},
 				{
 					count:  1,
@@ -987,7 +987,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
 					TopologySpreadConstraint: &api.TopologySpreadConstraint{
-						DefaultConstraints: getDefaultTopologyConstraints(2),
+						DefaultConstraints: getPolicyDefaultTopologyConstraint(1, "foo"),
 					},
 				},
 			},
@@ -1004,20 +1004,48 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:       3,
 					node:        "n1",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(2),
+					constraints: getTopologyConstraints(2),
 				},
 				{
 					count:       1,
 					node:        "n2",
 					labels:      map[string]string{"foo": "bar"},
-					constraints: getDefaultTopologyConstraints(2),
+					constraints: getTopologyConstraints(2),
 				},
 			}),
 			expectedEvictedCount: 0,
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
 					TopologySpreadConstraint: &api.TopologySpreadConstraint{
-						DefaultConstraints: getDefaultTopologyConstraints(1),
+						DefaultConstraints: getPolicyDefaultTopologyConstraint(1, "foo"),
+					},
+				},
+			},
+			namespaces: []string{"ns1"},
+		},
+		{
+			name: "2 domains, sizes [3,1], maxSkew=1, pod label missing default topology key, move 0 pods",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:  3,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+				{
+					count:  1,
+					node:   "n2",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 0,
+			strategy: api.DeschedulerStrategy{
+				Params: &api.StrategyParameters{
+					TopologySpreadConstraint: &api.TopologySpreadConstraint{
+						DefaultConstraints: getPolicyDefaultTopologyConstraint(1, "doesnotexist"),
 					},
 				},
 			},
@@ -1118,13 +1146,24 @@ func getLabelSelector(key string, values []string, operator metav1.LabelSelector
 	}
 }
 
-func getDefaultTopologyConstraints(maxSkew int32) []v1.TopologySpreadConstraint {
+func getTopologyConstraints(maxSkew int32) []v1.TopologySpreadConstraint {
 	return []v1.TopologySpreadConstraint{
 		{
 			MaxSkew:           maxSkew,
 			TopologyKey:       "zone",
 			WhenUnsatisfiable: v1.DoNotSchedule,
 			LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+		},
+	}
+}
+
+func getPolicyDefaultTopologyConstraint(maxSkew int32, label string) []api.DefaultTopologySpreadConstraint {
+	return []api.DefaultTopologySpreadConstraint{
+		{
+			MaxSkew:           maxSkew,
+			TopologyKey:       "zone",
+			WhenUnsatisfiable: v1.DoNotSchedule,
+			Labels:            []string{label},
 		},
 	}
 }

@@ -125,5 +125,12 @@ type FailedPods struct {
 }
 
 type TopologySpreadConstraint struct {
-	DefaultConstraints []v1.TopologySpreadConstraint
+	DefaultConstraints []DefaultTopologySpreadConstraint
+}
+
+type DefaultTopologySpreadConstraint struct {
+	MaxSkew           int32
+	TopologyKey       string
+	WhenUnsatisfiable v1.UnsatisfiableConstraintAction
+	Labels            []string
 }

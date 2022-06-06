@@ -123,5 +123,12 @@ type FailedPods struct {
 }
 
 type TopologySpreadConstraint struct {
-	DefaultConstraints []v1.TopologySpreadConstraint `json:"defaultConstraints,omitempty"`
+	DefaultConstraints []DefaultTopologySpreadConstraint `json:"defaultConstraints,omitempty"`
+}
+
+type DefaultTopologySpreadConstraint struct {
+	MaxSkew           int32                            `json:"maxSkew,omitempty"`
+	TopologyKey       string                           `json:"topologyKey,omitempty"`
+	WhenUnsatisfiable v1.UnsatisfiableConstraintAction `json:"whenUnsatisfiable,omitempty"`
+	Labels            []string                         `json:"labels,omitempty"`
 }

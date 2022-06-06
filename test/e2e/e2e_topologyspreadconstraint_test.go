@@ -33,44 +33,46 @@ func TestTopologySpreadConstraint(t *testing.T) {
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
 	testCases := map[string]struct {
-		replicaCount int
-		maxSkew      int
-		labelKey     string
-		labelValue   string
-		constraint   v1.UnsatisfiableConstraintAction
-		params       *deschedulerapi.StrategyParameters
+		replicaCount              int
+		maxSkew                   int
+		labelKey                  string
+		labelValue                string
+		params                    *deschedulerapi.StrategyParameters
+		topologySpreadConstraints []v1.TopologySpreadConstraint
 	}{
 		"test-rc-topology-spread-hard-constraint": {
-			replicaCount: 4,
-			maxSkew:      1,
-			labelKey:     "test",
-			labelValue:   "topology-spread-hard-constraint",
-			constraint:   v1.DoNotSchedule,
-			params:       &deschedulerapi.StrategyParameters{IncludeSoftConstraints: false},
+			replicaCount:              4,
+			maxSkew:                   1,
+			labelKey:                  "test",
+			labelValue:                "topology-spread-hard-constraint",
+			topologySpreadConstraints: makeTopologySpreadConstraints(1, "test", "topology-spread-hard-constraint", v1.DoNotSchedule),
+			params:                    &deschedulerapi.StrategyParameters{IncludeSoftConstraints: false},
 		},
 		"test-rc-topology-spread-soft-constraint": {
-			replicaCount: 4,
-			maxSkew:      1,
-			labelKey:     "test",
-			labelValue:   "topology-spread-soft-constraint",
-			constraint:   v1.ScheduleAnyway,
-			params:       &deschedulerapi.StrategyParameters{IncludeSoftConstraints: true},
+			replicaCount:              4,
+			maxSkew:                   1,
+			labelKey:                  "test",
+			labelValue:                "topology-spread-soft-constraint",
+			topologySpreadConstraints: makeTopologySpreadConstraints(1, "test", "topology-spread-soft-constraint", v1.ScheduleAnyway),
+			params:                    &deschedulerapi.StrategyParameters{IncludeSoftConstraints: true},
 		},
 		"test-rc-topology-spread-default-constraint": {
-			replicaCount: 4,
-			maxSkew:      1,
-			labelKey:     "test",
-			labelValue:   "topology-spread-default-constraint",
-			constraint:   v1.ScheduleAnyway,
+			replicaCount:              4,
+			maxSkew:                   1,
+			labelKey:                  "test",
+			labelValue:                "topology-spread-default-constraint",
+			topologySpreadConstraints: nil,
 			params: &deschedulerapi.StrategyParameters{
 				IncludeSoftConstraints: true,
 				TopologySpreadConstraint: &deschedulerapi.TopologySpreadConstraint{
-					DefaultConstraints: makeTopologySpreadConstraints(
-						1,
-						"test",
-						"topology-spread-default-constraint",
-						v1.ScheduleAnyway,
-					),
+					DefaultConstraints: []deschedulerapi.DefaultTopologySpreadConstraint{
+						{
+							MaxSkew:           1,
+							TopologyKey:       zoneTopologyKey,
+							WhenUnsatisfiable: v1.ScheduleAnyway,
+							Labels:            []string{"test"},
+						},
+					},
 				},
 			},
 		},
@@ -79,7 +81,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Logf("Creating RC %s with %d replicas", name, tc.replicaCount)
 			rc := RcByNameContainer(name, testNamespace.Name, int32(tc.replicaCount), map[string]string{tc.labelKey: tc.labelValue}, nil, "")
-			rc.Spec.Template.Spec.TopologySpreadConstraints = makeTopologySpreadConstraints(tc.maxSkew, tc.labelKey, tc.labelValue, tc.constraint)
+			rc.Spec.Template.Spec.TopologySpreadConstraints = tc.topologySpreadConstraints
 			if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, rc, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Error creating RC %s %v", name, err)
 			}
@@ -91,7 +93,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			violatorCount := tc.maxSkew + 1
 			violatorRc := RcByNameContainer(violatorRcName, testNamespace.Name, int32(violatorCount), map[string]string{tc.labelKey: tc.labelValue}, nil, "")
 			violatorRc.Spec.Template.Spec.NodeSelector = map[string]string{zoneTopologyKey: workerNodes[0].Labels[zoneTopologyKey]}
-			rc.Spec.Template.Spec.TopologySpreadConstraints = makeTopologySpreadConstraints(tc.maxSkew, tc.labelKey, tc.labelValue, tc.constraint)
 			if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, violatorRc, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Error creating RC %s: %v", violatorRcName, err)
 			}
@@ -144,9 +145,9 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			min, max := getMinAndMaxPodDistribution(nodePodCountMap)
 			if max-min > tc.maxSkew {
 				t.Errorf("Pod distribution for %s is still violating the max skew of %d as it is %d", name, tc.maxSkew, max-min)
+			} else {
+				t.Logf("Pods for %s were distributed in line with max skew of %d", name, tc.maxSkew)
 			}
-
-			t.Logf("Pods for %s were distributed in line with max skew of %d", name, tc.maxSkew)
 		})
 	}
 }

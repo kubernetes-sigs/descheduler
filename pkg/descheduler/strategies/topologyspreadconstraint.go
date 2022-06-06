@@ -370,7 +370,23 @@ func getTopologySpreadConstraints(pod v1.Pod, strategy api.DeschedulerStrategy) 
 	}
 
 	if strategy.Params != nil && strategy.Params.TopologySpreadConstraint != nil && len(strategy.Params.TopologySpreadConstraint.DefaultConstraints) > 0 {
-		return strategy.Params.TopologySpreadConstraint.DefaultConstraints
+		constraints := make([]v1.TopologySpreadConstraint, len(strategy.Params.TopologySpreadConstraint.DefaultConstraints))
+		for _, defaultConstraint := range strategy.Params.TopologySpreadConstraint.DefaultConstraints {
+			labelSelector := metav1.LabelSelector{MatchLabels: make(map[string]string, len(defaultConstraint.Labels))}
+			for _, label := range defaultConstraint.Labels {
+				if _, ok := pod.Labels[label]; !ok {
+					klog.V(4).InfoS("unable to assign default topology constraint as pod is missing label matching the topology key", "pod", klog.KObj(&pod), "label", label)
+					return nil
+				}
+				labelSelector.MatchLabels[label] = pod.Labels[label]
+			}
+			constraints = append(constraints, v1.TopologySpreadConstraint{
+				TopologyKey:   defaultConstraint.TopologyKey,
+				MaxSkew:       defaultConstraint.MaxSkew,
+				LabelSelector: &labelSelector,
+			})
+		}
+		return constraints
 	}
 
 	return nil
