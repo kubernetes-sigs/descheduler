@@ -100,22 +100,31 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 		return
 	}
 
+	podsToEvict := make([]*v1.Pod, 0)
+	nodeMap := make(map[string]*v1.Node, len(nodes))
+
 	for _, node := range nodes {
+		nodeMap[node.Name] = node
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 
 		pods := listOldPodsOnNode(node.Name, getPodsAssignedToNode, podFilter, *strategy.Params.PodLifeTime.MaxPodLifeTimeSeconds)
-		for _, pod := range pods {
-			success, err := podEvictor.EvictPod(ctx, pod, node, "PodLifeTime")
-			if success {
-				klog.V(1).InfoS("Evicted pod because it exceeded its lifetime", "pod", klog.KObj(pod), "maxPodLifeTime", *strategy.Params.PodLifeTime.MaxPodLifeTimeSeconds)
-			}
+		podsToEvict = append(podsToEvict, pods...)
+	}
 
-			if err != nil {
-				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
-				break
-			}
+	// Should sort Pods so that the oldest can be evicted first
+	// in the event that PDB or settings such maxNoOfPodsToEvictPer* prevent too much eviction
+	podutil.SortPodsBasedOnAge(podsToEvict)
+
+	for _, pod := range podsToEvict {
+		success, err := podEvictor.EvictPod(ctx, pod, nodeMap[pod.Spec.NodeName], "PodLifeTime")
+		if success {
+			klog.V(1).InfoS("Evicted pod because it exceeded its lifetime", "pod", klog.KObj(pod), "maxPodLifeTime", *strategy.Params.PodLifeTime.MaxPodLifeTimeSeconds)
 		}
 
+		if err != nil {
+			klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
+			break
+		}
 	}
 }
 

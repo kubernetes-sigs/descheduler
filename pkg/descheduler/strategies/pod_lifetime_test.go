@@ -139,12 +139,14 @@ func TestPodLifeTime(t *testing.T) {
 
 	var maxLifeTime uint = 600
 	testCases := []struct {
-		description             string
-		strategy                api.DeschedulerStrategy
-		pods                    []*v1.Pod
-		nodes                   []*v1.Node
-		expectedEvictedPodCount uint
-		ignorePvcPods           bool
+		description                string
+		strategy                   api.DeschedulerStrategy
+		pods                       []*v1.Pod
+		nodes                      []*v1.Node
+		expectedEvictedPodCount    uint
+		ignorePvcPods              bool
+		maxPodsToEvictPerNode      *uint
+		maxPodsToEvictPerNamespace *uint
 	}{
 		{
 			description: "Two pods in the `dev` Namespace, 1 is new and 1 very is old. 1 should be evicted.",
@@ -264,6 +266,46 @@ func TestPodLifeTime(t *testing.T) {
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
 		},
+		{
+			description: "2 Oldest pods should be evicted when maxPodsToEvictPerNode and maxPodsToEvictPerNamespace are not set",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
+				},
+			},
+			pods:                       []*v1.Pod{p1, p2, p9},
+			nodes:                      []*v1.Node{node1},
+			expectedEvictedPodCount:    2,
+			maxPodsToEvictPerNode:      nil,
+			maxPodsToEvictPerNamespace: nil,
+		},
+		{
+			description: "1 Oldest pod should be evicted when maxPodsToEvictPerNamespace is set to 1",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
+				},
+			},
+			pods:                       []*v1.Pod{p1, p2, p9},
+			nodes:                      []*v1.Node{node1},
+			maxPodsToEvictPerNamespace: func(i uint) *uint { return &i }(1),
+			expectedEvictedPodCount:    1,
+		},
+		{
+			description: "1 Oldest pod should be evicted when maxPodsToEvictPerNode is set to 1",
+			strategy: api.DeschedulerStrategy{
+				Enabled: true,
+				Params: &api.StrategyParameters{
+					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
+				},
+			},
+			pods:                    []*v1.Pod{p1, p2, p9},
+			nodes:                   []*v1.Node{node1},
+			maxPodsToEvictPerNode:   func(i uint) *uint { return &i }(1),
+			expectedEvictedPodCount: 1,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -295,8 +337,8 @@ func TestPodLifeTime(t *testing.T) {
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
 				false,
-				nil,
-				nil,
+				tc.maxPodsToEvictPerNode,
+				tc.maxPodsToEvictPerNamespace,
 				tc.nodes,
 				getPodsAssignedToNode,
 				false,

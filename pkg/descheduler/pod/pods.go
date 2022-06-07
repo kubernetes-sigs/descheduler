@@ -228,3 +228,10 @@ func SortPodsBasedOnPriorityLowToHigh(pods []*v1.Pod) {
 		return *pods[i].Spec.Priority < *pods[j].Spec.Priority
 	})
 }
+
+// SortPodsBasedOnAge sorts Pods from oldest to most recent in place
+func SortPodsBasedOnAge(pods []*v1.Pod) {
+	sort.Slice(pods, func(i, j int) bool {
+		return pods[i].CreationTimestamp.Before(&pods[j].CreationTimestamp)
+	})
+}
