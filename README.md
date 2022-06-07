@@ -751,6 +751,7 @@ strategies:
   "LowNodeUtilization":
     enabled: true
     params:
+      nodeFit: true
       nodeResourceUtilizationThresholds:
         thresholds:
           "cpu": 20
@@ -760,7 +761,6 @@ strategies:
           "cpu": 50
           "memory": 50
           "pods": 50
-        nodeFit: true
 ```
 
 Note that node fit filtering references the current pod spec, and not that of it's owner.
