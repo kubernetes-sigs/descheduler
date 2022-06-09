@@ -19,7 +19,6 @@ package evictions
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1beta1"
@@ -106,11 +105,17 @@ func (pe *PodEvictor) TotalEvicted() uint {
 // EvictPod returns non-nil error only when evicting a pod on a node is not
 // possible (due to maxPodsToEvictPerNode constraint). Success is true when the pod
 // is evicted on the server side.
-func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, strategy string, reasons ...string) (bool, error) {
-	reason := strategy
-	if len(reasons) > 0 {
-		reason += " (" + strings.Join(reasons, ", ") + ")"
+// eviction reason can be set through the ctx's evictionReason:STRING pair
+func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) (bool, error) {
+	strategy := ""
+	if ctx.Value("strategyName") != nil {
+		strategy = ctx.Value("strategyName").(string)
 	}
+	reason := ""
+	if ctx.Value("evictionReason") != nil {
+		reason = ctx.Value("evictionReason").(string)
+	}
+
 	if pe.maxPodsToEvictPerNode != nil && pe.nodepodCount[node]+1 > *pe.maxPodsToEvictPerNode {
 		if pe.metricsEnabled {
 			metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()

@@ -313,7 +313,7 @@ func evictPods(
 				continue
 			}
 
-			success, err := podEvictor.EvictPod(ctx, pod, nodeInfo.node, strategy)
+			success, err := podEvictor.EvictPod(ctx, pod, nodeInfo.node)
 			if err != nil {
 				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
 				break
