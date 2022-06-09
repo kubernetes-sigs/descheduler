@@ -187,7 +187,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		if !isEvictable(pod) {
 			continue
 		}
-		if _, err := podEvictor.EvictPod(ctx, pod, nodeMap[pod.Spec.NodeName]); err != nil {
+		if _, err := podEvictor.EvictPod(ctx, pod); err != nil {
 			klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
 			break
 		}
