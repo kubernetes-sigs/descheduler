@@ -102,11 +102,18 @@ func (pe *PodEvictor) TotalEvicted() uint {
 	return total
 }
 
-// EvictPod returns non-nil error only when evicting a pod on a node is not
-// possible (due to maxPodsToEvictPerNode constraint). Success is true when the pod
-// is evicted on the server side.
-// eviction reason can be set through the ctx's evictionReason:STRING pair
-func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod) (bool, error) {
+// NodeLimitExceeded checks if the number of evictions for a node was exceeded
+func (pe *PodEvictor) NodeLimitExceeded(node *v1.Node) bool {
+	if pe.maxPodsToEvictPerNode != nil {
+		return pe.nodepodCount[node.Name] == *pe.maxPodsToEvictPerNode
+	}
+	return false
+}
+
+// EvictPod evicts a pod while exercising eviction limits.
+// Returns true when the pod is evicted on the server side.
+// Eviction reason can be set through the ctx's evictionReason:STRING pair
+func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod) bool {
 	strategy := ""
 	if ctx.Value("strategyName") != nil {
 		strategy = ctx.Value("strategyName").(string)
@@ -121,7 +128,8 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod) (bool, error) {
 			if pe.metricsEnabled {
 				metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
 			}
-			return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", *pe.maxPodsToEvictPerNode, pod.Spec.NodeName)
+			klog.ErrorS(fmt.Errorf("Maximum number of evicted pods per node reached"), "limit", *pe.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
+			return false
 		}
 	}
 
@@ -129,7 +137,8 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod) (bool, error) {
 		if pe.metricsEnabled {
 			metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per namespace reached", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
 		}
-		return false, fmt.Errorf("Maximum number %v of evicted pods per %q namespace reached", *pe.maxPodsToEvictPerNamespace, pod.Namespace)
+		klog.ErrorS(fmt.Errorf("Maximum number of evicted pods per namespace reached"), "limit", *pe.maxPodsToEvictPerNamespace, "namespace", pod.Namespace)
+		return false
 	}
 
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion)
@@ -139,7 +148,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod) (bool, error) {
 		if pe.metricsEnabled {
 			metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
 		}
-		return false, nil
+		return false
 	}
 
 	if pod.Spec.NodeName != "" {
@@ -161,7 +170,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod) (bool, error) {
 		r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
 		r.Event(pod, v1.EventTypeNormal, "Descheduled", fmt.Sprintf("pod evicted by sigs.k8s.io/descheduler%s", reason))
 	}
-	return true, nil
+	return true
 }
 
 func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string) error {

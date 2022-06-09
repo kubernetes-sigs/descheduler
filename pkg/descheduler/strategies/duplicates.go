@@ -192,6 +192,7 @@ func RemoveDuplicatePods(
 		}
 
 		upperAvg := int(math.Ceil(float64(ownerKeyOccurence[ownerKey]) / float64(len(targetNodes))))
+	loop:
 		for nodeName, pods := range podNodes {
 			klog.V(2).InfoS("Average occurrence per node", "node", klog.KObj(nodeMap[nodeName]), "ownerKey", ownerKey, "avg", upperAvg)
 			// list of duplicated pods does not contain the original referential pod
@@ -199,9 +200,9 @@ func RemoveDuplicatePods(
 				// It's assumed all duplicated pods are in the same priority class
 				// TODO(jchaloup): check if the pod has a different node to lend to
 				for _, pod := range pods[upperAvg-1:] {
-					if _, err := podEvictor.EvictPod(ctx, pod); err != nil {
-						klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
-						break
+					podEvictor.EvictPod(ctx, pod)
+					if podEvictor.NodeLimitExceeded(nodeMap[nodeName]) {
+						continue loop
 					}
 				}
 			}

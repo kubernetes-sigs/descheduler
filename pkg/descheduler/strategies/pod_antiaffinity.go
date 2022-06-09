@@ -75,6 +75,7 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 		return
 	}
 
+loop:
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, podFilter)
@@ -86,13 +87,7 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
 			if checkPodsWithAntiAffinityExist(pods[i], pods) && evictorFilter.Filter(pods[i]) {
-				success, err := podEvictor.EvictPod(ctx, pods[i])
-				if err != nil {
-					klog.ErrorS(err, "Error evicting pod")
-					break
-				}
-
-				if success {
+				if podEvictor.EvictPod(ctx, pods[i]) {
 					// Since the current pod is evicted all other pods which have anti-affinity with this
 					// pod need not be evicted.
 					// Update pods.
@@ -100,6 +95,9 @@ func RemovePodsViolatingInterPodAntiAffinity(ctx context.Context, client clients
 					i--
 					totalPods--
 				}
+			}
+			if podEvictor.NodeLimitExceeded(node) {
+				continue loop
 			}
 		}
 	}

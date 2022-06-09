@@ -183,13 +183,17 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		}
 	}
 
+	nodeLimitExceeded := map[string]bool{}
 	for pod := range podsForEviction {
+		if nodeLimitExceeded[pod.Spec.NodeName] {
+			continue
+		}
 		if !isEvictable(pod) {
 			continue
 		}
-		if _, err := podEvictor.EvictPod(ctx, pod); err != nil {
-			klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
-			break
+		podEvictor.EvictPod(ctx, pod)
+		if podEvictor.NodeLimitExceeded(nodeMap[pod.Spec.NodeName]) {
+			nodeLimitExceeded[pod.Spec.NodeName] = true
 		}
 	}
 }
