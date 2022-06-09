@@ -6,3 +6,6 @@ strategies:
     params:
       podLifeTime:
         maxPodLifeTimeSeconds: 604800 # 7 days
+        states:
+        - "Pending"
+        - "PodInitializing"

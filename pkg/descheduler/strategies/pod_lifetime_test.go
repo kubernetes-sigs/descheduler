@@ -203,7 +203,7 @@ func TestPodLifeTime(t *testing.T) {
 				Params: &api.StrategyParameters{
 					PodLifeTime: &api.PodLifeTime{
 						MaxPodLifeTimeSeconds: &maxLifeTime,
-						PodStatusPhases:       []string{"ContainerCreating"},
+						States:                []string{"ContainerCreating"},
 					},
 				},
 			},
@@ -218,6 +218,7 @@ func TestPodLifeTime(t *testing.T) {
 						},
 					}
 					pod.OwnerReferences = ownerRef1
+					pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 				}),
 			},
 			nodes:                   []*v1.Node{node1},
@@ -230,7 +231,7 @@ func TestPodLifeTime(t *testing.T) {
 				Params: &api.StrategyParameters{
 					PodLifeTime: &api.PodLifeTime{
 						MaxPodLifeTimeSeconds: &maxLifeTime,
-						PodStatusPhases:       []string{"PodInitializing"},
+						States:                []string{"PodInitializing"},
 					},
 				},
 			},
@@ -245,6 +246,7 @@ func TestPodLifeTime(t *testing.T) {
 						},
 					}
 					pod.OwnerReferences = ownerRef1
+					pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 				}),
 			},
 			nodes:                   []*v1.Node{node1},
@@ -257,7 +259,7 @@ func TestPodLifeTime(t *testing.T) {
 				Params: &api.StrategyParameters{
 					PodLifeTime: &api.PodLifeTime{
 						MaxPodLifeTimeSeconds: &maxLifeTime,
-						PodStatusPhases:       []string{"Pending"},
+						States:                []string{"Pending"},
 					},
 				},
 			},
