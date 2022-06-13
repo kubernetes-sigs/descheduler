@@ -66,15 +66,11 @@ func RemoveDuplicatePods(
 	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
+	evictorFilter *evictions.EvictorFilter,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 ) {
 	if err := validateRemoveDuplicatePodsParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemoveDuplicatePods parameters")
-		return
-	}
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
-	if err != nil {
-		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
@@ -84,20 +80,13 @@ func RemoveDuplicatePods(
 		excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
 	}
 
-	nodeFit := false
-	if strategy.Params != nil {
-		nodeFit = strategy.Params.NodeFit
-	}
-
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
-
 	duplicatePods := make(map[podOwner]map[string][]*v1.Pod)
 	ownerKeyOccurence := make(map[podOwner]int32)
 	nodeCount := 0
 	nodeMap := make(map[string]*v1.Node)
 
 	podFilter, err := podutil.NewOptions().
-		WithFilter(evictable.IsEvictable).
+		WithFilter(evictorFilter.Filter).
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
 		BuildFilterFunc()

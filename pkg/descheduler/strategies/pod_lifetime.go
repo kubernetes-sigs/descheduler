@@ -29,7 +29,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func validatePodLifeTimeParams(params *api.StrategyParameters) error {
@@ -57,15 +56,9 @@ func validatePodLifeTimeParams(params *api.StrategyParameters) error {
 }
 
 // PodLifeTime evicts pods on nodes that were created more than strategy.Params.MaxPodLifeTimeSeconds seconds ago.
-func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, evictorFilter *evictions.EvictorFilter, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	if err := validatePodLifeTimeParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid PodLifeTime parameters")
-		return
-	}
-
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
-	if err != nil {
-		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
@@ -75,14 +68,12 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 		excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
 	}
 
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority))
-
-	filter := evictable.IsEvictable
+	filter := evictorFilter.Filter
 	if strategy.Params.PodLifeTime.PodStatusPhases != nil {
 		filter = func(pod *v1.Pod) bool {
 			for _, phase := range strategy.Params.PodLifeTime.PodStatusPhases {
 				if string(pod.Status.Phase) == phase {
-					return evictable.IsEvictable(pod)
+					return evictorFilter.Filter(pod)
 				}
 			}
 			return false

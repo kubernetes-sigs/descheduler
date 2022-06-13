@@ -177,19 +177,26 @@ func runPodLifetimeStrategy(
 	}
 
 	maxPodLifeTimeSeconds := uint(1)
+	strategy := deschedulerapi.DeschedulerStrategy{
+		Enabled: true,
+		Params: &deschedulerapi.StrategyParameters{
+			PodLifeTime:                &deschedulerapi.PodLifeTime{MaxPodLifeTimeSeconds: &maxPodLifeTimeSeconds},
+			Namespaces:                 namespaces,
+			ThresholdPriority:          priority,
+			ThresholdPriorityClassName: priorityClass,
+			LabelSelector:              labelSelector,
+		},
+	}
+
+	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, clientset, strategy.Params)
+	if err != nil {
+		t.Fatalf("Failed to get threshold priority from strategy's params")
+	}
+
 	strategies.PodLifeTime(
 		ctx,
 		clientset,
-		deschedulerapi.DeschedulerStrategy{
-			Enabled: true,
-			Params: &deschedulerapi.StrategyParameters{
-				PodLifeTime:                &deschedulerapi.PodLifeTime{MaxPodLifeTimeSeconds: &maxPodLifeTimeSeconds},
-				Namespaces:                 namespaces,
-				ThresholdPriority:          priority,
-				ThresholdPriorityClassName: priorityClass,
-				LabelSelector:              labelSelector,
-			},
-		},
+		strategy,
 		nodes,
 		evictions.NewPodEvictor(
 			clientset,
@@ -198,12 +205,16 @@ func runPodLifetimeStrategy(
 			nil,
 			maxPodsToEvictPerNamespace,
 			nodes,
+			false,
+		),
+		evictions.NewEvictorFilter(
+			nodes,
 			getPodsAssignedToNode,
 			false,
 			evictCritical,
 			false,
 			false,
-			false,
+			evictions.WithPriorityThreshold(thresholdPriority),
 		),
 		getPodsAssignedToNode,
 	)
@@ -326,7 +337,16 @@ func TestLowNodeUtilization(t *testing.T) {
 	// Run LowNodeUtilization strategy
 	podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
 
-	podFilter, err := podutil.NewOptions().WithFilter(podEvictor.Evictable().IsEvictable).BuildFilterFunc()
+	evictorFilter := evictions.NewEvictorFilter(
+		nodes,
+		getPodsAssignedToNode,
+		true,
+		false,
+		false,
+		false,
+	)
+
+	podFilter, err := podutil.NewOptions().WithFilter(evictorFilter.Filter).BuildFilterFunc()
 	if err != nil {
 		t.Errorf("Error initializing pod filter function, %v", err)
 	}
@@ -356,12 +376,13 @@ func TestLowNodeUtilization(t *testing.T) {
 		},
 		workerNodes,
 		podEvictor,
+		evictorFilter,
 		getPodsAssignedToNode,
 	)
 
 	waitForTerminatingPodsToDisappear(ctx, t, clientSet, rc.Namespace)
 
-	podFilter, err = podutil.NewOptions().WithFilter(podEvictor.Evictable().IsEvictable).BuildFilterFunc()
+	podFilter, err = podutil.NewOptions().WithFilter(evictorFilter.Filter).BuildFilterFunc()
 	if err != nil {
 		t.Errorf("Error initializing pod filter function, %v", err)
 	}
@@ -1410,11 +1431,6 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 		nil,
 		nil,
 		nodes,
-		getPodsAssignedToNode,
-		true,
-		false,
-		false,
-		false,
 		false,
 	)
 }

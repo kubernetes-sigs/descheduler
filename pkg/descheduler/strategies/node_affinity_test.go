@@ -222,15 +222,25 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 				tc.maxPodsToEvictPerNode,
 				tc.maxNoOfPodsToEvictPerNamespace,
 				tc.nodes,
+				false,
+			)
+
+			nodeFit := false
+			if tc.strategy.Params != nil {
+				nodeFit = tc.strategy.Params.NodeFit
+			}
+
+			evictorFilter := evictions.NewEvictorFilter(
+				tc.nodes,
 				getPodsAssignedToNode,
 				false,
 				false,
 				false,
 				false,
-				false,
+				evictions.WithNodeFit(nodeFit),
 			)
 
-			RemovePodsViolatingNodeAffinity(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+			RemovePodsViolatingNodeAffinity(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)

@@ -45,6 +45,7 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
@@ -87,7 +88,7 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	return runFn()
 }
 
-type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc)
+type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, evictorFilter *evictions.EvictorFilter, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc)
 
 func cachedClient(
 	realClient clientset.Interface,
@@ -283,18 +284,25 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
 			nodes,
-			getPodsAssignedToNode,
-			evictLocalStoragePods,
-			evictSystemCriticalPods,
-			ignorePvcPods,
-			evictBarePods,
 			!rs.DisableMetrics,
 		)
 
 		for name, strategy := range deschedulerPolicy.Strategies {
 			if f, ok := strategyFuncs[name]; ok {
 				if strategy.Enabled {
-					f(ctx, rs.Client, strategy, nodes, podEvictor, getPodsAssignedToNode)
+					nodeFit := false
+					if name != "PodLifeTime" {
+						if strategy.Params != nil {
+							nodeFit = strategy.Params.NodeFit
+						}
+					}
+					thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, rs.Client, strategy.Params)
+					if err != nil {
+						klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
+						continue
+					}
+					evictorFilter := evictions.NewEvictorFilter(nodes, getPodsAssignedToNode, evictLocalStoragePods, evictSystemCriticalPods, ignorePvcPods, evictBarePods, evictions.WithNodeFit(nodeFit), evictions.WithPriorityThreshold(thresholdPriority))
+					f(ctx, rs.Client, strategy, nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
 				}
 			} else {
 				klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)

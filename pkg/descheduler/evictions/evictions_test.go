@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
@@ -639,19 +638,6 @@ func TestIsEvictable(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			podEvictor := &PodEvictor{
-				client:                     fakeClient,
-				nodes:                      nodes,
-				nodeIndexer:                getPodsAssignedToNode,
-				policyGroupVersion:         policyv1.SchemeGroupVersion.String(),
-				dryRun:                     false,
-				maxPodsToEvictPerNode:      nil,
-				maxPodsToEvictPerNamespace: nil,
-				evictLocalStoragePods:      test.evictLocalStoragePods,
-				evictSystemCriticalPods:    test.evictSystemCriticalPods,
-				evictFailedBarePods:        test.evictFailedBarePods,
-			}
-
 			var opts []func(opts *Options)
 			if test.priorityThreshold != nil {
 				opts = append(opts, WithPriorityThreshold(*test.priorityThreshold))
@@ -659,9 +645,18 @@ func TestIsEvictable(t *testing.T) {
 			if test.nodeFit {
 				opts = append(opts, WithNodeFit(true))
 			}
-			evictable := podEvictor.Evictable(opts...)
 
-			result := evictable.IsEvictable(test.pods[0])
+			evictorFilter := NewEvictorFilter(
+				nodes,
+				getPodsAssignedToNode,
+				test.evictLocalStoragePods,
+				test.evictSystemCriticalPods,
+				false,
+				test.evictFailedBarePods,
+				opts...,
+			)
+
+			result := evictorFilter.Filter(test.pods[0])
 			if result != test.result {
 				t.Errorf("IsEvictable should return for pod %s %t, but it returns %t", test.pods[0].Name, test.result, result)
 			}

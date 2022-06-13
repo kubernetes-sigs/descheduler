@@ -51,17 +51,12 @@ type namespacePodEvictCount map[string]uint
 type PodEvictor struct {
 	client                     clientset.Interface
 	nodes                      []*v1.Node
-	nodeIndexer                podutil.GetPodsAssignedToNodeFunc
 	policyGroupVersion         string
 	dryRun                     bool
 	maxPodsToEvictPerNode      *uint
 	maxPodsToEvictPerNamespace *uint
 	nodepodCount               nodePodEvictedCount
 	namespacePodCount          namespacePodEvictCount
-	evictFailedBarePods        bool
-	evictLocalStoragePods      bool
-	evictSystemCriticalPods    bool
-	ignorePvcPods              bool
 	metricsEnabled             bool
 }
 
@@ -72,11 +67,6 @@ func NewPodEvictor(
 	maxPodsToEvictPerNode *uint,
 	maxPodsToEvictPerNamespace *uint,
 	nodes []*v1.Node,
-	nodeIndexer podutil.GetPodsAssignedToNodeFunc,
-	evictLocalStoragePods bool,
-	evictSystemCriticalPods bool,
-	ignorePvcPods bool,
-	evictFailedBarePods bool,
 	metricsEnabled bool,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
@@ -89,17 +79,12 @@ func NewPodEvictor(
 	return &PodEvictor{
 		client:                     client,
 		nodes:                      nodes,
-		nodeIndexer:                nodeIndexer,
 		policyGroupVersion:         policyGroupVersion,
 		dryRun:                     dryRun,
 		maxPodsToEvictPerNode:      maxPodsToEvictPerNode,
 		maxPodsToEvictPerNamespace: maxPodsToEvictPerNamespace,
 		nodepodCount:               nodePodCount,
 		namespacePodCount:          namespacePodCount,
-		evictLocalStoragePods:      evictLocalStoragePods,
-		evictSystemCriticalPods:    evictSystemCriticalPods,
-		evictFailedBarePods:        evictFailedBarePods,
-		ignorePvcPods:              ignorePvcPods,
 		metricsEnabled:             metricsEnabled,
 	}
 }
@@ -230,21 +215,26 @@ func WithLabelSelector(labelSelector labels.Selector) func(opts *Options) {
 
 type constraint func(pod *v1.Pod) error
 
-type evictable struct {
+type EvictorFilter struct {
 	constraints []constraint
 }
 
-// Evictable provides an implementation of IsEvictable(IsEvictable(pod *v1.Pod) bool).
-// The method accepts a list of options which allow to extend constraints
-// which decides when a pod is considered evictable.
-func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
+func NewEvictorFilter(
+	nodes []*v1.Node,
+	nodeIndexer podutil.GetPodsAssignedToNodeFunc,
+	evictLocalStoragePods bool,
+	evictSystemCriticalPods bool,
+	ignorePvcPods bool,
+	evictFailedBarePods bool,
+	opts ...func(opts *Options),
+) *EvictorFilter {
 	options := &Options{}
 	for _, opt := range opts {
 		opt(options)
 	}
 
-	ev := &evictable{}
-	if pe.evictFailedBarePods {
+	ev := &EvictorFilter{}
+	if evictFailedBarePods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			ownerRefList := podutil.OwnerRef(pod)
 			// Enable evictFailedBarePods to evict bare pods in failed phase
@@ -263,7 +253,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 			return nil
 		})
 	}
-	if !pe.evictSystemCriticalPods {
+	if !evictSystemCriticalPods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			// Moved from IsEvictable function to allow for disabling
 			if utils.IsCriticalPriorityPod(pod) {
@@ -281,7 +271,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 			})
 		}
 	}
-	if !pe.evictLocalStoragePods {
+	if !evictLocalStoragePods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			if utils.IsPodWithLocalStorage(pod) {
 				return fmt.Errorf("pod has local storage and descheduler is not configured with evictLocalStoragePods")
@@ -289,7 +279,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 			return nil
 		})
 	}
-	if pe.ignorePvcPods {
+	if ignorePvcPods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			if utils.IsPodWithPVC(pod) {
 				return fmt.Errorf("pod has a PVC and descheduler is configured to ignore PVC pods")
@@ -299,7 +289,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 	}
 	if options.nodeFit {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
-			if !nodeutil.PodFitsAnyOtherNode(pe.nodeIndexer, pod, pe.nodes) {
+			if !nodeutil.PodFitsAnyOtherNode(nodeIndexer, pod, nodes) {
 				return fmt.Errorf("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable")
 			}
 			return nil
@@ -318,7 +308,7 @@ func (pe *PodEvictor) Evictable(opts ...func(opts *Options)) *evictable {
 }
 
 // IsEvictable decides when a pod is evictable
-func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
+func (ef *EvictorFilter) Filter(pod *v1.Pod) bool {
 	checkErrs := []error{}
 
 	ownerRefList := podutil.OwnerRef(pod)
@@ -338,7 +328,7 @@ func (ev *evictable) IsEvictable(pod *v1.Pod) bool {
 		checkErrs = append(checkErrs, fmt.Errorf("pod is terminating"))
 	}
 
-	for _, c := range ev.constraints {
+	for _, c := range ef.constraints {
 		if err := c(pod); err != nil {
 			checkErrs = append(checkErrs, err)
 		}

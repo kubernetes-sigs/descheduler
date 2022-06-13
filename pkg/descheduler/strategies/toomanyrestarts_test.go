@@ -250,15 +250,20 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 				tc.maxPodsToEvictPerNode,
 				tc.maxNoOfPodsToEvictPerNamespace,
 				tc.nodes,
+				false,
+			)
+
+			evictorFilter := evictions.NewEvictorFilter(
+				tc.nodes,
 				getPodsAssignedToNode,
 				false,
 				false,
 				false,
 				false,
-				false,
+				evictions.WithNodeFit(tc.strategy.Params.NodeFit),
 			)
 
-			RemovePodsHavingTooManyRestarts(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+			RemovePodsHavingTooManyRestarts(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)

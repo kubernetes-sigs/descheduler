@@ -46,7 +46,7 @@ func TestRemoveFailedPods(t *testing.T) {
 	}{
 		{
 			description:             "default empty strategy, 0 failures, 0 evictions",
-			strategy:                api.DeschedulerStrategy{},
+			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: false}},
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
 			pods:                    []*v1.Pod{}, // no pods come back with field selector phase=Failed
@@ -275,15 +275,20 @@ func TestRemoveFailedPods(t *testing.T) {
 				nil,
 				nil,
 				tc.nodes,
+				false,
+			)
+
+			evictorFilter := evictions.NewEvictorFilter(
+				tc.nodes,
 				getPodsAssignedToNode,
 				false,
 				false,
 				false,
 				false,
-				false,
+				evictions.WithNodeFit(tc.strategy.Params.NodeFit),
 			)
 
-			RemoveFailedPods(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+			RemoveFailedPods(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)

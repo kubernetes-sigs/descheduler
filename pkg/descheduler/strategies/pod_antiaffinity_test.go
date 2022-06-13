@@ -218,11 +218,6 @@ func TestPodAntiAffinity(t *testing.T) {
 				test.maxPodsToEvictPerNode,
 				test.maxNoOfPodsToEvictPerNamespace,
 				test.nodes,
-				getPodsAssignedToNode,
-				false,
-				false,
-				false,
-				false,
 				false,
 			)
 			strategy := api.DeschedulerStrategy{
@@ -231,7 +226,17 @@ func TestPodAntiAffinity(t *testing.T) {
 				},
 			}
 
-			RemovePodsViolatingInterPodAntiAffinity(ctx, fakeClient, strategy, test.nodes, podEvictor, getPodsAssignedToNode)
+			evictorFilter := evictions.NewEvictorFilter(
+				test.nodes,
+				getPodsAssignedToNode,
+				false,
+				false,
+				false,
+				false,
+				evictions.WithNodeFit(test.nodeFit),
+			)
+
+			RemovePodsViolatingInterPodAntiAffinity(ctx, fakeClient, strategy, test.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != test.expectedEvictedPodCount {
 				t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, test.expectedEvictedPodCount)

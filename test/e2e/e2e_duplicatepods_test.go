@@ -145,11 +145,6 @@ func TestRemoveDuplicates(t *testing.T) {
 				nil,
 				nil,
 				nodes,
-				getPodsAssignedToNode,
-				true,
-				false,
-				false,
-				false,
 				false,
 			)
 
@@ -165,6 +160,14 @@ func TestRemoveDuplicates(t *testing.T) {
 				},
 				workerNodes,
 				podEvictor,
+				evictions.NewEvictorFilter(
+					nodes,
+					getPodsAssignedToNode,
+					true,
+					false,
+					false,
+					false,
+				),
 				getPodsAssignedToNode,
 			)
 
