@@ -52,5 +52,21 @@ The helm tests runs as part of descheduler CI. But, to run it manually from the 
 make test-helm
 ```
 
+## Build Helm Package locally
+
+If you made some changes in the chart, and just want to check if templating is ok, or if the chart is buildable, you can run this command to have a package built from the `./charts` directory.
+
+```
+make build-helm
+```
+
+## Lint Helm Chart locally
+
+To check linting of your changes in the helm chart locally you can run:
+
+```
+make lint-helm
+```
+
 ### Miscellaneous
 See the [hack directory](https://github.com/kubernetes-sigs/descheduler/tree/master/hack) for additional tools and scripts used for developing the descheduler.
