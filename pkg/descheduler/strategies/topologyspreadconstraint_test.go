@@ -1041,3 +1041,50 @@ func getDefaultTopologyConstraints(maxSkew int32) []v1.TopologySpreadConstraint 
 		},
 	}
 }
+
+func TestCheckIdenticalConstraints(t *testing.T) {
+	newConstrainSame := v1.TopologySpreadConstraint{
+		MaxSkew:           2,
+		TopologyKey:       "zone",
+		WhenUnsatisfiable: v1.DoNotSchedule,
+		LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+	}
+	newConstrainDifferent := v1.TopologySpreadConstraint{
+		MaxSkew:           3,
+		TopologyKey:       "node",
+		WhenUnsatisfiable: v1.DoNotSchedule,
+		LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+	}
+	namespaceTopologySpreadConstraint := make(map[v1.TopologySpreadConstraint]struct{})
+	namespaceTopologySpreadConstraint[v1.TopologySpreadConstraint{
+		MaxSkew:           2,
+		TopologyKey:       "zone",
+		WhenUnsatisfiable: v1.DoNotSchedule,
+		LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+	}] = struct{}{}
+	testCases := []struct {
+		name                               string
+		namespaceTopologySpreadConstraints map[v1.TopologySpreadConstraint]struct{}
+		newConstraint                      v1.TopologySpreadConstraint
+		expectedResult                     bool
+	}{
+		{
+			name:                               "new constraint is identical",
+			namespaceTopologySpreadConstraints: namespaceTopologySpreadConstraint,
+			newConstraint:                      newConstrainSame, expectedResult: true},
+		{
+			name:                               "new constraint is different",
+			namespaceTopologySpreadConstraints: namespaceTopologySpreadConstraint,
+			newConstraint:                      newConstrainDifferent, expectedResult: false,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			isIdentitcal := hasIdenticalConstraints(tc.newConstraint, tc.namespaceTopologySpreadConstraints)
+			if isIdentitcal != tc.expectedResult {
+				t.Errorf("Test error for description: %s. Expected result %v, got %v", tc.name, tc.expectedResult, isIdentitcal)
+			}
+		})
+	}
+}

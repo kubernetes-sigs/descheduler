@@ -19,6 +19,7 @@ package strategies
 import (
 	"context"
 	"math"
+	"reflect"
 	"sort"
 
 	v1 "k8s.io/api/core/v1"
@@ -111,6 +112,12 @@ func RemovePodsViolatingTopologySpreadConstraint(
 				if constraint.WhenUnsatisfiable == v1.ScheduleAnyway && (strategy.Params == nil || !strategy.Params.IncludeSoftConstraints) {
 					continue
 				}
+				// Need to check v1.TopologySpreadConstraint deepEquality because
+				// v1.TopologySpreadConstraint.LabelSelector is a pointer
+				// and assigning new constrains would always add more keys
+				if hasIdenticalConstraints(constraint, namespaceTopologySpreadConstraints) {
+					continue
+				}
 				namespaceTopologySpreadConstraints[constraint] = struct{}{}
 			}
 		}
@@ -181,6 +188,16 @@ func RemovePodsViolatingTopologySpreadConstraint(
 			break
 		}
 	}
+}
+
+// hasIdenticalConstraints checks if already had an identical TopologySpreadConstraint in namespaceTopologySpreadConstraints map
+func hasIdenticalConstraints(newConstraint v1.TopologySpreadConstraint, namespaceTopologySpreadConstraints map[v1.TopologySpreadConstraint]struct{}) bool {
+	for constraint := range namespaceTopologySpreadConstraints {
+		if reflect.DeepEqual(newConstraint, constraint) {
+			return true
+		}
+	}
+	return false
 }
 
 // topologyIsBalanced checks if any domains in the topology differ by more than the MaxSkew
