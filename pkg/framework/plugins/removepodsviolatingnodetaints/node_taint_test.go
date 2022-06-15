@@ -1,4 +1,20 @@
-package strategies
+/*
+Copyright 2022 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package removepodsviolatingnodetaints
 
 import (
 	"context"
@@ -12,9 +28,11 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -341,25 +359,33 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				false,
 			)
 
-			strategy := api.DeschedulerStrategy{
-				Params: &api.StrategyParameters{
-					NodeFit:                 tc.nodeFit,
-					IncludePreferNoSchedule: tc.includePreferNoSchedule,
-					ExcludedTaints:          tc.excludedTaints,
-				},
+			handle := &frameworkfake.HandleImpl{
+				ClientsetImpl:                 fakeClient,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				PodEvictorImpl:                podEvictor,
+				EvictorFilterImpl: evictions.NewEvictorFilter(
+					tc.nodes,
+					getPodsAssignedToNode,
+					tc.evictLocalStoragePods,
+					tc.evictSystemCriticalPods,
+					false,
+					false,
+					evictions.WithNodeFit(tc.nodeFit),
+				),
+				SharedInformerFactoryImpl: sharedInformerFactory,
 			}
 
-			evictorFilter := evictions.NewEvictorFilter(
-				tc.nodes,
-				getPodsAssignedToNode,
-				tc.evictLocalStoragePods,
-				tc.evictSystemCriticalPods,
-				false,
-				false,
-				evictions.WithNodeFit(tc.nodeFit),
+			plugin, err := New(&componentconfig.RemovePodsViolatingNodeTaintsArgs{
+				IncludePreferNoSchedule: tc.includePreferNoSchedule,
+				ExcludedTaints:          tc.excludedTaints,
+			},
+				handle,
 			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
 
-			RemovePodsViolatingNodeTaints(ctx, fakeClient, strategy, tc.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
+			plugin.(framework.DeschedulePlugin).Deschedule(ctx, tc.nodes)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)
