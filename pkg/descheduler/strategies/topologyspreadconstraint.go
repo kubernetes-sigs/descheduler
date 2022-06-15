@@ -105,7 +105,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		}
 
 		// ...where there is a topology constraint
-		namespaceTopologySpreadConstraints := make(map[v1.TopologySpreadConstraint]struct{})
+		namespaceTopologySpreadConstraints := []v1.TopologySpreadConstraint{}
 		for _, pod := range namespacePods.Items {
 			for _, constraint := range pod.Spec.TopologySpreadConstraints {
 				// Ignore soft topology constraints if they are not included
@@ -113,12 +113,12 @@ func RemovePodsViolatingTopologySpreadConstraint(
 					continue
 				}
 				// Need to check v1.TopologySpreadConstraint deepEquality because
-				// v1.TopologySpreadConstraint.LabelSelector is a pointer
-				// and assigning new constrains would always add more keys
+				// v1.TopologySpreadConstraint has pointer fields
+				// and we don't need to go over duplicated constraints later on
 				if hasIdenticalConstraints(constraint, namespaceTopologySpreadConstraints) {
 					continue
 				}
-				namespaceTopologySpreadConstraints[constraint] = struct{}{}
+				namespaceTopologySpreadConstraints = append(namespaceTopologySpreadConstraints, constraint)
 			}
 		}
 		if len(namespaceTopologySpreadConstraints) == 0 {
@@ -126,7 +126,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		}
 
 		// 2. for each topologySpreadConstraint in that namespace
-		for constraint := range namespaceTopologySpreadConstraints {
+		for _, constraint := range namespaceTopologySpreadConstraints {
 			constraintTopologies := make(map[topologyPair][]*v1.Pod)
 			// pre-populate the topologyPair map with all the topologies available from the nodeMap
 			// (we can't just build it from existing pods' nodes because a topology may have 0 pods)
@@ -190,9 +190,9 @@ func RemovePodsViolatingTopologySpreadConstraint(
 	}
 }
 
-// hasIdenticalConstraints checks if already had an identical TopologySpreadConstraint in namespaceTopologySpreadConstraints map
-func hasIdenticalConstraints(newConstraint v1.TopologySpreadConstraint, namespaceTopologySpreadConstraints map[v1.TopologySpreadConstraint]struct{}) bool {
-	for constraint := range namespaceTopologySpreadConstraints {
+// hasIdenticalConstraints checks if we already had an identical TopologySpreadConstraint in namespaceTopologySpreadConstraints slice
+func hasIdenticalConstraints(newConstraint v1.TopologySpreadConstraint, namespaceTopologySpreadConstraints []v1.TopologySpreadConstraint) bool {
+	for _, constraint := range namespaceTopologySpreadConstraints {
 		if reflect.DeepEqual(newConstraint, constraint) {
 			return true
 		}
