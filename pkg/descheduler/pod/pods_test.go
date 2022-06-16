@@ -19,7 +19,6 @@ package pod
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"reflect"
 	"testing"
 	"time"
@@ -164,20 +163,16 @@ func TestSortPodsBasedOnAge(t *testing.T) {
 
 	for i := 0; i < len(podList); i++ {
 		podList[i] = test.BuildTestPod(fmt.Sprintf("p%d", i), 1, 32, n1.Name, func(pod *v1.Pod) {
-			creationTimestamp := metav1.Now().Add(time.Minute * time.Duration(i))
+			creationTimestamp := metav1.Now().Add(time.Minute * time.Duration(-i))
 			pod.ObjectMeta.SetCreationTimestamp(metav1.NewTime(creationTimestamp))
 		})
 	}
 
-	rand.Seed(time.Now().UnixNano())
-	rand.Shuffle(len(podList), func(i, j int) { podList[i], podList[j] = podList[j], podList[i] })
-
 	SortPodsBasedOnAge(podList)
 
-	for i := 0; i < len(podList); i++ {
-		expectedName := fmt.Sprintf("p%d", i)
-		if podList[i].GetName() != expectedName {
-			t.Errorf("Expected pod %s to be at index %d", expectedName, i)
+	for i := 0; i < len(podList)-1; i++ {
+		if podList[i+1].CreationTimestamp.Before(&podList[i].CreationTimestamp) {
+			t.Errorf("Expected pods to be sorted by age but pod at index %d was older than %d", i+1, i)
 		}
 	}
 }
