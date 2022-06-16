@@ -15,6 +15,7 @@ import (
 	"k8s.io/utils/pointer"
 
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 )
 
@@ -96,6 +97,14 @@ func TestFailedPods(t *testing.T) {
 				},
 				nodes,
 				podEvictor,
+				evictions.NewEvictorFilter(
+					nodes,
+					getPodsAssignedToNode,
+					true,
+					false,
+					false,
+					false,
+				),
 				getPodsAssignedToNode,
 			)
 			t.Logf("Finished RemoveFailedPods strategy for %s", name)

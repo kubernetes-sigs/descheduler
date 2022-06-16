@@ -340,15 +340,19 @@ func TestPodLifeTime(t *testing.T) {
 				tc.maxPodsToEvictPerNode,
 				tc.maxPodsToEvictPerNamespace,
 				tc.nodes,
+				false,
+			)
+
+			evictorFilter := evictions.NewEvictorFilter(
+				tc.nodes,
 				getPodsAssignedToNode,
 				false,
 				false,
 				tc.ignorePvcPods,
 				false,
-				false,
 			)
 
-			PodLifeTime(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+			PodLifeTime(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != tc.expectedEvictedPodCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.description, tc.expectedEvictedPodCount, podsEvicted)

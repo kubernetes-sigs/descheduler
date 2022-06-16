@@ -338,11 +338,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				tc.maxPodsToEvictPerNode,
 				tc.maxNoOfPodsToEvictPerNamespace,
 				tc.nodes,
-				getPodsAssignedToNode,
-				tc.evictLocalStoragePods,
-				tc.evictSystemCriticalPods,
-				false,
-				false,
 				false,
 			)
 
@@ -354,7 +349,17 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				},
 			}
 
-			RemovePodsViolatingNodeTaints(ctx, fakeClient, strategy, tc.nodes, podEvictor, getPodsAssignedToNode)
+			evictorFilter := evictions.NewEvictorFilter(
+				tc.nodes,
+				getPodsAssignedToNode,
+				tc.evictLocalStoragePods,
+				tc.evictSystemCriticalPods,
+				false,
+				false,
+				evictions.WithNodeFit(tc.nodeFit),
+			)
+
+			RemovePodsViolatingNodeTaints(ctx, fakeClient, strategy, tc.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)

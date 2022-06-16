@@ -320,15 +320,25 @@ func TestFindDuplicatePods(t *testing.T) {
 				nil,
 				nil,
 				testCase.nodes,
+				false,
+			)
+
+			nodeFit := false
+			if testCase.strategy.Params != nil {
+				nodeFit = testCase.strategy.Params.NodeFit
+			}
+
+			evictorFilter := evictions.NewEvictorFilter(
+				testCase.nodes,
 				getPodsAssignedToNode,
 				false,
 				false,
 				false,
 				false,
-				false,
+				evictions.WithNodeFit(nodeFit),
 			)
 
-			RemoveDuplicatePods(ctx, fakeClient, testCase.strategy, testCase.nodes, podEvictor, getPodsAssignedToNode)
+			RemoveDuplicatePods(ctx, fakeClient, testCase.strategy, testCase.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != testCase.expectedEvictedPodCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)
@@ -748,15 +758,19 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				nil,
 				nil,
 				testCase.nodes,
-				getPodsAssignedToNode,
 				false,
+			)
+
+			evictorFilter := evictions.NewEvictorFilter(
+				testCase.nodes,
+				getPodsAssignedToNode,
 				false,
 				false,
 				false,
 				false,
 			)
 
-			RemoveDuplicatePods(ctx, fakeClient, testCase.strategy, testCase.nodes, podEvictor, getPodsAssignedToNode)
+			RemoveDuplicatePods(ctx, fakeClient, testCase.strategy, testCase.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != testCase.expectedEvictedPodCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)

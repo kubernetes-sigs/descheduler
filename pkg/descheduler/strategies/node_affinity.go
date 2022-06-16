@@ -29,7 +29,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func validatePodsViolatingNodeAffinityParams(params *api.StrategyParameters) error {
@@ -48,14 +47,9 @@ func validatePodsViolatingNodeAffinityParams(params *api.StrategyParameters) err
 }
 
 // RemovePodsViolatingNodeAffinity evicts pods on nodes which violate node affinity
-func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
+func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, evictorFilter *evictions.EvictorFilter, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
 	if err := validatePodsViolatingNodeAffinityParams(strategy.Params); err != nil {
 		klog.ErrorS(err, "Invalid RemovePodsViolatingNodeAffinity parameters")
-		return
-	}
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, client, strategy.Params)
-	if err != nil {
-		klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 		return
 	}
 
@@ -64,13 +58,6 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 		includedNamespaces = sets.NewString(strategy.Params.Namespaces.Include...)
 		excludedNamespaces = sets.NewString(strategy.Params.Namespaces.Exclude...)
 	}
-
-	nodeFit := false
-	if strategy.Params != nil {
-		nodeFit = strategy.Params.NodeFit
-	}
-
-	evictable := podEvictor.Evictable(evictions.WithPriorityThreshold(thresholdPriority), evictions.WithNodeFit(nodeFit))
 
 	podFilter, err := podutil.NewOptions().
 		WithNamespaces(includedNamespaces).
@@ -94,7 +81,7 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 					node.Name,
 					getPodsAssignedToNode,
 					podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
-						return evictable.IsEvictable(pod) &&
+						return evictorFilter.Filter(pod) &&
 							!nodeutil.PodFitsCurrentNode(getPodsAssignedToNode, pod, node) &&
 							nodeutil.PodFitsAnyNode(getPodsAssignedToNode, pod, nodes)
 					}),

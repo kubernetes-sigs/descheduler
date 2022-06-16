@@ -138,13 +138,9 @@ func TestTooManyRestarts(t *testing.T) {
 				nil,
 				nil,
 				nodes,
-				getPodsAssignedToNode,
-				true,
-				false,
-				false,
-				false,
 				false,
 			)
+
 			// Run RemovePodsHavingTooManyRestarts strategy
 			t.Log("Running RemovePodsHavingTooManyRestarts strategy")
 			strategies.RemovePodsHavingTooManyRestarts(
@@ -161,6 +157,14 @@ func TestTooManyRestarts(t *testing.T) {
 				},
 				workerNodes,
 				podEvictor,
+				evictions.NewEvictorFilter(
+					nodes,
+					getPodsAssignedToNode,
+					true,
+					false,
+					false,
+					false,
+				),
 				getPodsAssignedToNode,
 			)
 

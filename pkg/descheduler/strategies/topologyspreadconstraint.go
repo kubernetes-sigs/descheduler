@@ -47,12 +47,14 @@ type topology struct {
 	pods []*v1.Pod
 }
 
+// nolint: gocyclo
 func RemovePodsViolatingTopologySpreadConstraint(
 	ctx context.Context,
 	client clientset.Interface,
 	strategy api.DeschedulerStrategy,
 	nodes []*v1.Node,
 	podEvictor *evictions.PodEvictor,
+	evictorFilter *evictions.EvictorFilter,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 ) {
 	strategyParams, err := validation.ValidateAndParseStrategyParams(ctx, client, strategy.Params)
@@ -61,11 +63,13 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		return
 	}
 
-	evictable := podEvictor.Evictable(
-		evictions.WithPriorityThreshold(strategyParams.ThresholdPriority),
-		evictions.WithNodeFit(strategyParams.NodeFit),
-		evictions.WithLabelSelector(strategyParams.LabelSelector),
-	)
+	isEvictable := evictorFilter.Filter
+
+	if strategyParams.LabelSelector != nil && !strategyParams.LabelSelector.Empty() {
+		isEvictable = podutil.WrapFilterFuncs(isEvictable, func(pod *v1.Pod) bool {
+			return strategyParams.LabelSelector.Matches(labels.Set(pod.Labels))
+		})
+	}
 
 	nodeMap := make(map[string]*v1.Node, len(nodes))
 	for _, node := range nodes {
@@ -175,12 +179,12 @@ func RemovePodsViolatingTopologySpreadConstraint(
 				klog.V(2).InfoS("Skipping topology constraint because it is already balanced", "constraint", constraint)
 				continue
 			}
-			balanceDomains(client, getPodsAssignedToNode, podsForEviction, constraint, constraintTopologies, sumPods, evictable.IsEvictable, nodes)
+			balanceDomains(client, getPodsAssignedToNode, podsForEviction, constraint, constraintTopologies, sumPods, evictorFilter.Filter, nodes)
 		}
 	}
 
 	for pod := range podsForEviction {
-		if !evictable.IsEvictable(pod) {
+		if !isEvictable(pod) {
 			continue
 		}
 		if _, err := podEvictor.EvictPod(ctx, pod, nodeMap[pod.Spec.NodeName], "PodTopologySpread"); err != nil {
@@ -251,6 +255,7 @@ func balanceDomains(
 
 	idealAvg := sumPods / float64(len(constraintTopologies))
 	sortedDomains := sortDomains(constraintTopologies, isEvictable)
+
 	// i is the index for belowOrEqualAvg
 	// j is the index for aboveAvg
 	i := 0
