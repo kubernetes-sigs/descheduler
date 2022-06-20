@@ -6,10 +6,13 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	policy "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	core "k8s.io/client-go/testing"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -22,6 +25,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 		name                 string
 		pods                 []*v1.Pod
 		expectedEvictedCount uint
+		expectedEvictedPods  []string // if specified, will assert specific pods were evicted
 		nodes                []*v1.Node
 		strategy             api.DeschedulerStrategy
 		namespaces           []string
@@ -642,6 +646,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 5,
+			expectedEvictedPods:  []string{"pod-5", "pod-6", "pod-7", "pod-8"},
 			strategy:             api.DeschedulerStrategy{},
 			namespaces:           []string{"ns1"},
 		},
@@ -714,11 +719,12 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
+			expectedEvictedPods:  []string{"pod-0"},
 			strategy:             api.DeschedulerStrategy{},
 			namespaces:           []string{"ns1"},
 		},
 		{
-			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pods since pod does not tolerate the tainted node",
+			name: "2 domains, sizes [2,0], maxSkew=1, move 0 pods since pod does not tolerate the tainted node",
 			nodes: []*v1.Node{
 				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
 				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) {
@@ -817,6 +823,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
+			expectedEvictedPods:  []string{"pod-0"},
 			strategy:             api.DeschedulerStrategy{},
 			namespaces:           []string{"ns1"},
 		},
@@ -867,6 +874,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
+			expectedEvictedPods:  []string{"pod-1"},
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
 					LabelSelector: getLabelSelector("foo", []string{"bar"}, metav1.LabelSelectorOpIn),
@@ -894,6 +902,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
+			expectedEvictedPods:  []string{"pod-1"},
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{
 					LabelSelector: getLabelSelector("foo", []string{"baz"}, metav1.LabelSelectorOpNotIn),
@@ -1052,6 +1061,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 1,
+			expectedEvictedPods:  []string{"pod-4"},
 			strategy: api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{NodeFit: true},
 			},
@@ -1085,6 +1095,20 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
+			var evictedPods []string
+			fakeClient.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+				if action.GetSubresource() == "eviction" {
+					createAct, matched := action.(core.CreateActionImpl)
+					if !matched {
+						return false, nil, fmt.Errorf("unable to convert action to core.CreateActionImpl")
+					}
+					if eviction, matched := createAct.Object.(*policy.Eviction); matched {
+						evictedPods = append(evictedPods, eviction.GetName())
+					}
+				}
+				return false, nil, nil // fallback to the default reactor
+			})
+
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
 				"v1",
@@ -1114,6 +1138,18 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != tc.expectedEvictedCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.name, tc.expectedEvictedCount, podsEvicted)
+			}
+
+			if tc.expectedEvictedPods != nil {
+				diff := sets.NewString(tc.expectedEvictedPods...).Difference(sets.NewString(evictedPods...))
+				if diff.Len() > 0 {
+					t.Errorf(
+						"Expected pods %v to be evicted but %v were not evicted. Actual pods evicted: %v",
+						tc.expectedEvictedPods,
+						diff.List(),
+						evictedPods,
+					)
+				}
 			}
 		})
 	}
