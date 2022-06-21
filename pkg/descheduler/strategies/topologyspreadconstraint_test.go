@@ -1067,6 +1067,112 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 			namespaces: []string{"ns1"},
 		},
+		{
+			// https://github.com/kubernetes-sigs/descheduler/issues/839
+			name: "2 domains, sizes [3, 1], maxSkew=1, Tainted nodes; nothing should be moved",
+			nodes: []*v1.Node{
+				test.BuildTestNode("controlplane1", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneA"
+					n.Labels["kubernetes.io/hostname"] = "cp-1"
+					n.Spec.Taints = []v1.Taint{
+						{
+							Effect: v1.TaintEffectNoSchedule,
+							Key:    "node-role.kubernetes.io/controlplane",
+							Value:  "true",
+						},
+						{
+							Effect: v1.TaintEffectNoSchedule,
+							Key:    "node-role.kubernetes.io/etcd",
+							Value:  "true",
+						},
+					}
+				}),
+				test.BuildTestNode("infraservices1", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneA"
+					n.Labels["infra_service"] = "true"
+					n.Labels["kubernetes.io/hostname"] = "infra-1"
+					n.Spec.Taints = []v1.Taint{
+						{
+							Effect: v1.TaintEffectNoSchedule,
+							Key:    "infra_service",
+						},
+					}
+				}),
+				test.BuildTestNode("app1", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneA"
+					n.Labels["app_service"] = "true"
+					n.Labels["kubernetes.io/hostname"] = "app-1"
+				}),
+				test.BuildTestNode("app2", 2000, 3000, 10, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneB"
+					n.Labels["app_service"] = "true"
+					n.Labels["kubernetes.io/hostname"] = "app-2"
+				}),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:  2,
+					node:   "app1",
+					labels: map[string]string{"app.kubernetes.io/name": "service"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/hostname",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app.kubernetes.io/name": "service"}},
+						},
+					},
+					nodeAffinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "app_service",
+												Operator: v1.NodeSelectorOpExists,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					count:  2,
+					node:   "app2",
+					labels: map[string]string{"app.kubernetes.io/name": "service"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							MaxSkew:           1,
+							TopologyKey:       "kubernetes.io/hostname",
+							WhenUnsatisfiable: v1.DoNotSchedule,
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"app.kubernetes.io/name": "service"}},
+						},
+					},
+					nodeAffinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "app_service",
+												Operator: v1.NodeSelectorOpExists,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}),
+			expectedEvictedCount: 0,
+			strategy:             api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
+			namespaces:           []string{"ns1"},
+		},
 	}
 
 	for _, tc := range testCases {
