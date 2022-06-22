@@ -223,6 +223,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 				tc.maxNoOfPodsToEvictPerNamespace,
 				tc.nodes,
 				false,
+				nil,
 			)
 
 			nodeFit := false

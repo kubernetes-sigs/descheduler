@@ -773,6 +773,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				nil,
 				test.nodes,
 				false,
+				nil,
 			)
 
 			strategy := api.DeschedulerStrategy{
@@ -1094,6 +1095,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				nil,
 				item.nodes,
 				false,
+				nil,
 			)
 
 			evictorFilter := evictions.NewEvictorFilter(

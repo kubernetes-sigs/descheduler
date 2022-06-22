@@ -219,6 +219,7 @@ func TestPodAntiAffinity(t *testing.T) {
 				test.maxNoOfPodsToEvictPerNamespace,
 				test.nodes,
 				false,
+				nil,
 			)
 			strategy := api.DeschedulerStrategy{
 				Params: &api.StrategyParameters{

@@ -276,6 +276,7 @@ func TestRemoveFailedPods(t *testing.T) {
 				nil,
 				tc.nodes,
 				false,
+				nil,
 			)
 
 			evictorFilter := evictions.NewEvictorFilter(

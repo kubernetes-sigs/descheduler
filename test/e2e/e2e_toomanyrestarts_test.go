@@ -139,6 +139,7 @@ func TestTooManyRestarts(t *testing.T) {
 				nil,
 				nodes,
 				false,
+				nil,
 			)
 
 			// Run RemovePodsHavingTooManyRestarts strategy

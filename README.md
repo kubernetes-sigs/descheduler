@@ -53,6 +53,7 @@ Table of Contents
 - [High Availability](#high-availability)
   - [Configure HA Mode](#configure-ha-mode)
 - [Metrics](#metrics)
+- [Metrics Config](#metrics-config)
 - [Compatibility Matrix](#compatibility-matrix)
 - [Getting Involved and Contributing](#getting-involved-and-contributing)
   - [Communicating With Contributors](#communicating-with-contributors)
@@ -136,6 +137,7 @@ The policy includes a common configuration that applies to all the strategies:
 | `maxNoOfPodsToEvictPerNode` | `nil` | maximum number of pods evicted from each node (summed through all strategies) |
 | `maxNoOfPodsToEvictPerNamespace` | `nil` | maximum number of pods evicted from each namespace (summed through all strategies) |
 | `evictFailedBarePods` | `false` | allow eviction of pods without owner references and in failed phase |
+| `metricsConfig` | `nil` | configuration to instruct Descheduler's metrics to include node and pod labels |
 
 As part of the policy, the parameters associated with each strategy can be configured.
 See each strategy for details on available parameters.
@@ -151,6 +153,7 @@ evictLocalStoragePods: true
 evictSystemCriticalPods: true
 maxNoOfPodsToEvictPerNode: 40
 ignorePvcPods: false
+metricsConfig: {}
 strategies:
   ...
 ```
@@ -820,6 +823,29 @@ To get best results from HA mode some additional configurations might require:
 
 The metrics are served through https://localhost:10258/metrics by default.
 The address and port can be changed by setting `--binding-address` and `--secure-port` flags.
+
+## Metrics Config
+Eviction metrics can be enriched by including node and pod labels.
+
+| name	| type	| description |
+|-------|-------|----------------|
+| `nodeLabels` | list(string) | list of node labels to include in metrics |
+| `podLabels` | list(string) | list of pod labels to include in metrics |
+
+```yaml
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+metricsConfig:
+  nodeLabels:
+  - "topology.kubernetes.io/zone"
+  podLabels:
+  - "app.kubernetes.io/name"
+```
+
+In order to conform to [metrics names and labels data model](https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels),
+all labels will be converted to only contain ASCII letters, numbers, and underscores.
+In other words, node label `topology.kubernetes.io/zone` will become metric label `topology_kubernetes_io_zone`.
+The metric value, however, will be left untouched.
 
 ## Compatibility Matrix
 The below compatibility matrix shows the k8s client package(client-go, apimachinery, etc) versions that descheduler

@@ -321,6 +321,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				nil,
 				testCase.nodes,
 				false,
+				nil,
 			)
 
 			nodeFit := false
@@ -759,6 +760,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				nil,
 				testCase.nodes,
 				false,
+				nil,
 			)
 
 			evictorFilter := evictions.NewEvictorFilter(

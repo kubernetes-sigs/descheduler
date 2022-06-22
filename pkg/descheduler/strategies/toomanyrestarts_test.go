@@ -251,6 +251,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 				tc.maxNoOfPodsToEvictPerNamespace,
 				tc.nodes,
 				false,
+				nil,
 			)
 
 			evictorFilter := evictions.NewEvictorFilter(

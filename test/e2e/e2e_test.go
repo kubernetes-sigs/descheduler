@@ -206,6 +206,7 @@ func runPodLifetimeStrategy(
 			maxPodsToEvictPerNamespace,
 			nodes,
 			false,
+			nil,
 		),
 		evictions.NewEvictorFilter(
 			nodes,
@@ -1432,5 +1433,6 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 		nil,
 		nodes,
 		false,
+		nil,
 	)
 }

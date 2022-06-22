@@ -341,6 +341,7 @@ func TestPodLifeTime(t *testing.T) {
 				tc.maxPodsToEvictPerNamespace,
 				tc.nodes,
 				false,
+				nil,
 			)
 
 			evictorFilter := evictions.NewEvictorFilter(

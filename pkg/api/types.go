@@ -49,6 +49,14 @@ type DeschedulerPolicy struct {
 
 	// MaxNoOfPodsToEvictPerNamespace restricts maximum of pods to be evicted per namespace.
 	MaxNoOfPodsToEvictPerNamespace *uint
+
+	// MetricsConfig to control information included in metrics
+	MetricsConfig *MetricsConfig
+}
+
+type MetricsConfig struct {
+	NodeLabels []string
+	PodLabels  []string
 }
 
 type StrategyName string

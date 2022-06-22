@@ -339,6 +339,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				tc.maxNoOfPodsToEvictPerNamespace,
 				tc.nodes,
 				false,
+				nil,
 			)
 
 			strategy := api.DeschedulerStrategy{

@@ -972,6 +972,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				nil,
 				tc.nodes,
 				false,
+				nil,
 			)
 
 			nodeFit := false

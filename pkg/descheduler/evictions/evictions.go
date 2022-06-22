@@ -19,6 +19,8 @@ package evictions
 import (
 	"context"
 	"fmt"
+	basemetrics "k8s.io/component-base/metrics"
+	"sigs.k8s.io/descheduler/pkg/api"
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
@@ -58,6 +60,8 @@ type PodEvictor struct {
 	nodepodCount               nodePodEvictedCount
 	namespacePodCount          namespacePodEvictCount
 	metricsEnabled             bool
+	metricsNodeLabels          []string
+	metricsPodLabels           []string
 }
 
 func NewPodEvictor(
@@ -68,12 +72,19 @@ func NewPodEvictor(
 	maxPodsToEvictPerNamespace *uint,
 	nodes []*v1.Node,
 	metricsEnabled bool,
+	metricsConfig *api.MetricsConfig,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
 	var namespacePodCount = make(namespacePodEvictCount)
 	for _, node := range nodes {
 		// Initialize podsEvicted till now with 0.
 		nodePodCount[node] = 0
+	}
+
+	var metricsPodLabels, metricsNodeLabels []string
+	if metricsConfig != nil {
+		metricsNodeLabels = metricsConfig.NodeLabels
+		metricsPodLabels = metricsConfig.PodLabels
 	}
 
 	return &PodEvictor{
@@ -86,6 +97,8 @@ func NewPodEvictor(
 		nodepodCount:               nodePodCount,
 		namespacePodCount:          namespacePodCount,
 		metricsEnabled:             metricsEnabled,
+		metricsNodeLabels:          metricsNodeLabels,
+		metricsPodLabels:           metricsPodLabels,
 	}
 }
 
@@ -112,16 +125,12 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		reason += " (" + strings.Join(reasons, ", ") + ")"
 	}
 	if pe.maxPodsToEvictPerNode != nil && pe.nodepodCount[node]+1 > *pe.maxPodsToEvictPerNode {
-		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
-		}
+		pe.addMetric(metrics.PodsEvicted, map[string]string{"result": "maximum number of pods per node reached", "strategy": strategy}, node, pod)
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", *pe.maxPodsToEvictPerNode, node.Name)
 	}
 
 	if pe.maxPodsToEvictPerNamespace != nil && pe.namespacePodCount[pod.Namespace]+1 > *pe.maxPodsToEvictPerNamespace {
-		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per namespace reached", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
-		}
+		pe.addMetric(metrics.PodsEvicted, map[string]string{"result": "maximum number of pods per namespace reached", "strategy": strategy}, node, pod)
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q namespace reached", *pe.maxPodsToEvictPerNamespace, pod.Namespace)
 	}
 
@@ -129,18 +138,14 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 	if err != nil {
 		// err is used only for logging purposes
 		klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", reason)
-		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
-		}
+		pe.addMetric(metrics.PodsEvicted, map[string]string{"result": "error", "strategy": strategy}, node, pod)
 		return false, nil
 	}
 
 	pe.nodepodCount[node]++
 	pe.namespacePodCount[pod.Namespace]++
 
-	if pe.metricsEnabled {
-		metrics.PodsEvicted.With(map[string]string{"result": "success", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
-	}
+	pe.addMetric(metrics.PodsEvicted, map[string]string{"result": "success", "strategy": strategy}, node, pod)
 
 	if pe.dryRun {
 		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", reason, "strategy", strategy, "node", node.Name)
@@ -178,6 +183,27 @@ func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, poli
 		return fmt.Errorf("pod not found when evicting %q: %v", pod.Name, err)
 	}
 	return err
+}
+
+func (pe *PodEvictor) addMetric(metric *basemetrics.CounterVec, labels map[string]string, node *v1.Node, pod *v1.Pod) {
+	if !pe.metricsEnabled {
+		return
+	}
+
+	for _, label := range pe.metricsNodeLabels {
+		labelValue := node.Labels[label]
+		labels[metrics.ConvertToMetricLabel(label)] = labelValue
+	}
+
+	for _, label := range pe.metricsPodLabels {
+		labelValue := pod.Labels[label]
+		labels[metrics.ConvertToMetricLabel(label)] = labelValue
+	}
+
+	labels["namespace"] = pod.Namespace
+	labels["node"] = node.Name
+
+	metric.With(labels).Inc()
 }
 
 type Options struct {

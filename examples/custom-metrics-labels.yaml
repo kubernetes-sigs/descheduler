@@ -1,0 +1,10 @@
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+metricsConfig:
+  nodeLabels:
+  - "topology.kubernetes.io/zone"
+  podLabels:
+  - "app.kubernetes.io/name"
+strategies:
+  "RemovePodsViolatingTopologySpreadConstraint":
+     enabled: true

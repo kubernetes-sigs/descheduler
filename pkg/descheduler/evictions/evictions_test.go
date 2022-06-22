@@ -18,17 +18,22 @@ package evictions
 
 import (
 	"context"
-	"testing"
-
+	"fmt"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/descheduler/metrics"
+	"sigs.k8s.io/descheduler/pkg/api"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
+	"sort"
+	"strings"
+	"testing"
 )
 
 func TestEvictPod(t *testing.T) {
@@ -663,6 +668,7 @@ func TestIsEvictable(t *testing.T) {
 		})
 	}
 }
+
 func TestPodTypes(t *testing.T) {
 	n1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
 	p1 := test.BuildTestPod("p1", 400, 0, n1.Name, nil)
@@ -705,5 +711,101 @@ func TestPodTypes(t *testing.T) {
 	if utils.IsDaemonsetPod(ownerRefList) || utils.IsPodWithLocalStorage(p1) || utils.IsCriticalPriorityPod(p1) || utils.IsMirrorPod(p1) || utils.IsStaticPod(p1) {
 		t.Errorf("Expected p1 to be a normal pod.")
 	}
+}
 
+func TestPodEvictedMetrics(t *testing.T) {
+	ctx := context.Background()
+
+	// metrics register uses sync.Do (once) so we can only initialize it once
+	metricsConfig := &api.MetricsConfig{
+		NodeLabels: []string{"topology.kubernetes.io/zone"},
+		PodLabels:  []string{"app.kubernetes.io/name"},
+	}
+	metrics.Register(append(metricsConfig.NodeLabels, metricsConfig.PodLabels...))
+
+	for _, tc := range []struct {
+		description        string
+		node               *v1.Node
+		pod                *v1.Pod
+		customMetricLabels []string
+	}{
+		{
+			description: "test custom labels",
+			node: test.BuildTestNode("node1", 1000, 2000, 1, func(node *v1.Node) {
+				node.Labels["topology.kubernetes.io/zone"] = "zoneA"
+			}),
+			pod: test.BuildTestPod("p1", 400, 0, "node1", func(pod *v1.Pod) {
+				pod.Labels = map[string]string{"app.kubernetes.io/name": "p1"}
+			}),
+			customMetricLabels: []string{"app_kubernetes_io_name=\"p1\"", "topology_kubernetes_io_zone=\"zoneA\""},
+		},
+		{
+			description:        "test handles missing pod and node label",
+			node:               test.BuildTestNode("node1", 1000, 2000, 1, nil),
+			pod:                test.BuildTestPod("p1", 400, 0, "node1", nil),
+			customMetricLabels: []string{"app_kubernetes_io_name=\"\"", "topology_kubernetes_io_zone=\"\""},
+		},
+		{
+			description: "test handles missing pod label",
+			node: test.BuildTestNode("node1", 1000, 2000, 1, func(node *v1.Node) {
+				node.Labels["topology.kubernetes.io/zone"] = "zoneA"
+			}),
+			pod:                test.BuildTestPod("p1", 400, 0, "node1", nil),
+			customMetricLabels: []string{"app_kubernetes_io_name=\"\"", "topology_kubernetes_io_zone=\"zoneA\""},
+		},
+		{
+			description: "test handles missing node label",
+			node:        test.BuildTestNode("node1", 1000, 2000, 1, nil),
+			pod: test.BuildTestPod("p1", 400, 0, "node1", func(pod *v1.Pod) {
+				pod.Labels = map[string]string{"app.kubernetes.io/name": "p1"}
+			}),
+			customMetricLabels: []string{"app_kubernetes_io_name=\"p1\"", "topology_kubernetes_io_zone=\"\""},
+		},
+	} {
+		t.Run(tc.description, func(t *testing.T) {
+			metrics.PodsEvicted.Reset() // delete all existing metrics first
+
+			const strategy = "RemoveFailedPods"
+			fakeClient := fake.NewSimpleClientset(tc.node, tc.pod)
+
+			podEvictor := NewPodEvictor(
+				fakeClient,
+				"v1",
+				false,
+				nil,
+				nil,
+				[]*v1.Node{tc.node},
+				true,
+				metricsConfig,
+			)
+
+			podEvictor.EvictPod(ctx, tc.pod, tc.node, strategy, "metrics labels test")
+
+			metadata := fmt.Sprintf(`
+			# HELP %[1]s %s
+			# TYPE %[1]s counter
+			`, metrics.PodsEvicted.FQName(), metrics.PodsEvicted.Help,
+			)
+
+			metricsLabels := []string{
+				fmt.Sprintf("namespace=\"%s\"", tc.pod.GetNamespace()),
+				fmt.Sprintf("node=\"%s\"", tc.node.GetName()),
+				fmt.Sprintf("result=\"%s\"", "success"),
+				fmt.Sprintf("strategy=\"%s\"", strategy),
+			}
+			if tc.customMetricLabels != nil {
+				metricsLabels = append(metricsLabels, tc.customMetricLabels...)
+			}
+			sort.Strings(metricsLabels)
+
+			expected := fmt.Sprintf(`
+			%s{%s} 1
+			`, metrics.PodsEvicted.FQName(), strings.Join(metricsLabels, ","),
+			)
+			err := testutil.CollectAndCompare(metrics.PodsEvicted, strings.NewReader(metadata+expected), metrics.PodsEvicted.FQName())
+			if err != nil {
+				t.Errorf("Error occurred when collecting metrics %s. %v", metrics.PodsEvicted.Name, err)
+			}
+		})
+	}
 }

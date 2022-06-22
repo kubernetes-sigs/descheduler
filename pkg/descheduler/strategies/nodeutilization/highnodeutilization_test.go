@@ -508,6 +508,7 @@ func TestHighNodeUtilization(t *testing.T) {
 				nil,
 				testCase.nodes,
 				false,
+				nil,
 			)
 
 			strategy := api.DeschedulerStrategy{
@@ -720,6 +721,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 				nil,
 				item.nodes,
 				false,
+				nil,
 			)
 
 			evictorFilter := evictions.NewEvictorFilter(

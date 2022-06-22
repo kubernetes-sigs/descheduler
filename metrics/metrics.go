@@ -17,6 +17,7 @@ limitations under the License.
 package metrics
 
 import (
+	"regexp"
 	"sync"
 
 	"k8s.io/component-base/metrics"
@@ -30,14 +31,6 @@ const (
 )
 
 var (
-	PodsEvicted = metrics.NewCounterVec(
-		&metrics.CounterOpts{
-			Subsystem:      DeschedulerSubsystem,
-			Name:           "pods_evicted",
-			Help:           "Number of evicted pods, by the result, by the strategy, by the namespace, by the node name. 'error' result means a pod could not be evicted",
-			StabilityLevel: metrics.ALPHA,
-		}, []string{"result", "strategy", "namespace", "node"})
-
 	buildInfo = metrics.NewGauge(
 		&metrics.GaugeOpts{
 			Subsystem:      DeschedulerSubsystem,
@@ -48,25 +41,46 @@ var (
 		},
 	)
 
-	metricsList = []metrics.Registerable{
-		PodsEvicted,
-		buildInfo,
-	}
+	metricsNameRegex, _ = regexp.Compile("[^a-zA-Z0-9_]+")
+
+	PodsEvicted *metrics.CounterVec
 )
 
 var registerMetrics sync.Once
 
 // Register all metrics.
-func Register() {
+func Register(customLabels []string) {
 	// Register the metrics.
 	registerMetrics.Do(func() {
-		RegisterMetrics(metricsList...)
+		metrics := initialize(customLabels)
+		for _, metric := range metrics {
+			legacyregistry.MustRegister(metric)
+		}
 	})
 }
 
-// RegisterMetrics registers a list of metrics.
-func RegisterMetrics(extraMetrics ...metrics.Registerable) {
-	for _, metric := range extraMetrics {
-		legacyregistry.MustRegister(metric)
+// ensure that labels conform to https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels
+func ConvertToMetricLabel(label string) string {
+	return metricsNameRegex.ReplaceAllString(label, "_")
+}
+
+func initialize(customLabels []string) []metrics.Registerable {
+	labels := []string{"result", "strategy", "namespace", "node"}
+	for _, customLabel := range customLabels {
+		labels = append(labels, ConvertToMetricLabel(customLabel))
+	}
+
+	PodsEvicted = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Subsystem:      DeschedulerSubsystem,
+			Name:           "pods_evicted",
+			Help:           "Number of evicted pods, by the result, by the strategy, by the namespace, by the node name. 'error' result means a pod could not be evicted",
+			StabilityLevel: metrics.ALPHA,
+		},
+		labels,
+	)
+
+	return []metrics.Registerable{
+		PodsEvicted,
 	}
 }

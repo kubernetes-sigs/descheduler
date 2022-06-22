@@ -19,6 +19,7 @@ package descheduler
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/descheduler/metrics"
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1beta1"
@@ -36,7 +37,6 @@ import (
 	schedulingv1informers "k8s.io/client-go/informers/scheduling/v1"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
-	"sigs.k8s.io/descheduler/metrics"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -49,8 +49,6 @@ import (
 )
 
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
-	metrics.Register()
-
 	rsclient, err := client.CreateClient(rs.KubeconfigFile)
 	if err != nil {
 		return err
@@ -276,7 +274,20 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			podEvictorClient = rs.Client
 		}
 
+		if !rs.DisableMetrics {
+			klog.V(3).Infof("Registering metrics")
+
+			var customLabels []string
+			if deschedulerPolicy.MetricsConfig != nil {
+				customLabels = append(customLabels, deschedulerPolicy.MetricsConfig.NodeLabels...)
+				customLabels = append(customLabels, deschedulerPolicy.MetricsConfig.PodLabels...)
+			}
+
+			metrics.Register(customLabels)
+		}
+
 		klog.V(3).Infof("Building a pod evictor")
+
 		podEvictor := evictions.NewPodEvictor(
 			podEvictorClient,
 			evictionPolicyGroupVersion,
@@ -285,6 +296,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
 			nodes,
 			!rs.DisableMetrics,
+			deschedulerPolicy.MetricsConfig,
 		)
 
 		for name, strategy := range deschedulerPolicy.Strategies {
