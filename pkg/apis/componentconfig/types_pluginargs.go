@@ -32,3 +32,15 @@ type RemovePodsViolatingNodeTaintsArgs struct {
 	IncludePreferNoSchedule bool
 	ExcludedTaints          []string
 }
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// RemovePodsViolatingNodeAffinityArgs holds arguments used to configure RemovePodsViolatingNodeAffinity plugin.
+type RemovePodsViolatingNodeAffinityArgs struct {
+	metav1.TypeMeta
+
+	Namespaces              *api.Namespaces
+	LabelSelector           *metav1.LabelSelector
+	IncludePreferNoSchedule bool
+	NodeAffinityType        []string
+}

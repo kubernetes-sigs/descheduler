@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package strategies
+package removepodsviolatingnodeaffinity
 
 import (
 	"context"
@@ -26,10 +26,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
+	"sigs.k8s.io/descheduler/pkg/framework"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -229,18 +232,33 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			if tc.strategy.Params != nil {
 				nodeFit = tc.strategy.Params.NodeFit
 			}
+			handle := &frameworkfake.HandleImpl{
+				ClientsetImpl:                 fakeClient,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				PodEvictorImpl:                podEvictor,
+				SharedInformerFactoryImpl:     sharedInformerFactory,
+				EvictorFilterImpl: evictions.NewEvictorFilter(
+					tc.nodes,
+					getPodsAssignedToNode,
+					false,
+					false,
+					false,
+					false,
+					evictions.WithNodeFit(nodeFit),
+				),
+			}
 
-			evictorFilter := evictions.NewEvictorFilter(
-				tc.nodes,
-				getPodsAssignedToNode,
-				false,
-				false,
-				false,
-				false,
-				evictions.WithNodeFit(nodeFit),
+			plugin, err := New(
+				&componentconfig.RemovePodsViolatingNodeAffinityArgs{
+					NodeAffinityType: tc.strategy.Params.NodeAffinityType,
+				},
+				handle,
 			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
 
-			RemovePodsViolatingNodeAffinity(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
+			plugin.(framework.DeschedulePlugin).Deschedule(ctx, tc.nodes)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)
