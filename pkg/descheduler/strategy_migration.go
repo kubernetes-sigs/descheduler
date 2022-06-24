@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/validation"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodeaffinity"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
 )
@@ -74,6 +75,33 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
 		if status != nil && status.Err != nil {
 			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", removepodsviolatingnodeaffinity.PluginName)
+		}
+	},
+	"RemoveFailedPods": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+		failedPodsParams := params.FailedPods
+		if failedPodsParams == nil {
+			failedPodsParams = &api.FailedPods{}
+		}
+		args := &componentconfig.RemoveFailedPodsArgs{
+			Namespaces:              params.Namespaces,
+			LabelSelector:           params.LabelSelector,
+			IncludingInitContainers: failedPodsParams.IncludingInitContainers,
+			MinPodLifetimeSeconds:   failedPodsParams.MinPodLifetimeSeconds,
+			ExcludeOwnerKinds:       failedPodsParams.ExcludeOwnerKinds,
+			Reasons:                 failedPodsParams.Reasons,
+		}
+		if err := validation.ValidateRemoveFailedPodsArgs(args); err != nil {
+			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removefailedpods.PluginName)
+			return
+		}
+		pg, err := removefailedpods.New(args, handle)
+		if err != nil {
+			klog.V(1).ErrorS(err, "unable to initialize a plugin", "pluginName", removefailedpods.PluginName)
+			return
+		}
+		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
+		if status != nil && status.Err != nil {
+			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", removefailedpods.PluginName)
 		}
 	},
 }

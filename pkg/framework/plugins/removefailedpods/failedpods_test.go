@@ -1,4 +1,20 @@
-package strategies
+/*
+Copyright 2022 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package removefailedpods
 
 import (
 	"context"
@@ -9,11 +25,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
+	"sigs.k8s.io/descheduler/pkg/framework"
 
-	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -21,46 +40,54 @@ var (
 	OneHourInSeconds uint = 3600
 )
 
+type handleImpl struct {
+	clientset                 clientset.Interface
+	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
+	podEvictor                *evictions.PodEvictor
+	evictorFilter             *evictions.EvictorFilter
+	sharedInformerFactory     informers.SharedInformerFactory
+}
+
 func TestRemoveFailedPods(t *testing.T) {
-	createStrategy := func(enabled, includingInitContainers bool, reasons, excludeKinds []string, minAgeSeconds *uint, nodeFit bool) api.DeschedulerStrategy {
-		return api.DeschedulerStrategy{
-			Enabled: enabled,
-			Params: &api.StrategyParameters{
-				FailedPods: &api.FailedPods{
-					Reasons:                 reasons,
-					IncludingInitContainers: includingInitContainers,
-					ExcludeOwnerKinds:       excludeKinds,
-					MinPodLifetimeSeconds:   minAgeSeconds,
-				},
-				NodeFit: nodeFit,
-			},
+	createRemoveFailedPodsArgs := func(
+		includingInitContainers bool,
+		reasons, excludeKinds []string,
+		minAgeSeconds *uint) componentconfig.RemoveFailedPodsArgs {
+		return componentconfig.RemoveFailedPodsArgs{
+			IncludingInitContainers: includingInitContainers,
+			Reasons:                 reasons,
+			MinPodLifetimeSeconds:   minAgeSeconds,
+			ExcludeOwnerKinds:       excludeKinds,
 		}
 	}
 
 	tests := []struct {
 		description             string
 		nodes                   []*v1.Node
-		strategy                api.DeschedulerStrategy
+		args                    componentconfig.RemoveFailedPodsArgs
 		expectedEvictedPodCount uint
 		pods                    []*v1.Pod
+		nodeFit                 bool
 	}{
 		{
-			description:             "default empty strategy, 0 failures, 0 evictions",
-			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: false}},
+			description:             "default empty args, 0 failures, 0 evictions",
+			args:                    componentconfig.RemoveFailedPodsArgs{},
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
 			pods:                    []*v1.Pod{}, // no pods come back with field selector phase=Failed
+			nodeFit:                 false,
 		},
 		{
 			description:             "0 failures, 0 evictions",
-			strategy:                createStrategy(true, false, nil, nil, nil, false),
+			args:                    createRemoveFailedPodsArgs(false, nil, nil, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
 			pods:                    []*v1.Pod{}, // no pods come back with field selector phase=Failed
+			nodeFit:                 false,
 		},
 		{
 			description:             "1 container terminated with reason NodeAffinity, 1 eviction",
-			strategy:                createStrategy(true, false, nil, nil, nil, false),
+			args:                    createRemoveFailedPodsArgs(false, nil, nil, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 1,
 			pods: []*v1.Pod{
@@ -71,7 +98,7 @@ func TestRemoveFailedPods(t *testing.T) {
 		},
 		{
 			description:             "1 init container terminated with reason NodeAffinity, 1 eviction",
-			strategy:                createStrategy(true, true, nil, nil, nil, false),
+			args:                    createRemoveFailedPodsArgs(true, nil, nil, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 1,
 			pods: []*v1.Pod{
@@ -82,7 +109,7 @@ func TestRemoveFailedPods(t *testing.T) {
 		},
 		{
 			description:             "1 init container waiting with reason CreateContainerConfigError, 1 eviction",
-			strategy:                createStrategy(true, true, nil, nil, nil, false),
+			args:                    createRemoveFailedPodsArgs(true, nil, nil, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 1,
 			pods: []*v1.Pod{
@@ -93,7 +120,7 @@ func TestRemoveFailedPods(t *testing.T) {
 		},
 		{
 			description: "2 init container waiting with reason CreateContainerConfigError, 2 nodes, 2 evictions",
-			strategy:    createStrategy(true, true, nil, nil, nil, false),
+			args:        createRemoveFailedPodsArgs(true, nil, nil, nil),
 			nodes: []*v1.Node{
 				test.BuildTestNode("node1", 2000, 3000, 10, nil),
 				test.BuildTestNode("node2", 2000, 3000, 10, nil),
@@ -110,7 +137,7 @@ func TestRemoveFailedPods(t *testing.T) {
 		},
 		{
 			description:             "include reason=CreateContainerConfigError, 1 container terminated with reason CreateContainerConfigError, 1 eviction",
-			strategy:                createStrategy(true, false, []string{"CreateContainerConfigError"}, nil, nil, false),
+			args:                    createRemoveFailedPodsArgs(false, []string{"CreateContainerConfigError"}, nil, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 1,
 			pods: []*v1.Pod{
@@ -121,7 +148,7 @@ func TestRemoveFailedPods(t *testing.T) {
 		},
 		{
 			description:             "include reason=CreateContainerConfigError+NodeAffinity, 1 container terminated with reason CreateContainerConfigError, 1 eviction",
-			strategy:                createStrategy(true, false, []string{"CreateContainerConfigError", "NodeAffinity"}, nil, nil, false),
+			args:                    createRemoveFailedPodsArgs(false, []string{"CreateContainerConfigError", "NodeAffinity"}, nil, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 1,
 			pods: []*v1.Pod{
@@ -132,7 +159,7 @@ func TestRemoveFailedPods(t *testing.T) {
 		},
 		{
 			description:             "include reason=CreateContainerConfigError, 1 container terminated with reason NodeAffinity, 0 eviction",
-			strategy:                createStrategy(true, false, []string{"CreateContainerConfigError"}, nil, nil, false),
+			args:                    createRemoveFailedPodsArgs(false, []string{"CreateContainerConfigError"}, nil, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
 			pods: []*v1.Pod{
@@ -143,7 +170,7 @@ func TestRemoveFailedPods(t *testing.T) {
 		},
 		{
 			description:             "include init container=false, 1 init container waiting with reason CreateContainerConfigError, 0 eviction",
-			strategy:                createStrategy(true, false, []string{"CreateContainerConfigError"}, nil, nil, false),
+			args:                    createRemoveFailedPodsArgs(false, []string{"CreateContainerConfigError"}, nil, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
 			pods: []*v1.Pod{
@@ -154,7 +181,7 @@ func TestRemoveFailedPods(t *testing.T) {
 		},
 		{
 			description:             "lifetime 1 hour, 1 container terminated with reason NodeAffinity, 0 eviction",
-			strategy:                createStrategy(true, false, nil, nil, &OneHourInSeconds, false),
+			args:                    createRemoveFailedPodsArgs(false, nil, nil, &OneHourInSeconds),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
 			pods: []*v1.Pod{
@@ -165,7 +192,7 @@ func TestRemoveFailedPods(t *testing.T) {
 		},
 		{
 			description: "nodeFit=true, 1 unschedulable node, 1 container terminated with reason NodeAffinity, 0 eviction",
-			strategy:    createStrategy(true, false, nil, nil, nil, true),
+			args:        createRemoveFailedPodsArgs(false, nil, nil, nil),
 			nodes: []*v1.Node{
 				test.BuildTestNode("node1", 2000, 3000, 10, nil),
 				test.BuildTestNode("node2", 2000, 2000, 10, func(node *v1.Node) {
@@ -178,10 +205,11 @@ func TestRemoveFailedPods(t *testing.T) {
 					Terminated: &v1.ContainerStateTerminated{Reason: "NodeAffinity"},
 				}), nil),
 			},
+			nodeFit: true,
 		},
 		{
 			description:             "nodeFit=true, only available node does not have enough resources, 1 container terminated with reason CreateContainerConfigError, 0 eviction",
-			strategy:                createStrategy(true, false, []string{"CreateContainerConfigError"}, nil, nil, true),
+			args:                    createRemoveFailedPodsArgs(false, []string{"CreateContainerConfigError"}, nil, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 1, 1, 10, nil), test.BuildTestNode("node2", 0, 0, 10, nil)},
 			expectedEvictedPodCount: 0,
 			pods: []*v1.Pod{
@@ -189,10 +217,11 @@ func TestRemoveFailedPods(t *testing.T) {
 					Terminated: &v1.ContainerStateTerminated{Reason: "CreateContainerConfigError"},
 				}), nil),
 			},
+			nodeFit: true,
 		},
 		{
 			description:             "excluded owner kind=ReplicaSet, 1 init container terminated with owner kind=ReplicaSet, 0 eviction",
-			strategy:                createStrategy(true, true, nil, []string{"ReplicaSet"}, nil, false),
+			args:                    createRemoveFailedPodsArgs(true, nil, []string{"ReplicaSet"}, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
 			pods: []*v1.Pod{
@@ -203,7 +232,7 @@ func TestRemoveFailedPods(t *testing.T) {
 		},
 		{
 			description:             "excluded owner kind=DaemonSet, 1 init container terminated with owner kind=ReplicaSet, 1 eviction",
-			strategy:                createStrategy(true, true, nil, []string{"DaemonSet"}, nil, false),
+			args:                    createRemoveFailedPodsArgs(true, nil, []string{"DaemonSet"}, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 1,
 			pods: []*v1.Pod{
@@ -214,7 +243,7 @@ func TestRemoveFailedPods(t *testing.T) {
 		},
 		{
 			description:             "excluded owner kind=DaemonSet, 1 init container terminated with owner kind=ReplicaSet, 1 pod in termination; nothing should be moved",
-			strategy:                createStrategy(true, true, nil, []string{"DaemonSet"}, nil, false),
+			args:                    createRemoveFailedPodsArgs(true, nil, []string{"DaemonSet"}, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
 			pods: []*v1.Pod{
@@ -225,16 +254,17 @@ func TestRemoveFailedPods(t *testing.T) {
 		},
 		{
 			description:             "1 container terminated with reason ShutDown, 0 evictions",
-			strategy:                createStrategy(true, false, nil, nil, nil, true),
+			args:                    createRemoveFailedPodsArgs(false, nil, nil, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
 			pods: []*v1.Pod{
 				buildTestPod("p1", "node1", newPodStatus("Shutdown", v1.PodFailed, nil, nil), nil),
 			},
+			nodeFit: true,
 		},
 		{
 			description:             "include reason=Shutdown, 2 containers terminated with reason ShutDown, 2 evictions",
-			strategy:                createStrategy(true, false, []string{"Shutdown"}, nil, nil, false),
+			args:                    createRemoveFailedPodsArgs(false, []string{"Shutdown"}, nil, nil),
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 2,
 			pods: []*v1.Pod{
@@ -285,49 +315,33 @@ func TestRemoveFailedPods(t *testing.T) {
 				false,
 				false,
 				false,
-				evictions.WithNodeFit(tc.strategy.Params.NodeFit),
+				evictions.WithNodeFit(tc.nodeFit),
 			)
 
-			RemoveFailedPods(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
+			plugin, err := New(&componentconfig.RemoveFailedPodsArgs{
+				Reasons:                 tc.args.Reasons,
+				MinPodLifetimeSeconds:   tc.args.MinPodLifetimeSeconds,
+				IncludingInitContainers: tc.args.IncludingInitContainers,
+				ExcludeOwnerKinds:       tc.args.ExcludeOwnerKinds,
+				LabelSelector:           tc.args.LabelSelector,
+				Namespaces:              tc.args.Namespaces,
+			},
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 fakeClient,
+					PodEvictorImpl:                podEvictor,
+					EvictorFilterImpl:             evictorFilter,
+					SharedInformerFactoryImpl:     sharedInformerFactory,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				},
+			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
+			plugin.(framework.DeschedulePlugin).Deschedule(ctx, tc.nodes)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)
-			}
-		})
-	}
-}
-
-func TestValidRemoveFailedPodsParams(t *testing.T) {
-	ctx := context.Background()
-	fakeClient := &fake.Clientset{}
-	testCases := []struct {
-		name   string
-		params *api.StrategyParameters
-	}{
-		{name: "validate nil params", params: nil},
-		{name: "validate empty params", params: &api.StrategyParameters{}},
-		{name: "validate reasons params", params: &api.StrategyParameters{FailedPods: &api.FailedPods{
-			Reasons: []string{"CreateContainerConfigError"},
-		}}},
-		{name: "validate includingInitContainers params", params: &api.StrategyParameters{FailedPods: &api.FailedPods{
-			IncludingInitContainers: true,
-		}}},
-		{name: "validate excludeOwnerKinds params", params: &api.StrategyParameters{FailedPods: &api.FailedPods{
-			ExcludeOwnerKinds: []string{"Job"},
-		}}},
-		{name: "validate excludeOwnerKinds params", params: &api.StrategyParameters{FailedPods: &api.FailedPods{
-			MinPodLifetimeSeconds: &OneHourInSeconds,
-		}}},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			params, err := validateAndParseRemoveFailedPodsParams(ctx, fakeClient, tc.params)
-			if err != nil {
-				t.Errorf("strategy params should be valid but got err: %v", err.Error())
-			}
-			if params == nil {
-				t.Errorf("strategy params should return a ValidatedFailedPodsStrategyParams but got nil")
 			}
 		})
 	}

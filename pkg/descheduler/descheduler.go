@@ -46,6 +46,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
@@ -253,7 +254,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		"RemovePodsHavingTooManyRestarts":             strategies.RemovePodsHavingTooManyRestarts,
 		"PodLifeTime":                                 strategies.PodLifeTime,
 		"RemovePodsViolatingTopologySpreadConstraint": strategies.RemovePodsViolatingTopologySpreadConstraint,
-		"RemoveFailedPods":                            strategies.RemoveFailedPods,
+		removefailedpods.PluginName:                   nil,
 	}
 
 	var nodeSelector string

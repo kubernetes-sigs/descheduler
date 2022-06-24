@@ -106,7 +106,7 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 	}
 }
 
-func initializeClient(t *testing.T) (clientset.Interface, coreinformers.NodeInformer, podutil.GetPodsAssignedToNodeFunc, chan struct{}) {
+func initializeClient(t *testing.T) (clientset.Interface, informers.SharedInformerFactory, coreinformers.NodeInformer, podutil.GetPodsAssignedToNodeFunc, chan struct{}) {
 	clientSet, err := client.CreateClient(os.Getenv("KUBECONFIG"))
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
@@ -127,7 +127,7 @@ func initializeClient(t *testing.T) (clientset.Interface, coreinformers.NodeInfo
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 
 	waitForNodesReady(context.Background(), t, clientSet, nodeInformer)
-	return clientSet, nodeInformer, getPodsAssignedToNode, stopChannel
+	return clientSet, sharedInformerFactory, nodeInformer, getPodsAssignedToNode, stopChannel
 }
 
 func waitForNodesReady(ctx context.Context, t *testing.T, clientSet clientset.Interface, nodeInformer coreinformers.NodeInformer) {
@@ -246,7 +246,7 @@ func intersectStrings(lista, listb []string) []string {
 func TestLowNodeUtilization(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, _, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, _, _, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
@@ -404,7 +404,7 @@ func TestLowNodeUtilization(t *testing.T) {
 func TestNamespaceConstraintsInclude(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, _, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -475,7 +475,7 @@ func TestNamespaceConstraintsInclude(t *testing.T) {
 func TestNamespaceConstraintsExclude(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, _, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -542,7 +542,7 @@ func testEvictSystemCritical(t *testing.T, isPriorityClass bool) {
 	lowPriority := int32(500)
 	ctx := context.Background()
 
-	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, _, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -672,7 +672,7 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 	lowPriority := int32(500)
 	ctx := context.Background()
 
-	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, _, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -801,7 +801,7 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 func TestPodLabelSelector(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, _, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -904,7 +904,7 @@ func TestPodLabelSelector(t *testing.T) {
 func TestEvictAnnotation(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, _, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -976,7 +976,7 @@ func TestEvictAnnotation(t *testing.T) {
 func TestPodLifeTimeOldestEvicted(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, _, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
