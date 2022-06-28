@@ -524,15 +524,17 @@ strategies:
 
 This strategy evicts pods that are older than `maxPodLifeTimeSeconds`.
 
-You can also specify `podStatusPhases` to `only` evict pods with specific `StatusPhases`, currently this parameter is limited
-to `Running` and `Pending`.
+You can also specify `states` parameter to **only** evict pods matching the following conditions:
+  - [Pod Phase](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase) status of: `Running`, `Pending`
+  - [Container State Waiting](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-state-waiting) condition of: `PodInitializing`, `ContainerCreating`
 
 **Parameters:**
 
 |Name|Type|
 |---|---|
 |`maxPodLifeTimeSeconds`|int|
-|`podStatusPhases`|list(string)|
+|`podStatusPhases` (**Deprecated**. Use `states` instead)|list(string)|
+|`states`|list(string)|
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
@@ -549,8 +551,9 @@ strategies:
      params:
        podLifeTime:
          maxPodLifeTimeSeconds: 86400
-         podStatusPhases:
+         states:
          - "Pending"
+         - "PodInitializing"
 ```
 
 ### RemoveFailedPods

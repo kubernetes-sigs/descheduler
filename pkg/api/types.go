@@ -113,7 +113,10 @@ type RemoveDuplicates struct {
 
 type PodLifeTime struct {
 	MaxPodLifeTimeSeconds *uint
-	PodStatusPhases       []string
+	States                []string
+
+	// Deprecated: Use States instead.
+	PodStatusPhases []string
 }
 
 type FailedPods struct {

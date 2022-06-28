@@ -31,33 +31,48 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
-func validatePodLifeTimeParams(params *api.StrategyParameters) error {
+var (
+	podLifeTimeAllowedStates = sets.NewString(
+		string(v1.PodRunning),
+		string(v1.PodPending),
+
+		// Container state reason list: https://github.com/kubernetes/kubernetes/blob/release-1.24/pkg/kubelet/kubelet_pods.go#L76-L79
+		"PodInitializing",
+		"ContainerCreating",
+	)
+)
+
+func validatePodLifeTimeParams(params *api.StrategyParameters) (sets.String, error) {
 	if params == nil || params.PodLifeTime == nil || params.PodLifeTime.MaxPodLifeTimeSeconds == nil {
-		return fmt.Errorf("MaxPodLifeTimeSeconds not set")
+		return nil, fmt.Errorf("MaxPodLifeTimeSeconds not set")
 	}
 
+	var states []string
 	if params.PodLifeTime.PodStatusPhases != nil {
-		for _, phase := range params.PodLifeTime.PodStatusPhases {
-			if phase != string(v1.PodPending) && phase != string(v1.PodRunning) {
-				return fmt.Errorf("only Pending and Running phases are supported in PodLifeTime")
-			}
-		}
+		states = append(states, params.PodLifeTime.PodStatusPhases...)
+	}
+	if params.PodLifeTime.States != nil {
+		states = append(states, params.PodLifeTime.States...)
+	}
+	if !podLifeTimeAllowedStates.HasAll(states...) {
+		return nil, fmt.Errorf("states must be one of %v", podLifeTimeAllowedStates.List())
 	}
 
 	// At most one of include/exclude can be set
 	if params.Namespaces != nil && len(params.Namespaces.Include) > 0 && len(params.Namespaces.Exclude) > 0 {
-		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+		return nil, fmt.Errorf("only one of Include/Exclude namespaces can be set")
 	}
 	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
-		return fmt.Errorf("only one of thresholdPriority and thresholdPriorityClassName can be set")
+		return nil, fmt.Errorf("only one of thresholdPriority and thresholdPriorityClassName can be set")
 	}
 
-	return nil
+	return sets.NewString(states...), nil
 }
 
 // PodLifeTime evicts pods on nodes that were created more than strategy.Params.MaxPodLifeTimeSeconds seconds ago.
 func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, evictorFilter *evictions.EvictorFilter, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
-	if err := validatePodLifeTimeParams(strategy.Params); err != nil {
+	states, err := validatePodLifeTimeParams(strategy.Params)
+	if err != nil {
 		klog.ErrorS(err, "Invalid PodLifeTime parameters")
 		return
 	}
@@ -69,15 +84,20 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 	}
 
 	filter := evictorFilter.Filter
-	if strategy.Params.PodLifeTime.PodStatusPhases != nil {
-		filter = func(pod *v1.Pod) bool {
-			for _, phase := range strategy.Params.PodLifeTime.PodStatusPhases {
-				if string(pod.Status.Phase) == phase {
-					return evictorFilter.Filter(pod)
+	if states.Len() > 0 {
+		filter = podutil.WrapFilterFuncs(func(pod *v1.Pod) bool {
+			if states.Has(string(pod.Status.Phase)) {
+				return true
+			}
+
+			for _, containerStatus := range pod.Status.ContainerStatuses {
+				if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
+					return true
 				}
 			}
+
 			return false
-		}
+		}, filter)
 	}
 
 	podFilter, err := podutil.NewOptions().
