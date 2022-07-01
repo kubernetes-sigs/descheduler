@@ -135,13 +135,18 @@ ifndef HAS_GOLANGCI
 endif
 	./_output/bin/golangci-lint run
 
-lint-chart: ensure-helm-install
-	helm lint ./charts/descheduler
-
-test-helm: ensure-helm-install
-	./test/run-helm-tests.sh
+# helm
 
 ensure-helm-install:
 ifndef HAS_HELM
 	curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 && chmod 700 ./get_helm.sh && ./get_helm.sh
 endif
+
+lint-chart: ensure-helm-install
+	helm lint ./charts/descheduler
+
+build-helm:
+	helm package ./charts/descheduler --dependency-update --destination ./bin/chart
+
+test-helm: ensure-helm-install
+	./test/run-helm-tests.sh
