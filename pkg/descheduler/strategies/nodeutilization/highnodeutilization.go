@@ -31,6 +31,17 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
+// stealNodesFromLowNodes steal nodes from low utilized nodes so when high utilized nodes is empty.
+func stealNodesFromLowNodes(sourceNodes []NodeInfo) ([]NodeInfo, []NodeInfo) {
+	if len(sourceNodes) == 0 {
+		return nil, nil
+	}
+	partition := int(float64(len(sourceNodes)) * 0.5)
+	destination := sourceNodes[partition:]
+	source := sourceNodes[0:partition]
+	return source, destination
+}
+
 // HighNodeUtilization evicts pods from under utilized nodes so that scheduler can schedule according to its strategy.
 // Note that CPU/Memory requests are used to calculate nodes' utilization and not the actual resource usage.
 func HighNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, evictorFilter *evictions.EvictorFilter, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
@@ -82,6 +93,10 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 	if len(sourceNodes) == 0 {
 		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
 		return
+	}
+	if len(highNodes) == 0 && len(sourceNodes) > 1 {
+		klog.V(1).InfoS("No node is available to schedule the pods currently, steal nodes from low utilization nodes.")
+		sourceNodes, highNodes = stealNodesFromLowNodes(sourceNodes)
 	}
 	if len(sourceNodes) <= strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
 		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(sourceNodes), "numberOfNodes", strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
