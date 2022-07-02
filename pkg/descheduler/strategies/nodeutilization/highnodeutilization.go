@@ -29,7 +29,47 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
+
+// balanceNodes balance nodes from low utilized nodes to high utilized nodes.
+func balanceNodes(sourceNodes, destinationNodes []NodeInfo) ([]NodeInfo, []NodeInfo) {
+	if len(sourceNodes) == 0 || len(destinationNodes) > 0 {
+		return sourceNodes, destinationNodes
+	}
+	numOfBalanced := 0
+	partition := int(float64(len(sourceNodes)) * 0.5)
+	lowNodes := make([]NodeInfo, 0, partition)
+	highNodes := destinationNodes
+	hasImportantPods := func(node *NodeInfo) bool {
+		for _, pod := range node.allPods {
+			if utils.IsMirrorPod(pod) {
+				return true
+			}
+			if utils.IsPodWithPVC(pod) {
+				return true
+			}
+			if utils.IsCriticalPriorityPod(pod) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, node := range sourceNodes {
+		if nodeutil.IsNodeUnschedulable(node.node) {
+			lowNodes = append(lowNodes, node)
+			continue
+		}
+
+		if numOfBalanced < partition && !hasImportantPods(&node) {
+			numOfBalanced++
+			highNodes = append(highNodes, node)
+		} else {
+			lowNodes = append(lowNodes, node)
+		}
+	}
+	return lowNodes, highNodes
+}
 
 // HighNodeUtilization evicts pods from under utilized nodes so that scheduler can schedule according to its strategy.
 // Note that CPU/Memory requests are used to calculate nodes' utilization and not the actual resource usage.
@@ -82,6 +122,9 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 	if len(sourceNodes) == 0 {
 		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
 		return
+	}
+	if len(highNodes) == 0 {
+		sourceNodes, highNodes = balanceNodes(sourceNodes, highNodes)
 	}
 	if len(sourceNodes) <= strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
 		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(sourceNodes), "numberOfNodes", strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)

@@ -121,6 +121,7 @@ func TestHighNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p6", 400, 0, n3NodeName, test.SetRSOwnerRef),
 				test.BuildTestPod("p7", 400, 0, n3NodeName, test.SetRSOwnerRef),
 				test.BuildTestPod("p8", 400, 0, n3NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p9", 400, 0, n3NodeName, test.SetRSOwnerRef),
 			},
 			expectedPodsEvicted: 0,
 		},
@@ -136,15 +137,14 @@ func TestHighNodeUtilization(t *testing.T) {
 				test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
 			},
 			pods: []*v1.Pod{
-				// These can't be evicted.
 				test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
-				// These can't be evicted.
 				test.BuildTestPod("p2", 400, 0, n2NodeName, test.SetRSOwnerRef),
+				// These can't be evicted.
 				test.BuildTestPod("p3", 400, 0, n3NodeName, test.SetRSOwnerRef),
 				test.BuildTestPod("p4", 400, 0, n3NodeName, test.SetRSOwnerRef),
 				test.BuildTestPod("p5", 400, 0, n3NodeName, test.SetRSOwnerRef),
 			},
-			expectedPodsEvicted: 0,
+			expectedPodsEvicted: 1,
 		},
 		{
 			name: "without priorities",
@@ -428,6 +428,25 @@ func TestHighNodeUtilization(t *testing.T) {
 				}),
 			},
 			expectedPodsEvicted: 0,
+		},
+		{
+			name: "All nodes are low utilized",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU: 30,
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, nil),
+			},
+			pods: []*v1.Pod{
+				// node was balanced to high nodes. These won't be evicted.
+				test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				// low nodes
+				test.BuildTestPod("p2", 400, 0, n2NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 0, n3NodeName, test.SetRSOwnerRef),
+			},
+			expectedPodsEvicted: 2,
 		},
 	}
 
