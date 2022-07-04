@@ -31,9 +31,9 @@ commonLabels: {}
 cronJobApiVersion: "batch/v1"  # Use "batch/v1beta1" for k8s version < 1.21.0. TODO(@7i) remove with 1.23 release
 schedule: "*/2 * * * *"
 suspend: false
-#startingDeadlineSeconds: 200
-#successfulJobsHistoryLimit: 1
-#failedJobsHistoryLimit: 1
+# startingDeadlineSeconds: 200
+# successfulJobsHistoryLimit: 1
+# failedJobsHistoryLimit: 1
 
 # Required when running as a Deployment
 deschedulingInterval: 5m
