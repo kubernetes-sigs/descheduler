@@ -11,7 +11,7 @@ spec:
   {{- if not .Values.leaderElection.enabled }}
   {{- fail "You must set leaderElection to use more than 1 replica"}}
   {{- end}}
-  replicas: {{ required "leaderElection required for running more than one replica" .Values.replicas }}
+  replicas: {{ requi "leaderElection required for running more than one replica" .Values.replicas }}
   {{- else }}
   replicas: 1
   {{- end }}
