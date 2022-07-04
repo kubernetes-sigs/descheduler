@@ -159,7 +159,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 					continue
 				}
 
-				// 5. If the pod's node matches this constraint'selector topologyKey, create a topoPair and add the pod
+				// 5. If the pod's node matches this constraint's topologyKey, create a topoPair and add the pod
 				node, ok := nodeMap[namespacePods.Items[i].Spec.NodeName]
 				if !ok {
 					// If ok is false, node is nil in which case node.Labels will panic. In which case a pod is yet to be scheduled. So it's safe to just continue here.
@@ -179,7 +179,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 				klog.V(2).InfoS("Skipping topology constraint because it is already balanced", "constraint", constraint)
 				continue
 			}
-			balanceDomains(client, getPodsAssignedToNode, podsForEviction, constraint, constraintTopologies, sumPods, evictorFilter.Filter, nodes)
+			balanceDomains(getPodsAssignedToNode, podsForEviction, constraint, constraintTopologies, sumPods, evictorFilter.Filter, nodes)
 		}
 	}
 
@@ -244,7 +244,6 @@ func topologyIsBalanced(topology map[topologyPair][]*v1.Pod, constraint v1.Topol
 // [5, 5, 5, 5, 5, 5]
 // (assuming even distribution by the scheduler of the evicted pods)
 func balanceDomains(
-	client clientset.Interface,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 	podsForEviction map[*v1.Pod]struct{},
 	constraint v1.TopologySpreadConstraint,
@@ -255,6 +254,8 @@ func balanceDomains(
 
 	idealAvg := sumPods / float64(len(constraintTopologies))
 	sortedDomains := sortDomains(constraintTopologies, isEvictable)
+
+	nodesBelowIdealAvg := filterNodesBelowIdealAvg(nodes, sortedDomains, constraint.TopologyKey, idealAvg)
 
 	// i is the index for belowOrEqualAvg
 	// j is the index for aboveAvg
@@ -306,7 +307,8 @@ func balanceDomains(
 			// In other words, PTS can perform suboptimally if some of its chosen pods don't fit on other nodes.
 			// This is because the chosen pods aren't sorted, but immovable pods still count as "evicted" toward the PTS algorithm.
 			// So, a better selection heuristic could improve performance.
-			if !node.PodFitsAnyOtherNode(getPodsAssignedToNode, aboveToEvict[k], nodes) {
+
+			if !node.PodFitsAnyOtherNode(getPodsAssignedToNode, aboveToEvict[k], nodesBelowIdealAvg) {
 				klog.V(2).InfoS("ignoring pod for eviction as it does not fit on any other node", "pod", klog.KObj(aboveToEvict[k]))
 				continue
 			}
@@ -316,6 +318,25 @@ func balanceDomains(
 		sortedDomains[j].pods = sortedDomains[j].pods[:len(sortedDomains[j].pods)-movePods]
 		sortedDomains[i].pods = append(sortedDomains[i].pods, aboveToEvict...)
 	}
+}
+
+// filterNodesBelowIdealAvg will return nodes that have fewer pods matching topology domain than the idealAvg count.
+// the desired behavior is to not consider nodes in a given topology domain that are already packed.
+func filterNodesBelowIdealAvg(nodes []*v1.Node, sortedDomains []topology, topologyKey string, idealAvg float64) []*v1.Node {
+	topologyNodesMap := make(map[string][]*v1.Node, len(sortedDomains))
+	for _, node := range nodes {
+		if topologyDomain, ok := node.Labels[topologyKey]; ok {
+			topologyNodesMap[topologyDomain] = append(topologyNodesMap[topologyDomain], node)
+		}
+	}
+
+	var nodesBelowIdealAvg []*v1.Node
+	for _, domain := range sortedDomains {
+		if float64(len(domain.pods)) < idealAvg {
+			nodesBelowIdealAvg = append(nodesBelowIdealAvg, topologyNodesMap[domain.pair.value]...)
+		}
+	}
+	return nodesBelowIdealAvg
 }
 
 // sortDomains sorts and splits the list of topology domains based on their size
