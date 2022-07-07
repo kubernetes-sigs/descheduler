@@ -41,4 +41,4 @@ jobs:
           fi
 
       - name: Run chart-testing (lint)
-        run: ct lint --config=.github/ci/ct.yaml
+        run: ct lint --config=.github/ci/ct.yaml --validate-maintainers=false
