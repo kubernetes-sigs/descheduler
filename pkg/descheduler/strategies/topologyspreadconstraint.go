@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"reflect"
 	"sort"
 
 	v1 "k8s.io/api/core/v1"
@@ -107,20 +106,14 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		}
 
 		// ...where there is a topology constraint
-		namespaceTopologySpreadConstraints := []v1.TopologySpreadConstraint{}
+		namespaceTopologySpreadConstraints := make(map[v1.TopologySpreadConstraint]struct{})
 		for _, pod := range namespacePods.Items {
 			for _, constraint := range pod.Spec.TopologySpreadConstraints {
 				// Ignore soft topology constraints if they are not included
 				if constraint.WhenUnsatisfiable == v1.ScheduleAnyway && (strategy.Params == nil || !strategy.Params.IncludeSoftConstraints) {
 					continue
 				}
-				// Need to check v1.TopologySpreadConstraint deepEquality because
-				// v1.TopologySpreadConstraint has pointer fields
-				// and we don't need to go over duplicated constraints later on
-				if hasIdenticalConstraints(constraint, namespaceTopologySpreadConstraints) {
-					continue
-				}
-				namespaceTopologySpreadConstraints = append(namespaceTopologySpreadConstraints, constraint)
+				namespaceTopologySpreadConstraints[constraint] = struct{}{}
 			}
 		}
 		if len(namespaceTopologySpreadConstraints) == 0 {
@@ -128,7 +121,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		}
 
 		// 2. for each topologySpreadConstraint in that namespace
-		for _, constraint := range namespaceTopologySpreadConstraints {
+		for constraint := range namespaceTopologySpreadConstraints {
 			constraintTopologies := make(map[topologyPair][]*v1.Pod)
 			// pre-populate the topologyPair map with all the topologies available from the nodeMap
 			// (we can't just build it from existing pods' nodes because a topology may have 0 pods)
@@ -190,16 +183,6 @@ func RemovePodsViolatingTopologySpreadConstraint(
 			break
 		}
 	}
-}
-
-// hasIdenticalConstraints checks if we already had an identical TopologySpreadConstraint in namespaceTopologySpreadConstraints slice
-func hasIdenticalConstraints(newConstraint v1.TopologySpreadConstraint, namespaceTopologySpreadConstraints []v1.TopologySpreadConstraint) bool {
-	for _, constraint := range namespaceTopologySpreadConstraints {
-		if reflect.DeepEqual(newConstraint, constraint) {
-			return true
-		}
-	}
-	return false
 }
 
 // topologyIsBalanced checks if any domains in the topology differ by more than the MaxSkew
