@@ -47,9 +47,9 @@ Flags:
   -h, --help                             help for descheduler
       --kubeconfig string                File with  kube configuration.
       --log-backtrace-at traceLocation   when logging hits line file:N, emit a stack trace (default :0)
-      --log-dir string                   If non-empty, write log files in this directory
-      --log-file string                  If non-empty, use this log file
-      --log-file-max-size uint           Defines the maximum size a log file can grow to. Unit is megabytes. If the value is 0, the maximum file size is unlimited. (default 1800)
+      --log_dir string                   If non-empty, write log files in this directory
+      --log_file string                  If non-empty, use this log file
+      --log_file_max_size uint           Defines the maximum size a log file can grow to. Unit is megabytes. If the value is 0, the maximum file size is unlimited. (default 1800)
       --log-flush-frequency duration     Maximum number of seconds between log flushes (default 5s)
       --logtostderr                      log to standard error instead of files (default true)
       --max-pods-to-evict-per-node int   DEPRECATED: limits the maximum number of pods to be evicted per node by descheduler
