@@ -19,7 +19,6 @@ package evictions
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1beta1"
@@ -45,7 +44,7 @@ const (
 )
 
 // nodePodEvictedCount keeps count of pods evicted on node
-type nodePodEvictedCount map[*v1.Node]uint
+type nodePodEvictedCount map[string]uint
 type namespacePodEvictCount map[string]uint
 
 type PodEvictor struct {
@@ -73,7 +72,7 @@ func NewPodEvictor(
 	var namespacePodCount = make(namespacePodEvictCount)
 	for _, node := range nodes {
 		// Initialize podsEvicted till now with 0.
-		nodePodCount[node] = 0
+		nodePodCount[node.Name] = 0
 	}
 
 	return &PodEvictor{
@@ -91,7 +90,7 @@ func NewPodEvictor(
 
 // NodeEvicted gives a number of pods evicted for node
 func (pe *PodEvictor) NodeEvicted(node *v1.Node) uint {
-	return pe.nodepodCount[node]
+	return pe.nodepodCount[node.Name]
 }
 
 // TotalEvicted gives a number of pods evicted through all nodes
@@ -103,26 +102,43 @@ func (pe *PodEvictor) TotalEvicted() uint {
 	return total
 }
 
-// EvictPod returns non-nil error only when evicting a pod on a node is not
-// possible (due to maxPodsToEvictPerNode constraint). Success is true when the pod
-// is evicted on the server side.
-func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, strategy string, reasons ...string) (bool, error) {
-	reason := strategy
-	if len(reasons) > 0 {
-		reason += " (" + strings.Join(reasons, ", ") + ")"
+// NodeLimitExceeded checks if the number of evictions for a node was exceeded
+func (pe *PodEvictor) NodeLimitExceeded(node *v1.Node) bool {
+	if pe.maxPodsToEvictPerNode != nil {
+		return pe.nodepodCount[node.Name] == *pe.maxPodsToEvictPerNode
 	}
-	if pe.maxPodsToEvictPerNode != nil && pe.nodepodCount[node]+1 > *pe.maxPodsToEvictPerNode {
-		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
+	return false
+}
+
+// EvictPod evicts a pod while exercising eviction limits.
+// Returns true when the pod is evicted on the server side.
+// Eviction reason can be set through the ctx's evictionReason:STRING pair
+func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod) bool {
+	strategy := ""
+	if ctx.Value("strategyName") != nil {
+		strategy = ctx.Value("strategyName").(string)
+	}
+	reason := ""
+	if ctx.Value("evictionReason") != nil {
+		reason = ctx.Value("evictionReason").(string)
+	}
+
+	if pod.Spec.NodeName != "" {
+		if pe.maxPodsToEvictPerNode != nil && pe.nodepodCount[pod.Spec.NodeName]+1 > *pe.maxPodsToEvictPerNode {
+			if pe.metricsEnabled {
+				metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
+			}
+			klog.ErrorS(fmt.Errorf("Maximum number of evicted pods per node reached"), "limit", *pe.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
+			return false
 		}
-		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", *pe.maxPodsToEvictPerNode, node.Name)
 	}
 
 	if pe.maxPodsToEvictPerNamespace != nil && pe.namespacePodCount[pod.Namespace]+1 > *pe.maxPodsToEvictPerNamespace {
 		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per namespace reached", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
+			metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per namespace reached", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
 		}
-		return false, fmt.Errorf("Maximum number %v of evicted pods per %q namespace reached", *pe.maxPodsToEvictPerNamespace, pod.Namespace)
+		klog.ErrorS(fmt.Errorf("Maximum number of evicted pods per namespace reached"), "limit", *pe.maxPodsToEvictPerNamespace, "namespace", pod.Namespace)
+		return false
 	}
 
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion)
@@ -130,29 +146,31 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node, 
 		// err is used only for logging purposes
 		klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", reason)
 		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
+			metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
 		}
-		return false, nil
+		return false
 	}
 
-	pe.nodepodCount[node]++
+	if pod.Spec.NodeName != "" {
+		pe.nodepodCount[pod.Spec.NodeName]++
+	}
 	pe.namespacePodCount[pod.Namespace]++
 
 	if pe.metricsEnabled {
-		metrics.PodsEvicted.With(map[string]string{"result": "success", "strategy": strategy, "namespace": pod.Namespace, "node": node.Name}).Inc()
+		metrics.PodsEvicted.With(map[string]string{"result": "success", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
 	}
 
 	if pe.dryRun {
-		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", reason, "strategy", strategy, "node", node.Name)
+		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", reason, "strategy", strategy, "node", pod.Spec.NodeName)
 	} else {
-		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", reason, "strategy", strategy, "node", node.Name)
+		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", reason, "strategy", strategy, "node", pod.Spec.NodeName)
 		eventBroadcaster := record.NewBroadcaster()
 		eventBroadcaster.StartStructuredLogging(3)
 		eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: pe.client.CoreV1().Events(pod.Namespace)})
 		r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
 		r.Event(pod, v1.EventTypeNormal, "Descheduled", fmt.Sprintf("pod evicted by sigs.k8s.io/descheduler%s", reason))
 	}
-	return true, nil
+	return true
 }
 
 func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string) error {

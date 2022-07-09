@@ -72,6 +72,7 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 		return
 	}
 
+loop:
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, podFilter)
@@ -89,9 +90,9 @@ func RemovePodsHavingTooManyRestarts(ctx context.Context, client clientset.Inter
 			} else if restarts < strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold {
 				continue
 			}
-			if _, err := podEvictor.EvictPod(ctx, pods[i], node, "TooManyRestarts"); err != nil {
-				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
-				break
+			podEvictor.EvictPod(ctx, pods[i])
+			if podEvictor.NodeLimitExceeded(node) {
+				continue loop
 			}
 		}
 	}

@@ -313,14 +313,8 @@ func evictPods(
 				continue
 			}
 
-			success, err := podEvictor.EvictPod(ctx, pod, nodeInfo.node, strategy)
-			if err != nil {
-				klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
-				break
-			}
-
-			if success {
-				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod), "err", err)
+			if podEvictor.EvictPod(ctx, pod) {
+				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
 
 				for name := range totalAvailableUsage {
 					if name == v1.ResourcePods {
@@ -350,6 +344,9 @@ func evictPods(
 				if !continueEviction(nodeInfo, totalAvailableUsage) {
 					break
 				}
+			}
+			if podEvictor.NodeLimitExceeded(nodeInfo.node) {
+				return
 			}
 		}
 	}

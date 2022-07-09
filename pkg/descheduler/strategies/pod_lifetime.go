@@ -126,15 +126,16 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 	// in the event that PDB or settings such maxNoOfPodsToEvictPer* prevent too much eviction
 	podutil.SortPodsBasedOnAge(podsToEvict)
 
+	nodeLimitExceeded := map[string]bool{}
 	for _, pod := range podsToEvict {
-		success, err := podEvictor.EvictPod(ctx, pod, nodeMap[pod.Spec.NodeName], "PodLifeTime")
-		if success {
+		if nodeLimitExceeded[pod.Spec.NodeName] {
+			continue
+		}
+		if podEvictor.EvictPod(ctx, pod) {
 			klog.V(1).InfoS("Evicted pod because it exceeded its lifetime", "pod", klog.KObj(pod), "maxPodLifeTime", *strategy.Params.PodLifeTime.MaxPodLifeTimeSeconds)
 		}
-
-		if err != nil {
-			klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod))
-			break
+		if podEvictor.NodeLimitExceeded(nodeMap[pod.Spec.NodeName]) {
+			nodeLimitExceeded[pod.Spec.NodeName] = true
 		}
 	}
 }

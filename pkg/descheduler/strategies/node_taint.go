@@ -91,6 +91,7 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 		}
 	}
 
+loop:
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListAllPodsOnANode(node.Name, getPodsAssignedToNode, podFilter)
@@ -106,9 +107,9 @@ func RemovePodsViolatingNodeTaints(ctx context.Context, client clientset.Interfa
 				taintFilterFnc,
 			) {
 				klog.V(2).InfoS("Not all taints with NoSchedule effect are tolerated after update for pod on node", "pod", klog.KObj(pods[i]), "node", klog.KObj(node))
-				if _, err := podEvictor.EvictPod(ctx, pods[i], node, "NodeTaint"); err != nil {
-					klog.ErrorS(err, "Error evicting pod")
-					break
+				podEvictor.EvictPod(ctx, pods[i])
+				if podEvictor.NodeLimitExceeded(node) {
+					continue loop
 				}
 			}
 		}

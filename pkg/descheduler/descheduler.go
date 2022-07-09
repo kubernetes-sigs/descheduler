@@ -302,7 +302,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 						continue
 					}
 					evictorFilter := evictions.NewEvictorFilter(nodes, getPodsAssignedToNode, evictLocalStoragePods, evictSystemCriticalPods, ignorePvcPods, evictBarePods, evictions.WithNodeFit(nodeFit), evictions.WithPriorityThreshold(thresholdPriority))
-					f(ctx, rs.Client, strategy, nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
+					f(context.WithValue(ctx, "strategyName", string(name)), rs.Client, strategy, nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
 				}
 			} else {
 				klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
