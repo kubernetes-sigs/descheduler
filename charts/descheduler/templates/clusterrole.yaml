@@ -30,7 +30,7 @@ rules:
   verbs: ["create", "update"]
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
-  resourceNames: ["{{ .Values.leaderElection.resourceName }}"]
+  resourceNames: ["{{ .Values.leaderElection.resourceName | default "descheduler" }}"]
   verbs: ["get", "patch", "delete"]
 {{- end }}
 {{- if .Values.podSecurityPolicy.create }}
