@@ -313,7 +313,7 @@ func evictPods(
 				continue
 			}
 
-			if podEvictor.EvictPod(ctx, pod) {
+			if podEvictor.EvictPod(ctx, pod, evictions.EvictOptions{}) {
 				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
 
 				for name := range totalAvailableUsage {

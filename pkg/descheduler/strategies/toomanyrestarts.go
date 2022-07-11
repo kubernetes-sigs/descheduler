@@ -90,7 +90,7 @@ loop:
 			} else if restarts < strategy.Params.PodsHavingTooManyRestarts.PodRestartThreshold {
 				continue
 			}
-			podEvictor.EvictPod(ctx, pods[i])
+			podEvictor.EvictPod(ctx, pods[i], evictions.EvictOptions{})
 			if podEvictor.NodeLimitExceeded(node) {
 				continue loop
 			}

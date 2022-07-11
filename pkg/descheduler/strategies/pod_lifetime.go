@@ -131,7 +131,7 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 		if nodeLimitExceeded[pod.Spec.NodeName] {
 			continue
 		}
-		if podEvictor.EvictPod(ctx, pod) {
+		if podEvictor.EvictPod(ctx, pod, evictions.EvictOptions{}) {
 			klog.V(1).InfoS("Evicted pod because it exceeded its lifetime", "pod", klog.KObj(pod), "maxPodLifeTime", *strategy.Params.PodLifeTime.MaxPodLifeTimeSeconds)
 		}
 		if podEvictor.NodeLimitExceeded(nodeMap[pod.Spec.NodeName]) {
