@@ -75,7 +75,7 @@ func RemoveFailedPods(
 				continue
 			}
 
-			podEvictor.EvictPod(ctx, pods[i])
+			podEvictor.EvictPod(ctx, pods[i], evictions.EvictOptions{})
 			if podEvictor.NodeLimitExceeded(node) {
 				continue
 			}

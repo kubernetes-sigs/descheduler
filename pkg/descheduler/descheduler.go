@@ -301,7 +301,20 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 						klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
 						continue
 					}
-					evictorFilter := evictions.NewEvictorFilter(nodes, getPodsAssignedToNode, evictLocalStoragePods, evictSystemCriticalPods, ignorePvcPods, evictBarePods, evictions.WithNodeFit(nodeFit), evictions.WithPriorityThreshold(thresholdPriority))
+					evictorFilter := evictions.NewEvictorFilter(
+						nodes,
+						getPodsAssignedToNode,
+						evictLocalStoragePods,
+						evictSystemCriticalPods,
+						ignorePvcPods,
+						evictBarePods,
+						evictions.WithNodeFit(nodeFit),
+						evictions.WithPriorityThreshold(thresholdPriority),
+					)
+					// TODO: strategyName should be accessible from within the strategy using a framework
+					// handle or function which the Evictor has access to. For migration/in-progress framework
+					// work, we are currently passing this via context. To be removed
+					// (See discussion thread https://github.com/kubernetes-sigs/descheduler/pull/885#discussion_r919962292)
 					f(context.WithValue(ctx, "strategyName", string(name)), rs.Client, strategy, nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
 				}
 			} else {

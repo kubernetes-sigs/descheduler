@@ -200,7 +200,7 @@ func RemoveDuplicatePods(
 				// It's assumed all duplicated pods are in the same priority class
 				// TODO(jchaloup): check if the pod has a different node to lend to
 				for _, pod := range pods[upperAvg-1:] {
-					podEvictor.EvictPod(ctx, pod)
+					podEvictor.EvictPod(ctx, pod, evictions.EvictOptions{})
 					if podEvictor.NodeLimitExceeded(nodeMap[nodeName]) {
 						continue loop
 					}

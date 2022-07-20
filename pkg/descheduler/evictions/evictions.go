@@ -110,17 +110,19 @@ func (pe *PodEvictor) NodeLimitExceeded(node *v1.Node) bool {
 	return false
 }
 
+// EvictOptions provides a handle for passing additional info to EvictPod
+type EvictOptions struct {
+	// Reason allows for passing details about the specific eviction for logging.
+	Reason string
+}
+
 // EvictPod evicts a pod while exercising eviction limits.
 // Returns true when the pod is evicted on the server side.
-// Eviction reason can be set through the ctx's evictionReason:STRING pair
-func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod) bool {
+func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptions) bool {
+	// TODO: Replace context-propagated Strategy name with a defined framework handle for accessing Strategy info
 	strategy := ""
 	if ctx.Value("strategyName") != nil {
 		strategy = ctx.Value("strategyName").(string)
-	}
-	reason := ""
-	if ctx.Value("evictionReason") != nil {
-		reason = ctx.Value("evictionReason").(string)
 	}
 
 	if pod.Spec.NodeName != "" {
@@ -144,7 +146,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod) bool {
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion)
 	if err != nil {
 		// err is used only for logging purposes
-		klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", reason)
+		klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", opts.Reason)
 		if pe.metricsEnabled {
 			metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
 		}
@@ -161,14 +163,14 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod) bool {
 	}
 
 	if pe.dryRun {
-		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", reason, "strategy", strategy, "node", pod.Spec.NodeName)
+		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", strategy, "node", pod.Spec.NodeName)
 	} else {
-		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", reason, "strategy", strategy, "node", pod.Spec.NodeName)
+		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", strategy, "node", pod.Spec.NodeName)
 		eventBroadcaster := record.NewBroadcaster()
 		eventBroadcaster.StartStructuredLogging(3)
 		eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: pe.client.CoreV1().Events(pod.Namespace)})
 		r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
-		r.Event(pod, v1.EventTypeNormal, "Descheduled", fmt.Sprintf("pod evicted by sigs.k8s.io/descheduler%s", reason))
+		r.Event(pod, v1.EventTypeNormal, "Descheduled", fmt.Sprintf("pod evicted by sigs.k8s.io/descheduler%s", opts.Reason))
 	}
 	return true
 }

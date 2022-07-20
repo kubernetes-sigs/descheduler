@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
-
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -94,7 +93,7 @@ func RemovePodsViolatingNodeAffinity(ctx context.Context, client clientset.Inter
 				for _, pod := range pods {
 					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
 						klog.V(1).InfoS("Evicting pod", "pod", klog.KObj(pod))
-						podEvictor.EvictPod(ctx, pod)
+						podEvictor.EvictPod(ctx, pod, evictions.EvictOptions{})
 						if podEvictor.NodeLimitExceeded(node) {
 							continue loop
 						}

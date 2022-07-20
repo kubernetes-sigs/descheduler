@@ -191,7 +191,7 @@ func RemovePodsViolatingTopologySpreadConstraint(
 		if !isEvictable(pod) {
 			continue
 		}
-		podEvictor.EvictPod(ctx, pod)
+		podEvictor.EvictPod(ctx, pod, evictions.EvictOptions{})
 		if podEvictor.NodeLimitExceeded(nodeMap[pod.Spec.NodeName]) {
 			nodeLimitExceeded[pod.Spec.NodeName] = true
 		}
@@ -240,7 +240,7 @@ func topologyIsBalanced(topology map[topologyPair][]*v1.Pod, constraint v1.Topol
 // whichever number is less.
 //
 // (Note, we will only move as many pods from a domain as possible without bringing it below the ideal average,
-//  and we will not bring any smaller domain above the average)
+// and we will not bring any smaller domain above the average)
 // If the diff is within the skew, we move to the next highest domain.
 // If the higher domain can't give any more without falling below the average, we move to the next lowest "high" domain
 //
