@@ -53,11 +53,12 @@ import (
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	metrics.Register()
 
-	rsclient, err := client.CreateClient(rs.KubeconfigFile)
+	rsclient, eventClient, err := createClients(rs.KubeconfigFile)
 	if err != nil {
 		return err
 	}
 	rs.Client = rsclient
+	rs.EventClient = eventClient
 
 	deschedulerPolicy, err := LoadPolicyConfig(rs.PolicyConfigFile)
 	if err != nil {
@@ -287,6 +288,16 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
 	}
 
+	var eventClient clientset.Interface
+	if rs.DryRun {
+		eventClient = fakeclientset.NewSimpleClientset()
+	} else {
+		eventClient = rs.Client
+	}
+
+	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
+	defer eventBroadcaster.Shutdown()
+
 	wait.NonSlidingUntil(func() {
 		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, nodeSelector)
 		if err != nil {
@@ -340,6 +351,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
 			nodes,
 			!rs.DisableMetrics,
+			eventRecorder,
 		)
 
 		for name, strategy := range deschedulerPolicy.Strategies {
@@ -412,4 +424,18 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	}, rs.DeschedulingInterval, ctx.Done())
 
 	return nil
+}
+
+func createClients(kubeconfig string) (clientset.Interface, clientset.Interface, error) {
+	kClient, err := client.CreateClient(kubeconfig, "descheduler")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	eventClient, err := client.CreateClient(kubeconfig, "")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return kClient, eventClient, nil
 }

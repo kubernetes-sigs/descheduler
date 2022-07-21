@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/pointer"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -138,6 +139,9 @@ func TestRemoveDuplicates(t *testing.T) {
 			if err != nil || len(evictionPolicyGroupVersion) == 0 {
 				t.Fatalf("Error creating eviction policy group %v", err)
 			}
+
+			eventRecorder := &events.FakeRecorder{}
+
 			podEvictor := evictions.NewPodEvictor(
 				clientSet,
 				evictionPolicyGroupVersion,
@@ -146,6 +150,7 @@ func TestRemoveDuplicates(t *testing.T) {
 				nil,
 				nodes,
 				false,
+				eventRecorder,
 			)
 
 			t.Log("Running DeschedulerStrategy strategy")

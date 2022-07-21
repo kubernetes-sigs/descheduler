@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/events"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -1215,6 +1216,8 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				return false, nil, nil // fallback to the default reactor
 			})
 
+			eventRecorder := &events.FakeRecorder{}
+
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
 				"v1",
@@ -1223,6 +1226,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				nil,
 				tc.nodes,
 				false,
+				eventRecorder,
 			)
 
 			nodeFit := false

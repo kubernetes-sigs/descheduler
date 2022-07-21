@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/events"
 
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -349,6 +350,8 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
+			eventRecorder := &events.FakeRecorder{}
+
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
@@ -357,6 +360,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				tc.maxNoOfPodsToEvictPerNamespace,
 				tc.nodes,
 				false,
+				eventRecorder,
 			)
 
 			handle := &frameworkfake.HandleImpl{
