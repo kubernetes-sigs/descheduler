@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/record"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -765,6 +766,9 @@ func TestLowNodeUtilization(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
+			eventBroadcaster := record.NewBroadcaster()
+			eventBroadcaster.StartStructuredLogging(3)
+
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
@@ -773,6 +777,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				nil,
 				test.nodes,
 				false,
+				eventBroadcaster,
 			)
 
 			strategy := api.DeschedulerStrategy{
@@ -1086,6 +1091,9 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
+			eventBroadcaster := record.NewBroadcaster()
+			eventBroadcaster.StartStructuredLogging(3)
+
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
@@ -1094,6 +1102,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				nil,
 				item.nodes,
 				false,
+				eventBroadcaster,
 			)
 
 			evictorFilter := evictions.NewEvictorFilter(

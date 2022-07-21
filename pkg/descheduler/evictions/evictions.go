@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/errors"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
-	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/metrics"
@@ -57,6 +56,7 @@ type PodEvictor struct {
 	nodepodCount               nodePodEvictedCount
 	namespacePodCount          namespacePodEvictCount
 	metricsEnabled             bool
+	eventBroadcaster           record.EventBroadcaster
 }
 
 func NewPodEvictor(
@@ -67,6 +67,7 @@ func NewPodEvictor(
 	maxPodsToEvictPerNamespace *uint,
 	nodes []*v1.Node,
 	metricsEnabled bool,
+	eventBroadcaster record.EventBroadcaster,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
 	var namespacePodCount = make(namespacePodEvictCount)
@@ -85,6 +86,7 @@ func NewPodEvictor(
 		nodepodCount:               nodePodCount,
 		namespacePodCount:          namespacePodCount,
 		metricsEnabled:             metricsEnabled,
+		eventBroadcaster:           eventBroadcaster,
 	}
 }
 
@@ -166,10 +168,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", strategy, "node", pod.Spec.NodeName)
 	} else {
 		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", strategy, "node", pod.Spec.NodeName)
-		eventBroadcaster := record.NewBroadcaster()
-		eventBroadcaster.StartStructuredLogging(3)
-		eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: pe.client.CoreV1().Events(pod.Namespace)})
-		r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
+		r := pe.eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
 		r.Event(pod, v1.EventTypeNormal, "Descheduled", fmt.Sprintf("pod evicted by sigs.k8s.io/descheduler%s", opts.Reason))
 	}
 	return true

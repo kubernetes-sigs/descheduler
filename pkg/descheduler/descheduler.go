@@ -30,6 +30,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 
 	corev1informers "k8s.io/client-go/informers/core/v1"
@@ -275,6 +276,8 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		} else {
 			podEvictorClient = rs.Client
 		}
+		eventBroadcaster := record.NewBroadcaster()
+		eventBroadcaster.StartStructuredLogging(3)
 
 		klog.V(3).Infof("Building a pod evictor")
 		podEvictor := evictions.NewPodEvictor(
@@ -285,6 +288,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
 			nodes,
 			!rs.DisableMetrics,
+			eventBroadcaster,
 		)
 
 		for name, strategy := range deschedulerPolicy.Strategies {
