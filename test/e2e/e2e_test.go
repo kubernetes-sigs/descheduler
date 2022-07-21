@@ -36,6 +36,7 @@ import (
 	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/record"
 	v1qos "k8s.io/kubectl/pkg/util/qos"
 	"k8s.io/utils/pointer"
 
@@ -206,6 +207,7 @@ func runPodLifetimeStrategy(
 			maxPodsToEvictPerNamespace,
 			nodes,
 			false,
+			nil,
 		),
 		evictions.NewEvictorFilter(
 			nodes,
@@ -1424,6 +1426,10 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		t.Fatalf("Error creating eviction policy group: %v", err)
 	}
+
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartStructuredLogging(3)
+
 	return evictions.NewPodEvictor(
 		clientSet,
 		evictionPolicyGroupVersion,
@@ -1432,5 +1438,6 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 		nil,
 		nodes,
 		false,
+		eventBroadcaster,
 	)
 }
