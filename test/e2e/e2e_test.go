@@ -36,7 +36,7 @@ import (
 	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	v1qos "k8s.io/kubectl/pkg/util/qos"
 	"k8s.io/utils/pointer"
 
@@ -108,7 +108,7 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 }
 
 func initializeClient(t *testing.T) (clientset.Interface, coreinformers.NodeInformer, podutil.GetPodsAssignedToNodeFunc, chan struct{}) {
-	clientSet, err := client.CreateClient(os.Getenv("KUBECONFIG"))
+	clientSet, err := client.CreateClient(os.Getenv("KUBECONFIG"), "")
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
 	}
@@ -194,6 +194,11 @@ func runPodLifetimeStrategy(
 		t.Fatalf("Failed to get threshold priority from strategy's params")
 	}
 
+	eventBroadcaster := events.NewEventBroadcasterAdapter(clientset)
+	eventBroadcaster.StartRecordingToSink(ctx.Done())
+	eventRecorder := eventBroadcaster.NewRecorder("sigs.k8s.io.descheduler")
+	defer eventBroadcaster.Shutdown()
+
 	strategies.PodLifeTime(
 		ctx,
 		clientset,
@@ -207,7 +212,8 @@ func runPodLifetimeStrategy(
 			maxPodsToEvictPerNamespace,
 			nodes,
 			false,
-			nil,
+			eventBroadcaster,
+			eventRecorder,
 		),
 		evictions.NewEvictorFilter(
 			nodes,
@@ -1037,7 +1043,7 @@ func TestPodLifeTimeOldestEvicted(t *testing.T) {
 
 func TestDeschedulingInterval(t *testing.T) {
 	ctx := context.Background()
-	clientSet, err := client.CreateClient(os.Getenv("KUBECONFIG"))
+	clientSet, err := client.CreateClient(os.Getenv("KUBECONFIG"), "")
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
 	}
@@ -1427,8 +1433,11 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 		t.Fatalf("Error creating eviction policy group: %v", err)
 	}
 
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartStructuredLogging(3)
+	ctx := context.Background()
+	eventBroadcaster := events.NewEventBroadcasterAdapter(clientSet)
+	eventBroadcaster.StartRecordingToSink(ctx.Done())
+	eventRecorder := eventBroadcaster.NewRecorder("sigs.k8s.io.descheduler")
+	defer eventBroadcaster.Shutdown()
 
 	return evictions.NewPodEvictor(
 		clientSet,
@@ -1439,5 +1448,6 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 		nodes,
 		false,
 		eventBroadcaster,
+		eventRecorder,
 	)
 }

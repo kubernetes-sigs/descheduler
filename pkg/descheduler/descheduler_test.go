@@ -27,6 +27,7 @@ func TestTaintsUpdated(t *testing.T) {
 	}
 
 	client := fakeclientset.NewSimpleClientset(n1, n2, p1)
+	eventClient := fakeclientset.NewSimpleClientset(n1, n2, p1)
 	dp := &api.DeschedulerPolicy{
 		Strategies: api.StrategyList{
 			"RemovePodsViolatingNodeTaints": api.DeschedulerStrategy{
@@ -40,6 +41,7 @@ func TestTaintsUpdated(t *testing.T) {
 		t.Fatalf("Unable to initialize server: %v", err)
 	}
 	rs.Client = client
+	rs.EventClient = eventClient
 	rs.DeschedulingInterval = 100 * time.Millisecond
 	errChan := make(chan error, 1)
 	defer close(errChan)
@@ -104,6 +106,7 @@ func TestRootCancel(t *testing.T) {
 	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 	client := fakeclientset.NewSimpleClientset(n1, n2)
+	eventClient := fakeclientset.NewSimpleClientset(n1, n2)
 	dp := &api.DeschedulerPolicy{
 		Strategies: api.StrategyList{}, // no strategies needed for this test
 	}
@@ -113,6 +116,7 @@ func TestRootCancel(t *testing.T) {
 		t.Fatalf("Unable to initialize server: %v", err)
 	}
 	rs.Client = client
+	rs.EventClient = eventClient
 	rs.DeschedulingInterval = 100 * time.Millisecond
 	errChan := make(chan error, 1)
 	defer close(errChan)
@@ -137,6 +141,7 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 	client := fakeclientset.NewSimpleClientset(n1, n2)
+	eventClient := fakeclientset.NewSimpleClientset(n1, n2)
 	dp := &api.DeschedulerPolicy{
 		Strategies: api.StrategyList{}, // no strategies needed for this test
 	}
@@ -146,6 +151,7 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 		t.Fatalf("Unable to initialize server: %v", err)
 	}
 	rs.Client = client
+	rs.EventClient = eventClient
 	rs.DeschedulingInterval = 0
 	errChan := make(chan error, 1)
 	defer close(errChan)

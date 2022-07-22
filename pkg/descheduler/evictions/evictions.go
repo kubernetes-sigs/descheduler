@@ -27,8 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/errors"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/metrics"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -56,7 +55,8 @@ type PodEvictor struct {
 	nodepodCount               nodePodEvictedCount
 	namespacePodCount          namespacePodEvictCount
 	metricsEnabled             bool
-	eventBroadcaster           record.EventBroadcaster
+	eventBroadcaster           events.EventBroadcasterAdapter
+	eventRecorder              events.EventRecorder
 }
 
 func NewPodEvictor(
@@ -67,7 +67,8 @@ func NewPodEvictor(
 	maxPodsToEvictPerNamespace *uint,
 	nodes []*v1.Node,
 	metricsEnabled bool,
-	eventBroadcaster record.EventBroadcaster,
+	eventBroadcaster events.EventBroadcasterAdapter,
+	eventRecorder events.EventRecorder,
 ) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
 	var namespacePodCount = make(namespacePodEvictCount)
@@ -87,6 +88,7 @@ func NewPodEvictor(
 		namespacePodCount:          namespacePodCount,
 		metricsEnabled:             metricsEnabled,
 		eventBroadcaster:           eventBroadcaster,
+		eventRecorder:              eventRecorder,
 	}
 }
 
@@ -168,9 +170,11 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", strategy, "node", pod.Spec.NodeName)
 	} else {
 		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", strategy, "node", pod.Spec.NodeName)
-		r := pe.eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
-		r.Event(pod, v1.EventTypeNormal, "Descheduled", fmt.Sprintf("pod evicted by sigs.k8s.io/descheduler%s", opts.Reason))
-		eventBroadcaster.Shutdown()
+		reason := opts.Reason
+		if len(reason) == 0 {
+			reason = "NotSet"
+		}
+		pe.eventRecorder.Eventf(pod, nil, v1.EventTypeNormal, reason, "Descheduled", "pod evicted by sigs.k8s.io/descheduler")
 	}
 	return true
 }

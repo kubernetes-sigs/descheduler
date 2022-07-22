@@ -18,6 +18,8 @@ limitations under the License.
 package options
 
 import (
+	"time"
+
 	"github.com/spf13/pflag"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiserveroptions "k8s.io/apiserver/pkg/server/options"
@@ -27,7 +29,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
 	deschedulerscheme "sigs.k8s.io/descheduler/pkg/descheduler/scheme"
-	"time"
 )
 
 const (
@@ -39,6 +40,7 @@ type DeschedulerServer struct {
 	componentconfig.DeschedulerConfiguration
 
 	Client         clientset.Interface
+	EventClient    clientset.Interface
 	SecureServing  *apiserveroptions.SecureServingOptionsWithLoopback
 	DisableMetrics bool
 }

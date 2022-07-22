@@ -30,7 +30,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/klog/v2"
 
 	corev1informers "k8s.io/client-go/informers/core/v1"
@@ -54,11 +54,12 @@ import (
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	metrics.Register()
 
-	rsclient, err := client.CreateClient(rs.KubeconfigFile)
+	rsclient, eventClient, err := createClients(rs.KubeconfigFile)
 	if err != nil {
 		return err
 	}
 	rs.Client = rsclient
+	rs.EventClient = eventClient
 
 	deschedulerPolicy, err := LoadPolicyConfig(rs.PolicyConfigFile)
 	if err != nil {
@@ -331,8 +332,10 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		} else {
 			podEvictorClient = rs.Client
 		}
-		eventBroadcaster := record.NewBroadcaster()
-		eventBroadcaster.StartStructuredLogging(3)
+		eventBroadcaster := events.NewEventBroadcasterAdapter(rs.EventClient)
+		eventBroadcaster.StartRecordingToSink(ctx.Done())
+		eventRecorder := eventBroadcaster.NewRecorder("sigs.k8s.io.descheduler")
+		defer eventBroadcaster.Shutdown()
 
 		klog.V(3).Infof("Building a pod evictor")
 		podEvictor := evictions.NewPodEvictor(
@@ -344,6 +347,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			nodes,
 			!rs.DisableMetrics,
 			eventBroadcaster,
+			eventRecorder,
 		)
 
 		for name, strategy := range deschedulerPolicy.Strategies {
@@ -416,4 +420,18 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	}, rs.DeschedulingInterval, ctx.Done())
 
 	return nil
+}
+
+func createClients(kubeconfig string) (clientset.Interface, clientset.Interface, error) {
+	kClient, err := client.CreateClient(kubeconfig, "descheduler")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	eventClient, err := client.CreateClient(kubeconfig, "")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return kClient, eventClient, nil
 }
