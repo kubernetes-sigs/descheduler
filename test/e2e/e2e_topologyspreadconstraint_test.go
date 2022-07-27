@@ -78,7 +78,8 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			defer deleteRC(ctx, t, clientSet, violatorRc)
 			waitForRCPodsRunning(ctx, t, clientSet, violatorRc)
 
-			podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
+			podEvictor, eventBroadcaster := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
+			defer eventBroadcaster.Shutdown()
 
 			// Run TopologySpreadConstraint strategy
 			t.Logf("Running RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)

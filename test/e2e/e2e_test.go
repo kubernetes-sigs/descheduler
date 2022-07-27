@@ -36,6 +36,7 @@ import (
 	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/events"
 	v1qos "k8s.io/kubectl/pkg/util/qos"
 	"k8s.io/utils/pointer"
 
@@ -340,7 +341,8 @@ func TestLowNodeUtilization(t *testing.T) {
 	waitForRCPodsRunning(ctx, t, clientSet, rc)
 
 	// Run LowNodeUtilization strategy
-	podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
+	podEvictor, eventBroadcaster := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
+	defer eventBroadcaster.Shutdown()
 
 	evictorFilter := evictions.NewEvictorFilter(
 		nodes,
@@ -1424,7 +1426,7 @@ func splitNodesAndWorkerNodes(nodes []v1.Node) ([]*v1.Node, []*v1.Node) {
 	return allNodes, workerNodes
 }
 
-func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, nodes []*v1.Node) *evictions.PodEvictor {
+func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, nodes []*v1.Node) (*evictions.PodEvictor, events.EventBroadcasterAdapter) {
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		t.Fatalf("Error creating eviction policy group: %v", err)
@@ -1432,7 +1434,6 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 
 	ctx := context.Background()
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, clientSet)
-	defer eventBroadcaster.Shutdown()
 
 	return evictions.NewPodEvictor(
 		clientSet,
@@ -1444,5 +1445,5 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 		false,
 		eventBroadcaster,
 		eventRecorder,
-	)
+	), eventBroadcaster
 }

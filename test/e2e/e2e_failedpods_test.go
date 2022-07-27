@@ -85,7 +85,8 @@ func TestFailedPods(t *testing.T) {
 			defer jobClient.Delete(ctx, job.Name, metav1.DeleteOptions{PropagationPolicy: &deletePropagationPolicy})
 			waitForJobPodPhase(ctx, t, clientSet, job, v1.PodFailed)
 
-			podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
+			podEvictor, eventBroadcaster := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
+			defer eventBroadcaster.Shutdown()
 
 			t.Logf("Running RemoveFailedPods strategy for %s", name)
 			strategies.RemoveFailedPods(
