@@ -36,7 +36,6 @@ import (
 	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/events"
 	v1qos "k8s.io/kubectl/pkg/util/qos"
 	"k8s.io/utils/pointer"
 
@@ -194,9 +193,7 @@ func runPodLifetimeStrategy(
 		t.Fatalf("Failed to get threshold priority from strategy's params")
 	}
 
-	eventBroadcaster := events.NewEventBroadcasterAdapter(clientset)
-	eventBroadcaster.StartRecordingToSink(ctx.Done())
-	eventRecorder := eventBroadcaster.NewRecorder("sigs.k8s.io.descheduler")
+	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, clientset)
 	defer eventBroadcaster.Shutdown()
 
 	strategies.PodLifeTime(
@@ -1434,9 +1431,7 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 	}
 
 	ctx := context.Background()
-	eventBroadcaster := events.NewEventBroadcasterAdapter(clientSet)
-	eventBroadcaster.StartRecordingToSink(ctx.Done())
-	eventRecorder := eventBroadcaster.NewRecorder("sigs.k8s.io.descheduler")
+	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, clientSet)
 	defer eventBroadcaster.Shutdown()
 
 	return evictions.NewPodEvictor(

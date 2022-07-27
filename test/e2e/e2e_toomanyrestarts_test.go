@@ -28,12 +28,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/pointer"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func TestTooManyRestarts(t *testing.T) {
@@ -133,9 +133,7 @@ func TestTooManyRestarts(t *testing.T) {
 				t.Fatalf("Error creating eviction policy group: %v", err)
 			}
 
-			eventBroadcaster := events.NewEventBroadcasterAdapter(clientSet)
-			eventBroadcaster.StartRecordingToSink(ctx.Done())
-			eventRecorder := eventBroadcaster.NewRecorder("sigs.k8s.io.descheduler")
+			eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, clientSet)
 			defer eventBroadcaster.Shutdown()
 
 			podEvictor := evictions.NewPodEvictor(

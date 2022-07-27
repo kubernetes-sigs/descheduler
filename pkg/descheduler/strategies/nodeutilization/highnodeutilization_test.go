@@ -28,7 +28,6 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"k8s.io/client-go/tools/events"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -501,9 +500,7 @@ func TestHighNodeUtilization(t *testing.T) {
 			//	return true, nil, fmt.Errorf("Wrong node: %v", getAction.GetName())
 			//})
 
-			eventBroadcaster := events.NewEventBroadcasterAdapter(fakeClient)
-			eventBroadcaster.StartRecordingToSink(ctx.Done())
-			eventRecorder := eventBroadcaster.NewRecorder("sigs.k8s.io.descheduler")
+			eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, fakeClient)
 			defer eventBroadcaster.Shutdown()
 
 			podEvictor := evictions.NewPodEvictor(
@@ -720,9 +717,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			eventBroadcaster := events.NewEventBroadcasterAdapter(fakeClient)
-			eventBroadcaster.StartRecordingToSink(ctx.Done())
-			eventRecorder := eventBroadcaster.NewRecorder("sigs.k8s.io.descheduler")
+			eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, fakeClient)
 			defer eventBroadcaster.Shutdown()
 
 			podEvictor := evictions.NewPodEvictor(

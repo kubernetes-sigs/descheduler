@@ -30,7 +30,6 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"k8s.io/client-go/tools/events"
 	"k8s.io/klog/v2"
 
 	corev1informers "k8s.io/client-go/informers/core/v1"
@@ -332,9 +331,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		} else {
 			podEvictorClient = rs.Client
 		}
-		eventBroadcaster := events.NewEventBroadcasterAdapter(rs.EventClient)
-		eventBroadcaster.StartRecordingToSink(ctx.Done())
-		eventRecorder := eventBroadcaster.NewRecorder("sigs.k8s.io.descheduler")
+		eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, podEvictorClient)
 		defer eventBroadcaster.Shutdown()
 
 		klog.V(3).Infof("Building a pod evictor")
