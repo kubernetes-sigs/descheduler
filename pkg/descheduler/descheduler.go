@@ -288,6 +288,16 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
 	}
 
+	var eventClient clientset.Interface
+	if rs.DryRun {
+		eventClient = fakeclientset.NewSimpleClientset()
+	} else {
+		eventClient = rs.Client
+	}
+
+	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
+	defer eventBroadcaster.Shutdown()
+
 	wait.NonSlidingUntil(func() {
 		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, nodeSelector)
 		if err != nil {
@@ -331,8 +341,6 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		} else {
 			podEvictorClient = rs.Client
 		}
-		eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, podEvictorClient)
-		defer eventBroadcaster.Shutdown()
 
 		klog.V(3).Infof("Building a pod evictor")
 		podEvictor := evictions.NewPodEvictor(
