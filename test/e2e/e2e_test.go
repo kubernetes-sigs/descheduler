@@ -165,7 +165,7 @@ func runPodLifetimeStrategy(
 	maxPodsToEvictPerNamespace *uint,
 	labelSelector *metav1.LabelSelector,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
-) {
+) events.EventBroadcasterAdapter {
 	// Run descheduler.
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientset)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
@@ -195,7 +195,6 @@ func runPodLifetimeStrategy(
 	}
 
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, clientset)
-	defer eventBroadcaster.Shutdown()
 
 	strategies.PodLifeTime(
 		ctx,
@@ -224,6 +223,8 @@ func runPodLifetimeStrategy(
 		),
 		getPodsAssignedToNode,
 	)
+
+	return eventBroadcaster
 }
 
 func getPodNames(pods []v1.Pod) []string {
@@ -444,9 +445,10 @@ func TestNamespaceConstraintsInclude(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Logf("set the strategy to delete pods from %v namespace", rc.Namespace)
-	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, &deschedulerapi.Namespaces{
+	eventBroadcaster := runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, &deschedulerapi.Namespaces{
 		Include: []string{rc.Namespace},
 	}, "", nil, false, nil, nil, getPodsAssignedToNode)
+	defer eventBroadcaster.Shutdown()
 
 	// All pods are supposed to be deleted, wait until all the old pods are deleted
 	if err := wait.PollImmediate(time.Second, 20*time.Second, func() (bool, error) {
@@ -515,9 +517,10 @@ func TestNamespaceConstraintsExclude(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Logf("set the strategy to delete pods from namespaces except the %v namespace", rc.Namespace)
-	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, &deschedulerapi.Namespaces{
+	eventBroadcaster := runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, &deschedulerapi.Namespaces{
 		Exclude: []string{rc.Namespace},
 	}, "", nil, false, nil, nil, getPodsAssignedToNode)
+	defer eventBroadcaster.Shutdown()
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
@@ -629,11 +632,13 @@ func testEvictSystemCritical(t *testing.T, isPriorityClass bool) {
 	sort.Strings(initialPodNames)
 	t.Logf("Existing pods: %v", initialPodNames)
 
+	var eventBroadcaster events.EventBroadcasterAdapter
 	if isPriorityClass {
-		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, true, nil, nil, getPodsAssignedToNode)
+		eventBroadcaster = runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, true, nil, nil, getPodsAssignedToNode)
 	} else {
-		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, true, nil, nil, getPodsAssignedToNode)
+		eventBroadcaster = runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, true, nil, nil, getPodsAssignedToNode)
 	}
+	defer eventBroadcaster.Shutdown()
 
 	// All pods are supposed to be deleted, wait until all pods in the test namespace are terminating
 	t.Logf("All pods in the test namespace, no matter their priority (including system-node-critical and system-cluster-critical), will be deleted")
@@ -747,13 +752,15 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 	sort.Strings(expectEvictPodNames)
 	t.Logf("Pods not expected to be evicted: %v, pods expected to be evicted: %v", expectReservePodNames, expectEvictPodNames)
 
+	var eventBroadcaster events.EventBroadcasterAdapter
 	if isPriorityClass {
 		t.Logf("set the strategy to delete pods with priority lower than priority class %s", highPriorityClass.Name)
-		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, false, nil, nil, getPodsAssignedToNode)
+		eventBroadcaster = runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, false, nil, nil, getPodsAssignedToNode)
 	} else {
 		t.Logf("set the strategy to delete pods with priority lower than %d", highPriority)
-		runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, false, nil, nil, getPodsAssignedToNode)
+		eventBroadcaster = runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, false, nil, nil, getPodsAssignedToNode)
 	}
+	defer eventBroadcaster.Shutdown()
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
@@ -856,7 +863,8 @@ func TestPodLabelSelector(t *testing.T) {
 	t.Logf("Pods not expected to be evicted: %v, pods expected to be evicted: %v", expectReservePodNames, expectEvictPodNames)
 
 	t.Logf("set the strategy to delete pods with label test:podlifetime-evict")
-	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", nil, false, nil, &metav1.LabelSelector{MatchLabels: map[string]string{"test": "podlifetime-evict"}}, getPodsAssignedToNode)
+	eventBroadcaster := runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", nil, false, nil, &metav1.LabelSelector{MatchLabels: map[string]string{"test": "podlifetime-evict"}}, getPodsAssignedToNode)
+	defer eventBroadcaster.Shutdown()
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
@@ -956,7 +964,8 @@ func TestEvictAnnotation(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Log("Running PodLifetime strategy")
-	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", nil, false, nil, nil, getPodsAssignedToNode)
+	eventBroadcaster := runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", nil, false, nil, nil, getPodsAssignedToNode)
+	defer eventBroadcaster.Shutdown()
 
 	if err := wait.PollImmediate(5*time.Second, time.Minute, func() (bool, error) {
 		podList, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
@@ -1022,7 +1031,8 @@ func TestPodLifeTimeOldestEvicted(t *testing.T) {
 
 	t.Log("Running PodLifetime strategy with maxPodsToEvictPerNamespace=1 to ensure only the oldest pod is evicted")
 	var maxPodsToEvictPerNamespace uint = 1
-	runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", nil, false, &maxPodsToEvictPerNamespace, nil, getPodsAssignedToNode)
+	eventBroadcaster := runPodLifetimeStrategy(ctx, t, clientSet, nodeInformer, nil, "", nil, false, &maxPodsToEvictPerNamespace, nil, getPodsAssignedToNode)
+	defer eventBroadcaster.Shutdown()
 	t.Log("Finished PodLifetime strategy")
 
 	t.Logf("Wait for terminating pod to disappear")
