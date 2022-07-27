@@ -173,6 +173,9 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		reason := opts.Reason
 		if len(reason) == 0 {
 			reason = strategy
+			if len(reason) == 0 {
+				reason = "NotSet"
+			}
 		}
 		pe.eventRecorder.Eventf(pod, nil, v1.EventTypeNormal, reason, "Descheduled", "pod evicted by sigs.k8s.io/descheduler")
 	}
