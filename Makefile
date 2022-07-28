@@ -148,5 +148,8 @@ lint-chart: ensure-helm-install
 build-helm:
 	helm package ./charts/descheduler --dependency-update --destination ./bin/chart
 
-test-helm: ensure-helm-install
-	./test/run-helm-tests.sh
+kind-multi-node:
+	kind create cluster --name kind --config ./hack/kind_config.yaml --wait 2m
+
+ct-helm:
+	./hack/verify-chart.sh

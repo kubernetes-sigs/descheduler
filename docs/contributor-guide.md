@@ -31,25 +31,12 @@ View all CLI options.
 ## Run Tests
 ```
 GOOS=linux make dev-image
-kind create cluster --config hack/kind_config.yaml
+make kind-multi-node
 kind load docker-image <image name>
 kind get kubeconfig > /tmp/admin.conf
 export KUBECONFIG=/tmp/admin.conf
 make test-unit
 make test-e2e
-```
-
-## Run Helm Tests
-Run the helm test for a particular descheduler release by setting below variables,
-```
-HELM_IMAGE_REPO="descheduler"
-HELM_IMAGE_TAG="helm-test"
-HELM_CHART_LOCATION="./charts/descheduler"
-```
-The helm tests runs as part of descheduler CI. But, to run it manually from the descheduler root,
-
-```
-make test-helm
 ```
 
 ## Build Helm Package locally
@@ -67,6 +54,17 @@ To check linting of your changes in the helm chart locally you can run:
 ```
 make lint-helm
 ```
+
+## Test helm changes locally with kind and ct
+
+You will need kind and docker (or equivalent) installed. We can use ct public image to avoid installing ct and all its dependencies.
+
+
+```
+make kind-multi-node
+make ct-helm
+```
+
 
 ### Miscellaneous
 See the [hack directory](https://github.com/kubernetes-sigs/descheduler/tree/master/hack) for additional tools and scripts used for developing the descheduler.

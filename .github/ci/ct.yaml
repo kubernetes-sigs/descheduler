@@ -1,5 +1,6 @@
 chart-dirs:
   - charts
 helm-extra-args: "--timeout=5m"
+helm-extra-set-args: "--set=kind=Deployment --set=podSecurityPolicy.create=false"
 check-version-increment: false
 target-branch: master
