@@ -1,14 +1,9 @@
 reviewers:
-  - ravisantoshgudimetla
-  - sttts
-  - damemi
+  - knelasevero
   - soltysh
   - ingvagabund
 approvers:
-  - mfojtik
-  - ravisantoshgudimetla
-  - sttts
-  - damemi
+  - knelasevero
   - soltysh
   - ingvagabund
 component: "kube-scheduler"
