@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/events"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -765,6 +766,8 @@ func TestLowNodeUtilization(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
+			eventRecorder := &events.FakeRecorder{}
+
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
@@ -773,6 +776,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				nil,
 				test.nodes,
 				false,
+				eventRecorder,
 			)
 
 			strategy := api.DeschedulerStrategy{
@@ -1086,6 +1090,8 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
+			eventRecorder := &events.FakeRecorder{}
+
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
@@ -1094,6 +1100,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				nil,
 				item.nodes,
 				false,
+				eventRecorder,
 			)
 
 			evictorFilter := evictions.NewEvictorFilter(
