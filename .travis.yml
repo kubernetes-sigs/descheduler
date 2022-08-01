@@ -1,7 +1,0 @@
-language: go
-go:
-  - 1.17.x
-
-script:
-- hack/verify-gofmt.sh
-- make build
