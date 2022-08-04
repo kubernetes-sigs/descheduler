@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/validation"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodeaffinity"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
 )
 
@@ -80,6 +81,26 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
 		if status != nil && status.Err != nil {
 			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", removefailedpods.PluginName)
+		}
+	},
+	"RemovePodsViolatingNodeAffinity": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+		args := &componentconfig.RemovePodsViolatingNodeAffinityArgs{
+			Namespaces:       params.Namespaces,
+			LabelSelector:    params.LabelSelector,
+			NodeAffinityType: params.NodeAffinityType,
+		}
+		if err := validation.ValidateRemovePodsViolatingNodeAffinityArgs(args); err != nil {
+			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingnodeaffinity.PluginName)
+			return
+		}
+		pg, err := removepodsviolatingnodeaffinity.New(args, handle)
+		if err != nil {
+			klog.V(1).ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatingnodeaffinity.PluginName)
+			return
+		}
+		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
+		if status != nil && status.Err != nil {
+			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", removepodsviolatingnodeaffinity.PluginName)
 		}
 	},
 }

@@ -48,3 +48,17 @@ func validateCommonArgs(namespaces *api.Namespaces, labelSelector *metav1.LabelS
 
 	return nil
 }
+
+// ValidateRemovePodsViolatingNodeAffinityArgs validates RemovePodsViolatingNodeAffinity arguments
+func ValidateRemovePodsViolatingNodeAffinityArgs(args *componentconfig.RemovePodsViolatingNodeAffinityArgs) error {
+	if args == nil || len(args.NodeAffinityType) == 0 {
+		return fmt.Errorf("nodeAffinityType needs to be set")
+	}
+
+	// At most one of include/exclude can be set
+	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
+		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+	}
+
+	return nil
+}
