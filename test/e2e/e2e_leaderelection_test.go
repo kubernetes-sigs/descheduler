@@ -39,7 +39,7 @@ import (
 func TestLeaderElection(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, _, _, stopCh := initializeClient(t)
+	clientSet, _, _, _, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	ns1 := "e2e-" + strings.ToLower(t.Name()+"-a")

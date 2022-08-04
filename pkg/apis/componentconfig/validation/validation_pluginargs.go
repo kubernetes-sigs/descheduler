@@ -19,14 +19,31 @@ package validation
 import (
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 )
 
 // ValidateRemovePodsViolatingNodeTaintsArgs validates RemovePodsViolatingNodeTaints arguments
 func ValidateRemovePodsViolatingNodeTaintsArgs(args *componentconfig.RemovePodsViolatingNodeTaintsArgs) error {
+	return validateCommonArgs(args.Namespaces, args.LabelSelector)
+}
+
+// ValidateRemoveFailedPodsArgs validates RemoveFailedPods arguments
+func ValidateRemoveFailedPodsArgs(args *componentconfig.RemoveFailedPodsArgs) error {
+	return validateCommonArgs(args.Namespaces, args.LabelSelector)
+}
+
+func validateCommonArgs(namespaces *api.Namespaces, labelSelector *metav1.LabelSelector) error {
 	// At most one of include/exclude can be set
-	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
+	if namespaces != nil && len(namespaces.Include) > 0 && len(namespaces.Exclude) > 0 {
 		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+	}
+
+	if labelSelector != nil {
+		if _, err := metav1.LabelSelectorAsSelector(labelSelector); err != nil {
+			return fmt.Errorf("failed to get label selectors from strategy's params: %+v", err)
+		}
 	}
 
 	return nil
