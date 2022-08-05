@@ -14,21 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package componentconfig
+package removefailedpods
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
+// +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// RemovePodsViolatingNodeTaintsArgs holds arguments used to configure the RemovePodsViolatingNodeTaints plugin.
-type RemovePodsViolatingNodeTaintsArgs struct {
+// RemoveFailedPodsArgs holds arguments used to configure RemoveFailedPodsArgs plugin.
+type RemoveFailedPodsArgs struct {
 	metav1.TypeMeta
 
 	Namespaces              *api.Namespaces
 	LabelSelector           *metav1.LabelSelector
-	IncludePreferNoSchedule bool
-	ExcludedTaints          []string
+	ExcludeOwnerKinds       []string
+	MinPodLifetimeSeconds   *uint
+	Reasons                 []string
+	IncludingInitContainers bool
 }

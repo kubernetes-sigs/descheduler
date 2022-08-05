@@ -14,21 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package componentconfig
+package removefailedpods
 
 import (
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/descheduler/pkg/api"
 )
 
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+// ValidateRemoveFailedPodsArgs validates RemoveFailedPods arguments
+func ValidateRemoveFailedPodsArgs(args *RemoveFailedPodsArgs) error {
+	// At most one of include/exclude can be set
+	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
+		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+	}
 
-// RemovePodsViolatingNodeTaintsArgs holds arguments used to configure the RemovePodsViolatingNodeTaints plugin.
-type RemovePodsViolatingNodeTaintsArgs struct {
-	metav1.TypeMeta
+	if args.LabelSelector != nil {
+		if _, err := metav1.LabelSelectorAsSelector(args.LabelSelector); err != nil {
+			return fmt.Errorf("failed to get label selectors from strategy's params: %+v", err)
+		}
+	}
 
-	Namespaces              *api.Namespaces
-	LabelSelector           *metav1.LabelSelector
-	IncludePreferNoSchedule bool
-	ExcludedTaints          []string
+	return nil
 }

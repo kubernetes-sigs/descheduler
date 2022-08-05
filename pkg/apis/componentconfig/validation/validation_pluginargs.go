@@ -29,11 +29,6 @@ func ValidateRemovePodsViolatingNodeTaintsArgs(args *componentconfig.RemovePodsV
 	return validateCommonArgs(args.Namespaces, args.LabelSelector)
 }
 
-// ValidateRemoveFailedPodsArgs validates RemoveFailedPods arguments
-func ValidateRemoveFailedPodsArgs(args *componentconfig.RemoveFailedPodsArgs) error {
-	return validateCommonArgs(args.Namespaces, args.LabelSelector)
-}
-
 func validateCommonArgs(namespaces *api.Namespaces, labelSelector *metav1.LabelSelector) error {
 	// At most one of include/exclude can be set
 	if namespaces != nil && len(namespaces.Include) > 0 && len(namespaces.Exclude) > 0 {
