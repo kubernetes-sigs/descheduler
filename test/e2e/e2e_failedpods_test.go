@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/utils/pointer"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
@@ -39,27 +38,27 @@ func TestFailedPods(t *testing.T) {
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 	testCases := map[string]struct {
 		expectedEvictedCount uint
-		args                 *componentconfig.RemoveFailedPodsArgs
+		args                 *removefailedpods.RemoveFailedPodsArgs
 	}{
 		"test-failed-pods-default-args": {
 			expectedEvictedCount: 1,
-			args:                 &componentconfig.RemoveFailedPodsArgs{},
+			args:                 &removefailedpods.RemoveFailedPodsArgs{},
 		},
 		"test-failed-pods-reason-unmatched": {
 			expectedEvictedCount: 0,
-			args: &componentconfig.RemoveFailedPodsArgs{
+			args: &removefailedpods.RemoveFailedPodsArgs{
 				Reasons: []string{"ReasonDoesNotMatch"},
 			},
 		},
 		"test-failed-pods-min-age-unmet": {
 			expectedEvictedCount: 0,
-			args: &componentconfig.RemoveFailedPodsArgs{
+			args: &removefailedpods.RemoveFailedPodsArgs{
 				MinPodLifetimeSeconds: &oneHourPodLifetimeSeconds,
 			},
 		},
 		"test-failed-pods-exclude-job-kind": {
 			expectedEvictedCount: 0,
-			args: &componentconfig.RemoveFailedPodsArgs{
+			args: &removefailedpods.RemoveFailedPodsArgs{
 				ExcludeOwnerKinds: []string{"Job"},
 			},
 		},
@@ -89,7 +88,7 @@ func TestFailedPods(t *testing.T) {
 
 			t.Logf("Running RemoveFailedPods strategy for %s", name)
 
-			plugin, err := removefailedpods.New(&componentconfig.RemoveFailedPodsArgs{
+			plugin, err := removefailedpods.New(&removefailedpods.RemoveFailedPodsArgs{
 				Reasons:                 tc.args.Reasons,
 				MinPodLifetimeSeconds:   tc.args.MinPodLifetimeSeconds,
 				IncludingInitContainers: tc.args.IncludingInitContainers,
