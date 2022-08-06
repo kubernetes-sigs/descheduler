@@ -57,3 +57,15 @@ type RemovePodsViolatingNodeAffinityArgs struct {
 	LabelSelector    *metav1.LabelSelector
 	NodeAffinityType []string
 }
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// RemovePodsHavingTooManyRestartsArgs holds arguments used to configure RemovePodsHavingTooManyRestarts plugin.
+type RemovePodsHavingTooManyRestartsArgs struct {
+	metav1.TypeMeta
+
+	Namespaces              *api.Namespaces
+	LabelSelector           *metav1.LabelSelector
+	PodRestartThreshold     int32
+	IncludingInitContainers bool
+}
