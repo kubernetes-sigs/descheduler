@@ -18,6 +18,7 @@ package validation
 
 import (
 	"fmt"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -26,20 +27,36 @@ import (
 
 // ValidateRemovePodsViolatingNodeTaintsArgs validates RemovePodsViolatingNodeTaints arguments
 func ValidateRemovePodsViolatingNodeTaintsArgs(args *componentconfig.RemovePodsViolatingNodeTaintsArgs) error {
-	return validateCommonArgs(args.Namespaces, args.LabelSelector)
+	return errorsAggregate(
+		validateNamespaceArgs(args.Namespaces),
+		validateLabelSelectorArgs(args.LabelSelector),
+	)
 }
 
 // ValidateRemoveFailedPodsArgs validates RemoveFailedPods arguments
 func ValidateRemoveFailedPodsArgs(args *componentconfig.RemoveFailedPodsArgs) error {
-	return validateCommonArgs(args.Namespaces, args.LabelSelector)
+	return errorsAggregate(
+		validateNamespaceArgs(args.Namespaces),
+		validateLabelSelectorArgs(args.LabelSelector),
+	)
 }
 
-func validateCommonArgs(namespaces *api.Namespaces, labelSelector *metav1.LabelSelector) error {
+// errorsAggregate converts all arg validation errors to a single error interface.
+// if no errors, it will return nil.
+func errorsAggregate(errors ...error) error {
+	return utilerrors.NewAggregate(errors)
+}
+
+func validateNamespaceArgs(namespaces *api.Namespaces) error {
 	// At most one of include/exclude can be set
 	if namespaces != nil && len(namespaces.Include) > 0 && len(namespaces.Exclude) > 0 {
 		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
 	}
 
+	return nil
+}
+
+func validateLabelSelectorArgs(labelSelector *metav1.LabelSelector) error {
 	if labelSelector != nil {
 		if _, err := metav1.LabelSelectorAsSelector(labelSelector); err != nil {
 			return fmt.Errorf("failed to get label selectors from strategy's params: %+v", err)
