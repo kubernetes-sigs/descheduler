@@ -35,7 +35,7 @@ import (
 
 const PluginName = "RemoveFailedPods"
 
-// RemoveFailedPods evicts pods on the node which violate NoSchedule Taints on nodes
+// RemoveFailedPods evicts pods in failed status phase that match the given args criteria
 type RemoveFailedPods struct {
 	handle    framework.Handle
 	args      *componentconfig.RemoveFailedPodsArgs
