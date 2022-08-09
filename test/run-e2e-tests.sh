@@ -18,15 +18,21 @@ set -x
 set -o errexit
 set -o nounset
 
+# Set to empty if unbound/empty
+SKIP_INSTALL=${SKIP_INSTALL:-}
+
 # This just runs e2e tests.
 if [ -n "$KIND_E2E" ]; then
-    K8S_VERSION=${KUBERNETES_VERSION:-v1.24.0}
-    curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/${K8S_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/
-    wget https://github.com/kubernetes-sigs/kind/releases/download/v0.13.0/kind-linux-amd64
-    chmod +x kind-linux-amd64
-    mv kind-linux-amd64 kind
-    export PATH=$PATH:$PWD
-    kind create cluster --image kindest/node:${K8S_VERSION} --config=./hack/kind_config.yaml
+    # If we did not set SKIP_INSTALL
+    if [ -z "$SKIP_INSTALL" ]; then
+        K8S_VERSION=${KUBERNETES_VERSION:-v1.24.0}
+        curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/${K8S_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/
+        wget https://github.com/kubernetes-sigs/kind/releases/download/v0.13.0/kind-linux-amd64
+        chmod +x kind-linux-amd64
+        mv kind-linux-amd64 kind
+        export PATH=$PATH:$PWD
+        kind create cluster --image kindest/node:${K8S_VERSION} --config=./hack/kind_config.yaml
+    fi
     docker pull kubernetes/pause
     kind load docker-image kubernetes/pause
     kind get kubeconfig > /tmp/admin.conf

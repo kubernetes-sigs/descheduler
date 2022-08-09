@@ -31,7 +31,7 @@ View all CLI options.
 ## Run Tests
 ```
 GOOS=linux make dev-image
-kind create cluster --config hack/kind_config.yaml
+make kind-multi-node
 kind load docker-image <image name>
 kind get kubeconfig > /tmp/admin.conf
 export KUBECONFIG=/tmp/admin.conf

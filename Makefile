@@ -150,3 +150,6 @@ build-helm:
 
 test-helm: ensure-helm-install
 	./test/run-helm-tests.sh
+
+kind-multi-node:
+	kind create cluster --name kind --config ./hack/kind_config.yaml --wait 2m
