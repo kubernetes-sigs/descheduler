@@ -30,16 +30,19 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/pointer"
-	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
+
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
-	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
+	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
 )
 
 func TestTooManyRestarts(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, _, _, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, sharedInformerFactory, _, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
@@ -107,22 +110,29 @@ func TestTooManyRestarts(t *testing.T) {
 		t.Fatal("Pod restart count not as expected")
 	}
 
+	createRemovePodsHavingTooManyRestartsAgrs := func(
+		podRestartThresholds int32,
+		includingInitContainers bool,
+	) componentconfig.RemovePodsHavingTooManyRestartsArgs {
+		return componentconfig.RemovePodsHavingTooManyRestartsArgs{
+			PodRestartThreshold:     podRestartThresholds,
+			IncludingInitContainers: includingInitContainers,
+		}
+	}
+
 	tests := []struct {
 		name                    string
-		podRestartThreshold     int32
-		includingInitContainers bool
+		args                    componentconfig.RemovePodsHavingTooManyRestartsArgs
 		expectedEvictedPodCount uint
 	}{
 		{
 			name:                    "test-no-evictions",
-			podRestartThreshold:     int32(10000),
-			includingInitContainers: true,
+			args:                    createRemovePodsHavingTooManyRestartsAgrs(10000, true),
 			expectedEvictedPodCount: 0,
 		},
 		{
 			name:                    "test-one-evictions",
-			podRestartThreshold:     int32(4),
-			includingInitContainers: true,
+			args:                    createRemovePodsHavingTooManyRestartsAgrs(4, true),
 			expectedEvictedPodCount: 4,
 		},
 	}
@@ -146,32 +156,32 @@ func TestTooManyRestarts(t *testing.T) {
 				eventRecorder,
 			)
 
+			evictorFilter := evictions.NewEvictorFilter(
+				nodes,
+				getPodsAssignedToNode,
+				true,
+				false,
+				false,
+				false,
+			)
+
+			plugin, err := removepodshavingtoomanyrestarts.New(
+				&tc.args,
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 clientSet,
+					PodEvictorImpl:                podEvictor,
+					EvictorFilterImpl:             evictorFilter,
+					SharedInformerFactoryImpl:     sharedInformerFactory,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				})
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
 			// Run RemovePodsHavingTooManyRestarts strategy
 			t.Log("Running RemovePodsHavingTooManyRestarts strategy")
-			strategies.RemovePodsHavingTooManyRestarts(
-				ctx,
-				clientSet,
-				deschedulerapi.DeschedulerStrategy{
-					Enabled: true,
-					Params: &deschedulerapi.StrategyParameters{
-						PodsHavingTooManyRestarts: &deschedulerapi.PodsHavingTooManyRestarts{
-							PodRestartThreshold:     tc.podRestartThreshold,
-							IncludingInitContainers: tc.includingInitContainers,
-						},
-					},
-				},
-				workerNodes,
-				podEvictor,
-				evictions.NewEvictorFilter(
-					nodes,
-					getPodsAssignedToNode,
-					true,
-					false,
-					false,
-					false,
-				),
-				getPodsAssignedToNode,
-			)
+			plugin.(framework.DeschedulePlugin).Deschedule(ctx, workerNodes)
+			t.Logf("Finished RemoveFailedPods strategy for %s", tc.name)
 
 			waitForTerminatingPodsToDisappear(ctx, t, clientSet, testNamespace.Name)
 			actualEvictedPodCount := podEvictor.TotalEvicted()

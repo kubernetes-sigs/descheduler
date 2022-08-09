@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/validation"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodeaffinity"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
 )
@@ -101,6 +102,31 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
 		if status != nil && status.Err != nil {
 			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", removepodsviolatingnodeaffinity.PluginName)
+		}
+	},
+	"RemovePodsHavingTooManyRestarts": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+		tooManyRestartsParams := params.PodsHavingTooManyRestarts
+		if tooManyRestartsParams == nil {
+			tooManyRestartsParams = &api.PodsHavingTooManyRestarts{}
+		}
+		args := &componentconfig.RemovePodsHavingTooManyRestartsArgs{
+			Namespaces:              params.Namespaces,
+			LabelSelector:           params.LabelSelector,
+			PodRestartThreshold:     tooManyRestartsParams.PodRestartThreshold,
+			IncludingInitContainers: tooManyRestartsParams.IncludingInitContainers,
+		}
+		if err := validation.ValidateRemovePodsHavingTooManyRestartsArgs(args); err != nil {
+			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodshavingtoomanyrestarts.PluginName)
+			return
+		}
+		pg, err := removepodshavingtoomanyrestarts.New(args, handle)
+		if err != nil {
+			klog.V(1).ErrorS(err, "unable to initialize a plugin", "pluginName", removepodshavingtoomanyrestarts.PluginName)
+			return
+		}
+		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
+		if status != nil && status.Err != nil {
+			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", removepodshavingtoomanyrestarts.PluginName)
 		}
 	},
 }

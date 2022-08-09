@@ -18,9 +18,9 @@ package validation
 
 import (
 	"fmt"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 )
@@ -38,6 +38,15 @@ func ValidateRemoveFailedPodsArgs(args *componentconfig.RemoveFailedPodsArgs) er
 	return errorsAggregate(
 		validateNamespaceArgs(args.Namespaces),
 		validateLabelSelectorArgs(args.LabelSelector),
+	)
+}
+
+// ValidateRemovePodsHavingTooManyRestartsArgs validates RemovePodsHavingTooManyRestarts arguments
+func ValidateRemovePodsHavingTooManyRestartsArgs(args *componentconfig.RemovePodsHavingTooManyRestartsArgs) error {
+	return errorsAggregate(
+		validateNamespaceArgs(args.Namespaces),
+		validateLabelSelectorArgs(args.LabelSelector),
+		validatePodRestartThreshold(args.PodRestartThreshold),
 	)
 }
 
@@ -76,6 +85,12 @@ func ValidateRemovePodsViolatingNodeAffinityArgs(args *componentconfig.RemovePod
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
 		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
 	}
+	return nil
+}
 
+func validatePodRestartThreshold(podRestartThreshold int32) error {
+	if podRestartThreshold < 1 {
+		return fmt.Errorf("PodsHavingTooManyRestarts threshold not set")
+	}
 	return nil
 }
