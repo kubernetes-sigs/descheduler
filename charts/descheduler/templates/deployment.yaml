@@ -7,7 +7,7 @@ metadata:
   labels:
     {{- include "descheduler.labels" . | nindent 4 }}
 spec:
-  {{- if gt .Values.replicas 1.0}}
+  {{- i .Values.repli 1.0}}
   {{- if not .Values.leaderElection.enabled }}
   {{- fail "You must set leaderElection to use more than 1 replica"}}
   {{- end}}
