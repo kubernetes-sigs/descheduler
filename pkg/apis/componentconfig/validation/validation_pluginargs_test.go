@@ -83,3 +83,44 @@ func TestValidateRemovePodsViolatingNodeTaintsArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRemovePodsViolatingNodeAffinityArgs(t *testing.T) {
+	testCases := []struct {
+		description string
+		args        *componentconfig.RemovePodsViolatingNodeAffinityArgs
+		expectError bool
+	}{
+		{
+			description: "nil NodeAffinityType args, expects errors",
+			args: &componentconfig.RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: nil,
+			},
+			expectError: true,
+		},
+		{
+			description: "empty NodeAffinityType args, expects errors",
+			args: &componentconfig.RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{},
+			},
+			expectError: true,
+		},
+		{
+			description: "valid NodeAffinityType args, no errors",
+			args: &componentconfig.RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			err := ValidateRemovePodsViolatingNodeAffinityArgs(tc.args)
+
+			hasError := err != nil
+			if tc.expectError != hasError {
+				t.Error("unexpected arg validation behavior")
+			}
+		})
+	}
+}

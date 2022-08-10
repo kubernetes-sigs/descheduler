@@ -50,6 +50,20 @@ func ValidateRemovePodsHavingTooManyRestartsArgs(args *componentconfig.RemovePod
 	)
 }
 
+// ValidateRemovePodsViolatingNodeAffinityArgs validates RemovePodsViolatingNodeAffinity arguments
+func ValidateRemovePodsViolatingNodeAffinityArgs(args *componentconfig.RemovePodsViolatingNodeAffinityArgs) error {
+	var err error
+	if args == nil || len(args.NodeAffinityType) == 0 {
+		err = fmt.Errorf("nodeAffinityType needs to be set")
+	}
+
+	return errorsAggregate(
+		err,
+		validateNamespaceArgs(args.Namespaces),
+		validateLabelSelectorArgs(args.LabelSelector),
+	)
+}
+
 // errorsAggregate converts all arg validation errors to a single error interface.
 // if no errors, it will return nil.
 func errorsAggregate(errors ...error) error {
@@ -72,19 +86,6 @@ func validateLabelSelectorArgs(labelSelector *metav1.LabelSelector) error {
 		}
 	}
 
-	return nil
-}
-
-// ValidateRemovePodsViolatingNodeAffinityArgs validates RemovePodsViolatingNodeAffinity arguments
-func ValidateRemovePodsViolatingNodeAffinityArgs(args *componentconfig.RemovePodsViolatingNodeAffinityArgs) error {
-	if args == nil || len(args.NodeAffinityType) == 0 {
-		return fmt.Errorf("nodeAffinityType needs to be set")
-	}
-
-	// At most one of include/exclude can be set
-	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
-		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
-	}
 	return nil
 }
 
