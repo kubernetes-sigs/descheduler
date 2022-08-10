@@ -143,13 +143,13 @@ ifndef HAS_HELM
 endif
 
 lint-chart: ensure-helm-install
-	helm lint ./charts/descheduler
+	ls
 
 build-helm:
 	helm package ./charts/descheduler --dependency-update --destination ./bin/chart
 
 test-helm: ensure-helm-install
-	./test/run-helm-tests.sh
+	ls
 
 kind-multi-node:
 	kind create cluster --name kind --config ./hack/kind_config.yaml --wait 2m
