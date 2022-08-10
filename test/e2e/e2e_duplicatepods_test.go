@@ -18,6 +18,10 @@ package e2e
 
 import (
 	"context"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
+	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"strings"
 	"testing"
 
@@ -28,16 +32,14 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/pointer"
-	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
-	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 )
 
 func TestRemoveDuplicates(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, _, _, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, sharedInformerFactory, _, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
@@ -134,7 +136,7 @@ func TestRemoveDuplicates(t *testing.T) {
 			defer clientSet.AppsV1().Deployments(deploymentObj.Namespace).Delete(ctx, deploymentObj.Name, metav1.DeleteOptions{})
 			waitForPodsRunning(ctx, t, clientSet, map[string]string{"app": "test-duplicate", "name": "test-duplicatePods"}, tc.replicasNum, testNamespace.Name)
 
-			// Run DeschedulerStrategy strategy
+			// Run removeduplicates plugin
 			evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
 			if err != nil || len(evictionPolicyGroupVersion) == 0 {
 				t.Fatalf("Error creating eviction policy group %v", err)
@@ -152,29 +154,30 @@ func TestRemoveDuplicates(t *testing.T) {
 				false,
 				eventRecorder,
 			)
-
-			t.Log("Running DeschedulerStrategy strategy")
-			strategies.RemoveDuplicatePods(
-				ctx,
-				clientSet,
-				deschedulerapi.DeschedulerStrategy{
-					Enabled: true,
-					Params: &deschedulerapi.StrategyParameters{
-						RemoveDuplicates: &deschedulerapi.RemoveDuplicates{},
-					},
-				},
-				workerNodes,
-				podEvictor,
-				evictions.NewEvictorFilter(
-					nodes,
+			handle := &frameworkfake.HandleImpl{
+				ClientsetImpl:                 clientSet,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				PodEvictorImpl:                podEvictor,
+				EvictorFilterImpl: evictions.NewEvictorFilter(
+					workerNodes,
 					getPodsAssignedToNode,
 					true,
 					false,
 					false,
 					false,
+					evictions.WithNodeFit(false),
 				),
-				getPodsAssignedToNode,
+				SharedInformerFactoryImpl: sharedInformerFactory,
+			}
+
+			plugin, err := removeduplicates.New(&componentconfig.RemoveDuplicatesArgs{},
+				handle,
 			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+			t.Log("Running removeduplicates plugin")
+			plugin.(framework.BalancePlugin).Balance(ctx, workerNodes)
 
 			waitForTerminatingPodsToDisappear(ctx, t, clientSet, testNamespace.Name)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
