@@ -49,8 +49,7 @@ jobs:
       
       # Need a multi node cluster so descheduler runs until evictions
       - name: Create multi node Kind cluster
-        run: |
-          kind create cluster --name kind --config ./hack/kind_config.yaml --wait 2m
+        run: make kind-multi-node
 
       # helm-extra-set-args only available after ct 3.6.0
       - name: Run chart-testing (install)

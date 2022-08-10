@@ -153,3 +153,6 @@ test-helm: ensure-helm-install
 
 kind-multi-node:
 	kind create cluster --name kind --config ./hack/kind_config.yaml --wait 2m
+
+ct-helm:
+	./hack/verify-chart.sh
