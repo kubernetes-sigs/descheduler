@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/validation"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodeaffinity"
@@ -127,6 +128,27 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
 		if status != nil && status.Err != nil {
 			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", removepodshavingtoomanyrestarts.PluginName)
+		}
+	},
+	"RemoveDuplicates": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+		args := &componentconfig.RemoveDuplicatesArgs{
+			Namespaces: params.Namespaces,
+		}
+		if params.RemoveDuplicates != nil {
+			args.ExcludeOwnerKinds = params.RemoveDuplicates.ExcludeOwnerKinds
+		}
+		if err := validation.ValidateRemoveDuplicatesArgs(args); err != nil {
+			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removeduplicates.PluginName)
+			return
+		}
+		pg, err := removeduplicates.New(args, handle)
+		if err != nil {
+			klog.V(1).ErrorS(err, "unable to initialize a plugin", "pluginName", removeduplicates.PluginName)
+			return
+		}
+		status := pg.(framework.BalancePlugin).Balance(ctx, nodes)
+		if status != nil && status.Err != nil {
+			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", removeduplicates.PluginName)
 		}
 	},
 }

@@ -19,6 +19,7 @@ package descheduler
 import (
 	"context"
 	"fmt"
+	"k8s.io/klog/v2"
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1beta1"
@@ -27,13 +28,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
+	corev1informers "k8s.io/client-go/informers/core/v1"
+	schedulingv1informers "k8s.io/client-go/informers/scheduling/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"k8s.io/klog/v2"
-
-	corev1informers "k8s.io/client-go/informers/core/v1"
-	schedulingv1informers "k8s.io/client-go/informers/scheduling/v1"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/metrics"
@@ -245,7 +244,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
 	strategyFuncs := map[api.StrategyName]strategyFunction{
-		"RemoveDuplicates":                            strategies.RemoveDuplicatePods,
+		"RemoveDuplicates":                            nil,
 		"LowNodeUtilization":                          nodeutilization.LowNodeUtilization,
 		"HighNodeUtilization":                         nodeutilization.HighNodeUtilization,
 		"RemovePodsViolatingInterPodAntiAffinity":     strategies.RemovePodsViolatingInterPodAntiAffinity,

@@ -94,3 +94,10 @@ func validatePodRestartThreshold(podRestartThreshold int32) error {
 	}
 	return nil
 }
+
+func ValidateRemoveDuplicatesArgs(args *componentconfig.RemoveDuplicatesArgs) error {
+	// At most one of include/exclude can be set
+	return errorsAggregate(
+		validateNamespaceArgs(args.Namespaces),
+	)
+}

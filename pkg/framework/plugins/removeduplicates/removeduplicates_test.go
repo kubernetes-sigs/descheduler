@@ -1,5 +1,5 @@
 /*
-Copyright 2017 The Kubernetes Authors.
+Copyright 2022 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,10 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package strategies
+package removeduplicates
 
 import (
 	"context"
+	"k8s.io/client-go/tools/events"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
+	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -27,9 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/events"
 
-	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -187,105 +189,98 @@ func TestFindDuplicatePods(t *testing.T) {
 		pods                    []*v1.Pod
 		nodes                   []*v1.Node
 		expectedEvictedPodCount uint
-		strategy                api.DeschedulerStrategy
+		excludeOwnerKinds       []string
+		nodefit                 bool
 	}{
 		{
 			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet. 1 should be evicted.",
 			pods:                    []*v1.Pod{p1, p2, p3},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 1,
-			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet, but ReplicaSet kind is excluded. 0 should be evicted.",
 			pods:                    []*v1.Pod{p1, p2, p3},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{RemoveDuplicates: &api.RemoveDuplicates{ExcludeOwnerKinds: []string{"ReplicaSet"}}}},
+			excludeOwnerKinds:       []string{"ReplicaSet"},
 		},
 		{
 			description:             "Three Pods in the `test` Namespace, bound to same ReplicaSet. 1 should be evicted.",
 			pods:                    []*v1.Pod{p8, p9, p10},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 1,
-			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Three Pods in the `dev` Namespace, three Pods in the `test` Namespace. Bound to ReplicaSet with same name. 4 should be evicted.",
 			pods:                    []*v1.Pod{p1, p2, p3, p8, p9, p10},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
-			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Pods are: part of DaemonSet, with local storage, mirror pod annotation, critical pod annotation - none should be evicted.",
 			pods:                    []*v1.Pod{p4, p5, p6, p7},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Test all Pods: 4 should be evicted.",
 			pods:                    []*v1.Pod{p1, p2, p3, p4, p5, p6, p7, p8, p9, p10},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
-			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Pods with the same owner but different images should not be evicted",
 			pods:                    []*v1.Pod{p11, p12},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Pods with multiple containers should not match themselves",
 			pods:                    []*v1.Pod{p13},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Pods with matching ownerrefs and at not all matching image should not trigger an eviction",
 			pods:                    []*v1.Pod{p11, p13},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{},
 		},
 		{
 			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet. Only node available has a taint, and nodeFit set to true. 0 should be evicted.",
 			pods:                    []*v1.Pod{p1, p2, p3},
 			nodes:                   []*v1.Node{node1, node3},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
+			nodefit:                 true,
 		},
 		{
 			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet, all with a nodeSelector. Only node available has an incorrect node label, and nodeFit set to true. 0 should be evicted.",
 			pods:                    []*v1.Pod{p15, p16, p17},
 			nodes:                   []*v1.Node{node1, node4},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
+			nodefit:                 true,
 		},
 		{
 			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available is not schedulable, and nodeFit set to true. 0 should be evicted.",
 			pods:                    []*v1.Pod{p1, p2, p3},
 			nodes:                   []*v1.Node{node1, node5},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
+			nodefit:                 true,
 		},
 		{
 			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available does not have enough CPU, and nodeFit set to true. 0 should be evicted.",
 			pods:                    []*v1.Pod{p1, p2, p3, p19},
 			nodes:                   []*v1.Node{node1, node6},
 			expectedEvictedPodCount: 0,
-			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
+			nodefit:                 true,
 		},
 		{
 			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available has enough CPU, and nodeFit set to true. 1 should be evicted.",
 			pods:                    []*v1.Pod{p1, p2, p3, p20},
 			nodes:                   []*v1.Node{node1, node6},
 			expectedEvictedPodCount: 1,
-			strategy:                api.DeschedulerStrategy{Params: &api.StrategyParameters{NodeFit: true}},
+			nodefit:                 true,
 		},
 	}
 
@@ -327,25 +322,37 @@ func TestFindDuplicatePods(t *testing.T) {
 				eventRecorder,
 			)
 
-			nodeFit := false
-			if testCase.strategy.Params != nil {
-				nodeFit = testCase.strategy.Params.NodeFit
+			nodeFit := testCase.nodefit
+
+			handle := &frameworkfake.HandleImpl{
+				ClientsetImpl:                 fakeClient,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				PodEvictorImpl:                podEvictor,
+				EvictorFilterImpl: evictions.NewEvictorFilter(
+					testCase.nodes,
+					getPodsAssignedToNode,
+					false,
+					false,
+					false,
+					false,
+					evictions.WithNodeFit(nodeFit),
+				),
+				SharedInformerFactoryImpl: sharedInformerFactory,
 			}
 
-			evictorFilter := evictions.NewEvictorFilter(
-				testCase.nodes,
-				getPodsAssignedToNode,
-				false,
-				false,
-				false,
-				false,
-				evictions.WithNodeFit(nodeFit),
+			plugin, err := New(&componentconfig.RemoveDuplicatesArgs{
+				ExcludeOwnerKinds: testCase.excludeOwnerKinds,
+			},
+				handle,
 			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
 
-			RemoveDuplicatePods(ctx, fakeClient, testCase.strategy, testCase.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
-			podsEvicted := podEvictor.TotalEvicted()
-			if podsEvicted != testCase.expectedEvictedPodCount {
-				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)
+			plugin.(framework.BalancePlugin).Balance(ctx, testCase.nodes)
+			actualEvictedPodCount := podEvictor.TotalEvicted()
+			if actualEvictedPodCount != testCase.expectedEvictedPodCount {
+				t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", testCase.description, actualEvictedPodCount, testCase.expectedEvictedPodCount)
 			}
 		})
 	}
@@ -481,7 +488,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 		pods                    []*v1.Pod
 		nodes                   []*v1.Node
 		expectedEvictedPodCount uint
-		strategy                api.DeschedulerStrategy
 	}{
 		{
 			description: "Evict pods uniformly",
@@ -503,7 +509,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 				test.BuildTestNode("n3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly with one node left out",
@@ -524,7 +529,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n1", 2000, 3000, 10, nil),
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly with two replica sets",
@@ -546,7 +550,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 				test.BuildTestNode("n3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly with two owner references",
@@ -578,7 +581,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 				test.BuildTestNode("n3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods with number of pods less than nodes",
@@ -593,7 +595,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 				test.BuildTestNode("n3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods with number of pods less than nodes, but ignore different pods with the same ownerref",
@@ -612,7 +613,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 				test.BuildTestNode("n3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods with a single pod with three nodes",
@@ -626,7 +626,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("n2", 2000, 3000, 10, nil),
 				test.BuildTestNode("n3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly respecting taints",
@@ -651,7 +650,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("master2", 2000, 3000, 10, setMasterNoScheduleTaint),
 				test.BuildTestNode("master3", 2000, 3000, 10, setMasterNoScheduleTaint),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly respecting RequiredDuringSchedulingIgnoredDuringExecution node affinity",
@@ -676,7 +674,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("master2", 2000, 3000, 10, setMasterNoScheduleLabel),
 				test.BuildTestNode("master3", 2000, 3000, 10, setMasterNoScheduleLabel),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly respecting node selector",
@@ -701,7 +698,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("master2", 2000, 3000, 10, nil),
 				test.BuildTestNode("master3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 		{
 			description: "Evict pods uniformly respecting node selector with zero target nodes",
@@ -726,7 +722,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				test.BuildTestNode("master2", 2000, 3000, 10, nil),
 				test.BuildTestNode("master3", 2000, 3000, 10, nil),
 			},
-			strategy: api.DeschedulerStrategy{},
 		},
 	}
 
@@ -768,19 +763,32 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				eventRecorder,
 			)
 
-			evictorFilter := evictions.NewEvictorFilter(
-				testCase.nodes,
-				getPodsAssignedToNode,
-				false,
-				false,
-				false,
-				false,
-			)
+			handle := &frameworkfake.HandleImpl{
+				ClientsetImpl:                 fakeClient,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				PodEvictorImpl:                podEvictor,
+				EvictorFilterImpl: evictions.NewEvictorFilter(
+					testCase.nodes,
+					getPodsAssignedToNode,
+					false,
+					false,
+					false,
+					false,
+				),
+				SharedInformerFactoryImpl: sharedInformerFactory,
+			}
 
-			RemoveDuplicatePods(ctx, fakeClient, testCase.strategy, testCase.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
-			podsEvicted := podEvictor.TotalEvicted()
-			if podsEvicted != testCase.expectedEvictedPodCount {
-				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", testCase.description, testCase.expectedEvictedPodCount, podsEvicted)
+			plugin, err := New(&componentconfig.RemoveDuplicatesArgs{},
+				handle,
+			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
+			plugin.(framework.BalancePlugin).Balance(ctx, testCase.nodes)
+			actualEvictedPodCount := podEvictor.TotalEvicted()
+			if actualEvictedPodCount != testCase.expectedEvictedPodCount {
+				t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", testCase.description, actualEvictedPodCount, testCase.expectedEvictedPodCount)
 			}
 		})
 	}

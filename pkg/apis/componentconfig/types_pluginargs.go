@@ -69,3 +69,12 @@ type RemovePodsHavingTooManyRestartsArgs struct {
 	PodRestartThreshold     int32
 	IncludingInitContainers bool
 }
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+type RemoveDuplicatesArgs struct {
+	metav1.TypeMeta
+
+	Namespaces        *api.Namespaces
+	ExcludeOwnerKinds []string
+}
