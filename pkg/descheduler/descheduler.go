@@ -43,7 +43,6 @@ import (
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -247,7 +246,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		"RemoveDuplicates":                            nil,
 		"LowNodeUtilization":                          nodeutilization.LowNodeUtilization,
 		"HighNodeUtilization":                         nodeutilization.HighNodeUtilization,
-		"RemovePodsViolatingInterPodAntiAffinity":     strategies.RemovePodsViolatingInterPodAntiAffinity,
+		"RemovePodsViolatingInterPodAntiAffinity":     nil,
 		"RemovePodsViolatingNodeAffinity":             nil,
 		"RemovePodsViolatingNodeTaints":               nil,
 		"RemovePodsHavingTooManyRestarts":             nil,
