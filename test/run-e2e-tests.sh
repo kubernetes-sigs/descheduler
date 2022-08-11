@@ -33,7 +33,7 @@ if [ -n "$KIND_E2E" ]; then
         export PATH=$PATH:$PWD
         kind create cluster --image kindest/node:${K8S_VERSION} --config=./hack/kind_config.yaml
     fi
-    docker pull kubernetes/pause
+    ${CONTAINER_ENGINE:-docker} pull kubernetes/pause
     kind load docker-image kubernetes/pause
     kind get kubeconfig > /tmp/admin.conf
     export KUBECONFIG="/tmp/admin.conf"
