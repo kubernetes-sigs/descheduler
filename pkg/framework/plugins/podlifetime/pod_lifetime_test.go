@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+Copyright 2022 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package strategies
+package podlifetime
 
 import (
 	"context"
@@ -28,10 +28,11 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/events"
-
-	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -141,7 +142,7 @@ func TestPodLifeTime(t *testing.T) {
 	var maxLifeTime uint = 600
 	testCases := []struct {
 		description                string
-		strategy                   api.DeschedulerStrategy
+		args                       *componentconfig.PodLifeTimeArgs
 		pods                       []*v1.Pod
 		nodes                      []*v1.Node
 		expectedEvictedPodCount    uint
@@ -151,11 +152,8 @@ func TestPodLifeTime(t *testing.T) {
 	}{
 		{
 			description: "Two pods in the `dev` Namespace, 1 is new and 1 very is old. 1 should be evicted.",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
-				},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p1, p2},
 			nodes:                   []*v1.Node{node1},
@@ -163,11 +161,8 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "Two pods in the `dev` Namespace, 2 are new and 0 are old. 0 should be evicted.",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
-				},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p3, p4},
 			nodes:                   []*v1.Node{node1},
@@ -175,11 +170,8 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "Two pods in the `dev` Namespace, 1 created 605 seconds ago. 1 should be evicted.",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
-				},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p5, p6},
 			nodes:                   []*v1.Node{node1},
@@ -187,11 +179,8 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "Two pods in the `dev` Namespace, 1 created 595 seconds ago. 0 should be evicted.",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
-				},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p7, p8},
 			nodes:                   []*v1.Node{node1},
@@ -199,14 +188,9 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "Two pods, one with ContainerCreating state. 1 should be evicted.",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{
-						MaxPodLifeTimeSeconds: &maxLifeTime,
-						States:                []string{"ContainerCreating"},
-					},
-				},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"ContainerCreating"},
 			},
 			pods: []*v1.Pod{
 				p9,
@@ -227,14 +211,9 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "Two pods, one with PodInitializing state. 1 should be evicted.",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{
-						MaxPodLifeTimeSeconds: &maxLifeTime,
-						States:                []string{"PodInitializing"},
-					},
-				},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"PodInitializing"},
 			},
 			pods: []*v1.Pod{
 				p9,
@@ -255,14 +234,9 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "Two old pods with different states. 1 should be evicted.",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{
-						MaxPodLifeTimeSeconds: &maxLifeTime,
-						States:                []string{"Pending"},
-					},
-				},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"Pending"},
 			},
 			pods:                    []*v1.Pod{p9, p10},
 			nodes:                   []*v1.Node{node1},
@@ -270,11 +244,8 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "does not evict pvc pods with ignorePvcPods set to true",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
-				},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p11},
 			nodes:                   []*v1.Node{node1},
@@ -283,11 +254,8 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "evicts pvc pods with ignorePvcPods set to false (or unset)",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
-				},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p11},
 			nodes:                   []*v1.Node{node1},
@@ -295,13 +263,10 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "No pod to evicted since all pod terminating",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
-					LabelSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{"foo": "bar"},
-					},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"foo": "bar"},
 				},
 			},
 			pods:                    []*v1.Pod{p12, p13},
@@ -310,13 +275,10 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "No pod should be evicted since pod terminating",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
-					LabelSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{"foo": "bar"},
-					},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"foo": "bar"},
 				},
 			},
 			pods:                    []*v1.Pod{p14, p15},
@@ -325,11 +287,8 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "2 Oldest pods should be evicted when maxPodsToEvictPerNode and maxPodsToEvictPerNamespace are not set",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
-				},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                       []*v1.Pod{p1, p2, p9},
 			nodes:                      []*v1.Node{node1},
@@ -339,11 +298,8 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "1 Oldest pod should be evicted when maxPodsToEvictPerNamespace is set to 1",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
-				},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                       []*v1.Pod{p1, p2, p9},
 			nodes:                      []*v1.Node{node1},
@@ -352,11 +308,8 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "1 Oldest pod should be evicted when maxPodsToEvictPerNode is set to 1",
-			strategy: api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					PodLifeTime: &api.PodLifeTime{MaxPodLifeTimeSeconds: &maxLifeTime},
-				},
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p1, p2, p9},
 			nodes:                   []*v1.Node{node1},
@@ -412,7 +365,17 @@ func TestPodLifeTime(t *testing.T) {
 				false,
 			)
 
-			PodLifeTime(ctx, fakeClient, tc.strategy, tc.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
+			plugin, err := New(tc.args, &frameworkfake.HandleImpl{
+				ClientsetImpl:                 fakeClient,
+				PodEvictorImpl:                podEvictor,
+				EvictorFilterImpl:             evictorFilter,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+			})
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
+			plugin.(framework.DeschedulePlugin).Deschedule(ctx, tc.nodes)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != tc.expectedEvictedPodCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.description, tc.expectedEvictedPodCount, podsEvicted)

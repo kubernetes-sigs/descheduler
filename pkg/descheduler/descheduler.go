@@ -19,6 +19,7 @@ package descheduler
 import (
 	"context"
 	"fmt"
+
 	"k8s.io/klog/v2"
 
 	v1 "k8s.io/api/core/v1"
@@ -45,7 +46,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
 	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -251,7 +251,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		"RemovePodsViolatingNodeAffinity":             nil,
 		"RemovePodsViolatingNodeTaints":               nil,
 		"RemovePodsHavingTooManyRestarts":             nil,
-		"PodLifeTime":                                 strategies.PodLifeTime,
+		"PodLifeTime":                                 nil,
 		"RemovePodsViolatingTopologySpreadConstraint": strategies.RemovePodsViolatingTopologySpreadConstraint,
 		"RemoveFailedPods":                            nil,
 	}
@@ -369,7 +369,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 					// TODO(jchaloup): once all strategies are migrated move this check under
 					// the default evictor args validation
 					if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
-						klog.V(1).ErrorS(fmt.Errorf("priority threshold misconfigured"), "only one of priorityThreshold fields can be set", "pluginName", removepodsviolatingnodetaints.PluginName)
+						klog.V(1).ErrorS(fmt.Errorf("priority threshold misconfigured"), "only one of priorityThreshold fields can be set", "pluginName", name)
 						continue
 					}
 					thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, rs.Client, strategy.Params)
