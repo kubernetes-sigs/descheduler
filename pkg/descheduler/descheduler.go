@@ -252,7 +252,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		"RemovePodsViolatingNodeTaints":               nil,
 		"RemovePodsHavingTooManyRestarts":             nil,
 		"PodLifeTime":                                 nil,
-		"RemovePodsViolatingTopologySpreadConstraint": strategies.RemovePodsViolatingTopologySpreadConstraint,
+		"RemovePodsViolatingTopologySpreadConstraint": nil,
 		"RemoveFailedPods":                            nil,
 	}
 

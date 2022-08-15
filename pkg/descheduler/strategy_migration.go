@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodeaffinity"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
 )
 
 // Once all strategies are migrated the arguments get read from the configuration file
@@ -184,6 +185,26 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		status := pg.(framework.BalancePlugin).Balance(ctx, nodes)
 		if status != nil && status.Err != nil {
 			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", removeduplicates.PluginName)
+		}
+	},
+	"RemovePodsViolatingTopologySpreadConstraint": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+		args := &componentconfig.RemovePodsViolatingTopologySpreadConstraintArgs{
+			Namespaces:             params.Namespaces,
+			LabelSelector:          params.LabelSelector,
+			IncludeSoftConstraints: params.IncludePreferNoSchedule,
+		}
+		if err := validation.ValidateRemovePodsViolatingTopologySpreadConstraintArgs(args); err != nil {
+			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingtopologyspreadconstraint.PluginName)
+			return
+		}
+		pg, err := removepodsviolatingtopologyspreadconstraint.New(args, handle)
+		if err != nil {
+			klog.V(1).ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatingtopologyspreadconstraint.PluginName)
+			return
+		}
+		status := pg.(framework.BalancePlugin).Balance(ctx, nodes)
+		if status != nil && status.Err != nil {
+			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", removepodsviolatingtopologyspreadconstraint.PluginName)
 		}
 	},
 }

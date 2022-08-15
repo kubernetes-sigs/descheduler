@@ -86,6 +86,14 @@ func ValidateRemoveDuplicatesArgs(args *componentconfig.RemoveDuplicatesArgs) er
 	return validateNamespaceArgs(args.Namespaces)
 }
 
+// ValidateRemovePodsViolatingTopologySpreadConstraintArgs validates RemovePodsViolatingTopologySpreadConstraint arguments
+func ValidateRemovePodsViolatingTopologySpreadConstraintArgs(args *componentconfig.RemovePodsViolatingTopologySpreadConstraintArgs) error {
+	return errorsAggregate(
+		validateNamespaceArgs(args.Namespaces),
+		validateLabelSelectorArgs(args.LabelSelector),
+	)
+}
+
 // errorsAggregate converts all arg validation errors to a single error interface.
 // if no errors, it will return nil.
 func errorsAggregate(errors ...error) error {
