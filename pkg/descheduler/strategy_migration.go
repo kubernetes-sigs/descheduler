@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/validation"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
@@ -128,6 +129,40 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
 		if status != nil && status.Err != nil {
 			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", removepodshavingtoomanyrestarts.PluginName)
+		}
+	},
+	"PodLifeTime": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+		podLifeTimeParams := params.PodLifeTime
+		if podLifeTimeParams == nil {
+			podLifeTimeParams = &api.PodLifeTime{}
+		}
+
+		var states []string
+		if podLifeTimeParams.PodStatusPhases != nil {
+			states = append(states, podLifeTimeParams.PodStatusPhases...)
+		}
+		if podLifeTimeParams.States != nil {
+			states = append(states, podLifeTimeParams.States...)
+		}
+
+		args := &componentconfig.PodLifeTimeArgs{
+			Namespaces:            params.Namespaces,
+			LabelSelector:         params.LabelSelector,
+			MaxPodLifeTimeSeconds: podLifeTimeParams.MaxPodLifeTimeSeconds,
+			States:                states,
+		}
+		if err := validation.ValidatePodLifeTimeArgs(args); err != nil {
+			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", podlifetime.PluginName)
+			return
+		}
+		pg, err := podlifetime.New(args, handle)
+		if err != nil {
+			klog.V(1).ErrorS(err, "unable to initialize a plugin", "pluginName", podlifetime.PluginName)
+			return
+		}
+		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
+		if status != nil && status.Err != nil {
+			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", podlifetime.PluginName)
 		}
 	},
 	"RemoveDuplicates": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {

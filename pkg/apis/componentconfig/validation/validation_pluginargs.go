@@ -19,8 +19,11 @@ package validation
 import (
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/api/core/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apimachinery/pkg/util/sets"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 )
@@ -64,6 +67,25 @@ func ValidateRemovePodsViolatingNodeAffinityArgs(args *componentconfig.RemovePod
 	)
 }
 
+// ValidatePodLifeTimeArgs validates PodLifeTime arguments
+func ValidatePodLifeTimeArgs(args *componentconfig.PodLifeTimeArgs) error {
+	var err error
+	if args.MaxPodLifeTimeSeconds == nil {
+		err = fmt.Errorf("MaxPodLifeTimeSeconds not set")
+	}
+
+	return errorsAggregate(
+		err,
+		validateNamespaceArgs(args.Namespaces),
+		validateLabelSelectorArgs(args.LabelSelector),
+		validatePodLifeTimeStates(args.States),
+	)
+}
+
+func ValidateRemoveDuplicatesArgs(args *componentconfig.RemoveDuplicatesArgs) error {
+	return validateNamespaceArgs(args.Namespaces)
+}
+
 // errorsAggregate converts all arg validation errors to a single error interface.
 // if no errors, it will return nil.
 func errorsAggregate(errors ...error) error {
@@ -96,9 +118,19 @@ func validatePodRestartThreshold(podRestartThreshold int32) error {
 	return nil
 }
 
-func ValidateRemoveDuplicatesArgs(args *componentconfig.RemoveDuplicatesArgs) error {
-	// At most one of include/exclude can be set
-	return errorsAggregate(
-		validateNamespaceArgs(args.Namespaces),
+func validatePodLifeTimeStates(states []string) error {
+	podLifeTimeAllowedStates := sets.NewString(
+		string(v1.PodRunning),
+		string(v1.PodPending),
+
+		// Container state reasons: https://github.com/kubernetes/kubernetes/blob/release-1.24/pkg/kubelet/kubelet_pods.go#L76-L79
+		"PodInitializing",
+		"ContainerCreating",
 	)
+
+	if !podLifeTimeAllowedStates.HasAll(states...) {
+		return fmt.Errorf("states must be one of %v", podLifeTimeAllowedStates.List())
+	}
+
+	return nil
 }

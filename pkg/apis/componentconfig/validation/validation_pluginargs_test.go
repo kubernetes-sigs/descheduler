@@ -17,10 +17,12 @@ limitations under the License.
 package validation
 
 import (
+	"testing"
+
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
-	"testing"
 )
 
 func TestValidateRemovePodsViolatingNodeTaintsArgs(t *testing.T) {
@@ -116,6 +118,48 @@ func TestValidateRemovePodsViolatingNodeAffinityArgs(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
 			err := ValidateRemovePodsViolatingNodeAffinityArgs(tc.args)
+
+			hasError := err != nil
+			if tc.expectError != hasError {
+				t.Error("unexpected arg validation behavior")
+			}
+		})
+	}
+}
+
+func TestValidateRemovePodLifeTimeArgs(t *testing.T) {
+	testCases := []struct {
+		description string
+		args        *componentconfig.PodLifeTimeArgs
+		expectError bool
+	}{
+		{
+			description: "valid arg, no errors",
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: func(i uint) *uint { return &i }(1),
+				States:                []string{string(v1.PodRunning)},
+			},
+			expectError: false,
+		},
+		{
+			description: "nil MaxPodLifeTimeSeconds arg, expects errors",
+			args: &componentconfig.PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: nil,
+			},
+			expectError: true,
+		},
+		{
+			description: "invalid pod state arg, expects errors",
+			args: &componentconfig.PodLifeTimeArgs{
+				States: []string{string(v1.NodeRunning)},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			err := ValidatePodLifeTimeArgs(tc.args)
 
 			hasError := err != nil
 			if tc.expectError != hasError {
