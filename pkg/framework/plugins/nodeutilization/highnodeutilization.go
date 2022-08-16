@@ -1,11 +1,11 @@
 /*
-Copyright 2021 The Kubernetes Authors.
+Copyright 2022 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-   http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,40 +19,69 @@ package nodeutilization
 import (
 	"context"
 	"fmt"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
-
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
+
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
 )
 
-// HighNodeUtilization evicts pods from under utilized nodes so that scheduler can schedule according to its strategy.
+const HighNodeUtilizationPluginName = "HighNodeUtilization"
+
+// HighNodeUtilization evicts pods from under utilized nodes so that scheduler can schedule according to its plugin.
 // Note that CPU/Memory requests are used to calculate nodes' utilization and not the actual resource usage.
-func HighNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, evictorFilter *evictions.EvictorFilter, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
-	if err := validateNodeUtilizationParams(strategy.Params); err != nil {
-		klog.ErrorS(err, "Invalid HighNodeUtilization parameters")
-		return
+
+type HighNodeUtilization struct {
+	handle    framework.Handle
+	args      *componentconfig.HighNodeUtilizationArgs
+	podFilter func(pod *v1.Pod) bool
+}
+
+var _ framework.Plugin = &HighNodeUtilization{}
+var _ framework.BalancePlugin = &HighNodeUtilization{}
+
+// NewHighNodeUtilization builds plugin from its arguments while passing a handle
+func NewHighNodeUtilization(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+	highNodeUtilizatioArgs, ok := args.(*componentconfig.HighNodeUtilizationArgs)
+	if !ok {
+		return nil, fmt.Errorf("want args to be of type HighNodeUtilizationArgs, got %T", args)
 	}
 
-	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
-	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
-	if err := validateHighUtilizationStrategyConfig(thresholds, targetThresholds); err != nil {
-		klog.ErrorS(err, "HighNodeUtilization config is not valid")
-		return
+	podFilter, err := podutil.NewOptions().
+		WithFilter(handle.Evictor().Filter).
+		BuildFilterFunc()
+	if err != nil {
+		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
 	}
-	targetThresholds = make(api.ResourceThresholds)
+
+	return &HighNodeUtilization{
+		handle:    handle,
+		args:      highNodeUtilizatioArgs,
+		podFilter: podFilter,
+	}, nil
+}
+
+// Name retrieves the plugin name
+func (h *HighNodeUtilization) Name() string {
+	return HighNodeUtilizationPluginName
+}
+
+// Balance extension point implementation for the plugin
+func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
+	thresholds := h.args.Thresholds
+	targetThresholds := make(api.ResourceThresholds)
 
 	setDefaultForThresholds(thresholds, targetThresholds)
 	resourceNames := getResourceNames(targetThresholds)
 
 	sourceNodes, highNodes := classifyNodes(
-		getNodeUsage(nodes, resourceNames, getPodsAssignedToNode),
-		getNodeThresholds(nodes, thresholds, targetThresholds, resourceNames, getPodsAssignedToNode, false),
+		getNodeUsage(nodes, resourceNames, h.handle.GetPodsAssignedToNodeFunc()),
+		getNodeThresholds(nodes, thresholds, targetThresholds, resourceNames, h.handle.GetPodsAssignedToNodeFunc(), false),
 		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			return isNodeWithLowUtilization(usage, threshold.lowResourceThreshold)
 		},
@@ -81,19 +110,19 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 
 	if len(sourceNodes) == 0 {
 		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
-		return
+		return nil
 	}
-	if len(sourceNodes) <= strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
-		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(sourceNodes), "numberOfNodes", strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
-		return
+	if len(sourceNodes) <= h.args.NumberOfNodes {
+		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(sourceNodes), "numberOfNodes", h.args.NumberOfNodes)
+		return nil
 	}
 	if len(sourceNodes) == len(nodes) {
 		klog.V(1).InfoS("All nodes are underutilized, nothing to do here")
-		return
+		return nil
 	}
 	if len(highNodes) == 0 {
 		klog.V(1).InfoS("No node is available to schedule the pods, nothing to do here")
-		return
+		return nil
 	}
 
 	// stop if the total available usage has dropped to zero - no more pods can be scheduled
@@ -114,21 +143,11 @@ func HighNodeUtilization(ctx context.Context, client clientset.Interface, strate
 		ctx,
 		sourceNodes,
 		highNodes,
-		podEvictor,
-		evictorFilter.Filter,
+		h.handle.Evictor(),
+		h.podFilter,
 		resourceNames,
-		"HighNodeUtilization",
 		continueEvictionCond)
 
-}
-
-func validateHighUtilizationStrategyConfig(thresholds, targetThresholds api.ResourceThresholds) error {
-	if targetThresholds != nil {
-		return fmt.Errorf("targetThresholds is not applicable for HighNodeUtilization")
-	}
-	if err := validateThresholds(thresholds); err != nil {
-		return fmt.Errorf("thresholds config is not valid: %v", err)
-	}
 	return nil
 }
 

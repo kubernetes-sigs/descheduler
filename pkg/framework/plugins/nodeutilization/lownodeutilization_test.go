@@ -19,6 +19,10 @@ package nodeutilization
 import (
 	"context"
 	"fmt"
+	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
+	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -31,7 +35,6 @@ import (
 	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/events"
 
-	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -720,28 +723,6 @@ func TestLowNodeUtilization(t *testing.T) {
 				t.Errorf("Build get pods assigned to node function error: %v", err)
 			}
 
-			//fakeClient := &fake.Clientset{}
-			//fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-			//	list := action.(core.ListAction)
-			//	fieldString := list.GetListRestrictions().Fields.String()
-			//	if strings.Contains(fieldString, n1NodeName) {
-			//		return true, test.pods[n1NodeName], nil
-			//	}
-			//	if strings.Contains(fieldString, n2NodeName) {
-			//		return true, test.pods[n2NodeName], nil
-			//	}
-			//	if strings.Contains(fieldString, n3NodeName) {
-			//		return true, test.pods[n3NodeName], nil
-			//	}
-			//	return true, nil, fmt.Errorf("Failed to list: %v", list)
-			//})
-			//fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
-			//	getAction := action.(core.GetAction)
-			//	if node, exists := test.nodes[getAction.GetName()]; exists {
-			//		return true, node, nil
-			//	}
-			//	return true, nil, fmt.Errorf("Wrong node: %v", getAction.GetName())
-			//})
 			podsForEviction := make(map[string]struct{})
 			for _, pod := range test.evictedPods {
 				podsForEviction[pod] = struct{}{}
@@ -779,29 +760,33 @@ func TestLowNodeUtilization(t *testing.T) {
 				eventRecorder,
 			)
 
-			strategy := api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
-						Thresholds:             test.thresholds,
-						TargetThresholds:       test.targetThresholds,
-						UseDeviationThresholds: test.useDeviationThresholds,
-					},
-					NodeFit: true,
-				},
+			handle := &frameworkfake.HandleImpl{
+				ClientsetImpl:                 fakeClient,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				PodEvictorImpl:                podEvictor,
+				EvictorFilterImpl: evictions.NewEvictorFilter(
+					test.nodes,
+					getPodsAssignedToNode,
+					false,
+					false,
+					false,
+					false,
+					evictions.WithNodeFit(true),
+				),
+				SharedInformerFactoryImpl: sharedInformerFactory,
 			}
 
-			evictorFilter := evictions.NewEvictorFilter(
-				test.nodes,
-				getPodsAssignedToNode,
-				false,
-				false,
-				false,
-				false,
-				evictions.WithNodeFit(strategy.Params.NodeFit),
-			)
+			plugin, err := NewLowNodeUtilization(&componentconfig.LowNodeUtilizationArgs{
 
-			LowNodeUtilization(ctx, fakeClient, strategy, test.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
+				Thresholds:             test.thresholds,
+				TargetThresholds:       test.targetThresholds,
+				UseDeviationThresholds: test.useDeviationThresholds,
+			},
+				handle)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+			plugin.(framework.BalancePlugin).Balance(ctx, test.nodes)
 
 			podsEvicted := podEvictor.TotalEvicted()
 			if test.expectedPodsEvicted != podsEvicted {
@@ -814,176 +799,8 @@ func TestLowNodeUtilization(t *testing.T) {
 	}
 }
 
-func TestValidateLowNodeUtilizationStrategyConfig(t *testing.T) {
-	tests := []struct {
-		name             string
-		thresholds       api.ResourceThresholds
-		targetThresholds api.ResourceThresholds
-		errInfo          error
-	}{
-		{
-			name: "passing invalid thresholds",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    20,
-				v1.ResourceMemory: 120,
-			},
-			targetThresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				v1.ResourceMemory: 80,
-			},
-			errInfo: fmt.Errorf("thresholds config is not valid: %v", fmt.Errorf(
-				"%v threshold not in [%v, %v] range", v1.ResourceMemory, MinResourcePercentage, MaxResourcePercentage)),
-		},
-		{
-			name: "thresholds and targetThresholds configured different num of resources",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    20,
-				v1.ResourceMemory: 20,
-			},
-			targetThresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				v1.ResourceMemory: 80,
-				v1.ResourcePods:   80,
-			},
-			errInfo: fmt.Errorf("thresholds and targetThresholds configured different resources"),
-		},
-		{
-			name: "thresholds and targetThresholds configured different resources",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    20,
-				v1.ResourceMemory: 20,
-			},
-			targetThresholds: api.ResourceThresholds{
-				v1.ResourceCPU:  80,
-				v1.ResourcePods: 80,
-			},
-			errInfo: fmt.Errorf("thresholds and targetThresholds configured different resources"),
-		},
-		{
-			name: "thresholds' CPU config value is greater than targetThresholds'",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    90,
-				v1.ResourceMemory: 20,
-			},
-			targetThresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				v1.ResourceMemory: 80,
-			},
-			errInfo: fmt.Errorf("thresholds' %v percentage is greater than targetThresholds'", v1.ResourceCPU),
-		},
-		{
-			name: "only thresholds configured extended resource",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    20,
-				v1.ResourceMemory: 20,
-				extendedResource:  20,
-			},
-			targetThresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				v1.ResourceMemory: 80,
-			},
-			errInfo: fmt.Errorf("thresholds and targetThresholds configured different resources"),
-		},
-		{
-			name: "only targetThresholds configured extended resource",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    20,
-				v1.ResourceMemory: 20,
-			},
-			targetThresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				v1.ResourceMemory: 80,
-				extendedResource:  80,
-			},
-			errInfo: fmt.Errorf("thresholds and targetThresholds configured different resources"),
-		},
-		{
-			name: "thresholds and targetThresholds configured different extended resources",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    20,
-				v1.ResourceMemory: 20,
-				extendedResource:  20,
-			},
-			targetThresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				v1.ResourceMemory: 80,
-				"example.com/bar": 80,
-			},
-			errInfo: fmt.Errorf("thresholds and targetThresholds configured different resources"),
-		},
-		{
-			name: "thresholds' extended resource config value is greater than targetThresholds'",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    20,
-				v1.ResourceMemory: 20,
-				extendedResource:  90,
-			},
-			targetThresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				v1.ResourceMemory: 80,
-				extendedResource:  20,
-			},
-			errInfo: fmt.Errorf("thresholds' %v percentage is greater than targetThresholds'", extendedResource),
-		},
-		{
-			name: "passing valid strategy config",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    20,
-				v1.ResourceMemory: 20,
-			},
-			targetThresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				v1.ResourceMemory: 80,
-			},
-			errInfo: nil,
-		},
-		{
-			name: "passing valid strategy config with extended resource",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    20,
-				v1.ResourceMemory: 20,
-				extendedResource:  20,
-			},
-			targetThresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				v1.ResourceMemory: 80,
-				extendedResource:  80,
-			},
-			errInfo: nil,
-		},
-	}
-
-	for _, testCase := range tests {
-		validateErr := validateLowUtilizationStrategyConfig(testCase.thresholds, testCase.targetThresholds, false)
-
-		if validateErr == nil || testCase.errInfo == nil {
-			if validateErr != testCase.errInfo {
-				t.Errorf("expected validity of strategy config: thresholds %#v targetThresholds %#v to be %v but got %v instead",
-					testCase.thresholds, testCase.targetThresholds, testCase.errInfo, validateErr)
-			}
-		} else if validateErr.Error() != testCase.errInfo.Error() {
-			t.Errorf("expected validity of strategy config: thresholds %#v targetThresholds %#v to be %v but got %v instead",
-				testCase.thresholds, testCase.targetThresholds, testCase.errInfo, validateErr)
-		}
-	}
-}
-
 func TestLowNodeUtilizationWithTaints(t *testing.T) {
 	ctx := context.Background()
-	strategy := api.DeschedulerStrategy{
-		Enabled: true,
-		Params: &api.StrategyParameters{
-			NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
-				Thresholds: api.ResourceThresholds{
-					v1.ResourcePods: 20,
-				},
-				TargetThresholds: api.ResourceThresholds{
-					v1.ResourcePods: 70,
-				},
-			},
-			NodeFit: true,
-		},
-	}
 
 	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	n2 := test.BuildTestNode("n2", 1000, 3000, 10, nil)
@@ -1103,16 +920,36 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				eventRecorder,
 			)
 
-			evictorFilter := evictions.NewEvictorFilter(
-				item.nodes,
-				getPodsAssignedToNode,
-				false,
-				false,
-				false,
-				false,
-			)
+			handle := &frameworkfake.HandleImpl{
+				ClientsetImpl:                 fakeClient,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				PodEvictorImpl:                podEvictor,
+				EvictorFilterImpl: evictions.NewEvictorFilter(
+					item.nodes,
+					getPodsAssignedToNode,
+					false,
+					false,
+					false,
+					false,
+					evictions.WithNodeFit(true),
+				),
+				SharedInformerFactoryImpl: sharedInformerFactory,
+			}
 
-			LowNodeUtilization(ctx, fakeClient, strategy, item.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
+			plugin, err := NewLowNodeUtilization(&componentconfig.LowNodeUtilizationArgs{
+
+				Thresholds: api.ResourceThresholds{
+					v1.ResourcePods: 20,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					v1.ResourcePods: 70,
+				},
+			},
+				handle)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+			plugin.(framework.BalancePlugin).Balance(ctx, item.nodes)
 
 			if item.evictionsExpected != podEvictor.TotalEvicted() {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, podEvictor.TotalEvicted())

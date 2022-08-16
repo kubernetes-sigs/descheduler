@@ -39,20 +39,20 @@ import (
 	"k8s.io/client-go/tools/events"
 	v1qos "k8s.io/kubectl/pkg/util/qos"
 	"k8s.io/utils/pointer"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
-	"sigs.k8s.io/descheduler/pkg/framework"
-	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
-
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
+	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/descheduler/strategies/nodeutilization"
+	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -255,7 +255,7 @@ func intersectStrings(lista, listb []string) []string {
 func TestLowNodeUtilization(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, _, _, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, sharedInformerFactory, _, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
@@ -343,7 +343,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	defer deleteRC(ctx, t, clientSet, rc)
 	waitForRCPodsRunning(ctx, t, clientSet, rc)
 
-	// Run LowNodeUtilization strategy
+	// Run LowNodeUtilization plugin
 	podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
 
 	evictorFilter := evictions.NewEvictorFilter(
@@ -366,28 +366,27 @@ func TestLowNodeUtilization(t *testing.T) {
 	}
 	podsBefore := len(podsOnMosttUtilizedNode)
 
-	t.Log("Running LowNodeUtilization strategy")
-	nodeutilization.LowNodeUtilization(
-		ctx,
-		clientSet,
-		deschedulerapi.DeschedulerStrategy{
-			Enabled: true,
-			Params: &deschedulerapi.StrategyParameters{
-				NodeResourceUtilizationThresholds: &deschedulerapi.NodeResourceUtilizationThresholds{
-					Thresholds: deschedulerapi.ResourceThresholds{
-						v1.ResourceCPU: 70,
-					},
-					TargetThresholds: deschedulerapi.ResourceThresholds{
-						v1.ResourceCPU: 80,
-					},
-				},
-			},
+	t.Log("Running LowNodeUtilization plugin")
+	handle := &frameworkfake.HandleImpl{
+		ClientsetImpl:                 clientSet,
+		GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+		PodEvictorImpl:                podEvictor,
+		EvictorFilterImpl:             evictorFilter,
+		SharedInformerFactoryImpl:     sharedInformerFactory,
+	}
+
+	plugin, err := nodeutilization.NewLowNodeUtilization(&componentconfig.LowNodeUtilizationArgs{
+		Thresholds: api.ResourceThresholds{
+			v1.ResourceCPU: 70,
 		},
-		workerNodes,
-		podEvictor,
-		evictorFilter,
-		getPodsAssignedToNode,
-	)
+		TargetThresholds: api.ResourceThresholds{
+			v1.ResourceCPU: 80,
+		},
+	}, handle)
+	if err != nil {
+		t.Fatalf("Unable to initialize the plugin: %v", err)
+	}
+	plugin.(framework.BalancePlugin).Balance(ctx, workerNodes)
 
 	waitForTerminatingPodsToDisappear(ctx, t, clientSet, rc.Namespace)
 

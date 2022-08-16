@@ -28,6 +28,13 @@ import (
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 )
 
+const (
+	// MinResourcePercentage is the minimum value of a resource's percentage
+	MinResourcePercentage = 0
+	// MaxResourcePercentage is the maximum value of a resource's percentage
+	MaxResourcePercentage = 100
+)
+
 // ValidateRemovePodsViolatingNodeTaintsArgs validates RemovePodsViolatingNodeTaints arguments
 func ValidateRemovePodsViolatingNodeTaintsArgs(args *componentconfig.RemovePodsViolatingNodeTaintsArgs) error {
 	return errorsAggregate(
@@ -148,5 +155,49 @@ func validatePodLifeTimeStates(states []string) error {
 		return fmt.Errorf("states must be one of %v", podLifeTimeAllowedStates.List())
 	}
 
+	return nil
+}
+
+func ValidateHighNodeUtilizationArgs(args *componentconfig.HighNodeUtilizationArgs) error {
+	return validateThresholds(args.Thresholds)
+}
+
+func ValidateLowNodeUtilizationArgs(args *componentconfig.LowNodeUtilizationArgs) error {
+	return validateLowNodeUtilizationThresholds(args.Thresholds, args.TargetThresholds, args.UseDeviationThresholds)
+}
+
+func validateLowNodeUtilizationThresholds(thresholds, targetThresholds api.ResourceThresholds, useDeviationThresholds bool) error {
+	// validate thresholds and targetThresholds config
+	if err := validateThresholds(thresholds); err != nil {
+		return fmt.Errorf("thresholds config is not valid: %v", err)
+	}
+	if err := validateThresholds(targetThresholds); err != nil {
+		return fmt.Errorf("targetThresholds config is not valid: %v", err)
+	}
+
+	// validate if thresholds and targetThresholds have same resources configured
+	if len(thresholds) != len(targetThresholds) {
+		return fmt.Errorf("thresholds and targetThresholds configured different resources")
+	}
+	for resourceName, value := range thresholds {
+		if targetValue, ok := targetThresholds[resourceName]; !ok {
+			return fmt.Errorf("thresholds and targetThresholds configured different resources")
+		} else if value > targetValue && !useDeviationThresholds {
+			return fmt.Errorf("thresholds' %v percentage is greater than targetThresholds'", resourceName)
+		}
+	}
+	return nil
+}
+
+// validateThresholds checks if thresholds have valid resource name and resource percentage configured
+func validateThresholds(thresholds api.ResourceThresholds) error {
+	if len(thresholds) == 0 {
+		return fmt.Errorf("no resource threshold is configured")
+	}
+	for name, percent := range thresholds {
+		if percent < MinResourcePercentage || percent > MaxResourcePercentage {
+			return fmt.Errorf("%v threshold not in [%v, %v] range", name, MinResourcePercentage, MaxResourcePercentage)
+		}
+	}
 	return nil
 }

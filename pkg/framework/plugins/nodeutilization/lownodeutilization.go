@@ -1,5 +1,5 @@
 /*
-Copyright 2017 The Kubernetes Authors.
+Copyright 2022 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,34 +19,61 @@ package nodeutilization
 import (
 	"context"
 	"fmt"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
-
-	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
 )
+
+const LowNodeUtilizationPluginName = "LowNodeUtilization"
 
 // LowNodeUtilization evicts pods from overutilized nodes to underutilized nodes. Note that CPU/Memory requests are used
 // to calculate nodes' utilization and not the actual resource usage.
-func LowNodeUtilization(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, evictorFilter *evictions.EvictorFilter, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) {
-	// TODO: May be create a struct for the strategy as well, so that we don't have to pass along the all the params?
-	if err := validateNodeUtilizationParams(strategy.Params); err != nil {
-		klog.ErrorS(err, "Invalid LowNodeUtilization parameters")
-		return
+
+type LowNodeUtilization struct {
+	handle    framework.Handle
+	args      *componentconfig.LowNodeUtilizationArgs
+	podFilter func(pod *v1.Pod) bool
+}
+
+var _ framework.Plugin = &LowNodeUtilization{}
+var _ framework.BalancePlugin = &LowNodeUtilization{}
+
+// NewLowNodeUtilization builds plugin from its arguments while passing a handle
+func NewLowNodeUtilization(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+	lowNodeUtilizationArgsArgs, ok := args.(*componentconfig.LowNodeUtilizationArgs)
+	if !ok {
+		return nil, fmt.Errorf("want args to be of type LowNodeUtilizationArgs, got %T", args)
 	}
 
-	useDeviationThresholds := strategy.Params.NodeResourceUtilizationThresholds.UseDeviationThresholds
-	thresholds := strategy.Params.NodeResourceUtilizationThresholds.Thresholds
-	targetThresholds := strategy.Params.NodeResourceUtilizationThresholds.TargetThresholds
-	if err := validateLowUtilizationStrategyConfig(thresholds, targetThresholds, useDeviationThresholds); err != nil {
-		klog.ErrorS(err, "LowNodeUtilization config is not valid")
-		return
+	podFilter, err := podutil.NewOptions().
+		WithFilter(handle.Evictor().Filter).
+		BuildFilterFunc()
+	if err != nil {
+		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
 	}
+
+	return &LowNodeUtilization{
+		handle:    handle,
+		args:      lowNodeUtilizationArgsArgs,
+		podFilter: podFilter,
+	}, nil
+}
+
+// Name retrieves the plugin name
+func (l *LowNodeUtilization) Name() string {
+	return LowNodeUtilizationPluginName
+}
+
+// Balance extension point implementation for the plugin
+func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
+	useDeviationThresholds := l.args.UseDeviationThresholds
+	thresholds := l.args.Thresholds
+	targetThresholds := l.args.TargetThresholds
 
 	// check if Pods/CPU/Mem are set, if not, set them to 100
 	if _, ok := thresholds[v1.ResourcePods]; !ok {
@@ -79,8 +106,8 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 	resourceNames := getResourceNames(thresholds)
 
 	lowNodes, sourceNodes := classifyNodes(
-		getNodeUsage(nodes, resourceNames, getPodsAssignedToNode),
-		getNodeThresholds(nodes, thresholds, targetThresholds, resourceNames, getPodsAssignedToNode, useDeviationThresholds),
+		getNodeUsage(nodes, resourceNames, l.handle.GetPodsAssignedToNodeFunc()),
+		getNodeThresholds(nodes, thresholds, targetThresholds, resourceNames, l.handle.GetPodsAssignedToNodeFunc(), useDeviationThresholds),
 		// The node has to be schedulable (to be able to move workload there)
 		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			if nodeutil.IsNodeUnschedulable(node) {
@@ -124,22 +151,22 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 
 	if len(lowNodes) == 0 {
 		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
-		return
+		return nil
 	}
 
-	if len(lowNodes) <= strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes {
-		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(lowNodes), "numberOfNodes", strategy.Params.NodeResourceUtilizationThresholds.NumberOfNodes)
-		return
+	if len(lowNodes) <= l.args.NumberOfNodes {
+		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(lowNodes), "numberOfNodes", l.args.NumberOfNodes)
+		return nil
 	}
 
 	if len(lowNodes) == len(nodes) {
 		klog.V(1).InfoS("All nodes are underutilized, nothing to do here")
-		return
+		return nil
 	}
 
 	if len(sourceNodes) == 0 {
 		klog.V(1).InfoS("All nodes are under target utilization, nothing to do here")
-		return
+		return nil
 	}
 
 	// stop if node utilization drops below target threshold or any of required capacity (cpu, memory, pods) is moved
@@ -163,35 +190,10 @@ func LowNodeUtilization(ctx context.Context, client clientset.Interface, strateg
 		ctx,
 		sourceNodes,
 		lowNodes,
-		podEvictor,
-		evictorFilter.Filter,
+		l.handle.Evictor(),
+		l.podFilter,
 		resourceNames,
-		"LowNodeUtilization",
 		continueEvictionCond)
 
-	klog.V(1).InfoS("Total number of pods evicted", "evictedPods", podEvictor.TotalEvicted())
-}
-
-// validateLowUtilizationStrategyConfig checks if the strategy's config is valid
-func validateLowUtilizationStrategyConfig(thresholds, targetThresholds api.ResourceThresholds, useDeviationThresholds bool) error {
-	// validate thresholds and targetThresholds config
-	if err := validateThresholds(thresholds); err != nil {
-		return fmt.Errorf("thresholds config is not valid: %v", err)
-	}
-	if err := validateThresholds(targetThresholds); err != nil {
-		return fmt.Errorf("targetThresholds config is not valid: %v", err)
-	}
-
-	// validate if thresholds and targetThresholds have same resources configured
-	if len(thresholds) != len(targetThresholds) {
-		return fmt.Errorf("thresholds and targetThresholds configured different resources")
-	}
-	for resourceName, value := range thresholds {
-		if targetValue, ok := targetThresholds[resourceName]; !ok {
-			return fmt.Errorf("thresholds and targetThresholds configured different resources")
-		} else if value > targetValue && !useDeviationThresholds {
-			return fmt.Errorf("thresholds' %v percentage is greater than targetThresholds'", resourceName)
-		}
-	}
 	return nil
 }
