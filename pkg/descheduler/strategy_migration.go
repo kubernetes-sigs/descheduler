@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/validation"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
@@ -225,6 +226,48 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		status := pg.(framework.BalancePlugin).Balance(ctx, nodes)
 		if status != nil && status.Err != nil {
 			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", removepodsviolatingtopologyspreadconstraint.PluginName)
+		}
+	},
+	"HighNodeUtilization": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+		args := &componentconfig.HighNodeUtilizationArgs{
+			Thresholds:    params.NodeResourceUtilizationThresholds.Thresholds,
+			NumberOfNodes: params.NodeResourceUtilizationThresholds.NumberOfNodes,
+		}
+
+		if err := validation.ValidateHighNodeUtilizationArgs(args); err != nil {
+			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", nodeutilization.HighNodeUtilizationPluginName)
+			return
+		}
+		pg, err := nodeutilization.NewHighNodeUtilization(args, handle)
+		if err != nil {
+			klog.V(1).ErrorS(err, "unable to initialize a plugin", "pluginName", nodeutilization.HighNodeUtilizationPluginName)
+			return
+		}
+		status := pg.(framework.BalancePlugin).Balance(ctx, nodes)
+		if status != nil && status.Err != nil {
+			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", nodeutilization.HighNodeUtilizationPluginName)
+		}
+	},
+	"LowNodeUtilization": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+		args := &componentconfig.LowNodeUtilizationArgs{
+			Thresholds:             params.NodeResourceUtilizationThresholds.Thresholds,
+			TargetThresholds:       params.NodeResourceUtilizationThresholds.TargetThresholds,
+			UseDeviationThresholds: params.NodeResourceUtilizationThresholds.UseDeviationThresholds,
+			NumberOfNodes:          params.NodeResourceUtilizationThresholds.NumberOfNodes,
+		}
+
+		if err := validation.ValidateLowNodeUtilizationArgs(args); err != nil {
+			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", nodeutilization.LowNodeUtilizationPluginName)
+			return
+		}
+		pg, err := nodeutilization.NewLowNodeUtilization(args, handle)
+		if err != nil {
+			klog.V(1).ErrorS(err, "unable to initialize a plugin", "pluginName", nodeutilization.LowNodeUtilizationPluginName)
+			return
+		}
+		status := pg.(framework.BalancePlugin).Balance(ctx, nodes)
+		if status != nil && status.Err != nil {
+			klog.V(1).ErrorS(err, "plugin finished with error", "pluginName", nodeutilization.LowNodeUtilizationPluginName)
 		}
 	},
 }

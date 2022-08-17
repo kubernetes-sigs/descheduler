@@ -18,18 +18,17 @@ package nodeutilization
 
 import (
 	"context"
-	"fmt"
+	"sigs.k8s.io/descheduler/pkg/api"
 	"sort"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/klog/v2"
-
-	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/descheduler/node"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -61,30 +60,6 @@ const (
 	// MaxResourcePercentage is the maximum value of a resource's percentage
 	MaxResourcePercentage = 100
 )
-
-func validateNodeUtilizationParams(params *api.StrategyParameters) error {
-	if params == nil || params.NodeResourceUtilizationThresholds == nil {
-		return fmt.Errorf("NodeResourceUtilizationThresholds not set")
-	}
-	if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
-		return fmt.Errorf("only one of thresholdPriority and thresholdPriorityClassName can be set")
-	}
-
-	return nil
-}
-
-// validateThresholds checks if thresholds have valid resource name and resource percentage configured
-func validateThresholds(thresholds api.ResourceThresholds) error {
-	if len(thresholds) == 0 {
-		return fmt.Errorf("no resource threshold is configured")
-	}
-	for name, percent := range thresholds {
-		if percent < MinResourcePercentage || percent > MaxResourcePercentage {
-			return fmt.Errorf("%v threshold not in [%v, %v] range", name, MinResourcePercentage, MaxResourcePercentage)
-		}
-	}
-	return nil
-}
 
 func normalizePercentage(percent api.Percentage) api.Percentage {
 	if percent > MaxResourcePercentage {
@@ -237,10 +212,9 @@ func classifyNodes(
 func evictPodsFromSourceNodes(
 	ctx context.Context,
 	sourceNodes, destinationNodes []NodeInfo,
-	podEvictor *evictions.PodEvictor,
+	podEvictor framework.Evictor,
 	podFilter func(pod *v1.Pod) bool,
 	resourceNames []v1.ResourceName,
-	strategy string,
 	continueEviction continueEvictionCond,
 ) {
 	// upper bound on total number of pods/cpu/memory and optional extended resources to be moved
@@ -290,8 +264,8 @@ func evictPodsFromSourceNodes(
 		klog.V(1).InfoS("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
-		evictPods(ctx, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, strategy, continueEviction)
-		klog.V(1).InfoS("Evicted pods from node", "node", klog.KObj(node.node), "evictedPods", podEvictor.NodeEvicted(node.node), "usage", node.usage)
+		evictPods(ctx, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, continueEviction)
+
 	}
 }
 
@@ -301,8 +275,7 @@ func evictPods(
 	nodeInfo NodeInfo,
 	totalAvailableUsage map[v1.ResourceName]*resource.Quantity,
 	taintsOfLowNodes map[string][]v1.Taint,
-	podEvictor *evictions.PodEvictor,
-	strategy string,
+	podEvictor framework.Evictor,
 	continueEviction continueEvictionCond,
 ) {
 
@@ -313,7 +286,7 @@ func evictPods(
 				continue
 			}
 
-			if podEvictor.EvictPod(ctx, pod, evictions.EvictOptions{}) {
+			if podEvictor.Evict(ctx, pod, evictions.EvictOptions{}) {
 				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
 
 				for name := range totalAvailableUsage {
@@ -352,7 +325,7 @@ func evictPods(
 	}
 }
 
-// sortNodesByUsage sorts nodes based on usage according to the given strategy.
+// sortNodesByUsage sorts nodes based on usage according to the given plugin.
 func sortNodesByUsage(nodes []NodeInfo, ascending bool) {
 	sort.Slice(nodes, func(i, j int) bool {
 		ti := nodes[i].usage[v1.ResourceMemory].Value() + nodes[i].usage[v1.ResourceCPU].MilliValue() + nodes[i].usage[v1.ResourcePods].Value()
@@ -366,12 +339,12 @@ func sortNodesByUsage(nodes []NodeInfo, ascending bool) {
 			}
 		}
 
-		// Return ascending order for HighNodeUtilization strategy
+		// Return ascending order for HighNodeUtilization plugin
 		if ascending {
 			return ti < tj
 		}
 
-		// Return descending order for LowNodeUtilization strategy
+		// Return descending order for LowNodeUtilization plugin
 		return ti > tj
 	})
 }

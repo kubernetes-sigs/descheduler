@@ -31,8 +31,11 @@ import (
 	"k8s.io/client-go/tools/events"
 
 	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -478,29 +481,6 @@ func TestHighNodeUtilization(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			//fakeClient := &fake.Clientset{}
-			//fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-			//	list := action.(core.ListAction)
-			//	fieldString := list.GetListRestrictions().Fields.String()
-			//	if strings.Contains(fieldString, n1NodeName) {
-			//		return true, test.pods[n1NodeName], nil
-			//	}
-			//	if strings.Contains(fieldString, n2NodeName) {
-			//		return true, test.pods[n2NodeName], nil
-			//	}
-			//	if strings.Contains(fieldString, n3NodeName) {
-			//		return true, test.pods[n3NodeName], nil
-			//	}
-			//	return true, nil, fmt.Errorf("Failed to list: %v", list)
-			//})
-			//fakeClient.Fake.AddReactor("get", "nodes", func(action core.Action) (bool, runtime.Object, error) {
-			//	getAction := action.(core.GetAction)
-			//	if node, exists := testCase.nodes[getAction.GetName()]; exists {
-			//		return true, node, nil
-			//	}
-			//	return true, nil, fmt.Errorf("Wrong node: %v", getAction.GetName())
-			//})
-
 			eventRecorder := &events.FakeRecorder{}
 
 			podEvictor := evictions.NewPodEvictor(
@@ -514,27 +494,30 @@ func TestHighNodeUtilization(t *testing.T) {
 				eventRecorder,
 			)
 
-			strategy := api.DeschedulerStrategy{
-				Enabled: true,
-				Params: &api.StrategyParameters{
-					NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
-						Thresholds: testCase.thresholds,
-					},
-					NodeFit: true,
-				},
+			handle := &frameworkfake.HandleImpl{
+				ClientsetImpl:                 fakeClient,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				PodEvictorImpl:                podEvictor,
+				EvictorFilterImpl: evictions.NewEvictorFilter(
+					testCase.nodes,
+					getPodsAssignedToNode,
+					false,
+					false,
+					false,
+					false,
+					evictions.WithNodeFit(true),
+				),
+				SharedInformerFactoryImpl: sharedInformerFactory,
 			}
 
-			evictorFilter := evictions.NewEvictorFilter(
-				testCase.nodes,
-				getPodsAssignedToNode,
-				false,
-				false,
-				false,
-				false,
-				evictions.WithNodeFit(strategy.Params.NodeFit),
-			)
-
-			HighNodeUtilization(ctx, fakeClient, strategy, testCase.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
+			plugin, err := NewHighNodeUtilization(&componentconfig.HighNodeUtilizationArgs{
+				Thresholds: testCase.thresholds,
+			},
+				handle)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+			plugin.(framework.BalancePlugin).Balance(ctx, testCase.nodes)
 
 			podsEvicted := podEvictor.TotalEvicted()
 			if testCase.expectedPodsEvicted != podsEvicted {
@@ -547,85 +530,7 @@ func TestHighNodeUtilization(t *testing.T) {
 	}
 }
 
-func TestValidateHighNodeUtilizationStrategyConfig(t *testing.T) {
-	tests := []struct {
-		name             string
-		thresholds       api.ResourceThresholds
-		targetThresholds api.ResourceThresholds
-		errInfo          error
-	}{
-		{
-			name: "passing target thresholds",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    20,
-				v1.ResourceMemory: 20,
-			},
-			targetThresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				v1.ResourceMemory: 80,
-			},
-			errInfo: fmt.Errorf("targetThresholds is not applicable for HighNodeUtilization"),
-		},
-		{
-			name:       "passing empty thresholds",
-			thresholds: api.ResourceThresholds{},
-			errInfo:    fmt.Errorf("thresholds config is not valid: no resource threshold is configured"),
-		},
-		{
-			name: "passing invalid thresholds",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				v1.ResourceMemory: 120,
-			},
-			errInfo: fmt.Errorf("thresholds config is not valid: %v", fmt.Errorf(
-				"%v threshold not in [%v, %v] range", v1.ResourceMemory, MinResourcePercentage, MaxResourcePercentage)),
-		},
-		{
-			name: "passing valid strategy config",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				v1.ResourceMemory: 80,
-			},
-			errInfo: nil,
-		},
-		{
-			name: "passing valid strategy config with extended resource",
-			thresholds: api.ResourceThresholds{
-				v1.ResourceCPU:    80,
-				v1.ResourceMemory: 80,
-				extendedResource:  80,
-			},
-			errInfo: nil,
-		},
-	}
-
-	for _, testCase := range tests {
-		validateErr := validateHighUtilizationStrategyConfig(testCase.thresholds, testCase.targetThresholds)
-
-		if validateErr == nil || testCase.errInfo == nil {
-			if validateErr != testCase.errInfo {
-				t.Errorf("expected validity of strategy config: thresholds %#v targetThresholds %#v to be %v but got %v instead",
-					testCase.thresholds, testCase.targetThresholds, testCase.errInfo, validateErr)
-			}
-		} else if validateErr.Error() != testCase.errInfo.Error() {
-			t.Errorf("expected validity of strategy config: thresholds %#v targetThresholds %#v to be %v but got %v instead",
-				testCase.thresholds, testCase.targetThresholds, testCase.errInfo, validateErr)
-		}
-	}
-}
-
 func TestHighNodeUtilizationWithTaints(t *testing.T) {
-	strategy := api.DeschedulerStrategy{
-		Enabled: true,
-		Params: &api.StrategyParameters{
-			NodeResourceUtilizationThresholds: &api.NodeResourceUtilizationThresholds{
-				Thresholds: api.ResourceThresholds{
-					v1.ResourceCPU: 40,
-				},
-			},
-		},
-	}
-
 	n1 := test.BuildTestNode("n1", 1000, 3000, 10, nil)
 	n2 := test.BuildTestNode("n2", 1000, 3000, 10, nil)
 	n3 := test.BuildTestNode("n3", 1000, 3000, 10, nil)
@@ -729,16 +634,31 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 				eventRecorder,
 			)
 
-			evictorFilter := evictions.NewEvictorFilter(
-				item.nodes,
-				getPodsAssignedToNode,
-				false,
-				false,
-				false,
-				false,
-			)
+			handle := &frameworkfake.HandleImpl{
+				ClientsetImpl:                 fakeClient,
+				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				PodEvictorImpl:                podEvictor,
+				EvictorFilterImpl: evictions.NewEvictorFilter(
+					item.nodes,
+					getPodsAssignedToNode,
+					false,
+					false,
+					false,
+					false,
+				),
+				SharedInformerFactoryImpl: sharedInformerFactory,
+			}
 
-			HighNodeUtilization(ctx, fakeClient, strategy, item.nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
+			plugin, err := NewHighNodeUtilization(&componentconfig.HighNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU: 40,
+				},
+			},
+				handle)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+			plugin.(framework.BalancePlugin).Balance(ctx, item.nodes)
 
 			if item.evictionsExpected != podEvictor.TotalEvicted() {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, podEvictor.TotalEvicted())
