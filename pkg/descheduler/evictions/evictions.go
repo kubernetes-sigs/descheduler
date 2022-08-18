@@ -21,7 +21,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
-	policy "k8s.io/api/policy/v1beta1"
+	policy "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -193,7 +193,7 @@ func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, poli
 		},
 		DeleteOptions: deleteOptions,
 	}
-	err := client.PolicyV1beta1().Evictions(eviction.Namespace).Evict(ctx, eviction)
+	err := client.PolicyV1().Evictions(eviction.Namespace).Evict(ctx, eviction)
 
 	if apierrors.IsTooManyRequests(err) {
 		return fmt.Errorf("error when evicting pod (ignoring) %q: %v", pod.Name, err)

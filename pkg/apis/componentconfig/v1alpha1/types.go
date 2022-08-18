@@ -19,9 +19,9 @@ package v1alpha1
 import (
 	"time"
 
-	componentbaseconfig "k8s.io/component-base/config"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	componentbaseconfig "k8s.io/component-base/config"
+	registry "k8s.io/component-base/logs/api/v1"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -58,6 +58,6 @@ type DeschedulerConfiguration struct {
 	LeaderElection componentbaseconfig.LeaderElectionConfiguration `json:"leaderElection,omitempty"`
 
 	// Logging specifies the options of logging.
-	// Refer [Logs Options](https://github.com/kubernetes/component-base/blob/master/logs/options.go) for more information.
-	Logging componentbaseconfig.LoggingConfiguration `json:"logging,omitempty"`
+	// Refer [Logs Options](https://github.com/kubernetes/component-base/blob/master/logs/api/v1/options.go) for more information.
+	Logging registry.LoggingConfiguration `json:"logging,omitempty"`
 }
