@@ -19,6 +19,7 @@ package nodeutilization
 import (
 	"context"
 	"fmt"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,7 +41,6 @@ type LowNodeUtilization struct {
 	podFilter func(pod *v1.Pod) bool
 }
 
-var _ framework.Plugin = &LowNodeUtilization{}
 var _ framework.BalancePlugin = &LowNodeUtilization{}
 
 // NewLowNodeUtilization builds plugin from its arguments while passing a handle
