@@ -19,12 +19,13 @@ package removeduplicates
 import (
 	"context"
 	"fmt"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"math"
 	"reflect"
-	"sigs.k8s.io/descheduler/pkg/utils"
 	"sort"
 	"strings"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/descheduler/pkg/utils"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -50,7 +51,6 @@ type RemoveDuplicates struct {
 	podFilter podutil.FilterFunc
 }
 
-var _ framework.Plugin = &RemoveDuplicates{}
 var _ framework.BalancePlugin = &RemoveDuplicates{}
 
 type podOwner struct {

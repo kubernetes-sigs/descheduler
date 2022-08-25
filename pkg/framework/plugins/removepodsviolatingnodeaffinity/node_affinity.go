@@ -39,7 +39,6 @@ type RemovePodsViolatingNodeAffinity struct {
 	podFilter podutil.FilterFunc
 }
 
-var _ framework.Plugin = &RemovePodsViolatingNodeAffinity{}
 var _ framework.DeschedulePlugin = &RemovePodsViolatingNodeAffinity{}
 
 // New builds plugin from its arguments while passing a handle

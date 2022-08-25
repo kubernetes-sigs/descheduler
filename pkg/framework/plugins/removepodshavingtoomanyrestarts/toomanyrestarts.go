@@ -42,10 +42,7 @@ type RemovePodsHavingTooManyRestarts struct {
 	podFilter podutil.FilterFunc
 }
 
-var (
-	_ framework.Plugin           = &RemovePodsHavingTooManyRestarts{}
-	_ framework.DeschedulePlugin = &RemovePodsHavingTooManyRestarts{}
-)
+var _ framework.DeschedulePlugin = &RemovePodsHavingTooManyRestarts{}
 
 // New builds plugin from its arguments while passing a handle
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {

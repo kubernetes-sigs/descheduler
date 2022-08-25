@@ -42,7 +42,6 @@ type RemoveFailedPods struct {
 	podFilter podutil.FilterFunc
 }
 
-var _ framework.Plugin = &RemoveFailedPods{}
 var _ framework.DeschedulePlugin = &RemoveFailedPods{}
 
 // New builds plugin from its arguments while passing a handle

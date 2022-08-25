@@ -34,10 +34,7 @@ import (
 
 const PluginName = "PodLifeTime"
 
-var (
-	_ framework.Plugin           = &PodLifeTime{}
-	_ framework.DeschedulePlugin = &PodLifeTime{}
-)
+var _ framework.DeschedulePlugin = &PodLifeTime{}
 
 // PodLifeTime evicts pods on the node that violate the max pod lifetime threshold
 type PodLifeTime struct {
