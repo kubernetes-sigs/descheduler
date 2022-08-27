@@ -528,17 +528,20 @@ You can also specify `states` parameter to **only** evict pods matching the foll
   - [Pod Phase](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase) status of: `Running`, `Pending`
   - [Container State Waiting](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-state-waiting) condition of: `PodInitializing`, `ContainerCreating`
 
+If a value for `states` or `podStatusPhases` is not specified,
+Pods in any state (even `Running`) are considered for eviction.
+
 **Parameters:**
 
-|Name|Type|
-|---|---|
-|`maxPodLifeTimeSeconds`|int|
-|`podStatusPhases` (**Deprecated**. Use `states` instead)|list(string)|
-|`states`|list(string)|
-|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
-|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
-|`namespaces`|(see [namespace filtering](#namespace-filtering))|
-|`labelSelector`|(see [label filtering](#label-filtering))|
+|Name|Type|Notes|
+|---|---|---|
+|`maxPodLifeTimeSeconds`|int||
+|`podStatusPhases`|list(string)|Deprecated in v0.25+ Use `states` instead|
+|`states`|list(string)|Only supported in v0.25+|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))||
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))||
+|`namespaces`|(see [namespace filtering](#namespace-filtering))||
+|`labelSelector`|(see [label filtering](#label-filtering))||
 
 **Example:**
 
