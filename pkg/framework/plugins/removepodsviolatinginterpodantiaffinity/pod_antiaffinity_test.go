@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -226,20 +227,34 @@ func TestPodAntiAffinity(t *testing.T) {
 				false,
 				eventRecorder,
 			)
+
+			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods:   false,
+				EvictSystemCriticalPods: false,
+				IgnorePvcPods:           false,
+				EvictFailedBarePods:     false,
+				NodeFit:                 test.nodeFit,
+			}
+
+			evictorFilter, err := defaultevictor.New(
+				defaultevictorArgs,
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 fakeClient,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+					SharedInformerFactoryImpl:     sharedInformerFactory,
+				},
+			)
+
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
 			handle := &frameworkfake.HandleImpl{
 				ClientsetImpl:                 fakeClient,
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
 				SharedInformerFactoryImpl:     sharedInformerFactory,
-				EvictorFilterImpl: evictions.NewEvictorFilter(
-					test.nodes,
-					getPodsAssignedToNode,
-					false,
-					false,
-					false,
-					false,
-					evictions.WithNodeFit(test.nodeFit),
-				),
+				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
 			}
 			plugin, err := New(
 				&componentconfig.RemovePodsViolatingInterPodAntiAffinityArgs{},

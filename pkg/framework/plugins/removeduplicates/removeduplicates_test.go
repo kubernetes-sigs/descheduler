@@ -18,11 +18,13 @@ package removeduplicates
 
 import (
 	"context"
+	"testing"
+
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
-	"testing"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -324,20 +326,29 @@ func TestFindDuplicatePods(t *testing.T) {
 
 			nodeFit := testCase.nodefit
 
+			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods:   false,
+				EvictSystemCriticalPods: false,
+				IgnorePvcPods:           false,
+				EvictFailedBarePods:     false,
+				NodeFit:                 nodeFit,
+			}
+
+			evictorFilter, _ := defaultevictor.New(
+				defaultEvictorFilterArgs,
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 fakeClient,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+					SharedInformerFactoryImpl:     sharedInformerFactory,
+				},
+			)
+
 			handle := &frameworkfake.HandleImpl{
 				ClientsetImpl:                 fakeClient,
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl: evictions.NewEvictorFilter(
-					testCase.nodes,
-					getPodsAssignedToNode,
-					false,
-					false,
-					false,
-					false,
-					evictions.WithNodeFit(nodeFit),
-				),
-				SharedInformerFactoryImpl: sharedInformerFactory,
+				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
 			plugin, err := New(&componentconfig.RemoveDuplicatesArgs{
@@ -763,19 +774,32 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				eventRecorder,
 			)
 
+			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods:   false,
+				EvictSystemCriticalPods: false,
+				IgnorePvcPods:           false,
+				EvictFailedBarePods:     false,
+			}
+
+			evictorFilter, err := defaultevictor.New(
+				defaultEvictorFilterArgs,
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 fakeClient,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+					SharedInformerFactoryImpl:     sharedInformerFactory,
+				},
+			)
+
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
 			handle := &frameworkfake.HandleImpl{
 				ClientsetImpl:                 fakeClient,
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl: evictions.NewEvictorFilter(
-					testCase.nodes,
-					getPodsAssignedToNode,
-					false,
-					false,
-					false,
-					false,
-				),
-				SharedInformerFactoryImpl: sharedInformerFactory,
+				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
 			plugin, err := New(&componentconfig.RemoveDuplicatesArgs{},

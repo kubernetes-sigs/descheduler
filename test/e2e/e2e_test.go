@@ -51,6 +51,7 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -200,15 +201,27 @@ func runPodLifetimePlugin(
 		}
 	}
 
-	evictorFilter := evictions.NewEvictorFilter(
-		nodes,
-		getPodsAssignedToNode,
-		false,
-		evictCritical,
-		false,
-		false,
-		evictions.WithPriorityThreshold(thresholdPriority),
+	defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
+		EvictLocalStoragePods:   false,
+		EvictSystemCriticalPods: evictCritical,
+		IgnorePvcPods:           false,
+		EvictFailedBarePods:     false,
+		PriorityThreshold: &api.PriorityThreshold{
+			Value: &thresholdPriority,
+		},
+	}
+
+	evictorFilter, err := defaultevictor.New(
+		defaultevictorArgs,
+		&frameworkfake.HandleImpl{
+			ClientsetImpl:                 clientset,
+			GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+		},
 	)
+
+	if err != nil {
+		t.Fatalf("Unable to initialize the plugin: %v", err)
+	}
 
 	maxPodLifeTimeSeconds := uint(1)
 
@@ -219,7 +232,7 @@ func runPodLifetimePlugin(
 	}, &frameworkfake.HandleImpl{
 		ClientsetImpl:                 clientset,
 		PodEvictorImpl:                podEvictor,
-		EvictorFilterImpl:             evictorFilter,
+		EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
 		GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 	})
 	if err != nil {
@@ -346,16 +359,22 @@ func TestLowNodeUtilization(t *testing.T) {
 	// Run LowNodeUtilization plugin
 	podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
 
-	evictorFilter := evictions.NewEvictorFilter(
-		nodes,
-		getPodsAssignedToNode,
-		true,
-		false,
-		false,
-		false,
+	defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
+		EvictLocalStoragePods:   true,
+		EvictSystemCriticalPods: false,
+		IgnorePvcPods:           false,
+		EvictFailedBarePods:     false,
+	}
+
+	evictorFilter, _ := defaultevictor.New(
+		defaultevictorArgs,
+		&frameworkfake.HandleImpl{
+			ClientsetImpl:                 clientSet,
+			GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+		},
 	)
 
-	podFilter, err := podutil.NewOptions().WithFilter(evictorFilter.Filter).BuildFilterFunc()
+	podFilter, err := podutil.NewOptions().WithFilter(evictorFilter.(framework.EvictorPlugin).Filter).BuildFilterFunc()
 	if err != nil {
 		t.Errorf("Error initializing pod filter function, %v", err)
 	}
@@ -371,7 +390,7 @@ func TestLowNodeUtilization(t *testing.T) {
 		ClientsetImpl:                 clientSet,
 		GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 		PodEvictorImpl:                podEvictor,
-		EvictorFilterImpl:             evictorFilter,
+		EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
 		SharedInformerFactoryImpl:     sharedInformerFactory,
 	}
 
@@ -390,7 +409,7 @@ func TestLowNodeUtilization(t *testing.T) {
 
 	waitForTerminatingPodsToDisappear(ctx, t, clientSet, rc.Namespace)
 
-	podFilter, err = podutil.NewOptions().WithFilter(evictorFilter.Filter).BuildFilterFunc()
+	podFilter, err = podutil.NewOptions().WithFilter(evictorFilter.(framework.EvictorPlugin).Filter).BuildFilterFunc()
 	if err != nil {
 		t.Errorf("Error initializing pod filter function, %v", err)
 	}

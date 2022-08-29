@@ -11,9 +11,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
 )
 
@@ -85,14 +85,23 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			// Run TopologySpreadConstraint strategy
 			t.Logf("Running RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
 
-			filter := evictions.NewEvictorFilter(
-				nodes,
-				getPodsAssignedToNode,
-				true,
-				false,
-				false,
-				false,
+			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods:   true,
+				EvictSystemCriticalPods: false,
+				IgnorePvcPods:           false,
+				EvictFailedBarePods:     false,
+			}
+
+			filter, err := defaultevictor.New(
+				defaultevictorArgs,
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 clientSet,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				},
 			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
 
 			plugin, err := removepodsviolatingtopologyspreadconstraint.New(&componentconfig.RemovePodsViolatingTopologySpreadConstraintArgs{
 				IncludeSoftConstraints: tc.constraint != v1.DoNotSchedule,
@@ -100,7 +109,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				&frameworkfake.HandleImpl{
 					ClientsetImpl:                 clientSet,
 					PodEvictorImpl:                podEvictor,
-					EvictorFilterImpl:             filter,
+					EvictorFilterImpl:             filter.(framework.EvictorPlugin),
 					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				},
 			)

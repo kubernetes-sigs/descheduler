@@ -126,3 +126,8 @@ type FailedPods struct {
 	Reasons                 []string
 	IncludingInitContainers bool
 }
+
+type PriorityThreshold struct {
+	Value *int32
+	Name  string
+}

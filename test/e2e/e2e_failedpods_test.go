@@ -14,9 +14,9 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 )
 
@@ -78,14 +78,25 @@ func TestFailedPods(t *testing.T) {
 
 			podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
 
-			filter := evictions.NewEvictorFilter(
-				nodes,
-				getPodsAssignedToNode,
-				true,
-				false,
-				false,
-				false,
+			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods:   true,
+				EvictSystemCriticalPods: false,
+				IgnorePvcPods:           false,
+				EvictFailedBarePods:     false,
+			}
+
+			evictorFilter, err := defaultevictor.New(
+				defaultevictorArgs,
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 clientSet,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+					SharedInformerFactoryImpl:     sharedInformerFactory,
+				},
 			)
+
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
 
 			t.Logf("Running RemoveFailedPods strategy for %s", name)
 
@@ -100,7 +111,7 @@ func TestFailedPods(t *testing.T) {
 				&frameworkfake.HandleImpl{
 					ClientsetImpl:                 clientSet,
 					PodEvictorImpl:                podEvictor,
-					EvictorFilterImpl:             filter,
+					EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				},

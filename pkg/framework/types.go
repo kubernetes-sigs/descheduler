@@ -70,3 +70,12 @@ type BalancePlugin interface {
 	Plugin
 	Balance(ctx context.Context, nodes []*v1.Node) *Status
 }
+
+// EvictorPlugin defines extension points for a general evictor behavior
+// Even though we name this plugin interface EvictorPlugin, it does not actually evict anything,
+// This plugin is only meant to customize other actions (extension points) of the evictor,
+// like filtering, sorting, and other ones that might be relevant in the future
+type EvictorPlugin interface {
+	Plugin
+	Filter(pod *v1.Pod) bool
+}
