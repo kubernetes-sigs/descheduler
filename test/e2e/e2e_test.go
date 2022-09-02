@@ -1184,7 +1184,8 @@ var podRequestedResource = &v1.ResourceRequirements{
 
 // createBalancedPodForNodes creates a pod per node that asks for enough resources to make all nodes have the same mem/cpu usage ratio.
 // TODO(jchaloup): The function is updated version of what under https://github.com/kubernetes/kubernetes/blob/84483a5/test/e2e/scheduling/priorities.go#L478.
-//                 Import it once the function is moved under k8s.io/components-helper repo and modified to work for both priority and predicates cases.
+//
+//	Import it once the function is moved under k8s.io/components-helper repo and modified to work for both priority and predicates cases.
 func createBalancedPodForNodes(
 	t *testing.T,
 	ctx context.Context,

@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/api/policy/v1beta1"
+	policy "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
@@ -319,7 +319,7 @@ func TestHighNodeUtilization(t *testing.T) {
 				test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
 			},
 			pods: []*v1.Pod{
-				//These won't be evicted
+				// These won't be evicted
 				test.BuildTestPod("p1", 100, 0, n1NodeName, func(pod *v1.Pod) {
 					test.SetRSOwnerRef(pod)
 					test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
@@ -467,7 +467,7 @@ func TestHighNodeUtilization(t *testing.T) {
 				fakeClient.Fake.AddReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
 					getAction := action.(core.CreateAction)
 					obj := getAction.GetObject()
-					if eviction, ok := obj.(*v1beta1.Eviction); ok {
+					if eviction, ok := obj.(*policy.Eviction); ok {
 						if _, exists := podsForEviction[eviction.Name]; exists {
 							return true, obj, nil
 						}
@@ -561,7 +561,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 			name:  "No taints",
 			nodes: []*v1.Node{n1, n2, n3},
 			pods: []*v1.Pod{
-				//Node 1 pods
+				// Node 1 pods
 				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
 				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
 				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
@@ -574,7 +574,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 			name:  "No pod tolerates node taint",
 			nodes: []*v1.Node{n1, n3withTaints},
 			pods: []*v1.Pod{
-				//Node 1 pods
+				// Node 1 pods
 				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
 				// Node 3 pods
 				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n3withTaints.Name), 200, 0, n3withTaints.Name, test.SetRSOwnerRef),
@@ -585,7 +585,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 			name:  "Pod which tolerates node taint",
 			nodes: []*v1.Node{n1, n3withTaints},
 			pods: []*v1.Pod{
-				//Node 1 pods
+				// Node 1 pods
 				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 100, 0, n1.Name, test.SetRSOwnerRef),
 				podThatToleratesTaint,
 				// Node 3 pods

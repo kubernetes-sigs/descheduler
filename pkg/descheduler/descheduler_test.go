@@ -3,16 +3,15 @@ package descheduler
 import (
 	"context"
 	"fmt"
-	v1 "k8s.io/api/core/v1"
-	policy "k8s.io/api/policy/v1"
-	//policy "k8s.io/api/policy/v1beta1"
-	"strings"
 	"testing"
 	"time"
 
+	v1 "k8s.io/api/core/v1"
+	policy "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/apimachinery/pkg/runtime"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
+	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/test"
@@ -44,21 +43,6 @@ func TestTaintsUpdated(t *testing.T) {
 	}
 	rs.Client = client
 	rs.EventClient = eventClient
-	rs.DeschedulingInterval = 100 * time.Millisecond
-	errChan := make(chan error, 1)
-	defer close(errChan)
-	go func() {
-		err := RunDeschedulerStrategies(ctx, rs, dp, "v1")
-		errChan <- err
-	}()
-	select {
-	case err := <-errChan:
-		if err != nil {
-			t.Fatalf("Unable to run descheduler strategies: %v", err)
-		}
-	case <-time.After(1 * time.Second):
-		// Wait for few cycles and then verify the only pod still exists
-	}
 
 	pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -81,24 +65,14 @@ func TestTaintsUpdated(t *testing.T) {
 		t.Fatalf("Unable to update node: %v\n", err)
 	}
 
-	if err := wait.PollImmediate(100*time.Millisecond, time.Second, func() (bool, error) {
-		// Get over evicted pod result in panic
-		//pods, err := client.CoreV1().Pods(p1.Namespace).Get(p1.Name, metav1.GetOptions{})
-		// List is better, it does not panic.
-		// Though once the pod is evicted, List starts to error with "can't assign or convert v1beta1.Eviction into v1.Pod"
-		pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
-		if err == nil {
-			if len(pods.Items) > 0 {
-				return false, nil
-			}
-			return true, nil
-		}
-		if strings.Contains(err.Error(), "can't assign or convert v1beta1.Eviction into v1.Pod") {
-			return true, nil
-		}
+	var evictedPods []string
+	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-		return false, nil
-	}); err != nil {
+	if err := RunDeschedulerStrategies(ctx, rs, dp, "v1"); err != nil {
+		t.Fatalf("Unable to run descheduler strategies: %v", err)
+	}
+
+	if len(evictedPods) != 1 {
 		t.Fatalf("Unable to evict pod, node taint did not get propagated to descheduler strategies %v\n", err)
 	}
 }
@@ -136,21 +110,6 @@ func TestDuplicate(t *testing.T) {
 	}
 	rs.Client = client
 	rs.EventClient = eventClient
-	rs.DeschedulingInterval = 100 * time.Millisecond
-	errChan := make(chan error, 1)
-	defer close(errChan)
-	go func() {
-		err := RunDeschedulerStrategies(ctx, rs, dp, "v1")
-		errChan <- err
-	}()
-	select {
-	case err := <-errChan:
-		if err != nil {
-			t.Fatalf("Unable to run descheduler strategies: %v", err)
-		}
-	case <-time.After(1 * time.Second):
-		// Wait for few cycles and then verify the only pod still exists
-	}
 
 	pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -161,24 +120,14 @@ func TestDuplicate(t *testing.T) {
 		t.Errorf("Pods number should be 3 before evict")
 	}
 
-	if err := wait.PollImmediate(100*time.Millisecond, 5*time.Second, func() (bool, error) {
-		// Get over evicted pod result in panic
-		//pods, err := client.CoreV1().Pods(p1.Namespace).Get(p1.Name, metav1.GetOptions{})
-		// List is better, it does not panic.
-		// Though once the pod is evicted, List starts to error with "can't assign or convert v1beta1.Eviction into v1.Pod"
-		pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
-		if err == nil {
-			if len(pods.Items) > 2 {
-				return false, nil
-			}
-			return true, nil
-		}
-		if strings.Contains(err.Error(), "can't assign or convert v1beta1.Eviction into v1.Pod") {
-			return true, nil
-		}
+	var evictedPods []string
+	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-		return false, nil
-	}); err != nil {
+	if err := RunDeschedulerStrategies(ctx, rs, dp, "v1"); err != nil {
+		t.Fatalf("Unable to run descheduler strategies: %v", err)
+	}
+
+	if len(evictedPods) == 0 {
 		t.Fatalf("Unable to evict pod, node taint did not get propagated to descheduler strategies %v\n", err)
 	}
 }
@@ -204,7 +153,7 @@ func TestRootCancel(t *testing.T) {
 	defer close(errChan)
 
 	go func() {
-		err := RunDeschedulerStrategies(ctx, rs, dp, "v1beta1")
+		err := RunDeschedulerStrategies(ctx, rs, dp, "v1")
 		errChan <- err
 	}()
 	cancel()
@@ -239,7 +188,7 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 	defer close(errChan)
 
 	go func() {
-		err := RunDeschedulerStrategies(ctx, rs, dp, "v1beta1")
+		err := RunDeschedulerStrategies(ctx, rs, dp, "v1")
 		errChan <- err
 	}()
 	cancel()
@@ -253,53 +202,17 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 	}
 }
 
-func TestNewSimpleClientset(t *testing.T) {
-	client := fakeclientset.NewSimpleClientset()
-	client.CoreV1().Pods("default").Create(context.Background(), &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pod-1",
-			Namespace: "default",
-		},
-	}, metav1.CreateOptions{})
-	client.CoreV1().Pods("default").Create(context.Background(), &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pod-2",
-			Namespace: "default",
-		},
-	}, metav1.CreateOptions{})
-	err := client.CoreV1().Pods("default").EvictV1(context.Background(), &policy.Eviction{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "pod-2",
-		},
-	})
-
-	if err != nil {
-		t.Errorf("TestNewSimpleClientset() res = %v", err.Error())
-	}
-
-	pods, err := client.CoreV1().Pods("default").List(context.Background(), metav1.ListOptions{})
-	// err: item[0]: can't assign or convert v1beta1.Eviction into v1.Pod
-	if err != nil {
-		t.Errorf("TestNewSimpleClientset() res = %v", err.Error())
-	} else {
-		t.Log(len(pods.Items))
-		t.Logf("TestNewSimpleClientset() res = %v", pods)
-	}
-
-	err = client.PolicyV1().Evictions("default").Evict(context.Background(), &policy.Eviction{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "pod-1",
-		},
-	})
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	pods, err = client.CoreV1().Pods("default").List(context.Background(), metav1.ListOptions{})
-	// err: item[0]: can't assign or convert v1beta1.Eviction into v1.Pod
-	if err != nil {
-		t.Errorf("TestNewSimpleClientset() res = %v", err.Error())
-	} else {
-		t.Log(len(pods.Items))
-		t.Logf("TestNewSimpleClientset() res = %v", pods)
+func podEvictionReactionFuc(evictedPods *[]string) func(action core.Action) (bool, runtime.Object, error) {
+	return func(action core.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() == "eviction" {
+			createAct, matched := action.(core.CreateActionImpl)
+			if !matched {
+				return false, nil, fmt.Errorf("unable to convert action to core.CreateActionImpl")
+			}
+			if eviction, matched := createAct.Object.(*policy.Eviction); matched {
+				*evictedPods = append(*evictedPods, eviction.GetName())
+			}
+		}
+		return false, nil, nil // fallback to the default reactor
 	}
 }

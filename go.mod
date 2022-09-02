@@ -1,25 +1,32 @@
 module sigs.k8s.io/descheduler
 
-go 1.18
+go 1.19
 
 require (
 	github.com/client9/misspell v0.3.4
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/pflag v1.0.5
-	k8s.io/api v0.25.0-rc.0
-	k8s.io/apimachinery v0.25.0-rc.0
-	k8s.io/apiserver v0.25.0-rc.0
-	k8s.io/client-go v0.25.0-rc.0
-	k8s.io/code-generator v0.25.0-rc.0
-	k8s.io/component-base v0.25.0-rc.0
-	k8s.io/component-helpers v0.25.0-rc.0
+	k8s.io/api v0.25.0
+	k8s.io/apimachinery v0.25.0
+	k8s.io/apiserver v0.25.0
+	k8s.io/client-go v0.25.0
+	k8s.io/code-generator v0.25.0
+	k8s.io/component-base v0.25.0
+	k8s.io/component-helpers v0.25.0
 	k8s.io/klog/v2 v2.70.1
-	k8s.io/kubectl v0.20.5
-	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed
+	k8s.io/kubectl v0.25.0
+	k8s.io/utils v0.0.0-20220823124924-e9cbc92d1a73
 	sigs.k8s.io/mdtoc v1.0.1
 )
 
 require (
+	cloud.google.com/go v0.97.0 // indirect
+	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
+	github.com/Azure/go-autorest/autorest v0.11.27 // indirect
+	github.com/Azure/go-autorest/autorest/adal v0.9.20 // indirect
+	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
+	github.com/Azure/go-autorest/logger v0.2.1 // indirect
+	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
 	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/NYTimes/gziphandler v1.1.1 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
@@ -40,6 +47,7 @@ require (
 	github.com/go-openapi/jsonreference v0.19.5 // indirect
 	github.com/go-openapi/swag v0.19.14 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/gomarkdown/markdown v0.0.0-20200824053859-8c8b3816f167 // indirect
