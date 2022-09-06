@@ -76,6 +76,10 @@ deschedulerPolicy:
         - requiredDuringSchedulingIgnoredDuringExecution
     RemovePodsViolatingInterPodAntiAffinity:
       enabled: true
+    RemovePodsViolatingTopologySpreadConstraint:
+      enabled: true
+      params:
+        includeSoftConstraints: false
     LowNodeUtilization:
       enabled: true
       params:
