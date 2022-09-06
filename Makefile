@@ -26,7 +26,7 @@ ARCHS = amd64 arm arm64
 
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitbranch=${BRANCH} -X ${LDFLAG_LOCATION}.gitsha1=${SHA1}"
 
-GOLANGCI_VERSION := v1.46.1
+GOLANGCI_VERSION := v1.49.0
 HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint 2> /dev/null)
 
 # REGISTRY is the container registry to push

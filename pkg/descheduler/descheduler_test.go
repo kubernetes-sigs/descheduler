@@ -3,14 +3,15 @@ package descheduler
 import (
 	"context"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	policy "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/apimachinery/pkg/runtime"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
+	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/test"
@@ -42,21 +43,6 @@ func TestTaintsUpdated(t *testing.T) {
 	}
 	rs.Client = client
 	rs.EventClient = eventClient
-	rs.DeschedulingInterval = 100 * time.Millisecond
-	errChan := make(chan error, 1)
-	defer close(errChan)
-	go func() {
-		err := RunDeschedulerStrategies(ctx, rs, dp, "v1beta1")
-		errChan <- err
-	}()
-	select {
-	case err := <-errChan:
-		if err != nil {
-			t.Fatalf("Unable to run descheduler strategies: %v", err)
-		}
-	case <-time.After(1 * time.Second):
-		// Wait for few cycles and then verify the only pod still exists
-	}
 
 	pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -79,25 +65,70 @@ func TestTaintsUpdated(t *testing.T) {
 		t.Fatalf("Unable to update node: %v\n", err)
 	}
 
-	if err := wait.PollImmediate(100*time.Millisecond, time.Second, func() (bool, error) {
-		// Get over evicted pod result in panic
-		//pods, err := client.CoreV1().Pods(p1.Namespace).Get(p1.Name, metav1.GetOptions{})
-		// List is better, it does not panic.
-		// Though once the pod is evicted, List starts to error with "can't assign or convert v1beta1.Eviction into v1.Pod"
-		pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
-		if err == nil {
-			if len(pods.Items) > 0 {
-				return false, nil
-			}
-			return true, nil
-		}
-		if strings.Contains(err.Error(), "can't assign or convert v1beta1.Eviction into v1.Pod") {
-			return true, nil
-		}
+	var evictedPods []string
+	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-		return false, nil
-	}); err != nil {
-		t.Fatalf("Unable to evict pod, node taint did not get propagated to descheduler strategies")
+	if err := RunDeschedulerStrategies(ctx, rs, dp, "v1"); err != nil {
+		t.Fatalf("Unable to run descheduler strategies: %v", err)
+	}
+
+	if len(evictedPods) != 1 {
+		t.Fatalf("Unable to evict pod, node taint did not get propagated to descheduler strategies %v\n", err)
+	}
+}
+
+func TestDuplicate(t *testing.T) {
+	ctx := context.Background()
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
+
+	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
+	p1.Namespace = "dev"
+	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, nil)
+	p2.Namespace = "dev"
+	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, nil)
+	p3.Namespace = "dev"
+
+	ownerRef1 := test.GetReplicaSetOwnerRefList()
+	p1.ObjectMeta.OwnerReferences = ownerRef1
+	p2.ObjectMeta.OwnerReferences = ownerRef1
+	p3.ObjectMeta.OwnerReferences = ownerRef1
+
+	client := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3)
+	eventClient := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3)
+	dp := &api.DeschedulerPolicy{
+		Strategies: api.StrategyList{
+			"RemoveDuplicates": api.DeschedulerStrategy{
+				Enabled: true,
+			},
+		},
+	}
+
+	rs, err := options.NewDeschedulerServer()
+	if err != nil {
+		t.Fatalf("Unable to initialize server: %v", err)
+	}
+	rs.Client = client
+	rs.EventClient = eventClient
+
+	pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Errorf("Unable to list pods: %v", err)
+	}
+
+	if len(pods.Items) != 3 {
+		t.Errorf("Pods number should be 3 before evict")
+	}
+
+	var evictedPods []string
+	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
+
+	if err := RunDeschedulerStrategies(ctx, rs, dp, "v1"); err != nil {
+		t.Fatalf("Unable to run descheduler strategies: %v", err)
+	}
+
+	if len(evictedPods) == 0 {
+		t.Fatalf("Unable to evict pod, node taint did not get propagated to descheduler strategies %v\n", err)
 	}
 }
 
@@ -122,7 +153,7 @@ func TestRootCancel(t *testing.T) {
 	defer close(errChan)
 
 	go func() {
-		err := RunDeschedulerStrategies(ctx, rs, dp, "v1beta1")
+		err := RunDeschedulerStrategies(ctx, rs, dp, "v1")
 		errChan <- err
 	}()
 	cancel()
@@ -157,7 +188,7 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 	defer close(errChan)
 
 	go func() {
-		err := RunDeschedulerStrategies(ctx, rs, dp, "v1beta1")
+		err := RunDeschedulerStrategies(ctx, rs, dp, "v1")
 		errChan <- err
 	}()
 	cancel()
@@ -168,5 +199,20 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 		}
 	case <-time.After(1 * time.Second):
 		t.Fatal("Root ctx should have canceled immediately")
+	}
+}
+
+func podEvictionReactionFuc(evictedPods *[]string) func(action core.Action) (bool, runtime.Object, error) {
+	return func(action core.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() == "eviction" {
+			createAct, matched := action.(core.CreateActionImpl)
+			if !matched {
+				return false, nil, fmt.Errorf("unable to convert action to core.CreateActionImpl")
+			}
+			if eviction, matched := createAct.Object.(*policy.Eviction); matched {
+				*evictedPods = append(*evictedPods, eviction.GetName())
+			}
+		}
+		return false, nil, nil // fallback to the default reactor
 	}
 }

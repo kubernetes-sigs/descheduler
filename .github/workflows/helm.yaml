@@ -31,6 +31,10 @@ jobs:
         with:
           python-version: 3.7
 
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '1.19.0'
+
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2.2.1
         with:
@@ -43,10 +47,10 @@ jobs:
           if [[ -n "$changed" ]]; then
             echo "::set-output name=changed::true"
           fi
-      
+
       - name: Run chart-testing (lint)
         run: ct lint --config=.github/ci/ct.yaml --validate-maintainers=false
-      
+
       # Need a multi node cluster so descheduler runs until evictions
       - name: Create multi node Kind cluster
         run: make kind-multi-node
@@ -54,10 +58,10 @@ jobs:
       # helm-extra-set-args only available after ct 3.6.0
       - name: Run chart-testing (install)
         run: ct install --config=.github/ci/ct.yaml
-      
+
       - name: E2E after chart install
         env:
-          KUBERNETES_VERSION: "v1.24.0"
+          KUBERNETES_VERSION: "v1.25.0"
           KIND_E2E: true
           SKIP_INSTALL: true
         run: make test-e2e

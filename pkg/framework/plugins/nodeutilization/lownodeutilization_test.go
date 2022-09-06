@@ -19,15 +19,15 @@ package nodeutilization
 import (
 	"context"
 	"fmt"
+	"testing"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
-	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
-	"k8s.io/api/policy/v1beta1"
+	policy "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
@@ -733,7 +733,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				fakeClient.Fake.AddReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
 					getAction := action.(core.CreateAction)
 					obj := getAction.GetObject()
-					if eviction, ok := obj.(*v1beta1.Eviction); ok {
+					if eviction, ok := obj.(*policy.Eviction); ok {
 						if _, exists := podsForEviction[eviction.Name]; exists {
 							return true, obj, nil
 						}
@@ -751,7 +751,7 @@ func TestLowNodeUtilization(t *testing.T) {
 
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
-				policyv1.SchemeGroupVersion.String(),
+				policy.SchemeGroupVersion.String(),
 				false,
 				nil,
 				nil,
@@ -832,7 +832,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 			name:  "No taints",
 			nodes: []*v1.Node{n1, n2, n3},
 			pods: []*v1.Pod{
-				//Node 1 pods
+				// Node 1 pods
 				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
 				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
 				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
@@ -850,7 +850,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 			name:  "No pod tolerates node taint",
 			nodes: []*v1.Node{n1, n3withTaints},
 			pods: []*v1.Pod{
-				//Node 1 pods
+				// Node 1 pods
 				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
 				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
 				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
@@ -868,7 +868,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 			name:  "Pod which tolerates node taint",
 			nodes: []*v1.Node{n1, n3withTaints},
 			pods: []*v1.Pod{
-				//Node 1 pods
+				// Node 1 pods
 				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
 				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
 				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
@@ -911,7 +911,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
-				policyv1.SchemeGroupVersion.String(),
+				policy.SchemeGroupVersion.String(),
 				false,
 				&item.evictionsExpected,
 				nil,
