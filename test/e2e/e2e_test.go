@@ -37,7 +37,6 @@ import (
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/events"
-	v1qos "k8s.io/kubectl/pkg/util/qos"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -1327,6 +1326,11 @@ func computeCPUMemFraction(t *testing.T, cs clientset.Interface, node *v1.Node, 
 	for _, pod := range allpods.Items {
 		if pod.Spec.NodeName == node.Name {
 			req, _ := utils.PodRequestsAndLimits(&pod)
+			// Ignore best effort pods while computing fractions as they won't be taken in account by scheduler.
+			if utils.GetPodQOS(&pod) == v1.PodQOSBestEffort {
+				t.Logf("Ignoring best-effort pod %s on node %s", pod.Name, pod.Spec.NodeName)
+				continue
+			}
 			if _, ok := req[v1.ResourceCPU]; !ok {
 				req[v1.ResourceCPU] = *resource.NewMilliQuantity(0, resource.DecimalSI)
 			}
@@ -1337,11 +1341,7 @@ func computeCPUMemFraction(t *testing.T, cs clientset.Interface, node *v1.Node, 
 			cpuRequest := req[v1.ResourceCPU]
 			memoryRequest := req[v1.ResourceMemory]
 
-			t.Logf("Pod for on the node: %v, Cpu: %v, Mem: %v", pod.Name, (&cpuRequest).MilliValue(), (&memoryRequest).Value())
-			// Ignore best effort pods while computing fractions as they won't be taken in account by scheduler.
-			if v1qos.GetPodQOS(&pod) == v1.PodQOSBestEffort {
-				continue
-			}
+			t.Logf("Pod %s on node %s, Cpu: %v, Mem: %v", pod.Name, pod.Spec.NodeName, (&cpuRequest).MilliValue(), (&memoryRequest).Value())
 			totalRequestedCPUResource += (&cpuRequest).MilliValue()
 			totalRequestedMemResource += (&memoryRequest).Value()
 		}
