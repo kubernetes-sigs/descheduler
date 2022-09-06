@@ -14,7 +14,6 @@ require (
 	k8s.io/component-base v0.25.0
 	k8s.io/component-helpers v0.25.0
 	k8s.io/klog/v2 v2.70.1
-	k8s.io/kubectl v0.25.0
 	k8s.io/utils v0.0.0-20220823124924-e9cbc92d1a73
 	sigs.k8s.io/mdtoc v1.0.1
 )
