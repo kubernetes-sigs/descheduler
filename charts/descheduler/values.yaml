@@ -67,6 +67,12 @@ deschedulerPolicy:
   strategies:
     RemoveDuplicates:
       enabled: true
+    RemovePodsHavingTooManyRestarts:
+      enabled: true
+      params:
+        podsHavingTooManyRestarts:
+          podRestartThreshold: 100
+          includingInitContainers: true
     RemovePodsViolatingNodeTaints:
       enabled: true
     RemovePodsViolatingNodeAffinity:
