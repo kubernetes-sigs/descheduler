@@ -44,6 +44,7 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -88,7 +89,7 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	return runFn()
 }
 
-type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, evictorFilter *evictions.EvictorFilter, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc)
+type strategyFunction func(ctx context.Context, client clientset.Interface, strategy api.DeschedulerStrategy, nodes []*v1.Node, podEvictor *evictions.PodEvictor, evictorFilter framework.EvictorPlugin, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc)
 
 func cachedClient(
 	realClient clientset.Interface,
@@ -170,7 +171,7 @@ func cachedClient(
 // can evict a pod without importing a specific pod evictor
 type evictorImpl struct {
 	podEvictor    *evictions.PodEvictor
-	evictorFilter *evictions.EvictorFilter
+	evictorFilter framework.EvictorPlugin
 }
 
 var _ framework.Evictor = &evictorImpl{}
@@ -376,23 +377,33 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 						continue
 					}
 
-					evictorFilter := evictions.NewEvictorFilter(
-						nodes,
-						getPodsAssignedToNode,
-						evictLocalStoragePods,
-						evictSystemCriticalPods,
-						ignorePvcPods,
-						evictBarePods,
-						evictions.WithNodeFit(nodeFit),
-						evictions.WithPriorityThreshold(thresholdPriority),
+					defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
+						EvictLocalStoragePods:   evictLocalStoragePods,
+						EvictSystemCriticalPods: evictSystemCriticalPods,
+						IgnorePvcPods:           ignorePvcPods,
+						EvictFailedBarePods:     evictBarePods,
+						NodeFit:                 nodeFit,
+						PriorityThreshold: &api.PriorityThreshold{
+							Value: &thresholdPriority,
+						},
+					}
+
+					evictorFilter, _ := defaultevictor.New(
+						defaultevictorArgs,
+						&handleImpl{
+							clientSet:                 rs.Client,
+							getPodsAssignedToNodeFunc: getPodsAssignedToNode,
+							sharedInformerFactory:     sharedInformerFactory,
+						},
 					)
+
 					handle := &handleImpl{
 						clientSet:                 rs.Client,
 						getPodsAssignedToNodeFunc: getPodsAssignedToNode,
 						sharedInformerFactory:     sharedInformerFactory,
 						evictor: &evictorImpl{
 							podEvictor:    podEvictor,
-							evictorFilter: evictorFilter,
+							evictorFilter: evictorFilter.(framework.EvictorPlugin),
 						},
 					}
 
@@ -404,7 +415,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 					if pgFnc, exists := pluginsMap[string(name)]; exists {
 						pgFnc(childCtx, nodes, params, handle)
 					} else {
-						f(childCtx, rs.Client, strategy, nodes, podEvictor, evictorFilter, getPodsAssignedToNode)
+						f(childCtx, rs.Client, strategy, nodes, podEvictor, evictorFilter.(framework.EvictorPlugin), getPodsAssignedToNode)
 					}
 				}
 			} else {

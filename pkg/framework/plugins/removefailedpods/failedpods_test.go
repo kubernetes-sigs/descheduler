@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -301,15 +302,26 @@ func TestRemoveFailedPods(t *testing.T) {
 				eventRecorder,
 			)
 
-			evictorFilter := evictions.NewEvictorFilter(
-				tc.nodes,
-				getPodsAssignedToNode,
-				false,
-				false,
-				false,
-				false,
-				evictions.WithNodeFit(tc.nodeFit),
+			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods:   false,
+				EvictSystemCriticalPods: false,
+				IgnorePvcPods:           false,
+				EvictFailedBarePods:     false,
+				NodeFit:                 tc.nodeFit,
+			}
+
+			evictorFilter, err := defaultevictor.New(
+				defaultevictorArgs,
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 fakeClient,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+					SharedInformerFactoryImpl:     sharedInformerFactory,
+				},
 			)
+
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
 
 			plugin, err := New(&componentconfig.RemoveFailedPodsArgs{
 				Reasons:                 tc.args.Reasons,
@@ -322,7 +334,7 @@ func TestRemoveFailedPods(t *testing.T) {
 				&frameworkfake.HandleImpl{
 					ClientsetImpl:                 fakeClient,
 					PodEvictorImpl:                podEvictor,
-					EvictorFilterImpl:             evictorFilter,
+					EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				},

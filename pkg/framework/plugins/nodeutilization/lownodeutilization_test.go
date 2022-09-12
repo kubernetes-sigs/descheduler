@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
@@ -760,20 +761,33 @@ func TestLowNodeUtilization(t *testing.T) {
 				eventRecorder,
 			)
 
+			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods:   false,
+				EvictSystemCriticalPods: false,
+				IgnorePvcPods:           false,
+				EvictFailedBarePods:     false,
+				NodeFit:                 true,
+			}
+
+			evictorFilter, err := defaultevictor.New(
+				defaultEvictorFilterArgs,
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 fakeClient,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+					SharedInformerFactoryImpl:     sharedInformerFactory,
+				},
+			)
+
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
 			handle := &frameworkfake.HandleImpl{
 				ClientsetImpl:                 fakeClient,
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl: evictions.NewEvictorFilter(
-					test.nodes,
-					getPodsAssignedToNode,
-					false,
-					false,
-					false,
-					false,
-					evictions.WithNodeFit(true),
-				),
-				SharedInformerFactoryImpl: sharedInformerFactory,
+				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
 			plugin, err := NewLowNodeUtilization(&componentconfig.LowNodeUtilizationArgs{
@@ -920,20 +934,33 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				eventRecorder,
 			)
 
+			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods:   false,
+				EvictSystemCriticalPods: false,
+				IgnorePvcPods:           false,
+				EvictFailedBarePods:     false,
+				NodeFit:                 true,
+			}
+
+			evictorFilter, err := defaultevictor.New(
+				defaultEvictorFilterArgs,
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 fakeClient,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+					SharedInformerFactoryImpl:     sharedInformerFactory,
+				},
+			)
+
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
 			handle := &frameworkfake.HandleImpl{
 				ClientsetImpl:                 fakeClient,
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl: evictions.NewEvictorFilter(
-					item.nodes,
-					getPodsAssignedToNode,
-					false,
-					false,
-					false,
-					false,
-					evictions.WithNodeFit(true),
-				),
-				SharedInformerFactoryImpl: sharedInformerFactory,
+				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
 			plugin, err := NewLowNodeUtilization(&componentconfig.LowNodeUtilizationArgs{

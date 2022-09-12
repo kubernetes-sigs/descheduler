@@ -21,6 +21,7 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -1172,20 +1173,33 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				eventRecorder,
 			)
 
+			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods:   false,
+				EvictSystemCriticalPods: false,
+				IgnorePvcPods:           false,
+				EvictFailedBarePods:     false,
+				NodeFit:                 tc.nodeFit,
+			}
+
+			evictorFilter, err := defaultevictor.New(
+				defaultevictorArgs,
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 fakeClient,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+					SharedInformerFactoryImpl:     sharedInformerFactory,
+				},
+			)
+
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
 			handle := &frameworkfake.HandleImpl{
 				ClientsetImpl:                 fakeClient,
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl: evictions.NewEvictorFilter(
-					tc.nodes,
-					getPodsAssignedToNode,
-					false,
-					false,
-					false,
-					false,
-					evictions.WithNodeFit(tc.nodeFit),
-				),
-				SharedInformerFactoryImpl: sharedInformerFactory,
+				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
 			plugin, err := New(

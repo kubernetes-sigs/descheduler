@@ -16,7 +16,7 @@ type HandleImpl struct {
 	ClientsetImpl                 clientset.Interface
 	GetPodsAssignedToNodeFuncImpl podutil.GetPodsAssignedToNodeFunc
 	SharedInformerFactoryImpl     informers.SharedInformerFactory
-	EvictorFilterImpl             *evictions.EvictorFilter
+	EvictorFilterImpl             framework.EvictorPlugin
 	PodEvictorImpl                *evictions.PodEvictor
 }
 
