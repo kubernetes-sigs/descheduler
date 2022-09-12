@@ -43,7 +43,7 @@ var (
 			Subsystem:      DeschedulerSubsystem,
 			Name:           "build_info",
 			Help:           "Build info about descheduler, including Go version, Descheduler version, Git SHA, Git branch",
-			ConstLabels:    map[string]string{"GoVersion": version.Get().GoVersion, "DeschedulerVersion": version.Get().GitVersion, "GitBranch": version.Get().GitBranch, "GitSha1": version.Get().GitSha1},
+			ConstLabels:    map[string]string{"GoVersion": version.Get().GoVersion, "AppVersion": version.Get().Major + "." + version.Get().Minor, "DeschedulerVersion": version.Get().GitVersion, "GitBranch": version.Get().GitBranch, "GitSha1": version.Get().GitSha1},
 			StabilityLevel: metrics.ALPHA,
 		},
 	)
