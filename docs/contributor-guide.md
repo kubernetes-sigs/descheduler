@@ -53,7 +53,7 @@ make build-helm
 To check linting of your changes in the helm chart locally you can run:
 
 ```
-make lint-helm
+make lint-chart
 ```
 
 ## Test helm changes locally with kind and ct
