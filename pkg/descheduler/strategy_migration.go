@@ -133,13 +133,13 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		if tooManyRestartsParams == nil {
 			tooManyRestartsParams = &api.PodsHavingTooManyRestarts{}
 		}
-		args := &componentconfig.RemovePodsHavingTooManyRestartsArgs{
+		args := &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs{
 			Namespaces:              params.Namespaces,
 			LabelSelector:           params.LabelSelector,
 			PodRestartThreshold:     tooManyRestartsParams.PodRestartThreshold,
 			IncludingInitContainers: tooManyRestartsParams.IncludingInitContainers,
 		}
-		if err := validation.ValidateRemovePodsHavingTooManyRestartsArgs(args); err != nil {
+		if err := removepodshavingtoomanyrestarts.ValidateRemovePodsHavingTooManyRestartsArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodshavingtoomanyrestarts.PluginName)
 			return
 		}
