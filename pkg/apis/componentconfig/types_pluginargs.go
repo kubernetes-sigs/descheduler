@@ -97,23 +97,3 @@ type RemovePodsViolatingInterPodAntiAffinityArgs struct {
 	Namespaces    *api.Namespaces
 	LabelSelector *metav1.LabelSelector
 }
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
-type LowNodeUtilizationArgs struct {
-	metav1.TypeMeta
-
-	UseDeviationThresholds bool
-	Thresholds             api.ResourceThresholds
-	TargetThresholds       api.ResourceThresholds
-	NumberOfNodes          int
-}
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
-type HighNodeUtilizationArgs struct {
-	metav1.TypeMeta
-
-	Thresholds    api.ResourceThresholds
-	NumberOfNodes int
-}

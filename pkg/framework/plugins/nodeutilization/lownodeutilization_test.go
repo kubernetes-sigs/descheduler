@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
@@ -790,7 +789,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
-			plugin, err := NewLowNodeUtilization(&componentconfig.LowNodeUtilizationArgs{
+			plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
 
 				Thresholds:             test.thresholds,
 				TargetThresholds:       test.targetThresholds,
@@ -963,7 +962,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
-			plugin, err := NewLowNodeUtilization(&componentconfig.LowNodeUtilizationArgs{
+			plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
 
 				Thresholds: api.ResourceThresholds{
 					v1.ResourcePods: 20,

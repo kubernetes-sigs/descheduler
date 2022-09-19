@@ -229,12 +229,12 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 	},
 	"HighNodeUtilization": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.HighNodeUtilizationArgs{
+		args := &nodeutilization.HighNodeUtilizationArgs{
 			Thresholds:    params.NodeResourceUtilizationThresholds.Thresholds,
 			NumberOfNodes: params.NodeResourceUtilizationThresholds.NumberOfNodes,
 		}
 
-		if err := validation.ValidateHighNodeUtilizationArgs(args); err != nil {
+		if err := nodeutilization.ValidateHighNodeUtilizationArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", nodeutilization.HighNodeUtilizationPluginName)
 			return
 		}
@@ -249,14 +249,14 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 	},
 	"LowNodeUtilization": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.LowNodeUtilizationArgs{
+		args := &nodeutilization.LowNodeUtilizationArgs{
 			Thresholds:             params.NodeResourceUtilizationThresholds.Thresholds,
 			TargetThresholds:       params.NodeResourceUtilizationThresholds.TargetThresholds,
 			UseDeviationThresholds: params.NodeResourceUtilizationThresholds.UseDeviationThresholds,
 			NumberOfNodes:          params.NodeResourceUtilizationThresholds.NumberOfNodes,
 		}
 
-		if err := validation.ValidateLowNodeUtilizationArgs(args); err != nil {
+		if err := nodeutilization.ValidateLowNodeUtilizationArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", nodeutilization.LowNodeUtilizationPluginName)
 			return
 		}
