@@ -40,20 +40,6 @@ func ValidateRemovePodsViolatingNodeTaintsArgs(args *componentconfig.RemovePodsV
 	)
 }
 
-// ValidateRemovePodsViolatingNodeAffinityArgs validates RemovePodsViolatingNodeAffinity arguments
-func ValidateRemovePodsViolatingNodeAffinityArgs(args *componentconfig.RemovePodsViolatingNodeAffinityArgs) error {
-	var err error
-	if args == nil || len(args.NodeAffinityType) == 0 {
-		err = fmt.Errorf("nodeAffinityType needs to be set")
-	}
-
-	return errorsAggregate(
-		err,
-		validateNamespaceArgs(args.Namespaces),
-		validateLabelSelectorArgs(args.LabelSelector),
-	)
-}
-
 // ValidateRemovePodsViolatingTopologySpreadConstraintArgs validates RemovePodsViolatingTopologySpreadConstraint arguments
 func ValidateRemovePodsViolatingTopologySpreadConstraintArgs(args *componentconfig.RemovePodsViolatingTopologySpreadConstraintArgs) error {
 	return errorsAggregate(

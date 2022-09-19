@@ -90,12 +90,12 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 	},
 	"RemovePodsViolatingNodeAffinity": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.RemovePodsViolatingNodeAffinityArgs{
+		args := &removepodsviolatingnodeaffinity.RemovePodsViolatingNodeAffinityArgs{
 			Namespaces:       params.Namespaces,
 			LabelSelector:    params.LabelSelector,
 			NodeAffinityType: params.NodeAffinityType,
 		}
-		if err := validation.ValidateRemovePodsViolatingNodeAffinityArgs(args); err != nil {
+		if err := removepodsviolatingnodeaffinity.ValidateRemovePodsViolatingNodeAffinityArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingnodeaffinity.PluginName)
 			return
 		}
