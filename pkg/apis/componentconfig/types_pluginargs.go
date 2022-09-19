@@ -67,18 +67,6 @@ type RemoveDuplicatesArgs struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// PodLifeTimeArgs holds arguments used to configure PodLifeTime plugin.
-type PodLifeTimeArgs struct {
-	metav1.TypeMeta
-
-	Namespaces            *api.Namespaces
-	LabelSelector         *metav1.LabelSelector
-	MaxPodLifeTimeSeconds *uint
-	States                []string
-}
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
 // RemovePodsViolatingTopologySpreadConstraintArgs holds arguments used to configure RemovePodsViolatingTopologySpreadConstraint plugin.
 type RemovePodsViolatingTopologySpreadConstraintArgs struct {
 	metav1.TypeMeta

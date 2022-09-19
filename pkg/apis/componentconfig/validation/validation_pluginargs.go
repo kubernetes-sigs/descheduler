@@ -19,11 +19,8 @@ package validation
 import (
 	"fmt"
 
-	v1 "k8s.io/api/core/v1"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/apimachinery/pkg/util/sets"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 )
@@ -63,21 +60,6 @@ func ValidateRemovePodsViolatingNodeAffinityArgs(args *componentconfig.RemovePod
 		err,
 		validateNamespaceArgs(args.Namespaces),
 		validateLabelSelectorArgs(args.LabelSelector),
-	)
-}
-
-// ValidatePodLifeTimeArgs validates PodLifeTime arguments
-func ValidatePodLifeTimeArgs(args *componentconfig.PodLifeTimeArgs) error {
-	var err error
-	if args.MaxPodLifeTimeSeconds == nil {
-		err = fmt.Errorf("MaxPodLifeTimeSeconds not set")
-	}
-
-	return errorsAggregate(
-		err,
-		validateNamespaceArgs(args.Namespaces),
-		validateLabelSelectorArgs(args.LabelSelector),
-		validatePodLifeTimeStates(args.States),
 	)
 }
 
@@ -130,22 +112,5 @@ func validatePodRestartThreshold(podRestartThreshold int32) error {
 	if podRestartThreshold < 1 {
 		return fmt.Errorf("PodsHavingTooManyRestarts threshold not set")
 	}
-	return nil
-}
-
-func validatePodLifeTimeStates(states []string) error {
-	podLifeTimeAllowedStates := sets.NewString(
-		string(v1.PodRunning),
-		string(v1.PodPending),
-
-		// Container state reasons: https://github.com/kubernetes/kubernetes/blob/release-1.24/pkg/kubelet/kubelet_pods.go#L76-L79
-		"PodInitializing",
-		"ContainerCreating",
-	)
-
-	if !podLifeTimeAllowedStates.HasAll(states...) {
-		return fmt.Errorf("states must be one of %v", podLifeTimeAllowedStates.List())
-	}
-
 	return nil
 }

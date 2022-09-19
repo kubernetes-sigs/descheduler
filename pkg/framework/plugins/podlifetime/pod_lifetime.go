@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/framework"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -39,13 +38,13 @@ var _ framework.DeschedulePlugin = &PodLifeTime{}
 // PodLifeTime evicts pods on the node that violate the max pod lifetime threshold
 type PodLifeTime struct {
 	handle    framework.Handle
-	args      *componentconfig.PodLifeTimeArgs
+	args      *PodLifeTimeArgs
 	podFilter podutil.FilterFunc
 }
 
 // New builds plugin from its arguments while passing a handle
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	podLifeTimeArgs, ok := args.(*componentconfig.PodLifeTimeArgs)
+	podLifeTimeArgs, ok := args.(*PodLifeTimeArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type PodLifeTimeArgs, got %T", args)
 	}

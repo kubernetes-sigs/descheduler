@@ -167,13 +167,13 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 			states = append(states, podLifeTimeParams.States...)
 		}
 
-		args := &componentconfig.PodLifeTimeArgs{
+		args := &podlifetime.PodLifeTimeArgs{
 			Namespaces:            params.Namespaces,
 			LabelSelector:         params.LabelSelector,
 			MaxPodLifeTimeSeconds: podLifeTimeParams.MaxPodLifeTimeSeconds,
 			States:                states,
 		}
-		if err := validation.ValidatePodLifeTimeArgs(args); err != nil {
+		if err := podlifetime.ValidatePodLifeTimeArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", podlifetime.PluginName)
 			return
 		}
