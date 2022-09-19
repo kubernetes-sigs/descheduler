@@ -18,8 +18,9 @@ package nodeutilization
 
 import (
 	"context"
-	"sigs.k8s.io/descheduler/pkg/api"
 	"sort"
+
+	"sigs.k8s.io/descheduler/pkg/api"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -286,36 +287,38 @@ func evictPods(
 				continue
 			}
 
-			if podEvictor.Evict(ctx, pod, evictions.EvictOptions{}) {
-				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
+			if podEvictor.PreEvictionFilter(pod) {
+				if podEvictor.Evict(ctx, pod, evictions.EvictOptions{}) {
+					klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
 
-				for name := range totalAvailableUsage {
-					if name == v1.ResourcePods {
-						nodeInfo.usage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
-						totalAvailableUsage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
-					} else {
-						quantity := utils.GetResourceRequestQuantity(pod, name)
-						nodeInfo.usage[name].Sub(quantity)
-						totalAvailableUsage[name].Sub(quantity)
+					for name := range totalAvailableUsage {
+						if name == v1.ResourcePods {
+							nodeInfo.usage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
+							totalAvailableUsage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
+						} else {
+							quantity := utils.GetResourceRequestQuantity(pod, name)
+							nodeInfo.usage[name].Sub(quantity)
+							totalAvailableUsage[name].Sub(quantity)
+						}
 					}
-				}
 
-				keysAndValues := []interface{}{
-					"node", nodeInfo.node.Name,
-					"CPU", nodeInfo.usage[v1.ResourceCPU].MilliValue(),
-					"Mem", nodeInfo.usage[v1.ResourceMemory].Value(),
-					"Pods", nodeInfo.usage[v1.ResourcePods].Value(),
-				}
-				for name := range totalAvailableUsage {
-					if !nodeutil.IsBasicResource(name) {
-						keysAndValues = append(keysAndValues, string(name), totalAvailableUsage[name].Value())
+					keysAndValues := []interface{}{
+						"node", nodeInfo.node.Name,
+						"CPU", nodeInfo.usage[v1.ResourceCPU].MilliValue(),
+						"Mem", nodeInfo.usage[v1.ResourceMemory].Value(),
+						"Pods", nodeInfo.usage[v1.ResourcePods].Value(),
 					}
-				}
+					for name := range totalAvailableUsage {
+						if !nodeutil.IsBasicResource(name) {
+							keysAndValues = append(keysAndValues, string(name), totalAvailableUsage[name].Value())
+						}
+					}
 
-				klog.V(3).InfoS("Updated node usage", keysAndValues...)
-				// check if pods can be still evicted
-				if !continueEviction(nodeInfo, totalAvailableUsage) {
-					break
+					klog.V(3).InfoS("Updated node usage", keysAndValues...)
+					// check if pods can be still evicted
+					if !continueEviction(nodeInfo, totalAvailableUsage) {
+						break
+					}
 				}
 			}
 			if podEvictor.NodeLimitExceeded(nodeInfo.node) {
