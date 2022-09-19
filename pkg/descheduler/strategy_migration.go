@@ -22,8 +22,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/validation"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
@@ -209,12 +207,12 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 	},
 	"RemovePodsViolatingTopologySpreadConstraint": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.RemovePodsViolatingTopologySpreadConstraintArgs{
+		args := &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
 			Namespaces:             params.Namespaces,
 			LabelSelector:          params.LabelSelector,
 			IncludeSoftConstraints: params.IncludePreferNoSchedule,
 		}
-		if err := validation.ValidateRemovePodsViolatingTopologySpreadConstraintArgs(args); err != nil {
+		if err := removepodsviolatingtopologyspreadconstraint.ValidateRemovePodsViolatingTopologySpreadConstraintArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingtopologyspreadconstraint.PluginName)
 			return
 		}

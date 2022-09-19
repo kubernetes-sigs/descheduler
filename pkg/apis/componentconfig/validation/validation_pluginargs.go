@@ -19,50 +19,13 @@ package validation
 import (
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 )
-
-const (
-	// MinResourcePercentage is the minimum value of a resource's percentage
-	MinResourcePercentage = 0
-	// MaxResourcePercentage is the maximum value of a resource's percentage
-	MaxResourcePercentage = 100
-)
-
-// ValidateRemovePodsViolatingTopologySpreadConstraintArgs validates RemovePodsViolatingTopologySpreadConstraint arguments
-func ValidateRemovePodsViolatingTopologySpreadConstraintArgs(args *componentconfig.RemovePodsViolatingTopologySpreadConstraintArgs) error {
-	return errorsAggregate(
-		validateNamespaceArgs(args.Namespaces),
-		validateLabelSelectorArgs(args.LabelSelector),
-	)
-}
 
 // errorsAggregate converts all arg validation errors to a single error interface.
 // if no errors, it will return nil.
 func errorsAggregate(errors ...error) error {
 	return utilerrors.NewAggregate(errors)
-}
-
-func validateNamespaceArgs(namespaces *api.Namespaces) error {
-	// At most one of include/exclude can be set
-	if namespaces != nil && len(namespaces.Include) > 0 && len(namespaces.Exclude) > 0 {
-		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
-	}
-
-	return nil
-}
-
-func validateLabelSelectorArgs(labelSelector *metav1.LabelSelector) error {
-	if labelSelector != nil {
-		if _, err := metav1.LabelSelectorAsSelector(labelSelector); err != nil {
-			return fmt.Errorf("failed to get label selectors from strategy's params: %+v", err)
-		}
-	}
-
-	return nil
 }
 
 func validatePodRestartThreshold(podRestartThreshold int32) error {
