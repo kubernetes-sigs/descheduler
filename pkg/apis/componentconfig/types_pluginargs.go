@@ -54,13 +54,3 @@ type RemovePodsViolatingTopologySpreadConstraintArgs struct {
 	LabelSelector          *metav1.LabelSelector
 	IncludeSoftConstraints bool
 }
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
-// RemovePodsViolatingInterPodAntiAffinity holds arguments used to configure RemovePodsViolatingInterPodAntiAffinity plugin.
-type RemovePodsViolatingInterPodAntiAffinityArgs struct {
-	metav1.TypeMeta
-
-	Namespaces    *api.Namespaces
-	LabelSelector *metav1.LabelSelector
-}

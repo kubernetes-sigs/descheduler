@@ -62,14 +62,6 @@ func ValidateRemovePodsViolatingTopologySpreadConstraintArgs(args *componentconf
 	)
 }
 
-// ValidateRemovePodsViolatingInterPodAntiAffinityArgs validates ValidateRemovePodsViolatingInterPodAntiAffinity arguments
-func ValidateRemovePodsViolatingInterPodAntiAffinityArgs(args *componentconfig.RemovePodsViolatingInterPodAntiAffinityArgs) error {
-	return errorsAggregate(
-		validateNamespaceArgs(args.Namespaces),
-		validateLabelSelectorArgs(args.LabelSelector),
-	)
-}
-
 // errorsAggregate converts all arg validation errors to a single error interface.
 // if no errors, it will return nil.
 func errorsAggregate(errors ...error) error {

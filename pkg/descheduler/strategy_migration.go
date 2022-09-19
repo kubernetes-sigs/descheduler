@@ -110,11 +110,11 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 	},
 	"RemovePodsViolatingInterPodAntiAffinity": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.RemovePodsViolatingInterPodAntiAffinityArgs{
+		args := &removepodsviolatinginterpodantiaffinity.RemovePodsViolatingInterPodAntiAffinityArgs{
 			Namespaces:    params.Namespaces,
 			LabelSelector: params.LabelSelector,
 		}
-		if err := validation.ValidateRemovePodsViolatingInterPodAntiAffinityArgs(args); err != nil {
+		if err := removepodsviolatinginterpodantiaffinity.ValidateRemovePodsViolatingInterPodAntiAffinityArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatinginterpodantiaffinity.PluginName)
 			return
 		}
