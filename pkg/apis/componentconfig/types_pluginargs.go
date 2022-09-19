@@ -35,20 +35,6 @@ type RemovePodsViolatingNodeTaintsArgs struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// RemoveFailedPodsArgs holds arguments used to configure RemoveFailedPods plugin.
-type RemoveFailedPodsArgs struct {
-	metav1.TypeMeta
-
-	Namespaces              *api.Namespaces
-	LabelSelector           *metav1.LabelSelector
-	ExcludeOwnerKinds       []string
-	MinPodLifetimeSeconds   *uint
-	Reasons                 []string
-	IncludingInitContainers bool
-}
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
 // RemovePodsViolatingNodeAffinityArgs holds arguments used to configure RemovePodsViolatingNodeAffinity plugin.
 type RemovePodsViolatingNodeAffinityArgs struct {
 	metav1.TypeMeta

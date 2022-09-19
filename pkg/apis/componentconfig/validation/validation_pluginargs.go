@@ -43,14 +43,6 @@ func ValidateRemovePodsViolatingNodeTaintsArgs(args *componentconfig.RemovePodsV
 	)
 }
 
-// ValidateRemoveFailedPodsArgs validates RemoveFailedPods arguments
-func ValidateRemoveFailedPodsArgs(args *componentconfig.RemoveFailedPodsArgs) error {
-	return errorsAggregate(
-		validateNamespaceArgs(args.Namespaces),
-		validateLabelSelectorArgs(args.LabelSelector),
-	)
-}
-
 // ValidateRemovePodsHavingTooManyRestartsArgs validates RemovePodsHavingTooManyRestarts arguments
 func ValidateRemovePodsHavingTooManyRestartsArgs(args *componentconfig.RemovePodsHavingTooManyRestartsArgs) error {
 	return errorsAggregate(

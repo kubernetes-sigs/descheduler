@@ -67,7 +67,7 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		if failedPodsParams == nil {
 			failedPodsParams = &api.FailedPods{}
 		}
-		args := &componentconfig.RemoveFailedPodsArgs{
+		args := &removefailedpods.RemoveFailedPodsArgs{
 			Namespaces:              params.Namespaces,
 			LabelSelector:           params.LabelSelector,
 			IncludingInitContainers: failedPodsParams.IncludingInitContainers,
@@ -75,7 +75,7 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 			ExcludeOwnerKinds:       failedPodsParams.ExcludeOwnerKinds,
 			Reasons:                 failedPodsParams.Reasons,
 		}
-		if err := validation.ValidateRemoveFailedPodsArgs(args); err != nil {
+		if err := removefailedpods.ValidateRemoveFailedPodsArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removefailedpods.PluginName)
 			return
 		}
