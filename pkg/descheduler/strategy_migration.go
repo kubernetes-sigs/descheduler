@@ -42,13 +42,13 @@ import (
 
 var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl){
 	"RemovePodsViolatingNodeTaints": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.RemovePodsViolatingNodeTaintsArgs{
+		args := &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{
 			Namespaces:              params.Namespaces,
 			LabelSelector:           params.LabelSelector,
 			IncludePreferNoSchedule: params.IncludePreferNoSchedule,
 			ExcludedTaints:          params.ExcludedTaints,
 		}
-		if err := validation.ValidateRemovePodsViolatingNodeTaintsArgs(args); err != nil {
+		if err := removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingnodetaints.PluginName)
 			return
 		}

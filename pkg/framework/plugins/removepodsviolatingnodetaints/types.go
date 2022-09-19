@@ -14,20 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package componentconfig
+package removepodsviolatingnodetaints
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
+// +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// RemovePodsViolatingTopologySpreadConstraintArgs holds arguments used to configure RemovePodsViolatingTopologySpreadConstraint plugin.
-type RemovePodsViolatingTopologySpreadConstraintArgs struct {
+// RemovePodsViolatingNodeTaintsArgs holds arguments used to configure the RemovePodsViolatingNodeTaints plugin.
+type RemovePodsViolatingNodeTaintsArgs struct {
 	metav1.TypeMeta
 
-	Namespaces             *api.Namespaces
-	LabelSelector          *metav1.LabelSelector
-	IncludeSoftConstraints bool
+	Namespaces              *api.Namespaces
+	LabelSelector           *metav1.LabelSelector
+	IncludePreferNoSchedule bool
+	ExcludedTaints          []string
 }

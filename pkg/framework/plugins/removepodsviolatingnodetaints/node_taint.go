@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
@@ -37,7 +36,7 @@ const PluginName = "RemovePodsViolatingNodeTaints"
 // RemovePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
 type RemovePodsViolatingNodeTaints struct {
 	handle         framework.Handle
-	args           *componentconfig.RemovePodsViolatingNodeTaintsArgs
+	args           *RemovePodsViolatingNodeTaintsArgs
 	taintFilterFnc func(taint *v1.Taint) bool
 	podFilter      podutil.FilterFunc
 }
@@ -46,7 +45,7 @@ var _ framework.DeschedulePlugin = &RemovePodsViolatingNodeTaints{}
 
 // New builds plugin from its arguments while passing a handle
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	nodeTaintsArgs, ok := args.(*componentconfig.RemovePodsViolatingNodeTaintsArgs)
+	nodeTaintsArgs, ok := args.(*RemovePodsViolatingNodeTaintsArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingNodeTaintsArgs, got %T", args)
 	}
