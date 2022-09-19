@@ -41,7 +41,6 @@ import (
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -224,7 +223,7 @@ func runPodLifetimePlugin(
 
 	maxPodLifeTimeSeconds := uint(1)
 
-	plugin, err := podlifetime.New(&componentconfig.PodLifeTimeArgs{
+	plugin, err := podlifetime.New(&podlifetime.PodLifeTimeArgs{
 		MaxPodLifeTimeSeconds: &maxPodLifeTimeSeconds,
 		LabelSelector:         labelSelector,
 		Namespaces:            namespaces,
@@ -393,7 +392,7 @@ func TestLowNodeUtilization(t *testing.T) {
 		SharedInformerFactoryImpl:     sharedInformerFactory,
 	}
 
-	plugin, err := nodeutilization.NewLowNodeUtilization(&componentconfig.LowNodeUtilizationArgs{
+	plugin, err := nodeutilization.NewLowNodeUtilization(&nodeutilization.LowNodeUtilizationArgs{
 		Thresholds: api.ResourceThresholds{
 			v1.ResourceCPU: 70,
 		},
