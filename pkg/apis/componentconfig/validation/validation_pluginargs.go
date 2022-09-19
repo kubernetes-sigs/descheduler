@@ -63,10 +63,6 @@ func ValidateRemovePodsViolatingNodeAffinityArgs(args *componentconfig.RemovePod
 	)
 }
 
-func ValidateRemoveDuplicatesArgs(args *componentconfig.RemoveDuplicatesArgs) error {
-	return validateNamespaceArgs(args.Namespaces)
-}
-
 // ValidateRemovePodsViolatingTopologySpreadConstraintArgs validates RemovePodsViolatingTopologySpreadConstraint arguments
 func ValidateRemovePodsViolatingTopologySpreadConstraintArgs(args *componentconfig.RemovePodsViolatingTopologySpreadConstraintArgs) error {
 	return errorsAggregate(

@@ -188,13 +188,13 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 	},
 	"RemoveDuplicates": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.RemoveDuplicatesArgs{
+		args := &removeduplicates.RemoveDuplicatesArgs{
 			Namespaces: params.Namespaces,
 		}
 		if params.RemoveDuplicates != nil {
 			args.ExcludeOwnerKinds = params.RemoveDuplicates.ExcludeOwnerKinds
 		}
-		if err := validation.ValidateRemoveDuplicatesArgs(args); err != nil {
+		if err := removeduplicates.ValidateRemoveDuplicatesArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removeduplicates.PluginName)
 			return
 		}

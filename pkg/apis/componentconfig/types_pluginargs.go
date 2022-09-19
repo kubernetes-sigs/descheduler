@@ -58,15 +58,6 @@ type RemovePodsHavingTooManyRestartsArgs struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-type RemoveDuplicatesArgs struct {
-	metav1.TypeMeta
-
-	Namespaces        *api.Namespaces
-	ExcludeOwnerKinds []string
-}
-
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
 // RemovePodsViolatingTopologySpreadConstraintArgs holds arguments used to configure RemovePodsViolatingTopologySpreadConstraint plugin.
 type RemovePodsViolatingTopologySpreadConstraintArgs struct {
 	metav1.TypeMeta

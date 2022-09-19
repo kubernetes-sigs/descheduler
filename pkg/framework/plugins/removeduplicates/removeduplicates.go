@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
@@ -47,7 +46,7 @@ const PluginName = "RemoveDuplicates"
 
 type RemoveDuplicates struct {
 	handle    framework.Handle
-	args      *componentconfig.RemoveDuplicatesArgs
+	args      *RemoveDuplicatesArgs
 	podFilter podutil.FilterFunc
 }
 
@@ -60,7 +59,7 @@ type podOwner struct {
 
 // New builds plugin from its arguments while passing a handle
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	removeDuplicatesArgs, ok := args.(*componentconfig.RemoveDuplicatesArgs)
+	removeDuplicatesArgs, ok := args.(*RemoveDuplicatesArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemoveDuplicatesArgs, got %T", args)
 	}
