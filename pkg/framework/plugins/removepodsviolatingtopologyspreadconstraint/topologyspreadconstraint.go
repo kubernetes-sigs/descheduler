@@ -215,7 +215,10 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 		if !d.podFilter(pod) {
 			continue
 		}
-		d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{})
+
+		if d.handle.Evictor().PreEvictionFilter(pod) {
+			d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{})
+		}
 		if d.handle.Evictor().NodeLimitExceeded(nodeMap[pod.Spec.NodeName]) {
 			nodeLimitExceeded[pod.Spec.NodeName] = true
 		}

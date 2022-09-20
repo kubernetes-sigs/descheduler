@@ -57,8 +57,9 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 		excludedNamespaces = sets.NewString(failedPodsArgs.Namespaces.Exclude...)
 	}
 
+	// We can combine Filter and PreEvictionFilter since for this strategy it does not matter where we run PreEvictionFilter
 	podFilter, err := podutil.NewOptions().
-		WithFilter(handle.Evictor().Filter).
+		WithFilter(podutil.WrapFilterFuncs(handle.Evictor().Filter, handle.Evictor().PreEvictionFilter)).
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
 		WithLabelSelector(failedPodsArgs.LabelSelector).

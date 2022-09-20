@@ -181,6 +181,11 @@ func (ei *evictorImpl) Filter(pod *v1.Pod) bool {
 	return ei.evictorFilter.Filter(pod)
 }
 
+// PreEvictionFilter checks if pod can be evicted right before eviction
+func (ei *evictorImpl) PreEvictionFilter(pod *v1.Pod) bool {
+	return ei.evictorFilter.PreEvictionFilter(pod)
+}
+
 // Evict evicts a pod (no pre-check performed)
 func (ei *evictorImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.EvictOptions) bool {
 	return ei.podEvictor.EvictPod(ctx, pod, opts)

@@ -44,7 +44,9 @@ type constraint func(pod *v1.Pod) error
 // This plugin is only meant to customize other actions (extension points) of the evictor,
 // like filtering, sorting, and other ones that might be relevant in the future
 type DefaultEvictor struct {
+	args        runtime.Object
 	constraints []constraint
+	handle      framework.Handle
 }
 
 // IsPodEvictableBasedOnPriority checks if the given pod is evictable based on priority resolved from pod Spec.
@@ -66,6 +68,8 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	}
 
 	ev := &DefaultEvictor{}
+	ev.handle = handle
+	ev.args = defaultEvictorArgs
 
 	if defaultEvictorArgs.EvictFailedBarePods {
 		klog.V(1).InfoS("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
@@ -125,18 +129,6 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 			return nil
 		})
 	}
-	if defaultEvictorArgs.NodeFit {
-		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
-			nodes, err := nodeutil.ReadyNodes(context.TODO(), handle.ClientSet(), handle.SharedInformerFactory().Core().V1().Nodes(), defaultEvictorArgs.NodeSelector)
-			if err != nil {
-				return fmt.Errorf("could not list nodes when processing NodeFit")
-			}
-			if !nodeutil.PodFitsAnyOtherNode(handle.GetPodsAssignedToNodeFunc(), pod, nodes) {
-				return fmt.Errorf("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable")
-			}
-			return nil
-		})
-	}
 	if defaultEvictorArgs.LabelSelector != nil && !defaultEvictorArgs.LabelSelector.Empty() {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			if !defaultEvictorArgs.LabelSelector.Matches(labels.Set(pod.Labels)) {
@@ -152,6 +144,23 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 // Name retrieves the plugin name
 func (d *DefaultEvictor) Name() string {
 	return PluginName
+}
+
+func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
+	defaultEvictorArgs := d.args.(*DefaultEvictorArgs)
+	if defaultEvictorArgs.NodeFit {
+		nodes, err := nodeutil.ReadyNodes(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Nodes(), defaultEvictorArgs.NodeSelector)
+		if err != nil {
+			klog.V(1).ErrorS(fmt.Errorf("Pod fails the following checks"), "pod", klog.KObj(pod))
+			return false
+		}
+		if !nodeutil.PodFitsAnyOtherNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) {
+			klog.V(1).ErrorS(fmt.Errorf("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable"), "pod", klog.KObj(pod))
+			return false
+		}
+		return true
+	}
+	return true
 }
 
 func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
