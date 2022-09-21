@@ -1,5 +1,5 @@
 ---
-apiVersion: batch/v1  # for k8s version < 1.21.0, use batch/v1beta1
+apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: descheduler-cronjob
@@ -16,7 +16,7 @@ spec:
           priorityClassName: system-cluster-critical
           containers:
           - name: descheduler
-            image: k8s.gcr.io/descheduler/descheduler:v0.24.0
+            image: k8s.gcr.io/descheduler/descheduler:v0.25.0
             volumeMounts:
             - mountPath: /policy-dir
               name: policy-volume

@@ -1,0 +1,6 @@
+chart-dirs:
+  - charts
+helm-extra-args: "--timeout=5m"
+check-version-increment: false
+helm-extra-set-args: "--set=kind=Deployment"
+target-branch: master

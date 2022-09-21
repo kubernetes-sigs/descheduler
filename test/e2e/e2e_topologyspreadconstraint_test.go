@@ -10,15 +10,18 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
+	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
 )
 
 const zoneTopologyKey string = "topology.kubernetes.io/zone"
 
 func TestTopologySpreadConstraint(t *testing.T) {
 	ctx := context.Background()
-	clientSet, _, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, _, _, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -81,19 +84,40 @@ func TestTopologySpreadConstraint(t *testing.T) {
 
 			// Run TopologySpreadConstraint strategy
 			t.Logf("Running RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
-			strategies.RemovePodsViolatingTopologySpreadConstraint(
-				ctx,
-				clientSet,
-				deschedulerapi.DeschedulerStrategy{
-					Enabled: true,
-					Params: &deschedulerapi.StrategyParameters{
-						IncludeSoftConstraints: tc.constraint != v1.DoNotSchedule,
-					},
+
+			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods:   true,
+				EvictSystemCriticalPods: false,
+				IgnorePvcPods:           false,
+				EvictFailedBarePods:     false,
+			}
+
+			filter, err := defaultevictor.New(
+				defaultevictorArgs,
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 clientSet,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				},
-				nodes,
-				podEvictor,
-				getPodsAssignedToNode,
 			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
+			plugin, err := removepodsviolatingtopologyspreadconstraint.New(&componentconfig.RemovePodsViolatingTopologySpreadConstraintArgs{
+				IncludeSoftConstraints: tc.constraint != v1.DoNotSchedule,
+			},
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 clientSet,
+					PodEvictorImpl:                podEvictor,
+					EvictorFilterImpl:             filter.(framework.EvictorPlugin),
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				},
+			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
+			plugin.(framework.BalancePlugin).Balance(ctx, workerNodes)
 			t.Logf("Finished RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
 
 			t.Logf("Wait for terminating pods of %s to disappear", name)

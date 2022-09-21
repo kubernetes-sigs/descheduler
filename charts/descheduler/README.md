@@ -64,11 +64,12 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `deschedulerPolicy.strategies`      | The _descheduler_ strategies to apply                                                                                 | _see values.yaml_                    |
 | `priorityClassName`                 | The name of the priority class to add to pods                                                                         | `system-cluster-critical`            |
 | `rbac.create`                       | If `true`, create & use RBAC resources                                                                                | `true`                               |
-| `podSecurityPolicy.create`          | If `true`, create PodSecurityPolicy                                                                                   | `true`                               |
 | `resources`                         | Descheduler container CPU and memory requests/limits                                                                  | _see values.yaml_                    |
 | `serviceAccount.create`             | If `true`, create a service account for the cron job                                                                  | `true`                               |
 | `serviceAccount.name`               | The name of the service account to use, if not set and create is true a name is generated using the fullname template | `nil`                                |
 | `serviceAccount.annotations`        | Specifies custom annotations for the serviceAccount                                                                   | `{}`                                 |
+| `podAnnotations`                    | Annotations to add to the descheduler Pods                                                                            | `{}`                                 |
+| `podLabels`                         | Labels to add to the descheduler Pods                                                                                 | `{}`                                 |
 | `nodeSelector`                      | Node selectors to run the descheduler cronjob/deployment on specific nodes                                            | `nil`                                |
 | `service.enabled`                   | If `true`, create a service for deployment                                                                            | `false`                              |
 | `serviceMonitor.enabled`            | If `true`, create a ServiceMonitor for deployment                                                                     | `false`                              |

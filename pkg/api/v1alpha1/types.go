@@ -111,7 +111,10 @@ type RemoveDuplicates struct {
 
 type PodLifeTime struct {
 	MaxPodLifeTimeSeconds *uint    `json:"maxPodLifeTimeSeconds,omitempty"`
-	PodStatusPhases       []string `json:"podStatusPhases,omitempty"`
+	States                []string `json:"states,omitempty"`
+
+	// Deprecated: Use States instead.
+	PodStatusPhases []string `json:"podStatusPhases,omitempty"`
 }
 
 type FailedPods struct {

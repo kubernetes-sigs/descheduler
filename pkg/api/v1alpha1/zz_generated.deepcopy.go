@@ -209,6 +209,11 @@ func (in *PodLifeTime) DeepCopyInto(out *PodLifeTime) {
 		*out = new(uint)
 		**out = **in
 	}
+	if in.States != nil {
+		in, out := &in.States, &out.States
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.PodStatusPhases != nil {
 		in, out := &in.PodStatusPhases, &out.PodStatusPhases
 		*out = make([]string, len(*in))

@@ -12,16 +12,19 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
-
-	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/strategies"
+	"k8s.io/utils/pointer"
+	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
+	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 )
 
 var oneHourPodLifetimeSeconds uint = 3600
 
 func TestFailedPods(t *testing.T) {
 	ctx := context.Background()
-	clientSet, _, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, sharedInformerFactory, _, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -36,38 +39,28 @@ func TestFailedPods(t *testing.T) {
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 	testCases := map[string]struct {
 		expectedEvictedCount uint
-		strategyParams       *deschedulerapi.StrategyParameters
+		args                 *componentconfig.RemoveFailedPodsArgs
 	}{
-		"test-failed-pods-nil-strategy": {
+		"test-failed-pods-default-args": {
 			expectedEvictedCount: 1,
-			strategyParams:       nil,
-		},
-		"test-failed-pods-default-strategy": {
-			expectedEvictedCount: 1,
-			strategyParams:       &deschedulerapi.StrategyParameters{},
-		},
-		"test-failed-pods-default-failed-pods": {
-			expectedEvictedCount: 1,
-			strategyParams: &deschedulerapi.StrategyParameters{
-				FailedPods: &deschedulerapi.FailedPods{},
-			},
+			args:                 &componentconfig.RemoveFailedPodsArgs{},
 		},
 		"test-failed-pods-reason-unmatched": {
 			expectedEvictedCount: 0,
-			strategyParams: &deschedulerapi.StrategyParameters{
-				FailedPods: &deschedulerapi.FailedPods{Reasons: []string{"ReasonDoesNotMatch"}},
+			args: &componentconfig.RemoveFailedPodsArgs{
+				Reasons: []string{"ReasonDoesNotMatch"},
 			},
 		},
 		"test-failed-pods-min-age-unmet": {
 			expectedEvictedCount: 0,
-			strategyParams: &deschedulerapi.StrategyParameters{
-				FailedPods: &deschedulerapi.FailedPods{MinPodLifetimeSeconds: &oneHourPodLifetimeSeconds},
+			args: &componentconfig.RemoveFailedPodsArgs{
+				MinPodLifetimeSeconds: &oneHourPodLifetimeSeconds,
 			},
 		},
 		"test-failed-pods-exclude-job-kind": {
 			expectedEvictedCount: 0,
-			strategyParams: &deschedulerapi.StrategyParameters{
-				FailedPods: &deschedulerapi.FailedPods{ExcludeOwnerKinds: []string{"Job"}},
+			args: &componentconfig.RemoveFailedPodsArgs{
+				ExcludeOwnerKinds: []string{"Job"},
 			},
 		},
 	}
@@ -85,18 +78,49 @@ func TestFailedPods(t *testing.T) {
 
 			podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
 
-			t.Logf("Running RemoveFailedPods strategy for %s", name)
-			strategies.RemoveFailedPods(
-				ctx,
-				clientSet,
-				deschedulerapi.DeschedulerStrategy{
-					Enabled: true,
-					Params:  tc.strategyParams,
+			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods:   true,
+				EvictSystemCriticalPods: false,
+				IgnorePvcPods:           false,
+				EvictFailedBarePods:     false,
+			}
+
+			evictorFilter, err := defaultevictor.New(
+				defaultevictorArgs,
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 clientSet,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+					SharedInformerFactoryImpl:     sharedInformerFactory,
 				},
-				nodes,
-				podEvictor,
-				getPodsAssignedToNode,
 			)
+
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
+			t.Logf("Running RemoveFailedPods strategy for %s", name)
+
+			plugin, err := removefailedpods.New(&componentconfig.RemoveFailedPodsArgs{
+				Reasons:                 tc.args.Reasons,
+				MinPodLifetimeSeconds:   tc.args.MinPodLifetimeSeconds,
+				IncludingInitContainers: tc.args.IncludingInitContainers,
+				ExcludeOwnerKinds:       tc.args.ExcludeOwnerKinds,
+				LabelSelector:           tc.args.LabelSelector,
+				Namespaces:              tc.args.Namespaces,
+			},
+				&frameworkfake.HandleImpl{
+					ClientsetImpl:                 clientSet,
+					PodEvictorImpl:                podEvictor,
+					EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+					SharedInformerFactoryImpl:     sharedInformerFactory,
+					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+				},
+			)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
+			plugin.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
 			t.Logf("Finished RemoveFailedPods strategy for %s", name)
 
 			if actualEvictedCount := podEvictor.TotalEvicted(); actualEvictedCount == tc.expectedEvictedCount {
@@ -113,7 +137,6 @@ func initFailedJob(name, namespace string) *batchv1.Job {
 	podSpec.Containers[0].Command = []string{"/bin/false"}
 	podSpec.RestartPolicy = v1.RestartPolicyNever
 	labelsSet := labels.Set{"test": name, "name": name}
-	jobBackoffLimit := int32(0)
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:    labelsSet,
@@ -125,7 +148,7 @@ func initFailedJob(name, namespace string) *batchv1.Job {
 				Spec:       podSpec,
 				ObjectMeta: metav1.ObjectMeta{Labels: labelsSet},
 			},
-			BackoffLimit: &jobBackoffLimit,
+			BackoffLimit: pointer.Int32(0),
 		},
 	}
 }

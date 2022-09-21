@@ -1,0 +1,47 @@
+name: "Security"
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - release-*
+  schedule:
+    - cron: '30 1 * * 0'
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Build image
+        run: |
+          IMAGE_REPO=${HELM_IMAGE_REPO:-descheduler}
+          IMAGE_TAG=${HELM_IMAGE_TAG:-security-test}
+          VERSION=security-test make image
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'descheduler:security-test'
+          format: 'sarif'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+          exit-code: '0'
