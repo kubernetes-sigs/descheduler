@@ -119,9 +119,11 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 		errors = append(errors, fmt.Errorf("pod does not tolerate taints on the node"))
 	}
 	// Check if the pod can fit on a node based off it's requests
-	ok, reqErrors := fitsRequest(nodeIndexer, pod, node)
-	if !ok {
-		errors = append(errors, reqErrors...)
+	if pod.Spec.NodeName == "" || pod.Spec.NodeName != node.Name {
+		ok, reqErrors := fitsRequest(nodeIndexer, pod, node)
+		if !ok {
+			errors = append(errors, reqErrors...)
+		}
 	}
 	// Check if node is schedulable
 	if IsNodeUnschedulable(node) {

@@ -288,6 +288,7 @@ func Convert_api_NodeResourceUtilizationThresholds_To_v1alpha1_NodeResourceUtili
 
 func autoConvert_v1alpha1_PodLifeTime_To_api_PodLifeTime(in *PodLifeTime, out *api.PodLifeTime, s conversion.Scope) error {
 	out.MaxPodLifeTimeSeconds = (*uint)(unsafe.Pointer(in.MaxPodLifeTimeSeconds))
+	out.States = *(*[]string)(unsafe.Pointer(&in.States))
 	out.PodStatusPhases = *(*[]string)(unsafe.Pointer(&in.PodStatusPhases))
 	return nil
 }
@@ -299,6 +300,7 @@ func Convert_v1alpha1_PodLifeTime_To_api_PodLifeTime(in *PodLifeTime, out *api.P
 
 func autoConvert_api_PodLifeTime_To_v1alpha1_PodLifeTime(in *api.PodLifeTime, out *PodLifeTime, s conversion.Scope) error {
 	out.MaxPodLifeTimeSeconds = (*uint)(unsafe.Pointer(in.MaxPodLifeTimeSeconds))
+	out.States = *(*[]string)(unsafe.Pointer(&in.States))
 	out.PodStatusPhases = *(*[]string)(unsafe.Pointer(&in.PodStatusPhases))
 	return nil
 }

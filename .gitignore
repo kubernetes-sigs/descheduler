@@ -5,3 +5,4 @@ vendordiff.patch
 *.code-workspace
 .vscode/
 kind
+bin/

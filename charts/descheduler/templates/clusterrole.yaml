@@ -27,17 +27,10 @@ rules:
 {{- if .Values.leaderElection.enabled }}
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
-  verbs: ["create"]
+  verbs: ["create", "update"]
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
-  resourceNames: ["descheduler"]
+  resourceNames: ["{{ .Values.leaderElection.resourceName | default "descheduler" }}"]
   verbs: ["get", "patch", "delete"]
-{{- end }}
-{{- if .Values.podSecurityPolicy.create }}
-- apiGroups: ['policy']
-  resources: ['podsecuritypolicies']
-  verbs:     ['use']
-  resourceNames:
-  - {{ template "descheduler.fullname" . }}
 {{- end }}
 {{- end -}}

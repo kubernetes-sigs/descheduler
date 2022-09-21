@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
@@ -38,7 +39,7 @@ import (
 func TestLeaderElection(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, _, _, stopCh := initializeClient(t)
+	clientSet, _, _, _, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	ns1 := "e2e-" + strings.ToLower(t.Name()+"-a")
@@ -153,7 +154,7 @@ func createDeployment(ctx context.Context, clientSet clientset.Interface, namesp
 			Labels:    map[string]string{"test": "leaderelection", "name": "test-leaderelection"},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: func(i int32) *int32 { return &i }(replicas),
+			Replicas: pointer.Int32(replicas),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"test": "leaderelection", "name": "test-leaderelection"},
 			},

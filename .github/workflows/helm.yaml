@@ -1,0 +1,67 @@
+name: Helm
+
+on:
+  push:
+    branches:
+      - master
+      - release-*
+    paths:
+      - 'charts/**'
+      - '.github/workflows/helm.yaml'
+  pull_request:
+    paths:
+      - 'charts/**'
+      - '.github/workflows/helm.yaml'
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v2.1
+        with:
+          version: v3.9.2
+
+      - uses: actions/setup-python@v3.1.2
+        with:
+          python-version: 3.7
+
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '1.19.0'
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.2.1
+        with:
+          version: v3.7.0
+
+      - name: Run chart-testing (list-changed)
+        id: list-changed
+        run: |
+          changed=$(ct list-changed --config=.github/ci/ct.yaml)
+          if [[ -n "$changed" ]]; then
+            echo "::set-output name=changed::true"
+          fi
+
+      - name: Run chart-testing (lint)
+        run: ct lint --config=.github/ci/ct.yaml --validate-maintainers=false
+
+      # Need a multi node cluster so descheduler runs until evictions
+      - name: Create multi node Kind cluster
+        run: make kind-multi-node
+
+      # helm-extra-set-args only available after ct 3.6.0
+      - name: Run chart-testing (install)
+        run: ct install --config=.github/ci/ct.yaml
+
+      - name: E2E after chart install
+        env:
+          KUBERNETES_VERSION: "v1.25.0"
+          KIND_E2E: true
+          SKIP_INSTALL: true
+        run: make test-e2e

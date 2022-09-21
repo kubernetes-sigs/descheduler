@@ -28,12 +28,12 @@ fullnameOverride: ""
 # labels that'll be applied to all resources
 commonLabels: {}
 
-cronJobApiVersion: "batch/v1"  # Use "batch/v1beta1" for k8s version < 1.21.0. TODO(@7i) remove with 1.23 release
+cronJobApiVersion: "batch/v1"
 schedule: "*/2 * * * *"
 suspend: false
-#startingDeadlineSeconds: 200
-#successfulJobsHistoryLimit: 1
-#failedJobsHistoryLimit: 1
+# startingDeadlineSeconds: 200
+# successfulJobsHistoryLimit: 1
+# failedJobsHistoryLimit: 1
 
 # Required when running as a Deployment
 deschedulingInterval: 5m
@@ -48,9 +48,9 @@ replicas: 1
 # Required when running as a Deployment
 leaderElection: {}
 #  enabled: true
-#  leaseDuration: 15
-#  renewDeadline: 10
-#  retryPeriod: 2
+#  leaseDuration: 15s
+#  renewDeadline: 10s
+#  retryPeriod: 2s
 #  resourceLock: "leases"
 #  resourceName: "descheduler"
 #  resourceNamescape: "kube-system"
@@ -67,6 +67,12 @@ deschedulerPolicy:
   strategies:
     RemoveDuplicates:
       enabled: true
+    RemovePodsHavingTooManyRestarts:
+      enabled: true
+      params:
+        podsHavingTooManyRestarts:
+          podRestartThreshold: 100
+          includingInitContainers: true
     RemovePodsViolatingNodeTaints:
       enabled: true
     RemovePodsViolatingNodeAffinity:
@@ -76,6 +82,10 @@ deschedulerPolicy:
         - requiredDuringSchedulingIgnoredDuringExecution
     RemovePodsViolatingInterPodAntiAffinity:
       enabled: true
+    RemovePodsViolatingTopologySpreadConstraint:
+      enabled: true
+      params:
+        includeSoftConstraints: false
     LowNodeUtilization:
       enabled: true
       params:
@@ -123,10 +133,6 @@ rbac:
   # Specifies whether RBAC resources should be created
   create: true
 
-podSecurityPolicy:
-  # Specifies whether PodSecurityPolicy should be created.
-  create: true
-
 serviceAccount:
   # Specifies whether a ServiceAccount should be created
   create: true
@@ -135,6 +141,10 @@ serviceAccount:
   name:
   # Specifies custom annotations for the serviceAccount
   annotations: {}
+
+podAnnotations: {}
+
+podLabels: {}
 
 livenessProbe:
   failureThreshold: 3

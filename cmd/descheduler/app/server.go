@@ -33,9 +33,8 @@ import (
 	apiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/server/mux"
 	restclient "k8s.io/client-go/rest"
-	"k8s.io/component-base/config"
+	registry "k8s.io/component-base/logs/api/v1"
 	_ "k8s.io/component-base/logs/json/register"
-	"k8s.io/component-base/logs/registry"
 	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/klog/v2"
 )
@@ -62,12 +61,14 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 				klog.ErrorS(err, "failed to apply secure server configuration")
 				return
 			}
-
-			factory, _ := registry.LogRegistry.Get(s.Logging.Format)
+			var factory registry.LogFormatFactory
 			if factory == nil {
 				klog.ClearLogger()
 			} else {
-				log, logrFlush := factory.Create(config.LoggingConfiguration{})
+				log, logrFlush := factory.Create(registry.LoggingConfiguration{
+					Format: s.Logging.Format,
+				})
+
 				defer logrFlush()
 				klog.SetLogger(log)
 			}

@@ -105,17 +105,17 @@ See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/ku
 
 Run As A Job
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.24.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.25.0' | kubectl apply -f -
 ```
 
 Run As A CronJob
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.24.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.25.0' | kubectl apply -f -
 ```
 
 Run As A Deployment
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.24.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.25.0' | kubectl apply -f -
 ```
 
 ## User Guide
@@ -524,19 +524,24 @@ strategies:
 
 This strategy evicts pods that are older than `maxPodLifeTimeSeconds`.
 
-You can also specify `podStatusPhases` to `only` evict pods with specific `StatusPhases`, currently this parameter is limited
-to `Running` and `Pending`.
+You can also specify `states` parameter to **only** evict pods matching the following conditions:
+  - [Pod Phase](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase) status of: `Running`, `Pending`
+  - [Container State Waiting](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-state-waiting) condition of: `PodInitializing`, `ContainerCreating`
+
+If a value for `states` or `podStatusPhases` is not specified,
+Pods in any state (even `Running`) are considered for eviction.
 
 **Parameters:**
 
-|Name|Type|
-|---|---|
-|`maxPodLifeTimeSeconds`|int|
-|`podStatusPhases`|list(string)|
-|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
-|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
-|`namespaces`|(see [namespace filtering](#namespace-filtering))|
-|`labelSelector`|(see [label filtering](#label-filtering))|
+|Name|Type|Notes|
+|---|---|---|
+|`maxPodLifeTimeSeconds`|int||
+|`podStatusPhases`|list(string)|Deprecated in v0.25+ Use `states` instead|
+|`states`|list(string)|Only supported in v0.25+|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))||
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))||
+|`namespaces`|(see [namespace filtering](#namespace-filtering))||
+|`labelSelector`|(see [label filtering](#label-filtering))||
 
 **Example:**
 
@@ -549,8 +554,9 @@ strategies:
      params:
        podLifeTime:
          maxPodLifeTimeSeconds: 86400
-         podStatusPhases:
+         states:
          - "Pending"
+         - "PodInitializing"
 ```
 
 ### RemoveFailedPods
@@ -689,7 +695,7 @@ does not exist, descheduler won't create it and will throw an error.
 
 ### Label filtering
 
-The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.24/#labelselector-v1-meta)
+The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#labelselector-v1-meta)
 to filter pods by their labels:
 
 * `PodLifeTime`
@@ -751,6 +757,7 @@ strategies:
   "LowNodeUtilization":
     enabled: true
     params:
+      nodeFit: true
       nodeResourceUtilizationThresholds:
         thresholds:
           "cpu": 20
@@ -760,7 +767,6 @@ strategies:
           "cpu": 50
           "memory": 50
           "pods": 50
-        nodeFit: true
 ```
 
 Note that node fit filtering references the current pod spec, and not that of it's owner.
@@ -832,6 +838,7 @@ packages that it is compiled with.
 
 | Descheduler | Supported Kubernetes Version |
 |-------------|------------------------------|
+| v0.25       | v1.25                        |
 | v0.24       | v1.24                        |
 | v0.23       | v1.23                        |
 | v0.22       | v1.22                        |
