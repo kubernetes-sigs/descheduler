@@ -301,7 +301,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			fakeClient := fake.NewSimpleClientset(objs...)
 
 			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods()
+			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
 			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 			if err != nil {
@@ -751,7 +751,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			fakeClient := fake.NewSimpleClientset(objs...)
 
 			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods()
+			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
 			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 			if err != nil {

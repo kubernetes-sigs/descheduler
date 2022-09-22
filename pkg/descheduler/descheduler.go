@@ -29,10 +29,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
-	corev1informers "k8s.io/client-go/informers/core/v1"
-	schedulingv1informers "k8s.io/client-go/informers/scheduling/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
+	listersv1 "k8s.io/client-go/listers/core/v1"
+	schedulingv1 "k8s.io/client-go/listers/scheduling/v1"
 	core "k8s.io/client-go/testing"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
@@ -93,10 +93,10 @@ type strategyFunction func(ctx context.Context, client clientset.Interface, stra
 
 func cachedClient(
 	realClient clientset.Interface,
-	podInformer corev1informers.PodInformer,
-	nodeInformer corev1informers.NodeInformer,
-	namespaceInformer corev1informers.NamespaceInformer,
-	priorityClassInformer schedulingv1informers.PriorityClassInformer,
+	podLister listersv1.PodLister,
+	nodeLister listersv1.NodeLister,
+	namespaceLister listersv1.NamespaceLister,
+	priorityClassLister schedulingv1.PriorityClassLister,
 ) (clientset.Interface, error) {
 	fakeClient := fakeclientset.NewSimpleClientset()
 	// simulate a pod eviction by deleting a pod
@@ -120,7 +120,7 @@ func cachedClient(
 	})
 
 	klog.V(3).Infof("Pulling resources for the cached client from the cluster")
-	pods, err := podInformer.Lister().List(labels.Everything())
+	pods, err := podLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("unable to list pods: %v", err)
 	}
@@ -131,7 +131,7 @@ func cachedClient(
 		}
 	}
 
-	nodes, err := nodeInformer.Lister().List(labels.Everything())
+	nodes, err := nodeLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("unable to list nodes: %v", err)
 	}
@@ -142,7 +142,7 @@ func cachedClient(
 		}
 	}
 
-	namespaces, err := namespaceInformer.Lister().List(labels.Everything())
+	namespaces, err := namespaceLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("unable to list namespaces: %v", err)
 	}
@@ -153,7 +153,7 @@ func cachedClient(
 		}
 	}
 
-	priorityClasses, err := priorityClassInformer.Lister().List(labels.Everything())
+	priorityClasses, err := priorityClassLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("unable to list priorityclasses: %v", err)
 	}
@@ -227,17 +227,14 @@ func (hi *handleImpl) Evictor() framework.Evictor {
 
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string) error {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
-	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
-	podInformer := sharedInformerFactory.Core().V1().Pods()
-	namespaceInformer := sharedInformerFactory.Core().V1().Namespaces()
-	priorityClassInformer := sharedInformerFactory.Scheduling().V1().PriorityClasses()
+	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
+	podLister := sharedInformerFactory.Core().V1().Pods().Lister()
+	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
+	namespaceLister := sharedInformerFactory.Core().V1().Namespaces().Lister()
+	priorityClassLister := sharedInformerFactory.Scheduling().V1().PriorityClasses().Lister()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	// create the informers
-	namespaceInformer.Informer()
-	priorityClassInformer.Informer()
 
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
@@ -302,7 +299,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	defer eventBroadcaster.Shutdown()
 
 	wait.NonSlidingUntil(func() {
-		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, nodeSelector)
+		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeLister, nodeSelector)
 		if err != nil {
 			klog.V(1).InfoS("Unable to get ready nodes", "err", err)
 			cancel()
@@ -322,14 +319,14 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		if rs.DryRun {
 			klog.V(3).Infof("Building a cached client from the cluster for the dry run")
 			// Create a new cache so we start from scratch without any leftovers
-			fakeClient, err := cachedClient(rs.Client, podInformer, nodeInformer, namespaceInformer, priorityClassInformer)
+			fakeClient, err := cachedClient(rs.Client, podLister, nodeLister, namespaceLister, priorityClassLister)
 			if err != nil {
 				klog.Error(err)
 				return
 			}
 
 			fakeSharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			getPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(fakeSharedInformerFactory.Core().V1().Pods())
+			getPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(fakeSharedInformerFactory.Core().V1().Pods().Informer())
 			if err != nil {
 				klog.Errorf("build get pods assigned to node function error: %v", err)
 				return
