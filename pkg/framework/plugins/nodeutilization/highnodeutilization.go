@@ -26,6 +26,7 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
+	"sigs.k8s.io/descheduler/pkg/tracing"
 
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
@@ -71,7 +72,14 @@ func (h *HighNodeUtilization) Name() string {
 }
 
 // Balance extension point implementation for the plugin
-func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) (status *framework.Status) {
+	ctx, span, spanCloser := tracing.StartSpan(ctx, tracing.BalanceOperation, h.Name())
+	defer func() {
+		if status != nil && status.Err != nil {
+			span.RecordError(status.Err)
+		}
+		spanCloser()
+	}()
 	thresholds := h.args.Thresholds
 	targetThresholds := make(api.ResourceThresholds)
 

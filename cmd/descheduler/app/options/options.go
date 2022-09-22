@@ -20,6 +20,8 @@ package options
 import (
 	"time"
 
+	"sigs.k8s.io/descheduler/pkg/tracing"
+
 	"github.com/spf13/pflag"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiserveroptions "k8s.io/apiserver/pkg/server/options"
@@ -74,7 +76,9 @@ func newDefaultComponentConfig() (*componentconfig.DeschedulerConfiguration, err
 		},
 	}
 	deschedulerscheme.Scheme.Default(&versionedCfg)
-	cfg := componentconfig.DeschedulerConfiguration{}
+	cfg := componentconfig.DeschedulerConfiguration{
+		Tracing: componentconfig.TracingConfiguration{},
+	}
 	if err := deschedulerscheme.Scheme.Convert(&versionedCfg, &cfg, nil); err != nil {
 		return nil, err
 	}
@@ -92,7 +96,11 @@ func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&rs.PolicyConfigFile, "policy-config-file", rs.PolicyConfigFile, "File with descheduler policy configuration.")
 	fs.BoolVar(&rs.DryRun, "dry-run", rs.DryRun, "execute descheduler in dry run mode.")
 	fs.BoolVar(&rs.DisableMetrics, "disable-metrics", rs.DisableMetrics, "Disables metrics. The metrics are by default served through https://localhost:10258/metrics. Secure address, resp. port can be changed through --bind-address, resp. --secure-port flags.")
-
+	fs.StringVar(&rs.Tracing.CollectorEndpoint, "otel-collector-endpoint", "", "Set this flag to the OpenTelemetry Collector Service Address")
+	fs.StringVar(&rs.Tracing.TransportCert, "otel-transport-ca-cert", "", "Path of the CA Cert that can be used to generate the client Certificate for establishing secure connection to the OTEL in gRPC mode")
+	fs.StringVar(&rs.Tracing.ServiceName, "otel-service-name", tracing.DefaultServiceName, "OTEL Trace name to be used with the resources")
+	fs.StringVar(&rs.Tracing.ServiceNamespace, "otel-trace-namespace", "", "OTEL Trace namespace to be used with the resources")
+	fs.Float64Var(&rs.Tracing.SampleRate, "otel-sample-rate", 1.0, "Sample rate to collect the Traces")
 	componentbaseoptions.BindLeaderElectionFlags(&rs.LeaderElection, fs)
 
 	rs.SecureServing.AddFlags(fs)

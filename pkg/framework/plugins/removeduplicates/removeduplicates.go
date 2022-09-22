@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/descheduler/pkg/tracing"
 	"sigs.k8s.io/descheduler/pkg/utils"
 
 	v1 "k8s.io/api/core/v1"
@@ -93,7 +94,14 @@ func (r *RemoveDuplicates) Name() string {
 }
 
 // Balance extension point implementation for the plugin
-func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) (status *framework.Status) {
+	ctx, span, spanCloser := tracing.StartSpan(ctx, tracing.BalanceOperation, r.Name())
+	defer func() {
+		if status != nil && status.Err != nil {
+			span.RecordError(status.Err)
+		}
+		spanCloser()
+	}()
 	duplicatePods := make(map[podOwner]map[string][]*v1.Pod)
 	ownerKeyOccurence := make(map[podOwner]int32)
 	nodeCount := 0

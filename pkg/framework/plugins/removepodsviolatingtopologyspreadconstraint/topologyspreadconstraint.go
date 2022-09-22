@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/tracing"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -84,7 +85,14 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Name() string {
 }
 
 // nolint: gocyclo
-func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Context, nodes []*v1.Node) (status *framework.Status) {
+	ctx, span, spanCloser := tracing.StartSpan(ctx, tracing.BalanceOperation, d.Name())
+	defer func() {
+		if status != nil && status.Err != nil {
+			span.RecordError(status.Err)
+		}
+		spanCloser()
+	}()
 	nodeMap := make(map[string]*v1.Node, len(nodes))
 	for _, node := range nodes {
 		nodeMap[node.Name] = node
@@ -107,9 +115,10 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		klog.ErrorS(err, "Couldn't list namespaces")
-		return &framework.Status{
+		status = &framework.Status{
 			Err: fmt.Errorf("list namespace: %w", err),
 		}
+		return status
 	}
 	klog.V(1).InfoS("Processing namespaces for topology spread constraints")
 	podsForEviction := make(map[*v1.Pod]struct{})

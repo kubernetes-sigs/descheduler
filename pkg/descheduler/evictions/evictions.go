@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,6 +32,7 @@ import (
 	"sigs.k8s.io/descheduler/metrics"
 
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
+	"sigs.k8s.io/descheduler/pkg/tracing"
 )
 
 // nodePodEvictedCount keeps count of pods evicted on node
@@ -113,6 +116,17 @@ type EvictOptions struct {
 // EvictPod evicts a pod while exercising eviction limits.
 // Returns true when the pod is evicted on the server side.
 func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptions) bool {
+	var err error
+	ctx, evictSpan, evictCloser := tracing.StartSpanWithOptions(ctx, tracing.EvictionOption, []trace.TracerOption{}, "EvictPod", []attribute.KeyValue{
+		{Key: "pod-name", Value: attribute.StringValue(pod.GetName())},
+		{Key: "pod-namespace", Value: attribute.StringValue(pod.GetNamespace())},
+	})
+	defer func() {
+		if err != nil {
+			evictSpan.RecordError(err)
+		}
+		evictCloser()
+	}()
 	// TODO: Replace context-propagated Strategy name with a defined framework handle for accessing Strategy info
 	strategy := ""
 	if ctx.Value("strategyName") != nil {
@@ -124,7 +138,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 			if pe.metricsEnabled {
 				metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
 			}
-			klog.ErrorS(fmt.Errorf("Maximum number of evicted pods per node reached"), "limit", *pe.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
+			klog.ErrorS(fmt.Errorf("Maximum number of evicted pods per node reached"), "Eviction limit reached", "limit", *pe.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
 			return false
 		}
 	}
@@ -133,11 +147,11 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		if pe.metricsEnabled {
 			metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per namespace reached", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
 		}
-		klog.ErrorS(fmt.Errorf("Maximum number of evicted pods per namespace reached"), "limit", *pe.maxPodsToEvictPerNamespace, "namespace", pod.Namespace)
+		klog.ErrorS(fmt.Errorf("Maximum number of evicted pods per namespace reached"), "Eviction limit reached", "limit", *pe.maxPodsToEvictPerNamespace, "namespace", pod.Namespace)
 		return false
 	}
 
-	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion)
+	err = evictPod(ctx, pe.client, pod, pe.policyGroupVersion)
 	if err != nil {
 		// err is used only for logging purposes
 		klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", opts.Reason)

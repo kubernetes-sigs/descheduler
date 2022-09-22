@@ -23,11 +23,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"k8s.io/apiserver/pkg/server/healthz"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
+	"sigs.k8s.io/descheduler/pkg/tracing"
 
 	"github.com/spf13/cobra"
 
@@ -93,6 +95,15 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 				klog.Fatalf("failed to start secure server: %v", err)
 				return
 			}
+
+			tracerProvider, err := tracing.NewTracerProvider(s.Tracing.CollectorEndpoint, s.Tracing.TransportCert, s.Tracing.ServiceName, s.Tracing.ServiceNamespace, s.Tracing.SampleRate)
+			if err != nil {
+				klog.Fatalf("failed to setup tracing provider", "err", err)
+				return
+			}
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer tracing.Shutdown(ctx, tracerProvider)
+			defer cancel()
 
 			err = Run(ctx, s)
 			if err != nil {

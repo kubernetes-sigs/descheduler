@@ -26,6 +26,7 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/tracing"
 )
 
 const PluginName = "RemovePodsViolatingNodeAffinity"
@@ -75,7 +76,14 @@ func (d *RemovePodsViolatingNodeAffinity) Name() string {
 	return PluginName
 }
 
-func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) (status *framework.Status) {
+	ctx, span, spanCloser := tracing.StartSpan(ctx, tracing.DescheduleOperation, d.Name())
+	defer func() {
+		if status != nil && status.Err != nil {
+			span.RecordError(status.Err)
+		}
+		spanCloser()
+	}()
 	for _, nodeAffinity := range d.args.NodeAffinityType {
 		klog.V(2).InfoS("Executing for nodeAffinityType", "nodeAffinity", nodeAffinity)
 
@@ -94,9 +102,10 @@ func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes 
 					}),
 				)
 				if err != nil {
-					return &framework.Status{
+					status = &framework.Status{
 						Err: fmt.Errorf("error listing pods on a node: %v", err),
 					}
+					return status
 				}
 
 				for _, pod := range pods {

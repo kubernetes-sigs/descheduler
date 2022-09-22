@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/tracing"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -101,18 +102,25 @@ func (d *PodLifeTime) Name() string {
 }
 
 // Deschedule extension point implementation for the plugin
-func (d *PodLifeTime) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *PodLifeTime) Deschedule(ctx context.Context, nodes []*v1.Node) (status *framework.Status) {
 	podsToEvict := make([]*v1.Pod, 0)
 	nodeMap := make(map[string]*v1.Node, len(nodes))
-
+	ctx, span, spanCloser := tracing.StartSpan(ctx, tracing.DescheduleOperation, d.Name())
+	defer func() {
+		if status != nil && status.Err != nil {
+			span.RecordError(status.Err)
+		}
+		spanCloser()
+	}()
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListAllPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			// no pods evicted as error encountered retrieving evictable Pods
-			return &framework.Status{
+			status = &framework.Status{
 				Err: fmt.Errorf("error listing pods on a node: %v", err),
 			}
+			return status
 		}
 
 		nodeMap[node.Name] = node

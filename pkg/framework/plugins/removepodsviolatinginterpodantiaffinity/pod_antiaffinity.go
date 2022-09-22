@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/tracing"
 	"sigs.k8s.io/descheduler/pkg/utils"
 
 	v1 "k8s.io/api/core/v1"
@@ -77,15 +78,23 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Name() string {
 	return PluginName
 }
 
-func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) (status *framework.Status) {
+	ctx, span, spanCloser := tracing.StartSpan(ctx, tracing.DescheduleOperation, d.Name())
+	defer func() {
+		if status != nil && status.Err != nil {
+			span.RecordError(status.Err)
+		}
+		spanCloser()
+	}()
 loop:
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
-			return &framework.Status{
+			status = &framework.Status{
 				Err: fmt.Errorf("error listing pods: %v", err),
 			}
+			return status
 		}
 		// sort the evictable Pods based on priority, if there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(pods)

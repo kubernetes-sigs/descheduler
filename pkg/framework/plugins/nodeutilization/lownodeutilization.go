@@ -27,6 +27,7 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/tracing"
 )
 
 const LowNodeUtilizationPluginName = "LowNodeUtilization"
@@ -69,7 +70,14 @@ func (l *LowNodeUtilization) Name() string {
 }
 
 // Balance extension point implementation for the plugin
-func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) (status *framework.Status) {
+	ctx, span, spanCloser := tracing.StartSpan(ctx, tracing.BalanceOperation, l.Name())
+	defer func() {
+		if status != nil && status.Err != nil {
+			span.RecordError(status.Err)
+		}
+		spanCloser()
+	}()
 	useDeviationThresholds := l.args.UseDeviationThresholds
 	thresholds := l.args.Thresholds
 	targetThresholds := l.args.TargetThresholds
