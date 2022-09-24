@@ -24,7 +24,7 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 // SetDefaults_LowNodeUtilizationArgs
 // TODO: the final default values would be discussed in community
 func SetDefaults_LowNodeUtilizationArgs(obj *LowNodeUtilizationArgs) {
-	if obj.UseDeviationThresholds == false {
+	if !obj.UseDeviationThresholds {
 		obj.UseDeviationThresholds = false
 	}
 	if obj.Thresholds == nil {

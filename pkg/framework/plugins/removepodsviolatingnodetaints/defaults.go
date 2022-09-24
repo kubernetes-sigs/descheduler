@@ -30,7 +30,7 @@ func SetDefaults_RemovePodsViolatingNodeTaintsArgs(obj *RemovePodsViolatingNodeT
 	if obj.LabelSelector == nil {
 		obj.LabelSelector = nil
 	}
-	if obj.IncludePreferNoSchedule == false {
+	if !obj.IncludePreferNoSchedule {
 		obj.IncludePreferNoSchedule = false
 	}
 	if obj.ExcludedTaints == nil {

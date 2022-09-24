@@ -30,7 +30,7 @@ func SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(obj *RemovePods
 	if obj.LabelSelector == nil {
 		obj.LabelSelector = nil
 	}
-	if obj.IncludeSoftConstraints == false {
+	if !obj.IncludeSoftConstraints {
 		obj.IncludeSoftConstraints = false
 	}
 }

@@ -33,7 +33,7 @@ func SetDefaults_RemovePodsHavingTooManyRestartsArgs(obj *RemovePodsHavingTooMan
 	if obj.PodRestartThreshold == 0 {
 		obj.PodRestartThreshold = 0
 	}
-	if obj.IncludingInitContainers == false {
+	if !obj.IncludingInitContainers {
 		obj.IncludingInitContainers = false
 	}
 }

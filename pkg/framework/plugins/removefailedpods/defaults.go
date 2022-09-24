@@ -39,7 +39,7 @@ func SetDefaults_RemoveFailedPodsArgs(obj *RemoveFailedPodsArgs) {
 	if obj.Reasons == nil {
 		obj.Reasons = nil
 	}
-	if obj.IncludingInitContainers == false {
+	if !obj.IncludingInitContainers {
 		obj.IncludingInitContainers = false
 	}
 }

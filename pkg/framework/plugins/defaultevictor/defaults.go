@@ -27,16 +27,16 @@ func SetDefaults_DefaultEvictorArgs(obj *DefaultEvictorArgs) {
 	if obj.NodeSelector == "" {
 		obj.NodeSelector = ""
 	}
-	if obj.EvictLocalStoragePods == false {
+	if !obj.EvictLocalStoragePods {
 		obj.EvictSystemCriticalPods = false
 	}
-	if obj.EvictSystemCriticalPods == false {
+	if !obj.EvictSystemCriticalPods {
 		obj.EvictSystemCriticalPods = false
 	}
-	if obj.IgnorePvcPods == false {
+	if !obj.IgnorePvcPods {
 		obj.IgnorePvcPods = false
 	}
-	if obj.EvictFailedBarePods == false {
+	if !obj.EvictFailedBarePods {
 		obj.EvictFailedBarePods = false
 	}
 	if obj.LabelSelector == nil {
@@ -45,7 +45,7 @@ func SetDefaults_DefaultEvictorArgs(obj *DefaultEvictorArgs) {
 	if obj.PriorityThreshold == nil {
 		obj.PriorityThreshold = nil
 	}
-	if obj.NodeFit == false {
+	if !obj.NodeFit {
 		obj.NodeFit = false
 	}
 }
