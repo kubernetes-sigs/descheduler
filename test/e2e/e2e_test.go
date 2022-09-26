@@ -34,8 +34,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
-	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
@@ -110,7 +110,7 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 	}
 }
 
-func initializeClient(t *testing.T) (clientset.Interface, informers.SharedInformerFactory, coreinformers.NodeInformer, podutil.GetPodsAssignedToNodeFunc, chan struct{}) {
+func initializeClient(t *testing.T) (clientset.Interface, informers.SharedInformerFactory, listersv1.NodeLister, podutil.GetPodsAssignedToNodeFunc, chan struct{}) {
 	clientSet, err := client.CreateClient(os.Getenv("KUBECONFIG"), "")
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
@@ -119,8 +119,8 @@ func initializeClient(t *testing.T) (clientset.Interface, informers.SharedInform
 	stopChannel := make(chan struct{})
 
 	sharedInformerFactory := informers.NewSharedInformerFactory(clientSet, 0)
-	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
-	podInformer := sharedInformerFactory.Core().V1().Pods()
+	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
+	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
@@ -130,18 +130,18 @@ func initializeClient(t *testing.T) (clientset.Interface, informers.SharedInform
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 
-	waitForNodesReady(context.Background(), t, clientSet, nodeInformer)
-	return clientSet, sharedInformerFactory, nodeInformer, getPodsAssignedToNode, stopChannel
+	waitForNodesReady(context.Background(), t, clientSet, nodeLister)
+	return clientSet, sharedInformerFactory, nodeLister, getPodsAssignedToNode, stopChannel
 }
 
-func waitForNodesReady(ctx context.Context, t *testing.T, clientSet clientset.Interface, nodeInformer coreinformers.NodeInformer) {
+func waitForNodesReady(ctx context.Context, t *testing.T, clientSet clientset.Interface, nodeLister listersv1.NodeLister) {
 	if err := wait.PollImmediate(5*time.Second, 30*time.Second, func() (bool, error) {
 		nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return false, err
 		}
 
-		readyNodes, err := nodeutil.ReadyNodes(ctx, clientSet, nodeInformer, "")
+		readyNodes, err := nodeutil.ReadyNodes(ctx, clientSet, nodeLister, "")
 		if err != nil {
 			return false, err
 		}
@@ -160,7 +160,7 @@ func runPodLifetimePlugin(
 	ctx context.Context,
 	t *testing.T,
 	clientset clientset.Interface,
-	nodeInformer coreinformers.NodeInformer,
+	nodeLister listersv1.NodeLister,
 	namespaces *deschedulerapi.Namespaces,
 	priorityClass string,
 	priority *int32,
@@ -174,7 +174,7 @@ func runPodLifetimePlugin(
 		t.Fatalf("%v", err)
 	}
 
-	nodes, err := nodeutil.ReadyNodes(ctx, clientset, nodeInformer, "")
+	nodes, err := nodeutil.ReadyNodes(ctx, clientset, nodeLister, "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -930,7 +930,7 @@ func TestPodLabelSelector(t *testing.T) {
 func TestEvictAnnotation(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, _, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, _, nodeLister, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -975,7 +975,7 @@ func TestEvictAnnotation(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Log("Running PodLifetime plugin")
-	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", nil, false, nil, nil, getPodsAssignedToNode)
+	runPodLifetimePlugin(ctx, t, clientSet, nodeLister, nil, "", nil, false, nil, nil, getPodsAssignedToNode)
 
 	if err := wait.PollImmediate(5*time.Second, time.Minute, func() (bool, error) {
 		podList, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
@@ -1002,7 +1002,7 @@ func TestEvictAnnotation(t *testing.T) {
 func TestPodLifeTimeOldestEvicted(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, _, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, _, nodeLister, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -1041,7 +1041,7 @@ func TestPodLifeTimeOldestEvicted(t *testing.T) {
 
 	t.Log("Running PodLifetime plugin with maxPodsToEvictPerNamespace=1 to ensure only the oldest pod is evicted")
 	var maxPodsToEvictPerNamespace uint = 1
-	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", nil, false, &maxPodsToEvictPerNamespace, nil, getPodsAssignedToNode)
+	runPodLifetimePlugin(ctx, t, clientSet, nodeLister, nil, "", nil, false, &maxPodsToEvictPerNamespace, nil, getPodsAssignedToNode)
 	t.Log("Finished PodLifetime plugin")
 
 	t.Logf("Wait for terminating pod to disappear")
