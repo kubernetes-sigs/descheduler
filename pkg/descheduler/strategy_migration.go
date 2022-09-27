@@ -212,7 +212,7 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		args := &componentconfig.RemovePodsViolatingTopologySpreadConstraintArgs{
 			Namespaces:             params.Namespaces,
 			LabelSelector:          params.LabelSelector,
-			IncludeSoftConstraints: params.IncludePreferNoSchedule,
+			IncludeSoftConstraints: params.IncludeSoftConstraints,
 		}
 		if err := validation.ValidateRemovePodsViolatingTopologySpreadConstraintArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingtopologyspreadconstraint.PluginName)
