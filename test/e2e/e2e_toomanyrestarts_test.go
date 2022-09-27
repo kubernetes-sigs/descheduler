@@ -31,7 +31,6 @@ import (
 	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/pointer"
 
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	"sigs.k8s.io/descheduler/pkg/framework"
@@ -114,8 +113,8 @@ func TestTooManyRestarts(t *testing.T) {
 	createRemovePodsHavingTooManyRestartsAgrs := func(
 		podRestartThresholds int32,
 		includingInitContainers bool,
-	) componentconfig.RemovePodsHavingTooManyRestartsArgs {
-		return componentconfig.RemovePodsHavingTooManyRestartsArgs{
+	) removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs {
+		return removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs{
 			PodRestartThreshold:     podRestartThresholds,
 			IncludingInitContainers: includingInitContainers,
 		}
@@ -123,7 +122,7 @@ func TestTooManyRestarts(t *testing.T) {
 
 	tests := []struct {
 		name                    string
-		args                    componentconfig.RemovePodsHavingTooManyRestartsArgs
+		args                    removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs
 		expectedEvictedPodCount uint
 	}{
 		{

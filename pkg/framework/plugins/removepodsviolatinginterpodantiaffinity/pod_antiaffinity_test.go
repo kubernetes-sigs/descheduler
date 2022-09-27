@@ -27,7 +27,6 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/events"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/framework"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -257,7 +256,7 @@ func TestPodAntiAffinity(t *testing.T) {
 				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
 			}
 			plugin, err := New(
-				&componentconfig.RemovePodsViolatingInterPodAntiAffinityArgs{},
+				&RemovePodsViolatingInterPodAntiAffinityArgs{},
 				handle,
 			)
 

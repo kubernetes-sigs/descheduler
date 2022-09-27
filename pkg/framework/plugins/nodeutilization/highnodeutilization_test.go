@@ -31,7 +31,6 @@ import (
 	"k8s.io/client-go/tools/events"
 
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
@@ -524,7 +523,7 @@ func TestHighNodeUtilization(t *testing.T) {
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
-			plugin, err := NewHighNodeUtilization(&componentconfig.HighNodeUtilizationArgs{
+			plugin, err := NewHighNodeUtilization(&HighNodeUtilizationArgs{
 				Thresholds: testCase.thresholds,
 			},
 				handle)
@@ -676,7 +675,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
-			plugin, err := NewHighNodeUtilization(&componentconfig.HighNodeUtilizationArgs{
+			plugin, err := NewHighNodeUtilization(&HighNodeUtilizationArgs{
 				Thresholds: api.ResourceThresholds{
 					v1.ResourceCPU: 40,
 				},

@@ -22,8 +22,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/validation"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
@@ -42,13 +40,13 @@ import (
 
 var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl){
 	"RemovePodsViolatingNodeTaints": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.RemovePodsViolatingNodeTaintsArgs{
+		args := &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{
 			Namespaces:              params.Namespaces,
 			LabelSelector:           params.LabelSelector,
 			IncludePreferNoSchedule: params.IncludePreferNoSchedule,
 			ExcludedTaints:          params.ExcludedTaints,
 		}
-		if err := validation.ValidateRemovePodsViolatingNodeTaintsArgs(args); err != nil {
+		if err := removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingnodetaints.PluginName)
 			return
 		}
@@ -67,7 +65,7 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		if failedPodsParams == nil {
 			failedPodsParams = &api.FailedPods{}
 		}
-		args := &componentconfig.RemoveFailedPodsArgs{
+		args := &removefailedpods.RemoveFailedPodsArgs{
 			Namespaces:              params.Namespaces,
 			LabelSelector:           params.LabelSelector,
 			IncludingInitContainers: failedPodsParams.IncludingInitContainers,
@@ -75,7 +73,7 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 			ExcludeOwnerKinds:       failedPodsParams.ExcludeOwnerKinds,
 			Reasons:                 failedPodsParams.Reasons,
 		}
-		if err := validation.ValidateRemoveFailedPodsArgs(args); err != nil {
+		if err := removefailedpods.ValidateRemoveFailedPodsArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removefailedpods.PluginName)
 			return
 		}
@@ -90,12 +88,12 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 	},
 	"RemovePodsViolatingNodeAffinity": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.RemovePodsViolatingNodeAffinityArgs{
+		args := &removepodsviolatingnodeaffinity.RemovePodsViolatingNodeAffinityArgs{
 			Namespaces:       params.Namespaces,
 			LabelSelector:    params.LabelSelector,
 			NodeAffinityType: params.NodeAffinityType,
 		}
-		if err := validation.ValidateRemovePodsViolatingNodeAffinityArgs(args); err != nil {
+		if err := removepodsviolatingnodeaffinity.ValidateRemovePodsViolatingNodeAffinityArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingnodeaffinity.PluginName)
 			return
 		}
@@ -110,11 +108,11 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 	},
 	"RemovePodsViolatingInterPodAntiAffinity": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.RemovePodsViolatingInterPodAntiAffinityArgs{
+		args := &removepodsviolatinginterpodantiaffinity.RemovePodsViolatingInterPodAntiAffinityArgs{
 			Namespaces:    params.Namespaces,
 			LabelSelector: params.LabelSelector,
 		}
-		if err := validation.ValidateRemovePodsViolatingInterPodAntiAffinityArgs(args); err != nil {
+		if err := removepodsviolatinginterpodantiaffinity.ValidateRemovePodsViolatingInterPodAntiAffinityArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatinginterpodantiaffinity.PluginName)
 			return
 		}
@@ -133,13 +131,13 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		if tooManyRestartsParams == nil {
 			tooManyRestartsParams = &api.PodsHavingTooManyRestarts{}
 		}
-		args := &componentconfig.RemovePodsHavingTooManyRestartsArgs{
+		args := &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs{
 			Namespaces:              params.Namespaces,
 			LabelSelector:           params.LabelSelector,
 			PodRestartThreshold:     tooManyRestartsParams.PodRestartThreshold,
 			IncludingInitContainers: tooManyRestartsParams.IncludingInitContainers,
 		}
-		if err := validation.ValidateRemovePodsHavingTooManyRestartsArgs(args); err != nil {
+		if err := removepodshavingtoomanyrestarts.ValidateRemovePodsHavingTooManyRestartsArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodshavingtoomanyrestarts.PluginName)
 			return
 		}
@@ -167,13 +165,13 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 			states = append(states, podLifeTimeParams.States...)
 		}
 
-		args := &componentconfig.PodLifeTimeArgs{
+		args := &podlifetime.PodLifeTimeArgs{
 			Namespaces:            params.Namespaces,
 			LabelSelector:         params.LabelSelector,
 			MaxPodLifeTimeSeconds: podLifeTimeParams.MaxPodLifeTimeSeconds,
 			States:                states,
 		}
-		if err := validation.ValidatePodLifeTimeArgs(args); err != nil {
+		if err := podlifetime.ValidatePodLifeTimeArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", podlifetime.PluginName)
 			return
 		}
@@ -188,13 +186,13 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 	},
 	"RemoveDuplicates": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.RemoveDuplicatesArgs{
+		args := &removeduplicates.RemoveDuplicatesArgs{
 			Namespaces: params.Namespaces,
 		}
 		if params.RemoveDuplicates != nil {
 			args.ExcludeOwnerKinds = params.RemoveDuplicates.ExcludeOwnerKinds
 		}
-		if err := validation.ValidateRemoveDuplicatesArgs(args); err != nil {
+		if err := removeduplicates.ValidateRemoveDuplicatesArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removeduplicates.PluginName)
 			return
 		}
@@ -209,12 +207,12 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 	},
 	"RemovePodsViolatingTopologySpreadConstraint": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.RemovePodsViolatingTopologySpreadConstraintArgs{
+		args := &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
 			Namespaces:             params.Namespaces,
 			LabelSelector:          params.LabelSelector,
 			IncludeSoftConstraints: params.IncludePreferNoSchedule,
 		}
-		if err := validation.ValidateRemovePodsViolatingTopologySpreadConstraintArgs(args); err != nil {
+		if err := removepodsviolatingtopologyspreadconstraint.ValidateRemovePodsViolatingTopologySpreadConstraintArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingtopologyspreadconstraint.PluginName)
 			return
 		}
@@ -229,12 +227,12 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 	},
 	"HighNodeUtilization": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.HighNodeUtilizationArgs{
+		args := &nodeutilization.HighNodeUtilizationArgs{
 			Thresholds:    params.NodeResourceUtilizationThresholds.Thresholds,
 			NumberOfNodes: params.NodeResourceUtilizationThresholds.NumberOfNodes,
 		}
 
-		if err := validation.ValidateHighNodeUtilizationArgs(args); err != nil {
+		if err := nodeutilization.ValidateHighNodeUtilizationArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", nodeutilization.HighNodeUtilizationPluginName)
 			return
 		}
@@ -249,14 +247,14 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 	},
 	"LowNodeUtilization": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
-		args := &componentconfig.LowNodeUtilizationArgs{
+		args := &nodeutilization.LowNodeUtilizationArgs{
 			Thresholds:             params.NodeResourceUtilizationThresholds.Thresholds,
 			TargetThresholds:       params.NodeResourceUtilizationThresholds.TargetThresholds,
 			UseDeviationThresholds: params.NodeResourceUtilizationThresholds.UseDeviationThresholds,
 			NumberOfNodes:          params.NodeResourceUtilizationThresholds.NumberOfNodes,
 		}
 
-		if err := validation.ValidateLowNodeUtilizationArgs(args); err != nil {
+		if err := nodeutilization.ValidateLowNodeUtilizationArgs(args); err != nil {
 			klog.V(1).ErrorS(err, "unable to validate plugin arguments", "pluginName", nodeutilization.LowNodeUtilizationPluginName)
 			return
 		}

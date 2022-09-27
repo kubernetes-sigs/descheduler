@@ -29,7 +29,6 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/events"
 
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
@@ -109,8 +108,8 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 	createRemovePodsHavingTooManyRestartsAgrs := func(
 		podRestartThresholds int32,
 		includingInitContainers bool,
-	) componentconfig.RemovePodsHavingTooManyRestartsArgs {
-		return componentconfig.RemovePodsHavingTooManyRestartsArgs{
+	) RemovePodsHavingTooManyRestartsArgs {
+		return RemovePodsHavingTooManyRestartsArgs{
 			PodRestartThreshold:     podRestartThresholds,
 			IncludingInitContainers: includingInitContainers,
 		}
@@ -121,7 +120,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 	tests := []struct {
 		description                    string
 		nodes                          []*v1.Node
-		args                           componentconfig.RemovePodsHavingTooManyRestartsArgs
+		args                           RemovePodsHavingTooManyRestartsArgs
 		expectedEvictedPodCount        uint
 		maxPodsToEvictPerNode          *uint
 		maxNoOfPodsToEvictPerNamespace *uint

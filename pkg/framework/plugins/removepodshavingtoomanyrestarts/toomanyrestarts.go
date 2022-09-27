@@ -25,7 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
@@ -38,7 +37,7 @@ const PluginName = "RemovePodsHavingTooManyRestarts"
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
 type RemovePodsHavingTooManyRestarts struct {
 	handle    framework.Handle
-	args      *componentconfig.RemovePodsHavingTooManyRestartsArgs
+	args      *RemovePodsHavingTooManyRestartsArgs
 	podFilter podutil.FilterFunc
 }
 
@@ -46,7 +45,7 @@ var _ framework.DeschedulePlugin = &RemovePodsHavingTooManyRestarts{}
 
 // New builds plugin from its arguments while passing a handle
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	tooManyRestartsArgs, ok := args.(*componentconfig.RemovePodsHavingTooManyRestartsArgs)
+	tooManyRestartsArgs, ok := args.(*RemovePodsHavingTooManyRestartsArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsHavingTooManyRestartsArgs, got %T", args)
 	}
@@ -111,7 +110,7 @@ func (d *RemovePodsHavingTooManyRestarts) Deschedule(ctx context.Context, nodes 
 }
 
 // validateCanEvict looks at tooManyRestartsArgs to see if pod can be evicted given the args.
-func validateCanEvict(pod *v1.Pod, tooManyRestartsArgs *componentconfig.RemovePodsHavingTooManyRestartsArgs) error {
+func validateCanEvict(pod *v1.Pod, tooManyRestartsArgs *RemovePodsHavingTooManyRestartsArgs) error {
 	var err error
 
 	restarts := calcContainerRestartsFromStatuses(pod.Status.ContainerStatuses)
