@@ -37,6 +37,11 @@ func (in *HighNodeUtilizationArgs) DeepCopyInto(out *HighNodeUtilizationArgs) {
 			(*out)[key] = val
 		}
 	}
+	if in.EvictableNamespaces != nil {
+		in, out := &in.EvictableNamespaces, &out.EvictableNamespaces
+		*out = new(api.Namespaces)
+		(*in).DeepCopyInto(*out)
+	}
 	return
 }
 
@@ -75,6 +80,11 @@ func (in *LowNodeUtilizationArgs) DeepCopyInto(out *LowNodeUtilizationArgs) {
 		for key, val := range *in {
 			(*out)[key] = val
 		}
+	}
+	if in.EvictableNamespaces != nil {
+		in, out := &in.EvictableNamespaces, &out.EvictableNamespaces
+		*out = new(api.Namespaces)
+		(*in).DeepCopyInto(*out)
 	}
 	return
 }

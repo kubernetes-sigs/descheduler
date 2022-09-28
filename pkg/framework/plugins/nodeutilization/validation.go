@@ -19,7 +19,16 @@ import (
 )
 
 func ValidateHighNodeUtilizationArgs(args *HighNodeUtilizationArgs) error {
-	return validateThresholds(args.Thresholds)
+	// only exclude can be set, or not at all
+	if args.EvictableNamespaces != nil && len(args.EvictableNamespaces.Include) > 0 {
+		return fmt.Errorf("only Exclude namespaces can be set, inclusion is not supported")
+	}
+	err := validateThresholds(args.Thresholds)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func ValidateLowNodeUtilizationArgs(args *LowNodeUtilizationArgs) error {

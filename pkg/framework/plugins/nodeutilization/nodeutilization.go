@@ -24,6 +24,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -212,6 +213,7 @@ func classifyNodes(
 // TODO: @ravig Break this function into smaller functions.
 func evictPodsFromSourceNodes(
 	ctx context.Context,
+	evictableNamespaces *api.Namespaces,
 	sourceNodes, destinationNodes []NodeInfo,
 	podEvictor framework.Evictor,
 	podFilter func(pod *v1.Pod) bool,
@@ -265,13 +267,14 @@ func evictPodsFromSourceNodes(
 		klog.V(1).InfoS("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
-		evictPods(ctx, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, continueEviction)
+		evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, continueEviction)
 
 	}
 }
 
 func evictPods(
 	ctx context.Context,
+	evictableNamespaces *api.Namespaces,
 	inputPods []*v1.Pod,
 	nodeInfo NodeInfo,
 	totalAvailableUsage map[v1.ResourceName]*resource.Quantity,
@@ -280,6 +283,11 @@ func evictPods(
 	continueEviction continueEvictionCond,
 ) {
 
+	var excludedNamespaces sets.String
+	if evictableNamespaces != nil {
+		excludedNamespaces = sets.NewString(evictableNamespaces.Exclude...)
+	}
+
 	if continueEviction(nodeInfo, totalAvailableUsage) {
 		for _, pod := range inputPods {
 			if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
@@ -287,7 +295,16 @@ func evictPods(
 				continue
 			}
 
-			if podEvictor.PreEvictionFilter(pod) {
+			preEvictionFilterWithOptions, err := podutil.NewOptions().
+				WithFilter(podEvictor.PreEvictionFilter).
+				WithoutNamespaces(excludedNamespaces).
+				BuildFilterFunc()
+			if err != nil {
+				klog.V(1).ErrorS(err, "could not build preEvictionFilter with namespace exclusion")
+				continue
+			}
+
+			if preEvictionFilterWithOptions(pod) {
 				if podEvictor.Evict(ctx, pod, evictions.EvictOptions{}) {
 					klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
 

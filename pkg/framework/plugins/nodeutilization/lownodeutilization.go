@@ -187,6 +187,7 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 
 	evictPodsFromSourceNodes(
 		ctx,
+		l.args.EvictableNamespaces,
 		sourceNodes,
 		lowNodes,
 		l.handle.Evictor(),
