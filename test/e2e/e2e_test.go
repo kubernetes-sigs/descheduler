@@ -56,15 +56,15 @@ import (
 )
 
 func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
-	runAsUser := true
+	runAsUser := false
 	ape := false
 	return v1.PodSpec{
 		SecurityContext: &v1.PodSecurityContext{
-                  RunAsNonRoot: &runAsUser,
-                  SeccompProfile: &v1.SeccompProfile{
-                    Type: v1.SeccompProfileTypeRuntimeDefault,
-                    },
-                },
+			RunAsNonRoot: &runAsUser,
+			SeccompProfile: &v1.SeccompProfile{
+				Type: v1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
 		Containers: []v1.Container{{
 			Name:            "pause",
 			ImagePullPolicy: "Never",
@@ -81,13 +81,13 @@ func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 				},
 			},
 			SecurityContext: &v1.SecurityContext{
-                          AllowPrivilegeEscalation: &ape,
-                          Capabilities: &v1.Capabilities{
-                            Drop: []v1.Capability{
-                              "ALL",
-                            },
-                          },
-                        },
+				AllowPrivilegeEscalation: &ape,
+				Capabilities: &v1.Capabilities{
+					Drop: []v1.Capability{
+						"ALL",
+					},
+				},
+			},
 		}},
 		PriorityClassName:             priorityClassName,
 		TerminationGracePeriodSeconds: gracePeriod,
@@ -280,6 +280,7 @@ func intersectStrings(lista, listb []string) []string {
 }
 
 func TestLowNodeUtilization(t *testing.T) {
+	runAsUser := false
 	ctx := context.Background()
 
 	clientSet, sharedInformerFactory, _, getPodsAssignedToNode, stopCh := initializeClient(t)
@@ -300,7 +301,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
 	// Make all worker nodes resource balanced
-	cleanUp, err := createBalancedPodForNodes(t, ctx, clientSet, testNamespace.Name, workerNodes, 0.5)
+	cleanUp, err := createBalancedPodForNodes(t, ctx, clientSet, testNamespace.Name, workerNodes, 0.5, runAsUser)
 	if err != nil {
 		t.Fatalf("Unable to create load balancing pods: %v", err)
 	}
@@ -312,7 +313,7 @@ func TestLowNodeUtilization(t *testing.T) {
 
 	t.Log("Creating pods all bound to a single node")
 	for i := 0; i < 4; i++ {
-		runAsUser := true
+		runAsUser := false
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fmt.Sprintf("lnu-pod-%v", i),
@@ -321,11 +322,11 @@ func TestLowNodeUtilization(t *testing.T) {
 			},
 			Spec: v1.PodSpec{
 				SecurityContext: &v1.PodSecurityContext{
-                                  RunAsNonRoot: &runAsUser,
-                                  SeccompProfile: &v1.SeccompProfile{
-                                    Type: v1.SeccompProfileTypeRuntimeDefault,
-                                  },
-                                },
+					RunAsNonRoot: &runAsUser,
+					SeccompProfile: &v1.SeccompProfile{
+						Type: v1.SeccompProfileTypeRuntimeDefault,
+					},
+				},
 				Containers: []v1.Container{{
 					Name:            "pause",
 					ImagePullPolicy: "Never",
@@ -1233,6 +1234,7 @@ func createBalancedPodForNodes(
 	ns string,
 	nodes []*v1.Node,
 	ratio float64,
+	runAsUser bool,
 ) (func(), error) {
 	cleanUp := func() {
 		// Delete all remaining pods
@@ -1311,11 +1313,11 @@ func createBalancedPodForNodes(
 			},
 			Spec: v1.PodSpec{
 				SecurityContext: &v1.PodSecurityContext{
-                                  RunAsNonRoot: &runAsUser,
-                                  SeccompProfile: &v1.SeccompProfile{
-                                    Type: v1.SeccompProfileTypeRuntimeDefault,
-                                  },
-                                },
+					RunAsNonRoot: &runAsUser,
+					SeccompProfile: &v1.SeccompProfile{
+						Type: v1.SeccompProfileTypeRuntimeDefault,
+					},
+				},
 				Affinity: &v1.Affinity{
 					NodeAffinity: &v1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{

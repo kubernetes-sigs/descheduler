@@ -38,7 +38,7 @@ import (
 )
 
 func TestRemoveDuplicates(t *testing.T) {
-	runAsUser := true
+	runAsUser := false
 	ape := false
 	ctx := context.Background()
 
@@ -77,24 +77,24 @@ func TestRemoveDuplicates(t *testing.T) {
 				},
 				Spec: v1.PodSpec{
 					SecurityContext: &v1.PodSecurityContext{
-                                          RunAsNonRoot: &runAsUser,
-                                          SeccompProfile: &v1.SeccompProfile{
-                                            Type: v1.SeccompProfileTypeRuntimeDefault,
-                                          },
-                                        },
+						RunAsNonRoot: &runAsUser,
+						SeccompProfile: &v1.SeccompProfile{
+							Type: v1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
 					Containers: []v1.Container{{
 						Name:            "pause",
 						ImagePullPolicy: "Always",
 						Image:           "kubernetes/pause",
 						Ports:           []v1.ContainerPort{{ContainerPort: 80}},
 						SecurityContext: &v1.SecurityContext{
-                                                 AllowPrivilegeEscalation: &ape,
-                                                 Capabilities: &v1.Capabilities{
-                                                   Drop: []v1.Capability{
-                                                       "ALL",
-                                                   },
-                                                 },
-                                               },
+							AllowPrivilegeEscalation: &ape,
+							Capabilities: &v1.Capabilities{
+								Drop: []v1.Capability{
+									"ALL",
+								},
+							},
+						},
 					}},
 				},
 			},
