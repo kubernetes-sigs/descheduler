@@ -147,6 +147,8 @@ func TestLeaderElection(t *testing.T) {
 }
 
 func createDeployment(ctx context.Context, clientSet clientset.Interface, namespace string, replicas int32, t *testing.T) (*appsv1.Deployment, error) {
+	runAsUser := true
+	ape := false
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "leaderelection",
@@ -163,11 +165,25 @@ func createDeployment(ctx context.Context, clientSet clientset.Interface, namesp
 					Labels: map[string]string{"test": "leaderelection", "name": "test-leaderelection"},
 				},
 				Spec: v1.PodSpec{
+                                        SecurityContext: &v1.PodSecurityContext{
+                                          RunAsNonRoot: &runAsUser,
+                                          SeccompProfile: &v1.SeccompProfile{
+                                            Type: v1.SeccompProfileTypeRuntimeDefault,
+                                          },
+                                        },
 					Containers: []v1.Container{{
 						Name:            "pause",
 						ImagePullPolicy: "Always",
 						Image:           "kubernetes/pause",
 						Ports:           []v1.ContainerPort{{ContainerPort: 80}},
+						SecurityContext: &v1.SecurityContext{
+                                                  AllowPrivilegeEscalation: &ape,
+                                                  Capabilities: &v1.Capabilities{
+                                                    Drop: []v1.Capability{
+                                                        "ALL",
+                                                    },
+                                                  },
+                                                },
 					}},
 				},
 			},
