@@ -31,6 +31,7 @@ import (
 	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/pointer"
 
+	utilpointer "k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	"sigs.k8s.io/descheduler/pkg/framework"
@@ -75,6 +76,14 @@ func TestTooManyRestarts(t *testing.T) {
 					Labels: map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"},
 				},
 				Spec: v1.PodSpec{
+					SecurityContext: &v1.PodSecurityContext{
+						RunAsNonRoot: utilpointer.Bool(true),
+						RunAsUser:    utilpointer.Int64(1000),
+						RunAsGroup:   utilpointer.Int64(1000),
+						SeccompProfile: &v1.SeccompProfile{
+							Type: v1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
 					Containers: []v1.Container{{
 						Name:            "pause",
 						ImagePullPolicy: "Always",
@@ -82,6 +91,14 @@ func TestTooManyRestarts(t *testing.T) {
 						Command:         []string{"/bin/sh"},
 						Args:            []string{"-c", "sleep 1s && exit 1"},
 						Ports:           []v1.ContainerPort{{ContainerPort: 80}},
+						SecurityContext: &v1.SecurityContext{
+							AllowPrivilegeEscalation: utilpointer.Bool(false),
+							Capabilities: &v1.Capabilities{
+								Drop: []v1.Capability{
+									"ALL",
+								},
+							},
+						},
 					}},
 				},
 			},
