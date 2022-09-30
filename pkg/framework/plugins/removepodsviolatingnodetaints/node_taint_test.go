@@ -139,7 +139,8 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			VolumeSource: v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+				},
 			},
 		},
 	}
@@ -175,14 +176,13 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		includePreferNoSchedule        bool
 		excludedTaints                 []string
 	}{
-
 		{
 			description:             "Pods not tolerating node taint should be evicted",
 			pods:                    []*v1.Pod{p1, p2, p3},
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
-			expectedEvictedPodCount: 1, //p2 gets evicted
+			expectedEvictedPodCount: 1, // p2 gets evicted
 		},
 		{
 			description:             "Pods with tolerations but not tolerating node taint should be evicted",
@@ -190,7 +190,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			nodes:                   []*v1.Node{node1},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
-			expectedEvictedPodCount: 1, //p4 gets evicted
+			expectedEvictedPodCount: 1, // p4 gets evicted
 		},
 		{
 			description:             "Only <maxPodsToEvictPerNode> number of Pods not tolerating node taint should be evicted",
@@ -199,7 +199,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
 			maxPodsToEvictPerNode:   &uint1,
-			expectedEvictedPodCount: 1, //p5 or p6 gets evicted
+			expectedEvictedPodCount: 1, // p5 or p6 gets evicted
 		},
 		{
 			description:                    "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
@@ -208,7 +208,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			evictLocalStoragePods:          false,
 			evictSystemCriticalPods:        false,
 			maxNoOfPodsToEvictPerNamespace: &uint1,
-			expectedEvictedPodCount:        1, //p5 or p6 gets evicted
+			expectedEvictedPodCount:        1, // p5 or p6 gets evicted
 		},
 		{
 			description:             "Critical pods not tolerating node taint should not be evicted",
@@ -216,7 +216,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
-			expectedEvictedPodCount: 0, //nothing is evicted
+			expectedEvictedPodCount: 0, // nothing is evicted
 		},
 		{
 			description:             "Critical pods except storage pods not tolerating node taint should not be evicted",
@@ -224,7 +224,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   true,
 			evictSystemCriticalPods: false,
-			expectedEvictedPodCount: 1, //p9 gets evicted
+			expectedEvictedPodCount: 1, // p9 gets evicted
 		},
 		{
 			description:             "Critical and non critical pods, only non critical pods not tolerating node taint should be evicted",
@@ -232,7 +232,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			nodes:                   []*v1.Node{node2},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
-			expectedEvictedPodCount: 1, //p11 gets evicted
+			expectedEvictedPodCount: 1, // p11 gets evicted
 		},
 		{
 			description:             "Critical and non critical pods, pods not tolerating node taint should be evicted even if they are critical",
@@ -240,7 +240,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			nodes:                   []*v1.Node{node1, node2},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: true,
-			expectedEvictedPodCount: 2, //p2 and p7 are evicted
+			expectedEvictedPodCount: 2, // p2 and p7 are evicted
 		},
 		{
 			description:             "Pod p2 doesn't tolerate taint on it's node, but also doesn't tolerate taints on other nodes",
@@ -248,7 +248,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			nodes:                   []*v1.Node{node1, node2},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
-			expectedEvictedPodCount: 0, //p2 gets evicted
+			expectedEvictedPodCount: 0, // p2 gets evicted
 			nodeFit:                 true,
 		},
 		{
@@ -257,7 +257,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			nodes:                   []*v1.Node{node1, node3},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
-			expectedEvictedPodCount: 0, //p2 gets evicted
+			expectedEvictedPodCount: 0, // p2 gets evicted
 			nodeFit:                 true,
 		},
 		{
@@ -266,7 +266,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			nodes:                   []*v1.Node{node1, node4},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
-			expectedEvictedPodCount: 0, //p2 gets evicted
+			expectedEvictedPodCount: 0, // p2 gets evicted
 			nodeFit:                 true,
 		},
 		{
@@ -319,14 +319,13 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			nodes:                   []*v1.Node{node1, node6},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: true,
-			expectedEvictedPodCount: 0, //p2 and p7 can't be evicted
+			expectedEvictedPodCount: 0, // p2 and p7 can't be evicted
 			nodeFit:                 true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.description, func(t *testing.T) {
-
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -379,7 +378,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 				},
 			)
-
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
@@ -412,7 +410,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 }
 
 func TestToleratesTaint(t *testing.T) {
-
 	testCases := []struct {
 		description     string
 		toleration      v1.Toleration

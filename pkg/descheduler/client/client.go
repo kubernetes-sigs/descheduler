@@ -26,7 +26,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func CreateClient(kubeconfig string, userAgt string) (clientset.Interface, error) {
+func CreateClient(kubeconfig, userAgt string) (clientset.Interface, error) {
 	var cfg *rest.Config
 	if len(kubeconfig) != 0 {
 		master, err := GetMasterFromKubeconfig(kubeconfig)

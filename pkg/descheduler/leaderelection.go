@@ -19,13 +19,14 @@ package descheduler
 import (
 	"context"
 	"fmt"
+	"os"
+
 	"k8s.io/apimachinery/pkg/util/uuid"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	componentbaseconfig "k8s.io/component-base/config"
 	"k8s.io/klog/v2"
-	"os"
 )
 
 // NewLeaderElection starts the leader election code loop

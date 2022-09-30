@@ -90,7 +90,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -139,7 +140,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -198,7 +200,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -258,7 +261,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -312,7 +316,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -381,7 +386,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -447,7 +453,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -521,7 +528,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -602,7 +610,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -665,7 +674,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -756,7 +766,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -806,7 +817,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -901,7 +913,6 @@ func TestLowNodeUtilization(t *testing.T) {
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 				},
 			)
-
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
@@ -915,7 +926,6 @@ func TestLowNodeUtilization(t *testing.T) {
 			}
 
 			plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
-
 				Thresholds:             test.thresholds,
 				TargetThresholds:       test.targetThresholds,
 				UseDeviationThresholds: test.useDeviationThresholds,
@@ -1075,7 +1085,6 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 				},
 			)
-
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
@@ -1089,7 +1098,6 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 			}
 
 			plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
-
 				Thresholds: api.ResourceThresholds{
 					v1.ResourcePods: 20,
 				},

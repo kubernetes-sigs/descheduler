@@ -14,12 +14,13 @@ limitations under the License.
 package defaultevictor
 
 import (
+	"testing"
+
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"testing"
 )
 
 func TestSetDefaults_DefaultEvictorArgs(t *testing.T) {

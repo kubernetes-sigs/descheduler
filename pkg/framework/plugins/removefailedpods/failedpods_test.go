@@ -36,15 +36,14 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
-var (
-	OneHourInSeconds uint = 3600
-)
+var OneHourInSeconds uint = 3600
 
 func TestRemoveFailedPods(t *testing.T) {
 	createRemoveFailedPodsArgs := func(
 		includingInitContainers bool,
 		reasons, excludeKinds []string,
-		minAgeSeconds *uint) RemoveFailedPodsArgs {
+		minAgeSeconds *uint,
+	) RemoveFailedPodsArgs {
 		return RemoveFailedPodsArgs{
 			IncludingInitContainers: includingInitContainers,
 			Reasons:                 reasons,
@@ -317,7 +316,6 @@ func TestRemoveFailedPods(t *testing.T) {
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 				},
 			)
-
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}

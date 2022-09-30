@@ -18,13 +18,14 @@ package nodeutilization
 
 import (
 	"fmt"
+	"testing"
+
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"testing"
 )
 
 func TestValidateLowNodeUtilizationPluginConfig(t *testing.T) {
-	var extendedResource = v1.ResourceName("example.com/foo")
+	extendedResource := v1.ResourceName("example.com/foo")
 	tests := []struct {
 		name             string
 		thresholds       api.ResourceThresholds
@@ -165,7 +166,6 @@ func TestValidateLowNodeUtilizationPluginConfig(t *testing.T) {
 
 	for _, testCase := range tests {
 		args := &LowNodeUtilizationArgs{
-
 			Thresholds:       testCase.thresholds,
 			TargetThresholds: testCase.targetThresholds,
 		}

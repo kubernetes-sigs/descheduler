@@ -142,7 +142,8 @@ func TestFindDuplicatePods(t *testing.T) {
 			VolumeSource: v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+				},
 			},
 		},
 	}
@@ -366,7 +367,6 @@ func TestFindDuplicatePods(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestRemoveDuplicatesUniformly(t *testing.T) {
@@ -788,7 +788,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 				},
 			)
-
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
