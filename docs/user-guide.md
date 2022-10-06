@@ -159,6 +159,7 @@ strategies:
 ```
 
 ### Autoheal Node Problems
+
 Descheduler's `RemovePodsViolatingNodeTaints` strategy can be combined with
 [Node Problem Detector](https://github.com/kubernetes/node-problem-detector/) and
 [Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler) to automatically remove
@@ -167,6 +168,7 @@ There is a feature called TaintNodeByCondition of the node controller that takes
 The Descheduler will then deschedule workloads from those Nodes. Finally, if the descheduled Node's resource
 allocation falls below the Cluster Autoscaler's scale down threshold, the Node will become a scale down candidate
 and can be removed by Cluster Autoscaler. These three components form an autohealing cycle for Node problems.
+
 ---
 **NOTE**
 
