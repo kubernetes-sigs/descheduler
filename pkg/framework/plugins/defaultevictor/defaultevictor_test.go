@@ -374,6 +374,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 		priorityThreshold       *int32
 		nodeFit                 bool
 		result                  bool
+		strategyParameters      *api.StrategyParameters
 	}
 
 	testCases := []testCase{
@@ -702,12 +703,36 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			nodeFit:                 true,
 			result:                  true,
+		}, {
+			description: "Pod not present in the included namespaces",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1.Name, func(pod *v1.Pod) {}),
+			},
+			strategyParameters: &api.StrategyParameters{
+				Namespaces: &api.Namespaces{
+					Include: []string{"app1", "app2"},
+				},
+			},
+			result: false,
+		}, {
+			description: "Pod present in the excluded namespaces",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1.Name, func(pod *v1.Pod) {}),
+			},
+			strategyParameters: &api.StrategyParameters{
+				Namespaces: &api.Namespaces{
+					Exclude: []string{"default", "app1"},
+				},
+			},
+			result: false,
 		},
 	}
 
 	for _, test := range testCases {
 
 		t.Run(test.description, func(t *testing.T) {
+			t.Parallel()
+
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 

@@ -388,6 +388,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 						PriorityThreshold: &api.PriorityThreshold{
 							Value: &thresholdPriority,
 						},
+						StrategyParameters: params,
 					}
 
 					evictorFilter, _ := defaultevictor.New(

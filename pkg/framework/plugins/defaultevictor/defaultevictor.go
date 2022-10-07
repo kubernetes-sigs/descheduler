@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -71,6 +72,32 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	ev.handle = handle
 	ev.args = defaultEvictorArgs
 
+	ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+		if defaultEvictorArgs.StrategyParameters != nil &&
+			defaultEvictorArgs.StrategyParameters.Namespaces != nil &&
+			defaultEvictorArgs.StrategyParameters.Namespaces.Include != nil {
+			if !sets.NewString(defaultEvictorArgs.StrategyParameters.Namespaces.Include...).Has(pod.Namespace) {
+				return fmt.Errorf(
+					"pod is not present on included namespaces: %s",
+					defaultEvictorArgs.StrategyParameters.Namespaces.Include,
+				)
+			}
+		}
+		return nil
+	})
+	ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+		if defaultEvictorArgs.StrategyParameters != nil &&
+			defaultEvictorArgs.StrategyParameters.Namespaces != nil &&
+			defaultEvictorArgs.StrategyParameters.Namespaces.Exclude != nil {
+			if sets.NewString(defaultEvictorArgs.StrategyParameters.Namespaces.Exclude...).Has(pod.Namespace) {
+				return fmt.Errorf(
+					"pod is present on excluded namespaces: %s",
+					defaultEvictorArgs.StrategyParameters.Namespaces.Exclude,
+				)
+			}
+		}
+		return nil
+	})
 	if defaultEvictorArgs.EvictFailedBarePods {
 		klog.V(1).InfoS("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
@@ -151,7 +178,7 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 	if defaultEvictorArgs.NodeFit {
 		nodes, err := nodeutil.ReadyNodes(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Nodes().Lister(), defaultEvictorArgs.NodeSelector)
 		if err != nil {
-			klog.V(1).ErrorS(fmt.Errorf("Pod fails the following checks"), "pod", klog.KObj(pod))
+			klog.V(1).ErrorS(fmt.Errorf("pod fails the following checks"), "pod", klog.KObj(pod))
 			return false
 		}
 		if !nodeutil.PodFitsAnyOtherNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) {

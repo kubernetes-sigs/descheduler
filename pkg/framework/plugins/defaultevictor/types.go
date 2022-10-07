@@ -26,6 +26,7 @@ import (
 type DefaultEvictorArgs struct {
 	metav1.TypeMeta
 
+	StrategyParameters      *api.StrategyParameters
 	NodeSelector            string
 	EvictLocalStoragePods   bool
 	EvictSystemCriticalPods bool
