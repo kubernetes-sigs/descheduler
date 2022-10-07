@@ -101,7 +101,7 @@ The descheduler helm chart is also listed on the [artifact hub](https://artifact
 ### Install Using Kustomize
 
 You can use kustomize to install descheduler.
-See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/kustomize/resource/) for detailed instructions.
+See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/kustomize/cmd/build/) for detailed instructions.
 
 Run As A Job
 ```
