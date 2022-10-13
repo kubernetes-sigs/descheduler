@@ -16,12 +16,7 @@ git archive --format=tar --prefix=descheduler/ "$(git write-tree)" | (cd "${_des
 _deschedulertmp="${_deschedulertmp}/descheduler"
 
 pushd "${_deschedulertmp}" > /dev/null 2>&1
-go build -o "${OS_OUTPUT_BINPATH}/deepcopy-gen" "k8s.io/code-generator/cmd/deepcopy-gen"
-
-${OS_OUTPUT_BINPATH}/deepcopy-gen \
-                --go-header-file "hack/boilerplate/boilerplate.go.txt" \
-                --input-dirs "./pkg/apis/componentconfig,./pkg/apis/componentconfig/v1alpha1,./pkg/api,./pkg/api/v1alpha1,./pkg/framework/plugins/defaultevictor/" \
-                --output-file-base zz_generated.deepcopy
+./hack/update-generated-deep-copies.sh
 popd > /dev/null 2>&1
 
 pushd "${DESCHEDULER_ROOT}" > /dev/null 2>&1
