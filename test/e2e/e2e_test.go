@@ -38,6 +38,7 @@ import (
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/pointer"
+	utilpointer "k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
@@ -57,6 +58,14 @@ import (
 
 func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 	return v1.PodSpec{
+		SecurityContext: &v1.PodSecurityContext{
+			RunAsNonRoot: utilpointer.Bool(true),
+			RunAsUser:    utilpointer.Int64(1000),
+			RunAsGroup:   utilpointer.Int64(1000),
+			SeccompProfile: &v1.SeccompProfile{
+				Type: v1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
 		Containers: []v1.Container{{
 			Name:            "pause",
 			ImagePullPolicy: "Never",
@@ -70,6 +79,14 @@ func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 				Requests: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("100m"),
 					v1.ResourceMemory: resource.MustParse("100Mi"),
+				},
+			},
+			SecurityContext: &v1.SecurityContext{
+				AllowPrivilegeEscalation: utilpointer.Bool(false),
+				Capabilities: &v1.Capabilities{
+					Drop: []v1.Capability{
+						"ALL",
+					},
 				},
 			},
 		}},
@@ -303,6 +320,14 @@ func TestLowNodeUtilization(t *testing.T) {
 				Labels:    map[string]string{"test": "node-utilization", "name": "test-rc-node-utilization"},
 			},
 			Spec: v1.PodSpec{
+				SecurityContext: &v1.PodSecurityContext{
+					RunAsNonRoot: utilpointer.Bool(true),
+					RunAsUser:    utilpointer.Int64(1000),
+					RunAsGroup:   utilpointer.Int64(1000),
+					SeccompProfile: &v1.SeccompProfile{
+						Type: v1.SeccompProfileTypeRuntimeDefault,
+					},
+				},
 				Containers: []v1.Container{{
 					Name:            "pause",
 					ImagePullPolicy: "Never",
@@ -1287,6 +1312,14 @@ func createBalancedPodForNodes(
 				Labels:    balancePodLabel,
 			},
 			Spec: v1.PodSpec{
+				SecurityContext: &v1.PodSecurityContext{
+					RunAsNonRoot: utilpointer.Bool(true),
+					RunAsUser:    utilpointer.Int64(1000),
+					RunAsGroup:   utilpointer.Int64(1000),
+					SeccompProfile: &v1.SeccompProfile{
+						Type: v1.SeccompProfileTypeRuntimeDefault,
+					},
+				},
 				Affinity: &v1.Affinity{
 					NodeAffinity: &v1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
