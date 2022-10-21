@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "descheduler.labels" . | nindent 4 }}
 rules:
-- apiGroups: [""]
+- apiGroups: ["events.k8s.io"]
   resources: ["events"]
   verbs: ["create", "update"]
 - apiGroups: [""]

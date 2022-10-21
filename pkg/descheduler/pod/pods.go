@@ -23,7 +23,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/sets"
-	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/tools/cache"
 
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -118,9 +117,9 @@ func (o *Options) BuildFilterFunc() (FilterFunc, error) {
 
 // BuildGetPodsAssignedToNodeFunc establishes an indexer to map the pods and their assigned nodes.
 // It returns a function to help us get all the pods that assigned to a node based on the indexer.
-func BuildGetPodsAssignedToNodeFunc(podInformer coreinformers.PodInformer) (GetPodsAssignedToNodeFunc, error) {
+func BuildGetPodsAssignedToNodeFunc(podInformer cache.SharedIndexInformer) (GetPodsAssignedToNodeFunc, error) {
 	// Establish an indexer to map the pods and their assigned nodes.
-	err := podInformer.Informer().AddIndexers(cache.Indexers{
+	err := podInformer.AddIndexers(cache.Indexers{
 		nodeNameKeyIndex: func(obj interface{}) ([]string, error) {
 			pod, ok := obj.(*v1.Pod)
 			if !ok {
@@ -137,7 +136,7 @@ func BuildGetPodsAssignedToNodeFunc(podInformer coreinformers.PodInformer) (GetP
 	}
 
 	// The indexer helps us get all the pods that assigned to a node.
-	podIndexer := podInformer.Informer().GetIndexer()
+	podIndexer := podInformer.GetIndexer()
 	getPodsAssignedToNode := func(nodeName string, filter FilterFunc) ([]*v1.Pod, error) {
 		objs, err := podIndexer.ByIndex(nodeNameKeyIndex, nodeName)
 		if err != nil {

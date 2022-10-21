@@ -101,7 +101,7 @@ The descheduler helm chart is also listed on the [artifact hub](https://artifact
 ### Install Using Kustomize
 
 You can use kustomize to install descheduler.
-See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/kustomize/resource/) for detailed instructions.
+See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/kustomize/cmd/build/) for detailed instructions.
 
 Run As A Job
 ```
@@ -791,6 +791,9 @@ best effort pods are evicted before burstable and guaranteed pods.
 * All types of pods with the annotation `descheduler.alpha.kubernetes.io/evict` are eligible for eviction. This
   annotation is used to override checks which prevent eviction and users can select which pod is evicted.
   Users should know how and if the pod will be recreated.
+  The annotation only affects internal descheduler checks.
+  The anti-disruption protection provided by the [/eviction](https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/)
+  subresource is still respected.
 * Pods with a non-nil DeletionTimestamp are not evicted by default.
 
 Setting `--v=4` or greater on the Descheduler will log all reasons why any pod is not evictable.

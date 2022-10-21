@@ -27,7 +27,6 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/events"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/framework"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -45,8 +44,8 @@ func TestRemoveFailedPods(t *testing.T) {
 	createRemoveFailedPodsArgs := func(
 		includingInitContainers bool,
 		reasons, excludeKinds []string,
-		minAgeSeconds *uint) componentconfig.RemoveFailedPodsArgs {
-		return componentconfig.RemoveFailedPodsArgs{
+		minAgeSeconds *uint) RemoveFailedPodsArgs {
+		return RemoveFailedPodsArgs{
 			IncludingInitContainers: includingInitContainers,
 			Reasons:                 reasons,
 			MinPodLifetimeSeconds:   minAgeSeconds,
@@ -57,14 +56,14 @@ func TestRemoveFailedPods(t *testing.T) {
 	tests := []struct {
 		description             string
 		nodes                   []*v1.Node
-		args                    componentconfig.RemoveFailedPodsArgs
+		args                    RemoveFailedPodsArgs
 		expectedEvictedPodCount uint
 		pods                    []*v1.Pod
 		nodeFit                 bool
 	}{
 		{
 			description:             "default empty args, 0 failures, 0 evictions",
-			args:                    componentconfig.RemoveFailedPodsArgs{},
+			args:                    RemoveFailedPodsArgs{},
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 0,
 			pods:                    []*v1.Pod{}, // no pods come back with field selector phase=Failed
@@ -279,7 +278,7 @@ func TestRemoveFailedPods(t *testing.T) {
 			fakeClient := fake.NewSimpleClientset(objs...)
 
 			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods()
+			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
 			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 			if err != nil {
@@ -323,7 +322,7 @@ func TestRemoveFailedPods(t *testing.T) {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin, err := New(&componentconfig.RemoveFailedPodsArgs{
+			plugin, err := New(&RemoveFailedPodsArgs{
 				Reasons:                 tc.args.Reasons,
 				MinPodLifetimeSeconds:   tc.args.MinPodLifetimeSeconds,
 				IncludingInitContainers: tc.args.IncludingInitContainers,

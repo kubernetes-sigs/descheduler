@@ -34,14 +34,14 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
-	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/pointer"
+	utilpointer "k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -58,6 +58,14 @@ import (
 
 func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 	return v1.PodSpec{
+		SecurityContext: &v1.PodSecurityContext{
+			RunAsNonRoot: utilpointer.Bool(true),
+			RunAsUser:    utilpointer.Int64(1000),
+			RunAsGroup:   utilpointer.Int64(1000),
+			SeccompProfile: &v1.SeccompProfile{
+				Type: v1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
 		Containers: []v1.Container{{
 			Name:            "pause",
 			ImagePullPolicy: "Never",
@@ -71,6 +79,14 @@ func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 				Requests: v1.ResourceList{
 					v1.ResourceCPU:    resource.MustParse("100m"),
 					v1.ResourceMemory: resource.MustParse("100Mi"),
+				},
+			},
+			SecurityContext: &v1.SecurityContext{
+				AllowPrivilegeEscalation: utilpointer.Bool(false),
+				Capabilities: &v1.Capabilities{
+					Drop: []v1.Capability{
+						"ALL",
+					},
 				},
 			},
 		}},
@@ -110,7 +126,7 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 	}
 }
 
-func initializeClient(t *testing.T) (clientset.Interface, informers.SharedInformerFactory, coreinformers.NodeInformer, podutil.GetPodsAssignedToNodeFunc, chan struct{}) {
+func initializeClient(t *testing.T) (clientset.Interface, informers.SharedInformerFactory, listersv1.NodeLister, podutil.GetPodsAssignedToNodeFunc, chan struct{}) {
 	clientSet, err := client.CreateClient(os.Getenv("KUBECONFIG"), "")
 	if err != nil {
 		t.Errorf("Error during client creation with %v", err)
@@ -119,8 +135,8 @@ func initializeClient(t *testing.T) (clientset.Interface, informers.SharedInform
 	stopChannel := make(chan struct{})
 
 	sharedInformerFactory := informers.NewSharedInformerFactory(clientSet, 0)
-	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
-	podInformer := sharedInformerFactory.Core().V1().Pods()
+	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
+	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
@@ -130,18 +146,18 @@ func initializeClient(t *testing.T) (clientset.Interface, informers.SharedInform
 	sharedInformerFactory.Start(stopChannel)
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 
-	waitForNodesReady(context.Background(), t, clientSet, nodeInformer)
-	return clientSet, sharedInformerFactory, nodeInformer, getPodsAssignedToNode, stopChannel
+	waitForNodesReady(context.Background(), t, clientSet, nodeLister)
+	return clientSet, sharedInformerFactory, nodeLister, getPodsAssignedToNode, stopChannel
 }
 
-func waitForNodesReady(ctx context.Context, t *testing.T, clientSet clientset.Interface, nodeInformer coreinformers.NodeInformer) {
+func waitForNodesReady(ctx context.Context, t *testing.T, clientSet clientset.Interface, nodeLister listersv1.NodeLister) {
 	if err := wait.PollImmediate(5*time.Second, 30*time.Second, func() (bool, error) {
 		nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return false, err
 		}
 
-		readyNodes, err := nodeutil.ReadyNodes(ctx, clientSet, nodeInformer, "")
+		readyNodes, err := nodeutil.ReadyNodes(ctx, clientSet, nodeLister, "")
 		if err != nil {
 			return false, err
 		}
@@ -160,7 +176,7 @@ func runPodLifetimePlugin(
 	ctx context.Context,
 	t *testing.T,
 	clientset clientset.Interface,
-	nodeInformer coreinformers.NodeInformer,
+	nodeLister listersv1.NodeLister,
 	namespaces *deschedulerapi.Namespaces,
 	priorityClass string,
 	priority *int32,
@@ -174,7 +190,7 @@ func runPodLifetimePlugin(
 		t.Fatalf("%v", err)
 	}
 
-	nodes, err := nodeutil.ReadyNodes(ctx, clientset, nodeInformer, "")
+	nodes, err := nodeutil.ReadyNodes(ctx, clientset, nodeLister, "")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -224,7 +240,7 @@ func runPodLifetimePlugin(
 
 	maxPodLifeTimeSeconds := uint(1)
 
-	plugin, err := podlifetime.New(&componentconfig.PodLifeTimeArgs{
+	plugin, err := podlifetime.New(&podlifetime.PodLifeTimeArgs{
 		MaxPodLifeTimeSeconds: &maxPodLifeTimeSeconds,
 		LabelSelector:         labelSelector,
 		Namespaces:            namespaces,
@@ -304,6 +320,14 @@ func TestLowNodeUtilization(t *testing.T) {
 				Labels:    map[string]string{"test": "node-utilization", "name": "test-rc-node-utilization"},
 			},
 			Spec: v1.PodSpec{
+				SecurityContext: &v1.PodSecurityContext{
+					RunAsNonRoot: utilpointer.Bool(true),
+					RunAsUser:    utilpointer.Int64(1000),
+					RunAsGroup:   utilpointer.Int64(1000),
+					SeccompProfile: &v1.SeccompProfile{
+						Type: v1.SeccompProfileTypeRuntimeDefault,
+					},
+				},
 				Containers: []v1.Container{{
 					Name:            "pause",
 					ImagePullPolicy: "Never",
@@ -393,7 +417,7 @@ func TestLowNodeUtilization(t *testing.T) {
 		SharedInformerFactoryImpl:     sharedInformerFactory,
 	}
 
-	plugin, err := nodeutilization.NewLowNodeUtilization(&componentconfig.LowNodeUtilizationArgs{
+	plugin, err := nodeutilization.NewLowNodeUtilization(&nodeutilization.LowNodeUtilizationArgs{
 		Thresholds: api.ResourceThresholds{
 			v1.ResourceCPU: 70,
 		},
@@ -930,7 +954,7 @@ func TestPodLabelSelector(t *testing.T) {
 func TestEvictAnnotation(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, _, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, _, nodeLister, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -975,7 +999,7 @@ func TestEvictAnnotation(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Log("Running PodLifetime plugin")
-	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", nil, false, nil, nil, getPodsAssignedToNode)
+	runPodLifetimePlugin(ctx, t, clientSet, nodeLister, nil, "", nil, false, nil, nil, getPodsAssignedToNode)
 
 	if err := wait.PollImmediate(5*time.Second, time.Minute, func() (bool, error) {
 		podList, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
@@ -1002,7 +1026,7 @@ func TestEvictAnnotation(t *testing.T) {
 func TestPodLifeTimeOldestEvicted(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, _, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
+	clientSet, _, nodeLister, getPodsAssignedToNode, stopCh := initializeClient(t)
 	defer close(stopCh)
 
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -1041,7 +1065,7 @@ func TestPodLifeTimeOldestEvicted(t *testing.T) {
 
 	t.Log("Running PodLifetime plugin with maxPodsToEvictPerNamespace=1 to ensure only the oldest pod is evicted")
 	var maxPodsToEvictPerNamespace uint = 1
-	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", nil, false, &maxPodsToEvictPerNamespace, nil, getPodsAssignedToNode)
+	runPodLifetimePlugin(ctx, t, clientSet, nodeLister, nil, "", nil, false, &maxPodsToEvictPerNamespace, nil, getPodsAssignedToNode)
 	t.Log("Finished PodLifetime plugin")
 
 	t.Logf("Wait for terminating pod to disappear")
@@ -1288,6 +1312,14 @@ func createBalancedPodForNodes(
 				Labels:    balancePodLabel,
 			},
 			Spec: v1.PodSpec{
+				SecurityContext: &v1.PodSecurityContext{
+					RunAsNonRoot: utilpointer.Bool(true),
+					RunAsUser:    utilpointer.Int64(1000),
+					RunAsGroup:   utilpointer.Int64(1000),
+					SeccompProfile: &v1.SeccompProfile{
+						Type: v1.SeccompProfileTypeRuntimeDefault,
+					},
+				},
 				Affinity: &v1.Affinity{
 					NodeAffinity: &v1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{

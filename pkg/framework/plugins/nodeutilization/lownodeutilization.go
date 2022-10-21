@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
@@ -37,7 +36,7 @@ const LowNodeUtilizationPluginName = "LowNodeUtilization"
 
 type LowNodeUtilization struct {
 	handle    framework.Handle
-	args      *componentconfig.LowNodeUtilizationArgs
+	args      *LowNodeUtilizationArgs
 	podFilter func(pod *v1.Pod) bool
 }
 
@@ -45,7 +44,7 @@ var _ framework.BalancePlugin = &LowNodeUtilization{}
 
 // NewLowNodeUtilization builds plugin from its arguments while passing a handle
 func NewLowNodeUtilization(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	lowNodeUtilizationArgsArgs, ok := args.(*componentconfig.LowNodeUtilizationArgs)
+	lowNodeUtilizationArgsArgs, ok := args.(*LowNodeUtilizationArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type LowNodeUtilizationArgs, got %T", args)
 	}

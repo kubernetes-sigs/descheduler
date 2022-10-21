@@ -27,7 +27,6 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/events"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/framework"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -205,7 +204,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			fakeClient := fake.NewSimpleClientset(objs...)
 
 			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods()
+			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
 			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 			if err != nil {
@@ -257,7 +256,7 @@ func TestPodAntiAffinity(t *testing.T) {
 				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
 			}
 			plugin, err := New(
-				&componentconfig.RemovePodsViolatingInterPodAntiAffinityArgs{},
+				&RemovePodsViolatingInterPodAntiAffinityArgs{},
 				handle,
 			)
 

@@ -149,7 +149,7 @@ func (d *DefaultEvictor) Name() string {
 func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 	defaultEvictorArgs := d.args.(*DefaultEvictorArgs)
 	if defaultEvictorArgs.NodeFit {
-		nodes, err := nodeutil.ReadyNodes(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Nodes(), defaultEvictorArgs.NodeSelector)
+		nodes, err := nodeutil.ReadyNodes(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Nodes().Lister(), defaultEvictorArgs.NodeSelector)
 		if err != nil {
 			klog.V(1).ErrorS(fmt.Errorf("Pod fails the following checks"), "pod", klog.KObj(pod))
 			return false
