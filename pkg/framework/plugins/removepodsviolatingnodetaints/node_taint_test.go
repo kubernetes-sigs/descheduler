@@ -29,7 +29,6 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/events"
 
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
@@ -341,7 +340,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			fakeClient := fake.NewSimpleClientset(objs...)
 
 			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods()
+			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
 			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 			if err != nil {
@@ -393,7 +392,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
-			plugin, err := New(&componentconfig.RemovePodsViolatingNodeTaintsArgs{
+			plugin, err := New(&RemovePodsViolatingNodeTaintsArgs{
 				IncludePreferNoSchedule: tc.includePreferNoSchedule,
 				ExcludedTaints:          tc.excludedTaints,
 			},

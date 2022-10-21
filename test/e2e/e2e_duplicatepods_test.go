@@ -21,7 +21,6 @@ import (
 	"strings"
 	"testing"
 
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
@@ -34,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/pointer"
+	utilpointer "k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 )
@@ -75,11 +75,27 @@ func TestRemoveDuplicates(t *testing.T) {
 					Labels: map[string]string{"app": "test-duplicate", "name": "test-duplicatePods"},
 				},
 				Spec: v1.PodSpec{
+					SecurityContext: &v1.PodSecurityContext{
+						RunAsNonRoot: utilpointer.Bool(true),
+						RunAsUser:    utilpointer.Int64(1000),
+						RunAsGroup:   utilpointer.Int64(1000),
+						SeccompProfile: &v1.SeccompProfile{
+							Type: v1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
 					Containers: []v1.Container{{
 						Name:            "pause",
 						ImagePullPolicy: "Always",
 						Image:           "kubernetes/pause",
 						Ports:           []v1.ContainerPort{{ContainerPort: 80}},
+						SecurityContext: &v1.SecurityContext{
+							AllowPrivilegeEscalation: utilpointer.Bool(false),
+							Capabilities: &v1.Capabilities{
+								Drop: []v1.Capability{
+									"ALL",
+								},
+							},
+						},
 					}},
 				},
 			},
@@ -186,7 +202,7 @@ func TestRemoveDuplicates(t *testing.T) {
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
-			plugin, err := removeduplicates.New(&componentconfig.RemoveDuplicatesArgs{},
+			plugin, err := removeduplicates.New(&removeduplicates.RemoveDuplicatesArgs{},
 				handle,
 			)
 			if err != nil {

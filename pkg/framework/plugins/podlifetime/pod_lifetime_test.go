@@ -28,7 +28,6 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/events"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
@@ -143,7 +142,7 @@ func TestPodLifeTime(t *testing.T) {
 	var maxLifeTime uint = 600
 	testCases := []struct {
 		description                string
-		args                       *componentconfig.PodLifeTimeArgs
+		args                       *PodLifeTimeArgs
 		pods                       []*v1.Pod
 		nodes                      []*v1.Node
 		expectedEvictedPodCount    uint
@@ -153,7 +152,7 @@ func TestPodLifeTime(t *testing.T) {
 	}{
 		{
 			description: "Two pods in the `dev` Namespace, 1 is new and 1 very is old. 1 should be evicted.",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p1, p2},
@@ -162,7 +161,7 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "Two pods in the `dev` Namespace, 2 are new and 0 are old. 0 should be evicted.",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p3, p4},
@@ -171,7 +170,7 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "Two pods in the `dev` Namespace, 1 created 605 seconds ago. 1 should be evicted.",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p5, p6},
@@ -180,7 +179,7 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "Two pods in the `dev` Namespace, 1 created 595 seconds ago. 0 should be evicted.",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p7, p8},
@@ -189,7 +188,7 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "Two pods, one with ContainerCreating state. 1 should be evicted.",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"ContainerCreating"},
 			},
@@ -212,7 +211,7 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "Two pods, one with PodInitializing state. 1 should be evicted.",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"PodInitializing"},
 			},
@@ -235,7 +234,7 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "Two old pods with different states. 1 should be evicted.",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"Pending"},
 			},
@@ -245,7 +244,7 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "does not evict pvc pods with ignorePvcPods set to true",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p11},
@@ -255,7 +254,7 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "evicts pvc pods with ignorePvcPods set to false (or unset)",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p11},
@@ -264,7 +263,7 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "No pod to evicted since all pod terminating",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{"foo": "bar"},
@@ -276,7 +275,7 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "No pod should be evicted since pod terminating",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{"foo": "bar"},
@@ -288,7 +287,7 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "2 Oldest pods should be evicted when maxPodsToEvictPerNode and maxPodsToEvictPerNamespace are not set",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                       []*v1.Pod{p1, p2, p9},
@@ -299,7 +298,7 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "1 Oldest pod should be evicted when maxPodsToEvictPerNamespace is set to 1",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                       []*v1.Pod{p1, p2, p9},
@@ -309,7 +308,7 @@ func TestPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "1 Oldest pod should be evicted when maxPodsToEvictPerNode is set to 1",
-			args: &componentconfig.PodLifeTimeArgs{
+			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p1, p2, p9},
@@ -334,7 +333,7 @@ func TestPodLifeTime(t *testing.T) {
 			fakeClient := fake.NewSimpleClientset(objs...)
 
 			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods()
+			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
 			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 			if err != nil {

@@ -10,7 +10,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
@@ -103,7 +102,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin, err := removepodsviolatingtopologyspreadconstraint.New(&componentconfig.RemovePodsViolatingTopologySpreadConstraintArgs{
+			plugin, err := removepodsviolatingtopologyspreadconstraint.New(&removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
 				IncludeSoftConstraints: tc.constraint != v1.DoNotSchedule,
 			},
 				&frameworkfake.HandleImpl{

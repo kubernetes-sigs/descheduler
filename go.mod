@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/client9/misspell v0.3.4
+	github.com/google/go-cmp v0.5.6
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.25.0
@@ -51,7 +52,6 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/gomarkdown/markdown v0.0.0-20200824053859-8c8b3816f167 // indirect
 	github.com/google/gnostic v0.5.7-v3refs // indirect
-	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/google/gofuzz v1.1.0 // indirect
 	github.com/google/uuid v1.1.2 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect

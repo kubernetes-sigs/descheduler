@@ -23,7 +23,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -35,7 +34,7 @@ const PluginName = "RemovePodsViolatingNodeAffinity"
 // RemovePodsViolatingNodeAffinity evicts pods on the node which violate node affinity
 type RemovePodsViolatingNodeAffinity struct {
 	handle    framework.Handle
-	args      *componentconfig.RemovePodsViolatingNodeAffinityArgs
+	args      *RemovePodsViolatingNodeAffinityArgs
 	podFilter podutil.FilterFunc
 }
 
@@ -43,7 +42,7 @@ var _ framework.DeschedulePlugin = &RemovePodsViolatingNodeAffinity{}
 
 // New builds plugin from its arguments while passing a handle
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	nodeAffinityArgs, ok := args.(*componentconfig.RemovePodsViolatingNodeAffinityArgs)
+	nodeAffinityArgs, ok := args.(*RemovePodsViolatingNodeAffinityArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingNodeAffinityArgs, got %T", args)
 	}

@@ -24,8 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/klog/v2"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -33,7 +33,7 @@ import (
 
 // ReadyNodes returns ready nodes irrespective of whether they are
 // schedulable or not.
-func ReadyNodes(ctx context.Context, client clientset.Interface, nodeInformer coreinformers.NodeInformer, nodeSelector string) ([]*v1.Node, error) {
+func ReadyNodes(ctx context.Context, client clientset.Interface, nodeLister listersv1.NodeLister, nodeSelector string) ([]*v1.Node, error) {
 	ns, err := labels.Parse(nodeSelector)
 	if err != nil {
 		return []*v1.Node{}, err
@@ -41,7 +41,7 @@ func ReadyNodes(ctx context.Context, client clientset.Interface, nodeInformer co
 
 	var nodes []*v1.Node
 	// err is defined above
-	if nodes, err = nodeInformer.Lister().List(ns); err != nil {
+	if nodes, err = nodeLister.List(ns); err != nil {
 		return []*v1.Node{}, err
 	}
 

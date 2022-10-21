@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"k8s.io/client-go/tools/events"
-	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
@@ -301,7 +300,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			fakeClient := fake.NewSimpleClientset(objs...)
 
 			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods()
+			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
 			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 			if err != nil {
@@ -351,7 +350,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
-			plugin, err := New(&componentconfig.RemoveDuplicatesArgs{
+			plugin, err := New(&RemoveDuplicatesArgs{
 				ExcludeOwnerKinds: testCase.excludeOwnerKinds,
 			},
 				handle,
@@ -751,7 +750,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			fakeClient := fake.NewSimpleClientset(objs...)
 
 			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods()
+			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
 			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 			if err != nil {
@@ -802,7 +801,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
-			plugin, err := New(&componentconfig.RemoveDuplicatesArgs{},
+			plugin, err := New(&RemoveDuplicatesArgs{},
 				handle,
 			)
 			if err != nil {
