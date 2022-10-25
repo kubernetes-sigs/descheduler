@@ -129,6 +129,10 @@ func decodePolicy(kind schema.ObjectKind, decoder runtime.Decoder, policy []byte
 			return nil, err
 		}
 	} else {
+		err = validateDeschedulerConfiguration(*v2Policy)
+		if err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}
 	return v2Policy, nil
@@ -183,11 +187,42 @@ func policyToDefaultEvictor(in *v1alpha1.DeschedulerPolicy, profiles []v1alpha2.
 
 func setDefaults(in api.DeschedulerPolicy) *api.DeschedulerPolicy {
 	for idx, profile := range in.Profiles {
-		// Most defaults are being set, for example in pkg/framework/plugins/nodeutilization/defaults.go
 		// If we need to set defaults coming from loadtime in each profile we do it here
 		in.Profiles[idx] = setDefaultEvictor(profile)
+		for _, pluginConfig := range profile.PluginConfig {
+			setDefaultsPluginConfig(pluginConfig)
+
+		}
 	}
 	return &in
+}
+
+func setDefaultsPluginConfig(pluginConfig api.PluginConfig) {
+	// TODO later we can register validation and defaulting funcs in the registry
+	switch pluginConfig.Name {
+	case removeduplicates.PluginName:
+		removeduplicates.SetDefaults_RemoveDuplicatesArgs(pluginConfig.Args.(*removeduplicates.RemoveDuplicatesArgs))
+	case nodeutilization.LowNodeUtilizationPluginName:
+		nodeutilization.SetDefaults_LowNodeUtilizationArgs(pluginConfig.Args.(*nodeutilization.LowNodeUtilizationArgs))
+	case nodeutilization.HighNodeUtilizationPluginName:
+		nodeutilization.SetDefaults_HighNodeUtilizationArgs(pluginConfig.Args.(*nodeutilization.HighNodeUtilizationArgs))
+	case removepodsviolatinginterpodantiaffinity.PluginName:
+		removepodsviolatinginterpodantiaffinity.SetDefaults_RemovePodsViolatingInterPodAntiAffinityArgs(pluginConfig.Args.(*removepodsviolatinginterpodantiaffinity.RemovePodsViolatingInterPodAntiAffinityArgs))
+	case removepodsviolatingnodeaffinity.PluginName:
+		removepodsviolatingnodeaffinity.SetDefaults_RemovePodsViolatingNodeAffinityArgs(pluginConfig.Args.(*removepodsviolatingnodeaffinity.RemovePodsViolatingNodeAffinityArgs))
+	case removepodsviolatingnodetaints.PluginName:
+		removepodsviolatingnodetaints.SetDefaults_RemovePodsViolatingNodeTaintsArgs(pluginConfig.Args.(*removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs))
+	case removepodsviolatingtopologyspreadconstraint.PluginName:
+		removepodsviolatingtopologyspreadconstraint.SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(pluginConfig.Args.(*removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs))
+	case removepodshavingtoomanyrestarts.PluginName:
+		removepodshavingtoomanyrestarts.SetDefaults_RemovePodsHavingTooManyRestartsArgs(pluginConfig.Args.(*removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs))
+	case podlifetime.PluginName:
+		podlifetime.SetDefaults_PodLifeTimeArgs(pluginConfig.Args.(*podlifetime.PodLifeTimeArgs))
+	case removefailedpods.PluginName:
+		removefailedpods.SetDefaults_RemoveFailedPodsArgs(pluginConfig.Args.(*removefailedpods.RemoveFailedPodsArgs))
+	case defaultevictor.PluginName:
+		defaultevictor.SetDefaults_DefaultEvictorArgs(pluginConfig.Args.(*defaultevictor.DefaultEvictorArgs))
+	}
 }
 
 func setDefaultEvictor(profile api.Profile) api.Profile {
@@ -250,6 +285,7 @@ func validateDeschedulerConfiguration(in v1alpha2.DeschedulerPolicy) error {
 			errTooManyEvictors := fmt.Errorf("profile with invalid number of evictor plugins enabled found. Please enable a single evictor plugin.")
 			errorsInProfiles = setErrorsInProfiles(errTooManyEvictors, profile.Name, errorsInProfiles)
 		}
+		// TODO later we can register validation and defaulting funcs in the registry
 		for _, pluginConfig := range profile.PluginConfig {
 			switch pluginConfig.Name {
 			case removeduplicates.PluginName:
