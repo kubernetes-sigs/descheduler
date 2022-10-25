@@ -14,13 +14,4 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha2
-
-import "sort"
-
-func SortProfilesByName(profiles []Profile) []Profile {
-	sort.Slice(profiles, func(i, j int) bool {
-		return profiles[i].Name < profiles[j].Name
-	})
-	return profiles
-}
+package api

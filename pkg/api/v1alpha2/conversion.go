@@ -28,6 +28,9 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	api "sigs.k8s.io/descheduler/pkg/api"
 
+	// "sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
+	// "sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
 )
 
 var (
@@ -87,6 +90,22 @@ func convertToInternalPluginConfigArgs(out *api.DeschedulerPolicy) error {
 }
 
 func Convert_v1alpha2_PluginConfig_To_api_PluginConfig(in *PluginConfig, out *api.PluginConfig, s conversion.Scope) error {
+	out.Name = in.Name
+	if _, ok := pluginbuilder.PluginRegistry[in.Name]; ok {
+		out.Args = pluginbuilder.PluginRegistry[in.Name].PluginArgInstance
+		if in.Args.Raw != nil {
+			_, _, err := Codecs.UniversalDecoder().Decode(in.Args.Raw, nil, out.Args)
+			if err != nil {
+				return err
+			}
+		} else if in.Args.Object != nil {
+			out.Args = in.Args.Object
+		}
+	} else {
+		if err := runtime.Convert_runtime_RawExtension_To_runtime_Object(&in.Args, &out.Args, s); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
