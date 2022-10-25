@@ -14,6 +14,9 @@ import (
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -30,9 +33,33 @@ func TestTaintsUpdated(t *testing.T) {
 	client := fakeclientset.NewSimpleClientset(n1, n2, p1)
 	eventClient := fakeclientset.NewSimpleClientset(n1, n2, p1)
 	dp := &api.DeschedulerPolicy{
-		Strategies: api.StrategyList{
-			"RemovePodsViolatingNodeTaints": api.DeschedulerStrategy{
-				Enabled: true,
+		Profiles: []api.Profile{
+			{
+				Name: "test-profile",
+				PluginConfig: []api.PluginConfig{
+					{
+						Name: removepodsviolatingnodetaints.PluginName,
+						Args: &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{},
+					},
+					{
+						Name: defaultevictor.PluginName,
+						Args: &defaultevictor.DefaultEvictorArgs{},
+					},
+				},
+				Plugins: api.Plugins{
+					Evict: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					Filter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					PreEvictionFilter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					Deschedule: api.PluginSet{
+						Enabled: []string{removepodsviolatingnodetaints.PluginName},
+					},
+				},
 			},
 		},
 	}
@@ -97,9 +124,33 @@ func TestDuplicate(t *testing.T) {
 	client := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3)
 	eventClient := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3)
 	dp := &api.DeschedulerPolicy{
-		Strategies: api.StrategyList{
-			"RemoveDuplicates": api.DeschedulerStrategy{
-				Enabled: true,
+		Profiles: []api.Profile{
+			{
+				Name: "test-profile",
+				PluginConfig: []api.PluginConfig{
+					{
+						Name: removeduplicates.PluginName,
+						Args: &removeduplicates.RemoveDuplicatesArgs{},
+					},
+					{
+						Name: defaultevictor.PluginName,
+						Args: &defaultevictor.DefaultEvictorArgs{},
+					},
+				},
+				Plugins: api.Plugins{
+					Evict: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					Filter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					PreEvictionFilter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					Deschedule: api.PluginSet{
+						Enabled: []string{removeduplicates.PluginName},
+					},
+				},
 			},
 		},
 	}
@@ -138,8 +189,30 @@ func TestRootCancel(t *testing.T) {
 	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 	client := fakeclientset.NewSimpleClientset(n1, n2)
 	eventClient := fakeclientset.NewSimpleClientset(n1, n2)
+
 	dp := &api.DeschedulerPolicy{
-		Strategies: api.StrategyList{}, // no strategies needed for this test
+		Profiles: []api.Profile{
+			{
+				Name: "test-profile",
+				PluginConfig: []api.PluginConfig{
+					{
+						Name: defaultevictor.PluginName,
+						Args: &defaultevictor.DefaultEvictorArgs{},
+					},
+				},
+				Plugins: api.Plugins{
+					Evict: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					Filter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					PreEvictionFilter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+				},
+			}, // no profiles/strategies needed for this test
+		},
 	}
 
 	rs, err := options.NewDeschedulerServer()
@@ -174,7 +247,28 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 	client := fakeclientset.NewSimpleClientset(n1, n2)
 	eventClient := fakeclientset.NewSimpleClientset(n1, n2)
 	dp := &api.DeschedulerPolicy{
-		Strategies: api.StrategyList{}, // no strategies needed for this test
+		Profiles: []api.Profile{
+			{
+				Name: "test-profile",
+				PluginConfig: []api.PluginConfig{
+					{
+						Name: defaultevictor.PluginName,
+						Args: &defaultevictor.DefaultEvictorArgs{},
+					},
+				},
+				Plugins: api.Plugins{
+					Evict: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					Filter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					PreEvictionFilter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+				},
+			}, // no profiles/strategies needed for this test
+		},
 	}
 
 	rs, err := options.NewDeschedulerServer()

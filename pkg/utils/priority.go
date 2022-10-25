@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 )
 
 const SystemCriticalPriority = 2 * int32(1000000000)
@@ -55,7 +56,7 @@ func GetPriorityFromPriorityClass(ctx context.Context, client clientset.Interfac
 
 // GetPriorityFromStrategyParams gets priority from the given StrategyParameters.
 // It will return SystemCriticalPriority by default.
-func GetPriorityFromStrategyParams(ctx context.Context, client clientset.Interface, params *api.StrategyParameters) (priority int32, err error) {
+func GetPriorityFromStrategyParams(ctx context.Context, client clientset.Interface, params *v1alpha1.StrategyParameters) (priority int32, err error) {
 	if params == nil {
 		return SystemCriticalPriority, nil
 	}
