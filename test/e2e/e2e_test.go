@@ -1097,7 +1097,30 @@ func TestDeschedulingInterval(t *testing.T) {
 	}
 	s.Client = clientSet
 
-	deschedulerPolicy := &deschedulerapi.DeschedulerPolicy{}
+	deschedulerPolicy := &api.DeschedulerPolicy{
+		Profiles: []api.Profile{
+			{
+				Name: "test-profile",
+				PluginConfig: []api.PluginConfig{
+					{
+						Name: defaultevictor.PluginName,
+						Args: &defaultevictor.DefaultEvictorArgs{},
+					},
+				},
+				Plugins: api.Plugins{
+					Evict: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					Filter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					PreEvictionFilter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+				},
+			}, // no profiles/strategies needed for this test
+		},
+	}
 
 	c := make(chan bool, 1)
 	go func() {
