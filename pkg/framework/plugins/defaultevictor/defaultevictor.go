@@ -27,6 +27,7 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -215,4 +216,16 @@ func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
 	}
 
 	return true
+}
+
+func init() {
+	if _, ok := pluginbuilder.PluginRegistry[PluginName]; ok {
+		klog.V(10).InfoS("Plugin already registered", "plugin", PluginName)
+	} else {
+		exampleArg := &DefaultEvictorArgs{}
+		pluginbuilder.PluginRegistry[PluginName] = pluginbuilder.PluginBuilderAndArgsInstance{
+			PluginBuilder:     New,
+			PluginArgInstance: exampleArg,
+		}
+	}
 }

@@ -26,6 +26,7 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
@@ -170,6 +171,18 @@ func setDefaultForThresholds(thresholds, targetThresholds api.ResourceThresholds
 	for name := range thresholds {
 		if !nodeutil.IsBasicResource(name) {
 			targetThresholds[name] = MaxResourcePercentage
+		}
+	}
+}
+
+func init() {
+	if _, ok := pluginbuilder.PluginRegistry[HighNodeUtilizationPluginName]; ok {
+		klog.V(10).InfoS("Plugin already registered", "plugin", HighNodeUtilizationPluginName)
+	} else {
+		exampleArg := &HighNodeUtilizationArgs{}
+		pluginbuilder.PluginRegistry[HighNodeUtilizationPluginName] = pluginbuilder.PluginBuilderAndArgsInstance{
+			PluginBuilder:     NewHighNodeUtilization,
+			PluginArgInstance: exampleArg,
 		}
 	}
 }

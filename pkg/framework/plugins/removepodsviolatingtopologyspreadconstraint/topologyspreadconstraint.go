@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -432,5 +433,17 @@ func comparePodsByPriority(iPod, jPod *v1.Pod) bool {
 	} else {
 		// it doesn't matter. just return true
 		return true
+	}
+}
+
+func init() {
+	if _, ok := pluginbuilder.PluginRegistry[PluginName]; ok {
+		klog.V(10).InfoS("Plugin already registered", "plugin", PluginName)
+	} else {
+		exampleArg := &RemovePodsViolatingTopologySpreadConstraintArgs{}
+		pluginbuilder.PluginRegistry[PluginName] = pluginbuilder.PluginBuilderAndArgsInstance{
+			PluginBuilder:     New,
+			PluginArgInstance: exampleArg,
+		}
 	}
 }

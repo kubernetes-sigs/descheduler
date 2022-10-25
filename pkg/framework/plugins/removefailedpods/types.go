@@ -23,12 +23,12 @@ import (
 
 // RemoveFailedPodsArgs holds arguments used to configure RemoveFailedPods plugin.
 type RemoveFailedPodsArgs struct {
-	metav1.TypeMeta
+	metav1.TypeMeta `json:",inline"`
 
-	Namespaces              *api.Namespaces
-	LabelSelector           *metav1.LabelSelector
-	ExcludeOwnerKinds       []string
-	MinPodLifetimeSeconds   *uint
-	Reasons                 []string
-	IncludingInitContainers bool
+	Namespaces              *api.Namespaces       `json:"namespaces"`
+	LabelSelector           *metav1.LabelSelector `json:"labelSelector"`
+	ExcludeOwnerKinds       []string              `json:"excludeOwnerKinds"`
+	MinPodLifetimeSeconds   *uint                 `json:"minPodLifetimeSeconds"`
+	Reasons                 []string              `json:"reasons"`
+	IncludingInitContainers bool                  `json:"includingInitContainers"`
 }

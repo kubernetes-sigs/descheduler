@@ -27,6 +27,7 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 )
 
 const LowNodeUtilizationPluginName = "LowNodeUtilization"
@@ -195,4 +196,17 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 		continueEvictionCond)
 
 	return nil
+}
+
+func init() {
+	if _, ok := pluginbuilder.PluginRegistry[LowNodeUtilizationPluginName]; ok {
+		klog.V(10).InfoS("Plugin already registered", "plugin", LowNodeUtilizationPluginName)
+	} else {
+		exampleArg := &LowNodeUtilizationArgs{}
+		pluginbuilder.PluginRegistry[LowNodeUtilizationPluginName] = pluginbuilder.PluginBuilderAndArgsInstance{
+			PluginBuilder:     NewLowNodeUtilization,
+			PluginArgInstance: exampleArg,
+		}
+
+	}
 }

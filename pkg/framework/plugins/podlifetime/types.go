@@ -23,10 +23,10 @@ import (
 
 // PodLifeTimeArgs holds arguments used to configure PodLifeTime plugin.
 type PodLifeTimeArgs struct {
-	metav1.TypeMeta
+	metav1.TypeMeta `json:",inline"`
 
-	Namespaces            *api.Namespaces
-	LabelSelector         *metav1.LabelSelector
-	MaxPodLifeTimeSeconds *uint
-	States                []string
+	Namespaces            *api.Namespaces       `json:"namespaces"`
+	LabelSelector         *metav1.LabelSelector `json:"labelSelector"`
+	MaxPodLifeTimeSeconds *uint                 `json:"maxPodLifeTimeSeconds"`
+	States                []string              `json:"states"`
 }

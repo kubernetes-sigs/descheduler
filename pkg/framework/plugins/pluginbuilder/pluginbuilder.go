@@ -11,19 +11,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package removeduplicates
+package pluginbuilder
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/descheduler/pkg/api"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/descheduler/pkg/framework"
 )
 
-// +k8s:deepcopy-gen=true
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+var (
+	PluginRegistry Registry
+)
 
-type RemoveDuplicatesArgs struct {
-	metav1.TypeMeta `json:",inline"`
+type PluginBuilderAndArgsInstance struct {
+	PluginBuilder     PluginBuilder
+	PluginArgInstance runtime.Object
+}
 
-	Namespaces        *api.Namespaces `json:"namespaces"`
-	ExcludeOwnerKinds []string        `json:"excludeOwnerKinds"`
+type PluginBuilder = func(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
+
+type Registry = map[string]PluginBuilderAndArgsInstance
+
+func NewRegistry() Registry {
+	return Registry{}
+}
+
+func init() {
+	PluginRegistry = NewRegistry()
 }

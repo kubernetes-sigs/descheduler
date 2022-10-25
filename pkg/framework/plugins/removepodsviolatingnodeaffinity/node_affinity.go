@@ -27,6 +27,7 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 )
 
 const PluginName = "RemovePodsViolatingNodeAffinity"
@@ -115,4 +116,16 @@ func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes 
 		}
 	}
 	return nil
+}
+
+func init() {
+	if _, ok := pluginbuilder.PluginRegistry[PluginName]; ok {
+		klog.V(10).InfoS("Plugin already registered", "plugin", PluginName)
+	} else {
+		exampleArg := &RemovePodsViolatingNodeAffinityArgs{}
+		pluginbuilder.PluginRegistry[PluginName] = pluginbuilder.PluginBuilderAndArgsInstance{
+			PluginBuilder:     New,
+			PluginArgInstance: exampleArg,
+		}
+	}
 }
