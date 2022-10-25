@@ -243,36 +243,72 @@ func setDefaultEvictor(profile api.Profile) api.Profile {
 }
 
 func validateDeschedulerConfiguration(in v1alpha2.DeschedulerPolicy) error {
+	var errorsInProfiles error
+	for _, profile := range in.Profiles {
+		// v1alpha2.DeschedulerPolicy needs only 1 evictor plugin enabled
+		if len(profile.Plugins.Evict.Enabled) != 1 {
+			errTooManyEvictors := fmt.Errorf("profile with invalid number of evictor plugins enabled found. Please enable a single evictor plugin.")
+			errorsInProfiles = setErrorsInProfiles(errTooManyEvictors, profile.Name, errorsInProfiles)
+		}
+		for _, pluginConfig := range profile.PluginConfig {
+			switch pluginConfig.Name {
+			case removeduplicates.PluginName:
+				err := removeduplicates.ValidateRemoveDuplicatesArgs(pluginConfig.Args.Object.(*removeduplicates.RemoveDuplicatesArgs))
+				errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+			case nodeutilization.LowNodeUtilizationPluginName:
+				err := nodeutilization.ValidateLowNodeUtilizationArgs(pluginConfig.Args.Object.(*nodeutilization.LowNodeUtilizationArgs))
+				errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+			case nodeutilization.HighNodeUtilizationPluginName:
+				err := nodeutilization.ValidateHighNodeUtilizationArgs(pluginConfig.Args.Object.(*nodeutilization.HighNodeUtilizationArgs))
+				errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+			case removepodsviolatinginterpodantiaffinity.PluginName:
+				err := removepodsviolatinginterpodantiaffinity.ValidateRemovePodsViolatingInterPodAntiAffinityArgs(pluginConfig.Args.Object.(*removepodsviolatinginterpodantiaffinity.RemovePodsViolatingInterPodAntiAffinityArgs))
+				errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+			case removepodsviolatingnodeaffinity.PluginName:
+				err := removepodsviolatingnodeaffinity.ValidateRemovePodsViolatingNodeAffinityArgs(pluginConfig.Args.Object.(*removepodsviolatingnodeaffinity.RemovePodsViolatingNodeAffinityArgs))
+				errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+			case removepodsviolatingnodetaints.PluginName:
+				err := removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs(pluginConfig.Args.Object.(*removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs))
+				errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+			case removepodsviolatingtopologyspreadconstraint.PluginName:
+				err := removepodsviolatingtopologyspreadconstraint.ValidateRemovePodsViolatingTopologySpreadConstraintArgs(pluginConfig.Args.Object.(*removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs))
+				errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+			case removepodshavingtoomanyrestarts.PluginName:
+				err := removepodshavingtoomanyrestarts.ValidateRemovePodsHavingTooManyRestartsArgs(pluginConfig.Args.Object.(*removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs))
+				errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+			case podlifetime.PluginName:
+				err := podlifetime.ValidatePodLifeTimeArgs(pluginConfig.Args.Object.(*podlifetime.PodLifeTimeArgs))
+				errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+			case removefailedpods.PluginName:
+				err := removefailedpods.ValidateRemoveFailedPodsArgs(pluginConfig.Args.Object.(*removefailedpods.RemoveFailedPodsArgs))
+				errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+			case defaultevictor.PluginName:
+				_, err := defaultevictor.ValidateDefaultEvictorArgs(pluginConfig.Args.Object.(*defaultevictor.DefaultEvictorArgs))
+				errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+			default:
+				// For now erroing out on unexpected plugin names,
+				// TODO: call validations for any registered plugin,
+				// including out-of-tree plugins
+				err := fmt.Errorf("unexpected plugin name")
+				errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+			}
+		}
+	}
+	if errorsInProfiles != nil {
+		return errorsInProfiles
+	}
 	return nil
 }
 
-
-func hasPlugin(newPluginName string, pluginSet []string) bool {
-	for _, pluginName := range pluginSet {
-		if newPluginName == pluginName {
-			return true
+func setErrorsInProfiles(err error, profileName string, errorsInProfiles error) error {
+	if err != nil {
+		if errorsInProfiles == nil {
+			errorsInProfiles = fmt.Errorf("in profile %s: %s", profileName, err.Error())
+		} else {
+			errorsInProfiles = fmt.Errorf("%w: %s", errorsInProfiles, fmt.Sprintf("in profile %s: %s", profileName, err.Error()))
 		}
 	}
-	return false
-}
-
-func hasPluginConfigsWithSameName(newPluginConfig api.PluginConfig, pluginConfigs []api.PluginConfig) bool {
-	for _, pluginConfig := range pluginConfigs {
-		if newPluginConfig.Name == pluginConfig.Name {
-			return true
-		}
-	}
-	return false
-}
-
-func configurePlugin(args runtime.Object, name string) v1alpha2.PluginConfig {
-	var pluginConfig v1alpha2.PluginConfig
-
-	// runtime.Convert_runtime_Object_To_runtime_RawExtension(&args, pluginConfig.Args)
-	pluginConfig.Args.Object = args
-	// pluginConfig.Args.Raw = []byte(args)
-	pluginConfig.Name = name
-	return pluginConfig
+	return errorsInProfiles
 }
 
 func strategiesToProfiles(strategies v1alpha1.StrategyList) (*[]v1alpha2.Profile, error) {
@@ -381,6 +417,34 @@ func strategyToProfileWithDeschedulePlugin(args runtime.Object, name v1alpha1.St
 		profile.Plugins.Deschedule.Disabled = append(profile.Plugins.Deschedule.Enabled, string(name))
 	}
 	return profile
+}
+
+func hasPlugin(newPluginName string, pluginSet []string) bool {
+	for _, pluginName := range pluginSet {
+		if newPluginName == pluginName {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPluginConfigsWithSameName(newPluginConfig api.PluginConfig, pluginConfigs []api.PluginConfig) bool {
+	for _, pluginConfig := range pluginConfigs {
+		if newPluginConfig.Name == pluginConfig.Name {
+			return true
+		}
+	}
+	return false
+}
+
+func configurePlugin(args runtime.Object, name string) v1alpha2.PluginConfig {
+	var pluginConfig v1alpha2.PluginConfig
+
+	// runtime.Convert_runtime_Object_To_runtime_RawExtension(&args, pluginConfig.Args)
+	pluginConfig.Args.Object = args
+	// pluginConfig.Args.Raw = []byte(args)
+	pluginConfig.Name = name
+	return pluginConfig
 }
 
 func convertRemoveDuplicatesArgs(params *v1alpha1.StrategyParameters) *removeduplicates.RemoveDuplicatesArgs {
