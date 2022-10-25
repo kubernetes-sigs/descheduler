@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/errors"
@@ -62,9 +63,9 @@ func HaveEvictAnnotation(pod *v1.Pod) bool {
 
 // New builds plugin from its arguments while passing a handle
 func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	defaultEvictorArgs, ok := args.(*DefaultEvictorArgs)
-	if !ok {
-		return nil, fmt.Errorf("want args to be of type defaultEvictorFilterArgs, got %T", args)
+	defaultEvictorArgs, err := ValidateDefaultEvictorArgs(args)
+	if err != nil {
+		return nil, err
 	}
 
 	ev := &DefaultEvictor{}
@@ -129,9 +130,13 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 			return nil
 		})
 	}
-	if defaultEvictorArgs.LabelSelector != nil && !defaultEvictorArgs.LabelSelector.Empty() {
+	selector, err := metav1.LabelSelectorAsSelector(defaultEvictorArgs.LabelSelector)
+	if err != nil {
+		return nil, fmt.Errorf("could not get selector from label selector")
+	}
+	if defaultEvictorArgs.LabelSelector != nil && !selector.Empty() {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
-			if !defaultEvictorArgs.LabelSelector.Matches(labels.Set(pod.Labels)) {
+			if !selector.Matches(labels.Set(pod.Labels)) {
 				return fmt.Errorf("pod labels do not match the labelSelector filter in the policy parameter")
 			}
 			return nil
@@ -139,6 +144,17 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	}
 
 	return ev, nil
+}
+
+func ValidateDefaultEvictorArgs(args runtime.Object) (*DefaultEvictorArgs, error) {
+	defaultEvictorArgs, ok := args.(*DefaultEvictorArgs)
+	if !ok {
+		return nil, fmt.Errorf("want args to be of type defaultEvictorFilterArgs, got %T", args)
+	}
+	if defaultEvictorArgs.PriorityThreshold != nil && len(defaultEvictorArgs.PriorityThreshold.Name) > 0 {
+		return nil, fmt.Errorf("priority threshold misconfigured, only one of priorityThreshold fields can be set, got %T", args)
+	}
+	return defaultEvictorArgs, nil
 }
 
 // Name retrieves the plugin name
