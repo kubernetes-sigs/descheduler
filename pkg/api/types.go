@@ -1,12 +1,10 @@
+
 /*
 Copyright 2017 The Kubernetes Authors.
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-
     http://www.apache.org/licenses/LICENSE-2.0
-
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,117 +15,75 @@ limitations under the License.
 package api
 
 import (
+	"sort"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 type DeschedulerPolicy struct {
-	metav1.TypeMeta
+	metav1.TypeMeta `json:",inline"`
 
-	// Strategies
-	Strategies StrategyList
+	// Profiles
+	Profiles []Profile `json:"profiles,omitempty"`
 
 	// NodeSelector for a set of nodes to operate over
-	NodeSelector *string
-
-	// EvictFailedBarePods allows pods without ownerReferences and in failed phase to be evicted.
-	EvictFailedBarePods *bool
-
-	// EvictLocalStoragePods allows pods using local storage to be evicted.
-	EvictLocalStoragePods *bool
-
-	// EvictSystemCriticalPods allows eviction of pods of any priority (including Kubernetes system pods)
-	EvictSystemCriticalPods *bool
-
-	// IgnorePVCPods prevents pods with PVCs from being evicted.
-	IgnorePVCPods *bool
+	NodeSelector *string `json:"nodeSelector,omitempty"`
 
 	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
-	MaxNoOfPodsToEvictPerNode *uint
+	MaxNoOfPodsToEvictPerNode *uint `json:"maxNoOfPodsToEvictPerNode,omitempty"`
 
 	// MaxNoOfPodsToEvictPerNamespace restricts maximum of pods to be evicted per namespace.
-	MaxNoOfPodsToEvictPerNamespace *uint
+	MaxNoOfPodsToEvictPerNamespace *uint `json:"maxNoOfPodsToEvictPerNamespace,omitempty"`
 }
 
-type StrategyName string
-type StrategyList map[StrategyName]DeschedulerStrategy
+func (p *DeschedulerPolicy) SortProfilesByName() []Profile {
+	sort.Slice(p.Profiles, func(i, j int) bool {
+		return p.Profiles[i].Name < p.Profiles[j].Name
+	})
+	return p.Profiles
+}
 
-type DeschedulerStrategy struct {
-	// Enabled or disabled
-	Enabled bool
+type Profile struct {
+	Name         string         `json:"name"`
+	PluginConfig []PluginConfig `json:"pluginConfig"`
+	Plugins      Plugins        `json:"plugins"`
+}
 
-	// Weight
-	Weight int
+type Plugins struct {
+	PreSort           PluginSet `json:"presort"`
+	Sort              PluginSet `json:"sort"`
+	Deschedule        PluginSet `json:"deschedule"`
+	Balance           PluginSet `json:"balance"`
+	Evict             PluginSet `json:"evict"`
+	Filter            PluginSet `json:"filter"`
+	PreEvictionFilter PluginSet `json:"preevictionfilter"`
+}
 
-	// Strategy parameters
-	Params *StrategyParameters
+type PluginConfig struct {
+	Name string         `json:"name"`
+	Args runtime.Object `json:"args"`
+}
+
+type PluginSet struct {
+	Enabled  []string `json:"enabled"`
+	Disabled []string `json:"disabled"`
 }
 
 // Namespaces carries a list of included/excluded namespaces
-// for which a given strategy is applicable
+// for which a given plugin is applicable.
 type Namespaces struct {
-	Include []string
-	Exclude []string
-}
-
-// Besides Namespaces only one of its members may be specified
-// TODO(jchaloup): move Namespaces ThresholdPriority and ThresholdPriorityClassName to individual strategies
-//
-//	once the policy version is bumped to v1alpha2
-type StrategyParameters struct {
-	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds
-	NodeAffinityType                  []string
-	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts
-	PodLifeTime                       *PodLifeTime
-	RemoveDuplicates                  *RemoveDuplicates
-	FailedPods                        *FailedPods
-	IncludeSoftConstraints            bool
-	Namespaces                        *Namespaces
-	ThresholdPriority                 *int32
-	ThresholdPriorityClassName        string
-	LabelSelector                     *metav1.LabelSelector
-	NodeFit                           bool
-	IncludePreferNoSchedule           bool
-	ExcludedTaints                    []string
-}
-
-type Percentage float64
-type ResourceThresholds map[v1.ResourceName]Percentage
-
-type NodeResourceUtilizationThresholds struct {
-	UseDeviationThresholds bool
-	Thresholds             ResourceThresholds
-	TargetThresholds       ResourceThresholds
-	NumberOfNodes          int
-}
-
-type PodsHavingTooManyRestarts struct {
-	PodRestartThreshold     int32
-	IncludingInitContainers bool
-}
-
-type RemoveDuplicates struct {
-	ExcludeOwnerKinds []string
-}
-
-type PodLifeTime struct {
-	MaxPodLifeTimeSeconds *uint
-	States                []string
-
-	// Deprecated: Use States instead.
-	PodStatusPhases []string
-}
-
-type FailedPods struct {
-	ExcludeOwnerKinds       []string
-	MinPodLifetimeSeconds   *uint
-	Reasons                 []string
-	IncludingInitContainers bool
+	Include []string `json:"include"`
+	Exclude []string `json:"exclude"`
 }
 
 type PriorityThreshold struct {
 	Value *int32
 	Name  string
 }
+
+type Percentage float64
+type ResourceThresholds map[v1.ResourceName]Percentage
