@@ -17,8 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/descheduler/pkg/api"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -45,10 +45,10 @@ type DeschedulerPolicy struct {
 	IgnorePVCPods *bool `json:"ignorePvcPods,omitempty"`
 
 	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
-	MaxNoOfPodsToEvictPerNode *int `json:"maxNoOfPodsToEvictPerNode,omitempty"`
+	MaxNoOfPodsToEvictPerNode *uint `json:"maxNoOfPodsToEvictPerNode,omitempty"`
 
 	// MaxNoOfPodsToEvictPerNamespace restricts maximum of pods to be evicted per namespace.
-	MaxNoOfPodsToEvictPerNamespace *int `json:"maxNoOfPodsToEvictPerNamespace,omitempty"`
+	MaxNoOfPodsToEvictPerNamespace *uint `json:"maxNoOfPodsToEvictPerNamespace,omitempty"`
 }
 
 type StrategyName string
@@ -90,14 +90,11 @@ type StrategyParameters struct {
 	ExcludedTaints                    []string                           `json:"excludedTaints,omitempty"`
 }
 
-type Percentage float64
-type ResourceThresholds map[v1.ResourceName]Percentage
-
 type NodeResourceUtilizationThresholds struct {
-	UseDeviationThresholds bool               `json:"useDeviationThresholds,omitempty"`
-	Thresholds             ResourceThresholds `json:"thresholds,omitempty"`
-	TargetThresholds       ResourceThresholds `json:"targetThresholds,omitempty"`
-	NumberOfNodes          int                `json:"numberOfNodes,omitempty"`
+	UseDeviationThresholds bool                   `json:"useDeviationThresholds,omitempty"`
+	Thresholds             api.ResourceThresholds `json:"thresholds,omitempty"`
+	TargetThresholds       api.ResourceThresholds `json:"targetThresholds,omitempty"`
+	NumberOfNodes          int                    `json:"numberOfNodes,omitempty"`
 }
 
 type PodsHavingTooManyRestarts struct {
