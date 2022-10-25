@@ -33,6 +33,15 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatinginterpodantiaffinity"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodeaffinity"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
 )
 
 func LoadPolicyConfig(policyConfigFile string) (*api.DeschedulerPolicy, error) {
@@ -237,10 +246,6 @@ func validateDeschedulerConfiguration(in v1alpha2.DeschedulerPolicy) error {
 	return nil
 }
 
-func strategiesToProfiles(strategies v1alpha1.StrategyList) (*[]v1alpha2.Profile, error) {
-	var profiles []v1alpha2.Profile
-	return &profiles, nil
-}
 
 func hasPlugin(newPluginName string, pluginSet []string) bool {
 	for _, pluginName := range pluginSet {
@@ -268,4 +273,246 @@ func configurePlugin(args runtime.Object, name string) v1alpha2.PluginConfig {
 	// pluginConfig.Args.Raw = []byte(args)
 	pluginConfig.Name = name
 	return pluginConfig
+}
+
+func strategiesToProfiles(strategies v1alpha1.StrategyList) (*[]v1alpha2.Profile, error) {
+	var profiles []v1alpha2.Profile
+	for name, strategy := range strategies {
+		switch name {
+		case removeduplicates.PluginName:
+			removeduplicatesArgs := convertRemoveDuplicatesArgs(strategy.Params)
+			profile := strategyToProfileWithBalancePlugin(removeduplicatesArgs, name, strategy)
+			profile.Name = removeduplicates.PluginName
+			if len(profile.PluginConfig) > 0 {
+				profiles = append(profiles, profile)
+			}
+		case nodeutilization.LowNodeUtilizationPluginName:
+			lowNodeUtilizationArgs := convertLowNodeUtilizationArgs(strategy.Params)
+			profile := strategyToProfileWithBalancePlugin(lowNodeUtilizationArgs, name, strategy)
+			profile.Name = nodeutilization.LowNodeUtilizationPluginName
+			if len(profile.PluginConfig) > 0 {
+				profiles = append(profiles, profile)
+			}
+		case nodeutilization.HighNodeUtilizationPluginName:
+			highNodeUtilizationArgs := convertHighNodeUtilizationArgs(strategy.Params)
+			profile := strategyToProfileWithBalancePlugin(highNodeUtilizationArgs, name, strategy)
+			profile.Name = nodeutilization.HighNodeUtilizationPluginName
+			if len(profile.PluginConfig) > 0 {
+				profiles = append(profiles, profile)
+			}
+		case removepodsviolatinginterpodantiaffinity.PluginName:
+			removePodsViolatingInterPodAntiAffinityArgs := convertRemovePodsViolatingInterPodAntiAffinityArgs(strategy.Params)
+			profile := strategyToProfileWithDeschedulePlugin(removePodsViolatingInterPodAntiAffinityArgs, name, strategy)
+			profile.Name = removepodsviolatinginterpodantiaffinity.PluginName
+			if len(profile.PluginConfig) > 0 {
+				profiles = append(profiles, profile)
+			}
+		case removepodsviolatingnodeaffinity.PluginName:
+			removePodsViolatingNodeAffinityArgs := convertRemovePodsViolatingNodeAffinityArgs(strategy.Params)
+			profile := strategyToProfileWithDeschedulePlugin(removePodsViolatingNodeAffinityArgs, name, strategy)
+			profile.Name = removepodsviolatingnodeaffinity.PluginName
+			if len(profile.PluginConfig) > 0 {
+				profiles = append(profiles, profile)
+			}
+		case removepodsviolatingnodetaints.PluginName:
+			removePodsViolatingNodeTaintsArgs := convertRemovePodsViolatingNodeTaintsArgs(strategy.Params)
+			profile := strategyToProfileWithDeschedulePlugin(removePodsViolatingNodeTaintsArgs, name, strategy)
+			profile.Name = removepodsviolatingnodetaints.PluginName
+			if len(profile.PluginConfig) > 0 {
+				profiles = append(profiles, profile)
+			}
+		case removepodsviolatingtopologyspreadconstraint.PluginName:
+			removePodsViolatingTopologySpreadConstraintArgs := convertRemovePodsViolatingTopologySpreadConstraintArgs(strategy.Params)
+			profile := strategyToProfileWithBalancePlugin(removePodsViolatingTopologySpreadConstraintArgs, name, strategy)
+			profile.Name = removepodsviolatingtopologyspreadconstraint.PluginName
+			if len(profile.PluginConfig) > 0 {
+				profiles = append(profiles, profile)
+			}
+		case removepodshavingtoomanyrestarts.PluginName:
+			removePodsHavingTooManyRestartsArgs := convertRemovePodsHavingTooManyRestartsArgs(strategy.Params)
+			profile := strategyToProfileWithDeschedulePlugin(removePodsHavingTooManyRestartsArgs, name, strategy)
+			profile.Name = removepodshavingtoomanyrestarts.PluginName
+			if len(profile.PluginConfig) > 0 {
+				profiles = append(profiles, profile)
+			}
+		case podlifetime.PluginName:
+			podLifeTimeArgs := convertPodLifeTimeArgs(strategy.Params)
+			profile := strategyToProfileWithDeschedulePlugin(podLifeTimeArgs, name, strategy)
+			profile.Name = podlifetime.PluginName
+			if len(profile.PluginConfig) > 0 {
+				profiles = append(profiles, profile)
+			}
+		case removefailedpods.PluginName:
+			RemoveFailedPodsArgs := convertRemoveFailedPodsArgs(strategy.Params)
+			profile := strategyToProfileWithDeschedulePlugin(RemoveFailedPodsArgs, name, strategy)
+			profile.Name = removefailedpods.PluginName
+			if len(profile.PluginConfig) > 0 {
+				profiles = append(profiles, profile)
+			}
+		default:
+			return nil, fmt.Errorf("could not process strategy: %s", string(name))
+		}
+	}
+	// easier to test and to know what to expect if it is sorted
+	// (accessing the map with 'for key, val := range map' can start with any of the keys)
+	profiles = v1alpha2.SortProfilesByName(profiles)
+	return &profiles, nil
+}
+
+func strategyToProfileWithBalancePlugin(args runtime.Object, name v1alpha1.StrategyName, strategy v1alpha1.DeschedulerStrategy) v1alpha2.Profile {
+	var profile v1alpha2.Profile
+	newPluginConfig := configurePlugin(args, string(name))
+	profile.PluginConfig = append(profile.PluginConfig, newPluginConfig)
+	if strategy.Enabled {
+		profile.Plugins.Balance.Enabled = append(profile.Plugins.Balance.Enabled, string(name))
+	} else {
+		profile.Plugins.Balance.Disabled = append(profile.Plugins.Balance.Enabled, string(name))
+	}
+	return profile
+}
+
+func strategyToProfileWithDeschedulePlugin(args runtime.Object, name v1alpha1.StrategyName, strategy v1alpha1.DeschedulerStrategy) v1alpha2.Profile {
+	var profile v1alpha2.Profile
+	newPluginConfig := configurePlugin(args, string(name))
+	profile.PluginConfig = append(profile.PluginConfig, newPluginConfig)
+	if strategy.Enabled {
+		profile.Plugins.Deschedule.Enabled = append(profile.Plugins.Deschedule.Enabled, string(name))
+	} else {
+		profile.Plugins.Deschedule.Disabled = append(profile.Plugins.Deschedule.Enabled, string(name))
+	}
+	return profile
+}
+
+func convertRemoveDuplicatesArgs(params *v1alpha1.StrategyParameters) *removeduplicates.RemoveDuplicatesArgs {
+	removeduplicatesArgs := &removeduplicates.RemoveDuplicatesArgs{}
+	if params.RemoveDuplicates != nil {
+		removeduplicatesArgs.ExcludeOwnerKinds = params.RemoveDuplicates.ExcludeOwnerKinds
+	}
+	if params.Namespaces != nil {
+		removeduplicatesArgs.Namespaces = &api.Namespaces{
+			Include: params.Namespaces.Include,
+			Exclude: params.Namespaces.Exclude,
+		}
+	}
+	return removeduplicatesArgs
+}
+
+func convertLowNodeUtilizationArgs(params *v1alpha1.StrategyParameters) *nodeutilization.LowNodeUtilizationArgs {
+	lowNodeUtilizationArgs := &nodeutilization.LowNodeUtilizationArgs{}
+	if params.NodeResourceUtilizationThresholds != nil {
+		lowNodeUtilizationArgs.TargetThresholds = params.NodeResourceUtilizationThresholds.TargetThresholds
+		lowNodeUtilizationArgs.Thresholds = params.NodeResourceUtilizationThresholds.Thresholds
+		lowNodeUtilizationArgs.UseDeviationThresholds = params.NodeResourceUtilizationThresholds.UseDeviationThresholds
+		lowNodeUtilizationArgs.NumberOfNodes = params.NodeResourceUtilizationThresholds.NumberOfNodes
+	}
+	return lowNodeUtilizationArgs
+}
+
+func convertHighNodeUtilizationArgs(params *v1alpha1.StrategyParameters) *nodeutilization.HighNodeUtilizationArgs {
+	highNodeUtilizationArgs := &nodeutilization.HighNodeUtilizationArgs{}
+	if params.NodeResourceUtilizationThresholds != nil {
+		highNodeUtilizationArgs.NumberOfNodes = params.NodeResourceUtilizationThresholds.NumberOfNodes
+	}
+	return highNodeUtilizationArgs
+}
+
+func convertRemovePodsViolatingInterPodAntiAffinityArgs(params *v1alpha1.StrategyParameters) *removepodsviolatinginterpodantiaffinity.RemovePodsViolatingInterPodAntiAffinityArgs {
+	removePodsViolatingInterPodAntiAffinityArgs := &removepodsviolatinginterpodantiaffinity.RemovePodsViolatingInterPodAntiAffinityArgs{}
+	if params.Namespaces != nil {
+		removePodsViolatingInterPodAntiAffinityArgs.Namespaces = &api.Namespaces{
+			Include: params.Namespaces.Include,
+			Exclude: params.Namespaces.Exclude,
+		}
+	}
+	removePodsViolatingInterPodAntiAffinityArgs.LabelSelector = params.LabelSelector
+	return removePodsViolatingInterPodAntiAffinityArgs
+}
+
+func convertRemovePodsViolatingNodeAffinityArgs(params *v1alpha1.StrategyParameters) *removepodsviolatingnodeaffinity.RemovePodsViolatingNodeAffinityArgs {
+	removePodsViolatingNodeAffinityArgs := &removepodsviolatingnodeaffinity.RemovePodsViolatingNodeAffinityArgs{}
+	if params.Namespaces != nil {
+		removePodsViolatingNodeAffinityArgs.Namespaces = &api.Namespaces{
+			Include: params.Namespaces.Include,
+			Exclude: params.Namespaces.Exclude,
+		}
+	}
+	removePodsViolatingNodeAffinityArgs.LabelSelector = params.LabelSelector
+	return removePodsViolatingNodeAffinityArgs
+}
+
+func convertRemovePodsViolatingNodeTaintsArgs(params *v1alpha1.StrategyParameters) *removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs {
+	removePodsViolatingNodeTaintsArgs := &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}
+	if params.Namespaces != nil {
+		removePodsViolatingNodeTaintsArgs.Namespaces = &api.Namespaces{
+			Include: params.Namespaces.Include,
+			Exclude: params.Namespaces.Exclude,
+		}
+	}
+	removePodsViolatingNodeTaintsArgs.LabelSelector = params.LabelSelector
+	removePodsViolatingNodeTaintsArgs.IncludePreferNoSchedule = params.IncludePreferNoSchedule
+	removePodsViolatingNodeTaintsArgs.ExcludedTaints = params.ExcludedTaints
+	return removePodsViolatingNodeTaintsArgs
+}
+
+func convertRemovePodsViolatingTopologySpreadConstraintArgs(params *v1alpha1.StrategyParameters) *removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs {
+	removePodsViolatingTopologySpreadConstraintArgs := &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{}
+	if params.Namespaces != nil {
+		removePodsViolatingTopologySpreadConstraintArgs.Namespaces = &api.Namespaces{
+			Include: params.Namespaces.Include,
+			Exclude: params.Namespaces.Exclude,
+		}
+	}
+	removePodsViolatingTopologySpreadConstraintArgs.LabelSelector = params.LabelSelector
+	removePodsViolatingTopologySpreadConstraintArgs.IncludeSoftConstraints = params.IncludeSoftConstraints
+	return removePodsViolatingTopologySpreadConstraintArgs
+}
+
+func convertRemovePodsHavingTooManyRestartsArgs(params *v1alpha1.StrategyParameters) *removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs {
+	removePodsHavingTooManyRestartsArgs := &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs{}
+	if params.Namespaces != nil {
+		removePodsHavingTooManyRestartsArgs.Namespaces = &api.Namespaces{
+			Include: params.Namespaces.Include,
+			Exclude: params.Namespaces.Exclude,
+		}
+	}
+	removePodsHavingTooManyRestartsArgs.LabelSelector = params.LabelSelector
+	if params.PodsHavingTooManyRestarts != nil {
+		removePodsHavingTooManyRestartsArgs.PodRestartThreshold = params.PodsHavingTooManyRestarts.PodRestartThreshold
+		removePodsHavingTooManyRestartsArgs.IncludingInitContainers = params.PodsHavingTooManyRestarts.IncludingInitContainers
+	}
+	return removePodsHavingTooManyRestartsArgs
+}
+
+func convertPodLifeTimeArgs(params *v1alpha1.StrategyParameters) *podlifetime.PodLifeTimeArgs {
+	podLifeTimeArgs := &podlifetime.PodLifeTimeArgs{}
+	if params.Namespaces != nil {
+		podLifeTimeArgs.Namespaces = &api.Namespaces{
+			Include: params.Namespaces.Include,
+			Exclude: params.Namespaces.Exclude,
+		}
+	}
+	podLifeTimeArgs.LabelSelector = params.LabelSelector
+	if params.PodLifeTime != nil {
+		podLifeTimeArgs.MaxPodLifeTimeSeconds = params.PodLifeTime.MaxPodLifeTimeSeconds
+		podLifeTimeArgs.States = params.PodLifeTime.States
+	}
+	return podLifeTimeArgs
+}
+
+func convertRemoveFailedPodsArgs(params *v1alpha1.StrategyParameters) *removefailedpods.RemoveFailedPodsArgs {
+	removeFailedPodsArgs := &removefailedpods.RemoveFailedPodsArgs{}
+	if params.Namespaces != nil {
+		removeFailedPodsArgs.Namespaces = &api.Namespaces{
+			Include: params.Namespaces.Include,
+			Exclude: params.Namespaces.Exclude,
+		}
+	}
+	removeFailedPodsArgs.LabelSelector = params.LabelSelector
+	if params.FailedPods != nil {
+		removeFailedPodsArgs.ExcludeOwnerKinds = params.FailedPods.ExcludeOwnerKinds
+		removeFailedPodsArgs.MinPodLifetimeSeconds = params.FailedPods.MinPodLifetimeSeconds
+		removeFailedPodsArgs.Reasons = params.FailedPods.Reasons
+		removeFailedPodsArgs.IncludingInitContainers = params.FailedPods.IncludingInitContainers
+	}
+	return removeFailedPodsArgs
 }
