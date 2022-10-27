@@ -21,8 +21,6 @@ spec:
         - name: descheduler
           image: k8s.gcr.io/descheduler/descheduler:v0.25.0
           imagePullPolicy: IfNotPresent
-          command:
-            - "/bin/descheduler"
           args:
             - "--policy-config-file"
             - "/policy-dir/policy.yaml"
