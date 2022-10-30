@@ -140,6 +140,7 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 
 	evictPodsFromSourceNodes(
 		ctx,
+		h.args.EvictableNamespaces,
 		sourceNodes,
 		highNodes,
 		h.handle.Evictor(),

@@ -28,6 +28,10 @@ type LowNodeUtilizationArgs struct {
 	Thresholds             api.ResourceThresholds
 	TargetThresholds       api.ResourceThresholds
 	NumberOfNodes          int
+	// Naming this one differently since namespaces are still
+	// considered while considering resoures used by pods
+	// but then filtered out before eviction
+	EvictableNamespaces *api.Namespaces
 }
 
 // +k8s:deepcopy-gen=true
@@ -38,4 +42,8 @@ type HighNodeUtilizationArgs struct {
 
 	Thresholds    api.ResourceThresholds
 	NumberOfNodes int
+	// Naming this one differently since namespaces are still
+	// considered while considering resoures used by pods
+	// but then filtered out before eviction
+	EvictableNamespaces *api.Namespaces
 }
