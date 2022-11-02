@@ -79,6 +79,10 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 		return fmt.Errorf("leaderElection must be used with deschedulingInterval")
 	}
 
+	if rs.LeaderElection.LeaderElect && rs.DryRun {
+		klog.V(1).InfoS("Warning: DryRun is set to True. You need to disable it to use Leader Election.")
+	}
+
 	if rs.LeaderElection.LeaderElect && !rs.DryRun {
 		if err := NewLeaderElection(runFn, rsclient, &rs.LeaderElection, ctx); err != nil {
 			return fmt.Errorf("leaderElection: %w", err)

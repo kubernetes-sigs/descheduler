@@ -46,6 +46,7 @@ replicas: 1
 
 # Specifies whether Leader Election resources should be created
 # Required when running as a Deployment
+# NOTE: Leader election can't be activated if DryRun enabled
 leaderElection: {}
 #  enabled: true
 #  leaseDuration: 15s
