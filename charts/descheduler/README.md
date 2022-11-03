@@ -46,7 +46,7 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | Parameter                           | Description                                                                                                           | Default                              |
 |-------------------------------------|-----------------------------------------------------------------------------------------------------------------------|--------------------------------------|
 | `kind`                              | Use as CronJob or Deployment                                                                                          | `CronJob`                            |
-| `image.repository`                  | Docker repository to use                                                                                              | `k8s.gcr.io/descheduler/descheduler` |
+| `image.repository`                  | Docker repository to use                                                                                              | `registry.k8s.io/descheduler/descheduler` |
 | `image.tag`                         | Docker tag to use                                                                                                     | `v[chart appVersion]`                |
 | `image.pullPolicy`                  | Docker image pull policy                                                                                              | `IfNotPresent`                       |
 | `imagePullSecrets`                  | Docker repository secrets                                                                                             | `[]`                                 |
