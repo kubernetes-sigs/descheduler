@@ -137,7 +137,28 @@ type PriorityThreshold struct {
 	Name  string
 }
 
+type Profile struct {
+	Name          string
+	PluginConfigs []PluginConfig
+	Plugins       Plugins
+}
+
 type PluginConfig struct {
 	Name string
 	Args runtime.Object
+}
+
+type Plugins struct {
+	PreSort           PluginSet
+	Sort              PluginSet
+	Deschedule        PluginSet
+	Balance           PluginSet
+	Evict             PluginSet
+	Filter            PluginSet
+	PreEvictionFilter PluginSet
+}
+
+type PluginSet struct {
+	Enabled  []string
+	Disabled []string
 }

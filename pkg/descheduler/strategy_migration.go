@@ -220,8 +220,28 @@ var strategyParamsToPluginArgs = map[string]func(params *api.StrategyParameters)
 	},
 }
 
+type extensionPoint string
+
+const (
+	descheduleEP extensionPoint = "deschedule"
+	balanceEP    extensionPoint = "balance"
+)
+
+var pluginToExtensionPoint = map[string]extensionPoint{
+	removepodsviolatingnodetaints.PluginName:               descheduleEP,
+	removefailedpods.PluginName:                            descheduleEP,
+	removepodsviolatingnodeaffinity.PluginName:             descheduleEP,
+	removepodsviolatinginterpodantiaffinity.PluginName:     descheduleEP,
+	removepodshavingtoomanyrestarts.PluginName:             descheduleEP,
+	podlifetime.PluginName:                                 descheduleEP,
+	removeduplicates.PluginName:                            balanceEP,
+	removepodsviolatingtopologyspreadconstraint.PluginName: balanceEP,
+	nodeutilization.HighNodeUtilizationPluginName:          balanceEP,
+	nodeutilization.LowNodeUtilizationPluginName:           balanceEP,
+}
+
 var pluginsMap = map[string]func(args runtime.Object, handle *handleImpl) framework.Plugin{
-	"RemovePodsViolatingNodeTaints": func(args runtime.Object, handle *handleImpl) framework.Plugin {
+	removepodsviolatingnodetaints.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
 		pg, err := removepodsviolatingnodetaints.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatingnodetaints.PluginName)
@@ -229,7 +249,7 @@ var pluginsMap = map[string]func(args runtime.Object, handle *handleImpl) framew
 		}
 		return pg
 	},
-	"RemoveFailedPods": func(args runtime.Object, handle *handleImpl) framework.Plugin {
+	removefailedpods.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
 		pg, err := removefailedpods.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removefailedpods.PluginName)
@@ -237,7 +257,7 @@ var pluginsMap = map[string]func(args runtime.Object, handle *handleImpl) framew
 		}
 		return pg
 	},
-	"RemovePodsViolatingNodeAffinity": func(args runtime.Object, handle *handleImpl) framework.Plugin {
+	removepodsviolatingnodeaffinity.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
 		pg, err := removepodsviolatingnodeaffinity.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatingnodeaffinity.PluginName)
@@ -245,7 +265,7 @@ var pluginsMap = map[string]func(args runtime.Object, handle *handleImpl) framew
 		}
 		return pg
 	},
-	"RemovePodsViolatingInterPodAntiAffinity": func(args runtime.Object, handle *handleImpl) framework.Plugin {
+	removepodsviolatinginterpodantiaffinity.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
 		pg, err := removepodsviolatinginterpodantiaffinity.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatinginterpodantiaffinity.PluginName)
@@ -253,7 +273,7 @@ var pluginsMap = map[string]func(args runtime.Object, handle *handleImpl) framew
 		}
 		return pg
 	},
-	"RemovePodsHavingTooManyRestarts": func(args runtime.Object, handle *handleImpl) framework.Plugin {
+	removepodshavingtoomanyrestarts.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
 		pg, err := removepodshavingtoomanyrestarts.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodshavingtoomanyrestarts.PluginName)
@@ -261,7 +281,7 @@ var pluginsMap = map[string]func(args runtime.Object, handle *handleImpl) framew
 		}
 		return pg
 	},
-	"PodLifeTime": func(args runtime.Object, handle *handleImpl) framework.Plugin {
+	podlifetime.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
 		pg, err := podlifetime.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", podlifetime.PluginName)
@@ -269,7 +289,7 @@ var pluginsMap = map[string]func(args runtime.Object, handle *handleImpl) framew
 		}
 		return pg
 	},
-	"RemoveDuplicates": func(args runtime.Object, handle *handleImpl) framework.Plugin {
+	removeduplicates.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
 		pg, err := removeduplicates.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removeduplicates.PluginName)
@@ -277,7 +297,7 @@ var pluginsMap = map[string]func(args runtime.Object, handle *handleImpl) framew
 		}
 		return pg
 	},
-	"RemovePodsViolatingTopologySpreadConstraint": func(args runtime.Object, handle *handleImpl) framework.Plugin {
+	removepodsviolatingtopologyspreadconstraint.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
 		pg, err := removepodsviolatingtopologyspreadconstraint.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatingtopologyspreadconstraint.PluginName)
@@ -285,7 +305,7 @@ var pluginsMap = map[string]func(args runtime.Object, handle *handleImpl) framew
 		}
 		return pg
 	},
-	"HighNodeUtilization": func(args runtime.Object, handle *handleImpl) framework.Plugin {
+	nodeutilization.HighNodeUtilizationPluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
 		pg, err := nodeutilization.NewHighNodeUtilization(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", nodeutilization.HighNodeUtilizationPluginName)
@@ -293,7 +313,7 @@ var pluginsMap = map[string]func(args runtime.Object, handle *handleImpl) framew
 		}
 		return pg
 	},
-	"LowNodeUtilization": func(args runtime.Object, handle *handleImpl) framework.Plugin {
+	nodeutilization.LowNodeUtilizationPluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
 		pg, err := nodeutilization.NewLowNodeUtilization(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", nodeutilization.LowNodeUtilizationPluginName)

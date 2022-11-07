@@ -361,6 +361,9 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		var enabledDeschedulePlugins []framework.DeschedulePlugin
 		var enabledBalancePlugins []framework.BalancePlugin
 
+		var profiles []api.Profile
+
+		// Build profiles
 		for name, strategy := range deschedulerPolicy.Strategies {
 			if _, ok := strategyFuncs[name]; ok {
 				if strategy.Enabled {
@@ -386,17 +389,6 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 						continue
 					}
 
-					defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
-						EvictLocalStoragePods:   evictLocalStoragePods,
-						EvictSystemCriticalPods: evictSystemCriticalPods,
-						IgnorePvcPods:           ignorePvcPods,
-						EvictFailedBarePods:     evictBarePods,
-						NodeFit:                 nodeFit,
-						PriorityThreshold: &api.PriorityThreshold{
-							Value: &thresholdPriority,
-						},
-					}
-
 					var pluginConfig *api.PluginConfig
 					if pcFnc, exists := strategyParamsToPluginArgs[string(name)]; exists {
 						pluginConfig, err = pcFnc(params)
@@ -409,46 +401,97 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 						continue
 					}
 
-					evictorFilter, _ := defaultevictor.New(
-						defaultevictorArgs,
-						&handleImpl{
-							clientSet:                 rs.Client,
-							getPodsAssignedToNodeFunc: getPodsAssignedToNode,
-							sharedInformerFactory:     sharedInformerFactory,
+					profile := api.Profile{
+						Name: fmt.Sprintf("strategy-%v-profile", name),
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: defaultevictor.PluginName,
+								Args: &defaultevictor.DefaultEvictorArgs{
+									EvictLocalStoragePods:   evictLocalStoragePods,
+									EvictSystemCriticalPods: evictSystemCriticalPods,
+									IgnorePvcPods:           ignorePvcPods,
+									EvictFailedBarePods:     evictBarePods,
+									NodeFit:                 nodeFit,
+									PriorityThreshold: &api.PriorityThreshold{
+										Value: &thresholdPriority,
+									},
+								},
+							},
+							*pluginConfig,
 						},
-					)
-
-					handle := &handleImpl{
-						clientSet:                 rs.Client,
-						getPodsAssignedToNodeFunc: getPodsAssignedToNode,
-						sharedInformerFactory:     sharedInformerFactory,
-						evictor: &evictorImpl{
-							podEvictor:    podEvictor,
-							evictorFilter: evictorFilter.(framework.EvictorPlugin),
+						Plugins: api.Plugins{
+							Evict: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					}
 
-					if pgFnc, exists := pluginsMap[string(name)]; exists {
-						pg := pgFnc(pluginConfig.Args, handle)
-						if pg != nil {
-							switch v := pg.(type) {
-							case framework.DeschedulePlugin:
-								enabledDeschedulePlugins = append(enabledDeschedulePlugins, v)
-							case framework.BalancePlugin:
-								enabledBalancePlugins = append(enabledBalancePlugins, v)
-							default:
-								klog.ErrorS(fmt.Errorf("unknown plugin extension point"), "skipping strategy", "strategy", name)
-							}
-						}
-					} else {
-						klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
+					// Plugins have either of the two extension points
+					switch pluginToExtensionPoint[pluginConfig.Name] {
+					case descheduleEP:
+						profile.Plugins.Deschedule.Enabled = []string{pluginConfig.Name}
+					case balanceEP:
+						profile.Plugins.Balance.Enabled = []string{pluginConfig.Name}
 					}
+					profiles = append(profiles, profile)
 				}
 			} else {
 				klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
 			}
 		}
 
+		// Build plugins
+		for _, profile := range profiles {
+			pc := getPluginConfig(defaultevictor.PluginName, profile.PluginConfigs)
+			if pc == nil {
+				klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", defaultevictor.PluginName, "profile", profile.Name)
+				continue
+			}
+			evictorFilter, err := defaultevictor.New(
+				pc.Args,
+				&handleImpl{
+					clientSet:                 rs.Client,
+					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
+					sharedInformerFactory:     sharedInformerFactory,
+				},
+			)
+			if err != nil {
+				klog.ErrorS(fmt.Errorf("unable to construct a plugin"), "skipping plugin", "plugin", defaultevictor.PluginName)
+				continue
+			}
+			handle := &handleImpl{
+				clientSet:                 rs.Client,
+				getPodsAssignedToNodeFunc: getPodsAssignedToNode,
+				sharedInformerFactory:     sharedInformerFactory,
+				evictor: &evictorImpl{
+					podEvictor:    podEvictor,
+					evictorFilter: evictorFilter.(framework.EvictorPlugin),
+				},
+			}
+			// Assuming only a list of enabled extension points.
+			// Later, when a default list of plugins and their extension points is established,
+			// compute the list of enabled extension points as (DefaultEnabled + Enabled - Disabled)
+			for _, plugin := range append(profile.Plugins.Deschedule.Enabled, profile.Plugins.Balance.Enabled...) {
+				pc := getPluginConfig(plugin, profile.PluginConfigs)
+				if pc == nil {
+					klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", plugin)
+					continue
+				}
+				pg := pluginsMap[plugin](pc.Args, handle)
+				if pg != nil {
+					switch v := pg.(type) {
+					case framework.DeschedulePlugin:
+						enabledDeschedulePlugins = append(enabledDeschedulePlugins, v)
+					case framework.BalancePlugin:
+						enabledBalancePlugins = append(enabledBalancePlugins, v)
+					default:
+						klog.ErrorS(fmt.Errorf("unknown plugin extension point"), "skipping plugin", "plugin", plugin)
+					}
+				}
+			}
+		}
+
+		// Execute extension points
 		for _, pg := range enabledDeschedulePlugins {
 			// TODO: strategyName should be accessible from within the strategy using a framework
 			// handle or function which the Evictor has access to. For migration/in-progress framework
@@ -481,6 +524,15 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		}
 	}, rs.DeschedulingInterval, ctx.Done())
 
+	return nil
+}
+
+func getPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) *api.PluginConfig {
+	for _, pluginConfig := range pluginConfigs {
+		if pluginConfig.Name == pluginName {
+			return &pluginConfig
+		}
+	}
 	return nil
 }
 
