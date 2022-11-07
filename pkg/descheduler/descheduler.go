@@ -248,48 +248,9 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	sharedInformerFactory.Start(ctx.Done())
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-	strategyFuncs := map[api.StrategyName]strategyFunction{
-		"RemoveDuplicates":                            nil,
-		"LowNodeUtilization":                          nil,
-		"HighNodeUtilization":                         nil,
-		"RemovePodsViolatingInterPodAntiAffinity":     nil,
-		"RemovePodsViolatingNodeAffinity":             nil,
-		"RemovePodsViolatingNodeTaints":               nil,
-		"RemovePodsHavingTooManyRestarts":             nil,
-		"PodLifeTime":                                 nil,
-		"RemovePodsViolatingTopologySpreadConstraint": nil,
-		"RemoveFailedPods":                            nil,
-	}
-
 	var nodeSelector string
 	if deschedulerPolicy.NodeSelector != nil {
 		nodeSelector = *deschedulerPolicy.NodeSelector
-	}
-
-	var evictLocalStoragePods bool
-	if deschedulerPolicy.EvictLocalStoragePods != nil {
-		evictLocalStoragePods = *deschedulerPolicy.EvictLocalStoragePods
-	}
-
-	evictBarePods := false
-	if deschedulerPolicy.EvictFailedBarePods != nil {
-		evictBarePods = *deschedulerPolicy.EvictFailedBarePods
-		if evictBarePods {
-			klog.V(1).InfoS("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
-		}
-	}
-
-	evictSystemCriticalPods := false
-	if deschedulerPolicy.EvictSystemCriticalPods != nil {
-		evictSystemCriticalPods = *deschedulerPolicy.EvictSystemCriticalPods
-		if evictSystemCriticalPods {
-			klog.V(1).InfoS("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
-		}
-	}
-
-	ignorePvcPods := false
-	if deschedulerPolicy.IgnorePVCPods != nil {
-		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
 	}
 
 	var eventClient clientset.Interface
@@ -301,6 +262,10 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
 	defer eventBroadcaster.Shutdown()
+
+	// Build profiles
+	// TODO(jchaloup): replace this with v1alpha1 -> v1alpha2 conversion
+	profiles := strategiesToProfiles(ctx, rs, deschedulerPolicy)
 
 	wait.NonSlidingUntil(func() {
 		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeLister, nodeSelector)
@@ -360,85 +325,6 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 
 		var enabledDeschedulePlugins []framework.DeschedulePlugin
 		var enabledBalancePlugins []framework.BalancePlugin
-
-		var profiles []api.Profile
-
-		// Build profiles
-		for name, strategy := range deschedulerPolicy.Strategies {
-			if _, ok := strategyFuncs[name]; ok {
-				if strategy.Enabled {
-					params := strategy.Params
-					if params == nil {
-						params = &api.StrategyParameters{}
-					}
-
-					nodeFit := false
-					if name != "PodLifeTime" {
-						nodeFit = params.NodeFit
-					}
-
-					// TODO(jchaloup): once all strategies are migrated move this check under
-					// the default evictor args validation
-					if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
-						klog.ErrorS(fmt.Errorf("priority threshold misconfigured"), "only one of priorityThreshold fields can be set", "pluginName", name)
-						continue
-					}
-					thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, rs.Client, strategy.Params)
-					if err != nil {
-						klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
-						continue
-					}
-
-					var pluginConfig *api.PluginConfig
-					if pcFnc, exists := strategyParamsToPluginArgs[string(name)]; exists {
-						pluginConfig, err = pcFnc(params)
-						if err != nil {
-							klog.ErrorS(err, "skipping strategy", "strategy", name)
-							continue
-						}
-					} else {
-						klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
-						continue
-					}
-
-					profile := api.Profile{
-						Name: fmt.Sprintf("strategy-%v-profile", name),
-						PluginConfigs: []api.PluginConfig{
-							{
-								Name: defaultevictor.PluginName,
-								Args: &defaultevictor.DefaultEvictorArgs{
-									EvictLocalStoragePods:   evictLocalStoragePods,
-									EvictSystemCriticalPods: evictSystemCriticalPods,
-									IgnorePvcPods:           ignorePvcPods,
-									EvictFailedBarePods:     evictBarePods,
-									NodeFit:                 nodeFit,
-									PriorityThreshold: &api.PriorityThreshold{
-										Value: &thresholdPriority,
-									},
-								},
-							},
-							*pluginConfig,
-						},
-						Plugins: api.Plugins{
-							Evict: api.PluginSet{
-								Enabled: []string{defaultevictor.PluginName},
-							},
-						},
-					}
-
-					// Plugins have either of the two extension points
-					switch pluginToExtensionPoint[pluginConfig.Name] {
-					case descheduleEP:
-						profile.Plugins.Deschedule.Enabled = []string{pluginConfig.Name}
-					case balanceEP:
-						profile.Plugins.Balance.Enabled = []string{pluginConfig.Name}
-					}
-					profiles = append(profiles, profile)
-				}
-			} else {
-				klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
-			}
-		}
 
 		// Build plugins
 		for _, profile := range profiles {
@@ -500,7 +386,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			childCtx := context.WithValue(ctx, "strategyName", pg.Name())
 			status := pg.Deschedule(childCtx, nodes)
 			if status != nil && status.Err != nil {
-				klog.V(1).ErrorS(status.Err, "plugin finished with error", "pluginName", pg.Name())
+				klog.ErrorS(status.Err, "plugin finished with error", "pluginName", pg.Name())
 			}
 		}
 
@@ -512,7 +398,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			childCtx := context.WithValue(ctx, "strategyName", pg.Name())
 			status := pg.Balance(childCtx, nodes)
 			if status != nil && status.Err != nil {
-				klog.V(1).ErrorS(status.Err, "plugin finished with error", "pluginName", pg.Name())
+				klog.ErrorS(status.Err, "plugin finished with error", "pluginName", pg.Name())
 			}
 		}
 
@@ -525,6 +411,133 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	}, rs.DeschedulingInterval, ctx.Done())
 
 	return nil
+}
+
+func strategiesToProfiles(
+	ctx context.Context,
+	rs *options.DeschedulerServer,
+	deschedulerPolicy *api.DeschedulerPolicy,
+) []api.Profile {
+
+	strategyFuncs := map[api.StrategyName]strategyFunction{
+		"RemoveDuplicates":                            nil,
+		"LowNodeUtilization":                          nil,
+		"HighNodeUtilization":                         nil,
+		"RemovePodsViolatingInterPodAntiAffinity":     nil,
+		"RemovePodsViolatingNodeAffinity":             nil,
+		"RemovePodsViolatingNodeTaints":               nil,
+		"RemovePodsHavingTooManyRestarts":             nil,
+		"PodLifeTime":                                 nil,
+		"RemovePodsViolatingTopologySpreadConstraint": nil,
+		"RemoveFailedPods":                            nil,
+	}
+
+	var evictLocalStoragePods bool
+	if deschedulerPolicy.EvictLocalStoragePods != nil {
+		evictLocalStoragePods = *deschedulerPolicy.EvictLocalStoragePods
+	}
+
+	evictBarePods := false
+	if deschedulerPolicy.EvictFailedBarePods != nil {
+		evictBarePods = *deschedulerPolicy.EvictFailedBarePods
+		if evictBarePods {
+			klog.V(1).InfoS("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
+		}
+	}
+
+	evictSystemCriticalPods := false
+	if deschedulerPolicy.EvictSystemCriticalPods != nil {
+		evictSystemCriticalPods = *deschedulerPolicy.EvictSystemCriticalPods
+		if evictSystemCriticalPods {
+			klog.V(1).InfoS("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
+		}
+	}
+
+	ignorePvcPods := false
+	if deschedulerPolicy.IgnorePVCPods != nil {
+		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
+	}
+
+	var profiles []api.Profile
+
+	// Build profiles
+	for name, strategy := range deschedulerPolicy.Strategies {
+		if _, ok := strategyFuncs[name]; ok {
+			if strategy.Enabled {
+				params := strategy.Params
+				if params == nil {
+					params = &api.StrategyParameters{}
+				}
+
+				nodeFit := false
+				if name != "PodLifeTime" {
+					nodeFit = params.NodeFit
+				}
+
+				// TODO(jchaloup): once all strategies are migrated move this check under
+				// the default evictor args validation
+				if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
+					klog.ErrorS(fmt.Errorf("priority threshold misconfigured"), "only one of priorityThreshold fields can be set", "pluginName", name)
+					continue
+				}
+				thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, rs.Client, strategy.Params)
+				if err != nil {
+					klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
+					continue
+				}
+
+				var pluginConfig *api.PluginConfig
+				if pcFnc, exists := strategyParamsToPluginArgs[string(name)]; exists {
+					pluginConfig, err = pcFnc(params)
+					if err != nil {
+						klog.ErrorS(err, "skipping strategy", "strategy", name)
+						continue
+					}
+				} else {
+					klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
+					continue
+				}
+
+				profile := api.Profile{
+					Name: fmt.Sprintf("strategy-%v-profile", name),
+					PluginConfigs: []api.PluginConfig{
+						{
+							Name: defaultevictor.PluginName,
+							Args: &defaultevictor.DefaultEvictorArgs{
+								EvictLocalStoragePods:   evictLocalStoragePods,
+								EvictSystemCriticalPods: evictSystemCriticalPods,
+								IgnorePvcPods:           ignorePvcPods,
+								EvictFailedBarePods:     evictBarePods,
+								NodeFit:                 nodeFit,
+								PriorityThreshold: &api.PriorityThreshold{
+									Value: &thresholdPriority,
+								},
+							},
+						},
+						*pluginConfig,
+					},
+					Plugins: api.Plugins{
+						Evict: api.PluginSet{
+							Enabled: []string{defaultevictor.PluginName},
+						},
+					},
+				}
+
+				// Plugins have either of the two extension points
+				switch pluginToExtensionPoint[pluginConfig.Name] {
+				case descheduleEP:
+					profile.Plugins.Deschedule.Enabled = []string{pluginConfig.Name}
+				case balanceEP:
+					profile.Plugins.Balance.Enabled = []string{pluginConfig.Name}
+				}
+				profiles = append(profiles, profile)
+			}
+		} else {
+			klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
+		}
+	}
+
+	return profiles
 }
 
 func getPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) *api.PluginConfig {
