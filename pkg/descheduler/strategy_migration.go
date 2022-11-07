@@ -17,9 +17,6 @@ limitations under the License.
 package descheduler
 
 import (
-	"context"
-
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/framework"
@@ -38,8 +35,8 @@ import (
 // without any wiring. Keeping the wiring here so the descheduler can still use
 // the v1alpha1 configuration during the strategy migration to plugins.
 
-var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl){
-	"RemovePodsViolatingNodeTaints": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+var pluginsMap = map[string]func(params *api.StrategyParameters, handle *handleImpl) framework.Plugin{
+	"RemovePodsViolatingNodeTaints": func(params *api.StrategyParameters, handle *handleImpl) framework.Plugin {
 		args := &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{
 			Namespaces:              params.Namespaces,
 			LabelSelector:           params.LabelSelector,
@@ -48,19 +45,16 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 		if err := removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs(args); err != nil {
 			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingnodetaints.PluginName)
-			return
+			return nil
 		}
 		pg, err := removepodsviolatingnodetaints.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatingnodetaints.PluginName)
-			return
+			return nil
 		}
-		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
-		if status != nil && status.Err != nil {
-			klog.ErrorS(err, "plugin finished with error", "pluginName", removepodsviolatingnodetaints.PluginName)
-		}
+		return pg
 	},
-	"RemoveFailedPods": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+	"RemoveFailedPods": func(params *api.StrategyParameters, handle *handleImpl) framework.Plugin {
 		failedPodsParams := params.FailedPods
 		if failedPodsParams == nil {
 			failedPodsParams = &api.FailedPods{}
@@ -75,19 +69,16 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 		if err := removefailedpods.ValidateRemoveFailedPodsArgs(args); err != nil {
 			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", removefailedpods.PluginName)
-			return
+			return nil
 		}
 		pg, err := removefailedpods.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removefailedpods.PluginName)
-			return
+			return nil
 		}
-		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
-		if status != nil && status.Err != nil {
-			klog.ErrorS(err, "plugin finished with error", "pluginName", removefailedpods.PluginName)
-		}
+		return pg
 	},
-	"RemovePodsViolatingNodeAffinity": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+	"RemovePodsViolatingNodeAffinity": func(params *api.StrategyParameters, handle *handleImpl) framework.Plugin {
 		args := &removepodsviolatingnodeaffinity.RemovePodsViolatingNodeAffinityArgs{
 			Namespaces:       params.Namespaces,
 			LabelSelector:    params.LabelSelector,
@@ -95,38 +86,32 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 		if err := removepodsviolatingnodeaffinity.ValidateRemovePodsViolatingNodeAffinityArgs(args); err != nil {
 			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingnodeaffinity.PluginName)
-			return
+			return nil
 		}
 		pg, err := removepodsviolatingnodeaffinity.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatingnodeaffinity.PluginName)
-			return
+			return nil
 		}
-		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
-		if status != nil && status.Err != nil {
-			klog.ErrorS(err, "plugin finished with error", "pluginName", removepodsviolatingnodeaffinity.PluginName)
-		}
+		return pg
 	},
-	"RemovePodsViolatingInterPodAntiAffinity": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+	"RemovePodsViolatingInterPodAntiAffinity": func(params *api.StrategyParameters, handle *handleImpl) framework.Plugin {
 		args := &removepodsviolatinginterpodantiaffinity.RemovePodsViolatingInterPodAntiAffinityArgs{
 			Namespaces:    params.Namespaces,
 			LabelSelector: params.LabelSelector,
 		}
 		if err := removepodsviolatinginterpodantiaffinity.ValidateRemovePodsViolatingInterPodAntiAffinityArgs(args); err != nil {
 			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatinginterpodantiaffinity.PluginName)
-			return
+			return nil
 		}
 		pg, err := removepodsviolatinginterpodantiaffinity.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatinginterpodantiaffinity.PluginName)
-			return
+			return nil
 		}
-		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
-		if status != nil && status.Err != nil {
-			klog.ErrorS(err, "plugin finished with error", "pluginName", removepodsviolatinginterpodantiaffinity.PluginName)
-		}
+		return pg
 	},
-	"RemovePodsHavingTooManyRestarts": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+	"RemovePodsHavingTooManyRestarts": func(params *api.StrategyParameters, handle *handleImpl) framework.Plugin {
 		tooManyRestartsParams := params.PodsHavingTooManyRestarts
 		if tooManyRestartsParams == nil {
 			tooManyRestartsParams = &api.PodsHavingTooManyRestarts{}
@@ -139,19 +124,16 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 		if err := removepodshavingtoomanyrestarts.ValidateRemovePodsHavingTooManyRestartsArgs(args); err != nil {
 			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodshavingtoomanyrestarts.PluginName)
-			return
+			return nil
 		}
 		pg, err := removepodshavingtoomanyrestarts.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodshavingtoomanyrestarts.PluginName)
-			return
+			return nil
 		}
-		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
-		if status != nil && status.Err != nil {
-			klog.ErrorS(err, "plugin finished with error", "pluginName", removepodshavingtoomanyrestarts.PluginName)
-		}
+		return pg
 	},
-	"PodLifeTime": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+	"PodLifeTime": func(params *api.StrategyParameters, handle *handleImpl) framework.Plugin {
 		podLifeTimeParams := params.PodLifeTime
 		if podLifeTimeParams == nil {
 			podLifeTimeParams = &api.PodLifeTime{}
@@ -173,19 +155,16 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 		if err := podlifetime.ValidatePodLifeTimeArgs(args); err != nil {
 			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", podlifetime.PluginName)
-			return
+			return nil
 		}
 		pg, err := podlifetime.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", podlifetime.PluginName)
-			return
+			return nil
 		}
-		status := pg.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
-		if status != nil && status.Err != nil {
-			klog.ErrorS(err, "plugin finished with error", "pluginName", podlifetime.PluginName)
-		}
+		return pg
 	},
-	"RemoveDuplicates": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+	"RemoveDuplicates": func(params *api.StrategyParameters, handle *handleImpl) framework.Plugin {
 		args := &removeduplicates.RemoveDuplicatesArgs{
 			Namespaces: params.Namespaces,
 		}
@@ -194,19 +173,16 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 		if err := removeduplicates.ValidateRemoveDuplicatesArgs(args); err != nil {
 			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", removeduplicates.PluginName)
-			return
+			return nil
 		}
 		pg, err := removeduplicates.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removeduplicates.PluginName)
-			return
+			return nil
 		}
-		status := pg.(framework.BalancePlugin).Balance(ctx, nodes)
-		if status != nil && status.Err != nil {
-			klog.ErrorS(err, "plugin finished with error", "pluginName", removeduplicates.PluginName)
-		}
+		return pg
 	},
-	"RemovePodsViolatingTopologySpreadConstraint": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+	"RemovePodsViolatingTopologySpreadConstraint": func(params *api.StrategyParameters, handle *handleImpl) framework.Plugin {
 		args := &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
 			Namespaces:             params.Namespaces,
 			LabelSelector:          params.LabelSelector,
@@ -214,19 +190,16 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 		}
 		if err := removepodsviolatingtopologyspreadconstraint.ValidateRemovePodsViolatingTopologySpreadConstraintArgs(args); err != nil {
 			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingtopologyspreadconstraint.PluginName)
-			return
+			return nil
 		}
 		pg, err := removepodsviolatingtopologyspreadconstraint.New(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatingtopologyspreadconstraint.PluginName)
-			return
+			return nil
 		}
-		status := pg.(framework.BalancePlugin).Balance(ctx, nodes)
-		if status != nil && status.Err != nil {
-			klog.ErrorS(err, "plugin finished with error", "pluginName", removepodsviolatingtopologyspreadconstraint.PluginName)
-		}
+		return pg
 	},
-	"HighNodeUtilization": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+	"HighNodeUtilization": func(params *api.StrategyParameters, handle *handleImpl) framework.Plugin {
 		args := &nodeutilization.HighNodeUtilizationArgs{
 			Thresholds:    params.NodeResourceUtilizationThresholds.Thresholds,
 			NumberOfNodes: params.NodeResourceUtilizationThresholds.NumberOfNodes,
@@ -234,19 +207,16 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 
 		if err := nodeutilization.ValidateHighNodeUtilizationArgs(args); err != nil {
 			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", nodeutilization.HighNodeUtilizationPluginName)
-			return
+			return nil
 		}
 		pg, err := nodeutilization.NewHighNodeUtilization(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", nodeutilization.HighNodeUtilizationPluginName)
-			return
+			return nil
 		}
-		status := pg.(framework.BalancePlugin).Balance(ctx, nodes)
-		if status != nil && status.Err != nil {
-			klog.ErrorS(err, "plugin finished with error", "pluginName", nodeutilization.HighNodeUtilizationPluginName)
-		}
+		return pg
 	},
-	"LowNodeUtilization": func(ctx context.Context, nodes []*v1.Node, params *api.StrategyParameters, handle *handleImpl) {
+	"LowNodeUtilization": func(params *api.StrategyParameters, handle *handleImpl) framework.Plugin {
 		args := &nodeutilization.LowNodeUtilizationArgs{
 			Thresholds:             params.NodeResourceUtilizationThresholds.Thresholds,
 			TargetThresholds:       params.NodeResourceUtilizationThresholds.TargetThresholds,
@@ -256,16 +226,13 @@ var pluginsMap = map[string]func(ctx context.Context, nodes []*v1.Node, params *
 
 		if err := nodeutilization.ValidateLowNodeUtilizationArgs(args); err != nil {
 			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", nodeutilization.LowNodeUtilizationPluginName)
-			return
+			return nil
 		}
 		pg, err := nodeutilization.NewLowNodeUtilization(args, handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", nodeutilization.LowNodeUtilizationPluginName)
-			return
+			return nil
 		}
-		status := pg.(framework.BalancePlugin).Balance(ctx, nodes)
-		if status != nil && status.Err != nil {
-			klog.ErrorS(err, "plugin finished with error", "pluginName", nodeutilization.LowNodeUtilizationPluginName)
-		}
+		return pg
 	},
 }

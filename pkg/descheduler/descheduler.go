@@ -358,8 +358,11 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			eventRecorder,
 		)
 
+		var enabledDeschedulePlugins []framework.DeschedulePlugin
+		var enabledBalancePlugins []framework.BalancePlugin
+
 		for name, strategy := range deschedulerPolicy.Strategies {
-			if f, ok := strategyFuncs[name]; ok {
+			if _, ok := strategyFuncs[name]; ok {
 				if strategy.Enabled {
 					params := strategy.Params
 					if params == nil {
@@ -413,19 +416,48 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 						},
 					}
 
-					// TODO: strategyName should be accessible from within the strategy using a framework
-					// handle or function which the Evictor has access to. For migration/in-progress framework
-					// work, we are currently passing this via context. To be removed
-					// (See discussion thread https://github.com/kubernetes-sigs/descheduler/pull/885#discussion_r919962292)
-					childCtx := context.WithValue(ctx, "strategyName", string(name))
 					if pgFnc, exists := pluginsMap[string(name)]; exists {
-						pgFnc(childCtx, nodes, params, handle)
+						pg := pgFnc(params, handle)
+						if pg != nil {
+							switch v := pg.(type) {
+							case framework.DeschedulePlugin:
+								enabledDeschedulePlugins = append(enabledDeschedulePlugins, v)
+							case framework.BalancePlugin:
+								enabledBalancePlugins = append(enabledBalancePlugins, v)
+							default:
+								klog.ErrorS(fmt.Errorf("unknown plugin extension point"), "skipping strategy", "strategy", name)
+							}
+						}
 					} else {
-						f(childCtx, rs.Client, strategy, nodes, podEvictor, evictorFilter.(framework.EvictorPlugin), getPodsAssignedToNode)
+						klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
 					}
 				}
 			} else {
 				klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
+			}
+		}
+
+		for _, pg := range enabledDeschedulePlugins {
+			// TODO: strategyName should be accessible from within the strategy using a framework
+			// handle or function which the Evictor has access to. For migration/in-progress framework
+			// work, we are currently passing this via context. To be removed
+			// (See discussion thread https://github.com/kubernetes-sigs/descheduler/pull/885#discussion_r919962292)
+			childCtx := context.WithValue(ctx, "strategyName", pg.Name())
+			status := pg.Deschedule(childCtx, nodes)
+			if status != nil && status.Err != nil {
+				klog.V(1).ErrorS(status.Err, "plugin finished with error", "pluginName", pg.Name())
+			}
+		}
+
+		for _, pg := range enabledBalancePlugins {
+			// TODO: strategyName should be accessible from within the strategy using a framework
+			// handle or function which the Evictor has access to. For migration/in-progress framework
+			// work, we are currently passing this via context. To be removed
+			// (See discussion thread https://github.com/kubernetes-sigs/descheduler/pull/885#discussion_r919962292)
+			childCtx := context.WithValue(ctx, "strategyName", pg.Name())
+			status := pg.Balance(childCtx, nodes)
+			if status != nil && status.Err != nil {
+				klog.V(1).ErrorS(status.Err, "plugin finished with error", "pluginName", pg.Name())
 			}
 		}
 
