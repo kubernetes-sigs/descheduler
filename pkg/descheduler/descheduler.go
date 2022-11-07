@@ -397,6 +397,18 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 						},
 					}
 
+					var pluginConfig *api.PluginConfig
+					if pcFnc, exists := strategyParamsToPluginArgs[string(name)]; exists {
+						pluginConfig, err = pcFnc(params)
+						if err != nil {
+							klog.ErrorS(err, "skipping strategy", "strategy", name)
+							continue
+						}
+					} else {
+						klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
+						continue
+					}
+
 					evictorFilter, _ := defaultevictor.New(
 						defaultevictorArgs,
 						&handleImpl{
@@ -417,7 +429,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 					}
 
 					if pgFnc, exists := pluginsMap[string(name)]; exists {
-						pg := pgFnc(params, handle)
+						pg := pgFnc(pluginConfig.Args, handle)
 						if pg != nil {
 							switch v := pg.(type) {
 							case framework.DeschedulePlugin:

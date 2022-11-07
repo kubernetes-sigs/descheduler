@@ -19,6 +19,7 @@ package api
 import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -134,4 +135,9 @@ type FailedPods struct {
 type PriorityThreshold struct {
 	Value *int32
 	Name  string
+}
+
+type PluginConfig struct {
+	Name string
+	Args runtime.Object
 }
