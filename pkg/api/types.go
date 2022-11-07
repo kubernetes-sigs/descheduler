@@ -27,45 +27,17 @@ import (
 type DeschedulerPolicy struct {
 	metav1.TypeMeta
 
-	// Strategies
-	Strategies StrategyList
+	// Profiles
+	Profiles []Profile
 
 	// NodeSelector for a set of nodes to operate over
 	NodeSelector *string
-
-	// EvictFailedBarePods allows pods without ownerReferences and in failed phase to be evicted.
-	EvictFailedBarePods *bool
-
-	// EvictLocalStoragePods allows pods using local storage to be evicted.
-	EvictLocalStoragePods *bool
-
-	// EvictSystemCriticalPods allows eviction of pods of any priority (including Kubernetes system pods)
-	EvictSystemCriticalPods *bool
-
-	// IgnorePVCPods prevents pods with PVCs from being evicted.
-	IgnorePVCPods *bool
 
 	// MaxNoOfPodsToEvictPerNode restricts maximum of pods to be evicted per node.
 	MaxNoOfPodsToEvictPerNode *uint
 
 	// MaxNoOfPodsToEvictPerNamespace restricts maximum of pods to be evicted per namespace.
 	MaxNoOfPodsToEvictPerNamespace *uint
-}
-
-type (
-	StrategyName string
-	StrategyList map[StrategyName]DeschedulerStrategy
-)
-
-type DeschedulerStrategy struct {
-	// Enabled or disabled
-	Enabled bool
-
-	// Weight
-	Weight int
-
-	// Strategy parameters
-	Params *StrategyParameters
 }
 
 // Namespaces carries a list of included/excluded namespaces
@@ -75,62 +47,10 @@ type Namespaces struct {
 	Exclude []string
 }
 
-// Besides Namespaces only one of its members may be specified
-// TODO(jchaloup): move Namespaces ThresholdPriority and ThresholdPriorityClassName to individual strategies
-//
-//	once the policy version is bumped to v1alpha2
-type StrategyParameters struct {
-	NodeResourceUtilizationThresholds *NodeResourceUtilizationThresholds
-	NodeAffinityType                  []string
-	PodsHavingTooManyRestarts         *PodsHavingTooManyRestarts
-	PodLifeTime                       *PodLifeTime
-	RemoveDuplicates                  *RemoveDuplicates
-	FailedPods                        *FailedPods
-	IncludeSoftConstraints            bool
-	Namespaces                        *Namespaces
-	ThresholdPriority                 *int32
-	ThresholdPriorityClassName        string
-	LabelSelector                     *metav1.LabelSelector
-	NodeFit                           bool
-	IncludePreferNoSchedule           bool
-	ExcludedTaints                    []string
-}
-
 type (
 	Percentage         float64
 	ResourceThresholds map[v1.ResourceName]Percentage
 )
-
-type NodeResourceUtilizationThresholds struct {
-	UseDeviationThresholds bool
-	Thresholds             ResourceThresholds
-	TargetThresholds       ResourceThresholds
-	NumberOfNodes          int
-}
-
-type PodsHavingTooManyRestarts struct {
-	PodRestartThreshold     int32
-	IncludingInitContainers bool
-}
-
-type RemoveDuplicates struct {
-	ExcludeOwnerKinds []string
-}
-
-type PodLifeTime struct {
-	MaxPodLifeTimeSeconds *uint
-	States                []string
-
-	// Deprecated: Use States instead.
-	PodStatusPhases []string
-}
-
-type FailedPods struct {
-	ExcludeOwnerKinds       []string
-	MinPodLifetimeSeconds   *uint
-	Reasons                 []string
-	IncludingInitContainers bool
-}
 
 type PriorityThreshold struct {
 	Value *int32

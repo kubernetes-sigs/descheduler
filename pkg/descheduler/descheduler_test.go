@@ -14,6 +14,7 @@ import (
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -29,9 +30,9 @@ func TestTaintsUpdated(t *testing.T) {
 
 	client := fakeclientset.NewSimpleClientset(n1, n2, p1)
 	eventClient := fakeclientset.NewSimpleClientset(n1, n2, p1)
-	dp := &api.DeschedulerPolicy{
-		Strategies: api.StrategyList{
-			"RemovePodsViolatingNodeTaints": api.DeschedulerStrategy{
+	dp := &v1alpha1.DeschedulerPolicy{
+		Strategies: v1alpha1.StrategyList{
+			"RemovePodsViolatingNodeTaints": v1alpha1.DeschedulerStrategy{
 				Enabled: true,
 			},
 		},
@@ -68,7 +69,12 @@ func TestTaintsUpdated(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	if err := RunDeschedulerStrategies(ctx, rs, dp, "v1"); err != nil {
+	internalDeschedulerPolicy, err := v1alpha1Tov1alpha2(client, dp)
+	if err != nil {
+		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
+	}
+
+	if err := RunDeschedulerStrategies(ctx, rs, internalDeschedulerPolicy, "v1"); err != nil {
 		t.Fatalf("Unable to run descheduler strategies: %v", err)
 	}
 
@@ -96,9 +102,9 @@ func TestDuplicate(t *testing.T) {
 
 	client := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3)
 	eventClient := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3)
-	dp := &api.DeschedulerPolicy{
-		Strategies: api.StrategyList{
-			"RemoveDuplicates": api.DeschedulerStrategy{
+	dp := &v1alpha1.DeschedulerPolicy{
+		Strategies: v1alpha1.StrategyList{
+			"RemoveDuplicates": v1alpha1.DeschedulerStrategy{
 				Enabled: true,
 			},
 		},
@@ -123,7 +129,11 @@ func TestDuplicate(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	if err := RunDeschedulerStrategies(ctx, rs, dp, "v1"); err != nil {
+	internalDeschedulerPolicy, err := v1alpha1Tov1alpha2(client, dp)
+	if err != nil {
+		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
+	}
+	if err := RunDeschedulerStrategies(ctx, rs, internalDeschedulerPolicy, "v1"); err != nil {
 		t.Fatalf("Unable to run descheduler strategies: %v", err)
 	}
 
@@ -139,7 +149,7 @@ func TestRootCancel(t *testing.T) {
 	client := fakeclientset.NewSimpleClientset(n1, n2)
 	eventClient := fakeclientset.NewSimpleClientset(n1, n2)
 	dp := &api.DeschedulerPolicy{
-		Strategies: api.StrategyList{}, // no strategies needed for this test
+		Profiles: []api.Profile{}, // no strategies needed for this test
 	}
 
 	rs, err := options.NewDeschedulerServer()
@@ -174,7 +184,7 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 	client := fakeclientset.NewSimpleClientset(n1, n2)
 	eventClient := fakeclientset.NewSimpleClientset(n1, n2)
 	dp := &api.DeschedulerPolicy{
-		Strategies: api.StrategyList{}, // no strategies needed for this test
+		Profiles: []api.Profile{}, // no strategies needed for this test
 	}
 
 	rs, err := options.NewDeschedulerServer()

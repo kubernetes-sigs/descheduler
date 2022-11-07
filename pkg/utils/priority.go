@@ -55,14 +55,14 @@ func GetPriorityFromPriorityClass(ctx context.Context, client clientset.Interfac
 
 // GetPriorityFromStrategyParams gets priority from the given StrategyParameters.
 // It will return SystemCriticalPriority by default.
-func GetPriorityFromStrategyParams(ctx context.Context, client clientset.Interface, params *api.StrategyParameters) (priority int32, err error) {
-	if params == nil {
+func GetPriorityFromStrategyParams(ctx context.Context, client clientset.Interface, priorityThreshold *api.PriorityThreshold) (priority int32, err error) {
+	if priorityThreshold == nil {
 		return SystemCriticalPriority, nil
 	}
-	if params.ThresholdPriority != nil {
-		priority = *params.ThresholdPriority
+	if priorityThreshold.Value != nil {
+		priority = *priorityThreshold.Value
 	} else {
-		priority, err = GetPriorityFromPriorityClass(ctx, client, params.ThresholdPriorityClassName)
+		priority, err = GetPriorityFromPriorityClass(ctx, client, priorityThreshold.Name)
 		if err != nil {
 			return
 		}
