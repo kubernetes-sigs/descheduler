@@ -227,7 +227,7 @@ func evictPodsFromSourceNodes(
 		v1.ResourceMemory: {},
 	}
 
-	var taintsOfDestinationNodes = make(map[string][]v1.Taint, len(destinationNodes))
+	taintsOfDestinationNodes := make(map[string][]v1.Taint, len(destinationNodes))
 	for _, node := range destinationNodes {
 		taintsOfDestinationNodes[node.node.Name] = node.node.Spec.Taints
 
@@ -282,7 +282,6 @@ func evictPods(
 	podEvictor framework.Evictor,
 	continueEviction continueEvictionCond,
 ) {
-
 	var excludedNamespaces sets.String
 	if evictableNamespaces != nil {
 		excludedNamespaces = sets.NewString(evictableNamespaces.Exclude...)
@@ -438,7 +437,6 @@ func averageNodeBasicresources(nodes []*v1.Node, getPodsAssignedToNode podutil.G
 				total[resource] += api.Percentage(value.MilliValue()) / api.Percentage(nodeCapacityValue.MilliValue()) * 100.0
 			} else {
 				total[resource] += api.Percentage(value.Value()) / api.Percentage(nodeCapacityValue.Value()) * 100.0
-
 			}
 		}
 	}

@@ -14,11 +14,12 @@ limitations under the License.
 package removeduplicates
 
 import (
+	"testing"
+
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"testing"
 )
 
 func TestSetDefaults_RemoveDuplicatesArgs(t *testing.T) {

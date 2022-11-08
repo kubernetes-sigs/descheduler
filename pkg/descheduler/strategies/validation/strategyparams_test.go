@@ -10,9 +10,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
-var (
-	thresholdPriority int32 = 1000
-)
+var thresholdPriority int32 = 1000
 
 func TestValidStrategyParams(t *testing.T) {
 	ctx := context.Background()

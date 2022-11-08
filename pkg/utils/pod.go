@@ -186,7 +186,6 @@ func maxResourceList(list, new v1.ResourceList) {
 
 // PodToleratesTaints returns true if a pod tolerates one node's taints
 func PodToleratesTaints(pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
-
 	for nodeName, taintsForNode := range taintsOfNodes {
 		if len(pod.Spec.Tolerations) >= len(taintsForNode) {
 

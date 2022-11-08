@@ -29,6 +29,9 @@ LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}
 GOLANGCI_VERSION := v1.49.0
 HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint 2> /dev/null)
 
+GOFUMPT_VERSION := v0.4.0
+HAS_GOFUMPT := $(shell command -v gofumpt 2> /dev/null)
+
 # REGISTRY is the container registry to push
 # into. The default is to push to the staging
 # registry, not production.
@@ -136,6 +139,12 @@ ifndef HAS_GOLANGCI
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./_output/bin ${GOLANGCI_VERSION}
 endif
 	./_output/bin/golangci-lint run
+
+fmt:
+ifndef HAS_GOFUMPT
+	go install mvdan.cc/gofumpt@${GOFUMPT_VERSION}
+endif
+	gofumpt -w -extra .
 
 # helm
 

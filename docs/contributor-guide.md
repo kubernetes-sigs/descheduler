@@ -39,6 +39,13 @@ make test-unit
 make test-e2e
 ```
 
+## Format Code
+
+After making changes in the code base, ensure that the code is formatted correctly:
+
+```
+make fmt
+```
 
 ## Build Helm Package locally
 

@@ -233,7 +233,6 @@ func runPodLifetimePlugin(
 			GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 		},
 	)
-
 	if err != nil {
 		t.Fatalf("Unable to initialize the plugin: %v", err)
 	}

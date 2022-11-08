@@ -43,7 +43,6 @@ import (
 // NewDeschedulerCommand creates a *cobra.Command object with default parameters
 func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 	s, err := options.NewDeschedulerServer()
-
 	if err != nil {
 		klog.ErrorS(err, "unable to initialize server")
 	}

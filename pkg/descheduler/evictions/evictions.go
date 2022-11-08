@@ -33,8 +33,10 @@ import (
 )
 
 // nodePodEvictedCount keeps count of pods evicted on node
-type nodePodEvictedCount map[string]uint
-type namespacePodEvictCount map[string]uint
+type (
+	nodePodEvictedCount    map[string]uint
+	namespacePodEvictCount map[string]uint
+)
 
 type PodEvictor struct {
 	client                     clientset.Interface
@@ -59,8 +61,8 @@ func NewPodEvictor(
 	metricsEnabled bool,
 	eventRecorder events.EventRecorder,
 ) *PodEvictor {
-	var nodePodCount = make(nodePodEvictedCount)
-	var namespacePodCount = make(namespacePodEvictCount)
+	nodePodCount := make(nodePodEvictedCount)
+	namespacePodCount := make(namespacePodEvictCount)
 	for _, node := range nodes {
 		// Initialize podsEvicted till now with 0.
 		nodePodCount[node.Name] = 0

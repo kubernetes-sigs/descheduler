@@ -51,8 +51,10 @@ type DeschedulerPolicy struct {
 	MaxNoOfPodsToEvictPerNamespace *int `json:"maxNoOfPodsToEvictPerNamespace,omitempty"`
 }
 
-type StrategyName string
-type StrategyList map[StrategyName]DeschedulerStrategy
+type (
+	StrategyName string
+	StrategyList map[StrategyName]DeschedulerStrategy
+)
 
 type DeschedulerStrategy struct {
 	// Enabled or disabled
@@ -90,8 +92,10 @@ type StrategyParameters struct {
 	ExcludedTaints                    []string                           `json:"excludedTaints,omitempty"`
 }
 
-type Percentage float64
-type ResourceThresholds map[v1.ResourceName]Percentage
+type (
+	Percentage         float64
+	ResourceThresholds map[v1.ResourceName]Percentage
+)
 
 type NodeResourceUtilizationThresholds struct {
 	UseDeviationThresholds bool               `json:"useDeviationThresholds,omitempty"`

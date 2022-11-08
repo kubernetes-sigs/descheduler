@@ -14,12 +14,11 @@ limitations under the License.
 package removepodsviolatingnodeaffinity
 
 import (
+	"context"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
-
-	"context"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"

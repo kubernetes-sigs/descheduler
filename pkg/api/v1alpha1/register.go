@@ -28,8 +28,10 @@ var (
 )
 
 // GroupName is the group name used in this package
-const GroupName = "descheduler"
-const GroupVersion = "v1alpha1"
+const (
+	GroupName    = "descheduler"
+	GroupVersion = "v1alpha1"
+)
 
 // SchemeGroupVersion is group version used to register these objects
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: GroupVersion}

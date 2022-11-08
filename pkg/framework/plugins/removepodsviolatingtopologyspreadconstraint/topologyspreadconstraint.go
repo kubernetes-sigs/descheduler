@@ -282,8 +282,8 @@ func balanceDomains(
 	constraintTopologies map[topologyPair][]*v1.Pod,
 	sumPods float64,
 	isEvictable func(pod *v1.Pod) bool,
-	nodes []*v1.Node) {
-
+	nodes []*v1.Node,
+) {
 	idealAvg := sumPods / float64(len(constraintTopologies))
 	sortedDomains := sortDomains(constraintTopologies, isEvictable)
 
