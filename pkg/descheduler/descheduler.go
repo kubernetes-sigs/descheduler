@@ -374,7 +374,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 					// TODO(jchaloup): once all strategies are migrated move this check under
 					// the default evictor args validation
 					if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
-						klog.V(1).ErrorS(fmt.Errorf("priority threshold misconfigured"), "only one of priorityThreshold fields can be set", "pluginName", name)
+						klog.ErrorS(fmt.Errorf("priority threshold misconfigured"), "only one of priorityThreshold fields can be set", "pluginName", name)
 						continue
 					}
 					thresholdPriority, err := utils.GetPriorityFromStrategyParams(ctx, rs.Client, strategy.Params)

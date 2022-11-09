@@ -299,7 +299,7 @@ func evictPods(
 				WithoutNamespaces(excludedNamespaces).
 				BuildFilterFunc()
 			if err != nil {
-				klog.V(1).ErrorS(err, "could not build preEvictionFilter with namespace exclusion")
+				klog.ErrorS(err, "could not build preEvictionFilter with namespace exclusion")
 				continue
 			}
 
