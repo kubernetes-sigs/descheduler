@@ -52,7 +52,7 @@ func LoadPolicyConfig(policyConfigFile string, client clientset.Interface) (*api
 
 	// Build profiles
 	// TODO(jchaloup): replace this with v1alpha1 -> v1alpha2 conversion
-	internalPolicy, err := v1alpha1Tov1alpha2(client, versionedPolicy)
+	internalPolicy, err := V1alpha1ToInternal(client, versionedPolicy)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting versioned policy to internal policy version: %v", err)
 	}
@@ -60,7 +60,7 @@ func LoadPolicyConfig(policyConfigFile string, client clientset.Interface) (*api
 	return internalPolicy, nil
 }
 
-func v1alpha1Tov1alpha2(
+func V1alpha1ToInternal(
 	client clientset.Interface,
 	deschedulerPolicy *v1alpha1.DeschedulerPolicy,
 ) (*api.DeschedulerPolicy, error) {
@@ -186,6 +186,7 @@ func v1alpha1Tov1alpha2(
 			}
 		} else {
 			klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
+			return nil, fmt.Errorf("unknown strategy name: %v", name)
 		}
 	}
 

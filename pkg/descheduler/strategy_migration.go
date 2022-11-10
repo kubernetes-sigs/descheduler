@@ -188,6 +188,9 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 		}, nil
 	},
 	"HighNodeUtilization": func(params *v1alpha1.StrategyParameters) (*api.PluginConfig, error) {
+		if params.NodeResourceUtilizationThresholds == nil {
+			params.NodeResourceUtilizationThresholds = &v1alpha1.NodeResourceUtilizationThresholds{}
+		}
 		args := &nodeutilization.HighNodeUtilizationArgs{
 			Thresholds:    v1alpha1ThresholdToInternal(params.NodeResourceUtilizationThresholds.Thresholds),
 			NumberOfNodes: params.NodeResourceUtilizationThresholds.NumberOfNodes,
@@ -202,6 +205,9 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 		}, nil
 	},
 	"LowNodeUtilization": func(params *v1alpha1.StrategyParameters) (*api.PluginConfig, error) {
+		if params.NodeResourceUtilizationThresholds == nil {
+			params.NodeResourceUtilizationThresholds = &v1alpha1.NodeResourceUtilizationThresholds{}
+		}
 		args := &nodeutilization.LowNodeUtilizationArgs{
 			Thresholds:             v1alpha1ThresholdToInternal(params.NodeResourceUtilizationThresholds.Thresholds),
 			TargetThresholds:       v1alpha1ThresholdToInternal(params.NodeResourceUtilizationThresholds.TargetThresholds),
@@ -223,10 +229,14 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 func v1alpha1NamespacesToInternal(namespaces *v1alpha1.Namespaces) *api.Namespaces {
 	internal := &api.Namespaces{}
 	if namespaces != nil {
-		internal = &api.Namespaces{
-			Include: append([]string{}, namespaces.Include...),
-			Exclude: append([]string{}, namespaces.Exclude...),
+		if namespaces.Exclude != nil {
+			internal.Exclude = namespaces.Exclude
 		}
+		if namespaces.Include != nil {
+			internal.Include = namespaces.Include
+		}
+	} else {
+		internal = nil
 	}
 	return internal
 }
