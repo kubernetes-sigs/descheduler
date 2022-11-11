@@ -192,8 +192,9 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 			params.NodeResourceUtilizationThresholds = &v1alpha1.NodeResourceUtilizationThresholds{}
 		}
 		args := &nodeutilization.HighNodeUtilizationArgs{
-			Thresholds:    v1alpha1ThresholdToInternal(params.NodeResourceUtilizationThresholds.Thresholds),
-			NumberOfNodes: params.NodeResourceUtilizationThresholds.NumberOfNodes,
+			EvictableNamespaces: v1alpha1NamespacesToInternal(params.Namespaces),
+			Thresholds:          v1alpha1ThresholdToInternal(params.NodeResourceUtilizationThresholds.Thresholds),
+			NumberOfNodes:       params.NodeResourceUtilizationThresholds.NumberOfNodes,
 		}
 		if err := nodeutilization.ValidateHighNodeUtilizationArgs(args); err != nil {
 			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", nodeutilization.HighNodeUtilizationPluginName)
@@ -209,6 +210,7 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 			params.NodeResourceUtilizationThresholds = &v1alpha1.NodeResourceUtilizationThresholds{}
 		}
 		args := &nodeutilization.LowNodeUtilizationArgs{
+			EvictableNamespaces:    v1alpha1NamespacesToInternal(params.Namespaces),
 			Thresholds:             v1alpha1ThresholdToInternal(params.NodeResourceUtilizationThresholds.Thresholds),
 			TargetThresholds:       v1alpha1ThresholdToInternal(params.NodeResourceUtilizationThresholds.TargetThresholds),
 			UseDeviationThresholds: params.NodeResourceUtilizationThresholds.UseDeviationThresholds,

@@ -33,7 +33,15 @@ func ValidateHighNodeUtilizationArgs(args *HighNodeUtilizationArgs) error {
 }
 
 func ValidateLowNodeUtilizationArgs(args *LowNodeUtilizationArgs) error {
-	return validateLowNodeUtilizationThresholds(args.Thresholds, args.TargetThresholds, args.UseDeviationThresholds)
+	// only exclude can be set, or not at all
+	if args.EvictableNamespaces != nil && len(args.EvictableNamespaces.Include) > 0 {
+		return fmt.Errorf("only Exclude namespaces can be set, inclusion is not supported")
+	}
+	err := validateLowNodeUtilizationThresholds(args.Thresholds, args.TargetThresholds, args.UseDeviationThresholds)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func validateLowNodeUtilizationThresholds(thresholds, targetThresholds api.ResourceThresholds, useDeviationThresholds bool) error {
