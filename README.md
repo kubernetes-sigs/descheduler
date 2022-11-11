@@ -243,7 +243,7 @@ actual usage metrics. Implementing metrics-based descheduling is currently TODO 
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
-|`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
+|`Namespaces`|(see [namespace filtering](#namespace-filtering))|
 
 **Example:**
 
@@ -316,7 +316,7 @@ actual usage metrics. Implementing metrics-based descheduling is currently TODO 
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
-|`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
+|`Namespaces`|(see [namespace filtering](#namespace-filtering))|
 
 **Example:**
 
@@ -615,7 +615,7 @@ The following strategies accept a `namespaces` parameter which allows to specify
 * `RemoveDuplicates`
 * `RemovePodsViolatingTopologySpreadConstraint`
 * `RemoveFailedPods`
-* `LowNodeUtilization` and `HighNodeUtilization` (Only filtered right before eviction, parameter named `evictableNamespaces`)
+* `LowNodeUtilization` and `HighNodeUtilization` (Only filtered right before eviction)
 
 For example:
 
