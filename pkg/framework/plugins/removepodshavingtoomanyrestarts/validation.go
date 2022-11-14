@@ -33,7 +33,7 @@ func ValidateRemovePodsHavingTooManyRestartsArgs(args *RemovePodsHavingTooManyRe
 	}
 
 	if args.PodRestartThreshold < 1 {
-		return fmt.Errorf("PodsHavingTooManyRestarts threshold not set")
+		return fmt.Errorf("invalid PodsHavingTooManyRestarts threshold")
 	}
 
 	return nil
