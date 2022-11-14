@@ -368,6 +368,277 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 			},
 		},
 		{
+			description: "pass in all params to check args",
+			policy: &v1alpha1.DeschedulerPolicy{
+				Strategies: v1alpha1.StrategyList{
+					removeduplicates.PluginName: v1alpha1.DeschedulerStrategy{
+						Enabled: true,
+						Params: &v1alpha1.StrategyParameters{
+							RemoveDuplicates: &v1alpha1.RemoveDuplicates{
+								ExcludeOwnerKinds: []string{"ReplicaSet"},
+							},
+						},
+					},
+					nodeutilization.LowNodeUtilizationPluginName: v1alpha1.DeschedulerStrategy{
+						Enabled: true,
+						Params: &v1alpha1.StrategyParameters{
+							NodeResourceUtilizationThresholds: &v1alpha1.NodeResourceUtilizationThresholds{
+								Thresholds: v1alpha1.ResourceThresholds{
+									"cpu":    v1alpha1.Percentage(20),
+									"memory": v1alpha1.Percentage(20),
+									"pods":   v1alpha1.Percentage(20),
+								},
+								TargetThresholds: v1alpha1.ResourceThresholds{
+									"cpu":    v1alpha1.Percentage(50),
+									"memory": v1alpha1.Percentage(50),
+									"pods":   v1alpha1.Percentage(50),
+								},
+								UseDeviationThresholds: true,
+								NumberOfNodes:          3,
+							},
+						},
+					},
+					nodeutilization.HighNodeUtilizationPluginName: v1alpha1.DeschedulerStrategy{
+						Enabled: true,
+						Params: &v1alpha1.StrategyParameters{
+							NodeResourceUtilizationThresholds: &v1alpha1.NodeResourceUtilizationThresholds{
+								Thresholds: v1alpha1.ResourceThresholds{
+									"cpu":    v1alpha1.Percentage(20),
+									"memory": v1alpha1.Percentage(20),
+									"pods":   v1alpha1.Percentage(20),
+								},
+							},
+						},
+					},
+					removefailedpods.PluginName: v1alpha1.DeschedulerStrategy{
+						Enabled: true,
+						Params: &v1alpha1.StrategyParameters{
+							FailedPods: &v1alpha1.FailedPods{
+								MinPodLifetimeSeconds:   utilpointer.Uint(3600),
+								ExcludeOwnerKinds:       []string{"Job"},
+								Reasons:                 []string{"NodeAffinity"},
+								IncludingInitContainers: true,
+							},
+						},
+					},
+					removepodshavingtoomanyrestarts.PluginName: v1alpha1.DeschedulerStrategy{
+						Enabled: true,
+						Params: &v1alpha1.StrategyParameters{
+							PodsHavingTooManyRestarts: &v1alpha1.PodsHavingTooManyRestarts{
+								PodRestartThreshold:     100,
+								IncludingInitContainers: true,
+							},
+						},
+					},
+					removepodsviolatinginterpodantiaffinity.PluginName: v1alpha1.DeschedulerStrategy{
+						Enabled: true,
+						Params:  &v1alpha1.StrategyParameters{},
+					},
+					removepodsviolatingnodeaffinity.PluginName: v1alpha1.DeschedulerStrategy{
+						Enabled: true,
+						Params: &v1alpha1.StrategyParameters{
+							NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
+						},
+					},
+					removepodsviolatingnodetaints.PluginName: v1alpha1.DeschedulerStrategy{
+						Enabled: true,
+						Params: &v1alpha1.StrategyParameters{
+							ExcludedTaints: []string{"dedicated=special-user", "reserved"},
+						},
+					},
+					removepodsviolatingtopologyspreadconstraint.PluginName: v1alpha1.DeschedulerStrategy{
+						Enabled: true,
+						Params: &v1alpha1.StrategyParameters{
+							IncludeSoftConstraints: true,
+						},
+					},
+				},
+			},
+			result: &api.DeschedulerPolicy{
+				Profiles: []api.Profile{
+					{
+						Name: fmt.Sprintf("strategy-%s-profile", nodeutilization.HighNodeUtilizationPluginName),
+						PluginConfigs: []api.PluginConfig{
+							defaultEvictorPluginConfig,
+							{
+								Name: nodeutilization.HighNodeUtilizationPluginName,
+								Args: &nodeutilization.HighNodeUtilizationArgs{
+									Thresholds: api.ResourceThresholds{
+										"cpu":    api.Percentage(20),
+										"memory": api.Percentage(20),
+										"pods":   api.Percentage(20),
+									},
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Balance: api.PluginSet{
+								Enabled: []string{nodeutilization.HighNodeUtilizationPluginName},
+							},
+							Evict: defaultEvictorPluginSet,
+						},
+					},
+					{
+						Name: fmt.Sprintf("strategy-%s-profile", nodeutilization.LowNodeUtilizationPluginName),
+						PluginConfigs: []api.PluginConfig{
+							defaultEvictorPluginConfig,
+							{
+								Name: nodeutilization.LowNodeUtilizationPluginName,
+								Args: &nodeutilization.LowNodeUtilizationArgs{
+									UseDeviationThresholds: true,
+									NumberOfNodes:          3,
+									Thresholds: api.ResourceThresholds{
+										"cpu":    api.Percentage(20),
+										"memory": api.Percentage(20),
+										"pods":   api.Percentage(20),
+									},
+									TargetThresholds: api.ResourceThresholds{
+										"cpu":    api.Percentage(50),
+										"memory": api.Percentage(50),
+										"pods":   api.Percentage(50),
+									},
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Balance: api.PluginSet{
+								Enabled: []string{nodeutilization.LowNodeUtilizationPluginName},
+							},
+							Evict: defaultEvictorPluginSet,
+						},
+					},
+					{
+						Name: fmt.Sprintf("strategy-%s-profile", removeduplicates.PluginName),
+						PluginConfigs: []api.PluginConfig{
+							defaultEvictorPluginConfig,
+							{
+								Name: removeduplicates.PluginName,
+								Args: &removeduplicates.RemoveDuplicatesArgs{
+									ExcludeOwnerKinds: []string{"ReplicaSet"},
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Balance: api.PluginSet{
+								Enabled: []string{removeduplicates.PluginName},
+							},
+							Evict: defaultEvictorPluginSet,
+						},
+					},
+					{
+						Name: fmt.Sprintf("strategy-%s-profile", removefailedpods.PluginName),
+						PluginConfigs: []api.PluginConfig{
+							defaultEvictorPluginConfig,
+							{
+								Name: removefailedpods.PluginName,
+								Args: &removefailedpods.RemoveFailedPodsArgs{
+									ExcludeOwnerKinds:       []string{"Job"},
+									MinPodLifetimeSeconds:   utilpointer.Uint(3600),
+									Reasons:                 []string{"NodeAffinity"},
+									IncludingInitContainers: true,
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Deschedule: api.PluginSet{
+								Enabled: []string{removefailedpods.PluginName},
+							},
+							Evict: defaultEvictorPluginSet,
+						},
+					},
+					{
+						Name: fmt.Sprintf("strategy-%s-profile", removepodshavingtoomanyrestarts.PluginName),
+						PluginConfigs: []api.PluginConfig{
+							defaultEvictorPluginConfig,
+							{
+								Name: removepodshavingtoomanyrestarts.PluginName,
+								Args: &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs{
+									PodRestartThreshold:     100,
+									IncludingInitContainers: true,
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Deschedule: api.PluginSet{
+								Enabled: []string{removepodshavingtoomanyrestarts.PluginName},
+							},
+							Evict: defaultEvictorPluginSet,
+						},
+					},
+					{
+						Name: fmt.Sprintf("strategy-%s-profile", removepodsviolatinginterpodantiaffinity.PluginName),
+						PluginConfigs: []api.PluginConfig{
+							defaultEvictorPluginConfig,
+							{
+								Name: removepodsviolatinginterpodantiaffinity.PluginName,
+								Args: &removepodsviolatinginterpodantiaffinity.RemovePodsViolatingInterPodAntiAffinityArgs{},
+							},
+						},
+						Plugins: api.Plugins{
+							Deschedule: api.PluginSet{
+								Enabled: []string{removepodsviolatinginterpodantiaffinity.PluginName},
+							},
+							Evict: defaultEvictorPluginSet,
+						},
+					},
+					{
+						Name: fmt.Sprintf("strategy-%s-profile", removepodsviolatingnodeaffinity.PluginName),
+						PluginConfigs: []api.PluginConfig{
+							defaultEvictorPluginConfig,
+							{
+								Name: removepodsviolatingnodeaffinity.PluginName,
+								Args: &removepodsviolatingnodeaffinity.RemovePodsViolatingNodeAffinityArgs{
+									NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Deschedule: api.PluginSet{
+								Enabled: []string{removepodsviolatingnodeaffinity.PluginName},
+							},
+							Evict: defaultEvictorPluginSet,
+						},
+					},
+					{
+						Name: fmt.Sprintf("strategy-%s-profile", removepodsviolatingnodetaints.PluginName),
+						PluginConfigs: []api.PluginConfig{
+							defaultEvictorPluginConfig,
+							{
+								Name: removepodsviolatingnodetaints.PluginName,
+								Args: &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{
+									ExcludedTaints: []string{"dedicated=special-user", "reserved"},
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Deschedule: api.PluginSet{
+								Enabled: []string{removepodsviolatingnodetaints.PluginName},
+							},
+							Evict: defaultEvictorPluginSet,
+						},
+					},
+					{
+						Name: fmt.Sprintf("strategy-%s-profile", removepodsviolatingtopologyspreadconstraint.PluginName),
+						PluginConfigs: []api.PluginConfig{
+							defaultEvictorPluginConfig,
+							{
+								Name: removepodsviolatingtopologyspreadconstraint.PluginName,
+								Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
+									IncludeSoftConstraints: true,
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Balance: api.PluginSet{
+								Enabled: []string{removepodsviolatingtopologyspreadconstraint.PluginName},
+							},
+							Evict: defaultEvictorPluginSet,
+						},
+					},
+				},
+			},
+		},
+		{
 			description: "invalid strategy name",
 			policy: &v1alpha1.DeschedulerPolicy{Strategies: v1alpha1.StrategyList{
 				"InvalidName": v1alpha1.DeschedulerStrategy{
