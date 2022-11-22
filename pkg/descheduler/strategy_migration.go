@@ -19,11 +19,9 @@ package descheduler
 import (
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
@@ -269,87 +267,4 @@ var pluginToExtensionPoint = map[string]extensionPoint{
 	removepodsviolatingtopologyspreadconstraint.PluginName: balanceEP,
 	nodeutilization.HighNodeUtilizationPluginName:          balanceEP,
 	nodeutilization.LowNodeUtilizationPluginName:           balanceEP,
-}
-
-var pluginsMap = map[string]func(args runtime.Object, handle *handleImpl) framework.Plugin{
-	removepodsviolatingnodetaints.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
-		pg, err := removepodsviolatingnodetaints.New(args, handle)
-		if err != nil {
-			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatingnodetaints.PluginName)
-			return nil
-		}
-		return pg
-	},
-	removefailedpods.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
-		pg, err := removefailedpods.New(args, handle)
-		if err != nil {
-			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removefailedpods.PluginName)
-			return nil
-		}
-		return pg
-	},
-	removepodsviolatingnodeaffinity.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
-		pg, err := removepodsviolatingnodeaffinity.New(args, handle)
-		if err != nil {
-			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatingnodeaffinity.PluginName)
-			return nil
-		}
-		return pg
-	},
-	removepodsviolatinginterpodantiaffinity.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
-		pg, err := removepodsviolatinginterpodantiaffinity.New(args, handle)
-		if err != nil {
-			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatinginterpodantiaffinity.PluginName)
-			return nil
-		}
-		return pg
-	},
-	removepodshavingtoomanyrestarts.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
-		pg, err := removepodshavingtoomanyrestarts.New(args, handle)
-		if err != nil {
-			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodshavingtoomanyrestarts.PluginName)
-			return nil
-		}
-		return pg
-	},
-	podlifetime.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
-		pg, err := podlifetime.New(args, handle)
-		if err != nil {
-			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", podlifetime.PluginName)
-			return nil
-		}
-		return pg
-	},
-	removeduplicates.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
-		pg, err := removeduplicates.New(args, handle)
-		if err != nil {
-			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removeduplicates.PluginName)
-			return nil
-		}
-		return pg
-	},
-	removepodsviolatingtopologyspreadconstraint.PluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
-		pg, err := removepodsviolatingtopologyspreadconstraint.New(args, handle)
-		if err != nil {
-			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", removepodsviolatingtopologyspreadconstraint.PluginName)
-			return nil
-		}
-		return pg
-	},
-	nodeutilization.HighNodeUtilizationPluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
-		pg, err := nodeutilization.NewHighNodeUtilization(args, handle)
-		if err != nil {
-			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", nodeutilization.HighNodeUtilizationPluginName)
-			return nil
-		}
-		return pg
-	},
-	nodeutilization.LowNodeUtilizationPluginName: func(args runtime.Object, handle *handleImpl) framework.Plugin {
-		pg, err := nodeutilization.NewLowNodeUtilization(args, handle)
-		if err != nil {
-			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", nodeutilization.LowNodeUtilizationPluginName)
-			return nil
-		}
-		return pg
-	},
 }

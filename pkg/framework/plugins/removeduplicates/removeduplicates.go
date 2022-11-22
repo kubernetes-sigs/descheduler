@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 	"sigs.k8s.io/descheduler/pkg/utils"
 
 	v1 "k8s.io/api/core/v1"
@@ -297,4 +298,16 @@ func getNodeAffinityNodeSelector(pod *v1.Pod) *v1.NodeSelector {
 		return nil
 	}
 	return pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+}
+
+func init() {
+	if _, ok := pluginbuilder.PluginRegistry[PluginName]; ok {
+		klog.V(10).InfoS("Plugin already registered", "plugin", PluginName)
+	} else {
+		exampleArg := &RemoveDuplicatesArgs{}
+		pluginbuilder.PluginRegistry[PluginName] = pluginbuilder.PluginBuilderAndArgsInstance{
+			PluginBuilder:     New,
+			PluginArgInstance: exampleArg,
+		}
+	}
 }

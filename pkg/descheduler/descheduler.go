@@ -45,6 +45,7 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -357,11 +358,15 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 					klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", plugin)
 					continue
 				}
-				pgFnc, ok := pluginsMap[plugin]
+				registryPlugin, ok := pluginbuilder.PluginRegistry[plugin]
+				pgFnc := registryPlugin.PluginBuilder
 				if !ok {
 					klog.ErrorS(fmt.Errorf("unable to find plugin in the pluginsMap"), "skipping plugin", "plugin", plugin)
 				}
-				pg := pgFnc(pc.Args, handle)
+				pg, err := pgFnc(pc.Args, handle)
+				if err != nil {
+					klog.ErrorS(err, "unable to initialize a plugin", "pluginName", plugin)
+				}
 				if pg != nil {
 					switch v := pg.(type) {
 					case framework.DeschedulePlugin:

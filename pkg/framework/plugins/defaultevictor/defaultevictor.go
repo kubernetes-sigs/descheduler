@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/errors"
@@ -26,6 +27,7 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -129,9 +131,13 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 			return nil
 		})
 	}
-	if defaultEvictorArgs.LabelSelector != nil && !defaultEvictorArgs.LabelSelector.Empty() {
+	selector, err := metav1.LabelSelectorAsSelector(defaultEvictorArgs.LabelSelector)
+	if err != nil {
+		return nil, fmt.Errorf("could not get selector from label selector")
+	}
+	if defaultEvictorArgs.LabelSelector != nil && !selector.Empty() {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
-			if !defaultEvictorArgs.LabelSelector.Matches(labels.Set(pod.Labels)) {
+			if !selector.Matches(labels.Set(pod.Labels)) {
 				return fmt.Errorf("pod labels do not match the labelSelector filter in the policy parameter")
 			}
 			return nil
@@ -199,4 +205,16 @@ func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
 	}
 
 	return true
+}
+
+func init() {
+	if _, ok := pluginbuilder.PluginRegistry[PluginName]; ok {
+		klog.V(10).InfoS("Plugin already registered", "plugin", PluginName)
+	} else {
+		exampleArg := &DefaultEvictorArgs{}
+		pluginbuilder.PluginRegistry[PluginName] = pluginbuilder.PluginBuilderAndArgsInstance{
+			PluginBuilder:     New,
+			PluginArgInstance: exampleArg,
+		}
+	}
 }

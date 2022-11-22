@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -64,19 +65,6 @@ func V1alpha1ToInternal(
 	client clientset.Interface,
 	deschedulerPolicy *v1alpha1.DeschedulerPolicy,
 ) (*api.DeschedulerPolicy, error) {
-	validStrategyNames := map[v1alpha1.StrategyName]interface{}{
-		"RemoveDuplicates":                            nil,
-		"LowNodeUtilization":                          nil,
-		"HighNodeUtilization":                         nil,
-		"RemovePodsViolatingInterPodAntiAffinity":     nil,
-		"RemovePodsViolatingNodeAffinity":             nil,
-		"RemovePodsViolatingNodeTaints":               nil,
-		"RemovePodsHavingTooManyRestarts":             nil,
-		"PodLifeTime":                                 nil,
-		"RemovePodsViolatingTopologySpreadConstraint": nil,
-		"RemoveFailedPods":                            nil,
-	}
-
 	var evictLocalStoragePods bool
 	if deschedulerPolicy.EvictLocalStoragePods != nil {
 		evictLocalStoragePods = *deschedulerPolicy.EvictLocalStoragePods
@@ -107,7 +95,7 @@ func V1alpha1ToInternal(
 
 	// Build profiles
 	for name, strategy := range deschedulerPolicy.Strategies {
-		if _, ok := validStrategyNames[name]; ok {
+		if _, ok := pluginbuilder.PluginRegistry[string(name)]; ok {
 			if strategy.Enabled {
 				params := strategy.Params
 				if params == nil {

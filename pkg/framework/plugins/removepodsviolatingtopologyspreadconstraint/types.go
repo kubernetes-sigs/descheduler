@@ -26,9 +26,9 @@ import (
 
 // RemovePodsViolatingTopologySpreadConstraintArgs holds arguments used to configure RemovePodsViolatingTopologySpreadConstraint plugin.
 type RemovePodsViolatingTopologySpreadConstraintArgs struct {
-	metav1.TypeMeta
+	metav1.TypeMeta `json:",inline"`
 
-	Namespaces             *api.Namespaces
-	LabelSelector          *metav1.LabelSelector
-	IncludeSoftConstraints bool
+	Namespaces             *api.Namespaces       `json:"namespaces"`
+	LabelSelector          *metav1.LabelSelector `json:"labelSelector"`
+	IncludeSoftConstraints bool                  `json:"includeSoftConstraints"`
 }
