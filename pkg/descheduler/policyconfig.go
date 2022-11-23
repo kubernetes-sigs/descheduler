@@ -164,11 +164,10 @@ func V1alpha1ToInternal(
 				}
 
 				// Plugins have either of the two extension points
-				switch pluginToExtensionPoint[pluginConfig.Name] {
-				case descheduleEP:
-					profile.Plugins.Deschedule.Enabled = []string{pluginConfig.Name}
-				case balanceEP:
+				if pluginbuilder.PluginRegistry[string(name)].Balance {
 					profile.Plugins.Balance.Enabled = []string{pluginConfig.Name}
+				} else {
+					profile.Plugins.Deschedule.Enabled = []string{pluginConfig.Name}
 				}
 				profiles = append(profiles, profile)
 			}

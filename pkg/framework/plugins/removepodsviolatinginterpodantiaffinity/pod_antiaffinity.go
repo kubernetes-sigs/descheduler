@@ -25,7 +25,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 	"sigs.k8s.io/descheduler/pkg/utils"
 
 	v1 "k8s.io/api/core/v1"
@@ -139,16 +138,4 @@ func getPodAntiAffinityTerms(podAntiAffinity *v1.PodAntiAffinity) (terms []v1.Po
 		}
 	}
 	return terms
-}
-
-func init() {
-	if _, ok := pluginbuilder.PluginRegistry[PluginName]; ok {
-		klog.V(10).InfoS("Plugin already registered", "plugin", PluginName)
-	} else {
-		exampleArg := &RemovePodsViolatingInterPodAntiAffinityArgs{}
-		pluginbuilder.PluginRegistry[PluginName] = pluginbuilder.PluginBuilderAndArgsInstance{
-			PluginBuilder:     New,
-			PluginArgInstance: exampleArg,
-		}
-	}
 }

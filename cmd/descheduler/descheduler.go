@@ -22,11 +22,14 @@ import (
 	"k8s.io/component-base/cli"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 )
 
 func init() {
 	klog.SetOutput(os.Stdout)
 	klog.InitFlags(nil)
+	pluginbuilder.PluginRegistry = pluginbuilder.NewRegistry()
+	pluginbuilder.RegisterDefault(pluginbuilder.PluginRegistry)
 }
 
 func main() {

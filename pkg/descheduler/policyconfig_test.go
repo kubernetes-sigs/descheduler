@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
@@ -38,6 +39,8 @@ import (
 )
 
 func TestV1alpha1ToV1alpha2(t *testing.T) {
+	pluginbuilder.PluginRegistry = pluginbuilder.NewRegistry()
+	pluginbuilder.RegisterDefault(pluginbuilder.PluginRegistry)
 	defaultEvictorPluginConfig := api.PluginConfig{
 		Name: defaultevictor.PluginName,
 		Args: &defaultevictor.DefaultEvictorArgs{

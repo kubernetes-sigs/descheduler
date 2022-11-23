@@ -28,7 +28,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 )
 
 const PluginName = "RemovePodsHavingTooManyRestarts"
@@ -133,16 +132,4 @@ func calcContainerRestartsFromStatuses(statuses []v1.ContainerStatus) int32 {
 		restarts += cs.RestartCount
 	}
 	return restarts
-}
-
-func init() {
-	if _, ok := pluginbuilder.PluginRegistry[PluginName]; ok {
-		klog.V(10).InfoS("Plugin already registered", "plugin", PluginName)
-	} else {
-		exampleArg := &RemovePodsHavingTooManyRestartsArgs{}
-		pluginbuilder.PluginRegistry[PluginName] = pluginbuilder.PluginBuilderAndArgsInstance{
-			PluginBuilder:     New,
-			PluginArgInstance: exampleArg,
-		}
-	}
 }

@@ -30,7 +30,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 )
 
 const PluginName = "RemoveFailedPods"
@@ -165,16 +164,4 @@ func getFailedContainerStatusReasons(containerStatuses []v1.ContainerStatus) []s
 	}
 
 	return reasons
-}
-
-func init() {
-	if _, ok := pluginbuilder.PluginRegistry[PluginName]; ok {
-		klog.V(10).InfoS("Plugin already registered", "plugin", PluginName)
-	} else {
-		exampleArg := &RemoveFailedPodsArgs{}
-		pluginbuilder.PluginRegistry[PluginName] = pluginbuilder.PluginBuilderAndArgsInstance{
-			PluginBuilder:     New,
-			PluginArgInstance: exampleArg,
-		}
-	}
 }

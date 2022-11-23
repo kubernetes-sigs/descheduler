@@ -248,23 +248,3 @@ func v1alpha1ThresholdToInternal(thresholds v1alpha1.ResourceThresholds) api.Res
 	}
 	return internal
 }
-
-type extensionPoint string
-
-const (
-	descheduleEP extensionPoint = "deschedule"
-	balanceEP    extensionPoint = "balance"
-)
-
-var pluginToExtensionPoint = map[string]extensionPoint{
-	removepodsviolatingnodetaints.PluginName:               descheduleEP,
-	removefailedpods.PluginName:                            descheduleEP,
-	removepodsviolatingnodeaffinity.PluginName:             descheduleEP,
-	removepodsviolatinginterpodantiaffinity.PluginName:     descheduleEP,
-	removepodshavingtoomanyrestarts.PluginName:             descheduleEP,
-	podlifetime.PluginName:                                 descheduleEP,
-	removeduplicates.PluginName:                            balanceEP,
-	removepodsviolatingtopologyspreadconstraint.PluginName: balanceEP,
-	nodeutilization.HighNodeUtilizationPluginName:          balanceEP,
-	nodeutilization.LowNodeUtilizationPluginName:           balanceEP,
-}
