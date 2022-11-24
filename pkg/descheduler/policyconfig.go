@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/descheduler/scheme"
+	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -163,10 +164,21 @@ func V1alpha1ToInternal(
 					},
 				}
 
-				// Plugins have either of the two extension points
-				if pluginbuilder.PluginRegistry[string(name)].Balance {
+				// Plugins have either of the two extension points right now
+				// this might change in the future
+				exampleArgs := pluginbuilder.PluginRegistry[string(name)].PluginArgInstance
+				pluginInstance, err := pluginbuilder.PluginRegistry[string(name)].PluginBuilder(exampleArgs, &handleImpl{})
+				if err != nil {
+					klog.ErrorS(fmt.Errorf("could not build plugin"), "plugin build error", "plugin", name)
+					return nil, fmt.Errorf("could not build plugin: %v", name)
+				}
+
+				switch p := pluginInstance.(type) {
+				case framework.BalancePlugin:
+					klog.V(3).Info("converting Balance plugin: %s", p.Name())
 					profile.Plugins.Balance.Enabled = []string{pluginConfig.Name}
-				} else {
+				case framework.DeschedulePlugin:
+					klog.V(3).Info("converting Deschedule plugin: %s", p.Name())
 					profile.Plugins.Deschedule.Enabled = []string{pluginConfig.Name}
 				}
 				profiles = append(profiles, profile)

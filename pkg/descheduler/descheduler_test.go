@@ -23,7 +23,7 @@ import (
 
 func TestTaintsUpdated(t *testing.T) {
 	pluginbuilder.PluginRegistry = pluginbuilder.NewRegistry()
-	pluginbuilder.Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, false, pluginbuilder.PluginRegistry)
+	pluginbuilder.Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, pluginbuilder.PluginRegistry)
 	ctx := context.Background()
 	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
@@ -90,7 +90,7 @@ func TestTaintsUpdated(t *testing.T) {
 
 func TestDuplicate(t *testing.T) {
 	pluginbuilder.PluginRegistry = pluginbuilder.NewRegistry()
-	pluginbuilder.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicatesArgs{}, false, pluginbuilder.PluginRegistry)
+	pluginbuilder.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicatesArgs{}, pluginbuilder.PluginRegistry)
 	ctx := context.Background()
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
