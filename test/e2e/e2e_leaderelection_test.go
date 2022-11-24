@@ -35,12 +35,10 @@ import (
 	utilpointer "k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 )
 
 func TestLeaderElection(t *testing.T) {
-	pluginbuilder.PluginRegistry = pluginbuilder.NewRegistry()
-	pluginbuilder.RegisterDefault(pluginbuilder.PluginRegistry)
+	descheduler.SetupPlugins()
 	ctx := context.Background()
 
 	clientSet, _, _, _, stopCh := initializeClient(t)

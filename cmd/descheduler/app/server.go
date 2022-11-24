@@ -20,6 +20,7 @@ package app
 import (
 	"context"
 	"io"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -111,4 +112,9 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	return descheduler.Run(ctx, rs)
+}
+
+func SetupLogs() {
+	klog.SetOutput(os.Stdout)
+	klog.InitFlags(nil)
 }

@@ -17,16 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/framework"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatinginterpodantiaffinity"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodeaffinity"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
 )
 
 var PluginRegistry Registry
@@ -55,18 +45,4 @@ func Register(name string, builderFunc PluginBuilder, exampleArg runtime.Object,
 			PluginArgInstance: exampleArg,
 		}
 	}
-}
-
-func RegisterDefault(registry Registry) {
-	Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictorArgs{}, registry)
-	Register(nodeutilization.LowNodeUtilizationPluginName, nodeutilization.NewLowNodeUtilization, &nodeutilization.LowNodeUtilizationArgs{}, registry)
-	Register(nodeutilization.HighNodeUtilizationPluginName, nodeutilization.NewHighNodeUtilization, &nodeutilization.HighNodeUtilizationArgs{}, registry)
-	Register(podlifetime.PluginName, podlifetime.New, &podlifetime.PodLifeTimeArgs{}, registry)
-	Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicatesArgs{}, registry)
-	Register(removefailedpods.PluginName, removefailedpods.New, &removefailedpods.RemoveFailedPodsArgs{}, registry)
-	Register(removepodshavingtoomanyrestarts.PluginName, removepodshavingtoomanyrestarts.New, &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs{}, registry)
-	Register(removepodsviolatinginterpodantiaffinity.PluginName, removepodsviolatinginterpodantiaffinity.New, &removepodsviolatinginterpodantiaffinity.RemovePodsViolatingInterPodAntiAffinityArgs{}, registry)
-	Register(removepodsviolatingnodeaffinity.PluginName, removepodsviolatingnodeaffinity.New, &removepodsviolatingnodeaffinity.RemovePodsViolatingNodeAffinityArgs{}, registry)
-	Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, registry)
-	Register(removepodsviolatingtopologyspreadconstraint.PluginName, removepodsviolatingtopologyspreadconstraint.New, &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{}, registry)
 }
