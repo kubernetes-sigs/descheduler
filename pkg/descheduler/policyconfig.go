@@ -53,8 +53,7 @@ func LoadPolicyConfig(policyConfigFile string, client clientset.Interface) (*api
 	}
 
 	// Build profiles
-	// TODO(jchaloup): replace this with v1alpha1 -> v1alpha2 conversion
-	internalPolicy, err := V1alpha1ToInternal(client, versionedPolicy)
+	internalPolicy, err := V1alpha1ToInternal(client, versionedPolicy, pluginbuilder.PluginRegistry)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting versioned policy to internal policy version: %v", err)
 	}
@@ -65,6 +64,7 @@ func LoadPolicyConfig(policyConfigFile string, client clientset.Interface) (*api
 func V1alpha1ToInternal(
 	client clientset.Interface,
 	deschedulerPolicy *v1alpha1.DeschedulerPolicy,
+	registry map[string]pluginbuilder.PluginBuilderAndArgsInstance,
 ) (*api.DeschedulerPolicy, error) {
 	var evictLocalStoragePods bool
 	if deschedulerPolicy.EvictLocalStoragePods != nil {
@@ -164,10 +164,8 @@ func V1alpha1ToInternal(
 					},
 				}
 
-				// Plugins have either of the two extension points right now
-				// this might change in the future
-				exampleArgs := pluginbuilder.PluginRegistry[string(name)].PluginArgInstance
-				pluginInstance, err := pluginbuilder.PluginRegistry[string(name)].PluginBuilder(exampleArgs, &handleImpl{})
+				pluginArgs := pluginbuilder.PluginRegistry[string(name)].PluginArgInstance
+				pluginInstance, err := registry[string(name)].PluginBuilder(pluginArgs, &handleImpl{})
 				if err != nil {
 					klog.ErrorS(fmt.Errorf("could not build plugin"), "plugin build error", "plugin", name)
 					return nil, fmt.Errorf("could not build plugin: %v", name)
