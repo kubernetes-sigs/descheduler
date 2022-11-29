@@ -173,13 +173,26 @@ func V1alpha1ToInternal(
 					return nil, fmt.Errorf("could not build plugin: %v", name)
 				}
 
+				// pluginInstance can be of any of each type, or both
+				// TODO: make this a function if we get more interfaces
+				// and combinations
 				switch p := pluginInstance.(type) {
 				case framework.BalancePlugin:
 					klog.V(3).Info("converting Balance plugin: %s", p.Name())
 					profile.Plugins.Balance.Enabled = []string{pluginConfig.Name}
+					switch p := pluginInstance.(type) {
+					case framework.DeschedulePlugin:
+						klog.V(3).Info("converting Deschedule plugin: %s", p.Name())
+						profile.Plugins.Deschedule.Enabled = []string{pluginConfig.Name}
+					}
 				case framework.DeschedulePlugin:
 					klog.V(3).Info("converting Deschedule plugin: %s", p.Name())
 					profile.Plugins.Deschedule.Enabled = []string{pluginConfig.Name}
+					switch p := pluginInstance.(type) {
+					case framework.BalancePlugin:
+						klog.V(3).Info("converting Balance plugin: %s", p.Name())
+						profile.Plugins.Balance.Enabled = []string{pluginConfig.Name}
+					}
 				}
 				profiles = append(profiles, profile)
 			}
