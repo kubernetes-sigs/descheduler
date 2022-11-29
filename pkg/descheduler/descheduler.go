@@ -59,7 +59,7 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	rs.Client = rsclient
 	rs.EventClient = eventClient
 
-	deschedulerPolicy, err := LoadPolicyConfig(rs.PolicyConfigFile, rs.Client)
+	deschedulerPolicy, err := LoadPolicyConfig(rs.PolicyConfigFile, rs.Client, pluginbuilder.PluginRegistry)
 	if err != nil {
 		return err
 	}

@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
-func LoadPolicyConfig(policyConfigFile string, client clientset.Interface) (*api.DeschedulerPolicy, error) {
+func LoadPolicyConfig(policyConfigFile string, client clientset.Interface, registry map[string]pluginbuilder.PluginBuilderAndArgsInstance) (*api.DeschedulerPolicy, error) {
 	if policyConfigFile == "" {
 		klog.V(1).InfoS("Policy config file not specified")
 		return nil, nil
@@ -53,7 +53,7 @@ func LoadPolicyConfig(policyConfigFile string, client clientset.Interface) (*api
 	}
 
 	// Build profiles
-	internalPolicy, err := V1alpha1ToInternal(client, versionedPolicy, pluginbuilder.PluginRegistry)
+	internalPolicy, err := V1alpha1ToInternal(client, versionedPolicy, registry)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting versioned policy to internal policy version: %v", err)
 	}
