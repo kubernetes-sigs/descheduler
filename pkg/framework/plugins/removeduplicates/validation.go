@@ -15,9 +15,12 @@ package removeduplicates
 
 import (
 	"fmt"
+
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func ValidateRemoveDuplicatesArgs(args *RemoveDuplicatesArgs) error {
+func ValidateRemoveDuplicatesArgs(obj runtime.Object) error {
+	args := obj.(*RemoveDuplicatesArgs)
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
 		return fmt.Errorf("only one of Include/Exclude namespaces can be set")

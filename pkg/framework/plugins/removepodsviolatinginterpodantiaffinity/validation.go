@@ -17,10 +17,12 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // ValidateRemovePodsViolatingInterPodAntiAffinityArgs validates ValidateRemovePodsViolatingInterPodAntiAffinity arguments
-func ValidateRemovePodsViolatingInterPodAntiAffinityArgs(args *RemovePodsViolatingInterPodAntiAffinityArgs) error {
+func ValidateRemovePodsViolatingInterPodAntiAffinityArgs(obj runtime.Object) error {
+	args := obj.(*RemovePodsViolatingInterPodAntiAffinityArgs)
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
 		return fmt.Errorf("only one of Include/Exclude namespaces can be set")

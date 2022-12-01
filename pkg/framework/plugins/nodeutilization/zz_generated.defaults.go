@@ -29,15 +29,5 @@ import (
 // Public to allow building arbitrary schemes.
 // All generated defaulters are covering - they call all nested defaulters.
 func RegisterDefaults(scheme *runtime.Scheme) error {
-	scheme.AddTypeDefaultingFunc(&HighNodeUtilizationArgs{}, func(obj interface{}) { SetObjectDefaults_HighNodeUtilizationArgs(obj.(*HighNodeUtilizationArgs)) })
-	scheme.AddTypeDefaultingFunc(&LowNodeUtilizationArgs{}, func(obj interface{}) { SetObjectDefaults_LowNodeUtilizationArgs(obj.(*LowNodeUtilizationArgs)) })
 	return nil
-}
-
-func SetObjectDefaults_HighNodeUtilizationArgs(in *HighNodeUtilizationArgs) {
-	SetDefaults_HighNodeUtilizationArgs(in)
-}
-
-func SetObjectDefaults_LowNodeUtilizationArgs(in *LowNodeUtilizationArgs) {
-	SetDefaults_LowNodeUtilizationArgs(in)
 }

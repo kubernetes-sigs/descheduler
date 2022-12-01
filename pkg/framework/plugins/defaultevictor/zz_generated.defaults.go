@@ -29,10 +29,5 @@ import (
 // Public to allow building arbitrary schemes.
 // All generated defaulters are covering - they call all nested defaulters.
 func RegisterDefaults(scheme *runtime.Scheme) error {
-	scheme.AddTypeDefaultingFunc(&DefaultEvictorArgs{}, func(obj interface{}) { SetObjectDefaults_DefaultEvictorArgs(obj.(*DefaultEvictorArgs)) })
 	return nil
-}
-
-func SetObjectDefaults_DefaultEvictorArgs(in *DefaultEvictorArgs) {
-	SetDefaults_DefaultEvictorArgs(in)
 }

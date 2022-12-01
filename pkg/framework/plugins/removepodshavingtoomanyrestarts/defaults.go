@@ -23,17 +23,18 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 
 // SetDefaults_RemovePodsHavingTooManyRestartsArgs
 // TODO: the final default values would be discussed in community
-func SetDefaults_RemovePodsHavingTooManyRestartsArgs(obj *RemovePodsHavingTooManyRestartsArgs) {
-	if obj.Namespaces == nil {
-		obj.Namespaces = nil
+func SetDefaults_RemovePodsHavingTooManyRestartsArgs(obj runtime.Object) {
+	args := obj.(*RemovePodsHavingTooManyRestartsArgs)
+	if args.Namespaces == nil {
+		args.Namespaces = nil
 	}
-	if obj.LabelSelector == nil {
-		obj.LabelSelector = nil
+	if args.LabelSelector == nil {
+		args.LabelSelector = nil
 	}
-	if obj.PodRestartThreshold == 0 {
-		obj.PodRestartThreshold = 0
+	if args.PodRestartThreshold == 0 {
+		args.PodRestartThreshold = 0
 	}
-	if !obj.IncludingInitContainers {
-		obj.IncludingInitContainers = false
+	if !args.IncludingInitContainers {
+		args.IncludingInitContainers = false
 	}
 }

@@ -29,12 +29,5 @@ import (
 // Public to allow building arbitrary schemes.
 // All generated defaulters are covering - they call all nested defaulters.
 func RegisterDefaults(scheme *runtime.Scheme) error {
-	scheme.AddTypeDefaultingFunc(&RemovePodsViolatingTopologySpreadConstraintArgs{}, func(obj interface{}) {
-		SetObjectDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(obj.(*RemovePodsViolatingTopologySpreadConstraintArgs))
-	})
 	return nil
-}
-
-func SetObjectDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(in *RemovePodsViolatingTopologySpreadConstraintArgs) {
-	SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(in)
 }

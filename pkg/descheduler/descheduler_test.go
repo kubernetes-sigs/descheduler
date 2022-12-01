@@ -15,15 +15,15 @@ import (
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
 	"sigs.k8s.io/descheduler/test"
 )
 
 func TestTaintsUpdated(t *testing.T) {
-	pluginbuilder.PluginRegistry = pluginbuilder.NewRegistry()
-	pluginbuilder.Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, pluginbuilder.PluginRegistry)
+	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
+	pluginregistry.Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs, removepodsviolatingnodetaints.SetDefaults_RemovePodsViolatingNodeTaintsArgs, pluginregistry.PluginRegistry)
 	ctx := context.Background()
 	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
@@ -74,7 +74,7 @@ func TestTaintsUpdated(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	internalDeschedulerPolicy, err := V1alpha1ToInternal(client, dp, pluginbuilder.PluginRegistry)
+	internalDeschedulerPolicy, err := V1alpha1ToInternal(client, dp, pluginregistry.PluginRegistry)
 	if err != nil {
 		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
 	}
@@ -89,8 +89,8 @@ func TestTaintsUpdated(t *testing.T) {
 }
 
 func TestDuplicate(t *testing.T) {
-	pluginbuilder.PluginRegistry = pluginbuilder.NewRegistry()
-	pluginbuilder.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicatesArgs{}, pluginbuilder.PluginRegistry)
+	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
+	pluginregistry.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicatesArgs{}, removeduplicates.ValidateRemoveDuplicatesArgs, removeduplicates.SetDefaults_RemoveDuplicatesArgs, pluginregistry.PluginRegistry)
 	ctx := context.Background()
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
@@ -136,7 +136,7 @@ func TestDuplicate(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	internalDeschedulerPolicy, err := V1alpha1ToInternal(client, dp, pluginbuilder.PluginRegistry)
+	internalDeschedulerPolicy, err := V1alpha1ToInternal(client, dp, pluginregistry.PluginRegistry)
 	if err != nil {
 		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
 	}

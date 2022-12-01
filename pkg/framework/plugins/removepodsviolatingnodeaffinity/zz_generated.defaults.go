@@ -29,12 +29,5 @@ import (
 // Public to allow building arbitrary schemes.
 // All generated defaulters are covering - they call all nested defaulters.
 func RegisterDefaults(scheme *runtime.Scheme) error {
-	scheme.AddTypeDefaultingFunc(&RemovePodsViolatingNodeAffinityArgs{}, func(obj interface{}) {
-		SetObjectDefaults_RemovePodsViolatingNodeAffinityArgs(obj.(*RemovePodsViolatingNodeAffinityArgs))
-	})
 	return nil
-}
-
-func SetObjectDefaults_RemovePodsViolatingNodeAffinityArgs(in *RemovePodsViolatingNodeAffinityArgs) {
-	SetDefaults_RemovePodsViolatingNodeAffinityArgs(in)
 }
