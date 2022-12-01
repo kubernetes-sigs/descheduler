@@ -28,11 +28,13 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/descheduler/scheme"
+	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
-func LoadPolicyConfig(policyConfigFile string, client clientset.Interface) (*api.DeschedulerPolicy, error) {
+func LoadPolicyConfig(policyConfigFile string, client clientset.Interface, registry pluginbuilder.Registry) (*api.DeschedulerPolicy, error) {
 	if policyConfigFile == "" {
 		klog.V(1).InfoS("Policy config file not specified")
 		return nil, nil
@@ -51,8 +53,7 @@ func LoadPolicyConfig(policyConfigFile string, client clientset.Interface) (*api
 	}
 
 	// Build profiles
-	// TODO(jchaloup): replace this with v1alpha1 -> v1alpha2 conversion
-	internalPolicy, err := V1alpha1ToInternal(client, versionedPolicy)
+	internalPolicy, err := V1alpha1ToInternal(client, versionedPolicy, registry)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting versioned policy to internal policy version: %v", err)
 	}
@@ -63,20 +64,8 @@ func LoadPolicyConfig(policyConfigFile string, client clientset.Interface) (*api
 func V1alpha1ToInternal(
 	client clientset.Interface,
 	deschedulerPolicy *v1alpha1.DeschedulerPolicy,
+	registry pluginbuilder.Registry,
 ) (*api.DeschedulerPolicy, error) {
-	validStrategyNames := map[v1alpha1.StrategyName]interface{}{
-		"RemoveDuplicates":                            nil,
-		"LowNodeUtilization":                          nil,
-		"HighNodeUtilization":                         nil,
-		"RemovePodsViolatingInterPodAntiAffinity":     nil,
-		"RemovePodsViolatingNodeAffinity":             nil,
-		"RemovePodsViolatingNodeTaints":               nil,
-		"RemovePodsHavingTooManyRestarts":             nil,
-		"PodLifeTime":                                 nil,
-		"RemovePodsViolatingTopologySpreadConstraint": nil,
-		"RemoveFailedPods":                            nil,
-	}
-
 	var evictLocalStoragePods bool
 	if deschedulerPolicy.EvictLocalStoragePods != nil {
 		evictLocalStoragePods = *deschedulerPolicy.EvictLocalStoragePods
@@ -107,7 +96,7 @@ func V1alpha1ToInternal(
 
 	// Build profiles
 	for name, strategy := range deschedulerPolicy.Strategies {
-		if _, ok := validStrategyNames[name]; ok {
+		if _, ok := pluginbuilder.PluginRegistry[string(name)]; ok {
 			if strategy.Enabled {
 				params := strategy.Params
 				if params == nil {
@@ -175,13 +164,16 @@ func V1alpha1ToInternal(
 					},
 				}
 
-				// Plugins have either of the two extension points
-				switch pluginToExtensionPoint[pluginConfig.Name] {
-				case descheduleEP:
-					profile.Plugins.Deschedule.Enabled = []string{pluginConfig.Name}
-				case balanceEP:
-					profile.Plugins.Balance.Enabled = []string{pluginConfig.Name}
+				pluginArgs := registry[string(name)].PluginArgInstance
+				pluginInstance, err := registry[string(name)].PluginBuilder(pluginArgs, &handleImpl{})
+				if err != nil {
+					klog.ErrorS(fmt.Errorf("could not build plugin"), "plugin build error", "plugin", name)
+					return nil, fmt.Errorf("could not build plugin: %v", name)
 				}
+
+				// pluginInstance can be of any of each type, or both
+				profilePlugins := profile.Plugins
+				profile.Plugins = enableProfilePluginsByType(profilePlugins, pluginInstance, pluginConfig)
 				profiles = append(profiles, profile)
 			}
 		} else {
@@ -196,4 +188,28 @@ func V1alpha1ToInternal(
 		MaxNoOfPodsToEvictPerNode:      deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
 		MaxNoOfPodsToEvictPerNamespace: deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
 	}, nil
+}
+
+func enableProfilePluginsByType(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
+	profilePlugins = checkBalance(profilePlugins, pluginInstance, pluginConfig)
+	profilePlugins = checkDeschedule(profilePlugins, pluginInstance, pluginConfig)
+	return profilePlugins
+}
+
+func checkBalance(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
+	switch p := pluginInstance.(type) {
+	case framework.BalancePlugin:
+		klog.V(3).Info("converting Balance plugin: %s", p.Name())
+		profilePlugins.Balance.Enabled = []string{pluginConfig.Name}
+	}
+	return profilePlugins
+}
+
+func checkDeschedule(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
+	switch p := pluginInstance.(type) {
+	case framework.DeschedulePlugin:
+		klog.V(3).Info("converting Deschedule plugin: %s", p.Name())
+		profilePlugins.Deschedule.Enabled = []string{pluginConfig.Name}
+	}
+	return profilePlugins
 }

@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
@@ -38,6 +39,7 @@ import (
 )
 
 func TestV1alpha1ToV1alpha2(t *testing.T) {
+	SetupPlugins()
 	defaultEvictorPluginConfig := api.PluginConfig{
 		Name: defaultevictor.PluginName,
 		Args: &defaultevictor.DefaultEvictorArgs{
@@ -680,7 +682,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
 			client := fakeclientset.NewSimpleClientset()
-			result, err := V1alpha1ToInternal(client, tc.policy)
+			result, err := V1alpha1ToInternal(client, tc.policy, pluginbuilder.PluginRegistry)
 			if err != nil {
 				if err.Error() != tc.err.Error() {
 					t.Errorf("unexpected error: %s", err.Error())

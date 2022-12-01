@@ -22,28 +22,29 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 type LowNodeUtilizationArgs struct {
-	metav1.TypeMeta
+	metav1.TypeMeta `json:",inline"`
 
-	UseDeviationThresholds bool
-	Thresholds             api.ResourceThresholds
-	TargetThresholds       api.ResourceThresholds
-	NumberOfNodes          int
+	UseDeviationThresholds bool                   `json:"useDeviationThresholds"`
+	Thresholds             api.ResourceThresholds `json:"thresholds"`
+	TargetThresholds       api.ResourceThresholds `json:"targetThresholds"`
+	NumberOfNodes          int                    `json:"numberOfNodes"`
+
 	// Naming this one differently since namespaces are still
 	// considered while considering resoures used by pods
 	// but then filtered out before eviction
-	EvictableNamespaces *api.Namespaces
+	EvictableNamespaces *api.Namespaces `json:"evictableNamespaces"`
 }
 
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 type HighNodeUtilizationArgs struct {
-	metav1.TypeMeta
+	metav1.TypeMeta `json:",inline"`
 
-	Thresholds    api.ResourceThresholds
-	NumberOfNodes int
+	Thresholds    api.ResourceThresholds `json:"thresholds"`
+	NumberOfNodes int                    `json:"numberOfNodes"`
 	// Naming this one differently since namespaces are still
 	// considered while considering resoures used by pods
 	// but then filtered out before eviction
-	EvictableNamespaces *api.Namespaces
+	EvictableNamespaces *api.Namespaces `json:"evictableNamespaces"`
 }

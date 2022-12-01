@@ -22,6 +22,7 @@ limitations under the License.
 package defaultevictor
 
 import (
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	api "sigs.k8s.io/descheduler/pkg/api"
 )
@@ -31,7 +32,9 @@ func (in *DefaultEvictorArgs) DeepCopyInto(out *DefaultEvictorArgs) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
 	if in.LabelSelector != nil {
-		out.LabelSelector = in.LabelSelector.DeepCopySelector()
+		in, out := &in.LabelSelector, &out.LabelSelector
+		*out = new(v1.LabelSelector)
+		(*in).DeepCopyInto(*out)
 	}
 	if in.PriorityThreshold != nil {
 		in, out := &in.PriorityThreshold, &out.PriorityThreshold

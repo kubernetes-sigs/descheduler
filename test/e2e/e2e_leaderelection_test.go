@@ -38,6 +38,7 @@ import (
 )
 
 func TestLeaderElection(t *testing.T) {
+	descheduler.SetupPlugins()
 	ctx := context.Background()
 
 	clientSet, _, _, _, stopCh := initializeClient(t)
