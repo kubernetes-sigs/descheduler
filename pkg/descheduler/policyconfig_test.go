@@ -908,3 +908,94 @@ func TestValidateDeschedulerConfiguration(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeDefaults(t *testing.T) {
+	client := fakeclientset.NewSimpleClientset()
+	SetupPlugins()
+	type testCase struct {
+		description string
+		policy      []byte
+		err         error
+		result      *api.DeschedulerPolicy
+	}
+	testCases := []testCase{
+		{
+			description: "use empty RemoveFailedPods, check MinPodLifetimeSeconds default",
+			policy: []byte(`apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+      args:
+        evictSystemCriticalPods: true
+        evictFailedBarePods: true
+        evictLocalStoragePods: true
+        nodeFit: true
+    - name: "RemoveFailedPods"
+    plugins:
+      filter:
+        enabled:
+          - "DefaultEvictor"
+      evict:
+        enabled:
+          - "DefaultEvictor"
+      deschedule:
+        enabled:
+          - "RemovePodsHavingTooManyRestarts"
+`),
+			result: &api.DeschedulerPolicy{
+				Profiles: []api.Profile{
+					{
+						Name: "ProfileName",
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: defaultevictor.PluginName,
+								Args: &defaultevictor.DefaultEvictorArgs{
+									EvictSystemCriticalPods: true,
+									EvictFailedBarePods:     true,
+									EvictLocalStoragePods:   true,
+									NodeFit:                 true,
+								},
+							},
+							{
+								Name: removefailedpods.PluginName,
+								Args: &removefailedpods.RemoveFailedPodsArgs{
+									MinPodLifetimeSeconds: utilpointer.Uint(3600),
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Evict: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							Deschedule: api.PluginSet{
+								Enabled: []string{removepodshavingtoomanyrestarts.PluginName},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			result, err := decode("filename", tc.policy, client, pluginregistry.PluginRegistry)
+			if err != nil {
+				if tc.err == nil {
+					t.Errorf("unexpected error: %s.", err.Error())
+				} else {
+					t.Errorf("unexpected error: %s. Was expecting %s", err.Error(), tc.err.Error())
+				}
+			}
+			diff := cmp.Diff(tc.result, result)
+			if diff != "" && err == nil {
+				t.Errorf("test '%s' failed. Results are not deep equal. mismatch (-want +got):\n%s", tc.description, diff)
+			}
+		})
+	}
+}

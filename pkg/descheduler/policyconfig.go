@@ -96,13 +96,13 @@ func setDefaults(in api.DeschedulerPolicy, registry pluginregistry.Registry) *ap
 		// If we need to set defaults coming from loadtime in each profile we do it here
 		in.Profiles[idx] = setDefaultEvictor(profile)
 		for _, pluginConfig := range profile.PluginConfigs {
-			setDefaultsPluginConfig(pluginConfig, registry)
+			setDefaultsPluginConfig(&pluginConfig, registry)
 		}
 	}
 	return &in
 }
 
-func setDefaultsPluginConfig(pluginConfig api.PluginConfig, registry pluginregistry.Registry) {
+func setDefaultsPluginConfig(pluginConfig *api.PluginConfig, registry pluginregistry.Registry) {
 	if _, ok := registry[pluginConfig.Name]; ok {
 		pluginUtilities := registry[pluginConfig.Name]
 		pluginUtilities.PluginArgDefaulter(pluginConfig.Args)

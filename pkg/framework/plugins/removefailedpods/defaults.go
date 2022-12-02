@@ -15,6 +15,7 @@ package removefailedpods
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
+	utilpointer "k8s.io/utils/pointer"
 )
 
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
@@ -35,7 +36,7 @@ func SetDefaults_RemoveFailedPodsArgs(obj runtime.Object) {
 		args.ExcludeOwnerKinds = nil
 	}
 	if args.MinPodLifetimeSeconds == nil {
-		args.MinPodLifetimeSeconds = nil
+		args.MinPodLifetimeSeconds = utilpointer.Uint(3600)
 	}
 	if args.Reasons == nil {
 		args.Reasons = nil
