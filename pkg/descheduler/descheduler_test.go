@@ -74,7 +74,7 @@ func TestTaintsUpdated(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	internalDeschedulerPolicy, err := V1alpha1ToInternal(client, dp, pluginregistry.PluginRegistry)
+	internalDeschedulerPolicy, err := v1alpha1.V1alpha1ToInternal(client, dp, pluginregistry.PluginRegistry)
 	if err != nil {
 		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestDuplicate(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	internalDeschedulerPolicy, err := V1alpha1ToInternal(client, dp, pluginregistry.PluginRegistry)
+	internalDeschedulerPolicy, err := v1alpha1.V1alpha1ToInternal(client, dp, pluginregistry.PluginRegistry)
 	if err != nil {
 		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
 	}

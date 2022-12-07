@@ -417,17 +417,17 @@ func includeProfilePluginsByType(enabledDeschedulePlugins []framework.Deschedule
 }
 
 func includeDeschedule(enabledDeschedulePlugins []framework.DeschedulePlugin, pg framework.Plugin) []framework.DeschedulePlugin {
-	switch p := pg.(type) {
-	case framework.DeschedulePlugin:
-		enabledDeschedulePlugins = append(enabledDeschedulePlugins, p)
+	_, ok := pg.(framework.DeschedulePlugin)
+	if ok {
+		enabledDeschedulePlugins = append(enabledDeschedulePlugins, pg.(framework.DeschedulePlugin))
 	}
 	return enabledDeschedulePlugins
 }
 
 func includeBalance(enabledBalancePlugins []framework.BalancePlugin, pg framework.Plugin) []framework.BalancePlugin {
-	switch p := pg.(type) {
-	case framework.BalancePlugin:
-		enabledBalancePlugins = append(enabledBalancePlugins, p)
+	_, ok := pg.(framework.BalancePlugin)
+	if ok {
+		enabledBalancePlugins = append(enabledBalancePlugins, pg.(framework.BalancePlugin))
 	}
 	return enabledBalancePlugins
 }

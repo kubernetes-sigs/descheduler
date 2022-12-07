@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package descheduler
+package v1alpha1
 
 import (
 	"fmt"
@@ -23,7 +23,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	utilpointer "k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
@@ -39,20 +38,20 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingNodeTaints(t *testing.T) {
 	strategyName := "RemovePodsViolatingNodeTaints"
 	type testCase struct {
 		description string
-		params      *v1alpha1.StrategyParameters
+		params      *StrategyParameters
 		err         error
 		result      *api.PluginConfig
 	}
 	testCases := []testCase{
 		{
 			description: "wire in all valid parameters",
-			params: &v1alpha1.StrategyParameters{
+			params: &StrategyParameters{
 				ExcludedTaints: []string{
 					"dedicated=special-user",
 					"reserved",
 				},
 				ThresholdPriority: utilpointer.Int32(100),
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
 			},
@@ -69,8 +68,8 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "invalid params namespaces",
-			params: &v1alpha1.StrategyParameters{
-				Namespaces: &v1alpha1.Namespaces{
+			params: &StrategyParameters{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 					Include: []string{"test2"},
 				},
@@ -84,7 +83,7 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingNodeTaints(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			var result *api.PluginConfig
 			var err error
-			if pcFnc, exists := strategyParamsToPluginArgs[strategyName]; exists {
+			if pcFnc, exists := StrategyParamsToPluginArgs[strategyName]; exists {
 				result, err = pcFnc(tc.params)
 			}
 			if err != nil {
@@ -107,22 +106,22 @@ func TestStrategyParamsToPluginArgsRemoveFailedPods(t *testing.T) {
 	strategyName := "RemoveFailedPods"
 	type testCase struct {
 		description string
-		params      *v1alpha1.StrategyParameters
+		params      *StrategyParameters
 		err         error
 		result      *api.PluginConfig
 	}
 	testCases := []testCase{
 		{
 			description: "wire in all valid parameters",
-			params: &v1alpha1.StrategyParameters{
-				FailedPods: &v1alpha1.FailedPods{
+			params: &StrategyParameters{
+				FailedPods: &FailedPods{
 					MinPodLifetimeSeconds:   utilpointer.Uint(3600),
 					ExcludeOwnerKinds:       []string{"Job"},
 					Reasons:                 []string{"NodeAffinity"},
 					IncludingInitContainers: true,
 				},
 				ThresholdPriority: utilpointer.Int32(100),
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
 			},
@@ -142,8 +141,8 @@ func TestStrategyParamsToPluginArgsRemoveFailedPods(t *testing.T) {
 		},
 		{
 			description: "invalid params namespaces",
-			params: &v1alpha1.StrategyParameters{
-				Namespaces: &v1alpha1.Namespaces{
+			params: &StrategyParameters{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 					Include: []string{"test2"},
 				},
@@ -157,7 +156,7 @@ func TestStrategyParamsToPluginArgsRemoveFailedPods(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			var result *api.PluginConfig
 			var err error
-			if pcFnc, exists := strategyParamsToPluginArgs[strategyName]; exists {
+			if pcFnc, exists := StrategyParamsToPluginArgs[strategyName]; exists {
 				result, err = pcFnc(tc.params)
 			}
 			if err != nil {
@@ -180,17 +179,17 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingNodeAffinity(t *testing.T)
 	strategyName := "RemovePodsViolatingNodeAffinity"
 	type testCase struct {
 		description string
-		params      *v1alpha1.StrategyParameters
+		params      *StrategyParameters
 		err         error
 		result      *api.PluginConfig
 	}
 	testCases := []testCase{
 		{
 			description: "wire in all valid parameters",
-			params: &v1alpha1.StrategyParameters{
+			params: &StrategyParameters{
 				NodeAffinityType:  []string{"requiredDuringSchedulingIgnoredDuringExecution"},
 				ThresholdPriority: utilpointer.Int32(100),
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
 			},
@@ -207,15 +206,15 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingNodeAffinity(t *testing.T)
 		},
 		{
 			description: "invalid params, not setting nodeaffinity type",
-			params:      &v1alpha1.StrategyParameters{},
+			params:      &StrategyParameters{},
 			err:         fmt.Errorf("strategy \"%s\" param validation failed: nodeAffinityType needs to be set", strategyName),
 			result:      nil,
 		},
 		{
 			description: "invalid params namespaces",
-			params: &v1alpha1.StrategyParameters{
+			params: &StrategyParameters{
 				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 					Include: []string{"test2"},
 				},
@@ -229,7 +228,7 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingNodeAffinity(t *testing.T)
 		t.Run(tc.description, func(t *testing.T) {
 			var result *api.PluginConfig
 			var err error
-			if pcFnc, exists := strategyParamsToPluginArgs[strategyName]; exists {
+			if pcFnc, exists := StrategyParamsToPluginArgs[strategyName]; exists {
 				result, err = pcFnc(tc.params)
 			}
 			if err != nil {
@@ -252,16 +251,16 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingInterPodAntiAffinity(t *te
 	strategyName := "RemovePodsViolatingInterPodAntiAffinity"
 	type testCase struct {
 		description string
-		params      *v1alpha1.StrategyParameters
+		params      *StrategyParameters
 		err         error
 		result      *api.PluginConfig
 	}
 	testCases := []testCase{
 		{
 			description: "wire in all valid parameters",
-			params: &v1alpha1.StrategyParameters{
+			params: &StrategyParameters{
 				ThresholdPriority: utilpointer.Int32(100),
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
 			},
@@ -277,8 +276,8 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingInterPodAntiAffinity(t *te
 		},
 		{
 			description: "invalid params namespaces",
-			params: &v1alpha1.StrategyParameters{
-				Namespaces: &v1alpha1.Namespaces{
+			params: &StrategyParameters{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 					Include: []string{"test2"},
 				},
@@ -292,7 +291,7 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingInterPodAntiAffinity(t *te
 		t.Run(tc.description, func(t *testing.T) {
 			var result *api.PluginConfig
 			var err error
-			if pcFnc, exists := strategyParamsToPluginArgs[strategyName]; exists {
+			if pcFnc, exists := StrategyParamsToPluginArgs[strategyName]; exists {
 				result, err = pcFnc(tc.params)
 			}
 			if err != nil {
@@ -315,20 +314,20 @@ func TestStrategyParamsToPluginArgsRemovePodsHavingTooManyRestarts(t *testing.T)
 	strategyName := "RemovePodsHavingTooManyRestarts"
 	type testCase struct {
 		description string
-		params      *v1alpha1.StrategyParameters
+		params      *StrategyParameters
 		err         error
 		result      *api.PluginConfig
 	}
 	testCases := []testCase{
 		{
 			description: "wire in all valid parameters",
-			params: &v1alpha1.StrategyParameters{
-				PodsHavingTooManyRestarts: &v1alpha1.PodsHavingTooManyRestarts{
+			params: &StrategyParameters{
+				PodsHavingTooManyRestarts: &PodsHavingTooManyRestarts{
 					PodRestartThreshold:     100,
 					IncludingInitContainers: true,
 				},
 				ThresholdPriority: utilpointer.Int32(100),
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
 			},
@@ -346,8 +345,8 @@ func TestStrategyParamsToPluginArgsRemovePodsHavingTooManyRestarts(t *testing.T)
 		},
 		{
 			description: "invalid params namespaces",
-			params: &v1alpha1.StrategyParameters{
-				Namespaces: &v1alpha1.Namespaces{
+			params: &StrategyParameters{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 					Include: []string{"test2"},
 				},
@@ -357,8 +356,8 @@ func TestStrategyParamsToPluginArgsRemovePodsHavingTooManyRestarts(t *testing.T)
 		},
 		{
 			description: "invalid params restart threshold",
-			params: &v1alpha1.StrategyParameters{
-				PodsHavingTooManyRestarts: &v1alpha1.PodsHavingTooManyRestarts{
+			params: &StrategyParameters{
+				PodsHavingTooManyRestarts: &PodsHavingTooManyRestarts{
 					PodRestartThreshold: 0,
 				},
 			},
@@ -371,7 +370,7 @@ func TestStrategyParamsToPluginArgsRemovePodsHavingTooManyRestarts(t *testing.T)
 		t.Run(tc.description, func(t *testing.T) {
 			var result *api.PluginConfig
 			var err error
-			if pcFnc, exists := strategyParamsToPluginArgs[strategyName]; exists {
+			if pcFnc, exists := StrategyParamsToPluginArgs[strategyName]; exists {
 				result, err = pcFnc(tc.params)
 			}
 			if err != nil {
@@ -394,15 +393,15 @@ func TestStrategyParamsToPluginArgsPodLifeTime(t *testing.T) {
 	strategyName := "PodLifeTime"
 	type testCase struct {
 		description string
-		params      *v1alpha1.StrategyParameters
+		params      *StrategyParameters
 		err         error
 		result      *api.PluginConfig
 	}
 	testCases := []testCase{
 		{
 			description: "wire in all valid parameters",
-			params: &v1alpha1.StrategyParameters{
-				PodLifeTime: &v1alpha1.PodLifeTime{
+			params: &StrategyParameters{
+				PodLifeTime: &PodLifeTime{
 					MaxPodLifeTimeSeconds: utilpointer.Uint(86400),
 					States: []string{
 						"Pending",
@@ -410,7 +409,7 @@ func TestStrategyParamsToPluginArgsPodLifeTime(t *testing.T) {
 					},
 				},
 				ThresholdPriority: utilpointer.Int32(100),
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
 			},
@@ -431,11 +430,11 @@ func TestStrategyParamsToPluginArgsPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "invalid params namespaces",
-			params: &v1alpha1.StrategyParameters{
-				PodLifeTime: &v1alpha1.PodLifeTime{
+			params: &StrategyParameters{
+				PodLifeTime: &PodLifeTime{
 					MaxPodLifeTimeSeconds: utilpointer.Uint(86400),
 				},
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 					Include: []string{"test2"},
 				},
@@ -445,8 +444,8 @@ func TestStrategyParamsToPluginArgsPodLifeTime(t *testing.T) {
 		},
 		{
 			description: "invalid params MaxPodLifeTimeSeconds not set",
-			params: &v1alpha1.StrategyParameters{
-				PodLifeTime: &v1alpha1.PodLifeTime{},
+			params: &StrategyParameters{
+				PodLifeTime: &PodLifeTime{},
 			},
 			err:    fmt.Errorf("strategy \"%s\" param validation failed: MaxPodLifeTimeSeconds not set", strategyName),
 			result: nil,
@@ -457,7 +456,7 @@ func TestStrategyParamsToPluginArgsPodLifeTime(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			var result *api.PluginConfig
 			var err error
-			if pcFnc, exists := strategyParamsToPluginArgs[strategyName]; exists {
+			if pcFnc, exists := StrategyParamsToPluginArgs[strategyName]; exists {
 				result, err = pcFnc(tc.params)
 			}
 			if err != nil {
@@ -480,19 +479,19 @@ func TestStrategyParamsToPluginArgsRemoveDuplicates(t *testing.T) {
 	strategyName := "RemoveDuplicates"
 	type testCase struct {
 		description string
-		params      *v1alpha1.StrategyParameters
+		params      *StrategyParameters
 		err         error
 		result      *api.PluginConfig
 	}
 	testCases := []testCase{
 		{
 			description: "wire in all valid parameters",
-			params: &v1alpha1.StrategyParameters{
-				RemoveDuplicates: &v1alpha1.RemoveDuplicates{
+			params: &StrategyParameters{
+				RemoveDuplicates: &RemoveDuplicates{
 					ExcludeOwnerKinds: []string{"ReplicaSet"},
 				},
 				ThresholdPriority: utilpointer.Int32(100),
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
 			},
@@ -509,11 +508,11 @@ func TestStrategyParamsToPluginArgsRemoveDuplicates(t *testing.T) {
 		},
 		{
 			description: "invalid params namespaces",
-			params: &v1alpha1.StrategyParameters{
-				PodLifeTime: &v1alpha1.PodLifeTime{
+			params: &StrategyParameters{
+				PodLifeTime: &PodLifeTime{
 					MaxPodLifeTimeSeconds: utilpointer.Uint(86400),
 				},
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 					Include: []string{"test2"},
 				},
@@ -527,7 +526,7 @@ func TestStrategyParamsToPluginArgsRemoveDuplicates(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			var result *api.PluginConfig
 			var err error
-			if pcFnc, exists := strategyParamsToPluginArgs[strategyName]; exists {
+			if pcFnc, exists := StrategyParamsToPluginArgs[strategyName]; exists {
 				result, err = pcFnc(tc.params)
 			}
 			if err != nil {
@@ -550,17 +549,17 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingTopologySpreadConstraint(t
 	strategyName := "RemovePodsViolatingTopologySpreadConstraint"
 	type testCase struct {
 		description string
-		params      *v1alpha1.StrategyParameters
+		params      *StrategyParameters
 		err         error
 		result      *api.PluginConfig
 	}
 	testCases := []testCase{
 		{
 			description: "wire in all valid parameters",
-			params: &v1alpha1.StrategyParameters{
+			params: &StrategyParameters{
 				IncludeSoftConstraints: true,
 				ThresholdPriority:      utilpointer.Int32(100),
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
 			},
@@ -577,8 +576,8 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingTopologySpreadConstraint(t
 		},
 		{
 			description: "invalid params namespaces",
-			params: &v1alpha1.StrategyParameters{
-				Namespaces: &v1alpha1.Namespaces{
+			params: &StrategyParameters{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 					Include: []string{"test2"},
 				},
@@ -592,7 +591,7 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingTopologySpreadConstraint(t
 		t.Run(tc.description, func(t *testing.T) {
 			var result *api.PluginConfig
 			var err error
-			if pcFnc, exists := strategyParamsToPluginArgs[strategyName]; exists {
+			if pcFnc, exists := StrategyParamsToPluginArgs[strategyName]; exists {
 				result, err = pcFnc(tc.params)
 			}
 			if err != nil {
@@ -615,24 +614,24 @@ func TestStrategyParamsToPluginArgsHighNodeUtilization(t *testing.T) {
 	strategyName := "HighNodeUtilization"
 	type testCase struct {
 		description string
-		params      *v1alpha1.StrategyParameters
+		params      *StrategyParameters
 		err         error
 		result      *api.PluginConfig
 	}
 	testCases := []testCase{
 		{
 			description: "wire in all valid parameters",
-			params: &v1alpha1.StrategyParameters{
-				NodeResourceUtilizationThresholds: &v1alpha1.NodeResourceUtilizationThresholds{
+			params: &StrategyParameters{
+				NodeResourceUtilizationThresholds: &NodeResourceUtilizationThresholds{
 					NumberOfNodes: 3,
-					Thresholds: v1alpha1.ResourceThresholds{
-						"cpu":    v1alpha1.Percentage(20),
-						"memory": v1alpha1.Percentage(20),
-						"pods":   v1alpha1.Percentage(20),
+					Thresholds: ResourceThresholds{
+						"cpu":    Percentage(20),
+						"memory": Percentage(20),
+						"pods":   Percentage(20),
 					},
 				},
 				ThresholdPriority: utilpointer.Int32(100),
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
 			},
@@ -654,16 +653,16 @@ func TestStrategyParamsToPluginArgsHighNodeUtilization(t *testing.T) {
 		},
 		{
 			description: "invalid params namespaces",
-			params: &v1alpha1.StrategyParameters{
-				NodeResourceUtilizationThresholds: &v1alpha1.NodeResourceUtilizationThresholds{
+			params: &StrategyParameters{
+				NodeResourceUtilizationThresholds: &NodeResourceUtilizationThresholds{
 					NumberOfNodes: 3,
-					Thresholds: v1alpha1.ResourceThresholds{
-						"cpu":    v1alpha1.Percentage(20),
-						"memory": v1alpha1.Percentage(20),
-						"pods":   v1alpha1.Percentage(20),
+					Thresholds: ResourceThresholds{
+						"cpu":    Percentage(20),
+						"memory": Percentage(20),
+						"pods":   Percentage(20),
 					},
 				},
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Include: []string{"test2"},
 				},
 			},
@@ -672,8 +671,8 @@ func TestStrategyParamsToPluginArgsHighNodeUtilization(t *testing.T) {
 		},
 		{
 			description: "invalid params nil ResourceThresholds",
-			params: &v1alpha1.StrategyParameters{
-				NodeResourceUtilizationThresholds: &v1alpha1.NodeResourceUtilizationThresholds{
+			params: &StrategyParameters{
+				NodeResourceUtilizationThresholds: &NodeResourceUtilizationThresholds{
 					NumberOfNodes: 3,
 				},
 			},
@@ -682,11 +681,11 @@ func TestStrategyParamsToPluginArgsHighNodeUtilization(t *testing.T) {
 		},
 		{
 			description: "invalid params out of bounds threshold",
-			params: &v1alpha1.StrategyParameters{
-				NodeResourceUtilizationThresholds: &v1alpha1.NodeResourceUtilizationThresholds{
+			params: &StrategyParameters{
+				NodeResourceUtilizationThresholds: &NodeResourceUtilizationThresholds{
 					NumberOfNodes: 3,
-					Thresholds: v1alpha1.ResourceThresholds{
-						"cpu": v1alpha1.Percentage(150),
+					Thresholds: ResourceThresholds{
+						"cpu": Percentage(150),
 					},
 				},
 			},
@@ -699,7 +698,7 @@ func TestStrategyParamsToPluginArgsHighNodeUtilization(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			var result *api.PluginConfig
 			var err error
-			if pcFnc, exists := strategyParamsToPluginArgs[strategyName]; exists {
+			if pcFnc, exists := StrategyParamsToPluginArgs[strategyName]; exists {
 				result, err = pcFnc(tc.params)
 			}
 			if err != nil {
@@ -722,30 +721,30 @@ func TestStrategyParamsToPluginArgsLowNodeUtilization(t *testing.T) {
 	strategyName := "LowNodeUtilization"
 	type testCase struct {
 		description string
-		params      *v1alpha1.StrategyParameters
+		params      *StrategyParameters
 		err         error
 		result      *api.PluginConfig
 	}
 	testCases := []testCase{
 		{
 			description: "wire in all valid parameters",
-			params: &v1alpha1.StrategyParameters{
-				NodeResourceUtilizationThresholds: &v1alpha1.NodeResourceUtilizationThresholds{
+			params: &StrategyParameters{
+				NodeResourceUtilizationThresholds: &NodeResourceUtilizationThresholds{
 					NumberOfNodes: 3,
-					Thresholds: v1alpha1.ResourceThresholds{
-						"cpu":    v1alpha1.Percentage(20),
-						"memory": v1alpha1.Percentage(20),
-						"pods":   v1alpha1.Percentage(20),
+					Thresholds: ResourceThresholds{
+						"cpu":    Percentage(20),
+						"memory": Percentage(20),
+						"pods":   Percentage(20),
 					},
-					TargetThresholds: v1alpha1.ResourceThresholds{
-						"cpu":    v1alpha1.Percentage(50),
-						"memory": v1alpha1.Percentage(50),
-						"pods":   v1alpha1.Percentage(50),
+					TargetThresholds: ResourceThresholds{
+						"cpu":    Percentage(50),
+						"memory": Percentage(50),
+						"pods":   Percentage(50),
 					},
 					UseDeviationThresholds: true,
 				},
 				ThresholdPriority: utilpointer.Int32(100),
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
 			},
@@ -773,22 +772,22 @@ func TestStrategyParamsToPluginArgsLowNodeUtilization(t *testing.T) {
 		},
 		{
 			description: "invalid params namespaces",
-			params: &v1alpha1.StrategyParameters{
-				NodeResourceUtilizationThresholds: &v1alpha1.NodeResourceUtilizationThresholds{
+			params: &StrategyParameters{
+				NodeResourceUtilizationThresholds: &NodeResourceUtilizationThresholds{
 					NumberOfNodes: 3,
-					Thresholds: v1alpha1.ResourceThresholds{
-						"cpu":    v1alpha1.Percentage(20),
-						"memory": v1alpha1.Percentage(20),
-						"pods":   v1alpha1.Percentage(20),
+					Thresholds: ResourceThresholds{
+						"cpu":    Percentage(20),
+						"memory": Percentage(20),
+						"pods":   Percentage(20),
 					},
-					TargetThresholds: v1alpha1.ResourceThresholds{
-						"cpu":    v1alpha1.Percentage(50),
-						"memory": v1alpha1.Percentage(50),
-						"pods":   v1alpha1.Percentage(50),
+					TargetThresholds: ResourceThresholds{
+						"cpu":    Percentage(50),
+						"memory": Percentage(50),
+						"pods":   Percentage(50),
 					},
 					UseDeviationThresholds: true,
 				},
-				Namespaces: &v1alpha1.Namespaces{
+				Namespaces: &Namespaces{
 					Include: []string{"test2"},
 				},
 			},
@@ -797,8 +796,8 @@ func TestStrategyParamsToPluginArgsLowNodeUtilization(t *testing.T) {
 		},
 		{
 			description: "invalid params nil ResourceThresholds",
-			params: &v1alpha1.StrategyParameters{
-				NodeResourceUtilizationThresholds: &v1alpha1.NodeResourceUtilizationThresholds{
+			params: &StrategyParameters{
+				NodeResourceUtilizationThresholds: &NodeResourceUtilizationThresholds{
 					NumberOfNodes: 3,
 				},
 			},
@@ -807,11 +806,11 @@ func TestStrategyParamsToPluginArgsLowNodeUtilization(t *testing.T) {
 		},
 		{
 			description: "invalid params out of bounds threshold",
-			params: &v1alpha1.StrategyParameters{
-				NodeResourceUtilizationThresholds: &v1alpha1.NodeResourceUtilizationThresholds{
+			params: &StrategyParameters{
+				NodeResourceUtilizationThresholds: &NodeResourceUtilizationThresholds{
 					NumberOfNodes: 3,
-					Thresholds: v1alpha1.ResourceThresholds{
-						"cpu": v1alpha1.Percentage(150),
+					Thresholds: ResourceThresholds{
+						"cpu": Percentage(150),
 					},
 				},
 			},
@@ -824,7 +823,7 @@ func TestStrategyParamsToPluginArgsLowNodeUtilization(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			var result *api.PluginConfig
 			var err error
-			if pcFnc, exists := strategyParamsToPluginArgs[strategyName]; exists {
+			if pcFnc, exists := StrategyParamsToPluginArgs[strategyName]; exists {
 				result, err = pcFnc(tc.params)
 			}
 			if err != nil {

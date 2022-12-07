@@ -14,14 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package descheduler
+// This is a temporary package that will only exist while we have both v1alpha1 and v1alpha2
+package v1alpha1
 
 import (
 	"fmt"
 
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
@@ -37,8 +37,8 @@ import (
 // without any wiring. Keeping the wiring here so the descheduler can still use
 // the v1alpha1 configuration during the strategy migration to plugins.
 
-var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParameters) (*api.PluginConfig, error){
-	"RemovePodsViolatingNodeTaints": func(params *v1alpha1.StrategyParameters) (*api.PluginConfig, error) {
+var StrategyParamsToPluginArgs = map[string]func(params *StrategyParameters) (*api.PluginConfig, error){
+	"RemovePodsViolatingNodeTaints": func(params *StrategyParameters) (*api.PluginConfig, error) {
 		args := &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{
 			Namespaces:              v1alpha1NamespacesToInternal(params.Namespaces),
 			LabelSelector:           params.LabelSelector,
@@ -54,10 +54,10 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 			Args: args,
 		}, nil
 	},
-	"RemoveFailedPods": func(params *v1alpha1.StrategyParameters) (*api.PluginConfig, error) {
+	"RemoveFailedPods": func(params *StrategyParameters) (*api.PluginConfig, error) {
 		failedPodsParams := params.FailedPods
 		if failedPodsParams == nil {
-			failedPodsParams = &v1alpha1.FailedPods{}
+			failedPodsParams = &FailedPods{}
 		}
 		args := &removefailedpods.RemoveFailedPodsArgs{
 			Namespaces:              v1alpha1NamespacesToInternal(params.Namespaces),
@@ -76,7 +76,7 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 			Args: args,
 		}, nil
 	},
-	"RemovePodsViolatingNodeAffinity": func(params *v1alpha1.StrategyParameters) (*api.PluginConfig, error) {
+	"RemovePodsViolatingNodeAffinity": func(params *StrategyParameters) (*api.PluginConfig, error) {
 		args := &removepodsviolatingnodeaffinity.RemovePodsViolatingNodeAffinityArgs{
 			Namespaces:       v1alpha1NamespacesToInternal(params.Namespaces),
 			LabelSelector:    params.LabelSelector,
@@ -91,7 +91,7 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 			Args: args,
 		}, nil
 	},
-	"RemovePodsViolatingInterPodAntiAffinity": func(params *v1alpha1.StrategyParameters) (*api.PluginConfig, error) {
+	"RemovePodsViolatingInterPodAntiAffinity": func(params *StrategyParameters) (*api.PluginConfig, error) {
 		args := &removepodsviolatinginterpodantiaffinity.RemovePodsViolatingInterPodAntiAffinityArgs{
 			Namespaces:    v1alpha1NamespacesToInternal(params.Namespaces),
 			LabelSelector: params.LabelSelector,
@@ -105,10 +105,10 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 			Args: args,
 		}, nil
 	},
-	"RemovePodsHavingTooManyRestarts": func(params *v1alpha1.StrategyParameters) (*api.PluginConfig, error) {
+	"RemovePodsHavingTooManyRestarts": func(params *StrategyParameters) (*api.PluginConfig, error) {
 		tooManyRestartsParams := params.PodsHavingTooManyRestarts
 		if tooManyRestartsParams == nil {
-			tooManyRestartsParams = &v1alpha1.PodsHavingTooManyRestarts{}
+			tooManyRestartsParams = &PodsHavingTooManyRestarts{}
 		}
 		args := &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs{
 			Namespaces:              v1alpha1NamespacesToInternal(params.Namespaces),
@@ -125,10 +125,10 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 			Args: args,
 		}, nil
 	},
-	"PodLifeTime": func(params *v1alpha1.StrategyParameters) (*api.PluginConfig, error) {
+	"PodLifeTime": func(params *StrategyParameters) (*api.PluginConfig, error) {
 		podLifeTimeParams := params.PodLifeTime
 		if podLifeTimeParams == nil {
-			podLifeTimeParams = &v1alpha1.PodLifeTime{}
+			podLifeTimeParams = &PodLifeTime{}
 		}
 
 		var states []string
@@ -154,7 +154,7 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 			Args: args,
 		}, nil
 	},
-	"RemoveDuplicates": func(params *v1alpha1.StrategyParameters) (*api.PluginConfig, error) {
+	"RemoveDuplicates": func(params *StrategyParameters) (*api.PluginConfig, error) {
 		args := &removeduplicates.RemoveDuplicatesArgs{
 			Namespaces: v1alpha1NamespacesToInternal(params.Namespaces),
 		}
@@ -170,7 +170,7 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 			Args: args,
 		}, nil
 	},
-	"RemovePodsViolatingTopologySpreadConstraint": func(params *v1alpha1.StrategyParameters) (*api.PluginConfig, error) {
+	"RemovePodsViolatingTopologySpreadConstraint": func(params *StrategyParameters) (*api.PluginConfig, error) {
 		args := &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
 			Namespaces:             v1alpha1NamespacesToInternal(params.Namespaces),
 			LabelSelector:          params.LabelSelector,
@@ -185,9 +185,9 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 			Args: args,
 		}, nil
 	},
-	"HighNodeUtilization": func(params *v1alpha1.StrategyParameters) (*api.PluginConfig, error) {
+	"HighNodeUtilization": func(params *StrategyParameters) (*api.PluginConfig, error) {
 		if params.NodeResourceUtilizationThresholds == nil {
-			params.NodeResourceUtilizationThresholds = &v1alpha1.NodeResourceUtilizationThresholds{}
+			params.NodeResourceUtilizationThresholds = &NodeResourceUtilizationThresholds{}
 		}
 		args := &nodeutilization.HighNodeUtilizationArgs{
 			EvictableNamespaces: v1alpha1NamespacesToInternal(params.Namespaces),
@@ -203,9 +203,9 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 			Args: args,
 		}, nil
 	},
-	"LowNodeUtilization": func(params *v1alpha1.StrategyParameters) (*api.PluginConfig, error) {
+	"LowNodeUtilization": func(params *StrategyParameters) (*api.PluginConfig, error) {
 		if params.NodeResourceUtilizationThresholds == nil {
-			params.NodeResourceUtilizationThresholds = &v1alpha1.NodeResourceUtilizationThresholds{}
+			params.NodeResourceUtilizationThresholds = &NodeResourceUtilizationThresholds{}
 		}
 		args := &nodeutilization.LowNodeUtilizationArgs{
 			EvictableNamespaces:    v1alpha1NamespacesToInternal(params.Namespaces),
@@ -226,7 +226,7 @@ var strategyParamsToPluginArgs = map[string]func(params *v1alpha1.StrategyParame
 	},
 }
 
-func v1alpha1NamespacesToInternal(namespaces *v1alpha1.Namespaces) *api.Namespaces {
+func v1alpha1NamespacesToInternal(namespaces *Namespaces) *api.Namespaces {
 	internal := &api.Namespaces{}
 	if namespaces != nil {
 		if namespaces.Exclude != nil {
@@ -241,7 +241,7 @@ func v1alpha1NamespacesToInternal(namespaces *v1alpha1.Namespaces) *api.Namespac
 	return internal
 }
 
-func v1alpha1ThresholdToInternal(thresholds v1alpha1.ResourceThresholds) api.ResourceThresholds {
+func v1alpha1ThresholdToInternal(thresholds ResourceThresholds) api.ResourceThresholds {
 	internal := make(api.ResourceThresholds, len(thresholds))
 	for k, v := range thresholds {
 		internal[k] = api.Percentage(float64(v))
