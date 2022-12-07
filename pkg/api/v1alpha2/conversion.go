@@ -1,5 +1,5 @@
 /*
-Copyright 2017 The Kubernetes Authors.
+Copyright 2022 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import (
 )
 
 var (
-	// pluginArgConversionScheme is a scheme with internal and v1beta2 registered,
+	// pluginArgConversionScheme is a scheme with internal and v1alpha2 registered,
 	// used for defaulting/converting typed PluginConfig Args.
 	// Access via getPluginArgConversionScheme()
 	pluginArgConversionScheme     *runtime.Scheme
