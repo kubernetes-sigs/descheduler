@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginregistry"
+	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
 	"sigs.k8s.io/descheduler/test"

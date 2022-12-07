@@ -30,8 +30,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 

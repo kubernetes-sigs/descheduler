@@ -44,8 +44,8 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 

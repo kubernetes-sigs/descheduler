@@ -17,9 +17,9 @@ limitations under the License.
 package descheduler
 
 import (
+	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"

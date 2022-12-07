@@ -20,17 +20,13 @@ import (
 	"fmt"
 	"sync"
 
-	// unsafe "unsafe"
-
 	"k8s.io/apimachinery/pkg/conversion"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	api "sigs.k8s.io/descheduler/pkg/api"
 
-	// "sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginregistry"
-	// "sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
+	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 )
 
 var (
