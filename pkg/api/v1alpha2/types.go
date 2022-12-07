@@ -64,10 +64,3 @@ type PluginSet struct {
 	Enabled  []string `json:"enabled"`
 	Disabled []string `json:"disabled"`
 }
-
-// Namespaces carries a list of included/excluded namespaces
-// for which a given plugin is applicable.
-type Namespaces struct {
-	Include []string `json:"include"`
-	Exclude []string `json:"exclude"`
-}
