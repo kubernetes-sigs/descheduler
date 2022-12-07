@@ -69,18 +69,15 @@ func decode(policyConfigFile string, policy []byte, client clientset.Interface, 
 		if err != nil {
 			return nil, fmt.Errorf("failed converting versioned policy to internal policy version: %v", err)
 		}
-		err = validateDeschedulerConfiguration(*internalPolicy, registry)
-		if err != nil {
-			return nil, err
-		}
 	} else {
 		if err := runtime.DecodeInto(decoder, policy, internalPolicy); err != nil {
 			return nil, fmt.Errorf("failed decoding descheduler's policy config %q: %v", policyConfigFile, err)
 		}
-		err = validateDeschedulerConfiguration(*internalPolicy, registry)
-		if err != nil {
-			return nil, err
-		}
+	}
+
+	err = validateDeschedulerConfiguration(*internalPolicy, registry)
+	if err != nil {
+		return nil, err
 	}
 
 	setDefaults(*internalPolicy, registry)

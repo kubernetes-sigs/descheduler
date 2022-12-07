@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// This is a temporary package that will only exist while we have both v1alpha1 and v1alpha2
 package v1alpha1
 
 import (
