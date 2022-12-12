@@ -1,6 +1,10 @@
 [![Go Report Card](https://goreportcard.com/badge/sigs.k8s.io/descheduler)](https://goreportcard.com/report/sigs.k8s.io/descheduler)
 ![Release Charts](https://github.com/kubernetes-sigs/descheduler/workflows/Release%20Charts/badge.svg)
 
+<p align="center">
+    <img src="assets/logo/descheduler-stacked-color.png" width="40%" align="center" alt="descheduler">
+</p>
+
 # Descheduler for Kubernetes
 
 Scheduling in Kubernetes is the process of binding pending pods to nodes, and is performed by
