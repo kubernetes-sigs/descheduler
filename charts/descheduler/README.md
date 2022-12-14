@@ -57,6 +57,7 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `startingDeadlineSeconds`           | If set, configure `startingDeadlineSeconds` for the _descheduler_ job                                                 | `nil`                                |
 | `successfulJobsHistoryLimit`        | If set, configure `successfulJobsHistoryLimit` for the _descheduler_ job                                              | `nil`                                |
 | `failedJobsHistoryLimit`            | If set, configure `failedJobsHistoryLimit` for the _descheduler_ job                                                  | `nil`                                |
+| `ttlSecondsAfterFinished`           | If set, configure `ttlSecondsAfterFinished` for the _descheduler_ job                                                 | `nil`                                |
 | `deschedulingInterval`              | If using kind:Deployment, sets time between consecutive descheduler executions.                                       | `5m`                                 |
 | `replicas`                          | The replica count for Deployment                                                                                      | `1`                                  |
 | `leaderElection`                    | The options for high availability when running replicated components                                                  | _see values.yaml_                    |
