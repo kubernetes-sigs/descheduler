@@ -32,8 +32,9 @@ cronJobApiVersion: "batch/v1"
 schedule: "*/2 * * * *"
 suspend: false
 # startingDeadlineSeconds: 200
-# successfulJobsHistoryLimit: 1
+# successfulJobsHistoryLimit: 3
 # failedJobsHistoryLimit: 1
+# ttlSecondsAfterFinished 600
 
 # Required when running as a Deployment
 deschedulingInterval: 5m
