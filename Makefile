@@ -84,7 +84,7 @@ push: image
 	$(CONTAINER_ENGINE) tag $(IMAGE) $(IMAGE_GCLOUD)
 	$(CONTAINER_ENGINE) push $(IMAGE_GCLOUD)
 
-push-all: image.amd64 image.arm image.arm64
+push-images:
 	gcloud auth configure-docker
 	for arch in $(ARCHS); do \
 		$(CONTAINER_ENGINE) tag $(IMAGE)-$${arch} $(IMAGE_GCLOUD)-$${arch} ;\
@@ -95,6 +95,8 @@ push-all: image.amd64 image.arm image.arm64
 		DOCKER_CLI_EXPERIMENTAL=enabled $(CONTAINER_ENGINE) manifest annotate --arch $${arch} $(IMAGE_GCLOUD) $(IMAGE_GCLOUD)-$${arch} ;\
 	done
 	DOCKER_CLI_EXPERIMENTAL=enabled $(CONTAINER_ENGINE) manifest push $(IMAGE_GCLOUD) ;\
+
+push-all: image.amd64 image.arm image.arm64 push-images
 
 clean:
 	rm -rf _output
