@@ -78,6 +78,13 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Name() string {
 }
 
 func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+	allPods, err := d.listExistingPods(ctx)
+	if err != nil {
+		return &framework.Status{
+			Err: fmt.Errorf("error listing all pods: %v", err),
+		}
+	}
+	nodeMap := createNodeMap(nodes)
 loop:
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
@@ -91,11 +98,12 @@ loop:
 		podutil.SortPodsBasedOnPriorityLowToHigh(pods)
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
-			if checkPodsWithAntiAffinityExist(pods[i], pods) && d.handle.Evictor().Filter(pods[i]) && d.handle.Evictor().PreEvictionFilter(pods[i]) {
+			if checkPodsWithAntiAffinityExist(pods[i], allPods, nodeMap) && d.handle.Evictor().Filter(pods[i]) && d.handle.Evictor().PreEvictionFilter(pods[i]) {
 				if d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{}) {
 					// Since the current pod is evicted all other pods which have anti-affinity with this
 					// pod need not be evicted.
-					// Update pods.
+					// Update allPods.
+					allPods = removePodFromMap(pods[i], allPods)
 					pods = append(pods[:i], pods[i+1:]...)
 					i--
 					totalPods--
@@ -109,8 +117,44 @@ loop:
 	return nil
 }
 
+func (d *RemovePodsViolatingInterPodAntiAffinity) listExistingPods(ctx context.Context) (map[string][]*v1.Pod, error) {
+	podsList, err := d.handle.ClientSet().CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	existingPods := make(map[string][]*v1.Pod)
+	for i := 0; i < len(podsList.Items); i++ {
+		pod := &(podsList.Items[i])
+		existingPods[pod.Namespace] = append(existingPods[pod.Namespace], pod)
+	}
+	return existingPods, nil
+}
+
+func removePodFromMap(podToRemove *v1.Pod, podMap map[string][]*v1.Pod) map[string][]*v1.Pod {
+	podList, ok := podMap[podToRemove.Namespace]
+	if !ok {
+		return podMap
+	}
+	for i := 0; i < len(podList); i++ {
+		podToCheck := podList[i]
+		if podToRemove.GetUID() == podToCheck.GetUID() {
+			podMap[podToRemove.Namespace] = append(podList[:i], podList[i+1:]...)
+			return podMap
+		}
+	}
+	return podMap
+}
+
+func createNodeMap(nodes []*v1.Node) map[string]*v1.Node {
+	m := make(map[string]*v1.Node, len(nodes))
+	for _, node := range nodes {
+		m[node.GetName()] = node
+	}
+	return m
+}
+
 // checkPodsWithAntiAffinityExist checks if there are other pods on the node that the current pod cannot tolerate.
-func checkPodsWithAntiAffinityExist(pod *v1.Pod, pods []*v1.Pod) bool {
+func checkPodsWithAntiAffinityExist(pod *v1.Pod, pods map[string][]*v1.Pod, nodeMap map[string]*v1.Node) bool {
 	affinity := pod.Spec.Affinity
 	if affinity != nil && affinity.PodAntiAffinity != nil {
 		for _, term := range getPodAntiAffinityTerms(affinity.PodAntiAffinity) {
@@ -120,14 +164,47 @@ func checkPodsWithAntiAffinityExist(pod *v1.Pod, pods []*v1.Pod) bool {
 				klog.ErrorS(err, "Unable to convert LabelSelector into Selector")
 				return false
 			}
-			for _, existingPod := range pods {
-				if existingPod.Name != pod.Name && utils.PodMatchesTermsNamespaceAndSelector(existingPod, namespaces, selector) {
-					return true
+			for _, namespace := range namespaces.List() {
+				for _, existingPod := range pods[namespace] {
+					if existingPod.Name != pod.Name && utils.PodMatchesTermsNamespaceAndSelector(existingPod, namespaces, selector) {
+						node, ok := nodeMap[pod.Spec.NodeName]
+						if !ok {
+							continue
+						}
+						nodeHavingExistingPod, ok := nodeMap[existingPod.Spec.NodeName]
+						if !ok {
+							continue
+						}
+						if hasSameLabelValue(node, nodeHavingExistingPod, term.TopologyKey) {
+							klog.V(1).InfoS("Found Pods violating PodAntiAffinity", "pod to evicted", klog.KObj(pod))
+							return true
+						}
+					}
 				}
 			}
 		}
 	}
 	return false
+}
+
+func hasSameLabelValue(node1, node2 *v1.Node, key string) bool {
+	node1Labels := node1.Labels
+	if node1Labels == nil {
+		return false
+	}
+	node2Labels := node2.Labels
+	if node2Labels == nil {
+		return false
+	}
+	value1, ok := node1Labels[key]
+	if !ok {
+		return false
+	}
+	value2, ok := node2Labels[key]
+	if !ok {
+		return false
+	}
+	return value1 == value2
 }
 
 // getPodAntiAffinityTerms gets the antiaffinity terms for the given pod.
