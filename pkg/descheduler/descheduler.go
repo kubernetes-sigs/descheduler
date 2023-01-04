@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	componentbaseconfig "k8s.io/component-base/config"
 	"k8s.io/klog/v2"
 
 	v1 "k8s.io/api/core/v1"
@@ -52,7 +53,11 @@ import (
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	metrics.Register()
 
-	rsclient, eventClient, err := createClients(rs.KubeconfigFile)
+	clientConnection := rs.ClientConnection
+	if rs.KubeconfigFile != "" && clientConnection.Kubeconfig == "" {
+		clientConnection.Kubeconfig = rs.KubeconfigFile
+	}
+	rsclient, eventClient, err := createClients(clientConnection)
 	if err != nil {
 		return err
 	}
@@ -425,13 +430,13 @@ func getPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) *api.P
 	return nil
 }
 
-func createClients(kubeconfig string) (clientset.Interface, clientset.Interface, error) {
-	kClient, err := client.CreateClient(kubeconfig, "descheduler")
+func createClients(clientConnection componentbaseconfig.ClientConnectionConfiguration) (clientset.Interface, clientset.Interface, error) {
+	kClient, err := client.CreateClient(clientConnection, "descheduler")
 	if err != nil {
 		return nil, nil, err
 	}
 
-	eventClient, err := client.CreateClient(kubeconfig, "")
+	eventClient, err := client.CreateClient(clientConnection, "")
 	if err != nil {
 		return nil, nil, err
 	}

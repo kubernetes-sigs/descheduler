@@ -88,7 +88,7 @@ func TestLeaderElection(t *testing.T) {
 	s1.Client = clientSet
 	s1.DeschedulingInterval = 5 * time.Second
 	s1.LeaderElection.LeaderElect = true
-	s1.KubeconfigFile = os.Getenv("KUBECONFIG")
+	s1.ClientConnection.Kubeconfig = os.Getenv("KUBECONFIG")
 	s1.PolicyConfigFile = "./policy_leaderelection_a.yaml"
 
 	s2, err := options.NewDeschedulerServer()
@@ -98,7 +98,7 @@ func TestLeaderElection(t *testing.T) {
 	s2.Client = clientSet
 	s2.DeschedulingInterval = 5 * time.Second
 	s2.LeaderElection.LeaderElect = true
-	s2.KubeconfigFile = os.Getenv("KUBECONFIG")
+	s2.ClientConnection.Kubeconfig = os.Getenv("KUBECONFIG")
 	s2.PolicyConfigFile = "./policy_leaderelection_b.yaml"
 
 	t.Log("starting deschedulers")

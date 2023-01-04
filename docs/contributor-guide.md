@@ -20,7 +20,7 @@ make
 
 Run descheduler.
 ```sh
-./_output/bin/descheduler --kubeconfig <path to kubeconfig> --policy-config-file <path-to-policy-file> --v 1
+./_output/bin/descheduler --client-connection-kubeconfig <path to kubeconfig> --policy-config-file <path-to-policy-file> --v 1
 ```
 
 View all CLI options.
