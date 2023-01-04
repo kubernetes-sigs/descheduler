@@ -19,7 +19,7 @@ package descheduler
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientset "k8s.io/client-go/kubernetes"
@@ -40,7 +40,7 @@ func LoadPolicyConfig(policyConfigFile string, client clientset.Interface, regis
 		return nil, nil
 	}
 
-	policy, err := ioutil.ReadFile(policyConfigFile)
+	policy, err := os.ReadFile(policyConfigFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read policy config file %q: %+v", policyConfigFile, err)
 	}
