@@ -43,11 +43,7 @@ func LoadPolicyConfig(policyConfigFile string, client clientset.Interface, regis
 		return nil, fmt.Errorf("failed to read policy config file %q: %+v", policyConfigFile, err)
 	}
 
-	internalPolicy, err := decode(policyConfigFile, policy, client, registry)
-	if err != nil {
-		return nil, err
-	}
-	return internalPolicy, nil
+	return decode(policyConfigFile, policy, client, registry)
 }
 
 func decode(policyConfigFile string, policy []byte, client clientset.Interface, registry pluginregistry.Registry) (*api.DeschedulerPolicy, error) {
