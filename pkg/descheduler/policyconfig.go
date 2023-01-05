@@ -95,7 +95,9 @@ func setDefaults(in api.DeschedulerPolicy, registry pluginregistry.Registry) *ap
 func setDefaultsPluginConfig(pluginConfig *api.PluginConfig, registry pluginregistry.Registry) {
 	if _, ok := registry[pluginConfig.Name]; ok {
 		pluginUtilities := registry[pluginConfig.Name]
-		pluginUtilities.PluginArgDefaulter(pluginConfig.Args)
+		if pluginUtilities.PluginArgDefaulter != nil {
+			pluginUtilities.PluginArgDefaulter(pluginConfig.Args)
+		}
 	}
 }
 
@@ -129,8 +131,10 @@ func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginr
 		for _, pluginConfig := range profile.PluginConfigs {
 			if _, ok := registry[pluginConfig.Name]; ok {
 				pluginUtilities := registry[pluginConfig.Name]
-				err := pluginUtilities.PluginArgValidator(pluginConfig.Args)
-				errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+				if pluginUtilities.PluginArgValidator != nil {
+					err := pluginUtilities.PluginArgValidator(pluginConfig.Args)
+					errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+				}
 			}
 		}
 	}
