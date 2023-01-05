@@ -102,20 +102,18 @@ func setDefaultsPluginConfig(pluginConfig *api.PluginConfig, registry pluginregi
 }
 
 func setDefaultEvictor(profile api.Profile) api.Profile {
-	if len(profile.Plugins.Evict.Enabled) == 0 {
+	newPluginConfig := api.PluginConfig{
+		Name: defaultevictor.PluginName,
+		Args: &defaultevictor.DefaultEvictorArgs{
+			EvictLocalStoragePods:   false,
+			EvictSystemCriticalPods: false,
+			IgnorePvcPods:           false,
+			EvictFailedBarePods:     false,
+		},
+	}
+	if len(profile.Plugins.Evict.Enabled) == 0 && !hasPluginConfigsWithSameName(newPluginConfig, profile.PluginConfigs) {
 		profile.Plugins.Evict.Enabled = append(profile.Plugins.Evict.Enabled, defaultevictor.PluginName)
-		newPluginConfig := api.PluginConfig{
-			Name: defaultevictor.PluginName,
-			Args: &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   false,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
-			},
-		}
-		if !hasPluginConfigsWithSameName(newPluginConfig, profile.PluginConfigs) {
-			profile.PluginConfigs = append(profile.PluginConfigs, newPluginConfig)
-		}
+		profile.PluginConfigs = append(profile.PluginConfigs, newPluginConfig)
 	}
 	return profile
 }
