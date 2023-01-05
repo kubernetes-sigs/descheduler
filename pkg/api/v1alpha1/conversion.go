@@ -105,7 +105,7 @@ func V1alpha1ToInternal(
 	if deschedulerPolicy.EvictFailedBarePods != nil {
 		evictBarePods = *deschedulerPolicy.EvictFailedBarePods
 		if evictBarePods {
-			klog.V(1).InfoS("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
+			klog.V(1).Info("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
 		}
 	}
 
@@ -113,7 +113,7 @@ func V1alpha1ToInternal(
 	if deschedulerPolicy.EvictSystemCriticalPods != nil {
 		evictSystemCriticalPods = *deschedulerPolicy.EvictSystemCriticalPods
 		if evictSystemCriticalPods {
-			klog.V(1).InfoS("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
+			klog.V(1).Info("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
 		}
 	}
 
