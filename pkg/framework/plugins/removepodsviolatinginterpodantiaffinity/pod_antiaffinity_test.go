@@ -38,19 +38,27 @@ import (
 )
 
 func TestPodAntiAffinity(t *testing.T) {
-	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, func(node *v1.Node) {
+		node.ObjectMeta.Labels = map[string]string{
+			"region": "main-region",
+		}
+	})
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, func(node *v1.Node) {
 		node.ObjectMeta.Labels = map[string]string{
 			"datacenter": "east",
 		}
 	})
-
 	node3 := test.BuildTestNode("n3", 2000, 3000, 10, func(node *v1.Node) {
 		node.Spec = v1.NodeSpec{
 			Unschedulable: true,
 		}
 	})
 	node4 := test.BuildTestNode("n4", 2, 2, 1, nil)
+	node5 := test.BuildTestNode("n5", 200, 3000, 10, func(node *v1.Node) {
+		node.ObjectMeta.Labels = map[string]string{
+			"region": "main-region",
+		}
+	})
 
 	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
 	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, nil)
@@ -62,6 +70,7 @@ func TestPodAntiAffinity(t *testing.T) {
 	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, nil)
 	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, nil)
 	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, nil)
+	p11 := test.BuildTestPod("p11", 100, 0, node5.Name, nil)
 	p9.DeletionTimestamp = &metav1.Time{}
 	p10.DeletionTimestamp = &metav1.Time{}
 
@@ -73,6 +82,7 @@ func TestPodAntiAffinity(t *testing.T) {
 	p5.Labels = map[string]string{"foo": "bar"}
 	p6.Labels = map[string]string{"foo": "bar"}
 	p7.Labels = map[string]string{"foo1": "bar1"}
+	p11.Labels = map[string]string{"foo": "bar"}
 	nonEvictablePod.Labels = map[string]string{"foo": "bar"}
 	test.SetNormalOwnerRef(p1)
 	test.SetNormalOwnerRef(p2)
@@ -83,6 +93,7 @@ func TestPodAntiAffinity(t *testing.T) {
 	test.SetNormalOwnerRef(p7)
 	test.SetNormalOwnerRef(p9)
 	test.SetNormalOwnerRef(p10)
+	test.SetNormalOwnerRef(p11)
 
 	// set pod anti affinity
 	setPodAntiAffinity(p1, "foo", "bar")
@@ -185,6 +196,13 @@ func TestPodAntiAffinity(t *testing.T) {
 			nodes:                   []*v1.Node{node1, node4},
 			expectedEvictedPodCount: 0,
 			nodeFit:                 true,
+		},
+		{
+			description:             "Evict pod violating anti-affinity among different node (all pods have anti-affinity)",
+			pods:                    []*v1.Pod{p1, p11},
+			nodes:                   []*v1.Node{node1, node5},
+			expectedEvictedPodCount: 1,
+			nodeFit:                 false,
 		},
 	}
 
