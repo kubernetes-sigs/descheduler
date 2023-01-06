@@ -137,7 +137,7 @@ func removePodFromMap(podToRemove *v1.Pod, podMap map[string][]*v1.Pod) map[stri
 	}
 	for i := 0; i < len(podList); i++ {
 		podToCheck := podList[i]
-		if podToRemove.GetUID() == podToCheck.GetUID() {
+		if podToRemove.Name == podToCheck.Name {
 			podMap[podToRemove.Namespace] = append(podList[:i], podList[i+1:]...)
 			return podMap
 		}
@@ -188,6 +188,9 @@ func checkPodsWithAntiAffinityExist(pod *v1.Pod, pods map[string][]*v1.Pod, node
 }
 
 func hasSameLabelValue(node1, node2 *v1.Node, key string) bool {
+	if node1.Name == node2.Name {
+		return true
+	}
 	node1Labels := node1.Labels
 	if node1Labels == nil {
 		return false
