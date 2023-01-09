@@ -19,4 +19,5 @@ USER 1000
 
 COPY _output/bin/descheduler /bin/descheduler
 
-CMD ["/bin/descheduler", "--help"]
+ENTRYPOINT ["/bin/descheduler"]
+CMD ["--help"]
