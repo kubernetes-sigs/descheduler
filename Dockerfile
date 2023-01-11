@@ -27,5 +27,4 @@ USER 1000
 
 COPY --from=0 /go/src/sigs.k8s.io/descheduler/_output/bin/descheduler /bin/descheduler
 
-ENTRYPOINT ["/bin/descheduler"]
-CMD ["--help"]
+CMD ["/bin/descheduler", "--help"]
