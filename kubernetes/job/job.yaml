@@ -18,6 +18,8 @@ spec:
           volumeMounts:
           - mountPath: /policy-dir
             name: policy-volume
+          command:
+            - "/bin/descheduler"
           args:
             - "--policy-config-file"
             - "/policy-dir/policy.yaml"
