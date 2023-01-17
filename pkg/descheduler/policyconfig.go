@@ -53,6 +53,13 @@ func decode(policyConfigFile string, policy []byte, client clientset.Interface, 
 
 	decoder := scheme.Codecs.UniversalDecoder(v1alpha1.SchemeGroupVersion, v1alpha2.SchemeGroupVersion, api.SchemeGroupVersion)
 	if err := runtime.DecodeInto(decoder, policy, versionedPolicy); err != nil {
+		// TODO: Right now we are checking this error string because we couldn't make a native
+		// Convert_v1alpha1_DeschedulerPolicy_To_api_DeschedulerPolicy in conversion.go
+		// and we are just calling  V1alpha1ToInternal directly (since it needs a client as an argument).
+		// We need to make V1alpha1ToInternal stop needing a client, use a native conversion function
+		// and just rely in a DecodeInto that would pick up any policy file directly into our internal api.
+		// An attempt of doing that is in b25a44c51c0fa31a7831b899e73d83abd12a789a. Relevant discussions in following comments:
+		// https://github.com/kubernetes-sigs/descheduler/pull/1006#discussion_r1062630128
 		if err.Error() == "converting (v1alpha2.DeschedulerPolicy) to (v1alpha1.DeschedulerPolicy): unknown conversion" {
 			klog.V(1).InfoS("Tried reading v1alpha2.DeschedulerPolicy and failed. Trying legacy conversion now.")
 		} else {
