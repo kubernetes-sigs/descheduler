@@ -23,17 +23,18 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 
 // SetDefaults_PodLifeTimeArgs
 // TODO: the final default values would be discussed in community
-func SetDefaults_PodLifeTimeArgs(obj *PodLifeTimeArgs) {
-	if obj.Namespaces == nil {
-		obj.Namespaces = nil
+func SetDefaults_PodLifeTimeArgs(obj runtime.Object) {
+	args := obj.(*PodLifeTimeArgs)
+	if args.Namespaces == nil {
+		args.Namespaces = nil
 	}
-	if obj.LabelSelector == nil {
-		obj.LabelSelector = nil
+	if args.LabelSelector == nil {
+		args.LabelSelector = nil
 	}
-	if obj.MaxPodLifeTimeSeconds == nil {
-		obj.MaxPodLifeTimeSeconds = nil
+	if args.MaxPodLifeTimeSeconds == nil {
+		args.MaxPodLifeTimeSeconds = nil
 	}
-	if obj.States == nil {
-		obj.States = nil
+	if args.States == nil {
+		args.States = nil
 	}
 }

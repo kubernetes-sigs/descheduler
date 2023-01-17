@@ -20,10 +20,12 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // ValidateRemovePodsViolatingNodeAffinityArgs validates RemovePodsViolatingNodeAffinity arguments
-func ValidateRemovePodsViolatingNodeAffinityArgs(args *RemovePodsViolatingNodeAffinityArgs) error {
+func ValidateRemovePodsViolatingNodeAffinityArgs(obj runtime.Object) error {
+	args := obj.(*RemovePodsViolatingNodeAffinityArgs)
 	if args == nil || len(args.NodeAffinityType) == 0 {
 		return fmt.Errorf("nodeAffinityType needs to be set")
 	}

@@ -17,7 +17,6 @@ limitations under the License.
 package descheduler
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -27,14 +26,13 @@ import (
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
+	"sigs.k8s.io/descheduler/pkg/api/v1alpha2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/scheme"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
-func LoadPolicyConfig(policyConfigFile string, client clientset.Interface, registry pluginbuilder.Registry) (*api.DeschedulerPolicy, error) {
+func LoadPolicyConfig(policyConfigFile string, client clientset.Interface, registry pluginregistry.Registry) (*api.DeschedulerPolicy, error) {
 	if policyConfigFile == "" {
 		klog.V(1).InfoS("Policy config file not specified")
 		return nil, nil
@@ -45,171 +43,128 @@ func LoadPolicyConfig(policyConfigFile string, client clientset.Interface, regis
 		return nil, fmt.Errorf("failed to read policy config file %q: %+v", policyConfigFile, err)
 	}
 
+	return decode(policyConfigFile, policy, client, registry)
+}
+
+func decode(policyConfigFile string, policy []byte, client clientset.Interface, registry pluginregistry.Registry) (*api.DeschedulerPolicy, error) {
 	versionedPolicy := &v1alpha1.DeschedulerPolicy{}
+	internalPolicy := &api.DeschedulerPolicy{}
+	var err error
 
-	decoder := scheme.Codecs.UniversalDecoder(v1alpha1.SchemeGroupVersion)
+	decoder := scheme.Codecs.UniversalDecoder(v1alpha1.SchemeGroupVersion, v1alpha2.SchemeGroupVersion, api.SchemeGroupVersion)
 	if err := runtime.DecodeInto(decoder, policy, versionedPolicy); err != nil {
-		return nil, fmt.Errorf("failed decoding descheduler's policy config %q: %v", policyConfigFile, err)
+		// TODO: Right now we are checking this error string because we couldn't make a native
+		// Convert_v1alpha1_DeschedulerPolicy_To_api_DeschedulerPolicy in conversion.go
+		// and we are just calling  V1alpha1ToInternal directly (since it needs a client as an argument).
+		// We need to make V1alpha1ToInternal stop needing a client, use a native conversion function
+		// and just rely in a DecodeInto that would pick up any policy file directly into our internal api.
+		// An attempt of doing that is in b25a44c51c0fa31a7831b899e73d83abd12a789a. Relevant discussions in following comments:
+		// https://github.com/kubernetes-sigs/descheduler/pull/1006#discussion_r1062630128
+		if err.Error() == "converting (v1alpha2.DeschedulerPolicy) to (v1alpha1.DeschedulerPolicy): unknown conversion" {
+			klog.V(1).InfoS("Tried reading v1alpha2.DeschedulerPolicy and failed. Trying legacy conversion now.")
+		} else {
+			return nil, fmt.Errorf("failed decoding descheduler's policy config %q: %v", policyConfigFile, err)
+		}
+	}
+	if versionedPolicy.APIVersion == "descheduler/v1alpha1" {
+		// Build profiles
+		internalPolicy, err = v1alpha1.V1alpha1ToInternal(client, versionedPolicy, registry)
+		if err != nil {
+			return nil, fmt.Errorf("failed converting versioned policy to internal policy version: %v", err)
+		}
+	} else {
+		if err := runtime.DecodeInto(decoder, policy, internalPolicy); err != nil {
+			return nil, fmt.Errorf("failed decoding descheduler's policy config %q: %v", policyConfigFile, err)
+		}
 	}
 
-	// Build profiles
-	internalPolicy, err := V1alpha1ToInternal(client, versionedPolicy, registry)
+	err = validateDeschedulerConfiguration(*internalPolicy, registry)
 	if err != nil {
-		return nil, fmt.Errorf("failed converting versioned policy to internal policy version: %v", err)
+		return nil, err
 	}
+
+	setDefaults(*internalPolicy, registry)
 
 	return internalPolicy, nil
 }
 
-func V1alpha1ToInternal(
-	client clientset.Interface,
-	deschedulerPolicy *v1alpha1.DeschedulerPolicy,
-	registry pluginbuilder.Registry,
-) (*api.DeschedulerPolicy, error) {
-	var evictLocalStoragePods bool
-	if deschedulerPolicy.EvictLocalStoragePods != nil {
-		evictLocalStoragePods = *deschedulerPolicy.EvictLocalStoragePods
-	}
-
-	evictBarePods := false
-	if deschedulerPolicy.EvictFailedBarePods != nil {
-		evictBarePods = *deschedulerPolicy.EvictFailedBarePods
-		if evictBarePods {
-			klog.V(1).InfoS("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
+func setDefaults(in api.DeschedulerPolicy, registry pluginregistry.Registry) *api.DeschedulerPolicy {
+	for idx, profile := range in.Profiles {
+		// If we need to set defaults coming from loadtime in each profile we do it here
+		in.Profiles[idx] = setDefaultEvictor(profile)
+		for _, pluginConfig := range profile.PluginConfigs {
+			setDefaultsPluginConfig(&pluginConfig, registry)
 		}
 	}
+	return &in
+}
 
-	evictSystemCriticalPods := false
-	if deschedulerPolicy.EvictSystemCriticalPods != nil {
-		evictSystemCriticalPods = *deschedulerPolicy.EvictSystemCriticalPods
-		if evictSystemCriticalPods {
-			klog.V(1).InfoS("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
+func setDefaultsPluginConfig(pluginConfig *api.PluginConfig, registry pluginregistry.Registry) {
+	if _, ok := registry[pluginConfig.Name]; ok {
+		pluginUtilities := registry[pluginConfig.Name]
+		if pluginUtilities.PluginArgDefaulter != nil {
+			pluginUtilities.PluginArgDefaulter(pluginConfig.Args)
 		}
 	}
+}
 
-	ignorePvcPods := false
-	if deschedulerPolicy.IgnorePVCPods != nil {
-		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
+func setDefaultEvictor(profile api.Profile) api.Profile {
+	newPluginConfig := api.PluginConfig{
+		Name: defaultevictor.PluginName,
+		Args: &defaultevictor.DefaultEvictorArgs{
+			EvictLocalStoragePods:   false,
+			EvictSystemCriticalPods: false,
+			IgnorePvcPods:           false,
+			EvictFailedBarePods:     false,
+		},
 	}
+	if len(profile.Plugins.Evict.Enabled) == 0 && !hasPluginConfigsWithSameName(newPluginConfig, profile.PluginConfigs) {
+		profile.Plugins.Evict.Enabled = append(profile.Plugins.Evict.Enabled, defaultevictor.PluginName)
+		profile.PluginConfigs = append(profile.PluginConfigs, newPluginConfig)
+	}
+	return profile
+}
 
-	var profiles []api.Profile
-
-	// Build profiles
-	for name, strategy := range deschedulerPolicy.Strategies {
-		if _, ok := pluginbuilder.PluginRegistry[string(name)]; ok {
-			if strategy.Enabled {
-				params := strategy.Params
-				if params == nil {
-					params = &v1alpha1.StrategyParameters{}
+func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginregistry.Registry) error {
+	var errorsInProfiles error
+	for _, profile := range in.Profiles {
+		// api.DeschedulerPolicy needs only 1 evictor plugin enabled
+		if len(profile.Plugins.Evict.Enabled) != 1 {
+			errTooManyEvictors := fmt.Errorf("profile with invalid number of evictor plugins enabled found. Please enable a single evictor plugin.")
+			errorsInProfiles = setErrorsInProfiles(errTooManyEvictors, profile.Name, errorsInProfiles)
+		}
+		for _, pluginConfig := range profile.PluginConfigs {
+			if _, ok := registry[pluginConfig.Name]; ok {
+				pluginUtilities := registry[pluginConfig.Name]
+				if pluginUtilities.PluginArgValidator != nil {
+					err := pluginUtilities.PluginArgValidator(pluginConfig.Args)
+					errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
 				}
-
-				nodeFit := false
-				if name != "PodLifeTime" {
-					nodeFit = params.NodeFit
-				}
-
-				// TODO(jchaloup): once all strategies are migrated move this check under
-				// the default evictor args validation
-				if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
-					klog.ErrorS(fmt.Errorf("priority threshold misconfigured"), "only one of priorityThreshold fields can be set", "pluginName", name)
-					return nil, fmt.Errorf("priority threshold misconfigured for plugin %v", name)
-				}
-				var priorityThreshold *api.PriorityThreshold
-				if strategy.Params != nil {
-					priorityThreshold = &api.PriorityThreshold{
-						Value: strategy.Params.ThresholdPriority,
-						Name:  strategy.Params.ThresholdPriorityClassName,
-					}
-				}
-				thresholdPriority, err := utils.GetPriorityFromStrategyParams(context.TODO(), client, priorityThreshold)
-				if err != nil {
-					klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
-					return nil, fmt.Errorf("failed to get threshold priority from strategy's params: %v", err)
-				}
-
-				var pluginConfig *api.PluginConfig
-				if pcFnc, exists := strategyParamsToPluginArgs[string(name)]; exists {
-					pluginConfig, err = pcFnc(params)
-					if err != nil {
-						klog.ErrorS(err, "skipping strategy", "strategy", name)
-						return nil, fmt.Errorf("failed to get plugin config for strategy %v: %v", name, err)
-					}
-				} else {
-					klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
-					return nil, fmt.Errorf("unknown strategy name: %v", name)
-				}
-
-				profile := api.Profile{
-					Name: fmt.Sprintf("strategy-%v-profile", name),
-					PluginConfigs: []api.PluginConfig{
-						{
-							Name: defaultevictor.PluginName,
-							Args: &defaultevictor.DefaultEvictorArgs{
-								EvictLocalStoragePods:   evictLocalStoragePods,
-								EvictSystemCriticalPods: evictSystemCriticalPods,
-								IgnorePvcPods:           ignorePvcPods,
-								EvictFailedBarePods:     evictBarePods,
-								NodeFit:                 nodeFit,
-								PriorityThreshold: &api.PriorityThreshold{
-									Value: &thresholdPriority,
-								},
-							},
-						},
-						*pluginConfig,
-					},
-					Plugins: api.Plugins{
-						Evict: api.PluginSet{
-							Enabled: []string{defaultevictor.PluginName},
-						},
-					},
-				}
-
-				pluginArgs := registry[string(name)].PluginArgInstance
-				pluginInstance, err := registry[string(name)].PluginBuilder(pluginArgs, &handleImpl{})
-				if err != nil {
-					klog.ErrorS(fmt.Errorf("could not build plugin"), "plugin build error", "plugin", name)
-					return nil, fmt.Errorf("could not build plugin: %v", name)
-				}
-
-				// pluginInstance can be of any of each type, or both
-				profilePlugins := profile.Plugins
-				profile.Plugins = enableProfilePluginsByType(profilePlugins, pluginInstance, pluginConfig)
-				profiles = append(profiles, profile)
 			}
-		} else {
-			klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
-			return nil, fmt.Errorf("unknown strategy name: %v", name)
 		}
 	}
-
-	return &api.DeschedulerPolicy{
-		Profiles:                       profiles,
-		NodeSelector:                   deschedulerPolicy.NodeSelector,
-		MaxNoOfPodsToEvictPerNode:      deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
-		MaxNoOfPodsToEvictPerNamespace: deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
-	}, nil
-}
-
-func enableProfilePluginsByType(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
-	profilePlugins = checkBalance(profilePlugins, pluginInstance, pluginConfig)
-	profilePlugins = checkDeschedule(profilePlugins, pluginInstance, pluginConfig)
-	return profilePlugins
-}
-
-func checkBalance(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
-	switch p := pluginInstance.(type) {
-	case framework.BalancePlugin:
-		klog.V(3).Info("converting Balance plugin: %s", p.Name())
-		profilePlugins.Balance.Enabled = []string{pluginConfig.Name}
+	if errorsInProfiles != nil {
+		return errorsInProfiles
 	}
-	return profilePlugins
+	return nil
 }
 
-func checkDeschedule(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
-	switch p := pluginInstance.(type) {
-	case framework.DeschedulePlugin:
-		klog.V(3).Info("converting Deschedule plugin: %s", p.Name())
-		profilePlugins.Deschedule.Enabled = []string{pluginConfig.Name}
+func setErrorsInProfiles(err error, profileName string, errorsInProfiles error) error {
+	if err != nil {
+		if errorsInProfiles == nil {
+			errorsInProfiles = fmt.Errorf("in profile %s: %s", profileName, err.Error())
+		} else {
+			errorsInProfiles = fmt.Errorf("%w: %s", errorsInProfiles, fmt.Sprintf("in profile %s: %s", profileName, err.Error()))
+		}
 	}
-	return profilePlugins
+	return errorsInProfiles
+}
+
+func hasPluginConfigsWithSameName(newPluginConfig api.PluginConfig, pluginConfigs []api.PluginConfig) bool {
+	for _, pluginConfig := range pluginConfigs {
+		if newPluginConfig.Name == pluginConfig.Name {
+			return true
+		}
+	}
+	return false
 }

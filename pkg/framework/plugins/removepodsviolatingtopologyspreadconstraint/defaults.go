@@ -23,14 +23,15 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 
 // SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs
 // TODO: the final default values would be discussed in community
-func SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(obj *RemovePodsViolatingTopologySpreadConstraintArgs) {
-	if obj.Namespaces == nil {
-		obj.Namespaces = nil
+func SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(obj runtime.Object) {
+	args := obj.(*RemovePodsViolatingTopologySpreadConstraintArgs)
+	if args.Namespaces == nil {
+		args.Namespaces = nil
 	}
-	if obj.LabelSelector == nil {
-		obj.LabelSelector = nil
+	if args.LabelSelector == nil {
+		args.LabelSelector = nil
 	}
-	if !obj.IncludeSoftConstraints {
-		obj.IncludeSoftConstraints = false
+	if !args.IncludeSoftConstraints {
+		args.IncludeSoftConstraints = false
 	}
 }

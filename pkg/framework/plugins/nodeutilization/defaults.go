@@ -23,28 +23,30 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 
 // SetDefaults_LowNodeUtilizationArgs
 // TODO: the final default values would be discussed in community
-func SetDefaults_LowNodeUtilizationArgs(obj *LowNodeUtilizationArgs) {
-	if !obj.UseDeviationThresholds {
-		obj.UseDeviationThresholds = false
+func SetDefaults_LowNodeUtilizationArgs(obj runtime.Object) {
+	args := obj.(*LowNodeUtilizationArgs)
+	if !args.UseDeviationThresholds {
+		args.UseDeviationThresholds = false
 	}
-	if obj.Thresholds == nil {
-		obj.Thresholds = nil
+	if args.Thresholds == nil {
+		args.Thresholds = nil
 	}
-	if obj.TargetThresholds == nil {
-		obj.TargetThresholds = nil
+	if args.TargetThresholds == nil {
+		args.TargetThresholds = nil
 	}
-	if obj.NumberOfNodes == 0 {
-		obj.NumberOfNodes = 0
+	if args.NumberOfNodes == 0 {
+		args.NumberOfNodes = 0
 	}
 }
 
 // SetDefaults_HighNodeUtilizationArgs
 // TODO: the final default values would be discussed in community
-func SetDefaults_HighNodeUtilizationArgs(obj *HighNodeUtilizationArgs) {
-	if obj.Thresholds == nil {
-		obj.Thresholds = nil
+func SetDefaults_HighNodeUtilizationArgs(obj runtime.Object) {
+	args := obj.(*HighNodeUtilizationArgs)
+	if args.Thresholds == nil {
+		args.Thresholds = nil
 	}
-	if obj.NumberOfNodes == 0 {
-		obj.NumberOfNodes = 0
+	if args.NumberOfNodes == 0 {
+		args.NumberOfNodes = 0
 	}
 }

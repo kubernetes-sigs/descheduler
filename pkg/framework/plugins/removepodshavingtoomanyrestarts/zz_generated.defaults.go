@@ -29,12 +29,5 @@ import (
 // Public to allow building arbitrary schemes.
 // All generated defaulters are covering - they call all nested defaulters.
 func RegisterDefaults(scheme *runtime.Scheme) error {
-	scheme.AddTypeDefaultingFunc(&RemovePodsHavingTooManyRestartsArgs{}, func(obj interface{}) {
-		SetObjectDefaults_RemovePodsHavingTooManyRestartsArgs(obj.(*RemovePodsHavingTooManyRestartsArgs))
-	})
 	return nil
-}
-
-func SetObjectDefaults_RemovePodsHavingTooManyRestartsArgs(in *RemovePodsHavingTooManyRestartsArgs) {
-	SetDefaults_RemovePodsHavingTooManyRestartsArgs(in)
 }

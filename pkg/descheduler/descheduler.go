@@ -44,8 +44,8 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
+	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -59,7 +59,7 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	rs.Client = rsclient
 	rs.EventClient = eventClient
 
-	deschedulerPolicy, err := LoadPolicyConfig(rs.PolicyConfigFile, rs.Client, pluginbuilder.PluginRegistry)
+	deschedulerPolicy, err := LoadPolicyConfig(rs.PolicyConfigFile, rs.Client, pluginregistry.PluginRegistry)
 	if err != nil {
 		return err
 	}
@@ -358,7 +358,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 					klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", plugin)
 					continue
 				}
-				registryPlugin, ok := pluginbuilder.PluginRegistry[plugin]
+				registryPlugin, ok := pluginregistry.PluginRegistry[plugin]
 				pgFnc := registryPlugin.PluginBuilder
 				if !ok {
 					klog.ErrorS(fmt.Errorf("unable to find plugin in the pluginsMap"), "skipping plugin", "plugin", plugin)
@@ -368,14 +368,8 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 					klog.ErrorS(err, "unable to initialize a plugin", "pluginName", plugin)
 				}
 				if pg != nil {
-					switch v := pg.(type) {
-					case framework.DeschedulePlugin:
-						enabledDeschedulePlugins = append(enabledDeschedulePlugins, v)
-					case framework.BalancePlugin:
-						enabledBalancePlugins = append(enabledBalancePlugins, v)
-					default:
-						klog.ErrorS(fmt.Errorf("unknown plugin extension point"), "skipping plugin", "plugin", plugin)
-					}
+					// pg can be of any of each type, or both
+					enabledDeschedulePlugins, enabledBalancePlugins = includeProfilePluginsByType(enabledDeschedulePlugins, enabledBalancePlugins, pg)
 				}
 			}
 		}
@@ -414,6 +408,28 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	}, rs.DeschedulingInterval, ctx.Done())
 
 	return nil
+}
+
+func includeProfilePluginsByType(enabledDeschedulePlugins []framework.DeschedulePlugin, enabledBalancePlugins []framework.BalancePlugin, pg framework.Plugin) ([]framework.DeschedulePlugin, []framework.BalancePlugin) {
+	enabledDeschedulePlugins = includeDeschedule(enabledDeschedulePlugins, pg)
+	enabledBalancePlugins = includeBalance(enabledBalancePlugins, pg)
+	return enabledDeschedulePlugins, enabledBalancePlugins
+}
+
+func includeDeschedule(enabledDeschedulePlugins []framework.DeschedulePlugin, pg framework.Plugin) []framework.DeschedulePlugin {
+	_, ok := pg.(framework.DeschedulePlugin)
+	if ok {
+		enabledDeschedulePlugins = append(enabledDeschedulePlugins, pg.(framework.DeschedulePlugin))
+	}
+	return enabledDeschedulePlugins
+}
+
+func includeBalance(enabledBalancePlugins []framework.BalancePlugin, pg framework.Plugin) []framework.BalancePlugin {
+	_, ok := pg.(framework.BalancePlugin)
+	if ok {
+		enabledBalancePlugins = append(enabledBalancePlugins, pg.(framework.BalancePlugin))
+	}
+	return enabledBalancePlugins
 }
 
 func getPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) *api.PluginConfig {
