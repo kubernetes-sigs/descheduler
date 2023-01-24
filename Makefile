@@ -117,6 +117,9 @@ verify-vendor:
 verify-toc:
 	./hack/verify-toc.sh
 
+verify-docs:
+	./hack/verify-docs.sh
+
 test-unit:
 	./test/run-unit-tests.sh
 
@@ -128,11 +131,13 @@ gen:
 	./hack/update-generated-deep-copies.sh
 	./hack/update-generated-defaulters.sh
 	./hack/update-toc.sh
+	./hack/update-docs.sh
 
 verify-gen:
 	./hack/verify-conversions.sh
 	./hack/verify-deep-copies.sh
 	./hack/verify-defaulters.sh
+	./hack/verify-docs.sh
 
 lint:
 ifndef HAS_GOLANGCI
