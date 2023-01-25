@@ -20,13 +20,13 @@ import (
 	"os"
 
 	"k8s.io/component-base/cli"
-	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app"
+	"sigs.k8s.io/descheduler/pkg/descheduler"
 )
 
 func init() {
-	klog.SetOutput(os.Stdout)
-	klog.InitFlags(nil)
+	app.SetupLogs()
+	descheduler.SetupPlugins()
 }
 
 func main() {

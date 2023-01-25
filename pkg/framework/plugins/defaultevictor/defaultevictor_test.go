@@ -300,7 +300,6 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-
 		t.Run(test.description, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -474,7 +473,8 @@ func TestDefaultEvictorFilter(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -494,7 +494,8 @@ func TestDefaultEvictorFilter(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -515,7 +516,8 @@ func TestDefaultEvictorFilter(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -706,7 +708,6 @@ func TestDefaultEvictorFilter(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-
 		t.Run(test.description, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -758,7 +759,6 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			if (result) != test.result {
 				t.Errorf("Filter should return for pod %s %t, but it returns %t", test.pods[0].Name, test.result, result)
 			}
-
 		})
 	}
 }

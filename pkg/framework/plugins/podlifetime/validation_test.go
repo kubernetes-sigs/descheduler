@@ -17,8 +17,9 @@ limitations under the License.
 package podlifetime
 
 import (
-	v1 "k8s.io/api/core/v1"
 	"testing"
+
+	v1 "k8s.io/api/core/v1"
 )
 
 func TestValidateRemovePodLifeTimeArgs(t *testing.T) {

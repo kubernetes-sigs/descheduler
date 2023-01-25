@@ -22,8 +22,8 @@ import (
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 type RemoveDuplicatesArgs struct {
-	metav1.TypeMeta
+	metav1.TypeMeta `json:",inline"`
 
-	Namespaces        *api.Namespaces
-	ExcludeOwnerKinds []string
+	Namespaces        *api.Namespaces `json:"namespaces"`
+	ExcludeOwnerKinds []string        `json:"excludeOwnerKinds"`
 }

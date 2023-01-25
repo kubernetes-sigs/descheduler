@@ -26,10 +26,10 @@ import (
 
 // RemovePodsViolatingNodeTaintsArgs holds arguments used to configure the RemovePodsViolatingNodeTaints plugin.
 type RemovePodsViolatingNodeTaintsArgs struct {
-	metav1.TypeMeta
+	metav1.TypeMeta `json:",inline"`
 
-	Namespaces              *api.Namespaces
-	LabelSelector           *metav1.LabelSelector
-	IncludePreferNoSchedule bool
-	ExcludedTaints          []string
+	Namespaces              *api.Namespaces       `json:"namespaces"`
+	LabelSelector           *metav1.LabelSelector `json:"labelSelector"`
+	IncludePreferNoSchedule bool                  `json:"includePreferNoSchedule"`
+	ExcludedTaints          []string              `json:"excludedTaints"`
 }

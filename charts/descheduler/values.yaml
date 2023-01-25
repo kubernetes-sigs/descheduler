@@ -6,7 +6,7 @@
 kind: CronJob
 
 image:
-  repository: k8s.gcr.io/descheduler/descheduler
+  repository: registry.k8s.io/descheduler/descheduler
   # Overrides the image tag whose default is the chart version
   tag: ""
   pullPolicy: IfNotPresent
@@ -32,8 +32,9 @@ cronJobApiVersion: "batch/v1"
 schedule: "*/2 * * * *"
 suspend: false
 # startingDeadlineSeconds: 200
-# successfulJobsHistoryLimit: 1
+# successfulJobsHistoryLimit: 3
 # failedJobsHistoryLimit: 1
+# ttlSecondsAfterFinished 600
 
 # Required when running as a Deployment
 deschedulingInterval: 5m
@@ -46,6 +47,7 @@ replicas: 1
 
 # Specifies whether Leader Election resources should be created
 # Required when running as a Deployment
+# NOTE: Leader election can't be activated if DryRun enabled
 leaderElection: {}
 #  enabled: true
 #  leaseDuration: 15s

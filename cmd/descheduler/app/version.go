@@ -24,7 +24,7 @@ import (
 )
 
 func NewVersionCommand() *cobra.Command {
-	var versionCmd = &cobra.Command{
+	versionCmd := &cobra.Command{
 		Use:   "version",
 		Short: "Version of descheduler",
 		Long:  `Prints the version of descheduler.`,

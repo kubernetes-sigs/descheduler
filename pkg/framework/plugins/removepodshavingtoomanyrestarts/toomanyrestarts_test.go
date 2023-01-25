@@ -74,7 +74,8 @@ func initPods(node *v1.Node) []*v1.Pod {
 			VolumeSource: v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+				},
 			},
 		},
 	}
@@ -225,7 +226,6 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.description, func(t *testing.T) {
-
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -278,7 +278,6 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 				},
 			)
-
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}

@@ -26,8 +26,8 @@ import (
 
 // RemovePodsViolatingInterPodAntiAffinity holds arguments used to configure RemovePodsViolatingInterPodAntiAffinity plugin.
 type RemovePodsViolatingInterPodAntiAffinityArgs struct {
-	metav1.TypeMeta
+	metav1.TypeMeta `json:",inline"`
 
-	Namespaces    *api.Namespaces
-	LabelSelector *metav1.LabelSelector
+	Namespaces    *api.Namespaces       `json:"namespaces"`
+	LabelSelector *metav1.LabelSelector `json:"labelSelector"`
 }

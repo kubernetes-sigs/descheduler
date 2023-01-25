@@ -56,7 +56,6 @@ func TestReadyNodes(t *testing.T) {
 	if IsReady(node5) {
 		t.Errorf("Expected %v to be not ready", node5.Name)
 	}
-
 }
 
 func TestReadyNodesWithNodeSelector(t *testing.T) {
@@ -111,11 +110,9 @@ func TestIsNodeUnschedulable(t *testing.T) {
 			t.Errorf("Test %#v failed", test.description)
 		}
 	}
-
 }
 
 func TestPodFitsCurrentNode(t *testing.T) {
-
 	nodeLabelKey := "kubernetes.io/desiredNode"
 	nodeLabelValue := "yes"
 
@@ -756,7 +753,7 @@ func TestPodFitsAnyOtherNode(t *testing.T) {
 }
 
 // createResourceList builds a small resource list of core resources
-func createResourceList(cpu int64, memory int64, ephemeralStorage int64) v1.ResourceList {
+func createResourceList(cpu, memory, ephemeralStorage int64) v1.ResourceList {
 	resourceList := make(map[v1.ResourceName]resource.Quantity)
 	resourceList[v1.ResourceCPU] = *resource.NewMilliQuantity(cpu, resource.DecimalSI)
 	resourceList[v1.ResourceMemory] = *resource.NewQuantity(memory, resource.DecimalSI)

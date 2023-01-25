@@ -58,6 +58,7 @@ func TestLowNodeUtilization(t *testing.T) {
 		pods                         []*v1.Pod
 		expectedPodsEvicted          uint
 		evictedPods                  []string
+		evictableNamespaces          *api.Namespaces
 	}{
 		{
 			name: "no evictable pods",
@@ -89,7 +90,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -138,7 +140,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -154,6 +157,132 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
 			expectedPodsEvicted: 4,
+		},
+		{
+			name: "without priorities, but excluding namespaces",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					pod.Namespace = "namespace1"
+				}),
+				test.BuildTestPod("p2", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					pod.Namespace = "namespace1"
+				}),
+				test.BuildTestPod("p3", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					pod.Namespace = "namespace1"
+				}),
+				test.BuildTestPod("p4", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					pod.Namespace = "namespace1"
+				}),
+				test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					pod.Namespace = "namespace1"
+				}),
+				// These won't be evicted.
+				test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
+				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					// A pod with local storage.
+					test.SetNormalOwnerRef(pod)
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "sample",
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+								EmptyDir: &v1.EmptyDirVolumeSource{
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
+							},
+						},
+					}
+					// A Mirror Pod.
+					pod.Annotations = test.GetMirrorPodAnnotation()
+				}),
+				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					// A Critical Pod.
+					pod.Namespace = "kube-system"
+					priority := utils.SystemCriticalPriority
+					pod.Spec.Priority = &priority
+				}),
+				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
+			},
+			evictableNamespaces: &api.Namespaces{
+				Exclude: []string{
+					"namespace1",
+				},
+			},
+			expectedPodsEvicted: 0,
+		},
+		{
+			name: "without priorities, but include only default namespace",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					pod.Namespace = "namespace3"
+				}),
+				test.BuildTestPod("p4", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					pod.Namespace = "namespace4"
+				}),
+				test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					pod.Namespace = "namespace5"
+				}),
+				// These won't be evicted.
+				test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
+				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					// A pod with local storage.
+					test.SetNormalOwnerRef(pod)
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "sample",
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+								EmptyDir: &v1.EmptyDirVolumeSource{
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
+							},
+						},
+					}
+					// A Mirror Pod.
+					pod.Annotations = test.GetMirrorPodAnnotation()
+				}),
+				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					// A Critical Pod.
+					pod.Namespace = "kube-system"
+					priority := utils.SystemCriticalPriority
+					pod.Spec.Priority = &priority
+				}),
+				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
+			},
+			evictableNamespaces: &api.Namespaces{
+				Include: []string{
+					"default",
+				},
+			},
+			expectedPodsEvicted: 2,
 		},
 		{
 			name: "without priorities stop when cpu capacity is depleted",
@@ -187,7 +316,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -256,7 +386,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -322,7 +453,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -396,7 +528,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -477,7 +610,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -540,7 +674,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -631,7 +766,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -681,7 +817,8 @@ func TestLowNodeUtilization(t *testing.T) {
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
 							},
 						},
 					}
@@ -776,7 +913,6 @@ func TestLowNodeUtilization(t *testing.T) {
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 				},
 			)
-
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
@@ -790,10 +926,10 @@ func TestLowNodeUtilization(t *testing.T) {
 			}
 
 			plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
-
 				Thresholds:             test.thresholds,
 				TargetThresholds:       test.targetThresholds,
 				UseDeviationThresholds: test.useDeviationThresholds,
+				EvictableNamespaces:    test.evictableNamespaces,
 			},
 				handle)
 			if err != nil {
@@ -949,7 +1085,6 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 				},
 			)
-
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
@@ -963,7 +1098,6 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 			}
 
 			plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
-
 				Thresholds: api.ResourceThresholds{
 					v1.ResourcePods: 20,
 				},

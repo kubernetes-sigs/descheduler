@@ -20,6 +20,7 @@ package app
 import (
 	"context"
 	"io"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -34,6 +35,7 @@ import (
 	"k8s.io/apiserver/pkg/server/mux"
 	restclient "k8s.io/client-go/rest"
 	registry "k8s.io/component-base/logs/api/v1"
+	jsonLog "k8s.io/component-base/logs/json"
 	_ "k8s.io/component-base/logs/json/register"
 	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/klog/v2"
@@ -42,7 +44,6 @@ import (
 // NewDeschedulerCommand creates a *cobra.Command object with default parameters
 func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 	s, err := options.NewDeschedulerServer()
-
 	if err != nil {
 		klog.ErrorS(err, "unable to initialize server")
 	}
@@ -62,13 +63,18 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 				return
 			}
 			var factory registry.LogFormatFactory
+
+			if s.Logging.Format == "json" {
+				factory = jsonLog.Factory{}
+			}
+
 			if factory == nil {
 				klog.ClearLogger()
 			} else {
 				log, logrFlush := factory.Create(registry.LoggingConfiguration{
-					Format: s.Logging.Format,
+					Format:    s.Logging.Format,
+					Verbosity: s.Logging.Verbosity,
 				})
-
 				defer logrFlush()
 				klog.SetLogger(log)
 			}
@@ -106,4 +112,9 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	return descheduler.Run(ctx, rs)
+}
+
+func SetupLogs() {
+	klog.SetOutput(os.Stdout)
+	klog.InitFlags(nil)
 }

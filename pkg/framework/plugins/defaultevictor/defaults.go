@@ -23,29 +23,30 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 
 // SetDefaults_DefaultEvictorArgs
 // TODO: the final default values would be discussed in community
-func SetDefaults_DefaultEvictorArgs(obj *DefaultEvictorArgs) {
-	if obj.NodeSelector == "" {
-		obj.NodeSelector = ""
+func SetDefaults_DefaultEvictorArgs(obj runtime.Object) {
+	args := obj.(*DefaultEvictorArgs)
+	if args.NodeSelector == "" {
+		args.NodeSelector = ""
 	}
-	if !obj.EvictLocalStoragePods {
-		obj.EvictSystemCriticalPods = false
+	if !args.EvictLocalStoragePods {
+		args.EvictSystemCriticalPods = false
 	}
-	if !obj.EvictSystemCriticalPods {
-		obj.EvictSystemCriticalPods = false
+	if !args.EvictSystemCriticalPods {
+		args.EvictSystemCriticalPods = false
 	}
-	if !obj.IgnorePvcPods {
-		obj.IgnorePvcPods = false
+	if !args.IgnorePvcPods {
+		args.IgnorePvcPods = false
 	}
-	if !obj.EvictFailedBarePods {
-		obj.EvictFailedBarePods = false
+	if !args.EvictFailedBarePods {
+		args.EvictFailedBarePods = false
 	}
-	if obj.LabelSelector == nil {
-		obj.LabelSelector = nil
+	if args.LabelSelector == nil {
+		args.LabelSelector = nil
 	}
-	if obj.PriorityThreshold == nil {
-		obj.PriorityThreshold = nil
+	if args.PriorityThreshold == nil {
+		args.PriorityThreshold = nil
 	}
-	if !obj.NodeFit {
-		obj.NodeFit = false
+	if !args.NodeFit {
+		args.NodeFit = false
 	}
 }

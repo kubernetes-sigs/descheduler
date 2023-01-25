@@ -14,12 +14,13 @@ limitations under the License.
 package nodeutilization
 
 import (
+	"testing"
+
 	"github.com/google/go-cmp/cmp"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"testing"
 )
 
 func TestSetDefaults_LowNodeUtilizationArgs(t *testing.T) {

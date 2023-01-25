@@ -15,6 +15,7 @@ package removefailedpods
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
+	utilpointer "k8s.io/utils/pointer"
 )
 
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
@@ -23,23 +24,24 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 
 // SetDefaults_RemoveFailedPodsArgs
 // TODO: the final default values would be discussed in community
-func SetDefaults_RemoveFailedPodsArgs(obj *RemoveFailedPodsArgs) {
-	if obj.Namespaces == nil {
-		obj.Namespaces = nil
+func SetDefaults_RemoveFailedPodsArgs(obj runtime.Object) {
+	args := obj.(*RemoveFailedPodsArgs)
+	if args.Namespaces == nil {
+		args.Namespaces = nil
 	}
-	if obj.LabelSelector == nil {
-		obj.LabelSelector = nil
+	if args.LabelSelector == nil {
+		args.LabelSelector = nil
 	}
-	if obj.ExcludeOwnerKinds == nil {
-		obj.ExcludeOwnerKinds = nil
+	if args.ExcludeOwnerKinds == nil {
+		args.ExcludeOwnerKinds = nil
 	}
-	if obj.MinPodLifetimeSeconds == nil {
-		obj.MinPodLifetimeSeconds = nil
+	if args.MinPodLifetimeSeconds == nil {
+		args.MinPodLifetimeSeconds = utilpointer.Uint(3600)
 	}
-	if obj.Reasons == nil {
-		obj.Reasons = nil
+	if args.Reasons == nil {
+		args.Reasons = nil
 	}
-	if !obj.IncludingInitContainers {
-		obj.IncludingInitContainers = false
+	if !args.IncludingInitContainers {
+		args.IncludingInitContainers = false
 	}
 }

@@ -35,7 +35,7 @@ jobs:
 
       - uses: actions/setup-go@v3
         with:
-          go-version: '1.19.0'
+          go-version: '1.19.3'
 
       - name: Set up chart-testing
         uses: helm/chart-testing-action@v2.2.1
@@ -63,7 +63,7 @@ jobs:
 
       - name: E2E after chart install
         env:
-          KUBERNETES_VERSION: "v1.25.0"
+          KUBERNETES_VERSION: "v1.26.0"
           KIND_E2E: true
           SKIP_INSTALL: true
         run: make test-e2e
