@@ -15,15 +15,36 @@ package nodeutilization
 
 import (
 	"fmt"
+
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
-func ValidateHighNodeUtilizationArgs(args *HighNodeUtilizationArgs) error {
-	return validateThresholds(args.Thresholds)
+func ValidateHighNodeUtilizationArgs(obj runtime.Object) error {
+	args := obj.(*HighNodeUtilizationArgs)
+	// only exclude can be set, or not at all
+	if args.EvictableNamespaces != nil && len(args.EvictableNamespaces.Include) > 0 {
+		return fmt.Errorf("only Exclude namespaces can be set, inclusion is not supported")
+	}
+	err := validateThresholds(args.Thresholds)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func ValidateLowNodeUtilizationArgs(args *LowNodeUtilizationArgs) error {
-	return validateLowNodeUtilizationThresholds(args.Thresholds, args.TargetThresholds, args.UseDeviationThresholds)
+func ValidateLowNodeUtilizationArgs(obj runtime.Object) error {
+	args := obj.(*LowNodeUtilizationArgs)
+	// only exclude can be set, or not at all
+	if args.EvictableNamespaces != nil && len(args.EvictableNamespaces.Include) > 0 {
+		return fmt.Errorf("only Exclude namespaces can be set, inclusion is not supported")
+	}
+	err := validateLowNodeUtilizationThresholds(args.Thresholds, args.TargetThresholds, args.UseDeviationThresholds)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func validateLowNodeUtilizationThresholds(thresholds, targetThresholds api.ResourceThresholds, useDeviationThresholds bool) error {

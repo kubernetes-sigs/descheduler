@@ -23,10 +23,10 @@ import (
 
 // RemovePodsHavingTooManyRestartsArgs holds arguments used to configure RemovePodsHavingTooManyRestarts plugin.
 type RemovePodsHavingTooManyRestartsArgs struct {
-	metav1.TypeMeta
+	metav1.TypeMeta `json:",inline"`
 
-	Namespaces              *api.Namespaces
-	LabelSelector           *metav1.LabelSelector
-	PodRestartThreshold     int32
-	IncludingInitContainers bool
+	Namespaces              *api.Namespaces       `json:"namespaces"`
+	LabelSelector           *metav1.LabelSelector `json:"labelSelector"`
+	PodRestartThreshold     int32                 `json:"podRestartThreshold"`
+	IncludingInitContainers bool                  `json:"includingInitContainers"`
 }

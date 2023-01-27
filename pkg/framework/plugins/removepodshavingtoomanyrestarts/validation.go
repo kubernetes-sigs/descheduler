@@ -15,11 +15,14 @@ package removepodshavingtoomanyrestarts
 
 import (
 	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // ValidateRemovePodsHavingTooManyRestartsArgs validates RemovePodsHavingTooManyRestarts arguments
-func ValidateRemovePodsHavingTooManyRestartsArgs(args *RemovePodsHavingTooManyRestartsArgs) error {
+func ValidateRemovePodsHavingTooManyRestartsArgs(obj runtime.Object) error {
+	args := obj.(*RemovePodsHavingTooManyRestartsArgs)
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
 		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
@@ -32,7 +35,7 @@ func ValidateRemovePodsHavingTooManyRestartsArgs(args *RemovePodsHavingTooManyRe
 	}
 
 	if args.PodRestartThreshold < 1 {
-		return fmt.Errorf("PodsHavingTooManyRestarts threshold not set")
+		return fmt.Errorf("invalid PodsHavingTooManyRestarts threshold")
 	}
 
 	return nil

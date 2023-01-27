@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/errors"
@@ -129,9 +130,13 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 			return nil
 		})
 	}
-	if defaultEvictorArgs.LabelSelector != nil && !defaultEvictorArgs.LabelSelector.Empty() {
+	selector, err := metav1.LabelSelectorAsSelector(defaultEvictorArgs.LabelSelector)
+	if err != nil {
+		return nil, fmt.Errorf("could not get selector from label selector")
+	}
+	if defaultEvictorArgs.LabelSelector != nil && !selector.Empty() {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
-			if !defaultEvictorArgs.LabelSelector.Matches(labels.Set(pod.Labels)) {
+			if !selector.Matches(labels.Set(pod.Labels)) {
 				return fmt.Errorf("pod labels do not match the labelSelector filter in the policy parameter")
 			}
 			return nil
@@ -151,11 +156,11 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 	if defaultEvictorArgs.NodeFit {
 		nodes, err := nodeutil.ReadyNodes(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Nodes().Lister(), defaultEvictorArgs.NodeSelector)
 		if err != nil {
-			klog.V(1).ErrorS(fmt.Errorf("Pod fails the following checks"), "pod", klog.KObj(pod))
+			klog.ErrorS(fmt.Errorf("Pod fails the following checks"), "pod", klog.KObj(pod))
 			return false
 		}
 		if !nodeutil.PodFitsAnyOtherNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) {
-			klog.V(1).ErrorS(fmt.Errorf("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable"), "pod", klog.KObj(pod))
+			klog.ErrorS(fmt.Errorf("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable"), "pod", klog.KObj(pod))
 			return false
 		}
 		return true

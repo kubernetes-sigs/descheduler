@@ -81,7 +81,7 @@ func TestPodTypes(t *testing.T) {
 	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	// The following 4 pods won't get evicted.
 	// A daemonset.
-	//p2.Annotations = test.GetDaemonSetAnnotation()
+	// p2.Annotations = test.GetDaemonSetAnnotation()
 	p2.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 	// A pod with local storage.
 	p3.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -91,7 +91,8 @@ func TestPodTypes(t *testing.T) {
 			VolumeSource: v1.VolumeSource{
 				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
 				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI)},
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+				},
 			},
 		},
 	}
@@ -111,5 +112,4 @@ func TestPodTypes(t *testing.T) {
 	if utils.IsDaemonsetPod(ownerRefList) || utils.IsPodWithLocalStorage(p1) || utils.IsCriticalPriorityPod(p1) || utils.IsMirrorPod(p1) || utils.IsStaticPod(p1) {
 		t.Errorf("Expected p1 to be a normal pod.")
 	}
-
 }

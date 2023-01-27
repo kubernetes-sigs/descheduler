@@ -14,13 +14,14 @@ limitations under the License.
 package removefailedpods
 
 import (
+	"testing"
+
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"testing"
 )
 
 func TestSetDefaults_RemoveFailedPodsArgs(t *testing.T) {

@@ -23,6 +23,9 @@ spec:
   {{- end }}
   jobTemplate:
     spec:
+      {{- if .Values.ttlSecondsAfterFinished }}
+      ttlSecondsAfterFinished: {{ .Values.ttlSecondsAfterFinished }}
+      {{- end }}
       template:
         metadata:
           name: {{ template "descheduler.fullname" . }}

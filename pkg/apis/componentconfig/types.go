@@ -34,6 +34,7 @@ type DeschedulerConfiguration struct {
 
 	// KubeconfigFile is path to kubeconfig file with authorization and master
 	// location information.
+	// Deprecated: Use clientConnection.kubeConfig instead.
 	KubeconfigFile string
 
 	// PolicyConfigFile is the filepath to the descheduler policy configuration.
@@ -58,6 +59,10 @@ type DeschedulerConfiguration struct {
 	LeaderElection componentbaseconfig.LeaderElectionConfiguration
 
 	// Logging specifies the options of logging.
-	// Refer [Logs Options](https://github.com/kubernetes/component-base/blob/master/logs/api/v1/options.go) for more information.
+	// Refer to [Logs Options](https://github.com/kubernetes/component-base/blob/master/logs/api/v1/options.go) for more information.
 	Logging registry.LoggingConfiguration
+
+	// ClientConnection specifies the kubeconfig file and client connection settings to use when communicating with the apiserver.
+	// Refer to [ClientConnection](https://pkg.go.dev/k8s.io/kubernetes/pkg/apis/componentconfig#ClientConnectionConfiguration) for more information.
+	ClientConnection componentbaseconfig.ClientConnectionConfiguration
 }

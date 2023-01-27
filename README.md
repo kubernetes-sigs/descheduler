@@ -1,6 +1,10 @@
 [![Go Report Card](https://goreportcard.com/badge/sigs.k8s.io/descheduler)](https://goreportcard.com/report/sigs.k8s.io/descheduler)
 ![Release Charts](https://github.com/kubernetes-sigs/descheduler/workflows/Release%20Charts/badge.svg)
 
+<p align="center">
+    <img src="assets/logo/descheduler-stacked-color.png" width="40%" align="center" alt="descheduler">
+</p>
+
 # Descheduler for Kubernetes
 
 Scheduling in Kubernetes is the process of binding pending pods to nodes, and is performed by
@@ -105,17 +109,17 @@ See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/ku
 
 Run As A Job
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.25.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.26.0' | kubectl apply -f -
 ```
 
 Run As A CronJob
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.25.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.26.0' | kubectl apply -f -
 ```
 
 Run As A Deployment
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.25.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.26.0' | kubectl apply -f -
 ```
 
 ## User Guide
@@ -243,6 +247,7 @@ actual usage metrics. Implementing metrics-based descheduling is currently TODO 
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
+|`Namespaces`|(see [namespace filtering](#namespace-filtering))|
 
 **Example:**
 
@@ -315,6 +320,7 @@ actual usage metrics. Implementing metrics-based descheduling is currently TODO 
 |`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
 |`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
+|`Namespaces`|(see [namespace filtering](#namespace-filtering))|
 
 **Example:**
 
@@ -613,6 +619,7 @@ The following strategies accept a `namespaces` parameter which allows to specify
 * `RemoveDuplicates`
 * `RemovePodsViolatingTopologySpreadConstraint`
 * `RemoveFailedPods`
+* `LowNodeUtilization` and `HighNodeUtilization` (Only filtered right before eviction)
 
 For example:
 
@@ -695,7 +702,7 @@ does not exist, descheduler won't create it and will throw an error.
 
 ### Label filtering
 
-The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.25/#labelselector-v1-meta)
+The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.26/#labelselector-v1-meta)
 to filter pods by their labels:
 
 * `PodLifeTime`
@@ -841,6 +848,7 @@ packages that it is compiled with.
 
 | Descheduler | Supported Kubernetes Version |
 |-------------|------------------------------|
+| v0.26       | v1.26                        |
 | v0.25       | v1.25                        |
 | v0.24       | v1.24                        |
 | v0.23       | v1.23                        |

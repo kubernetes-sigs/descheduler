@@ -20,38 +20,43 @@ import (
 	"fmt"
 
 	clientset "k8s.io/client-go/kubernetes"
+	componentbaseconfig "k8s.io/component-base/config"
+
 	// Ensure to load all auth plugins.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func CreateClient(kubeconfig string, userAgt string) (clientset.Interface, error) {
+func CreateClient(clientConnection componentbaseconfig.ClientConnectionConfiguration, userAgt string) (clientset.Interface, error) {
 	var cfg *rest.Config
-	if len(kubeconfig) != 0 {
-		master, err := GetMasterFromKubeconfig(kubeconfig)
+	if len(clientConnection.Kubeconfig) != 0 {
+		master, err := GetMasterFromKubeconfig(clientConnection.Kubeconfig)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to parse kubeconfig file: %v ", err)
+			return nil, fmt.Errorf("failed to parse kubeconfig file: %v ", err)
 		}
 
-		cfg, err = clientcmd.BuildConfigFromFlags(master, kubeconfig)
+		cfg, err = clientcmd.BuildConfigFromFlags(master, clientConnection.Kubeconfig)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to build config: %v", err)
+			return nil, fmt.Errorf("unable to build config: %v", err)
 		}
 
 	} else {
 		var err error
 		cfg, err = rest.InClusterConfig()
 		if err != nil {
-			return nil, fmt.Errorf("Unable to build in cluster config: %v", err)
+			return nil, fmt.Errorf("unable to build in cluster config: %v", err)
 		}
 	}
 
+	cfg.Burst = int(clientConnection.Burst)
+	cfg.QPS = clientConnection.QPS
+
 	if len(userAgt) != 0 {
-		return clientset.NewForConfig(rest.AddUserAgent(cfg, userAgt))
-	} else {
-		return clientset.NewForConfig(cfg)
+		cfg = rest.AddUserAgent(cfg, userAgt)
 	}
+
+	return clientset.NewForConfig(cfg)
 }
 
 func GetMasterFromKubeconfig(filename string) (string, error) {
@@ -62,11 +67,11 @@ func GetMasterFromKubeconfig(filename string) (string, error) {
 
 	context, ok := config.Contexts[config.CurrentContext]
 	if !ok {
-		return "", fmt.Errorf("Failed to get master address from kubeconfig")
+		return "", fmt.Errorf("failed to get master address from kubeconfig")
 	}
 
 	if val, ok := config.Clusters[context.Cluster]; ok {
 		return val.Server, nil
 	}
-	return "", fmt.Errorf("Failed to get master address from kubeconfig")
+	return "", fmt.Errorf("failed to get master address from kubeconfig")
 }

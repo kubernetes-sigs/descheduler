@@ -26,9 +26,9 @@ import (
 
 // RemovePodsViolatingNodeAffinityArgs holds arguments used to configure RemovePodsViolatingNodeAffinity plugin.
 type RemovePodsViolatingNodeAffinityArgs struct {
-	metav1.TypeMeta
+	metav1.TypeMeta `json:",inline"`
 
-	Namespaces       *api.Namespaces
-	LabelSelector    *metav1.LabelSelector
-	NodeAffinityType []string
+	Namespaces       *api.Namespaces       `json:"namespaces"`
+	LabelSelector    *metav1.LabelSelector `json:"labelSelector"`
+	NodeAffinityType []string              `json:"nodeAffinityType"`
 }

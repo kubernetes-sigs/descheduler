@@ -23,11 +23,12 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 
 // SetDefaults_RemovePodsViolatingInterPodAntiAffinityArgs
 // TODO: the final default values would be discussed in community
-func SetDefaults_RemovePodsViolatingInterPodAntiAffinityArgs(obj *RemovePodsViolatingInterPodAntiAffinityArgs) {
-	if obj.Namespaces == nil {
-		obj.Namespaces = nil
+func SetDefaults_RemovePodsViolatingInterPodAntiAffinityArgs(obj runtime.Object) {
+	args := obj.(*RemovePodsViolatingInterPodAntiAffinityArgs)
+	if args.Namespaces == nil {
+		args.Namespaces = nil
 	}
-	if obj.LabelSelector == nil {
-		obj.LabelSelector = nil
+	if args.LabelSelector == nil {
+		args.LabelSelector = nil
 	}
 }
