@@ -26,6 +26,44 @@ Descheduler, based on its policy, finds pods that can be moved and evicts them. 
 note, in current implementation, descheduler does not schedule replacement of evicted pods
 but relies on the default scheduler for that.
 
+Table of Contents
+=================
+<!-- toc -->
+- [Quick Start](#quick-start)
+  - [Run As A Job](#run-as-a-job)
+  - [Run As A CronJob](#run-as-a-cronjob)
+  - [Run As A Deployment](#run-as-a-deployment)
+  - [Install Using Helm](#install-using-helm)
+  - [Install Using Kustomize](#install-using-kustomize)
+- [User Guide](#user-guide)
+- [Policy and Strategies](#policy-and-strategies)
+  - [RemoveDuplicates](#removeduplicates)
+  - [LowNodeUtilization](#lownodeutilization)
+  - [HighNodeUtilization](#highnodeutilization)
+  - [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity)
+  - [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity)
+  - [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints)
+  - [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint)
+  - [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts)
+  - [PodLifeTime](#podlifetime)
+  - [RemoveFailedPods](#removefailedpods)
+- [Filter Pods](#filter-pods)
+  - [Namespace filtering](#namespace-filtering)
+  - [Priority filtering](#priority-filtering)
+  - [Label filtering](#label-filtering)
+  - [Node Fit filtering](#node-fit-filtering)
+- [Pod Evictions](#pod-evictions)
+  - [Pod Disruption Budget (PDB)](#pod-disruption-budget-pdb)
+- [High Availability](#high-availability)
+  - [Configure HA Mode](#configure-ha-mode)
+- [Metrics](#metrics)
+- [Compatibility Matrix](#compatibility-matrix)
+- [Getting Involved and Contributing](#getting-involved-and-contributing)
+  - [Communicating With Contributors](#communicating-with-contributors)
+- [Roadmap](#roadmap)
+  - [Code of conduct](#code-of-conduct)
+<!-- /toc -->
+
 ## Quick Start
 
 The descheduler can be run as a `Job`, `CronJob`, or `Deployment` inside of a k8s cluster. It has the
@@ -88,72 +126,37 @@ kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?re
 
 See the [user guide](docs/user-guide.md) in the `/docs` directory.
 
-## Policy, Default Evictor and Strategy plugins
+## Policy and Strategies
 
-**⚠️ v1alpha1 configuration is still suported, but deprecated (and soon will be removed). Please consider migrating to v1alpha2 (described bellow). For previous v1alpha1 documentation go to docs/deprecated/v1alpha1.md**
+Descheduler's policy is configurable and includes strategies that can be enabled or disabled. By default, all strategies are enabled.
 
-The Descheduler Policy is configurable and includes default eviction strategy plugins that can be enabled or disabled. It includes a common eviction configuration at the top level, as well as configuration from the Evictor plugin (Default Evictor, if not specified otherwise). Top-level configuration and Evictor plugin configuration are applied to all evictions.
-
-### Top Level configuration
-
-These are top level keys in the Descheduler Policy that you can use to configure all evictions.
-
-| Name | Default Value | Description |
-|------|---------------|-------------|
-| `nodeSelector` | `nil` | limiting the nodes which are processed |
-| `maxNoOfPodsToEvictPerNode` | `nil` | maximum number of pods evicted from each node (summed through all strategies) |
-| `maxNoOfPodsToEvictPerNamespace` | `nil` | maximum number of pods evicted from each namespace (summed through all strategies) |
-
-### Evictor Plugion configuration (Default Evictor)
-
-The Default Evictor Plugin is used by default for filtering pods before processing them in an eviction strategy plugin, or for applying a PreEvictionFilter of pods before eviction. You can also create your own Evictor Plugin or use the Default one provided by Descheduler.  Other uses for the Evictor plugin can be to sort, filter, validate or group pods by different criteria, and that's why this is handled by a plugin and not configured in the top level config.
-
+The policy includes a common configuration that applies to all the strategies:
 | Name | Default Value | Description |
 |------|---------------|-------------|
 | `nodeSelector` | `nil` | limiting the nodes which are processed |
 | `evictLocalStoragePods` | `false` | allows eviction of pods with local storage |
 | `evictSystemCriticalPods` | `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
 | `ignorePvcPods` | `false` | set whether PVC pods should be evicted or ignored |
+| `maxNoOfPodsToEvictPerNode` | `nil` | maximum number of pods evicted from each node (summed through all strategies) |
+| `maxNoOfPodsToEvictPerNamespace` | `nil` | maximum number of pods evicted from each namespace (summed through all strategies) |
 | `evictFailedBarePods` | `false` | allow eviction of pods without owner references and in failed phase |
-|`labelSelector`|(see [label filtering](#label-filtering))|
-|`priorityThreshold`|int (see [priority filtering](#priority-filtering))|
-|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
-|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
-### Example policy
-
-As part of the policy, you will start deciding which top level configuration to use, then which Evictor plugin to use (if you have your own, the Default Evictor if not), followed by deciding the configuration passed to the Evictor Plugin. After that you will enable/disable eviction strategies plugins and configure them properly.
-
-See each eviction strategy plugin section for details on available parameters.
+As part of the policy, the parameters associated with each strategy can be configured.
+See each strategy for details on available parameters.
 
 **Policy:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-nodeSelector: "node1" # you don't need to set this, if not set all will be processed
-maxNoOfPodsToEvictPerNode: 5000 # you don't need to set this, unlimited if not set
-maxNoOfPodsToEvictPerNamespace: 5000 # you don't need to set this, unlimited if not set
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-      args:
-        evictSystemCriticalPods: true
-        evictFailedBarePods: true
-        evictLocalStoragePods: true
-        nodeFit: true
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      deschedule:
-        enabled:
-          - ...
-      balance:
-        enabled:
-          - ...
-      [...]
+nodeSelector: prod=dev
+evictFailedBarePods: false
+evictLocalStoragePods: true
+evictSystemCriticalPods: true
+maxNoOfPodsToEvictPerNode: 40
+ignorePvcPods: false
+strategies:
+  ...
 ```
 
 The following diagram provides a visualization of most of the strategies to help
@@ -161,11 +164,9 @@ categorize how strategies fit together.
 
 ![Strategies diagram](strategies_diagram.png)
 
-Next sections will go over different eviction strategy plugins. Right now we group them by being Deschedule plugins or Balance plugins (more types could be added).
-
 ### RemoveDuplicates
 
-This eviction strategy plugin makes sure that there is only one pod associated with a ReplicaSet (RS),
+This strategy makes sure that there is only one pod associated with a ReplicaSet (RS),
 ReplicationController (RC), StatefulSet, or Job running on the same node. If there are more,
 those duplicate pods are evicted for better spreading of pods in a cluster. This issue could happen
 if some nodes went down due to whatever reasons, and pods on them were moved to other nodes leading to
@@ -177,34 +178,27 @@ has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considere
 pods created by Deployments are considered for eviction by this strategy. The `excludeOwnerKinds` parameter
 should include `ReplicaSet` to have pods created by Deployments excluded.
 
-This is a Balance plugin.
-
 **Parameters:**
 
 |Name|Type|
 |---|---|
 |`excludeOwnerKinds`|list(string)|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-    - name: "RemoveDuplicates"
-      args:
-        excludeOwnerKinds: 
-          - "ReplicaSet"
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      balance:
-        enabled:
-          - "RemoveDuplicates"
+strategies:
+  "RemoveDuplicates":
+     enabled: true
+     params:
+       removeDuplicates:
+         excludeOwnerKinds:
+         - "ReplicaSet"
 ```
 
 ### LowNodeUtilization
@@ -242,44 +236,37 @@ design for scheduling pods onto nodes. This means that resource usage as reporte
 like `kubectl top`) may differ from the calculated consumption, due to these components reporting
 actual usage metrics. Implementing metrics-based descheduling is currently TODO for the project.
 
-This is a Balance plugin.
-
 **Parameters:**
 
 |Name|Type|
 |---|---|
-|`useDeviationThresholds`|bool|
 |`thresholds`|map(string:int)|
 |`targetThresholds`|map(string:int)|
 |`numberOfNodes`|int|
-|`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
+|`useDeviationThresholds`|bool|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
+|`Namespaces`|(see [namespace filtering](#namespace-filtering))|
 
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-    - name: "LowNodeUtilization"
-      args:
-        thresholds:
-          "cpu" : 20
-          "memory": 20
-          "pods": 20
-        targetThresholds:
-          "cpu" : 50
-          "memory": 50
-          "pods": 50
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      balance:
-        enabled:
-          - "LowNodeUtilization"
+strategies:
+  "LowNodeUtilization":
+     enabled: true
+     params:
+       nodeResourceUtilizationThresholds:
+         thresholds:
+           "cpu" : 20
+           "memory": 20
+           "pods": 20
+         targetThresholds:
+           "cpu" : 50
+           "memory": 50
+           "pods": 50
 ```
 
 Policy should pass the following validation checks:
@@ -324,43 +311,31 @@ design for scheduling pods onto nodes. This means that resource usage as reporte
 like `kubectl top`) may differ from the calculated consumption, due to these components reporting
 actual usage metrics. Implementing metrics-based descheduling is currently TODO for the project.
 
-This is a Balance plugin.
-
 **Parameters:**
 
 |Name|Type|
 |---|---|
 |`thresholds`|map(string:int)|
 |`numberOfNodes`|int|
-|`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
+|`Namespaces`|(see [namespace filtering](#namespace-filtering))|
 
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-    - name: "HighNodeUtilization"
-      args:
-        thresholds:
-          "cpu" : 20
-          "memory": 20
-          "pods": 20
-        evictableNamespaces:
-          namespaces:
-            exclude:
-            - "kube-system"
-            - "namespace1" 
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      balance:
-        enabled:
-          - "HighNodeUtilization"
+strategies:
+  "HighNodeUtilization":
+     enabled: true
+     params:
+       nodeResourceUtilizationThresholds:
+         thresholds:
+           "cpu" : 20
+           "memory": 20
+           "pods": 20
 ```
 
 Policy should pass the following validation checks:
@@ -382,32 +357,24 @@ them to run on the same node, then podA will be evicted from the node so that po
 issue could happen, when the anti-affinity rules for podB and podC are created when they are already running on
 node.
 
-This is a Deschedule plugin.
-
 **Parameters:**
 
 |Name|Type|
 |---|---|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-    - name: "RemovePodsViolatingInterPodAntiAffinity"
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      deschedule:
-        enabled:
-          - "RemovePodsViolatingInterPodAntiAffinity"
+strategies:
+  "RemovePodsViolatingInterPodAntiAffinity":
+     enabled: true
 ```
 
 ### RemovePodsViolatingNodeAffinity
@@ -428,36 +395,28 @@ of scheduling. Over time nodeA stops to satisfy the rule. When the strategy gets
 executed and there is another node available that satisfies the node affinity rule,
 podA gets evicted from nodeA.
 
-This is a Deschedule plugin.
-
 **Parameters:**
 
 |Name|Type|
 |---|---|
 |`nodeAffinityType`|list(string)|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-    - name: "RemovePodsViolatingNodeAffinity"
-      args:
-        nodeAffinityType:
-        - "requiredDuringSchedulingIgnoredDuringExecution"
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      deschedule:
-        enabled:
-          - "RemovePodsViolatingNodeAffinity"
+strategies:
+  "RemovePodsViolatingNodeAffinity":
+    enabled: true
+    params:
+      nodeAffinityType:
+      - "requiredDuringSchedulingIgnoredDuringExecution"
 ```
 
 ### RemovePodsViolatingNodeTaints
@@ -473,38 +432,29 @@ key=value matches an excludedTaints entry, the taint will be ignored.
 For example, excludedTaints entry "dedicated" would match all taints with key "dedicated", regardless of value.
 excludedTaints entry "dedicated=special-user" would match taints with key "dedicated" and value "special-user".
 
-This is a Deschedule plugin.
-
 **Parameters:**
 
 |Name|Type|
 |---|---|
 |`excludedTaints`|list(string)|
-|`includePreferNoSchedule`|bool|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
 ````yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-    - name: "RemovePodsViolatingNodeTaints"
-      args:
-        excludedTaints:
-        - dedicated=special-user # exclude taints with key "dedicated" and value "special-user"
-        - reserved # exclude all taints with key "reserved"
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      deschedule:
-        enabled:
-          - "RemovePodsViolatingNodeTaints"
+strategies:
+  "RemovePodsViolatingNodeTaints":
+    enabled: true
+    params:
+      excludedTaints:
+      - dedicated=special-user # exclude taints with key "dedicated" and value "special-user"
+      - reserved # exclude all taints with key "reserved"
 ````
 
 ### RemovePodsViolatingTopologySpreadConstraint
@@ -518,35 +468,27 @@ include soft constraints.
 
 Strategy parameter `labelSelector` is not utilized when balancing topology domains and is only applied during eviction to determine if the pod can be evicted.
 
-This is a Balance plugin.
-
 **Parameters:**
 
 |Name|Type|
 |---|---|
 |`includeSoftConstraints`|bool|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-    - name: "RemovePodsViolatingTopologySpreadConstraint"
-      args:
-        includeSoftConstraints: false
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      balance:
-        enabled:
-          - "RemovePodsViolatingTopologySpreadConstraint"
+strategies:
+  "RemovePodsViolatingTopologySpreadConstraint":
+     enabled: true
+     params:
+       includeSoftConstraints: false
 ```
 
 
@@ -558,37 +500,30 @@ include `podRestartThreshold`, which is the number of restarts (summed over all 
 should be evicted, and `includingInitContainers`, which determines whether init container restarts should be factored
 into that calculation.
 
-This is a Deschedule plugin.
-
 **Parameters:**
 
 |Name|Type|
 |---|---|
 |`podRestartThreshold`|int|
 |`includingInitContainers`|bool|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-    - name: "RemovePodsHavingTooManyRestarts"
-      args:
-        podRestartThreshold: 100
-        includingInitContainers: true
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      deschedule:
-        enabled:
-          - "RemovePodsHavingTooManyRestarts"
+strategies:
+  "RemovePodsHavingTooManyRestarts":
+     enabled: true
+     params:
+       podsHavingTooManyRestarts:
+         podRestartThreshold: 100
+         includingInitContainers: true
 ```
 
 ### PodLifeTime
@@ -602,39 +537,32 @@ You can also specify `states` parameter to **only** evict pods matching the foll
 If a value for `states` or `podStatusPhases` is not specified,
 Pods in any state (even `Running`) are considered for eviction.
 
-This is a Deschedule plugin.
-
 **Parameters:**
 
 |Name|Type|Notes|
 |---|---|---|
 |`maxPodLifeTimeSeconds`|int||
+|`podStatusPhases`|list(string)|Deprecated in v0.25+ Use `states` instead|
 |`states`|list(string)|Only supported in v0.25+|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))||
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))||
 |`namespaces`|(see [namespace filtering](#namespace-filtering))||
 |`labelSelector`|(see [label filtering](#label-filtering))||
 
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-    - name: "PodLifeTime"
-      args:
-        maxPodLifeTimeSeconds: 86400
-        states:
-        - "Pending"
-        - "PodInitializing"
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      deschedule:
-        enabled:
-          - "PodLifeTime"
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+       podLifeTime:
+         maxPodLifeTimeSeconds: 86400
+         states:
+         - "Pending"
+         - "PodInitializing"
 ```
 
 ### RemoveFailedPods
@@ -646,8 +574,6 @@ You can specify an optional parameter `minPodLifetimeSeconds` to evict pods that
 Lastly, you can specify the optional parameter `excludeOwnerKinds` and if a pod
 has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
 
-This is a Deschedule plugin.
-
 **Parameters:**
 
 |Name|Type|
@@ -656,33 +582,28 @@ This is a Deschedule plugin.
 |`excludeOwnerKinds`|list(string)|
 |`reasons`|list(string)|
 |`includingInitContainers`|bool|
+|`thresholdPriority`|int (see [priority filtering](#priority-filtering))|
+|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
 
 **Example:**
 
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-    - name: "RemoveFailedPods"
-      args:
-        reasons:
-        - "NodeAffinity"
-        includingInitContainers: true
-        excludeOwnerKinds:
-        - "Job"
-        minPodLifetimeSeconds: 3600
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      deschedule:
-        enabled:
-          - "RemoveFailedPods"
+strategies:
+  "RemoveFailedPods":
+     enabled: true
+     params:
+       failedPods:
+         reasons:
+         - "NodeAffinity"
+         includingInitContainers: true
+         excludeOwnerKinds:
+         - "Job"
+         minPodLifetimeSeconds: 3600
 ```
 
 ## Filter Pods
@@ -698,60 +619,41 @@ The following strategies accept a `namespaces` parameter which allows to specify
 * `RemoveDuplicates`
 * `RemovePodsViolatingTopologySpreadConstraint`
 * `RemoveFailedPods`
-
-
-The following strategies accept a `evictableNamespaces` parameter which allows to specify a list of excluding namespaces:
 * `LowNodeUtilization` and `HighNodeUtilization` (Only filtered right before eviction)
 
-For example with PodLifeTime:
+For example:
 
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-    - name: "PodLifeTime"
-      args:
-        maxPodLifeTimeSeconds: 86400
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+        podLifeTime:
+          maxPodLifeTimeSeconds: 86400
         namespaces:
           include:
           - "namespace1"
           - "namespace2"
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      deschedule:
-        enabled:
-          - "PodLifeTime"
 ```
 
-In the example `PodLifeTime` gets executed only over `namespace1` and `namespace2`.
+In the examples `PodLifeTime` gets executed only over `namespace1` and `namespace2`.
 The similar holds for `exclude` field:
 
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-    - name: "PodLifeTime"
-      args:
-        maxPodLifeTimeSeconds: 86400
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+        podLifeTime:
+          maxPodLifeTimeSeconds: 86400
         namespaces:
           exclude:
           - "namespace1"
           - "namespace2"
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      deschedule:
-        enabled:
-          - "PodLifeTime"
 ```
 
 The strategy gets executed over all namespaces but `namespace1` and `namespace2`.
@@ -760,62 +662,42 @@ It's not allowed to compute `include` with `exclude` field.
 
 ### Priority filtering
 
-Priority threshold can be configured via the Default Evictor Filter, and, only pods under the threshold can be evicted. You can
-specify this threshold by setting `priorityThreshold.name`(setting the threshold to the value of the given
-priority class) or `priorityThreshold.value`(directly setting the threshold) parameters. By default, this threshold
+All strategies are able to configure a priority threshold, only pods under the threshold can be evicted. You can
+specify this threshold by setting `thresholdPriorityClassName`(setting the threshold to the value of the given
+priority class) or `thresholdPriority`(directly setting the threshold) parameters. By default, this threshold
 is set to the value of `system-cluster-critical` priority class.
 
 Note: Setting `evictSystemCriticalPods` to true disables priority filtering entirely.
 
 E.g.
 
-Setting `priorityThreshold value`
+Setting `thresholdPriority`
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-      args:
-        priorityThreshold:
-          value: 10000
-    - name: "PodLifeTime"
-      args:
-        maxPodLifeTimeSeconds: 86400
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      deschedule:
-        enabled:
-          - "PodLifeTime"
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+        podLifeTime:
+          maxPodLifeTimeSeconds: 86400
+        thresholdPriority: 10000
 ```
 
-Setting `Priority Threshold Class Name (priorityThreshold.name)`
+Setting `thresholdPriorityClassName`
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-      args:
-        priorityThreshold:
-          name: "priorityClassName1"
-    - name: "PodLifeTime"
-      args:
-        maxPodLifeTimeSeconds: 86400
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      deschedule:
-        enabled:
-          - "PodLifeTime"
+strategies:
+  "PodLifeTime":
+     enabled: true
+     params:
+        podLifeTime:
+          maxPodLifeTimeSeconds: 86400
+        thresholdPriorityClassName: "priorityclass1"
 ```
 
-Note that you can't configure both `priorityThreshold.name` and `priorityThreshold.value`, if the given priority class
+Note that you can't configure both `thresholdPriority` and `thresholdPriorityClassName`, if the given priority class
 does not exist, descheduler won't create it and will throw an error.
 
 ### Label filtering
@@ -836,34 +718,37 @@ This allows running strategies among pods the descheduler is interested in.
 For example:
 
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-    - name: "PodLifeTime"
-      args:
+strategies:
+  "PodLifeTime":
+    enabled: true
+    params:
+      podLifeTime:
         maxPodLifeTimeSeconds: 86400
-        labelSelector:
-          matchLabels:
-            component: redis
-          matchExpressions:
-            - {key: tier, operator: In, values: [cache]}
-            - {key: environment, operator: NotIn, values: [dev]}
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      deschedule:
-        enabled:
-          - "PodLifeTime"
+      labelSelector:
+        matchLabels:
+          component: redis
+        matchExpressions:
+          - {key: tier, operator: In, values: [cache]}
+          - {key: environment, operator: NotIn, values: [dev]}
 ```
 
 
 ### Node Fit filtering
 
- NodeFit can be configured via the Default Evictor Filter. If set to `true` the descheduler will consider whether or not the pods that meet eviction criteria will fit on other nodes before evicting them. If a pod cannot be rescheduled to another node, it will not be evicted. Currently the following criteria are considered when setting `nodeFit` to `true`:
+The following strategies accept a `nodeFit` boolean parameter which can optimize descheduling:
+* `RemoveDuplicates`
+* `LowNodeUtilization`
+* `HighNodeUtilization`
+* `RemovePodsViolatingInterPodAntiAffinity`
+* `RemovePodsViolatingNodeAffinity`
+* `RemovePodsViolatingNodeTaints`
+* `RemovePodsViolatingTopologySpreadConstraint`
+* `RemovePodsHavingTooManyRestarts`
+* `RemoveFailedPods`
+
+ If set to `true` the descheduler will consider whether or not the pods that meet eviction criteria will fit on other nodes before evicting them. If a pod cannot be rescheduled to another node, it will not be evicted. Currently the following criteria are considered when setting `nodeFit` to `true`:
 - A `nodeSelector` on the pod
 - Any `tolerations` on the pod and any `taints` on the other nodes
 - `nodeAffinity` on the pod
@@ -873,24 +758,22 @@ profiles:
 E.g.
 
 ```yaml
-apiVersion: "descheduler/v1alpha2"
+apiVersion: "descheduler/v1alpha1"
 kind: "DeschedulerPolicy"
-profiles:
-  - name: ProfileName
-    pluginConfig:
-    - name: "DefaultEvictor"
-      args:
-        nodeFit: true
-    - name: "PodLifeTime"
-      args:
-        maxPodLifeTimeSeconds: 86400
-    plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
-      deschedule:
-        enabled:
-          - "PodLifeTime"
+strategies:
+  "LowNodeUtilization":
+    enabled: true
+    params:
+      nodeFit: true
+      nodeResourceUtilizationThresholds:
+        thresholds:
+          "cpu": 20
+          "memory": 20
+          "pods": 20
+        targetThresholds:
+          "cpu": 50
+          "memory": 50
+          "pods": 50
 ```
 
 Note that node fit filtering references the current pod spec, and not that of it's owner.
@@ -899,130 +782,3 @@ the pod may be running with an outdated spec, which the descheduler will referen
 This is expected behavior as the descheduler is a "best-effort" mechanism.
 
 Using Deployments instead of ReplicationControllers provides an automated rollout of pod spec changes, therefore ensuring that the descheduler has an up-to-date view of the cluster state.
-
-## Pod Evictions
-
-When the descheduler decides to evict pods from a node, it employs the following general mechanism:
-
-* [Critical pods](https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/) (with priorityClassName set to system-cluster-critical or system-node-critical) are never evicted (unless `evictSystemCriticalPods: true` is set).
-* Pods (static or mirrored pods or standalone pods) not part of an ReplicationController, ReplicaSet(Deployment), StatefulSet, or Job are
-never evicted because these pods won't be recreated. (Standalone pods in failed status phase can be evicted by setting `evictFailedBarePods: true`)
-* Pods associated with DaemonSets are never evicted.
-* Pods with local storage are never evicted (unless `evictLocalStoragePods: true` is set).
-* Pods with PVCs are evicted (unless `ignorePvcPods: true` is set).
-* In `LowNodeUtilization` and `RemovePodsViolatingInterPodAntiAffinity`, pods are evicted by their priority from low to high, and if they have same priority,
-best effort pods are evicted before burstable and guaranteed pods.
-* All types of pods with the annotation `descheduler.alpha.kubernetes.io/evict` are eligible for eviction. This
-  annotation is used to override checks which prevent eviction and users can select which pod is evicted.
-  Users should know how and if the pod will be recreated.
-  The annotation only affects internal descheduler checks.
-  The anti-disruption protection provided by the [/eviction](https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/)
-  subresource is still respected.
-* Pods with a non-nil DeletionTimestamp are not evicted by default.
-
-Setting `--v=4` or greater on the Descheduler will log all reasons why any pod is not evictable.
-
-### Pod Disruption Budget (PDB)
-
-Pods subject to a Pod Disruption Budget(PDB) are not evicted if descheduling violates its PDB. The pods
-are evicted by using the eviction subresource to handle PDB.
-
-## High Availability
-
-In High Availability mode, Descheduler starts [leader election](https://github.com/kubernetes/client-go/tree/master/tools/leaderelection) process in Kubernetes. You can activate HA mode
-if you choose to deploy your application as Deployment.
-
-Deployment starts with 1 replica by default. If you want to use more than 1 replica, you must consider
-enable High Availability mode since we don't want to run descheduler pods simultaneously.
-
-### Configure HA Mode
-
-The leader election process can be enabled by setting `--leader-elect` in the CLI. You can also set
-`--set=leaderElection.enabled=true` flag if you are using Helm.
-
-To get best results from HA mode some additional configurations might require:
-* Configure a [podAntiAffinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node) rule if you want to schedule onto a node only if that node is in the same zone as at least one already-running descheduler
-* Set the replica count greater than 1
-
-## Metrics
-
-| name	| type	| description |
-|-------|-------|----------------|
-| build_info |	gauge |	constant 1 |
-| pods_evicted | CounterVec | total number of pods evicted |
-
-The metrics are served through https://localhost:10258/metrics by default.
-The address and port can be changed by setting `--binding-address` and `--secure-port` flags.
-
-## Compatibility Matrix
-The below compatibility matrix shows the k8s client package(client-go, apimachinery, etc) versions that descheduler
-is compiled with. At this time descheduler does not have a hard dependency to a specific k8s release. However a
-particular descheduler release is only tested against the three latest k8s minor versions. For example descheduler
-v0.18 should work with k8s v1.18, v1.17, and v1.16.
-
-Starting with descheduler release v0.18 the minor version of descheduler matches the minor version of the k8s client
-packages that it is compiled with.
-
-| Descheduler | Supported Kubernetes Version |
-|-------------|------------------------------|
-| v0.26       | v1.26                        |
-| v0.25       | v1.25                        |
-| v0.24       | v1.24                        |
-| v0.23       | v1.23                        |
-| v0.22       | v1.22                        |
-| v0.21       | v1.21                        |
-| v0.20       | v1.20                        |
-| v0.19       | v1.19                        |
-| v0.18       | v1.18                        |
-| v0.10       | v1.17                        |
-| v0.4-v0.9   | v1.9+                        |
-| v0.1-v0.3   | v1.7-v1.8                    |
-
-## Getting Involved and Contributing
-
-Are you interested in contributing to descheduler? We, the
-maintainers and community, would love your suggestions, contributions, and help!
-Also, the maintainers can be contacted at any time to learn more about how to get
-involved.
-
-To get started writing code see the [contributor guide](docs/contributor-guide.md) in the `/docs` directory.
-
-In the interest of getting more new people involved we tag issues with
-[`good first issue`][good_first_issue].
-These are typically issues that have smaller scope but are good ways to start
-to get acquainted with the codebase.
-
-We also encourage ALL active community participants to act as if they are
-maintainers, even if you don't have "official" write permissions. This is a
-community effort, we are here to serve the Kubernetes community. If you have an
-active interest and you want to get involved, you have real power! Don't assume
-that the only people who can get things done around here are the "maintainers".
-
-We also would love to add more "official" maintainers, so show us what you can
-do!
-
-This repository uses the Kubernetes bots. See a full list of the commands [here][prow].
-
-### Communicating With Contributors
-
-You can reach the contributors of this project at:
-
-- [Slack channel](https://kubernetes.slack.com/messages/sig-scheduling)
-- [Mailing list](https://groups.google.com/forum/#!forum/kubernetes-sig-scheduling)
-
-Learn how to engage with the Kubernetes community on the [community page](http://kubernetes.io/community/).
-
-## Roadmap
-
-This roadmap is not in any particular order.
-
-* Consideration of pod affinity
-* Strategy to consider number of pending pods
-* Integration with cluster autoscaler
-* Integration with metrics providers for obtaining real load metrics
-* Consideration of Kubernetes's scheduler's predicates
-
-
-### Code of conduct
-
-Participation in the Kubernetes community is governed by the [Kubernetes Code of Conduct](code-of-conduct.md).
