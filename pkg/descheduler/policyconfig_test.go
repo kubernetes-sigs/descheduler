@@ -45,7 +45,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 		Name: defaultevictor.PluginName,
 		Args: &defaultevictor.DefaultEvictorArgs{
 			PriorityThreshold: &api.PriorityThreshold{
-				Value: utilpointer.Int32(utils.SystemCriticalPriority),
+				Value: nil,
 			},
 		},
 	}
@@ -682,8 +682,9 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			client := fakeclientset.NewSimpleClientset()
-			result, err := v1alpha1.V1alpha1ToInternal(client, tc.policy, pluginregistry.PluginRegistry)
+			result := &api.DeschedulerPolicy{}
+			scope := scope{}
+			err := v1alpha1.V1alpha1ToInternal(tc.policy, pluginregistry.PluginRegistry, result, scope)
 			if err != nil {
 				if err.Error() != tc.err.Error() {
 					t.Errorf("unexpected error: %s", err.Error())
@@ -763,7 +764,7 @@ strategies:
 			},
 		},
 		{
-			description: "v1aplha2 to internal",
+			description: "v1alpha2 to internal",
 			policy: []byte(`apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 profiles:
@@ -801,6 +802,7 @@ profiles:
 									EvictSystemCriticalPods: true,
 									EvictFailedBarePods:     true,
 									EvictLocalStoragePods:   true,
+									PriorityThreshold:       &api.PriorityThreshold{Value: utilpointer.Int32(2000000000)},
 									NodeFit:                 true,
 								},
 							},
@@ -955,6 +957,7 @@ profiles:
 									EvictSystemCriticalPods: true,
 									EvictFailedBarePods:     true,
 									EvictLocalStoragePods:   true,
+									PriorityThreshold:       &api.PriorityThreshold{Value: utilpointer.Int32(2000000000)},
 									NodeFit:                 true,
 								},
 							},

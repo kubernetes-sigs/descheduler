@@ -328,7 +328,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 
 		// Build plugins
 		for _, profile := range deschedulerPolicy.Profiles {
-			pc := getPluginConfig(defaultevictor.PluginName, profile.PluginConfigs)
+			pc, _ := GetPluginConfig(defaultevictor.PluginName, profile.PluginConfigs)
 			if pc == nil {
 				klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", defaultevictor.PluginName, "profile", profile.Name)
 				continue
@@ -358,7 +358,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			// Later, when a default list of plugins and their extension points is established,
 			// compute the list of enabled extension points as (DefaultEnabled + Enabled - Disabled)
 			for _, plugin := range append(profile.Plugins.Deschedule.Enabled, profile.Plugins.Balance.Enabled...) {
-				pc := getPluginConfig(plugin, profile.PluginConfigs)
+				pc, _ := GetPluginConfig(plugin, profile.PluginConfigs)
 				if pc == nil {
 					klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", plugin)
 					continue
@@ -437,13 +437,13 @@ func includeBalance(enabledBalancePlugins []framework.BalancePlugin, pg framewor
 	return enabledBalancePlugins
 }
 
-func getPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) *api.PluginConfig {
-	for _, pluginConfig := range pluginConfigs {
+func GetPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) (*api.PluginConfig, int) {
+	for idx, pluginConfig := range pluginConfigs {
 		if pluginConfig.Name == pluginName {
-			return &pluginConfig
+			return &pluginConfig, idx
 		}
 	}
-	return nil
+	return nil, 0
 }
 
 func createClients(clientConnection componentbaseconfig.ClientConnectionConfiguration) (clientset.Interface, clientset.Interface, error) {
