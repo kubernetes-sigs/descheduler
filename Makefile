@@ -100,7 +100,7 @@ clean:
 	rm -rf _output
 	rm -rf _tmp
 
-verify: verify-govet verify-spelling verify-gofmt verify-vendor lint lint-chart verify-toc verify-gen
+verify: verify-govet verify-spelling verify-gofmt verify-vendor lint lint-chart verify-gen
 
 verify-govet:
 	./hack/verify-govet.sh
@@ -113,9 +113,6 @@ verify-gofmt:
 
 verify-vendor:
 	./hack/verify-vendor.sh
-
-verify-toc:
-	./hack/verify-toc.sh
 
 verify-docs:
 	./hack/verify-docs.sh
@@ -130,7 +127,6 @@ gen:
 	./hack/update-generated-conversions.sh
 	./hack/update-generated-deep-copies.sh
 	./hack/update-generated-defaulters.sh
-	./hack/update-toc.sh
 	./hack/update-docs.sh
 
 verify-gen:
