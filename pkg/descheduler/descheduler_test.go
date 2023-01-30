@@ -9,6 +9,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/conversion"
 	"k8s.io/apimachinery/pkg/runtime"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
@@ -20,6 +21,22 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
 	"sigs.k8s.io/descheduler/test"
 )
+
+// scope contains information about an ongoing conversion.
+type scope struct {
+	converter *conversion.Converter
+	meta      *conversion.Meta
+}
+
+// Convert continues a conversion.
+func (s scope) Convert(src, dest interface{}) error {
+	return s.converter.Convert(src, dest, s.meta)
+}
+
+// Meta returns the meta object that was originally passed to Convert.
+func (s scope) Meta() *conversion.Meta {
+	return s.meta
+}
 
 func TestTaintsUpdated(t *testing.T) {
 	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
@@ -74,7 +91,9 @@ func TestTaintsUpdated(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	internalDeschedulerPolicy, err := v1alpha1.V1alpha1ToInternal(client, dp, pluginregistry.PluginRegistry)
+	internalDeschedulerPolicy := &api.DeschedulerPolicy{}
+	scope := scope{}
+	err = v1alpha1.V1alpha1ToInternal(dp, pluginregistry.PluginRegistry, internalDeschedulerPolicy, scope)
 	if err != nil {
 		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
 	}
@@ -136,7 +155,9 @@ func TestDuplicate(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	internalDeschedulerPolicy, err := v1alpha1.V1alpha1ToInternal(client, dp, pluginregistry.PluginRegistry)
+	internalDeschedulerPolicy := &api.DeschedulerPolicy{}
+	scope := scope{}
+	err = v1alpha1.V1alpha1ToInternal(dp, pluginregistry.PluginRegistry, internalDeschedulerPolicy, scope)
 	if err != nil {
 		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
 	}
