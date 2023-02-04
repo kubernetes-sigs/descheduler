@@ -19,6 +19,7 @@ package descheduler
 import (
 	"context"
 	"fmt"
+	"time"
 
 	componentbaseconfig "k8s.io/component-base/config"
 	"k8s.io/klog/v2"
@@ -49,6 +50,16 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
+
+type enabledDeschedulePluginEntry struct {
+	Plugin  framework.DeschedulePlugin
+	Profile string
+}
+
+type enabledBalancePluginEntry struct {
+	Plugin  framework.BalancePlugin
+	Profile string
+}
 
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	metrics.Register()
@@ -268,6 +279,8 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	defer eventBroadcaster.Shutdown()
 
 	wait.NonSlidingUntil(func() {
+		loopStartDuration := time.Now()
+		defer metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
 		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeLister, nodeSelector)
 		if err != nil {
 			klog.V(1).InfoS("Unable to get ready nodes", "err", err)
@@ -323,8 +336,8 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			eventRecorder,
 		)
 
-		var enabledDeschedulePlugins []framework.DeschedulePlugin
-		var enabledBalancePlugins []framework.BalancePlugin
+		var enabledDeschedulePlugins []enabledDeschedulePluginEntry
+		var enabledBalancePlugins []enabledBalancePluginEntry
 
 		// Build plugins
 		for _, profile := range deschedulerPolicy.Profiles {
@@ -374,7 +387,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 				}
 				if pg != nil {
 					// pg can be of any of each type, or both
-					enabledDeschedulePlugins, enabledBalancePlugins = includeProfilePluginsByType(enabledDeschedulePlugins, enabledBalancePlugins, pg)
+					enabledDeschedulePlugins, enabledBalancePlugins = includeProfilePluginsByType(enabledDeschedulePlugins, enabledBalancePlugins, pg, profile.Name)
 				}
 			}
 		}
@@ -385,10 +398,12 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			// handle or function which the Evictor has access to. For migration/in-progress framework
 			// work, we are currently passing this via context. To be removed
 			// (See discussion thread https://github.com/kubernetes-sigs/descheduler/pull/885#discussion_r919962292)
-			childCtx := context.WithValue(ctx, "strategyName", pg.Name())
-			status := pg.Deschedule(childCtx, nodes)
+			strategyStart := time.Now()
+			childCtx := context.WithValue(ctx, "strategyName", pg.Plugin.Name())
+			status := pg.Plugin.Deschedule(childCtx, nodes)
+			metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pg.Plugin.Name(), "profile": pg.Profile}).Observe(time.Since(strategyStart).Seconds())
 			if status != nil && status.Err != nil {
-				klog.ErrorS(status.Err, "plugin finished with error", "pluginName", pg.Name())
+				klog.ErrorS(status.Err, "plugin finished with error", "pluginName", pg.Plugin.Name())
 			}
 		}
 
@@ -397,10 +412,12 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			// handle or function which the Evictor has access to. For migration/in-progress framework
 			// work, we are currently passing this via context. To be removed
 			// (See discussion thread https://github.com/kubernetes-sigs/descheduler/pull/885#discussion_r919962292)
-			childCtx := context.WithValue(ctx, "strategyName", pg.Name())
-			status := pg.Balance(childCtx, nodes)
+			strategyStart := time.Now()
+			childCtx := context.WithValue(ctx, "strategyName", pg.Plugin.Name())
+			status := pg.Plugin.Balance(childCtx, nodes)
+			metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pg.Plugin.Name(), "profile": pg.Profile}).Observe(time.Since(strategyStart).Seconds())
 			if status != nil && status.Err != nil {
-				klog.ErrorS(status.Err, "plugin finished with error", "pluginName", pg.Name())
+				klog.ErrorS(status.Err, "plugin finished with error", "pluginName", pg.Plugin.Name())
 			}
 		}
 
@@ -415,24 +432,24 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	return nil
 }
 
-func includeProfilePluginsByType(enabledDeschedulePlugins []framework.DeschedulePlugin, enabledBalancePlugins []framework.BalancePlugin, pg framework.Plugin) ([]framework.DeschedulePlugin, []framework.BalancePlugin) {
-	enabledDeschedulePlugins = includeDeschedule(enabledDeschedulePlugins, pg)
-	enabledBalancePlugins = includeBalance(enabledBalancePlugins, pg)
+func includeProfilePluginsByType(enabledDeschedulePlugins []enabledDeschedulePluginEntry, enabledBalancePlugins []enabledBalancePluginEntry, pg framework.Plugin, profile string) ([]enabledDeschedulePluginEntry, []enabledBalancePluginEntry) {
+	enabledDeschedulePlugins = includeDeschedule(enabledDeschedulePlugins, pg, profile)
+	enabledBalancePlugins = includeBalance(enabledBalancePlugins, pg, profile)
 	return enabledDeschedulePlugins, enabledBalancePlugins
 }
 
-func includeDeschedule(enabledDeschedulePlugins []framework.DeschedulePlugin, pg framework.Plugin) []framework.DeschedulePlugin {
+func includeDeschedule(enabledDeschedulePlugins []enabledDeschedulePluginEntry, pg framework.Plugin, profile string) []enabledDeschedulePluginEntry {
 	_, ok := pg.(framework.DeschedulePlugin)
 	if ok {
-		enabledDeschedulePlugins = append(enabledDeschedulePlugins, pg.(framework.DeschedulePlugin))
+		enabledDeschedulePlugins = append(enabledDeschedulePlugins, enabledDeschedulePluginEntry{Plugin: pg.(framework.DeschedulePlugin), Profile: profile})
 	}
 	return enabledDeschedulePlugins
 }
 
-func includeBalance(enabledBalancePlugins []framework.BalancePlugin, pg framework.Plugin) []framework.BalancePlugin {
+func includeBalance(enabledBalancePlugins []enabledBalancePluginEntry, pg framework.Plugin, profile string) []enabledBalancePluginEntry {
 	_, ok := pg.(framework.BalancePlugin)
 	if ok {
-		enabledBalancePlugins = append(enabledBalancePlugins, pg.(framework.BalancePlugin))
+		enabledBalancePlugins = append(enabledBalancePlugins, enabledBalancePluginEntry{Plugin: pg.(framework.BalancePlugin), Profile: profile})
 	}
 	return enabledBalancePlugins
 }
