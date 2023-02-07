@@ -102,27 +102,26 @@ The Descheduler Policy is configurable and includes default strategy plugins tha
 
 These are top level keys in the Descheduler Policy that you can use to configure all evictions.
 
-| Name | Default Value | Description |
-|------|---------------|-------------|
-| `nodeSelector` | `nil` | limiting the nodes which are processed |
-| `maxNoOfPodsToEvictPerNode` | `nil` | maximum number of pods evicted from each node (summed through all strategies) |
-| `maxNoOfPodsToEvictPerNamespace` | `nil` | maximum number of pods evicted from each namespace (summed through all strategies) |
+| Name |type| Default Value | Description |
+|------|----|---------------|-------------|
+| `nodeSelector` |`string`| `nil` | limiting the nodes which are processed |
+| `maxNoOfPodsToEvictPerNode` |`int`| `nil` | maximum number of pods evicted from each node (summed through all strategies) |
+| `maxNoOfPodsToEvictPerNamespace` |`int`| `nil` | maximum number of pods evicted from each namespace (summed through all strategies) |
 
 ### Evictor Plugion configuration (Default Evictor)
 
 The Default Evictor Plugin is used by default for filtering pods before processing them in an strategy plugin, or for applying a PreEvictionFilter of pods before eviction. You can also create your own Evictor Plugin or use the Default one provided by Descheduler.  Other uses for the Evictor plugin can be to sort, filter, validate or group pods by different criteria, and that's why this is handled by a plugin and not configured in the top level config.
 
-| Name | Default Value | Description |
-|------|---------------|-------------|
-| `nodeSelector` | `nil` | limiting the nodes which are processed |
-| `evictLocalStoragePods` | `false` | allows eviction of pods with local storage |
-| `evictSystemCriticalPods` | `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
-| `ignorePvcPods` | `false` | set whether PVC pods should be evicted or ignored |
-| `evictFailedBarePods` | `false` | allow eviction of pods without owner references and in failed phase |
-|`labelSelector`|(see [label filtering](#label-filtering))|
-|`priorityThreshold`|int (see [priority filtering](#priority-filtering))|
-|`thresholdPriorityClassName`|string (see [priority filtering](#priority-filtering))|
-|`nodeFit`|bool (see [node fit filtering](#node-fit-filtering))|
+| Name |type| Default Value | Description |
+|------|----|---------------|-------------|
+| `nodeSelector` |`string`| `nil` | limiting the nodes which are processed |
+| `evictLocalStoragePods` |`bool`| `false` | allows eviction of pods with local storage |
+| `evictSystemCriticalPods` |`bool`| `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
+| `ignorePvcPods` |`bool`| `false` | set whether PVC pods should be evicted or ignored |
+| `evictFailedBarePods` |`bool`| `false` | allow eviction of pods without owner references and in failed phase |
+|`labelSelector`|`metav1.LabelSelector`||(see [label filtering](#label-filtering))|
+|`priorityThreshold`|`priorityThreshold`||(see [priority filtering](#priority-filtering))|
+|`nodeFit`|`bool`|`false`|(see [node fit filtering](#node-fit-filtering))|
 
 ### Example policy
 
