@@ -104,7 +104,7 @@ These are top level keys in the Descheduler Policy that you can use to configure
 
 | Name |type| Default Value | Description |
 |------|----|---------------|-------------|
-| `nodeSelector` |`string`| `nil` | limiting the nodes which are processed |
+| `nodeSelector` |`string`| `nil` | limiting the nodes which are processed. Only used when `nodeFit`=`true` and only by the PreEvictionFilter Extension Point |
 | `maxNoOfPodsToEvictPerNode` |`int`| `nil` | maximum number of pods evicted from each node (summed through all strategies) |
 | `maxNoOfPodsToEvictPerNamespace` |`int`| `nil` | maximum number of pods evicted from each namespace (summed through all strategies) |
 
@@ -134,7 +134,7 @@ See each strategy plugin section for details on available parameters.
 ```yaml
 apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
-nodeSelector: "node1" # you don't need to set this, if not set all will be processed
+nodeSelector: "node=node1" # you don't need to set this, if not set all will be processed
 maxNoOfPodsToEvictPerNode: 5000 # you don't need to set this, unlimited if not set
 maxNoOfPodsToEvictPerNamespace: 5000 # you don't need to set this, unlimited if not set
 profiles:
