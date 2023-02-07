@@ -1,6 +1,10 @@
 [![Go Report Card](https://goreportcard.com/badge/sigs.k8s.io/descheduler)](https://goreportcard.com/report/sigs.k8s.io/descheduler)
 ![Release Charts](https://github.com/kubernetes-sigs/descheduler/workflows/Release%20Charts/badge.svg)
 
+<p align="left">
+	↖️ Click at the [bullet list icon] at the top left corner of the Readme visualization for the github generated table of contents.
+</p>
+
 <p align="center">
     <img src="assets/logo/descheduler-stacked-color.png" width="40%" align="center" alt="descheduler">
 </p>
@@ -92,7 +96,7 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 
 **⚠️ v1alpha1 configuration is still suported, but deprecated (and soon will be removed). Please consider migrating to v1alpha2 (described bellow). For previous v1alpha1 documentation go to docs/deprecated/v1alpha1.md**
 
-The Descheduler Policy is configurable and includes default eviction strategy plugins that can be enabled or disabled. It includes a common eviction configuration at the top level, as well as configuration from the Evictor plugin (Default Evictor, if not specified otherwise). Top-level configuration and Evictor plugin configuration are applied to all evictions.
+The Descheduler Policy is configurable and includes default strategy plugins that can be enabled or disabled. It includes a common eviction configuration at the top level, as well as configuration from the Evictor plugin (Default Evictor, if not specified otherwise). Top-level configuration and Evictor plugin configuration are applied to all evictions.
 
 ### Top Level configuration
 
@@ -106,7 +110,7 @@ These are top level keys in the Descheduler Policy that you can use to configure
 
 ### Evictor Plugion configuration (Default Evictor)
 
-The Default Evictor Plugin is used by default for filtering pods before processing them in an eviction strategy plugin, or for applying a PreEvictionFilter of pods before eviction. You can also create your own Evictor Plugin or use the Default one provided by Descheduler.  Other uses for the Evictor plugin can be to sort, filter, validate or group pods by different criteria, and that's why this is handled by a plugin and not configured in the top level config.
+The Default Evictor Plugin is used by default for filtering pods before processing them in an strategy plugin, or for applying a PreEvictionFilter of pods before eviction. You can also create your own Evictor Plugin or use the Default one provided by Descheduler.  Other uses for the Evictor plugin can be to sort, filter, validate or group pods by different criteria, and that's why this is handled by a plugin and not configured in the top level config.
 
 | Name | Default Value | Description |
 |------|---------------|-------------|
@@ -124,7 +128,7 @@ The Default Evictor Plugin is used by default for filtering pods before processi
 
 As part of the policy, you will start deciding which top level configuration to use, then which Evictor plugin to use (if you have your own, the Default Evictor if not), followed by deciding the configuration passed to the Evictor Plugin. After that you will enable/disable eviction strategies plugins and configure them properly.
 
-See each eviction strategy plugin section for details on available parameters.
+See each strategy plugin section for details on available parameters.
 
 **Policy:**
 
@@ -161,11 +165,11 @@ categorize how strategies fit together.
 
 ![Strategies diagram](strategies_diagram.png)
 
-Next sections will go over different eviction strategy plugins. Right now we group them by being Deschedule plugins or Balance plugins (more types could be added).
+Next sections will go over different strategy plugins. Right now we group them by being Deschedule plugins or Balance plugins (more types could be added).
 
 ### RemoveDuplicates
 
-This eviction strategy plugin makes sure that there is only one pod associated with a ReplicaSet (RS),
+This strategy plugin makes sure that there is only one pod associated with a ReplicaSet (RS),
 ReplicationController (RC), StatefulSet, or Job running on the same node. If there are more,
 those duplicate pods are evicted for better spreading of pods in a cluster. This issue could happen
 if some nodes went down due to whatever reasons, and pods on them were moved to other nodes leading to
