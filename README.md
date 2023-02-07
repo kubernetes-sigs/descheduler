@@ -164,7 +164,24 @@ categorize how strategies fit together.
 
 ![Strategies diagram](strategies_diagram.png)
 
-Next sections will go over different strategy plugins. Right now we group them by being Deschedule plugins or Balance plugins (more types could be added).
+The following sections provide an overview of the different strategy plugins available. These plugins are grouped based on their implementation of extension points: Deschedule or Balance.
+
+Deschedule Plugins: These plugins process pods one by one, and evict them in a sequential manner.
+
+Balance Plugins: These plugins process all pods, or groups of pods, and determine which pods to evict based on how the group was intended to be spread.
+
+|Name|Extension Point Implemented|Description|
+|----|-----------|-----------|
+| [RemoveDuplicates](#removeduplicates) |Balance|Spreads replicas|
+| [LowNodeUtilization](#lownodeutilization) |Balance|Spreads pods according to pods resource requests and node resources available|
+| [HighNodeUtilization](#highnodeutilization) |Balance|Spreads pods according to pods resource requests and node resources available|
+| [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity) |Deschedule|Evicts pods violating pod anti affinity|
+| [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity) |Deschedule|Evicts pods violating node affinity|
+| [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints) |Deschedule|Evicts pods violating node taints|
+| [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint) |Balance|Evicts pods violating TopologySpreadConstraints|
+| [PodLifeTime](#podlifetime) |Deschedule|Evicts pods that have exceeded a specified age limit|
+| [RemoveFailedPods](#removefailedpods) |Deschedule|Evicts pods with certain failed reasons|
+
 
 ### RemoveDuplicates
 
@@ -179,8 +196,6 @@ It provides one optional parameter, `excludeOwnerKinds`, which is a list of Owne
 has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction. Note that
 pods created by Deployments are considered for eviction by this strategy. The `excludeOwnerKinds` parameter
 should include `ReplicaSet` to have pods created by Deployments excluded.
-
-This is a Balance plugin.
 
 **Parameters:**
 
@@ -244,8 +259,6 @@ This approach is chosen in order to maintain consistency with the kube-scheduler
 design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands
 like `kubectl top`) may differ from the calculated consumption, due to these components reporting
 actual usage metrics. Implementing metrics-based descheduling is currently TODO for the project.
-
-This is a Balance plugin.
 
 **Parameters:**
 
@@ -327,8 +340,6 @@ design for scheduling pods onto nodes. This means that resource usage as reporte
 like `kubectl top`) may differ from the calculated consumption, due to these components reporting
 actual usage metrics. Implementing metrics-based descheduling is currently TODO for the project.
 
-This is a Balance plugin.
-
 **Parameters:**
 
 |Name|Type|
@@ -385,8 +396,6 @@ them to run on the same node, then podA will be evicted from the node so that po
 issue could happen, when the anti-affinity rules for podB and podC are created when they are already running on
 node.
 
-This is a Deschedule plugin.
-
 **Parameters:**
 
 |Name|Type|
@@ -431,8 +440,6 @@ of scheduling. Over time nodeA stops to satisfy the rule. When the strategy gets
 executed and there is another node available that satisfies the node affinity rule,
 podA gets evicted from nodeA.
 
-This is a Deschedule plugin.
-
 **Parameters:**
 
 |Name|Type|
@@ -475,8 +482,6 @@ key=value matches an excludedTaints entry, the taint will be ignored.
 
 For example, excludedTaints entry "dedicated" would match all taints with key "dedicated", regardless of value.
 excludedTaints entry "dedicated=special-user" would match taints with key "dedicated" and value "special-user".
-
-This is a Deschedule plugin.
 
 **Parameters:**
 
@@ -521,8 +526,6 @@ include soft constraints.
 
 Strategy parameter `labelSelector` is not utilized when balancing topology domains and is only applied during eviction to determine if the pod can be evicted.
 
-This is a Balance plugin.
-
 **Parameters:**
 
 |Name|Type|
@@ -560,8 +563,6 @@ can't get the volume/disk attached to the instance, then the pod should be re-sc
 include `podRestartThreshold`, which is the number of restarts (summed over all eligible containers) at which a pod
 should be evicted, and `includingInitContainers`, which determines whether init container restarts should be factored
 into that calculation.
-
-This is a Deschedule plugin.
 
 **Parameters:**
 
@@ -605,8 +606,6 @@ You can also specify `states` parameter to **only** evict pods matching the foll
 If a value for `states` or `podStatusPhases` is not specified,
 Pods in any state (even `Running`) are considered for eviction.
 
-This is a Deschedule plugin.
-
 **Parameters:**
 
 |Name|Type|Notes|
@@ -648,8 +647,6 @@ You can provide an optional parameter to filter by failed `reasons`.
 You can specify an optional parameter `minPodLifetimeSeconds` to evict pods that are older than specified seconds.
 Lastly, you can specify the optional parameter `excludeOwnerKinds` and if a pod
 has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
-
-This is a Deschedule plugin.
 
 **Parameters:**
 
