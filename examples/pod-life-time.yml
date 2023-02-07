@@ -17,5 +17,3 @@ profiles:
       deschedule:
         enabled:
           - "PodLifeTime"
-
-
