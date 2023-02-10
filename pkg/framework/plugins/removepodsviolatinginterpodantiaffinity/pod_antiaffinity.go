@@ -78,32 +78,36 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Name() string {
 }
 
 func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
-	allPods, err := d.listExistingPods(ctx)
+	podsList, err := d.handle.ClientSet().CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return &framework.Status{
 			Err: fmt.Errorf("error listing all pods: %v", err),
 		}
 	}
+
+	podsInANamespace := groupByNamespace(podsList)
+
+	runningPodFilter := func(pod *v1.Pod) bool {
+		return pod.Status.Phase != v1.PodSucceeded && pod.Status.Phase != v1.PodFailed
+	}
+	podsOnANode := groupByNodeName(podsList, podutil.WrapFilterFuncs(runningPodFilter, d.podFilter))
+
 	nodeMap := createNodeMap(nodes)
+
 loop:
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
-		pods, err := podutil.ListPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
-		if err != nil {
-			return &framework.Status{
-				Err: fmt.Errorf("error listing pods: %v", err),
-			}
-		}
-		// sort the evictable Pods based on priority, if there are multiple pods with same priority, they are sorted based on QoS tiers.
+		pods := podsOnANode[node.Name]
+		// sort the evict-able Pods based on priority, if there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(pods)
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
-			if checkPodsWithAntiAffinityExist(pods[i], allPods, nodeMap) && d.handle.Evictor().Filter(pods[i]) && d.handle.Evictor().PreEvictionFilter(pods[i]) {
+			if checkPodsWithAntiAffinityExist(pods[i], podsInANamespace, nodeMap) && d.handle.Evictor().Filter(pods[i]) && d.handle.Evictor().PreEvictionFilter(pods[i]) {
 				if d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{}) {
 					// Since the current pod is evicted all other pods which have anti-affinity with this
 					// pod need not be evicted.
 					// Update allPods.
-					allPods = removePodFromMap(pods[i], allPods)
+					podsInANamespace = removePodFromNamespaceMap(pods[i], podsInANamespace)
 					pods = append(pods[:i], pods[i+1:]...)
 					i--
 					totalPods--
@@ -117,20 +121,7 @@ loop:
 	return nil
 }
 
-func (d *RemovePodsViolatingInterPodAntiAffinity) listExistingPods(ctx context.Context) (map[string][]*v1.Pod, error) {
-	podsList, err := d.handle.ClientSet().CoreV1().Pods("").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	existingPods := make(map[string][]*v1.Pod)
-	for i := 0; i < len(podsList.Items); i++ {
-		pod := &(podsList.Items[i])
-		existingPods[pod.Namespace] = append(existingPods[pod.Namespace], pod)
-	}
-	return existingPods, nil
-}
-
-func removePodFromMap(podToRemove *v1.Pod, podMap map[string][]*v1.Pod) map[string][]*v1.Pod {
+func removePodFromNamespaceMap(podToRemove *v1.Pod, podMap map[string][]*v1.Pod) map[string][]*v1.Pod {
 	podList, ok := podMap[podToRemove.Namespace]
 	if !ok {
 		return podMap
@@ -143,6 +134,29 @@ func removePodFromMap(podToRemove *v1.Pod, podMap map[string][]*v1.Pod) map[stri
 		}
 	}
 	return podMap
+}
+
+func groupByNamespace(pods *v1.PodList) map[string][]*v1.Pod {
+	m := make(map[string][]*v1.Pod)
+	for i := 0; i < len(pods.Items); i++ {
+		pod := &(pods.Items[i])
+		m[pod.Namespace] = append(m[pod.Namespace], pod)
+	}
+	return m
+}
+
+func groupByNodeName(pods *v1.PodList, filter podutil.FilterFunc) map[string][]*v1.Pod {
+	m := make(map[string][]*v1.Pod)
+	if filter == nil {
+		filter = func(p *v1.Pod) bool { return true }
+	}
+	for i := 0; i < len(pods.Items); i++ {
+		pod := &(pods.Items[i])
+		if filter(pod) {
+			m[pod.Spec.NodeName] = append(m[pod.Spec.NodeName], pod)
+		}
+	}
+	return m
 }
 
 func createNodeMap(nodes []*v1.Node) map[string]*v1.Node {
