@@ -1,8 +1,17 @@
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
-strategies:
-  "RemovePodsViolatingNodeAffinity":
-    enabled: true
-    params:
-      nodeAffinityType:
-      - "requiredDuringSchedulingIgnoredDuringExecution"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+    - name: "RemovePodsViolatingNodeAffinity"
+      args:
+        nodeAffinityType:
+        - "requiredDuringSchedulingIgnoredDuringExecution"
+    plugins:
+      evict:
+        enabled:
+          - "DefaultEvictor"
+      deschedule:
+        enabled:
+          - "RemovePodsViolatingNodeAffinity"

@@ -1,9 +1,17 @@
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
-strategies:
-  "HighNodeUtilization":
-    enabled: true
-    params:
-      nodeResourceUtilizationThresholds:
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+    - name: "HighNodeUtilization"
+      args:
         thresholds:
           "memory": 20
+    plugins:
+      evict:
+        enabled:
+          - "DefaultEvictor"
+      balance:
+        enabled:
+          - "HighNodeUtilization"
