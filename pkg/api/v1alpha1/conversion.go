@@ -229,6 +229,7 @@ func V1alpha1ToInternal(
 	out.NodeSelector = deschedulerPolicy.NodeSelector
 	out.MaxNoOfPodsToEvictPerNamespace = deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace
 	out.MaxNoOfPodsToEvictPerNode = deschedulerPolicy.MaxNoOfPodsToEvictPerNode
+	out.MinNoOfPodsToEvictForReplicas = deschedulerPolicy.MinNoOfPodsToEvictForReplicas
 
 	return nil
 }

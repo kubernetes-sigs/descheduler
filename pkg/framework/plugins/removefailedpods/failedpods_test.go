@@ -295,6 +295,7 @@ func TestRemoveFailedPods(t *testing.T) {
 				false,
 				nil,
 				nil,
+				nil,
 				tc.nodes,
 				false,
 				eventRecorder,

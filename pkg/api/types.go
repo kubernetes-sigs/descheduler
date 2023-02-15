@@ -38,6 +38,9 @@ type DeschedulerPolicy struct {
 
 	// MaxNoOfPodsToEvictPerNamespace restricts maximum of pods to be evicted per namespace.
 	MaxNoOfPodsToEvictPerNamespace *uint
+
+	// MinNoOfPodsToEvictForReplicas restricts minimal of pod's ownerReference to avoid evicting.
+	MinNoOfPodsToEvictForReplicas *uint
 }
 
 // Namespaces carries a list of included/excluded namespaces

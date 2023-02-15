@@ -331,10 +331,18 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			rs.DryRun,
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
+			deschedulerPolicy.MinNoOfPodsToEvictForReplicas,
 			nodes,
 			!rs.DisableMetrics,
 			eventRecorder,
 		)
+
+		// podEvictor.podReplicasCount
+		podEvictor.PodReplicasCount = podutil.GetReplicasCount(podLister)
+		klog.V(1).Infof("length of PodReplicasCount is %v", len(podEvictor.PodReplicasCount))
+		for i, j := range podEvictor.PodReplicasCount {
+			klog.V(1).Infof("pod %v is %v", i, j)
+		}
 
 		var enabledDeschedulePlugins []enabledDeschedulePluginEntry
 		var enabledBalancePlugins []enabledBalancePluginEntry

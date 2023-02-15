@@ -30,12 +30,14 @@ import (
 	"sigs.k8s.io/descheduler/metrics"
 
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 // nodePodEvictedCount keeps count of pods evicted on node
 type (
-	nodePodEvictedCount    map[string]uint
-	namespacePodEvictCount map[string]uint
+	nodePodEvictedCount        map[string]uint
+	namespacePodEvictCount     map[string]uint
+	podOwnerRefReplicasCount   map[string]uint
 )
 
 type PodEvictor struct {
@@ -45,6 +47,8 @@ type PodEvictor struct {
 	dryRun                     bool
 	maxPodsToEvictPerNode      *uint
 	maxPodsToEvictPerNamespace *uint
+	minReplicas                *uint
+	PodReplicasCount           podOwnerRefReplicasCount
 	nodepodCount               nodePodEvictedCount
 	namespacePodCount          namespacePodEvictCount
 	metricsEnabled             bool
@@ -57,12 +61,14 @@ func NewPodEvictor(
 	dryRun bool,
 	maxPodsToEvictPerNode *uint,
 	maxPodsToEvictPerNamespace *uint,
+	minReplicas *uint,
 	nodes []*v1.Node,
 	metricsEnabled bool,
 	eventRecorder events.EventRecorder,
 ) *PodEvictor {
 	nodePodCount := make(nodePodEvictedCount)
 	namespacePodCount := make(namespacePodEvictCount)
+	podReplicasCount := make(podOwnerRefReplicasCount)
 	for _, node := range nodes {
 		// Initialize podsEvicted till now with 0.
 		nodePodCount[node.Name] = 0
@@ -75,6 +81,8 @@ func NewPodEvictor(
 		dryRun:                     dryRun,
 		maxPodsToEvictPerNode:      maxPodsToEvictPerNode,
 		maxPodsToEvictPerNamespace: maxPodsToEvictPerNamespace,
+		minReplicas:                minReplicas,
+		PodReplicasCount:           podReplicasCount,
 		nodepodCount:               nodePodCount,
 		namespacePodCount:          namespacePodCount,
 		metricsEnabled:             metricsEnabled,
@@ -136,6 +144,20 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		klog.ErrorS(fmt.Errorf("Maximum number of evicted pods per namespace reached"), "limit", *pe.maxPodsToEvictPerNamespace, "namespace", pod.Namespace)
 		return false
 	}
+
+	podOwnerRefKey := utils.GetPodOwnerRefKey(pod)
+	klog.V(1).Infof("Pod's OwnerReference Replicas is %v", pe.PodReplicasCount[podOwnerRefKey[0]])
+	if pe.minReplicas == nil {
+		klog.V(1).Infof("minreplicas is nil")
+	} else {
+		klog.V(1).Infof("%v", *pe.minReplicas)
+	}
+	if pe.minReplicas != nil && pe.PodReplicasCount[podOwnerRefKey[0]] <= *pe.minReplicas {
+		// klog.V(1).Infof("minimal Replicas is %v", *pe.minReplicas)
+		klog.ErrorS(fmt.Errorf("Pod's OwnerReference Replicas is less than minimal Replicas"), "limit", *pe.minReplicas, "replicas", pe.PodReplicasCount[podOwnerRefKey[0]])
+		return false
+	}
+
 
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion)
 	if err != nil {

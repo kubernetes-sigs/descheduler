@@ -257,6 +257,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 				false,
 				tc.maxPodsToEvictPerNode,
 				tc.maxNoOfPodsToEvictPerNamespace,
+				nil,
 				tc.nodes,
 				false,
 				eventRecorder,

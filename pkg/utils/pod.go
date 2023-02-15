@@ -2,6 +2,8 @@ package utils
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -212,4 +214,26 @@ func PodToleratesTaints(pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
 		}
 	}
 	return false
+}
+
+// GetPodOwnerRefKey returns pod's ownerReference key
+func GetPodOwnerRefKey(pod *v1.Pod) []string {
+
+	podOwnerRefKey := []string{}
+	ownerRefList := pod.ObjectMeta.GetOwnerReferences()
+	if len(ownerRefList) == 0 {
+		klog.Errorf("pod does not have any ownerRefs")
+	}
+	imageList := []string{}
+	for _, container := range pod.Spec.Containers {
+		imageList = append(imageList, container.Image)
+	}
+	sort.Strings(imageList)
+	imagesHash := strings.Join(imageList, "#")
+	for _, ownerRef := range ownerRefList {
+		s := strings.Join([]string{pod.ObjectMeta.Namespace, ownerRef.Kind, ownerRef.Name, imagesHash}, "/")
+		podOwnerRefKey = append(podOwnerRefKey, s)
+	}
+	return podOwnerRefKey
+
 }

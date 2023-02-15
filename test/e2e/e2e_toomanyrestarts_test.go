@@ -168,6 +168,7 @@ func TestTooManyRestarts(t *testing.T) {
 				false,
 				nil,
 				nil,
+				nil,
 				nodes,
 				false,
 				eventRecorder,

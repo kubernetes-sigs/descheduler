@@ -18,12 +18,15 @@ package pod
 
 import (
 	"sort"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog/v2"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
@@ -234,3 +237,38 @@ func SortPodsBasedOnAge(pods []*v1.Pod) {
 		return pods[i].CreationTimestamp.Before(&pods[j].CreationTimestamp)
 	})
 }
+
+// get number of replication pods from deployment or job
+func GetReplicasCount(podLister listersv1.PodLister) map[string]uint {
+
+	podReplicasCount := make(map[string]uint)
+
+	// pods, err := podInformer.Lister().List(labels.Everything())
+	pods, err := podLister.List(labels.Everything())
+	if err != nil {
+
+	}
+
+	for _, pod := range pods {
+
+		ownerRefList := OwnerRef(pod)
+		if len(ownerRefList) == 0 {
+			continue
+		}
+		// podContainerKeys := make([]string, 0, len(ownerRefList)*len(pod.Spec.Containers))
+		imageList := []string{}
+		for _, container := range pod.Spec.Containers {
+			imageList = append(imageList, container.Image)
+		}
+		sort.Strings(imageList)
+		imagesHash := strings.Join(imageList, "#")
+		klog.V(1).Infof(imagesHash)
+		for _, ownerRef := range ownerRefList {
+			s := strings.Join([]string{pod.ObjectMeta.Namespace, ownerRef.Kind, ownerRef.Name, imagesHash}, "/")
+			podReplicasCount[s] = podReplicasCount[s] + 1
+		}
+
+	}
+	return podReplicasCount
+}
+	

@@ -1167,6 +1167,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				false,
 				nil,
 				nil,
+				nil,
 				tc.nodes,
 				false,
 				eventRecorder,

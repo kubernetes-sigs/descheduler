@@ -72,6 +72,11 @@ func (in *DeschedulerPolicy) DeepCopyInto(out *DeschedulerPolicy) {
 		*out = new(uint)
 		**out = **in
 	}
+	if in.MinNoOfPodsToEvictForReplicas != nil {
+		in, out := &in.MinNoOfPodsToEvictForReplicas, &out.MinNoOfPodsToEvictForReplicas
+		*out = new(uint)
+		**out = **in
+	}
 	return
 }
 
