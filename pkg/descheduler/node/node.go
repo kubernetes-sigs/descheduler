@@ -222,6 +222,12 @@ func fitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nod
 			podFitsOnNode = false
 		}
 	}
+	// check pod num, at least one pod number is avaibalbe
+	if availableResources[v1.ResourcePods].MilliValue() <= 0 {
+		insufficientResources = append(insufficientResources, fmt.Errorf("insufficient %v", v1.ResourcePods))
+		podFitsOnNode = false
+	}
+
 	return podFitsOnNode, insufficientResources
 }
 
