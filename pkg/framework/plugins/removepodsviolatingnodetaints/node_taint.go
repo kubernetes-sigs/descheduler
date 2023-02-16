@@ -105,7 +105,6 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 			}
 		}
 		totalPods := len(pods)
-		skipNode := false
 		for i := 0; i < totalPods; i++ {
 			if !utils.TolerationsTolerateTaintsWithFilter(
 				pods[i].Spec.Tolerations,
@@ -115,14 +114,11 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 				klog.V(2).InfoS("Not all taints with NoSchedule effect are tolerated after update for pod on node", "pod", klog.KObj(pods[i]), "node", klog.KObj(node))
 				d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{})
 				if d.handle.Evictor().NodeLimitExceeded(node) {
-					skipNode = true
 					break
 				}
 			}
 		}
-		if skipNode {
-			continue
-		}
 	}
+
 	return nil
 }
