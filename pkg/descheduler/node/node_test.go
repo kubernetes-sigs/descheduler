@@ -18,6 +18,7 @@ package node
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -747,6 +748,64 @@ func TestPodFitsAnyOtherNode(t *testing.T) {
 			actual := PodFitsAnyOtherNode(getPodsAssignedToNode, tc.pod, tc.nodes)
 			if actual != tc.success {
 				t.Errorf("Test %#v failed", tc.description)
+			}
+		})
+	}
+}
+
+func TestNodeFit(t *testing.T) {
+	node := test.BuildTestNode("node", 64000, 128*1000*1000*1000, 2, nil)
+	tests := []struct {
+		description string
+		pod         *v1.Pod
+		node        *v1.Node
+		podsOnNode  []*v1.Pod
+		err         error
+	}{
+		{
+			description: "insufficient cpu",
+			pod:         test.BuildTestPod("p1", 10000, 2*1000*1000*1000, "", nil),
+			node:        node,
+			podsOnNode: []*v1.Pod{
+				test.BuildTestPod("p2", 60000, 60*1000*1000*1000, "node", nil),
+			},
+			err: errors.New("insufficient cpu"),
+		},
+		{
+			description: "insufficient pod num",
+			pod:         test.BuildTestPod("p1", 1000, 2*1000*1000*1000, "", nil),
+			node:        node,
+			podsOnNode: []*v1.Pod{
+				test.BuildTestPod("p2", 1000, 2*1000*1000*1000, "node", nil),
+				test.BuildTestPod("p3", 1000, 2*1000*1000*1000, "node", nil),
+			},
+			err: errors.New("insufficient pods"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			objs := []runtime.Object{tc.node, tc.pod}
+			for _, pod := range tc.podsOnNode {
+				objs = append(objs, pod)
+			}
+
+			fakeClient := fake.NewSimpleClientset(objs...)
+
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
+
+			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			if err != nil {
+				t.Errorf("Build get pods assigned to node function error: %v", err)
+			}
+
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+			if errs := NodeFit(getPodsAssignedToNode, tc.pod, tc.node); (len(errs) == 0 && tc.err != nil) || errs[0].Error() != tc.err.Error() {
+				t.Errorf("Test %#v failed, got %v, expect %v", tc.description, errs, tc.err)
 			}
 		})
 	}
