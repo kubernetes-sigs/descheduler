@@ -23,6 +23,7 @@ import (
 const (
 	EvictionKind        = "Eviction"
 	EvictionSubresource = "pods/eviction"
+	EvictionVersionv1   = "v1"
 )
 
 // SupportEviction uses Discovery API to find out if the server support eviction subresource
