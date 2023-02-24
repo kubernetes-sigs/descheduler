@@ -24,9 +24,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/sets"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
-	listersv1 "k8s.io/client-go/listers/core/v1"
 
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
@@ -240,13 +240,11 @@ func SortPodsBasedOnAge(pods []*v1.Pod) {
 
 // get number of replication pods from deployment or job
 func GetReplicasCount(podLister listersv1.PodLister) map[string]uint {
-
 	podReplicasCount := make(map[string]uint)
 
 	// pods, err := podInformer.Lister().List(labels.Everything())
 	pods, err := podLister.List(labels.Everything())
 	if err != nil {
-
 	}
 
 	for _, pod := range pods {
@@ -271,4 +269,3 @@ func GetReplicasCount(podLister listersv1.PodLister) map[string]uint {
 	}
 	return podReplicasCount
 }
-	

@@ -35,9 +35,9 @@ import (
 
 // nodePodEvictedCount keeps count of pods evicted on node
 type (
-	nodePodEvictedCount        map[string]uint
-	namespacePodEvictCount     map[string]uint
-	podOwnerRefReplicasCount   map[string]uint
+	nodePodEvictedCount      map[string]uint
+	namespacePodEvictCount   map[string]uint
+	podOwnerRefReplicasCount map[string]uint
 )
 
 type PodEvictor struct {
@@ -157,7 +157,6 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		klog.ErrorS(fmt.Errorf("Pod's OwnerReference Replicas is less than minimal Replicas"), "limit", *pe.minReplicas, "replicas", pe.PodReplicasCount[podOwnerRefKey[0]])
 		return false
 	}
-
 
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion)
 	if err != nil {

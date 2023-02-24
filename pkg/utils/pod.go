@@ -218,7 +218,6 @@ func PodToleratesTaints(pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
 
 // GetPodOwnerRefKey returns pod's ownerReference key
 func GetPodOwnerRefKey(pod *v1.Pod) []string {
-
 	podOwnerRefKey := []string{}
 	ownerRefList := pod.ObjectMeta.GetOwnerReferences()
 	if len(ownerRefList) == 0 {
@@ -235,5 +234,4 @@ func GetPodOwnerRefKey(pod *v1.Pod) []string {
 		podOwnerRefKey = append(podOwnerRefKey, s)
 	}
 	return podOwnerRefKey
-
 }
