@@ -23,7 +23,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"k8s.io/apiserver/pkg/server/healthz"
 
@@ -101,10 +100,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 				klog.Fatalf("failed to setup tracing provider", "err", err)
 				return
 			}
-			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer tracing.Shutdown(ctx, tracerProvider)
-			defer cancel()
-
 			err = Run(ctx, s)
 			if err != nil {
 				klog.ErrorS(err, "descheduler server")

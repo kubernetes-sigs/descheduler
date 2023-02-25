@@ -88,7 +88,6 @@ func NewTracerProvider(endpoint, caCert, name, namespace string, sampleRate floa
 		}
 		resourceOpts := []sdkresource.Option{sdkresource.WithAttributes(semconv.ServiceNameKey.String(name)), sdkresource.WithSchemaURL(semconv.SchemaURL)}
 		if namespace != "" {
-			klog.V(5).InfoS("no namespace provided, using default namespace")
 			resourceOpts = append(resourceOpts, sdkresource.WithAttributes(semconv.ServiceNamespaceKey.String(namespace)))
 		}
 		resource, err := sdkresource.New(ctx, resourceOpts...)

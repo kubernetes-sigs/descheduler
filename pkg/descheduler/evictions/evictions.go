@@ -118,8 +118,8 @@ type EvictOptions struct {
 func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptions) bool {
 	var err error
 	ctx, evictSpan, evictCloser := tracing.StartSpanWithOptions(ctx, tracing.EvictionOption, []trace.TracerOption{}, "EvictPod", []attribute.KeyValue{
-		{Key: "pod-name", Value: attribute.StringValue(pod.GetName())},
-		{Key: "pod-namespace", Value: attribute.StringValue(pod.GetNamespace())},
+		attribute.String("pod-name", pod.GetName()),
+		attribute.String("pod-namespace", pod.GetNamespace()),
 	})
 	defer func() {
 		if err != nil {
