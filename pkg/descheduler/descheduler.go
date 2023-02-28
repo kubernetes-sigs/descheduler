@@ -19,6 +19,9 @@ package descheduler
 import (
 	"context"
 	"fmt"
+	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
+	fakemetricsclientset "k8s.io/metrics/pkg/client/clientset/versioned/fake"
+	"sigs.k8s.io/descheduler/pkg/descheduler/cache"
 	"time"
 
 	componentbaseconfig "k8s.io/component-base/config"
@@ -109,7 +112,34 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 
 	return runFn()
 }
-
+func cacheMetricsClient() (metricsclientset.Interface, error) {
+	fakeMetricsClient := fakemetricsclientset.NewSimpleClientset()
+	fakeMetricsClient.PrependReactor("list", "*", func(action core.Action) (handled bool, ret runtime.Object, err error) {
+		switch action := action.(type) {
+		case core.ListActionImpl:
+			gvr := action.GetResource()
+			if gvr.Resource == "nodes" {
+				gvr.Resource = "nodemetricses"
+			}
+			if gvr.Resource == "pods" {
+				gvr.Resource = "podmetricses"
+			}
+			ns := action.GetNamespace()
+			obj, err := fakeMetricsClient.Tracker().List(gvr, action.GetKind(), ns)
+			return true, obj, err
+		}
+		return false, nil, err
+	})
+	_, err := fakeMetricsClient.MetricsV1beta1().NodeMetricses().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to list node metrics")
+	}
+	_, err = fakeMetricsClient.MetricsV1beta1().PodMetricses("").List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to list pod metrics")
+	}
+	return fakeMetricsClient, nil
+}
 func cachedClient(
 	realClient clientset.Interface,
 	podLister listersv1.PodLister,
@@ -249,6 +279,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 	podLister := sharedInformerFactory.Core().V1().Pods().Lister()
 	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
+	nodeInformer := sharedInformerFactory.Core().V1().Nodes().Informer()
 	namespaceLister := sharedInformerFactory.Core().V1().Namespaces().Lister()
 	priorityClassLister := sharedInformerFactory.Scheduling().V1().PriorityClasses().Lister()
 
@@ -258,6 +289,20 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
 		return fmt.Errorf("build get pods assigned to node function error: %v", err)
+	}
+
+	// real metrics client
+	metricsClient, err := client.CreateMetricsClient(rs.ClientConnection)
+	if err != nil {
+		cancel()
+		klog.V(1).Infof("createMetricsClient failed with %+v", err)
+	}
+	var icache cache.BasicCache
+	// init real metrics cache before start informerFactory
+	icache, err = cache.InitCache(rs.Client, nodeInformer, nodeLister, podInformer, metricsClient, ctx.Done())
+	if err != nil {
+		cancel()
+		klog.V(1).Infof("init metrics cache failed")
 	}
 
 	sharedInformerFactory.Start(ctx.Done())
@@ -316,13 +361,32 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 
 			fakeCtx, cncl := context.WithCancel(context.TODO())
 			defer cncl()
+
+			// fake metrics client
+			metricsClient, err := cacheMetricsClient()
+			if err != nil {
+				cancel()
+				klog.V(1).Infof("init metrics cache failed")
+			}
+			//init fake metrics cache
+			icache, err = cache.InitCache(fakeClient, fakeSharedInformerFactory.Core().V1().Nodes().Informer(),
+				fakeSharedInformerFactory.Core().V1().Nodes().Lister(),
+				fakeSharedInformerFactory.Core().V1().Pods().Informer(),
+				metricsClient, fakeCtx.Done())
+			if err != nil {
+				cancel()
+				klog.V(1).Infof("init metrics cache failed")
+			}
+
 			fakeSharedInformerFactory.Start(fakeCtx.Done())
 			fakeSharedInformerFactory.WaitForCacheSync(fakeCtx.Done())
-
 			podEvictorClient = fakeClient
+
 		} else {
 			podEvictorClient = rs.Client
 		}
+		//run cache
+		icache.Run(time.Minute)
 
 		klog.V(3).Infof("Building a pod evictor")
 		podEvictor := evictions.NewPodEvictor(
@@ -473,6 +537,5 @@ func createClients(clientConnection componentbaseconfig.ClientConnectionConfigur
 	if err != nil {
 		return nil, nil, err
 	}
-
 	return kClient, eventClient, nil
 }

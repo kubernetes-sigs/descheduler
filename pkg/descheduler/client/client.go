@@ -18,6 +18,7 @@ package client
 
 import (
 	"fmt"
+	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	clientset "k8s.io/client-go/kubernetes"
 	componentbaseconfig "k8s.io/component-base/config"
@@ -28,6 +29,31 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+func CreateMetricsClient(clientConnection componentbaseconfig.ClientConnectionConfiguration) (*metricsclientset.Clientset, error) {
+	var cfg *rest.Config
+	if len(clientConnection.Kubeconfig) != 0 {
+		master, err := GetMasterFromKubeconfig(clientConnection.Kubeconfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse kubeconfig file: %v ", err)
+		}
+
+		cfg, err = clientcmd.BuildConfigFromFlags(master, clientConnection.Kubeconfig)
+		if err != nil {
+			return nil, fmt.Errorf("unable to build config: %v", err)
+		}
+
+	} else {
+		var err error
+		cfg, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, fmt.Errorf("unable to build in cluster config: %v", err)
+		}
+	}
+
+	cfg.Burst = int(clientConnection.Burst)
+	cfg.QPS = clientConnection.QPS
+	return metricsclientset.NewForConfig(cfg)
+}
 func CreateClient(clientConnection componentbaseconfig.ClientConnectionConfiguration, userAgt string) (clientset.Interface, error) {
 	var cfg *rest.Config
 	if len(clientConnection.Kubeconfig) != 0 {
