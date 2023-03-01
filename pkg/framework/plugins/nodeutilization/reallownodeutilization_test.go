@@ -56,10 +56,11 @@ func TestRealLowNodeUtilization(t *testing.T) {
 				test.BuildTestNode(low1Node, 10000, 10000, 0, nil),
 			},
 			pods: []*v1.Pod{
-				test.BuildTestPod("p1", 2000, 2000, target1Node, nil),
-				test.BuildTestPod("p2", 2000, 2000, target1Node, nil),
-				test.BuildTestPod("p3", 2000, 2000, target1Node, nil),
-				test.BuildTestPod("p4", 2000, 2000, target1Node, nil),
+				test.BuildTestPod("p1", 2000, 2000, target1Node, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 2000, 2000, target1Node, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 2000, 2000, target1Node, test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 2000, 2000, target1Node, test.SetRSOwnerRef),
+				test.BuildTestPod("p5", 2000, 2000, low1Node, test.SetRSOwnerRef),
 			},
 			nodeMetrics: []*v1beta1.NodeMetrics{
 				test.BuildTestNodeMetrics(target1Node, 8000, 8000, nil),
@@ -88,7 +89,7 @@ func TestRealLowNodeUtilization(t *testing.T) {
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, time.Second*5)
 			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
 			var metricsObjs []runtime.Object
@@ -119,7 +120,7 @@ func TestRealLowNodeUtilization(t *testing.T) {
 			iCache, err := cache.InitCache(fakeClient, sharedInformerFactory.Core().V1().Nodes().Informer(),
 				sharedInformerFactory.Core().V1().Nodes().Lister(), sharedInformerFactory.Core().V1().Pods().Informer(), fakeMetricsClient, ctx.Done())
 
-			iCache.Run(time.Second * 10)
+			iCache.Run(time.Second * 5)
 
 			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 			if err != nil {
@@ -150,15 +151,13 @@ func TestRealLowNodeUtilization(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 			cacheReady := false
-			for i := 0; i < 100 || cacheReady; i++ {
+			for i := 0; i < 100 && !cacheReady; i++ {
+				time.Sleep(time.Second * 6)
 				nodeUsage := iCache.GetReadyNodeUsage(&cache.QueryCacheOption{})
 				for _, u := range nodeUsage {
-					if len(u.UsageList) > cache.LATEST_REAL_METRICS_STORE {
+					if len(u.UsageList) > cache.LATEST_REAL_METRICS_STORE && len(u.AllPods) > 0 && len(u.AllPods[0].UsageList) > 0 {
 						cacheReady = true
 					}
-				}
-				if cacheReady {
-					break
 				}
 			}
 

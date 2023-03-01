@@ -93,7 +93,7 @@ func newPodStats(pod *v1.Pod) *podStats {
 	}
 }
 
-func InitCache(client clientset.Interface, nodeInformer cache.SharedIndexInformer, nodeLister corelisters.NodeLister, podInformer cache.SharedIndexInformer, mc metricsclientset.Interface, stopChan <-chan struct{}) (c BasicCache, err error) {
+func InitCache(client clientset.Interface, nodeInformer cache.SharedIndexInformer, nodeLister corelisters.NodeLister, podInformer cache.SharedIndexInformer, mc metricsclientset.Interface, stopChan <-chan struct{}) (BasicCache, error) {
 	iCache := &Cache{
 		client:     client,
 		nodeLister: nodeLister,
@@ -101,7 +101,7 @@ func InitCache(client clientset.Interface, nodeInformer cache.SharedIndexInforme
 		mc:         mc,
 		nodes:      make(map[string]*nodeStats, 500),
 	}
-	_, err = nodeInformer.AddEventHandler(iCache.GetResourceNodeEventHandler())
+	_, err := nodeInformer.AddEventHandler(iCache.GetResourceNodeEventHandler())
 	if err != nil {
 		return iCache, err
 	}
@@ -109,6 +109,7 @@ func InitCache(client clientset.Interface, nodeInformer cache.SharedIndexInforme
 	if err != nil {
 		return iCache, err
 	}
+	innerCache = iCache
 	return iCache, nil
 }
 

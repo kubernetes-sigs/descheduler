@@ -33,8 +33,8 @@ type BasicCache interface {
 	GetReadyNodeUsage(option *QueryCacheOption) map[string]*NodeUsageMap
 }
 
-var c BasicCache
+var innerCache BasicCache
 
 func GetCache() BasicCache {
-	return c
+	return innerCache
 }

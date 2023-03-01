@@ -59,14 +59,9 @@ func (l *RealLowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) 
 	targetThresholds := l.args.TargetThresholds
 
 	// check if Pods/CPU/Mem are set, if not, set them to 100
-	if _, ok := thresholds[v1.ResourcePods]; !ok {
-		if useDeviationThresholds {
-			thresholds[v1.ResourcePods] = MinResourcePercentage
-			targetThresholds[v1.ResourcePods] = MinResourcePercentage
-		} else {
-			thresholds[v1.ResourcePods] = MaxResourcePercentage
-			targetThresholds[v1.ResourcePods] = MaxResourcePercentage
-		}
+	if _, ok := thresholds[v1.ResourcePods]; ok {
+		delete(thresholds, v1.ResourcePods)
+		delete(targetThresholds, v1.ResourcePods)
 	}
 	if _, ok := thresholds[v1.ResourceCPU]; !ok {
 		if useDeviationThresholds {

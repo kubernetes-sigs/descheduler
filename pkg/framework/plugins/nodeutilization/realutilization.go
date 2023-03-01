@@ -174,8 +174,15 @@ func SortPodsBasedOnPriorityLowToHigh(podsUsage []*cache.PodUsageMap) {
 		if *pi.Spec.Priority != *pj.Spec.Priority {
 			return *pi.Spec.Priority < *pj.Spec.Priority
 		}
-		return true
-		//return podsUsage[i].CpuUsage < podsUsage[j].CpuUsage
+		if len(podsUsage[i].UsageList) == 0 {
+			return true
+		}
+		if len(podsUsage[j].UsageList) == 0 {
+			return false
+		}
+		piUsage := podsUsage[i].UsageList[len(podsUsage[i].UsageList)-1]
+		pjUsage := podsUsage[j].UsageList[len(podsUsage[j].UsageList)-1]
+		return piUsage.Cpu().MilliValue() < pjUsage.Cpu().MilliValue()
 	})
 }
 
@@ -227,11 +234,13 @@ func evictPodsWithReal(
 				klog.ErrorS(err, "could not build preEvictionFilter with namespace exclusion")
 				continue
 			}
-			// if pod too small,skip evict
+			// if pod too small to make usage to normal is wasteful,skip evict
 			matchSmallPod := true
-			for name := range totalAvailableUsage {
+			for name := range nodeInfo.CurrentUsage {
+				copyNodeUsage := nodeInfo.CurrentUsage[name].DeepCopy()
+				copyNodeUsage.Sub(*nodeInfo.threshold.highResourceThreshold[name])
 				podResourceUsage := podCurrentUsage[name]
-				if totalAvailableUsage[name].MilliValue() < podResourceUsage.MilliValue()*10 {
+				if copyNodeUsage.MilliValue() < podResourceUsage.MilliValue()*10 {
 					matchSmallPod = false
 				}
 			}
