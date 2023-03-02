@@ -60,7 +60,7 @@ leaderElection: {}
 cmdOptions:
   v: 3
 
-#It is recommended to use the latest Policy API version
+# Recommended to use the latest Policy API version supported by the Descheduler app version
 deschedulerPolicyAPIVersion: "descheduler/v1alpha2"
 
 deschedulerPolicy:
