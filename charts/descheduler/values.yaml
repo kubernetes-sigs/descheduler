@@ -60,6 +60,9 @@ leaderElection: {}
 cmdOptions:
   v: 3
 
+#It is recommended to use the latest Policy API version
+deschedulerPolicyAPIVersion: "descheduler/v1alpha2"
+
 deschedulerPolicy:
   # nodeSelector: "key1=value1,key2=value2"
   # maxNoOfPodsToEvictPerNode: 10
