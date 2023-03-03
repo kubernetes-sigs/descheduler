@@ -61,7 +61,7 @@ cmdOptions:
   v: 3
 
 # Recommended to use the latest Policy API version supported by the Descheduler app version
-deschedulerPolicyAPIVersion: "descheduler/v1alpha2"
+deschedulerPolicyAPIVersion: "descheduler/v1alpha1"
 
 deschedulerPolicy:
   # nodeSelector: "key1=value1,key2=value2"
