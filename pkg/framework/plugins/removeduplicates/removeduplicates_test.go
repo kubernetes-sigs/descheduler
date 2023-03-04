@@ -72,6 +72,7 @@ func TestFindDuplicatePods(t *testing.T) {
 		}
 	})
 	node6 := test.BuildTestNode("n6", 200, 200, 10, nil)
+	node7 := test.BuildTestNode("n7", 2000, 3000, 10, nil)
 
 	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
 	p1.Namespace = "dev"
@@ -186,6 +187,14 @@ func TestFindDuplicatePods(t *testing.T) {
 		"datacenter": "west",
 	}
 
+	// no enough resource to evict duplicate pods
+	p21 := test.BuildTestPod("p21", 1700, 0, node1.Name, nil)
+	p22 := test.BuildTestPod("p22", 1700, 0, node2.Name, nil)
+	p23 := test.BuildTestPod("p23", 600, 0, node7.Name, nil)
+	p24 := test.BuildTestPod("p24", 600, 0, node7.Name, nil)
+	p23.ObjectMeta.OwnerReferences = ownerRef3
+	p24.ObjectMeta.OwnerReferences = ownerRef3
+
 	testCases := []struct {
 		description             string
 		pods                    []*v1.Pod
@@ -283,6 +292,12 @@ func TestFindDuplicatePods(t *testing.T) {
 			nodes:                   []*v1.Node{node1, node6},
 			expectedEvictedPodCount: 1,
 			nodefit:                 true,
+		},
+		{
+			description:             "no enough resource to evict duplicate pods",
+			pods:                    []*v1.Pod{p21, p22, p23, p24},
+			nodes:                   []*v1.Node{node1, node2, node7},
+			expectedEvictedPodCount: 0,
 		},
 	}
 

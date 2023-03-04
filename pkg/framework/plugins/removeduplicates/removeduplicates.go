@@ -33,6 +33,7 @@ import (
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
 )
@@ -189,7 +190,7 @@ func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) *frame
 	// 1. how many pods can be evicted to respect uniform placement of pods among viable nodes?
 	for ownerKey, podNodes := range duplicatePods {
 
-		targetNodes := getTargetNodes(podNodes, nodes)
+		targetNodes := getTargetNodes(r.handle.GetPodsAssignedToNodeFunc(), podNodes, nodes)
 
 		klog.V(2).InfoS("Adjusting feasible nodes", "owner", ownerKey, "from", nodeCount, "to", len(targetNodes))
 		if len(targetNodes) < 2 {
@@ -217,7 +218,7 @@ func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) *frame
 	return nil
 }
 
-func getTargetNodes(podNodes map[string][]*v1.Pod, nodes []*v1.Node) []*v1.Node {
+func getTargetNodes(nodeIndexer podutil.GetPodsAssignedToNodeFunc, podNodes map[string][]*v1.Pod, nodes []*v1.Node) []*v1.Node {
 	// In order to reduce the number of pods processed, identify pods which have
 	// equal (tolerations, nodeselectors, node affinity) terms and considered them
 	// as identical. Identical pods wrt. (tolerations, nodeselectors, node affinity) terms
@@ -249,12 +250,15 @@ func getTargetNodes(podNodes map[string][]*v1.Pod, nodes []*v1.Node) []*v1.Node 
 	for pod := range distinctPods {
 		matchingNodes := map[string]*v1.Node{}
 		for _, node := range nodes {
-			if !utils.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, func(taint *v1.Taint) bool {
-				return taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectNoExecute
-			}) {
-				continue
-			}
-			if match, err := utils.PodMatchNodeSelector(pod, node); err == nil && !match {
+			// if !utils.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, func(taint *v1.Taint) bool {
+			// 	return taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectNoExecute
+			// }) {
+			// 	continue
+			// }
+			// if match, err := utils.PodMatchNodeSelector(pod, node); err == nil && !match {
+			// 	continue
+			// }
+			if !nodeutil.PodFitsCurrentNode(nodeIndexer, pod, node) {
 				continue
 			}
 			matchingNodes[node.Name] = node
