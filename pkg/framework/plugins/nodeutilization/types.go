@@ -30,7 +30,7 @@ type LowNodeUtilizationArgs struct {
 	NumberOfNodes          int                    `json:"numberOfNodes"`
 
 	// Naming this one differently since namespaces are still
-	// considered while considering resoures used by pods
+	// considered while considering resources used by pods
 	// but then filtered out before eviction
 	EvictableNamespaces *api.Namespaces `json:"evictableNamespaces"`
 }
@@ -44,7 +44,7 @@ type HighNodeUtilizationArgs struct {
 	Thresholds    api.ResourceThresholds `json:"thresholds"`
 	NumberOfNodes int                    `json:"numberOfNodes"`
 	// Naming this one differently since namespaces are still
-	// considered while considering resoures used by pods
+	// considered while considering resources used by pods
 	// but then filtered out before eviction
 	EvictableNamespaces *api.Namespaces `json:"evictableNamespaces"`
 }
