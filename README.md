@@ -320,6 +320,8 @@ trigger down scaling of under utilized nodes.
 This strategy **must** be used with the scheduler scoring strategy `MostAllocated`. The parameters of this strategy are
 configured under `nodeResourceUtilizationThresholds`.
 
+> Note: On GKE, it is not possible to customize the default scheduler config. Instead, you can use the [`optimze-utilization` autoscaling strategy](https://cloud.google.com/kubernetes-engine/docs/concepts/cluster-autoscaler#:~:text=The%20optimize%2Dutilization%20autoscaling%20profile,custom%20scheduler%20are%20not%20affected), which has the same effect as enabling the `MostAllocated` scheduler plugin. Alternatively, you can deploy a second custom scheduler and edit that scheduler's config yourself.
+
 The under utilization of nodes is determined by a configurable threshold `thresholds`. The threshold
 `thresholds` can be configured for cpu, memory, number of pods, and extended resources in terms of percentage. The percentage is
 calculated as the current resources requested on the node vs [total allocatable](https://kubernetes.io/docs/concepts/architecture/nodes/#capacity).
