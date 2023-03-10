@@ -65,13 +65,7 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-            privileged: false
-            readOnlyRootFilesystem: true
-            runAsNonRoot: true
+            {{- toYaml .Values.securityContext | nindent 12 }}
           volumeMounts:
             - mountPath: /policy-dir
               name: policy-volume
