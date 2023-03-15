@@ -1,4 +1,4 @@
-package nodeutilization
+package realutilization
 
 import (
 	"context"
@@ -7,30 +7,29 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/cache"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
 )
 
-const RealLowNodeUtilizationPluginName = "RealLowNodeUtilization"
-
 // LowNodeUtilization evicts pods from overutilized nodes to underutilized nodes. Note that CPU/Memory requests are used
 // to calculate nodes' utilization and not the actual resource usage.
 
 type RealLowNodeUtilization struct {
 	handle    framework.Handle
-	args      *LowNodeUtilizationArgs
+	args      *LowNodeRealUtilizationArgs
 	podFilter func(pod *v1.Pod) bool
 }
 
 var _ framework.BalancePlugin = &RealLowNodeUtilization{}
 
-// NewLowNodeUtilization builds plugin from its arguments while passing a handle
+// NewRealLowNodeUtilization builds plugin from its arguments while passing a handle
 func NewRealLowNodeUtilization(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
-	lowNodeUtilizationArgsArgs, ok := args.(*LowNodeUtilizationArgs)
+	lowNodeRealUtilizationArgsArgs, ok := args.(*LowNodeRealUtilizationArgs)
 	if !ok {
-		return nil, fmt.Errorf("want args to be of type LowNodeUtilizationArgs, got %T", args)
+		return nil, fmt.Errorf("want args to be of type LowNodeRealUtilizationArgsArgs, got %T", args)
 	}
 
 	podFilter, err := podutil.NewOptions().
@@ -42,19 +41,36 @@ func NewRealLowNodeUtilization(args runtime.Object, handle framework.Handle) (fr
 
 	return &RealLowNodeUtilization{
 		handle:    handle,
-		args:      lowNodeUtilizationArgsArgs,
+		args:      lowNodeRealUtilizationArgsArgs,
 		podFilter: podFilter,
 	}, nil
 }
 
+const LowNodeRealUtilizationPluginName = "LowNodeRealUtilization"
+
 // Name retrieves the plugin name
 func (l *RealLowNodeUtilization) Name() string {
-	return LowNodeUtilizationPluginName
+	return LowNodeRealUtilizationPluginName
 }
+
+// getResourceNames returns list of resource names in resource thresholds
+func getResourceNames(thresholds api.ResourceThresholds) []v1.ResourceName {
+	resourceNames := make([]v1.ResourceName, 0, len(thresholds))
+	for name := range thresholds {
+		resourceNames = append(resourceNames, name)
+	}
+	return resourceNames
+}
+
+const (
+	// MinResourcePercentage is the minimum value of a resource's percentage
+	MinResourcePercentage = 0
+	// MaxResourcePercentage is the maximum value of a resource's percentage
+	MaxResourcePercentage = 100
+)
 
 // Balance extension point implementation for the plugin
 func (l *RealLowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
-	useDeviationThresholds := l.args.UseDeviationThresholds
 	thresholds := l.args.Thresholds
 	targetThresholds := l.args.TargetThresholds
 
@@ -64,28 +80,18 @@ func (l *RealLowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) 
 		delete(targetThresholds, v1.ResourcePods)
 	}
 	if _, ok := thresholds[v1.ResourceCPU]; !ok {
-		if useDeviationThresholds {
-			thresholds[v1.ResourceCPU] = MinResourcePercentage
-			targetThresholds[v1.ResourceCPU] = MinResourcePercentage
-		} else {
-			thresholds[v1.ResourceCPU] = MaxResourcePercentage
-			targetThresholds[v1.ResourceCPU] = MaxResourcePercentage
-		}
+		thresholds[v1.ResourceCPU] = MaxResourcePercentage
+		targetThresholds[v1.ResourceCPU] = MaxResourcePercentage
 	}
 	if _, ok := thresholds[v1.ResourceMemory]; !ok {
-		if useDeviationThresholds {
-			thresholds[v1.ResourceMemory] = MinResourcePercentage
-			targetThresholds[v1.ResourceMemory] = MinResourcePercentage
-		} else {
-			thresholds[v1.ResourceMemory] = MaxResourcePercentage
-			targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
-		}
+		thresholds[v1.ResourceMemory] = MaxResourcePercentage
+		targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
 	}
 	resourceNames := getResourceNames(thresholds)
 
 	lowNodes, sourceNodes := classifyNodesWithReal(
 		getNodeRealUsage(nodes),
-		getNodeThresholds(nodes, thresholds, targetThresholds, resourceNames, l.handle.GetPodsAssignedToNodeFunc(), false),
+		getNodeThresholds(nodes, thresholds, targetThresholds, resourceNames),
 		// The node has to be schedulable (to be able to move workload there)
 		func(node *v1.Node, usage cache.NodeUsageMap, threshold NodeThresholds) bool {
 			if nodeutil.IsNodeUnschedulable(node) {
@@ -164,6 +170,64 @@ func (l *RealLowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) 
 		continueEvictionCond)
 
 	return nil
+}
+
+func getNodeThresholds(
+	nodes []*v1.Node,
+	lowThreshold, highThreshold api.ResourceThresholds,
+	resourceNames []v1.ResourceName,
+) map[string]NodeThresholds {
+	nodeThresholdsMap := map[string]NodeThresholds{}
+
+	for _, node := range nodes {
+		nodeCapacity := node.Status.Capacity
+		if len(node.Status.Allocatable) > 0 {
+			nodeCapacity = node.Status.Allocatable
+		}
+
+		nodeThresholdsMap[node.Name] = NodeThresholds{
+			lowResourceThreshold:  map[v1.ResourceName]*resource.Quantity{},
+			highResourceThreshold: map[v1.ResourceName]*resource.Quantity{},
+		}
+
+		for _, resourceName := range resourceNames {
+			nodeThresholdsMap[node.Name].lowResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, lowThreshold[resourceName])
+			nodeThresholdsMap[node.Name].highResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, highThreshold[resourceName])
+		}
+
+	}
+	return nodeThresholdsMap
+}
+
+func normalizePercentage(percent api.Percentage) api.Percentage {
+	if percent > MaxResourcePercentage {
+		return MaxResourcePercentage
+	}
+	if percent < MinResourcePercentage {
+		return MinResourcePercentage
+	}
+	return percent
+}
+
+func resourceThreshold(nodeCapacity v1.ResourceList, resourceName v1.ResourceName, threshold api.Percentage) *resource.Quantity {
+	defaultFormat := resource.DecimalSI
+	if resourceName == v1.ResourceMemory {
+		defaultFormat = resource.BinarySI
+	}
+
+	resourceCapacityFraction := func(resourceNodeCapacity int64) int64 {
+		// A threshold is in percentages but in <0;100> interval.
+		// Performing `threshold * 0.01` will convert <0;100> interval into <0;1>.
+		// Multiplying it with capacity will give fraction of the capacity corresponding to the given resource threshold in Quantity units.
+		return int64(float64(threshold) * 0.01 * float64(resourceNodeCapacity))
+	}
+
+	resourceCapacityQuantity := nodeCapacity.Name(resourceName, defaultFormat)
+
+	if resourceName == v1.ResourceCPU {
+		return resource.NewMilliQuantity(resourceCapacityFraction(resourceCapacityQuantity.MilliValue()), defaultFormat)
+	}
+	return resource.NewQuantity(resourceCapacityFraction(resourceCapacityQuantity.Value()), defaultFormat)
 }
 
 func getNodeRealUsage(

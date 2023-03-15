@@ -114,6 +114,9 @@ func InitCache(client clientset.Interface, nodeInformer cache.SharedIndexInforme
 }
 
 func (c *Cache) Run(period time.Duration) {
+	if period == 0 {
+		return
+	}
 	go wait.Until(c.ClearStat, period, c.stopChan)
 	go wait.Until(c.syncMetricsWorker, period, c.stopChan)
 }

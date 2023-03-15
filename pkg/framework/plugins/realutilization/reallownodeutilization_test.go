@@ -1,4 +1,4 @@
-package nodeutilization
+package realutilization
 
 import (
 	"context"
@@ -71,6 +71,7 @@ func TestRealLowNodeUtilization(t *testing.T) {
 				test.BuildTestPodMetrics("p2", 2000, 2000, nil),
 				test.BuildTestPodMetrics("p3", 2000, 2000, nil),
 				test.BuildTestPodMetrics("p4", 2000, 2000, nil),
+				test.BuildTestPodMetrics("p5", 2000, 2000, nil),
 			},
 			expectedPodsEvicted: 4,
 		},
@@ -204,11 +205,10 @@ func TestRealLowNodeUtilization(t *testing.T) {
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
-			plugin, err := NewRealLowNodeUtilization(&LowNodeUtilizationArgs{
-				Thresholds:             test.thresholds,
-				TargetThresholds:       test.targetThresholds,
-				UseDeviationThresholds: test.useDeviationThresholds,
-				EvictableNamespaces:    test.evictableNamespaces,
+			plugin, err := NewRealLowNodeUtilization(&LowNodeRealUtilizationArgs{
+				Thresholds:          test.thresholds,
+				TargetThresholds:    test.targetThresholds,
+				EvictableNamespaces: test.evictableNamespaces,
 			}, handle)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)

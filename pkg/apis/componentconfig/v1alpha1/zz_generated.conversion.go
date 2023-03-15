@@ -51,6 +51,7 @@ func RegisterConversions(s *runtime.Scheme) error {
 
 func autoConvert_v1alpha1_DeschedulerConfiguration_To_componentconfig_DeschedulerConfiguration(in *DeschedulerConfiguration, out *componentconfig.DeschedulerConfiguration, s conversion.Scope) error {
 	out.DeschedulingInterval = time.Duration(in.DeschedulingInterval)
+	out.MetricsCacheSyncInterval = time.Duration(in.MetricsCacheSyncInterval)
 	out.KubeconfigFile = in.KubeconfigFile
 	out.PolicyConfigFile = in.PolicyConfigFile
 	out.DryRun = in.DryRun
@@ -71,6 +72,7 @@ func Convert_v1alpha1_DeschedulerConfiguration_To_componentconfig_DeschedulerCon
 
 func autoConvert_componentconfig_DeschedulerConfiguration_To_v1alpha1_DeschedulerConfiguration(in *componentconfig.DeschedulerConfiguration, out *DeschedulerConfiguration, s conversion.Scope) error {
 	out.DeschedulingInterval = time.Duration(in.DeschedulingInterval)
+	out.MetricsCacheSyncInterval = time.Duration(in.MetricsCacheSyncInterval)
 	out.KubeconfigFile = in.KubeconfigFile
 	out.PolicyConfigFile = in.PolicyConfigFile
 	out.DryRun = in.DryRun

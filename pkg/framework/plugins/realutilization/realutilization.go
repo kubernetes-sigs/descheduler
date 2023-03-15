@@ -1,4 +1,4 @@
-package nodeutilization
+package realutilization
 
 import (
 	"context"
@@ -19,6 +19,10 @@ import (
 type RealNodeInfo struct {
 	*cache.NodeUsageMap
 	threshold NodeThresholds
+}
+type NodeThresholds struct {
+	lowResourceThreshold  map[v1.ResourceName]*resource.Quantity
+	highResourceThreshold map[v1.ResourceName]*resource.Quantity
 }
 
 func classifyNodesWithReal(
