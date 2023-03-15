@@ -108,7 +108,7 @@ These are top level keys in the Descheduler Policy that you can use to configure
 | `maxNoOfPodsToEvictPerNode` |`int`| `nil` | maximum number of pods evicted from each node (summed through all strategies) |
 | `maxNoOfPodsToEvictPerNamespace` |`int`| `nil` | maximum number of pods evicted from each namespace (summed through all strategies) |
 
-### Evictor Plugion configuration (Default Evictor)
+### Evictor Plugin configuration (Default Evictor)
 
 The Default Evictor Plugin is used by default for filtering pods before processing them in an strategy plugin, or for applying a PreEvictionFilter of pods before eviction. You can also create your own Evictor Plugin or use the Default one provided by Descheduler.  Other uses for the Evictor plugin can be to sort, filter, validate or group pods by different criteria, and that's why this is handled by a plugin and not configured in the top level config.
 
