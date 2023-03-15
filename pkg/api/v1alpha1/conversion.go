@@ -242,7 +242,7 @@ func enableProfilePluginsByType(profilePlugins api.Plugins, pluginInstance frame
 func checkBalance(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
 	_, ok := pluginInstance.(framework.BalancePlugin)
 	if ok {
-		klog.V(3).Info("converting Balance plugin: %s", pluginInstance.Name())
+		klog.V(3).Infof("converting Balance plugin: %s", pluginInstance.Name())
 		profilePlugins.Balance.Enabled = []string{pluginConfig.Name}
 	}
 	return profilePlugins
@@ -251,7 +251,7 @@ func checkBalance(profilePlugins api.Plugins, pluginInstance framework.Plugin, p
 func checkDeschedule(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
 	_, ok := pluginInstance.(framework.DeschedulePlugin)
 	if ok {
-		klog.V(3).Info("converting Deschedule plugin: %s", pluginInstance.Name())
+		klog.V(3).Infof("converting Deschedule plugin: %s", pluginInstance.Name())
 		profilePlugins.Deschedule.Enabled = []string{pluginConfig.Name}
 	}
 	return profilePlugins
