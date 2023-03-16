@@ -46,8 +46,7 @@ func (ns *nodeStats) getPodUsageByNode() []*PodUsageMap {
 		usage := &PodUsageMap{
 			Pod: podStat.pod,
 		}
-		var usageList []v1.ResourceList
-		usageList = podStat.realUsed
+		usageList := podStat.realUsed
 		usage.UsageList = usageList
 		podUsage = append(podUsage, usage)
 	}
@@ -125,10 +124,7 @@ func (c *Cache) ClearStat() {
 	defer c.Unlock()
 	now := time.Now()
 	canClear := func(updateTime time.Time) bool {
-		if now.Sub(updateTime).Minutes() > 2 {
-			return true
-		}
-		return false
+		return now.Sub(updateTime).Minutes() > 2
 	}
 	for nodeName, nodeStats := range c.nodes {
 		if canClear(nodeStats.updateTime) && len(nodeStats.realUsed) > 0 {
@@ -275,11 +271,7 @@ func (c *Cache) deleteNode(obj interface{}) {
 		klog.Errorf("Failed to convert %v to v1.Pod", obj)
 		return
 	}
-
-	if _, ok := c.nodes[node.Name]; ok {
-		delete(c.nodes, node.Name)
-	}
-
+	delete(c.nodes, node.Name)
 }
 func (c *Cache) GetResourcePodEventHandler() cache.ResourceEventHandler {
 	return cache.FilteringResourceEventHandler{
