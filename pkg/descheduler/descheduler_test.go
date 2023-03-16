@@ -3,9 +3,10 @@ package descheduler
 import (
 	"context"
 	"fmt"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/realutilization"
 	"testing"
 	"time"
+
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/realutilization"
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
@@ -107,6 +108,7 @@ func TestTaintsUpdated(t *testing.T) {
 		t.Fatalf("Unable to evict pod, node taint did not get propagated to descheduler strategies %v\n", err)
 	}
 }
+
 func TestRealUtiization(t *testing.T) {
 	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
 	pluginregistry.Register(realutilization.LowNodeRealUtilizationPluginName, realutilization.NewRealLowNodeUtilization, &realutilization.LowNodeRealUtilizationArgs{}, realutilization.ValidateLowNodeRealUtilizationArgs, realutilization.SetDefaults_LowNodeRealUtilizationArgs, pluginregistry.PluginRegistry)
@@ -157,6 +159,7 @@ func TestRealUtiization(t *testing.T) {
 	}
 	<-ctx.Done()
 }
+
 func TestDuplicate(t *testing.T) {
 	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
 	pluginregistry.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicatesArgs{}, removeduplicates.ValidateRemoveDuplicatesArgs, removeduplicates.SetDefaults_RemoveDuplicatesArgs, pluginregistry.PluginRegistry)

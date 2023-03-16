@@ -3,6 +3,9 @@ package cache
 import (
 	"context"
 	"fmt"
+	"testing"
+	"time"
+
 	v1 "k8s.io/api/core/v1"
 	v12 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -12,8 +15,6 @@ import (
 	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	fakemetricsclientset "k8s.io/metrics/pkg/client/clientset/versioned/fake"
 	"sigs.k8s.io/descheduler/test"
-	"testing"
-	"time"
 )
 
 // test query real usage from cache

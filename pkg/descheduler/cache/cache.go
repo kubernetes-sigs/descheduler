@@ -3,6 +3,9 @@ package cache
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
+
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,13 +18,13 @@ import (
 	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/descheduler/pkg/utils"
-	"sync"
-	"time"
 )
 
-const LATEST_REAL_METRICS_STORE int = 6
-const LATEST_HIGH_METRICS_STORE int = 3
-const MAX_REAL_METRICS_STORE int = 15
+const (
+	LATEST_REAL_METRICS_STORE int = 6
+	LATEST_HIGH_METRICS_STORE int = 3
+	MAX_REAL_METRICS_STORE    int = 15
+)
 
 type Cache struct {
 	sync.RWMutex
@@ -119,6 +122,7 @@ func (c *Cache) Run(period time.Duration) {
 	go wait.Until(c.ClearStat, period, c.stopChan)
 	go wait.Until(c.syncMetricsWorker, period, c.stopChan)
 }
+
 func (c *Cache) ClearStat() {
 	c.Lock()
 	defer c.Unlock()
@@ -139,6 +143,7 @@ func (c *Cache) ClearStat() {
 		}
 	}
 }
+
 func (c *Cache) syncMetricsWorker() {
 	klog.V(4).Infof("sync metrics start")
 	defer func() {
@@ -159,7 +164,7 @@ func (c *Cache) syncMetricsWorker() {
 		if _, ok := c.nodes[item.Name]; ok {
 			c.nodes[item.Name].updateTime = item.Timestamp.Time
 			c.nodes[item.Name].realUsed = append(c.nodes[item.Name].realUsed, &item)
-			//保留15分钟内的node利用率
+			// 保留15分钟内的node利用率
 			cutTime := time.Now().Add(-time.Duration(MAX_REAL_METRICS_STORE) * time.Minute)
 			cutIndex := 0
 			for j, metricsItem := range c.nodes[item.Name].realUsed {
@@ -173,7 +178,6 @@ func (c *Cache) syncMetricsWorker() {
 	}
 
 	podMetricsList, err := c.mc.MetricsV1beta1().PodMetricses("").List(ctx, metav1.ListOptions{})
-
 	if err != nil {
 		klog.Errorf("Failed to get pod metric %v ", err)
 		return
@@ -220,6 +224,7 @@ func (c *Cache) GetResourceNodeEventHandler() cache.ResourceEventHandler {
 		DeleteFunc: c.deleteNode,
 	}
 }
+
 func (c *Cache) addNode(obj interface{}) {
 	c.Lock()
 	defer c.Unlock()
@@ -237,7 +242,6 @@ func (c *Cache) addNode(obj interface{}) {
 			pods:     make(map[string]*podStats),
 		}
 	}
-
 }
 
 func (c *Cache) updateNode(oldObj, newObj interface{}) {
@@ -273,6 +277,7 @@ func (c *Cache) deleteNode(obj interface{}) {
 	}
 	delete(c.nodes, node.Name)
 }
+
 func (c *Cache) GetResourcePodEventHandler() cache.ResourceEventHandler {
 	return cache.FilteringResourceEventHandler{
 		FilterFunc: func(obj interface{}) bool {
@@ -359,7 +364,6 @@ func (c *Cache) updatePod(oldObj, newObj interface{}) {
 			c.nodes[oldPod.Spec.NodeName].pods[oldPod.Name].pod = newPod
 		}
 	}
-
 }
 
 func (c *Cache) deletePod(obj interface{}) {
@@ -379,7 +383,6 @@ func (c *Cache) deletePod(obj interface{}) {
 	if _, ok := nodeStat.pods[pod.Name]; ok {
 		delete(c.nodes[pod.Spec.NodeName].pods, pod.Name)
 	}
-
 }
 
 func (c *Cache) GetReadyNodeUsage(option *QueryCacheOption) map[string]*NodeUsageMap {
@@ -420,7 +423,7 @@ func (ns *nodeStats) getNodeUsageMap() *NodeUsageMap {
 		klog.V(5).Infof("usage is empty,node:%s", node.Name)
 	}
 	var currentUsage v1.ResourceList
-	//use latest usage
+	// use latest usage
 	if len(usage) > 0 {
 		currentUsage = usage[len(usage)-1]
 	}

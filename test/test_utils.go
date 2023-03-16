@@ -18,11 +18,12 @@ package test
 
 import (
 	"fmt"
+	"time"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
-	"time"
 )
 
 // BuildTestPod creates a test pod with given parameters.
@@ -207,7 +208,7 @@ func BuildTestNodeMetrics(name string, millicpu, mem int64, apply func(metrics *
 
 // BuildTestNode creates a node with specified capacity.
 func BuildTestPodMetrics(name string, millicpu, mem int64, apply func(metrics *v1beta1.PodMetrics)) *v1beta1.PodMetrics {
-	var metrics = &v1beta1.PodMetrics{
+	metrics := &v1beta1.PodMetrics{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "default",

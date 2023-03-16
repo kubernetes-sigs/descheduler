@@ -18,12 +18,12 @@ package v1alpha1
 
 import (
 	"fmt"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/realutilization"
 
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/realutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"

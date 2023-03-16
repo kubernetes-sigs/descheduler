@@ -19,13 +19,15 @@ package descheduler
 import (
 	"context"
 	"fmt"
-	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
-	fakemetricsclientset "k8s.io/metrics/pkg/client/clientset/versioned/fake"
 	"math"
-	"sigs.k8s.io/descheduler/pkg/descheduler/cache"
 	"strconv"
 	"strings"
 	"time"
+
+	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
+	fakemetricsclientset "k8s.io/metrics/pkg/client/clientset/versioned/fake"
+
+	"sigs.k8s.io/descheduler/pkg/descheduler/cache"
 
 	componentbaseconfig "k8s.io/component-base/config"
 	"k8s.io/klog/v2"
@@ -175,6 +177,7 @@ func cachedMetricsClient() (metricsclientset.Interface, error) {
 	}
 	return fakeMetricsClient, nil
 }
+
 func cachedClient(
 	realClient clientset.Interface,
 	podLister listersv1.PodLister,
@@ -403,7 +406,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		} else {
 			podEvictorClient = rs.Client
 		}
-		//run cache
+		// run cache
 		icache.Run(rs.MetricsCacheSyncInterval)
 
 		klog.V(3).Infof("Building a pod evictor")

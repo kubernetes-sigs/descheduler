@@ -2,6 +2,8 @@ package realutilization
 
 import (
 	"context"
+	"sort"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -13,7 +15,6 @@ import (
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/utils"
-	"sort"
 )
 
 type RealNodeInfo struct {
@@ -86,7 +87,7 @@ func IsNodeWithLowUtilization(nodeThresholds v1.ResourceList, thresholds map[v1.
 // 检查最近n次的状态是否完全匹配
 func CheckNodeByWindowLatestCt(nodeThresholdsList []v1.ResourceList, thresholds map[v1.ResourceName]*resource.Quantity, f checkNodeFunc, latestCt int) bool {
 	if len(nodeThresholdsList) == 0 || len(nodeThresholdsList) < latestCt {
-		//metrics is empty
+		// metrics is empty
 		return false
 	}
 	for _, nodeThresholds := range nodeThresholdsList[len(nodeThresholdsList)-latestCt:] {
@@ -156,6 +157,7 @@ func evictPodsFromSourceNodesWithReal(
 
 	}
 }
+
 func SortPodsBasedOnPriorityLowToHigh(podsUsage []*cache.PodUsageMap) {
 	sort.Slice(podsUsage, func(i, j int) bool {
 		pi := podsUsage[i].Pod

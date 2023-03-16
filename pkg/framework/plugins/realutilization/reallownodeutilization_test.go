@@ -3,6 +3,9 @@ package realutilization
 import (
 	"context"
 	"fmt"
+	"testing"
+	"time"
+
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -20,8 +23,6 @@ import (
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/test"
-	"testing"
-	"time"
 )
 
 func TestRealLowNodeUtilization(t *testing.T) {

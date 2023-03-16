@@ -1,9 +1,10 @@
 package cache
 
 import (
+	"time"
+
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"time"
 )
 
 type NodeInfoShadow struct {

@@ -18,7 +18,6 @@ limitations under the License.
 package options
 
 import (
-	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -27,6 +26,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	componentbaseconfig "k8s.io/component-base/config"
 	componentbaseoptions "k8s.io/component-base/config/options"
+	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
 	deschedulerscheme "sigs.k8s.io/descheduler/pkg/descheduler/scheme"

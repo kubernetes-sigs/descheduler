@@ -18,10 +18,10 @@ package client
 
 import (
 	"fmt"
-	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	clientset "k8s.io/client-go/kubernetes"
 	componentbaseconfig "k8s.io/component-base/config"
+	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	// Ensure to load all auth plugins.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -54,6 +54,7 @@ func CreateMetricsClient(clientConnection componentbaseconfig.ClientConnectionCo
 	cfg.QPS = clientConnection.QPS
 	return metricsclientset.NewForConfig(cfg)
 }
+
 func CreateClient(clientConnection componentbaseconfig.ClientConnectionConfiguration, userAgt string) (clientset.Interface, error) {
 	var cfg *rest.Config
 	if len(clientConnection.Kubeconfig) != 0 {

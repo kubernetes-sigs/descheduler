@@ -3,6 +3,7 @@ package realutilization
 import (
 	"context"
 	"fmt"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -157,7 +158,7 @@ func (l *RealLowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) 
 	}
 
 	// Sort the nodes by the usage in descending order
-	//sortNodesByUsage(sourceNodes, false)
+	// sortNodesByUsage(sourceNodes, false)
 
 	evictPodsFromSourceNodesWithReal(
 		ctx,
