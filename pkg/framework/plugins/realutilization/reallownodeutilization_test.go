@@ -53,28 +53,36 @@ func TestRealLowNodeUtilization(t *testing.T) {
 				v1.ResourceMemory: 70,
 			},
 			nodes: []*v1.Node{
-				test.BuildTestNode(target1Node, 10000, 10000, 0, nil),
-				test.BuildTestNode(low1Node, 10000, 10000, 0, nil),
+				test.BuildTestNode(target1Node, 10000, 10000, 100, nil),
+				test.BuildTestNode(low1Node, 10000, 10000, 100, nil),
 			},
 			pods: []*v1.Pod{
-				test.BuildTestPod("p1", 2000, 2000, target1Node, test.SetRSOwnerRef),
-				test.BuildTestPod("p2", 2000, 2000, target1Node, test.SetRSOwnerRef),
-				test.BuildTestPod("p3", 2000, 2000, target1Node, test.SetRSOwnerRef),
-				test.BuildTestPod("p4", 2000, 2000, target1Node, test.SetRSOwnerRef),
-				test.BuildTestPod("p5", 2000, 2000, low1Node, test.SetRSOwnerRef),
+				test.BuildTestPod("p1", 1000, 1000, target1Node, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 1000, 1000, target1Node, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 1000, 1000, target1Node, test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 1000, 1000, target1Node, test.SetRSOwnerRef),
+				test.BuildTestPod("p5", 1000, 1000, target1Node, test.SetRSOwnerRef),
+				test.BuildTestPod("p6", 1000, 1000, target1Node, test.SetRSOwnerRef),
+				test.BuildTestPod("p7", 1000, 1000, target1Node, test.SetRSOwnerRef),
+				test.BuildTestPod("p8", 1000, 1000, target1Node, test.SetRSOwnerRef),
+				test.BuildTestPod("p9", 2000, 2000, low1Node, test.SetRSOwnerRef),
 			},
 			nodeMetrics: []*v1beta1.NodeMetrics{
-				test.BuildTestNodeMetrics(target1Node, 8000, 8000, nil),
+				test.BuildTestNodeMetrics(target1Node, 8200, 8200, nil),
 				test.BuildTestNodeMetrics(low1Node, 2000, 2000, nil),
 			},
 			podMetrics: []*v1beta1.PodMetrics{
-				test.BuildTestPodMetrics("p1", 2000, 2000, nil),
-				test.BuildTestPodMetrics("p2", 2000, 2000, nil),
-				test.BuildTestPodMetrics("p3", 2000, 2000, nil),
-				test.BuildTestPodMetrics("p4", 2000, 2000, nil),
-				test.BuildTestPodMetrics("p5", 2000, 2000, nil),
+				test.BuildTestPodMetrics("p1", 500, 500, nil),
+				test.BuildTestPodMetrics("p2", 500, 500, nil),
+				test.BuildTestPodMetrics("p3", 1000, 1000, nil),
+				test.BuildTestPodMetrics("p4", 1000, 1000, nil),
+				test.BuildTestPodMetrics("p5", 1000, 1000, nil),
+				test.BuildTestPodMetrics("p6", 1000, 1000, nil),
+				test.BuildTestPodMetrics("p7", 1500, 1500, nil),
+				test.BuildTestPodMetrics("p8", 1500, 1500, nil),
+				test.BuildTestPodMetrics("p9", 2000, 2000, nil),
 			},
-			expectedPodsEvicted: 4,
+			expectedPodsEvicted: 3,
 		},
 	}
 	for _, test := range testCases {
@@ -122,7 +130,7 @@ func TestRealLowNodeUtilization(t *testing.T) {
 			iCache, err := cache.InitCache(fakeClient, sharedInformerFactory.Core().V1().Nodes().Informer(),
 				sharedInformerFactory.Core().V1().Nodes().Lister(), sharedInformerFactory.Core().V1().Pods().Informer(), fakeMetricsClient, ctx.Done())
 
-			iCache.Run(time.Second * 5)
+			iCache.Run(time.Millisecond * 100)
 
 			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 			if err != nil {

@@ -169,26 +169,27 @@ func SortPodsBasedOnPriorityLowToHigh(podsUsage []*cache.PodUsageMap) {
 			return false
 		}
 		if (pj.Spec.Priority == nil && pi.Spec.Priority == nil) || (*pi.Spec.Priority == *pj.Spec.Priority) {
-			if podutil.IsBestEffortPod(pi) {
+			if utils.GetPodQOS(pi) != utils.GetPodQOS(pj) {
+				if podutil.IsBestEffortPod(pi) {
+					return true
+				}
+				if podutil.IsBurstablePod(pi) && podutil.IsGuaranteedPod(pj) {
+					return true
+				}
+				return false
+			}
+			if len(podsUsage[i].UsageList) == 0 && len(podsUsage[j].UsageList) != 0 {
 				return true
 			}
-			if podutil.IsBurstablePod(pi) && podutil.IsGuaranteedPod(pj) {
-				return true
+			if len(podsUsage[i].UsageList) != 0 && len(podsUsage[j].UsageList) == 0 {
+				return false
 			}
-			return false
+			piUsage := podsUsage[i].UsageList[len(podsUsage[i].UsageList)-1]
+			pjUsage := podsUsage[j].UsageList[len(podsUsage[j].UsageList)-1]
+			return piUsage.Cpu().MilliValue() < pjUsage.Cpu().MilliValue()
+
 		}
-		if *pi.Spec.Priority != *pj.Spec.Priority {
-			return *pi.Spec.Priority < *pj.Spec.Priority
-		}
-		if len(podsUsage[i].UsageList) == 0 {
-			return true
-		}
-		if len(podsUsage[j].UsageList) == 0 {
-			return false
-		}
-		piUsage := podsUsage[i].UsageList[len(podsUsage[i].UsageList)-1]
-		pjUsage := podsUsage[j].UsageList[len(podsUsage[j].UsageList)-1]
-		return piUsage.Cpu().MilliValue() < pjUsage.Cpu().MilliValue()
+		return *pi.Spec.Priority < *pj.Spec.Priority
 	})
 }
 
