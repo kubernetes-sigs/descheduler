@@ -149,7 +149,8 @@ func TestRealUtiization(t *testing.T) {
 	rs.DeschedulingInterval = 0
 	internalDeschedulerPolicy := &api.DeschedulerPolicy{}
 	scope := scope{}
-	ctx := context.Background()
+
+	ctx, _ := context.WithTimeout(context.Background(), time.Second*10)
 	err = v1alpha1.V1alpha1ToInternal(dp, pluginregistry.PluginRegistry, internalDeschedulerPolicy, scope)
 	if err != nil {
 		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
