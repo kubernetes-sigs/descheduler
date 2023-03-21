@@ -1,3 +1,16 @@
+/*
+Copyright 2023 The Kubernetes Authors.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package profile
 
 import (
@@ -131,6 +144,26 @@ func getPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) (*api.
 	return nil, 0
 }
 
+func buildPlugin(config api.Profile, pluginName string, handle *handleImpl, reg pluginregistry.Registry) (framework.Plugin, error) {
+	pc, _ := getPluginConfig(pluginName, config.PluginConfigs)
+	if pc == nil {
+		klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", pluginName, "profile", config.Name)
+		return nil, fmt.Errorf("unable to find %q plugin config", pluginName)
+	}
+
+	registryPlugin, ok := reg[pluginName]
+	if !ok {
+		klog.ErrorS(fmt.Errorf("unable to find plugin in the pluginsMap"), "skipping plugin", "plugin", pluginName)
+		return nil, fmt.Errorf("unable to find %q plugin in the pluginsMap", pluginName)
+	}
+	pg, err := registryPlugin.PluginBuilder(pc.Args, handle)
+	if err != nil {
+		klog.ErrorS(err, "unable to initialize a plugin", "pluginName", pluginName)
+		return nil, fmt.Errorf("unable to initialize %q plugin: %v", pluginName, err)
+	}
+	return pg, nil
+}
+
 func NewProfile(config api.Profile, reg pluginregistry.Registry, opts ...Option) (*profileImpl, error) {
 	hOpts := &handleImplOpts{}
 	for _, optFnc := range opts {
@@ -149,22 +182,16 @@ func NewProfile(config api.Profile, reg pluginregistry.Registry, opts ...Option)
 		return nil, fmt.Errorf("podEvictor missing")
 	}
 
-	pc, _ := getPluginConfig(defaultevictor.PluginName, config.PluginConfigs)
-	if pc == nil {
-		klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", defaultevictor.PluginName, "profile", config.Name)
-		return nil, fmt.Errorf("unable to find %q plugin config", defaultevictor.PluginName)
-	}
-	evictorPlugin, err := defaultevictor.New(
-		pc.Args,
-		&handleImpl{
-			clientSet:                 hOpts.clientSet,
-			getPodsAssignedToNodeFunc: hOpts.getPodsAssignedToNodeFunc,
-			sharedInformerFactory:     hOpts.sharedInformerFactory,
-		},
-	)
+	evictorPlugin, err := buildPlugin(config, defaultevictor.PluginName, &handleImpl{
+		clientSet:                 hOpts.clientSet,
+		getPodsAssignedToNodeFunc: hOpts.getPodsAssignedToNodeFunc,
+		sharedInformerFactory:     hOpts.sharedInformerFactory,
+	}, reg)
 	if err != nil {
-		klog.ErrorS(fmt.Errorf("unable to construct a plugin"), "skipping plugin", "plugin", defaultevictor.PluginName, "profile", config.Name)
-		return nil, fmt.Errorf("unable to construct %v plugin: %v", defaultevictor.PluginName, err)
+		return nil, fmt.Errorf("unable to build %v plugin: %v", defaultevictor.PluginName, err)
+	}
+	if evictorPlugin == nil {
+		return nil, fmt.Errorf("empty plugin build for %v plugin: %v", defaultevictor.PluginName, err)
 	}
 
 	handle := &handleImpl{
@@ -180,34 +207,38 @@ func NewProfile(config api.Profile, reg pluginregistry.Registry, opts ...Option)
 	deschedulePlugins := []framework.DeschedulePlugin{}
 	balancePlugins := []framework.BalancePlugin{}
 
+	descheduleEnabled := make(map[string]struct{})
+	balanceEnabled := make(map[string]struct{})
+	for _, name := range config.Plugins.Deschedule.Enabled {
+		descheduleEnabled[name] = struct{}{}
+	}
+	for _, name := range config.Plugins.Balance.Enabled {
+		balanceEnabled[name] = struct{}{}
+	}
+
 	// Assuming only a list of enabled extension points.
 	// Later, when a default list of plugins and their extension points is established,
 	// compute the list of enabled extension points as (DefaultEnabled + Enabled - Disabled)
 	for _, plugin := range append(config.Plugins.Deschedule.Enabled, config.Plugins.Balance.Enabled...) {
-		pc, _ := getPluginConfig(plugin, config.PluginConfigs)
-		if pc == nil {
-			klog.ErrorS(fmt.Errorf("unable to find plugin config"), "not found", "plugin", plugin)
-			return nil, fmt.Errorf("unable to find %q plugin config", plugin)
-		}
-		registryPlugin, ok := reg[plugin]
-		if !ok {
-			klog.ErrorS(fmt.Errorf("unable to find plugin in the pluginsMap"), "skipping plugin", "plugin", plugin)
-			return nil, fmt.Errorf("unable to find %q plugin in the pluginsMap", plugin)
-		}
-		pg, err := registryPlugin.PluginBuilder(pc.Args, handle)
+		pg, err := buildPlugin(config, plugin, handle, reg)
 		if err != nil {
-			klog.ErrorS(err, "unable to initialize a plugin", "pluginName", plugin)
-			return nil, fmt.Errorf("unable to initialize %q plugin: %v", plugin, err)
+			return nil, fmt.Errorf("unable to build %v plugin: %v", plugin, err)
 		}
 		if pg != nil {
 			// pg can be of any of each type, or both
-			_, ok := pg.(framework.DeschedulePlugin)
-			if ok {
-				deschedulePlugins = append(deschedulePlugins, pg.(framework.DeschedulePlugin))
+
+			if _, exists := descheduleEnabled[plugin]; exists {
+				_, ok := pg.(framework.DeschedulePlugin)
+				if ok {
+					deschedulePlugins = append(deschedulePlugins, pg.(framework.DeschedulePlugin))
+				}
 			}
-			_, ok = pg.(framework.BalancePlugin)
-			if ok {
-				balancePlugins = append(balancePlugins, pg.(framework.BalancePlugin))
+
+			if _, exists := balanceEnabled[plugin]; exists {
+				_, ok := pg.(framework.BalancePlugin)
+				if ok {
+					balancePlugins = append(balancePlugins, pg.(framework.BalancePlugin))
+				}
 			}
 		}
 	}
