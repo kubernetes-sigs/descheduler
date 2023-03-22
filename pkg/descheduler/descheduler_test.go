@@ -11,6 +11,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/conversion"
 	"k8s.io/apimachinery/pkg/runtime"
+	apiversion "k8s.io/apimachinery/pkg/version"
+	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
@@ -20,6 +22,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
+	deschedulerversion "sigs.k8s.io/descheduler/pkg/version"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -242,6 +245,61 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 		}
 	case <-time.After(1 * time.Second):
 		t.Fatal("Root ctx should have canceled immediately")
+	}
+}
+
+func TestValidateVersionCompatibility(t *testing.T) {
+	type testCase struct {
+		name             string
+		deschedulerMinor string
+		serverMinor      string
+		expectError      bool
+	}
+	testCases := []testCase{
+		{
+			name:             "no error when descheduler minor equals to server minor",
+			deschedulerMinor: "26.0",
+			serverMinor:      "26",
+			expectError:      false,
+		},
+		{
+			name:             "no error when descheduler minor is 3 behind server minor",
+			deschedulerMinor: "23.0",
+			serverMinor:      "26",
+			expectError:      false,
+		},
+		{
+			name:             "no error when descheduler minor is 3 ahead of server minor",
+			deschedulerMinor: "26.0",
+			serverMinor:      "23",
+			expectError:      false,
+		},
+		{
+			name:             "error when descheduler minor is 4 behind server minor",
+			deschedulerMinor: "22.0",
+			serverMinor:      "26",
+			expectError:      true,
+		},
+		{
+			name:             "error when descheduler minor is 4 ahead of server minor",
+			deschedulerMinor: "27.0",
+			serverMinor:      "23",
+			expectError:      true,
+		},
+	}
+	client := fakeclientset.NewSimpleClientset()
+	fakeDiscovery, _ := client.Discovery().(*fakediscovery.FakeDiscovery)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeDiscovery.FakedServerVersion = &apiversion.Info{Major: "1", Minor: tc.serverMinor}
+			deschedulerVersion := deschedulerversion.Info{Major: "0", Minor: tc.deschedulerMinor}
+			err := validateVersionCompatibility(fakeDiscovery, deschedulerVersion)
+
+			hasError := err != nil
+			if tc.expectError != hasError {
+				t.Error("unexpected version compatibility behavior")
+			}
+		})
 	}
 }
 
