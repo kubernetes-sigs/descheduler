@@ -27,7 +27,7 @@ type DeschedulerPolicy struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// Profiles
-	Profiles []Profile `json:"profiles,omitempty"`
+	Profiles []DeschedulerProfile `json:"profiles,omitempty"`
 
 	// NodeSelector for a set of nodes to operate over
 	NodeSelector *string `json:"nodeSelector,omitempty"`
@@ -39,7 +39,7 @@ type DeschedulerPolicy struct {
 	MaxNoOfPodsToEvictPerNamespace *uint `json:"maxNoOfPodsToEvictPerNamespace,omitempty"`
 }
 
-type Profile struct {
+type DeschedulerProfile struct {
 	Name          string         `json:"name"`
 	PluginConfigs []PluginConfig `json:"pluginConfig"`
 	Plugins       Plugins        `json:"plugins"`

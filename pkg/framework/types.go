@@ -82,3 +82,12 @@ type EvictorPlugin interface {
 	Filter(pod *v1.Pod) bool
 	PreEvictionFilter(pod *v1.Pod) bool
 }
+
+type ExtensionPoint string
+
+const (
+	DescheduleExtensionPoint        ExtensionPoint = "Deschedule"
+	BalanceExtensionPoint           ExtensionPoint = "Balance"
+	FilterExtensionPoint            ExtensionPoint = "Filter"
+	PreEvictionFilterExtensionPoint ExtensionPoint = "PreEvictionFilter"
+)

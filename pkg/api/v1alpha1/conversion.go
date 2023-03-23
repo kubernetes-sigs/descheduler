@@ -142,7 +142,7 @@ func V1alpha1ToInternal(
 		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
 	}
 
-	var profiles []api.Profile
+	var profiles []api.DeschedulerProfile
 
 	// Build profiles
 	for name, strategy := range deschedulerPolicy.Strategies {
@@ -184,7 +184,7 @@ func V1alpha1ToInternal(
 					return fmt.Errorf("unknown strategy name: %v", name)
 				}
 
-				profile := api.Profile{
+				profile := api.DeschedulerProfile{
 					Name: fmt.Sprintf("strategy-%v-profile", name),
 					PluginConfigs: []api.PluginConfig{
 						{
