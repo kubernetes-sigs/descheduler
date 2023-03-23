@@ -93,7 +93,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 				},
 			},
 			result: &api.DeschedulerPolicy{
-				Profiles: []api.Profile{
+				Profiles: []api.DeschedulerProfile{
 					{
 						Name: fmt.Sprintf("strategy-%s-profile", removeduplicates.PluginName),
 						PluginConfigs: []api.PluginConfig{
@@ -201,7 +201,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 				},
 			},
 			result: &api.DeschedulerPolicy{
-				Profiles: []api.Profile{
+				Profiles: []api.DeschedulerProfile{
 					{
 						Name: fmt.Sprintf("strategy-%s-profile", nodeutilization.HighNodeUtilizationPluginName),
 						PluginConfigs: []api.PluginConfig{
@@ -458,7 +458,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 				},
 			},
 			result: &api.DeschedulerPolicy{
-				Profiles: []api.Profile{
+				Profiles: []api.DeschedulerProfile{
 					{
 						Name: fmt.Sprintf("strategy-%s-profile", nodeutilization.HighNodeUtilizationPluginName),
 						PluginConfigs: []api.PluginConfig{
@@ -692,7 +692,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 			}
 			if err == nil {
 				// sort to easily compare deepequality
-				result.Profiles = api.SortProfilesByName(result.Profiles)
+				result.Profiles = api.SortDeschedulerProfileByName(result.Profiles)
 				diff := cmp.Diff(tc.result, result)
 				if diff != "" {
 					t.Errorf("test '%s' failed. Results are not deep equal. mismatch (-want +got):\n%s", tc.description, diff)
@@ -738,7 +738,7 @@ strategies:
           - "testleaderelection-a"
 `),
 			result: &api.DeschedulerPolicy{
-				Profiles: []api.Profile{
+				Profiles: []api.DeschedulerProfile{
 					{
 						Name: fmt.Sprintf("strategy-%s-profile", podlifetime.PluginName),
 						PluginConfigs: []api.PluginConfig{
@@ -792,7 +792,7 @@ profiles:
           - "RemovePodsHavingTooManyRestarts"
 `),
 			result: &api.DeschedulerPolicy{
-				Profiles: []api.Profile{
+				Profiles: []api.DeschedulerProfile{
 					{
 						Name: "ProfileName",
 						PluginConfigs: []api.PluginConfig{
@@ -860,7 +860,7 @@ func TestValidateDeschedulerConfiguration(t *testing.T) {
 		{
 			description: "multiple errors",
 			deschedulerPolicy: api.DeschedulerPolicy{
-				Profiles: []api.Profile{
+				Profiles: []api.DeschedulerProfile{
 					{
 						Name: removefailedpods.PluginName,
 						Plugins: api.Plugins{
@@ -947,7 +947,7 @@ profiles:
           - "RemovePodsHavingTooManyRestarts"
 `),
 			result: &api.DeschedulerPolicy{
-				Profiles: []api.Profile{
+				Profiles: []api.DeschedulerProfile{
 					{
 						Name: "ProfileName",
 						PluginConfigs: []api.PluginConfig{

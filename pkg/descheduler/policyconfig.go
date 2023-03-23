@@ -87,7 +87,7 @@ func setDefaultsPluginConfig(pluginConfig *api.PluginConfig, registry pluginregi
 	}
 }
 
-func setDefaultEvictor(profile api.Profile, client clientset.Interface) api.Profile {
+func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interface) api.DeschedulerProfile {
 	newPluginConfig := api.PluginConfig{
 		Name: defaultevictor.PluginName,
 		Args: &defaultevictor.DefaultEvictorArgs{
