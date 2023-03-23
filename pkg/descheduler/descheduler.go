@@ -48,7 +48,7 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
-	frwkprofile "sigs.k8s.io/descheduler/pkg/framework/profile"
+	frameworkprofile "sigs.k8s.io/descheduler/pkg/framework/profile"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/pkg/version"
 )
@@ -302,26 +302,27 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		)
 
 		for _, profile := range deschedulerPolicy.Profiles {
-			prfl, err := frwkprofile.NewProfile(
+			currProfile, err := frameworkprofile.NewProfile(
 				profile,
 				pluginregistry.PluginRegistry,
-				frwkprofile.WithClientSet(client),
-				frwkprofile.WithSharedInformerFactory(cycleSharedInformerFactory),
-				frwkprofile.WithPodEvictor(podEvictor),
-				frwkprofile.WithGetPodsAssignedToNodeFnc(getPodsAssignedToNode),
+				frameworkprofile.WithClientSet(client),
+				frameworkprofile.WithSharedInformerFactory(cycleSharedInformerFactory),
+				frameworkprofile.WithPodEvictor(podEvictor),
+				frameworkprofile.WithGetPodsAssignedToNodeFnc(getPodsAssignedToNode),
 			)
 			if err != nil {
 				klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)
 				continue
 			}
 
-			status := prfl.RunBalancePlugins(ctx, nodes)
+			// First deschedule
+			status := currProfile.RunDeschedulePlugins(ctx, nodes)
 			if status != nil && status.Err != nil {
-				klog.ErrorS(status.Err, "running balance extension point failed with error", "profile", profile.Name)
+				klog.ErrorS(status.Err, "running deschedule extension point failed with error", "profile", profile.Name)
 				continue
 			}
-
-			status = prfl.RunDeschedulePlugins(ctx, nodes)
+			// Then balance
+			status = currProfile.RunBalancePlugins(ctx, nodes)
 			if status != nil && status.Err != nil {
 				klog.ErrorS(status.Err, "running balance extension point failed with error", "profile", profile.Name)
 				continue
