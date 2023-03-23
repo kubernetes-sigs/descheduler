@@ -30,9 +30,9 @@ import (
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -378,14 +378,14 @@ func TestPodLifeTime(t *testing.T) {
 			plugin, err := New(tc.args, &frameworkfake.HandleImpl{
 				ClientsetImpl:                 fakeClient,
 				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 			})
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin.(framework.DeschedulePlugin).Deschedule(ctx, tc.nodes)
+			plugin.(frameworktypes.DeschedulePlugin).Deschedule(ctx, tc.nodes)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != tc.expectedEvictedPodCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.description, tc.expectedEvictedPodCount, podsEvicted)

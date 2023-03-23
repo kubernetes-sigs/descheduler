@@ -34,10 +34,10 @@ import (
 	utilpointer "k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 func TestTooManyRestarts(t *testing.T) {
@@ -197,7 +197,7 @@ func TestTooManyRestarts(t *testing.T) {
 				&frameworkfake.HandleImpl{
 					ClientsetImpl:                 clientSet,
 					PodEvictorImpl:                podEvictor,
-					EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+					EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				})
@@ -207,7 +207,7 @@ func TestTooManyRestarts(t *testing.T) {
 
 			// Run RemovePodsHavingTooManyRestarts strategy
 			t.Log("Running RemovePodsHavingTooManyRestarts strategy")
-			plugin.(framework.DeschedulePlugin).Deschedule(ctx, workerNodes)
+			plugin.(frameworktypes.DeschedulePlugin).Deschedule(ctx, workerNodes)
 			t.Logf("Finished RemoveFailedPods strategy for %s", tc.name)
 
 			waitForTerminatingPodsToDisappear(ctx, t, clientSet, testNamespace.Name)

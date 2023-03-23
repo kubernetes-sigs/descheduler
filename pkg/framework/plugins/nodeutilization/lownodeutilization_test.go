@@ -22,9 +22,9 @@ import (
 	"testing"
 
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
@@ -921,7 +921,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				ClientsetImpl:                 fakeClient,
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
@@ -935,7 +935,7 @@ func TestLowNodeUtilization(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
-			plugin.(framework.BalancePlugin).Balance(ctx, test.nodes)
+			plugin.(frameworktypes.BalancePlugin).Balance(ctx, test.nodes)
 
 			podsEvicted := podEvictor.TotalEvicted()
 			if test.expectedPodsEvicted != podsEvicted {
@@ -1093,7 +1093,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				ClientsetImpl:                 fakeClient,
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
@@ -1109,7 +1109,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
-			plugin.(framework.BalancePlugin).Balance(ctx, item.nodes)
+			plugin.(frameworktypes.BalancePlugin).Balance(ctx, item.nodes)
 
 			if item.evictionsExpected != podEvictor.TotalEvicted() {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, podEvictor.TotalEvicted())

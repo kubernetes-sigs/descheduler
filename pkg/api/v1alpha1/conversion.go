@@ -30,9 +30,9 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 var (
@@ -48,10 +48,10 @@ var (
 // can evict a pod without importing a specific pod evictor
 type evictorImpl struct {
 	podEvictor    *evictions.PodEvictor
-	evictorFilter framework.EvictorPlugin
+	evictorFilter frameworktypes.EvictorPlugin
 }
 
-var _ framework.Evictor = &evictorImpl{}
+var _ frameworktypes.Evictor = &evictorImpl{}
 
 // Filter checks if a pod can be evicted
 func (ei *evictorImpl) Filter(pod *v1.Pod) bool {
@@ -80,7 +80,7 @@ type handleImpl struct {
 	evictor                   *evictorImpl
 }
 
-var _ framework.Handle = &handleImpl{}
+var _ frameworktypes.Handle = &handleImpl{}
 
 // ClientSet retrieves kube client set
 func (hi *handleImpl) ClientSet() clientset.Interface {
@@ -98,7 +98,7 @@ func (hi *handleImpl) SharedInformerFactory() informers.SharedInformerFactory {
 }
 
 // Evictor retrieves evictor so plugins can filter and evict pods
-func (hi *handleImpl) Evictor() framework.Evictor {
+func (hi *handleImpl) Evictor() frameworktypes.Evictor {
 	return hi.evictor
 }
 
@@ -233,14 +233,14 @@ func V1alpha1ToInternal(
 	return nil
 }
 
-func enableProfilePluginsByType(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
+func enableProfilePluginsByType(profilePlugins api.Plugins, pluginInstance frameworktypes.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
 	profilePlugins = checkBalance(profilePlugins, pluginInstance, pluginConfig)
 	profilePlugins = checkDeschedule(profilePlugins, pluginInstance, pluginConfig)
 	return profilePlugins
 }
 
-func checkBalance(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
-	_, ok := pluginInstance.(framework.BalancePlugin)
+func checkBalance(profilePlugins api.Plugins, pluginInstance frameworktypes.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
+	_, ok := pluginInstance.(frameworktypes.BalancePlugin)
 	if ok {
 		klog.V(3).Infof("converting Balance plugin: %s", pluginInstance.Name())
 		profilePlugins.Balance.Enabled = []string{pluginConfig.Name}
@@ -248,8 +248,8 @@ func checkBalance(profilePlugins api.Plugins, pluginInstance framework.Plugin, p
 	return profilePlugins
 }
 
-func checkDeschedule(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
-	_, ok := pluginInstance.(framework.DeschedulePlugin)
+func checkDeschedule(profilePlugins api.Plugins, pluginInstance frameworktypes.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
+	_, ok := pluginInstance.(frameworktypes.DeschedulePlugin)
 	if ok {
 		klog.V(3).Infof("converting Deschedule plugin: %s", pluginInstance.Name())
 		profilePlugins.Deschedule.Enabled = []string{pluginConfig.Name}

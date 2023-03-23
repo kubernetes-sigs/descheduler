@@ -15,11 +15,11 @@ package plugin
 
 import (
 	v1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 type Action interface {
-	Handle() framework.Handle
+	Handle() frameworktypes.Handle
 	GetExtensionPoint() string
 	DeepCopy() Action
 }
@@ -63,11 +63,11 @@ type BalanceAction interface {
 }
 
 type ActionImpl struct {
-	handle         framework.Handle
+	handle         frameworktypes.Handle
 	extensionPoint string
 }
 
-func (a ActionImpl) Handle() framework.Handle {
+func (a ActionImpl) Handle() frameworktypes.Handle {
 	return a.handle
 }
 

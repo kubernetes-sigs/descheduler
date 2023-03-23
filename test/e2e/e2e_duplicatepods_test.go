@@ -21,10 +21,10 @@ import (
 	"strings"
 	"testing"
 
-	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -197,7 +197,7 @@ func TestRemoveDuplicates(t *testing.T) {
 				ClientsetImpl:                 clientSet,
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
@@ -208,7 +208,7 @@ func TestRemoveDuplicates(t *testing.T) {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 			t.Log("Running removeduplicates plugin")
-			plugin.(framework.BalancePlugin).Balance(ctx, workerNodes)
+			plugin.(frameworktypes.BalancePlugin).Balance(ctx, workerNodes)
 
 			waitForTerminatingPodsToDisappear(ctx, t, clientSet, testNamespace.Name)
 			actualEvictedPodCount := podEvictor.TotalEvicted()

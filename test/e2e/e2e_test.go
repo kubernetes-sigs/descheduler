@@ -49,11 +49,11 @@ import (
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -247,14 +247,14 @@ func runPodLifetimePlugin(
 	}, &frameworkfake.HandleImpl{
 		ClientsetImpl:                 clientset,
 		PodEvictorImpl:                podEvictor,
-		EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+		EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 		GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 	})
 	if err != nil {
 		t.Fatalf("Unable to initialize the plugin: %v", err)
 	}
 	t.Log("Running podlifetime plugin")
-	plugin.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
+	plugin.(frameworktypes.DeschedulePlugin).Deschedule(ctx, nodes)
 }
 
 func getPodNames(pods []v1.Pod) []string {
@@ -397,7 +397,7 @@ func TestLowNodeUtilization(t *testing.T) {
 		},
 	)
 
-	podFilter, err := podutil.NewOptions().WithFilter(evictorFilter.(framework.EvictorPlugin).Filter).BuildFilterFunc()
+	podFilter, err := podutil.NewOptions().WithFilter(evictorFilter.(frameworktypes.EvictorPlugin).Filter).BuildFilterFunc()
 	if err != nil {
 		t.Errorf("Error initializing pod filter function, %v", err)
 	}
@@ -413,7 +413,7 @@ func TestLowNodeUtilization(t *testing.T) {
 		ClientsetImpl:                 clientSet,
 		GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 		PodEvictorImpl:                podEvictor,
-		EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+		EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 		SharedInformerFactoryImpl:     sharedInformerFactory,
 	}
 
@@ -428,11 +428,11 @@ func TestLowNodeUtilization(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to initialize the plugin: %v", err)
 	}
-	plugin.(framework.BalancePlugin).Balance(ctx, workerNodes)
+	plugin.(frameworktypes.BalancePlugin).Balance(ctx, workerNodes)
 
 	waitForTerminatingPodsToDisappear(ctx, t, clientSet, rc.Namespace)
 
-	podFilter, err = podutil.NewOptions().WithFilter(evictorFilter.(framework.EvictorPlugin).Filter).BuildFilterFunc()
+	podFilter, err = podutil.NewOptions().WithFilter(evictorFilter.(frameworktypes.EvictorPlugin).Filter).BuildFilterFunc()
 	if err != nil {
 		t.Errorf("Error initializing pod filter function, %v", err)
 	}
