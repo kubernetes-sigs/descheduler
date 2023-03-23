@@ -24,8 +24,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/descheduler/pkg/api"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -347,7 +347,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			result := evictorPlugin.(framework.EvictorPlugin).PreEvictionFilter(test.pods[0])
+			result := evictorPlugin.(frameworktypes.EvictorPlugin).PreEvictionFilter(test.pods[0])
 			if (result) != test.result {
 				t.Errorf("Filter should return for pod %s %t, but it returns %t", test.pods[0].Name, test.result, result)
 			}
@@ -755,7 +755,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			result := evictorPlugin.(framework.EvictorPlugin).Filter(test.pods[0])
+			result := evictorPlugin.(frameworktypes.EvictorPlugin).Filter(test.pods[0])
 			if (result) != test.result {
 				t.Errorf("Filter should return for pod %s %t, but it returns %t", test.pods[0].Name, test.result, result)
 			}

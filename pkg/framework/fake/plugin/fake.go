@@ -20,8 +20,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 // +k8s:deepcopy-gen=true
@@ -39,9 +39,9 @@ func ValidateFakePluginArgs(obj runtime.Object) error {
 func SetDefaults_FakePluginArgs(obj runtime.Object) {}
 
 var (
-	_ framework.EvictorPlugin    = &FakePlugin{}
-	_ framework.DeschedulePlugin = &FakePlugin{}
-	_ framework.BalancePlugin    = &FakePlugin{}
+	_ frameworktypes.EvictorPlugin    = &FakePlugin{}
+	_ frameworktypes.DeschedulePlugin = &FakePlugin{}
+	_ frameworktypes.BalancePlugin    = &FakePlugin{}
 )
 
 // FakePlugin is a configurable plugin used for testing
@@ -53,11 +53,11 @@ type FakePlugin struct {
 	ReactionChain []Reactor
 
 	args   runtime.Object
-	handle framework.Handle
+	handle frameworktypes.Handle
 }
 
 func NewPluginFncFromFake(fp *FakePlugin) pluginregistry.PluginBuilder {
-	return func(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+	return func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 		fakePluginArgs, ok := args.(*FakePluginArgs)
 		if !ok {
 			return nil, fmt.Errorf("want args to be of type FakePluginArgs, got %T", args)
@@ -71,7 +71,7 @@ func NewPluginFncFromFake(fp *FakePlugin) pluginregistry.PluginBuilder {
 }
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	fakePluginArgs, ok := args.(*FakePluginArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type FakePluginArgs, got %T", args)
@@ -97,7 +97,7 @@ func (d *FakePlugin) Filter(pod *v1.Pod) bool {
 	return true
 }
 
-func (d *FakePlugin) handleAction(action Action) *framework.Status {
+func (d *FakePlugin) handleAction(action Action) *frameworktypes.Status {
 	actionCopy := action.DeepCopy()
 	for _, reactor := range d.ReactionChain {
 		if !reactor.Handles(actionCopy) {
@@ -108,30 +108,30 @@ func (d *FakePlugin) handleAction(action Action) *framework.Status {
 			continue
 		}
 
-		return &framework.Status{
+		return &frameworktypes.Status{
 			Err: err,
 		}
 	}
-	return &framework.Status{
+	return &frameworktypes.Status{
 		Err: fmt.Errorf("unhandled %q action", action.GetExtensionPoint()),
 	}
 }
 
-func (d *FakePlugin) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *FakePlugin) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	return d.handleAction(&DescheduleActionImpl{
 		ActionImpl: ActionImpl{
 			handle:         d.handle,
-			extensionPoint: string(framework.DescheduleExtensionPoint),
+			extensionPoint: string(frameworktypes.DescheduleExtensionPoint),
 		},
 		nodes: nodes,
 	})
 }
 
-func (d *FakePlugin) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *FakePlugin) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	return d.handleAction(&BalanceActionImpl{
 		ActionImpl: ActionImpl{
 			handle:         d.handle,
-			extensionPoint: string(framework.BalanceExtensionPoint),
+			extensionPoint: string(frameworktypes.BalanceExtensionPoint),
 		},
 		nodes: nodes,
 	})

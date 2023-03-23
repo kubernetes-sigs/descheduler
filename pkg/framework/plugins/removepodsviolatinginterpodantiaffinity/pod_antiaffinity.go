@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 
 	v1 "k8s.io/api/core/v1"
@@ -36,15 +36,15 @@ const PluginName = "RemovePodsViolatingInterPodAntiAffinity"
 
 // RemovePodsViolatingInterPodAntiAffinity evicts pods on the node which violate inter pod anti affinity
 type RemovePodsViolatingInterPodAntiAffinity struct {
-	handle    framework.Handle
+	handle    frameworktypes.Handle
 	args      *RemovePodsViolatingInterPodAntiAffinityArgs
 	podFilter podutil.FilterFunc
 }
 
-var _ framework.DeschedulePlugin = &RemovePodsViolatingInterPodAntiAffinity{}
+var _ frameworktypes.DeschedulePlugin = &RemovePodsViolatingInterPodAntiAffinity{}
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	interPodAntiAffinityArgs, ok := args.(*RemovePodsViolatingInterPodAntiAffinityArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingInterPodAntiAffinityArgs, got %T", args)
@@ -77,13 +77,13 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Name() string {
 	return PluginName
 }
 
-func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 loop:
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
-			return &framework.Status{
+			return &frameworktypes.Status{
 				Err: fmt.Errorf("error listing pods: %v", err),
 			}
 		}

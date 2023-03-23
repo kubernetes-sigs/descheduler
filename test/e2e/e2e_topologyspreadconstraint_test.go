@@ -10,10 +10,10 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 const zoneTopologyKey string = "topology.kubernetes.io/zone"
@@ -108,7 +108,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				&frameworkfake.HandleImpl{
 					ClientsetImpl:                 clientSet,
 					PodEvictorImpl:                podEvictor,
-					EvictorFilterImpl:             filter.(framework.EvictorPlugin),
+					EvictorFilterImpl:             filter.(frameworktypes.EvictorPlugin),
 					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				},
 			)
@@ -116,7 +116,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin.(framework.BalancePlugin).Balance(ctx, workerNodes)
+			plugin.(frameworktypes.BalancePlugin).Balance(ctx, workerNodes)
 			t.Logf("Finished RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
 
 			t.Logf("Wait for terminating pods of %s to disappear", name)

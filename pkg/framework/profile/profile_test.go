@@ -16,10 +16,10 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	fakeplugin "sigs.k8s.io/descheduler/pkg/framework/fake/plugin"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	testutils "sigs.k8s.io/descheduler/test"
 )
@@ -28,7 +28,7 @@ func TestProfileTopExtensionPoints(t *testing.T) {
 	tests := []struct {
 		name             string
 		config           api.DeschedulerProfile
-		extensionPoint   framework.ExtensionPoint
+		extensionPoint   frameworktypes.ExtensionPoint
 		expectedEviction bool
 	}{
 		{
@@ -58,7 +58,7 @@ func TestProfileTopExtensionPoints(t *testing.T) {
 					},
 				},
 			},
-			extensionPoint:   framework.DescheduleExtensionPoint,
+			extensionPoint:   frameworktypes.DescheduleExtensionPoint,
 			expectedEviction: true,
 		},
 		{
@@ -88,7 +88,7 @@ func TestProfileTopExtensionPoints(t *testing.T) {
 					},
 				},
 			},
-			extensionPoint:   framework.BalanceExtensionPoint,
+			extensionPoint:   frameworktypes.BalanceExtensionPoint,
 			expectedEviction: true,
 		},
 		{
@@ -118,7 +118,7 @@ func TestProfileTopExtensionPoints(t *testing.T) {
 					},
 				},
 			},
-			extensionPoint:   framework.DescheduleExtensionPoint,
+			extensionPoint:   frameworktypes.DescheduleExtensionPoint,
 			expectedEviction: false,
 		},
 		{
@@ -148,7 +148,7 @@ func TestProfileTopExtensionPoints(t *testing.T) {
 					},
 				},
 			},
-			extensionPoint:   framework.BalanceExtensionPoint,
+			extensionPoint:   frameworktypes.BalanceExtensionPoint,
 			expectedEviction: false,
 		},
 	}
@@ -166,8 +166,8 @@ func TestProfileTopExtensionPoints(t *testing.T) {
 			p1.ObjectMeta.OwnerReferences = []metav1.OwnerReference{{}}
 
 			fakePlugin := fakeplugin.FakePlugin{}
-			if test.extensionPoint == framework.DescheduleExtensionPoint {
-				fakePlugin.AddReactor(string(framework.DescheduleExtensionPoint), func(action fakeplugin.Action) (handled bool, err error) {
+			if test.extensionPoint == frameworktypes.DescheduleExtensionPoint {
+				fakePlugin.AddReactor(string(frameworktypes.DescheduleExtensionPoint), func(action fakeplugin.Action) (handled bool, err error) {
 					if dAction, ok := action.(fakeplugin.DescheduleAction); ok {
 						if dAction.Handle().Evictor().Evict(ctx, p1, evictions.EvictOptions{}) {
 							return true, nil
@@ -177,8 +177,8 @@ func TestProfileTopExtensionPoints(t *testing.T) {
 					return false, nil
 				})
 			}
-			if test.extensionPoint == framework.BalanceExtensionPoint {
-				fakePlugin.AddReactor(string(framework.BalanceExtensionPoint), func(action fakeplugin.Action) (handled bool, err error) {
+			if test.extensionPoint == frameworktypes.BalanceExtensionPoint {
+				fakePlugin.AddReactor(string(frameworktypes.BalanceExtensionPoint), func(action fakeplugin.Action) (handled bool, err error) {
 					if dAction, ok := action.(fakeplugin.BalanceAction); ok {
 						if dAction.Handle().Evictor().Evict(ctx, p1, evictions.EvictOptions{}) {
 							return true, nil
@@ -240,11 +240,11 @@ func TestProfileTopExtensionPoints(t *testing.T) {
 				t.Fatalf("unable to create %q profile: %v", test.config.Name, err)
 			}
 
-			var status *framework.Status
+			var status *frameworktypes.Status
 			switch test.extensionPoint {
-			case framework.DescheduleExtensionPoint:
+			case frameworktypes.DescheduleExtensionPoint:
 				status = prfl.RunDeschedulePlugins(ctx, nodes)
-			case framework.BalanceExtensionPoint:
+			case frameworktypes.BalanceExtensionPoint:
 				status = prfl.RunBalancePlugins(ctx, nodes)
 			default:
 				t.Fatalf("unknown %q extension point", test.extensionPoint)

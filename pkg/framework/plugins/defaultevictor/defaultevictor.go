@@ -26,7 +26,7 @@ import (
 	"k8s.io/klog/v2"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -35,7 +35,7 @@ const (
 	evictPodAnnotationKey = "descheduler.alpha.kubernetes.io/evict"
 )
 
-var _ framework.EvictorPlugin = &DefaultEvictor{}
+var _ frameworktypes.EvictorPlugin = &DefaultEvictor{}
 
 type constraint func(pod *v1.Pod) error
 
@@ -47,7 +47,7 @@ type constraint func(pod *v1.Pod) error
 type DefaultEvictor struct {
 	args        runtime.Object
 	constraints []constraint
-	handle      framework.Handle
+	handle      frameworktypes.Handle
 }
 
 // IsPodEvictableBasedOnPriority checks if the given pod is evictable based on priority resolved from pod Spec.
@@ -62,7 +62,7 @@ func HaveEvictAnnotation(pod *v1.Pod) bool {
 }
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	defaultEvictorArgs, ok := args.(*DefaultEvictorArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type defaultEvictorFilterArgs, got %T", args)
