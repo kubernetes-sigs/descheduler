@@ -27,13 +27,13 @@ import (
 func TestProfileTopExtensionPoints(t *testing.T) {
 	tests := []struct {
 		name             string
-		config           api.Profile
+		config           api.DeschedulerProfile
 		extensionPoint   framework.ExtensionPoint
 		expectedEviction bool
 	}{
 		{
 			name: "profile with deschedule extension point enabled single eviction",
-			config: api.Profile{
+			config: api.DeschedulerProfile{
 				Name: "strategy-test-profile-with-deschedule",
 				PluginConfigs: []api.PluginConfig{
 					{
@@ -63,7 +63,7 @@ func TestProfileTopExtensionPoints(t *testing.T) {
 		},
 		{
 			name: "profile with balance extension point enabled single eviction",
-			config: api.Profile{
+			config: api.DeschedulerProfile{
 				Name: "strategy-test-profile-with-balance",
 				PluginConfigs: []api.PluginConfig{
 					{
@@ -93,7 +93,7 @@ func TestProfileTopExtensionPoints(t *testing.T) {
 		},
 		{
 			name: "profile with deschedule extension point balance enabled no eviction",
-			config: api.Profile{
+			config: api.DeschedulerProfile{
 				Name: "strategy-test-profile-with-deschedule",
 				PluginConfigs: []api.PluginConfig{
 					{
@@ -123,7 +123,7 @@ func TestProfileTopExtensionPoints(t *testing.T) {
 		},
 		{
 			name: "profile with balance extension point deschedule enabled no eviction",
-			config: api.Profile{
+			config: api.DeschedulerProfile{
 				Name: "strategy-test-profile-with-deschedule",
 				PluginConfigs: []api.PluginConfig{
 					{

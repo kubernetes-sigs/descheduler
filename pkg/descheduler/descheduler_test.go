@@ -182,7 +182,7 @@ func TestRootCancel(t *testing.T) {
 	client := fakeclientset.NewSimpleClientset(n1, n2)
 	eventClient := fakeclientset.NewSimpleClientset(n1, n2)
 	dp := &api.DeschedulerPolicy{
-		Profiles: []api.Profile{}, // no strategies needed for this test
+		Profiles: []api.DeschedulerProfile{}, // no strategies needed for this test
 	}
 
 	rs, err := options.NewDeschedulerServer()
@@ -217,7 +217,7 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 	client := fakeclientset.NewSimpleClientset(n1, n2)
 	eventClient := fakeclientset.NewSimpleClientset(n1, n2)
 	dp := &api.DeschedulerPolicy{
-		Profiles: []api.Profile{}, // no strategies needed for this test
+		Profiles: []api.DeschedulerProfile{}, // no strategies needed for this test
 	}
 
 	rs, err := options.NewDeschedulerServer()

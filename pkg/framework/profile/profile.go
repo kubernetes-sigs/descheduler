@@ -144,7 +144,7 @@ func getPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) (*api.
 	return nil, 0
 }
 
-func buildPlugin(config api.Profile, pluginName string, handle *handleImpl, reg pluginregistry.Registry) (framework.Plugin, error) {
+func buildPlugin(config api.DeschedulerProfile, pluginName string, handle *handleImpl, reg pluginregistry.Registry) (framework.Plugin, error) {
 	pc, _ := getPluginConfig(pluginName, config.PluginConfigs)
 	if pc == nil {
 		klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", pluginName, "profile", config.Name)
@@ -164,7 +164,7 @@ func buildPlugin(config api.Profile, pluginName string, handle *handleImpl, reg 
 	return pg, nil
 }
 
-func NewProfile(config api.Profile, reg pluginregistry.Registry, opts ...Option) (*profileImpl, error) {
+func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts ...Option) (*profileImpl, error) {
 	hOpts := &handleImplOpts{}
 	for _, optFnc := range opts {
 		optFnc(hOpts)

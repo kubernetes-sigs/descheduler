@@ -28,7 +28,7 @@ type DeschedulerPolicy struct {
 	metav1.TypeMeta
 
 	// Profiles
-	Profiles []Profile
+	Profiles []DeschedulerProfile
 
 	// NodeSelector for a set of nodes to operate over
 	NodeSelector *string
@@ -57,7 +57,7 @@ type PriorityThreshold struct {
 	Name  string
 }
 
-type Profile struct {
+type DeschedulerProfile struct {
 	Name          string
 	PluginConfigs []PluginConfig
 	Plugins       Plugins
