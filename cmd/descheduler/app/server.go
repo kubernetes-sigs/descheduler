@@ -62,8 +62,8 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 				klog.ErrorS(err, "failed to apply secure server configuration")
 				return
 			}
-			var factory registry.LogFormatFactory
 
+			var factory registry.LogFormatFactory
 			if s.Logging.Format == "json" {
 				factory = jsonLog.Factory{}
 			}
@@ -71,11 +71,11 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 			if factory == nil {
 				klog.ClearLogger()
 			} else {
-				log, logrFlush := factory.Create(registry.LoggingConfiguration{
+				log, loggerControl := factory.Create(registry.LoggingConfiguration{
 					Format:    s.Logging.Format,
 					Verbosity: s.Logging.Verbosity,
-				})
-				defer logrFlush()
+				}, registry.LoggingOptions{})
+				defer loggerControl.Flush()
 				klog.SetLogger(log)
 			}
 

@@ -36,6 +36,7 @@ func init() {
 	flag.BoolVar(&defaultOptions.Dryrun, "dryrun", false, "Whether to check for changes to TOC, rather than overwriting. Requires --inplace flag.")
 	flag.BoolVar(&defaultOptions.Inplace, "inplace", false, "Whether to edit the file in-place, or output to STDOUT. Requires toc tags to be present.")
 	flag.BoolVar(&defaultOptions.SkipPrefix, "skip-prefix", true, "Whether to ignore any headers before the opening toc tag.")
+	flag.IntVar(&defaultOptions.MaxDepth, "max-depth", mdtoc.MaxHeaderDepth, "Limit the depth of headers that will be included in the TOC.")
 
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [OPTIONS] [FILE]...\n", os.Args[0])
