@@ -26,6 +26,8 @@ var PluginRegistry Registry
 
 type PluginUtilities struct {
 	PluginBuilder PluginBuilder
+
+	PluginType interface{}
 	// Just an example instance of this PluginArg so we can avoid having
 	// to deal with reflect Types
 	PluginArgInstance  runtime.Object
@@ -46,12 +48,21 @@ func NewRegistry() Registry {
 	return Registry{}
 }
 
-func Register(name string, builderFunc PluginBuilder, exampleArg runtime.Object, pluginArgValidator PluginArgValidator, pluginArgDefaulter PluginArgDefaulter, registry Registry) {
+func Register(
+	name string,
+	builderFunc PluginBuilder,
+	pluginType interface{},
+	exampleArg runtime.Object,
+	pluginArgValidator PluginArgValidator,
+	pluginArgDefaulter PluginArgDefaulter,
+	registry Registry,
+) {
 	if _, ok := registry[name]; ok {
 		klog.V(10).InfoS("Plugin already registered", "plugin", name)
 	} else {
 		registry[name] = PluginUtilities{
 			PluginBuilder:      builderFunc,
+			PluginType:         pluginType,
 			PluginArgInstance:  exampleArg,
 			PluginArgValidator: pluginArgValidator,
 			PluginArgDefaulter: pluginArgDefaulter,

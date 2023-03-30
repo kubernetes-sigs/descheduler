@@ -193,6 +193,7 @@ func TestProfileTopExtensionPoints(t *testing.T) {
 			pluginregistry.Register(
 				"FakePlugin",
 				fakeplugin.NewPluginFncFromFake(&fakePlugin),
+				&fakeplugin.FakePlugin{},
 				&fakeplugin.FakePluginArgs{},
 				fakeplugin.ValidateFakePluginArgs,
 				fakeplugin.SetDefaults_FakePluginArgs,
@@ -202,6 +203,7 @@ func TestProfileTopExtensionPoints(t *testing.T) {
 			pluginregistry.Register(
 				defaultevictor.PluginName,
 				defaultevictor.New,
+				&defaultevictor.DefaultEvictor{},
 				&defaultevictor.DefaultEvictorArgs{},
 				defaultevictor.ValidateDefaultEvictorArgs,
 				defaultevictor.SetDefaults_DefaultEvictorArgs,
