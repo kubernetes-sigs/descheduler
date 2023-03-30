@@ -42,6 +42,9 @@ var (
 	_ frameworktypes.EvictorPlugin    = &FakePlugin{}
 	_ frameworktypes.DeschedulePlugin = &FakePlugin{}
 	_ frameworktypes.BalancePlugin    = &FakePlugin{}
+	_ frameworktypes.EvictorPlugin    = &FakeFilterPlugin{}
+	_ frameworktypes.DeschedulePlugin = &FakeDeschedulePlugin{}
+	_ frameworktypes.BalancePlugin    = &FakeBalancePlugin{}
 )
 
 // FakePlugin is a configurable plugin used for testing
@@ -84,6 +87,10 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 	return ev, nil
 }
 
+func (c *FakePlugin) AddReactor(extensionPoint string, reaction ReactionFunc) {
+	c.ReactionChain = append(c.ReactionChain, &SimpleReactor{ExtensionPoint: extensionPoint, Reaction: reaction})
+}
+
 // Name retrieves the plugin name
 func (d *FakePlugin) Name() string {
 	return d.PluginName
@@ -103,7 +110,7 @@ func (d *FakePlugin) handleAction(action Action) *frameworktypes.Status {
 		if !reactor.Handles(actionCopy) {
 			continue
 		}
-		handled, err := reactor.React(actionCopy)
+		handled, _, err := reactor.React(actionCopy)
 		if !handled {
 			continue
 		}
@@ -135,4 +142,269 @@ func (d *FakePlugin) Balance(ctx context.Context, nodes []*v1.Node) *frameworkty
 		},
 		nodes: nodes,
 	})
+}
+
+// +k8s:deepcopy-gen=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// FakeDeschedulePluginArgs holds arguments used to configure FakeDeschedulePlugin plugin.
+type FakeDeschedulePluginArgs struct {
+	metav1.TypeMeta `json:",inline"`
+}
+
+// FakeDeschedulePlugin is a configurable plugin used for testing
+type FakeDeschedulePlugin struct {
+	PluginName string
+
+	// ReactionChain is the list of reactors that will be attempted for every
+	// request in the order they are tried.
+	ReactionChain []Reactor
+
+	args   runtime.Object
+	handle frameworktypes.Handle
+}
+
+func NewFakeDeschedulePluginFncFromFake(fp *FakeDeschedulePlugin) pluginregistry.PluginBuilder {
+	return func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+		fakePluginArgs, ok := args.(*FakeDeschedulePluginArgs)
+		if !ok {
+			return nil, fmt.Errorf("want args to be of type FakeDeschedulePluginArgs, got %T", args)
+		}
+
+		fp.handle = handle
+		fp.args = fakePluginArgs
+
+		return fp, nil
+	}
+}
+
+// New builds plugin from its arguments while passing a handle
+func NewFakeDeschedule(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+	fakePluginArgs, ok := args.(*FakeDeschedulePluginArgs)
+	if !ok {
+		return nil, fmt.Errorf("want args to be of type FakePluginArgs, got %T", args)
+	}
+
+	ev := &FakeDeschedulePlugin{}
+	ev.handle = handle
+	ev.args = fakePluginArgs
+
+	return ev, nil
+}
+
+func (c *FakeDeschedulePlugin) AddReactor(extensionPoint string, reaction ReactionFunc) {
+	c.ReactionChain = append(c.ReactionChain, &SimpleReactor{ExtensionPoint: extensionPoint, Reaction: reaction})
+}
+
+// Name retrieves the plugin name
+func (d *FakeDeschedulePlugin) Name() string {
+	return d.PluginName
+}
+
+func (d *FakeDeschedulePlugin) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	return d.handleAction(&DescheduleActionImpl{
+		ActionImpl: ActionImpl{
+			handle:         d.handle,
+			extensionPoint: string(frameworktypes.DescheduleExtensionPoint),
+		},
+		nodes: nodes,
+	})
+}
+
+func (d *FakeDeschedulePlugin) handleAction(action Action) *frameworktypes.Status {
+	actionCopy := action.DeepCopy()
+	for _, reactor := range d.ReactionChain {
+		if !reactor.Handles(actionCopy) {
+			continue
+		}
+		handled, _, err := reactor.React(actionCopy)
+		if !handled {
+			continue
+		}
+
+		return &frameworktypes.Status{
+			Err: err,
+		}
+	}
+	return &frameworktypes.Status{
+		Err: fmt.Errorf("unhandled %q action", action.GetExtensionPoint()),
+	}
+}
+
+// +k8s:deepcopy-gen=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// FakeBalancePluginArgs holds arguments used to configure FakeBalancePlugin plugin.
+type FakeBalancePluginArgs struct {
+	metav1.TypeMeta `json:",inline"`
+}
+
+// FakeBalancePlugin is a configurable plugin used for testing
+type FakeBalancePlugin struct {
+	PluginName string
+
+	// ReactionChain is the list of reactors that will be attempted for every
+	// request in the order they are tried.
+	ReactionChain []Reactor
+
+	args   runtime.Object
+	handle frameworktypes.Handle
+}
+
+func NewFakeBalancePluginFncFromFake(fp *FakeBalancePlugin) pluginregistry.PluginBuilder {
+	return func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+		fakePluginArgs, ok := args.(*FakeBalancePluginArgs)
+		if !ok {
+			return nil, fmt.Errorf("want args to be of type FakeBalancePluginArgs, got %T", args)
+		}
+
+		fp.handle = handle
+		fp.args = fakePluginArgs
+
+		return fp, nil
+	}
+}
+
+// New builds plugin from its arguments while passing a handle
+func NewFakeBalance(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+	fakePluginArgs, ok := args.(*FakeBalancePluginArgs)
+	if !ok {
+		return nil, fmt.Errorf("want args to be of type FakePluginArgs, got %T", args)
+	}
+
+	ev := &FakeBalancePlugin{}
+	ev.handle = handle
+	ev.args = fakePluginArgs
+
+	return ev, nil
+}
+
+func (c *FakeBalancePlugin) AddReactor(extensionPoint string, reaction ReactionFunc) {
+	c.ReactionChain = append(c.ReactionChain, &SimpleReactor{ExtensionPoint: extensionPoint, Reaction: reaction})
+}
+
+// Name retrieves the plugin name
+func (d *FakeBalancePlugin) Name() string {
+	return d.PluginName
+}
+
+func (d *FakeBalancePlugin) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	return d.handleAction(&BalanceActionImpl{
+		ActionImpl: ActionImpl{
+			handle:         d.handle,
+			extensionPoint: string(frameworktypes.BalanceExtensionPoint),
+		},
+		nodes: nodes,
+	})
+}
+
+func (d *FakeBalancePlugin) handleAction(action Action) *frameworktypes.Status {
+	actionCopy := action.DeepCopy()
+	for _, reactor := range d.ReactionChain {
+		if !reactor.Handles(actionCopy) {
+			continue
+		}
+		handled, _, err := reactor.React(actionCopy)
+		if !handled {
+			continue
+		}
+
+		return &frameworktypes.Status{
+			Err: err,
+		}
+	}
+	return &frameworktypes.Status{
+		Err: fmt.Errorf("unhandled %q action", action.GetExtensionPoint()),
+	}
+}
+
+// +k8s:deepcopy-gen=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// FakeFilterPluginArgs holds arguments used to configure FakeFilterPlugin plugin.
+type FakeFilterPluginArgs struct {
+	metav1.TypeMeta `json:",inline"`
+}
+
+// FakeFilterPlugin is a configurable plugin used for testing
+type FakeFilterPlugin struct {
+	PluginName string
+
+	// ReactionChain is the list of reactors that will be attempted for every
+	// request in the order they are tried.
+	ReactionChain []Reactor
+
+	args   runtime.Object
+	handle frameworktypes.Handle
+}
+
+func NewFakeFilterPluginFncFromFake(fp *FakeFilterPlugin) pluginregistry.PluginBuilder {
+	return func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+		fakePluginArgs, ok := args.(*FakeFilterPluginArgs)
+		if !ok {
+			return nil, fmt.Errorf("want args to be of type FakeFilterPluginArgs, got %T", args)
+		}
+
+		fp.handle = handle
+		fp.args = fakePluginArgs
+
+		return fp, nil
+	}
+}
+
+// New builds plugin from its arguments while passing a handle
+func NewFakeFilter(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+	fakePluginArgs, ok := args.(*FakeFilterPluginArgs)
+	if !ok {
+		return nil, fmt.Errorf("want args to be of type FakePluginArgs, got %T", args)
+	}
+
+	ev := &FakeFilterPlugin{}
+	ev.handle = handle
+	ev.args = fakePluginArgs
+
+	return ev, nil
+}
+
+func (c *FakeFilterPlugin) AddReactor(extensionPoint string, reaction ReactionFunc) {
+	c.ReactionChain = append(c.ReactionChain, &SimpleReactor{ExtensionPoint: extensionPoint, Reaction: reaction})
+}
+
+// Name retrieves the plugin name
+func (d *FakeFilterPlugin) Name() string {
+	return d.PluginName
+}
+
+func (d *FakeFilterPlugin) Filter(pod *v1.Pod) bool {
+	return d.handleBoolAction(&FilterActionImpl{
+		ActionImpl: ActionImpl{
+			handle:         d.handle,
+			extensionPoint: string(frameworktypes.FilterExtensionPoint),
+		},
+	})
+}
+
+func (d *FakeFilterPlugin) PreEvictionFilter(pod *v1.Pod) bool {
+	return d.handleBoolAction(&PreEvictionFilterActionImpl{
+		ActionImpl: ActionImpl{
+			handle:         d.handle,
+			extensionPoint: string(frameworktypes.PreEvictionFilterExtensionPoint),
+		},
+	})
+}
+
+func (d *FakeFilterPlugin) handleBoolAction(action Action) bool {
+	actionCopy := action.DeepCopy()
+	for _, reactor := range d.ReactionChain {
+		if !reactor.Handles(actionCopy) {
+			continue
+		}
+		handled, filter, _ := reactor.React(actionCopy)
+		if !handled {
+			continue
+		}
+
+		return filter
+	}
+	panic(fmt.Errorf("unhandled %q action", action.GetExtensionPoint()))
 }

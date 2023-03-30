@@ -42,7 +42,7 @@ type (
 	PluginArgDefaulter = func(args runtime.Object)
 )
 
-type Registry = map[string]PluginUtilities
+type Registry map[string]PluginUtilities
 
 func NewRegistry() Registry {
 	return Registry{}
