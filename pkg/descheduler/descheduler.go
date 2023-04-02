@@ -24,6 +24,11 @@ import (
 	"strings"
 	"time"
 
+	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
+	fakemetricsclientset "k8s.io/metrics/pkg/client/clientset/versioned/fake"
+
+	"sigs.k8s.io/descheduler/pkg/descheduler/cache"
+
 	componentbaseconfig "k8s.io/component-base/config"
 	"k8s.io/klog/v2"
 
@@ -61,6 +66,10 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 		clientConnection.Kubeconfig = rs.KubeconfigFile
 	}
 	rsclient, eventClient, err := createClients(clientConnection)
+	if err != nil {
+		return err
+	}
+	rs.MetricsClient, err = client.CreateMetricsClient(clientConnection)
 	if err != nil {
 		return err
 	}
@@ -126,6 +135,35 @@ func versionCompatibilityCheck(rs *options.DeschedulerServer) {
 	if math.Abs(deschedulerMinorVersionFloat-kubernetesMinorVersionFloat) > 3 {
 		klog.Warningf("Warning: Descheduler minor version %v is not supported on your version of Kubernetes %v.%v. See compatibility docs for more info: https://github.com/kubernetes-sigs/descheduler#compatibility-matrix", deschedulerMinorVersion, serverVersion.Major, serverVersion.Minor)
 	}
+}
+
+func cachedMetricsClient() (metricsclientset.Interface, error) {
+	fakeMetricsClient := fakemetricsclientset.NewSimpleClientset()
+	fakeMetricsClient.PrependReactor("list", "*", func(action core.Action) (handled bool, ret runtime.Object, err error) {
+		switch action := action.(type) {
+		case core.ListActionImpl:
+			gvr := action.GetResource()
+			if gvr.Resource == "nodes" {
+				gvr.Resource = "nodemetricses"
+			}
+			if gvr.Resource == "pods" {
+				gvr.Resource = "podmetricses"
+			}
+			ns := action.GetNamespace()
+			obj, err := fakeMetricsClient.Tracker().List(gvr, action.GetKind(), ns)
+			return true, obj, err
+		}
+		return false, nil, err
+	})
+	_, err := fakeMetricsClient.MetricsV1beta1().NodeMetricses().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to list node metrics")
+	}
+	_, err = fakeMetricsClient.MetricsV1beta1().PodMetricses("").List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to list pod metrics")
+	}
+	return fakeMetricsClient, nil
 }
 
 func cachedClient(
@@ -209,6 +247,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 	podLister := sharedInformerFactory.Core().V1().Pods().Lister()
 	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
+	nodeInformer := sharedInformerFactory.Core().V1().Nodes().Informer()
 	namespaceLister := sharedInformerFactory.Core().V1().Namespaces().Lister()
 	priorityClassLister := sharedInformerFactory.Scheduling().V1().PriorityClasses().Lister()
 
@@ -220,6 +259,20 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		return fmt.Errorf("build get pods assigned to node function error: %v", err)
 	}
 
+	var icache cache.BasicCache
+	var metricsClient metricsclientset.Interface
+	if rs.DryRun {
+		metricsClient = fakemetricsclientset.NewSimpleClientset()
+	} else {
+		metricsClient = rs.MetricsClient
+	}
+
+	// init real metrics cache before start informerFactory
+	icache, err = cache.InitCache(rs.Client, nodeInformer, nodeLister, podInformer, metricsClient, ctx.Done())
+	if err != nil {
+		cancel()
+		klog.V(1).Infof("init metrics cache failed")
+	}
 	sharedInformerFactory.Start(ctx.Done())
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
@@ -288,6 +341,8 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		} else {
 			client = rs.Client
 		}
+		// run cache
+		icache.Run(rs.MetricsCacheSyncInterval)
 
 		klog.V(3).Infof("Building a pod evictor")
 		podEvictor := evictions.NewPodEvictor(

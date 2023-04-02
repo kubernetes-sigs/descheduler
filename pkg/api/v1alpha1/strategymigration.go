@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/realutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
@@ -220,6 +221,26 @@ var StrategyParamsToPluginArgs = map[string]func(params *StrategyParameters) (*a
 		}
 		return &api.PluginConfig{
 			Name: nodeutilization.LowNodeUtilizationPluginName,
+			Args: args,
+		}, nil
+	},
+	"LowNodeRealUtilization": func(params *StrategyParameters) (*api.PluginConfig, error) {
+		if params.NodeResourceUtilizationThresholds == nil {
+			params.NodeResourceUtilizationThresholds = &NodeResourceUtilizationThresholds{}
+		}
+		args := &realutilization.LowNodeRealUtilizationArgs{
+			EvictableNamespaces: v1alpha1NamespacesToInternal(params.Namespaces),
+			Thresholds:          v1alpha1ThresholdToInternal(params.NodeResourceUtilizationThresholds.Thresholds),
+			TargetThresholds:    v1alpha1ThresholdToInternal(params.NodeResourceUtilizationThresholds.TargetThresholds),
+			NumberOfNodes:       params.NodeResourceUtilizationThresholds.NumberOfNodes,
+		}
+
+		if err := realutilization.ValidateLowNodeRealUtilizationArgs(args); err != nil {
+			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", realutilization.LowNodeRealUtilizationPluginName)
+			return nil, fmt.Errorf("strategy %q param validation failed: %v", realutilization.LowNodeRealUtilizationPluginName, err)
+		}
+		return &api.PluginConfig{
+			Name: realutilization.LowNodeRealUtilizationPluginName,
 			Args: args,
 		}, nil
 	},

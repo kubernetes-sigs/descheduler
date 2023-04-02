@@ -30,8 +30,8 @@ type DeschedulerConfiguration struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// Time interval for descheduler to run
-	DeschedulingInterval time.Duration `json:"deschedulingInterval,omitempty"`
-
+	DeschedulingInterval     time.Duration `json:"deschedulingInterval,omitempty"`
+	MetricsCacheSyncInterval time.Duration `json:"metricsCacheSyncInterval,omitempty"`
 	// KubeconfigFile is path to kubeconfig file with authorization and master
 	// location information.
 	// Deprecated: Use clientConnection.kubeConfig instead.

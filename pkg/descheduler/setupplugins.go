@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/realutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
@@ -39,6 +40,7 @@ func RegisterDefaultPlugins(registry pluginregistry.Registry) {
 	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, registry)
 	pluginregistry.Register(nodeutilization.LowNodeUtilizationPluginName, nodeutilization.NewLowNodeUtilization, &nodeutilization.LowNodeUtilizationArgs{}, nodeutilization.ValidateLowNodeUtilizationArgs, nodeutilization.SetDefaults_LowNodeUtilizationArgs, registry)
 	pluginregistry.Register(nodeutilization.HighNodeUtilizationPluginName, nodeutilization.NewHighNodeUtilization, &nodeutilization.HighNodeUtilizationArgs{}, nodeutilization.ValidateHighNodeUtilizationArgs, nodeutilization.SetDefaults_HighNodeUtilizationArgs, registry)
+	pluginregistry.Register(realutilization.LowNodeRealUtilizationPluginName, realutilization.NewRealLowNodeUtilization, &realutilization.LowNodeRealUtilizationArgs{}, realutilization.ValidateLowNodeRealUtilizationArgs, realutilization.SetDefaults_LowNodeRealUtilizationArgs, registry)
 	pluginregistry.Register(podlifetime.PluginName, podlifetime.New, &podlifetime.PodLifeTimeArgs{}, podlifetime.ValidatePodLifeTimeArgs, podlifetime.SetDefaults_PodLifeTimeArgs, registry)
 	pluginregistry.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicatesArgs{}, removeduplicates.ValidateRemoveDuplicatesArgs, removeduplicates.SetDefaults_RemoveDuplicatesArgs, registry)
 	pluginregistry.Register(removefailedpods.PluginName, removefailedpods.New, &removefailedpods.RemoveFailedPodsArgs{}, removefailedpods.ValidateRemoveFailedPodsArgs, removefailedpods.SetDefaults_RemoveFailedPodsArgs, registry)
