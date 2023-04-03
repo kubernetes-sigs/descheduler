@@ -22,12 +22,12 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 
@@ -37,20 +37,21 @@ import (
 // evictorImpl implements the Evictor interface so plugins
 // can evict a pod without importing a specific pod evictor
 type evictorImpl struct {
-	podEvictor    *evictions.PodEvictor
-	evictorFilter framework.EvictorPlugin
+	podEvictor        *evictions.PodEvictor
+	filter            podutil.FilterFunc
+	preEvictionFilter podutil.FilterFunc
 }
 
-var _ framework.Evictor = &evictorImpl{}
+var _ frameworktypes.Evictor = &evictorImpl{}
 
 // Filter checks if a pod can be evicted
 func (ei *evictorImpl) Filter(pod *v1.Pod) bool {
-	return ei.evictorFilter.Filter(pod)
+	return ei.filter(pod)
 }
 
 // PreEvictionFilter checks if pod can be evicted right before eviction
 func (ei *evictorImpl) PreEvictionFilter(pod *v1.Pod) bool {
-	return ei.evictorFilter.PreEvictionFilter(pod)
+	return ei.preEvictionFilter(pod)
 }
 
 // Evict evicts a pod (no pre-check performed)
@@ -70,7 +71,7 @@ type handleImpl struct {
 	evictor                   *evictorImpl
 }
 
-var _ framework.Handle = &handleImpl{}
+var _ frameworktypes.Handle = &handleImpl{}
 
 // ClientSet retrieves kube client set
 func (hi *handleImpl) ClientSet() clientset.Interface {
@@ -88,16 +89,34 @@ func (hi *handleImpl) SharedInformerFactory() informers.SharedInformerFactory {
 }
 
 // Evictor retrieves evictor so plugins can filter and evict pods
-func (hi *handleImpl) Evictor() framework.Evictor {
+func (hi *handleImpl) Evictor() frameworktypes.Evictor {
 	return hi.evictor
+}
+
+type filterPlugin interface {
+	frameworktypes.Plugin
+	Filter(pod *v1.Pod) bool
+}
+
+type preEvictionFilterPlugin interface {
+	frameworktypes.Plugin
+	PreEvictionFilter(pod *v1.Pod) bool
 }
 
 type profileImpl struct {
 	profileName string
 	podEvictor  *evictions.PodEvictor
 
-	deschedulePlugins []framework.DeschedulePlugin
-	balancePlugins    []framework.BalancePlugin
+	deschedulePlugins        []frameworktypes.DeschedulePlugin
+	balancePlugins           []frameworktypes.BalancePlugin
+	filterPlugins            []filterPlugin
+	preEvictionFilterPlugins []preEvictionFilterPlugin
+
+	// Each extension point with a list of plugins implementing the extension point.
+	deschedule        sets.String
+	balance           sets.String
+	filter            sets.String
+	preEvictionFilter sets.String
 }
 
 // Option for the handleImpl.
@@ -144,7 +163,7 @@ func getPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) (*api.
 	return nil, 0
 }
 
-func buildPlugin(config api.DeschedulerProfile, pluginName string, handle *handleImpl, reg pluginregistry.Registry) (framework.Plugin, error) {
+func buildPlugin(config api.DeschedulerProfile, pluginName string, handle *handleImpl, reg pluginregistry.Registry) (frameworktypes.Plugin, error) {
 	pc, _ := getPluginConfig(pluginName, config.PluginConfigs)
 	if pc == nil {
 		klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", pluginName, "profile", config.Name)
@@ -162,6 +181,26 @@ func buildPlugin(config api.DeschedulerProfile, pluginName string, handle *handl
 		return nil, fmt.Errorf("unable to initialize %q plugin: %v", pluginName, err)
 	}
 	return pg, nil
+}
+
+func (p *profileImpl) registryToExtensionPoints(registry pluginregistry.Registry) {
+	p.deschedule = sets.NewString()
+	p.balance = sets.NewString()
+	p.filter = sets.NewString()
+	p.preEvictionFilter = sets.NewString()
+
+	for plugin, pluginUtilities := range registry {
+		if _, ok := pluginUtilities.PluginType.(frameworktypes.DeschedulePlugin); ok {
+			p.deschedule.Insert(plugin)
+		}
+		if _, ok := pluginUtilities.PluginType.(frameworktypes.BalancePlugin); ok {
+			p.balance.Insert(plugin)
+		}
+		if _, ok := pluginUtilities.PluginType.(frameworktypes.EvictorPlugin); ok {
+			p.filter.Insert(plugin)
+			p.preEvictionFilter.Insert(plugin)
+		}
+	}
 }
 
 func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts ...Option) (*profileImpl, error) {
@@ -182,16 +221,27 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 		return nil, fmt.Errorf("podEvictor missing")
 	}
 
-	evictorPlugin, err := buildPlugin(config, defaultevictor.PluginName, &handleImpl{
-		clientSet:                 hOpts.clientSet,
-		getPodsAssignedToNodeFunc: hOpts.getPodsAssignedToNodeFunc,
-		sharedInformerFactory:     hOpts.sharedInformerFactory,
-	}, reg)
-	if err != nil {
-		return nil, fmt.Errorf("unable to build %v plugin: %v", defaultevictor.PluginName, err)
+	pi := &profileImpl{
+		profileName:              config.Name,
+		podEvictor:               hOpts.podEvictor,
+		deschedulePlugins:        []frameworktypes.DeschedulePlugin{},
+		balancePlugins:           []frameworktypes.BalancePlugin{},
+		filterPlugins:            []filterPlugin{},
+		preEvictionFilterPlugins: []preEvictionFilterPlugin{},
 	}
-	if evictorPlugin == nil {
-		return nil, fmt.Errorf("empty plugin build for %v plugin: %v", defaultevictor.PluginName, err)
+	pi.registryToExtensionPoints(reg)
+
+	if !pi.deschedule.HasAll(config.Plugins.Deschedule.Enabled...) {
+		return nil, fmt.Errorf("profile %q configures deschedule extension point of non-existing plugins: %v", config.Name, sets.NewString(config.Plugins.Deschedule.Enabled...).Difference(pi.deschedule))
+	}
+	if !pi.balance.HasAll(config.Plugins.Balance.Enabled...) {
+		return nil, fmt.Errorf("profile %q configures balance extension point of non-existing plugins: %v", config.Name, sets.NewString(config.Plugins.Balance.Enabled...).Difference(pi.balance))
+	}
+	if !pi.filter.HasAll(config.Plugins.Filter.Enabled...) {
+		return nil, fmt.Errorf("profile %q configures filter extension point of non-existing plugins: %v", config.Name, sets.NewString(config.Plugins.Filter.Enabled...).Difference(pi.filter))
+	}
+	if !pi.preEvictionFilter.HasAll(config.Plugins.PreEvictionFilter.Enabled...) {
+		return nil, fmt.Errorf("profile %q configures preEvictionFilter extension point of non-existing plugins: %v", config.Name, sets.NewString(config.Plugins.PreEvictionFilter.Enabled...).Difference(pi.preEvictionFilter))
 	}
 
 	handle := &handleImpl{
@@ -199,59 +249,55 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 		getPodsAssignedToNodeFunc: hOpts.getPodsAssignedToNodeFunc,
 		sharedInformerFactory:     hOpts.sharedInformerFactory,
 		evictor: &evictorImpl{
-			podEvictor:    hOpts.podEvictor,
-			evictorFilter: evictorPlugin.(framework.EvictorPlugin),
+			podEvictor: hOpts.podEvictor,
 		},
 	}
 
-	deschedulePlugins := []framework.DeschedulePlugin{}
-	balancePlugins := []framework.BalancePlugin{}
+	pluginNames := append(config.Plugins.Deschedule.Enabled, config.Plugins.Balance.Enabled...)
+	pluginNames = append(pluginNames, config.Plugins.Filter.Enabled...)
+	pluginNames = append(pluginNames, config.Plugins.PreEvictionFilter.Enabled...)
 
-	descheduleEnabled := make(map[string]struct{})
-	balanceEnabled := make(map[string]struct{})
-	for _, name := range config.Plugins.Deschedule.Enabled {
-		descheduleEnabled[name] = struct{}{}
-	}
-	for _, name := range config.Plugins.Balance.Enabled {
-		balanceEnabled[name] = struct{}{}
-	}
-
-	// Assuming only a list of enabled extension points.
-	// Later, when a default list of plugins and their extension points is established,
-	// compute the list of enabled extension points as (DefaultEnabled + Enabled - Disabled)
-	for _, plugin := range append(config.Plugins.Deschedule.Enabled, config.Plugins.Balance.Enabled...) {
+	plugins := make(map[string]frameworktypes.Plugin)
+	for _, plugin := range sets.NewString(pluginNames...).List() {
 		pg, err := buildPlugin(config, plugin, handle, reg)
 		if err != nil {
 			return nil, fmt.Errorf("unable to build %v plugin: %v", plugin, err)
 		}
-		if pg != nil {
-			// pg can be of any of each type, or both
-
-			if _, exists := descheduleEnabled[plugin]; exists {
-				_, ok := pg.(framework.DeschedulePlugin)
-				if ok {
-					deschedulePlugins = append(deschedulePlugins, pg.(framework.DeschedulePlugin))
-				}
-			}
-
-			if _, exists := balanceEnabled[plugin]; exists {
-				_, ok := pg.(framework.BalancePlugin)
-				if ok {
-					balancePlugins = append(balancePlugins, pg.(framework.BalancePlugin))
-				}
-			}
+		if pg == nil {
+			return nil, fmt.Errorf("got empty %v plugin build", plugin)
 		}
+		plugins[plugin] = pg
 	}
 
-	return &profileImpl{
-		profileName:       config.Name,
-		podEvictor:        hOpts.podEvictor,
-		deschedulePlugins: deschedulePlugins,
-		balancePlugins:    balancePlugins,
-	}, nil
+	// Later, when a default list of plugins and their extension points is established,
+	// compute the list of enabled extension points as (DefaultEnabled + Enabled - Disabled)
+	for _, pluginName := range config.Plugins.Deschedule.Enabled {
+		pi.deschedulePlugins = append(pi.deschedulePlugins, plugins[pluginName].(frameworktypes.DeschedulePlugin))
+	}
+
+	for _, pluginName := range config.Plugins.Balance.Enabled {
+		pi.balancePlugins = append(pi.balancePlugins, plugins[pluginName].(frameworktypes.BalancePlugin))
+	}
+
+	filters := []podutil.FilterFunc{}
+	for _, pluginName := range config.Plugins.Filter.Enabled {
+		pi.filterPlugins = append(pi.filterPlugins, plugins[pluginName].(filterPlugin))
+		filters = append(filters, plugins[pluginName].(filterPlugin).Filter)
+	}
+
+	preEvictionFilters := []podutil.FilterFunc{}
+	for _, pluginName := range config.Plugins.PreEvictionFilter.Enabled {
+		pi.preEvictionFilterPlugins = append(pi.preEvictionFilterPlugins, plugins[pluginName].(preEvictionFilterPlugin))
+		preEvictionFilters = append(preEvictionFilters, plugins[pluginName].(preEvictionFilterPlugin).PreEvictionFilter)
+	}
+
+	handle.evictor.filter = podutil.WrapFilterFuncs(filters...)
+	handle.evictor.preEvictionFilter = podutil.WrapFilterFuncs(preEvictionFilters...)
+
+	return pi, nil
 }
 
-func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	errs := []error{}
 	for _, pl := range d.deschedulePlugins {
 		evicted := d.podEvictor.TotalEvicted()
@@ -272,15 +318,15 @@ func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node)
 
 	aggrErr := errors.NewAggregate(errs)
 	if aggrErr == nil {
-		return &framework.Status{}
+		return &frameworktypes.Status{}
 	}
 
-	return &framework.Status{
+	return &frameworktypes.Status{
 		Err: fmt.Errorf("%v", aggrErr.Error()),
 	}
 }
 
-func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	errs := []error{}
 	for _, pl := range d.balancePlugins {
 		evicted := d.podEvictor.TotalEvicted()
@@ -301,10 +347,10 @@ func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *f
 
 	aggrErr := errors.NewAggregate(errs)
 	if aggrErr == nil {
-		return &framework.Status{}
+		return &frameworktypes.Status{}
 	}
 
-	return &framework.Status{
+	return &frameworktypes.Status{
 		Err: fmt.Errorf("%v", aggrErr.Error()),
 	}
 }

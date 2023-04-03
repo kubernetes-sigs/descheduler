@@ -15,14 +15,16 @@ package plugin
 
 import (
 	v1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 type Action interface {
-	Handle() framework.Handle
+	Handle() frameworktypes.Handle
 	GetExtensionPoint() string
 	DeepCopy() Action
 }
+
+type ReactionFunc func(action Action) (handled, filter bool, err error)
 
 // Reactor is an interface to allow the composition of reaction functions.
 type Reactor interface {
@@ -31,7 +33,8 @@ type Reactor interface {
 	Handles(action Action) bool
 	// React handles the action.  It may choose to
 	// delegate by indicated handled=false.
-	React(action Action) (handled bool, err error)
+	// filter is used to store results of filter based actions
+	React(action Action) (handled, filter bool, err error)
 }
 
 // SimpleReactor is a Reactor. Each reaction function is attached to a given extensionPoint. "*" in either field matches everything for that value.
@@ -44,11 +47,9 @@ func (r *SimpleReactor) Handles(action Action) bool {
 	return r.ExtensionPoint == "*" || r.ExtensionPoint == action.GetExtensionPoint()
 }
 
-func (r *SimpleReactor) React(action Action) (bool, error) {
+func (r *SimpleReactor) React(action Action) (bool, bool, error) {
 	return r.Reaction(action)
 }
-
-type ReactionFunc func(action Action) (handled bool, err error)
 
 type DescheduleAction interface {
 	Action
@@ -62,12 +63,22 @@ type BalanceAction interface {
 	Nodes() []*v1.Node
 }
 
+type FilterAction interface {
+	Action
+	CanFilter() bool
+}
+
+type PreEvictionFilterAction interface {
+	Action
+	CanPreEvictionFilter() bool
+}
+
 type ActionImpl struct {
-	handle         framework.Handle
+	handle         frameworktypes.Handle
 	extensionPoint string
 }
 
-func (a ActionImpl) Handle() framework.Handle {
+func (a ActionImpl) Handle() frameworktypes.Handle {
 	return a.handle
 }
 
@@ -130,6 +141,30 @@ func (a BalanceActionImpl) DeepCopy() Action {
 	}
 }
 
-func (c *FakePlugin) AddReactor(extensionPoint string, reaction ReactionFunc) {
-	c.ReactionChain = append(c.ReactionChain, &SimpleReactor{ExtensionPoint: extensionPoint, Reaction: reaction})
+type FilterActionImpl struct {
+	ActionImpl
+}
+
+func (d FilterActionImpl) CanFilter() bool {
+	return true
+}
+
+func (a FilterActionImpl) DeepCopy() Action {
+	return FilterActionImpl{
+		ActionImpl: a.ActionImpl.DeepCopy().(ActionImpl),
+	}
+}
+
+type PreEvictionFilterActionImpl struct {
+	ActionImpl
+}
+
+func (d PreEvictionFilterActionImpl) CanPreEvictionFilter() bool {
+	return true
+}
+
+func (a PreEvictionFilterActionImpl) DeepCopy() Action {
+	return PreEvictionFilterActionImpl{
+		ActionImpl: a.ActionImpl.DeepCopy().(ActionImpl),
+	}
 }

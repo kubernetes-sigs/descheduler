@@ -27,7 +27,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/events"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -331,7 +331,7 @@ func TestRemoveFailedPods(t *testing.T) {
 				&frameworkfake.HandleImpl{
 					ClientsetImpl:                 fakeClient,
 					PodEvictorImpl:                podEvictor,
-					EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+					EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				},
@@ -340,7 +340,7 @@ func TestRemoveFailedPods(t *testing.T) {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin.(framework.DeschedulePlugin).Deschedule(ctx, tc.nodes)
+			plugin.(frameworktypes.DeschedulePlugin).Deschedule(ctx, tc.nodes)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)

@@ -19,13 +19,15 @@ package pluginregistry
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 var PluginRegistry Registry
 
 type PluginUtilities struct {
 	PluginBuilder PluginBuilder
+
+	PluginType interface{}
 	// Just an example instance of this PluginArg so we can avoid having
 	// to deal with reflect Types
 	PluginArgInstance  runtime.Object
@@ -33,25 +35,34 @@ type PluginUtilities struct {
 	PluginArgDefaulter PluginArgDefaulter
 }
 
-type PluginBuilder = func(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
+type PluginBuilder = func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error)
 
 type (
 	PluginArgValidator = func(args runtime.Object) error
 	PluginArgDefaulter = func(args runtime.Object)
 )
 
-type Registry = map[string]PluginUtilities
+type Registry map[string]PluginUtilities
 
 func NewRegistry() Registry {
 	return Registry{}
 }
 
-func Register(name string, builderFunc PluginBuilder, exampleArg runtime.Object, pluginArgValidator PluginArgValidator, pluginArgDefaulter PluginArgDefaulter, registry Registry) {
+func Register(
+	name string,
+	builderFunc PluginBuilder,
+	pluginType interface{},
+	exampleArg runtime.Object,
+	pluginArgValidator PluginArgValidator,
+	pluginArgDefaulter PluginArgDefaulter,
+	registry Registry,
+) {
 	if _, ok := registry[name]; ok {
 		klog.V(10).InfoS("Plugin already registered", "plugin", name)
 	} else {
 		registry[name] = PluginUtilities{
 			PluginBuilder:      builderFunc,
+			PluginType:         pluginType,
 			PluginArgInstance:  exampleArg,
 			PluginArgValidator: pluginArgValidator,
 			PluginArgDefaulter: pluginArgDefaulter,

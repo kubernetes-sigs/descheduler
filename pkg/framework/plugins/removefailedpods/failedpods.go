@@ -29,22 +29,22 @@ import (
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 const PluginName = "RemoveFailedPods"
 
 // RemoveFailedPods evicts pods in failed status phase that match the given args criteria
 type RemoveFailedPods struct {
-	handle    framework.Handle
+	handle    frameworktypes.Handle
 	args      *RemoveFailedPodsArgs
 	podFilter podutil.FilterFunc
 }
 
-var _ framework.DeschedulePlugin = &RemoveFailedPods{}
+var _ frameworktypes.DeschedulePlugin = &RemoveFailedPods{}
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	failedPodsArgs, ok := args.(*RemoveFailedPodsArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemoveFailedPodsArgs, got %T", args)
@@ -91,13 +91,13 @@ func (d *RemoveFailedPods) Name() string {
 }
 
 // Deschedule extension point implementation for the plugin
-func (d *RemoveFailedPods) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *RemoveFailedPods) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListAllPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			// no pods evicted as error encountered retrieving evictable Pods
-			return &framework.Status{
+			return &frameworktypes.Status{
 				Err: fmt.Errorf("error listing pods on a node: %v", err),
 			}
 		}

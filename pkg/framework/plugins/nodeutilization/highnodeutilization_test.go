@@ -33,9 +33,9 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -519,7 +519,7 @@ func TestHighNodeUtilization(t *testing.T) {
 				ClientsetImpl:                 fakeClient,
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
@@ -530,7 +530,7 @@ func TestHighNodeUtilization(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
-			plugin.(framework.BalancePlugin).Balance(ctx, testCase.nodes)
+			plugin.(frameworktypes.BalancePlugin).Balance(ctx, testCase.nodes)
 
 			podsEvicted := podEvictor.TotalEvicted()
 			if testCase.expectedPodsEvicted != podsEvicted {
@@ -670,7 +670,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 				ClientsetImpl:                 fakeClient,
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
@@ -683,7 +683,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
-			plugin.(framework.BalancePlugin).Balance(ctx, item.nodes)
+			plugin.(frameworktypes.BalancePlugin).Balance(ctx, item.nodes)
 
 			if item.evictionsExpected != podEvictor.TotalEvicted() {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, podEvictor.TotalEvicted())
