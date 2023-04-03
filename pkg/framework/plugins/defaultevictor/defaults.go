@@ -28,7 +28,7 @@ func SetDefaults_DefaultEvictorArgs(obj *DefaultEvictorArgs) {
 		obj.NodeSelector = ""
 	}
 	if !obj.EvictLocalStoragePods {
-		obj.EvictSystemCriticalPods = false
+		obj.EvictLocalStoragePods = false
 	}
 	if !obj.EvictSystemCriticalPods {
 		obj.EvictSystemCriticalPods = false
