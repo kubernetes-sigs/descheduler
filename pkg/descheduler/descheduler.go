@@ -186,7 +186,7 @@ func cachedClient(
 
 	for _, item := range namespaces {
 		if _, err := fakeClient.CoreV1().Namespaces().Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
-			return nil, fmt.Errorf("unable to copy node: %v", err)
+			return nil, fmt.Errorf("unable to copy namespace: %v", err)
 		}
 	}
 
