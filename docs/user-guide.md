@@ -4,6 +4,8 @@ Starting with descheduler release v0.10.0 container images are available in the 
 
 Descheduler Version | Container Image                                 | Architectures           |
 ------------------- |-------------------------------------------------|-------------------------|
+v0.26.1             | registry.k8s.io/descheduler/descheduler:v0.26.1 | AMD64<br>ARM64<br>ARMv7 |
+v0.26.0             | registry.k8s.io/descheduler/descheduler:v0.26.0 | AMD64<br>ARM64<br>ARMv7 |
 v0.25.1             | registry.k8s.io/descheduler/descheduler:v0.25.1 | AMD64<br>ARM64<br>ARMv7 |
 v0.25.0             | registry.k8s.io/descheduler/descheduler:v0.25.0 | AMD64<br>ARM64<br>ARMv7 |
 v0.24.1             | registry.k8s.io/descheduler/descheduler:v0.24.1 | AMD64<br>ARM64<br>ARMv7 |
