@@ -73,7 +73,6 @@ type Plugins struct {
 	Sort              PluginSet
 	Deschedule        PluginSet
 	Balance           PluginSet
-	Evict             PluginSet
 	Filter            PluginSet
 	PreEvictionFilter PluginSet
 }

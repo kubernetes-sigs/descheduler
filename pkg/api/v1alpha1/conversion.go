@@ -201,7 +201,10 @@ func V1alpha1ToInternal(
 						*pluginConfig,
 					},
 					Plugins: api.Plugins{
-						Evict: api.PluginSet{
+						Filter: api.PluginSet{
+							Enabled: []string{defaultevictor.PluginName},
+						},
+						PreEvictionFilter: api.PluginSet{
 							Enabled: []string{defaultevictor.PluginName},
 						},
 					},
