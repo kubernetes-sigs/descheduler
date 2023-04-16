@@ -87,6 +87,15 @@ func setDefaultsPluginConfig(pluginConfig *api.PluginConfig, registry pluginregi
 	}
 }
 
+func findPluginName(names []string, key string) bool {
+	for _, name := range names {
+		if name == key {
+			return true
+		}
+	}
+	return false
+}
+
 func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interface) api.DeschedulerProfile {
 	newPluginConfig := api.PluginConfig{
 		Name: defaultevictor.PluginName,
@@ -97,16 +106,24 @@ func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interfac
 			EvictFailedBarePods:     false,
 		},
 	}
-	if len(profile.Plugins.Evict.Enabled) == 0 && !hasPluginConfigsWithSameName(newPluginConfig, profile.PluginConfigs) {
-		profile.Plugins.Evict.Enabled = append(profile.Plugins.Evict.Enabled, defaultevictor.PluginName)
-		profile.PluginConfigs = append(profile.PluginConfigs, newPluginConfig)
+
+	// Always enable DefaultEvictor plugin for filter/preEvictionFilter extension points
+	if !findPluginName(profile.Plugins.Filter.Enabled, defaultevictor.PluginName) {
+		profile.Plugins.Filter.Enabled = append([]string{defaultevictor.PluginName}, profile.Plugins.Filter.Enabled...)
 	}
-	var thresholdPriority int32
-	var err error
+
+	if !findPluginName(profile.Plugins.PreEvictionFilter.Enabled, defaultevictor.PluginName) {
+		profile.Plugins.PreEvictionFilter.Enabled = append([]string{defaultevictor.PluginName}, profile.Plugins.PreEvictionFilter.Enabled...)
+	}
+
 	defaultevictorPluginConfig, idx := GetPluginConfig(defaultevictor.PluginName, profile.PluginConfigs)
-	if defaultevictorPluginConfig != nil {
-		thresholdPriority, err = utils.GetPriorityFromStrategyParams(context.TODO(), client, defaultevictorPluginConfig.Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold)
+	if defaultevictorPluginConfig == nil {
+		profile.PluginConfigs = append([]api.PluginConfig{newPluginConfig}, profile.PluginConfigs...)
+		defaultevictorPluginConfig = &newPluginConfig
+		idx = 0
 	}
+
+	thresholdPriority, err := utils.GetPriorityFromStrategyParams(context.TODO(), client, defaultevictorPluginConfig.Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold)
 	if err != nil {
 		klog.Error(err, "Failed to get threshold priority from args")
 	}
@@ -118,11 +135,6 @@ func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interfac
 func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginregistry.Registry) error {
 	var errorsInProfiles error
 	for _, profile := range in.Profiles {
-		// api.DeschedulerPolicy needs only 1 evictor plugin enabled
-		if len(profile.Plugins.Evict.Enabled) != 1 {
-			errTooManyEvictors := fmt.Errorf("profile with invalid number of evictor plugins enabled found. Please enable a single evictor plugin.")
-			errorsInProfiles = setErrorsInProfiles(errTooManyEvictors, profile.Name, errorsInProfiles)
-		}
 		for _, pluginConfig := range profile.PluginConfigs {
 			if _, ok := registry[pluginConfig.Name]; ok {
 				pluginUtilities := registry[pluginConfig.Name]
