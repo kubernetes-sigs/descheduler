@@ -28,6 +28,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodeaffinity"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/trimaran"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/trimaran/targetloadpacking"
 )
 
 func SetupPlugins() {
@@ -39,6 +41,7 @@ func RegisterDefaultPlugins(registry pluginregistry.Registry) {
 	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, registry)
 	pluginregistry.Register(nodeutilization.LowNodeUtilizationPluginName, nodeutilization.NewLowNodeUtilization, &nodeutilization.LowNodeUtilization{}, &nodeutilization.LowNodeUtilizationArgs{}, nodeutilization.ValidateLowNodeUtilizationArgs, nodeutilization.SetDefaults_LowNodeUtilizationArgs, registry)
 	pluginregistry.Register(nodeutilization.HighNodeUtilizationPluginName, nodeutilization.NewHighNodeUtilization, &nodeutilization.HighNodeUtilization{}, &nodeutilization.HighNodeUtilizationArgs{}, nodeutilization.ValidateHighNodeUtilizationArgs, nodeutilization.SetDefaults_HighNodeUtilizationArgs, registry)
+	pluginregistry.Register(targetloadpacking.Name, targetloadpacking.New, &targetloadpacking.TargetLoadPacking{}, &trimaran.TargetLoadPackingArgs{}, trimaran.ValidateTargetLoadPackingArgs, trimaran.SetDefaults_TargetLoadPackingArgs, registry)
 	pluginregistry.Register(podlifetime.PluginName, podlifetime.New, &podlifetime.PodLifeTime{}, &podlifetime.PodLifeTimeArgs{}, podlifetime.ValidatePodLifeTimeArgs, podlifetime.SetDefaults_PodLifeTimeArgs, registry)
 	pluginregistry.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicates{}, &removeduplicates.RemoveDuplicatesArgs{}, removeduplicates.ValidateRemoveDuplicatesArgs, removeduplicates.SetDefaults_RemoveDuplicatesArgs, registry)
 	pluginregistry.Register(removefailedpods.PluginName, removefailedpods.New, &removefailedpods.RemoveFailedPods{}, &removefailedpods.RemoveFailedPodsArgs{}, removefailedpods.ValidateRemoveFailedPodsArgs, removefailedpods.SetDefaults_RemoveFailedPodsArgs, registry)

@@ -175,6 +175,7 @@ Balance Plugins: These plugins process all pods, or groups of pods, and determin
 | [RemoveDuplicates](#removeduplicates) |Balance|Spreads replicas|
 | [LowNodeUtilization](#lownodeutilization) |Balance|Spreads pods according to pods resource requests and node resources available|
 | [HighNodeUtilization](#highnodeutilization) |Balance|Spreads pods according to pods resource requests and node resources available|
+| [TargetLoadPacking](#targetloadpacking) |Balance|Spreads pods according to node utilization metrics|
 | [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity) |Deschedule|Evicts pods violating pod anti affinity|
 | [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity) |Deschedule|Evicts pods violating node affinity|
 | [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints) |Deschedule|Evicts pods violating node taints|
@@ -389,6 +390,43 @@ There is another parameter associated with the `HighNodeUtilization` strategy, c
 This parameter can be configured to activate the strategy only when the number of under utilized nodes
 is above the configured value. This could be helpful in large clusters where a few nodes could go
 under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero.
+
+### TargetLoadPacking
+
+This strategy finds nodes that are under utilized and evicts pods, if possible, from other nodes in the hope that recreation of evicted pods will be scheduled on these underutilized nodes. It has the same goal as `LowNodeUtilization`, the only difference is that it makes decisions based on real-time metrics data, not pod resource requests.
+
+This strategy **must** be used with the scheduler scoring strategy [`TargetLoadPacking`](https://github.com/kubernetes-sigs/scheduler-plugins/tree/master/pkg/trimaran/targetloadpacking).
+
+**Parameters:**
+
+Any explanation of the plugin's parameters can be found at [kubernetes-sigs/scheduler-plugins/pkg/trimaran/targetloadpacking](https://github.com/kubernetes-sigs/scheduler-plugins/tree/master/pkg/trimaran/targetloadpacking).
+
+**Example:**
+
+```yaml
+apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+    - name: "TargetLoadPacking"
+      args:
+        defaultRequests:
+          cpu: "2000m"
+        defaultRequestsMultiplier: "2"
+        targetUtilization: 70
+        metricProvider: 
+          type: Prometheus
+          address: http://prometheus-k8s.monitoring.svc.cluster.local:9090
+    plugins:
+      evict:
+        enabled:
+          - "DefaultEvictor"
+      balance:
+        enabled:
+          - "TargetLoadPacking"
+```
 
 ### RemovePodsViolatingInterPodAntiAffinity
 
