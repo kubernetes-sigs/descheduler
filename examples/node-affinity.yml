@@ -3,15 +3,11 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemovePodsViolatingNodeAffinity"
       args:
         nodeAffinityType:
         - "requiredDuringSchedulingIgnoredDuringExecution"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemovePodsViolatingNodeAffinity"
