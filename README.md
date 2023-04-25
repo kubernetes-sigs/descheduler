@@ -125,7 +125,7 @@ The Default Evictor Plugin is used by default for filtering pods before processi
 
 ### Example policy
 
-As part of the policy, you will start deciding which top level configuration to use, then which Evictor plugin to use (if you have your own, the Default Evictor if not), followed by deciding the configuration passed to the Evictor Plugin. After that you will enable/disable eviction strategies plugins and configure them properly.
+As part of the policy, you will start deciding which top level configuration to use, then which Evictor plugin to use (if you have your own, the Default Evictor if not), followed by deciding the configuration passed to the Evictor Plugin. By default, the Default Evictor is enabled for both `filter` and `preEvictionFilter` extension points.  After that you will enable/disable eviction strategies plugins and configure them properly.
 
 See each strategy plugin section for details on available parameters.
 
@@ -147,9 +147,13 @@ profiles:
         evictLocalStoragePods: true
         nodeFit: true
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
+      # DefaultEvictor is enabled for both `filter` and `preEvictionFilter`
+      # filter:
+      #   enabled:
+      #     - "DefaultEvictor"
+      # preEvictionFilter:
+      #   enabled:
+      #     - "DefaultEvictor"
       deschedule:
         enabled:
           - ...
@@ -211,15 +215,11 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemoveDuplicates"
       args:
-        excludeOwnerKinds: 
+        excludeOwnerKinds:
           - "ReplicaSet"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "RemoveDuplicates"
@@ -278,7 +278,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "LowNodeUtilization"
       args:
         thresholds:
@@ -290,9 +289,6 @@ profiles:
           "memory": 50
           "pods": 50
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "LowNodeUtilization"
@@ -358,7 +354,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "HighNodeUtilization"
       args:
         thresholds:
@@ -369,11 +364,8 @@ profiles:
           namespaces:
             exclude:
             - "kube-system"
-            - "namespace1" 
+            - "namespace1"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "HighNodeUtilization"
@@ -413,12 +405,8 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemovePodsViolatingInterPodAntiAffinity"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemovePodsViolatingInterPodAntiAffinity"
@@ -458,15 +446,11 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemovePodsViolatingNodeAffinity"
       args:
         nodeAffinityType:
         - "requiredDuringSchedulingIgnoredDuringExecution"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemovePodsViolatingNodeAffinity"
@@ -502,16 +486,12 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemovePodsViolatingNodeTaints"
       args:
         excludedTaints:
         - dedicated=special-user # exclude taints with key "dedicated" and value "special-user"
         - reserved # exclude all taints with key "reserved"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemovePodsViolatingNodeTaints"
@@ -544,14 +524,10 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemovePodsViolatingTopologySpreadConstraint"
       args:
         includeSoftConstraints: false
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "RemovePodsViolatingTopologySpreadConstraint"
@@ -583,15 +559,11 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemovePodsHavingTooManyRestarts"
       args:
         podRestartThreshold: 100
         includingInitContainers: true
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemovePodsHavingTooManyRestarts"
@@ -625,7 +597,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "PodLifeTime"
       args:
         maxPodLifeTimeSeconds: 86400
@@ -633,9 +604,6 @@ profiles:
         - "Pending"
         - "PodInitializing"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -669,7 +637,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemoveFailedPods"
       args:
         reasons:
@@ -679,9 +646,6 @@ profiles:
         - "Job"
         minPodLifetimeSeconds: 3600
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemoveFailedPods"
@@ -713,7 +677,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "PodLifeTime"
       args:
         maxPodLifeTimeSeconds: 86400
@@ -722,9 +685,6 @@ profiles:
           - "namespace1"
           - "namespace2"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -739,7 +699,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "PodLifeTime"
       args:
         maxPodLifeTimeSeconds: 86400
@@ -748,9 +707,6 @@ profiles:
           - "namespace1"
           - "namespace2"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -786,9 +742,6 @@ profiles:
       args:
         maxPodLifeTimeSeconds: 86400
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -809,9 +762,6 @@ profiles:
       args:
         maxPodLifeTimeSeconds: 86400
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -843,7 +793,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "PodLifeTime"
       args:
         maxPodLifeTimeSeconds: 86400
@@ -854,9 +803,6 @@ profiles:
             - {key: tier, operator: In, values: [cache]}
             - {key: environment, operator: NotIn, values: [dev]}
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -887,9 +833,6 @@ profiles:
       args:
         maxPodLifeTimeSeconds: 86400
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
