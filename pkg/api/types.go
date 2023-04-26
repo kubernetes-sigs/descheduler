@@ -43,8 +43,8 @@ type DeschedulerPolicy struct {
 // Namespaces carries a list of included/excluded namespaces
 // for which a given strategy is applicable
 type Namespaces struct {
-	Include []string
-	Exclude []string
+	Include []string `json:"include"`
+	Exclude []string `json:"exclude"`
 }
 
 type (
@@ -53,8 +53,8 @@ type (
 )
 
 type PriorityThreshold struct {
-	Value *int32
-	Name  string
+	Value *int32 `json:"value"`
+	Name  string `json:"name"`
 }
 
 type DeschedulerProfile struct {
