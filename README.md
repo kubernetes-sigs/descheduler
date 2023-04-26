@@ -30,6 +30,23 @@ Descheduler, based on its policy, finds pods that can be moved and evicts them. 
 note, in current implementation, descheduler does not schedule replacement of evicted pods
 but relies on the default scheduler for that.
 
+## ⚠️  Documentation Versions by Release
+
+If you are using a published release of Descheduler (such as
+`registry.k8s.io/descheduler/descheduler:v0.26.1`), follow the documentation in
+that version's release branch, as listed below:
+
+|Descheduler Version|Docs link|
+|---|---|
+|v0.26.x|[`release-1.26`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.26/README.md)|
+|v0.25.x|[`release-1.25`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.25/README.md)|
+|v0.24.x|[`release-1.24`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.24/README.md)|
+
+The
+[`master`](https://github.com/kubernetes-sigs/descheduler/blob/master/README.md)
+branch is considered in-development and the information presented in it may not
+work for previous versions.
+
 ## Quick Start
 
 The descheduler can be run as a `Job`, `CronJob`, or `Deployment` inside of a k8s cluster. It has the
