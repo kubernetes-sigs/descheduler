@@ -123,7 +123,7 @@ func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interfac
 		idx = 0
 	}
 
-	thresholdPriority, err := utils.GetPriorityFromStrategyParams(context.TODO(), client, defaultevictorPluginConfig.Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold)
+	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), client, defaultevictorPluginConfig.Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold)
 	if err != nil {
 		klog.Error(err, "Failed to get threshold priority from args")
 	}
@@ -137,36 +137,25 @@ func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginr
 	for _, profile := range in.Profiles {
 		for _, pluginConfig := range profile.PluginConfigs {
 			if _, ok := registry[pluginConfig.Name]; ok {
+				if _, ok := registry[pluginConfig.Name]; !ok {
+					errorsInProfiles = fmt.Errorf("%w: %s", errorsInProfiles, fmt.Sprintf("in profile %s: plugin %s in pluginConfig not registered", profile.Name, pluginConfig.Name))
+					continue
+				}
+
 				pluginUtilities := registry[pluginConfig.Name]
-				if pluginUtilities.PluginArgValidator != nil {
-					err := pluginUtilities.PluginArgValidator(pluginConfig.Args)
-					errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
+				if pluginUtilities.PluginArgValidator == nil {
+					continue
+				}
+				err := pluginUtilities.PluginArgValidator(pluginConfig.Args)
+				if err != nil {
+					if errorsInProfiles == nil {
+						errorsInProfiles = fmt.Errorf("in profile %s: %s", profile.Name, err.Error())
+					} else {
+						errorsInProfiles = fmt.Errorf("%w: %s", errorsInProfiles, fmt.Sprintf("in profile %s: %s", profile.Name, err.Error()))
+					}
 				}
 			}
 		}
 	}
-	if errorsInProfiles != nil {
-		return errorsInProfiles
-	}
-	return nil
-}
-
-func setErrorsInProfiles(err error, profileName string, errorsInProfiles error) error {
-	if err != nil {
-		if errorsInProfiles == nil {
-			errorsInProfiles = fmt.Errorf("in profile %s: %s", profileName, err.Error())
-		} else {
-			errorsInProfiles = fmt.Errorf("%w: %s", errorsInProfiles, fmt.Sprintf("in profile %s: %s", profileName, err.Error()))
-		}
-	}
 	return errorsInProfiles
-}
-
-func hasPluginConfigsWithSameName(newPluginConfig api.PluginConfig, pluginConfigs []api.PluginConfig) bool {
-	for _, pluginConfig := range pluginConfigs {
-		if newPluginConfig.Name == pluginConfig.Name {
-			return true
-		}
-	}
-	return false
 }
