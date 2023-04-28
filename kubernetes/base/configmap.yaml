@@ -28,4 +28,4 @@ data:
             enabled:
               - "LowNodeUtilization"
               - "RemovePodsViolatingInterPodAntiAffinity"
-              - "RemoveDuplicates
+              - "RemoveDuplicates"
