@@ -875,12 +875,6 @@ profiles:
         podRestartThreshold: 100
         includingInitContainers: true
     plugins:
-      filter:
-        enabled:
-          - "DefaultEvictor"
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemovePodsHavingTooManyRestarts"

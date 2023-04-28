@@ -58,14 +58,10 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "PodLifeTime"
       args:
         maxPodLifeTimeSeconds: 604800
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -73,7 +69,7 @@ profiles:
 
 ### Balance Cluster By Node Memory Utilization
 If your cluster has been running for a long period of time, you may find that the resource utilization is not very
-balanced. The following two strategies can be used to rebalance your cluster based on `cpu`, `memory` 
+balanced. The following two strategies can be used to rebalance your cluster based on `cpu`, `memory`
 or `number of pods`.
 
 #### Balance high utilization nodes
@@ -86,7 +82,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "LowNodeUtilization"
       args:
         thresholds:
@@ -94,9 +89,6 @@ profiles:
         targetThresholds:
           "memory": 70
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "LowNodeUtilization"
@@ -113,15 +105,11 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "HighNodeUtilization"
       args:
         thresholds:
           "memory": 20
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "HighNodeUtilization"

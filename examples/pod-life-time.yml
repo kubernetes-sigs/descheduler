@@ -3,7 +3,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "PodLifeTime"
       args:
         maxPodLifeTimeSeconds: 604800 # 7 days
@@ -11,9 +10,6 @@ profiles:
         - "Pending"
         - "PodInitializing"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"

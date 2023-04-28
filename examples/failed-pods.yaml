@@ -3,7 +3,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemoveFailedPods"
       args:
         reasons:
@@ -14,9 +13,6 @@ profiles:
         - "Job"
         minPodLifetimeSeconds: 3600
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemoveFailedPods"

@@ -3,14 +3,10 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemovePodsViolatingTopologySpreadConstraint"
       args:
         includeSoftConstraints: true # Include 'ScheduleAnyways' constraints
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "RemovePodsViolatingTopologySpreadConstraint"
