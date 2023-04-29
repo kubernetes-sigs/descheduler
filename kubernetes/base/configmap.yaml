@@ -27,5 +27,8 @@ data:
           balance:
             enabled:
               - "LowNodeUtilization"
-              - "RemovePodsViolatingInterPodAntiAffinity"
               - "RemoveDuplicates"
+          deschedule:
+            enabled:
+              - "RemovePodsViolatingInterPodAntiAffinity"   
+              
