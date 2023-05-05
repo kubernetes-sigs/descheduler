@@ -38,7 +38,7 @@ that version's release branch, as listed below:
 
 |Descheduler Version|Docs link|
 |---|---|
-|v0.27.x|[`release-1.26`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.27/README.md)|
+|v0.27.x|[`release-1.27`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.27/README.md)|
 |v0.26.x|[`release-1.26`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.26/README.md)|
 |v0.25.x|[`release-1.25`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.25/README.md)|
 |v0.24.x|[`release-1.24`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.24/README.md)|
