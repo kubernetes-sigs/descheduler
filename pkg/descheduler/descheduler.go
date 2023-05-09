@@ -18,12 +18,14 @@ package descheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
 	"time"
 
+	"k8s.io/client-go/discovery"
 	componentbaseconfig "k8s.io/component-base/config"
 	"k8s.io/klog/v2"
 
@@ -76,7 +78,9 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	}
 
 	// Add k8s compatibility warnings to logs
-	versionCompatibilityCheck(rs)
+	if err := validateVersionCompatibility(rs.Client.Discovery(), version.Get()); err != nil {
+		klog.Warning(err.Error())
+	}
 
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(rs.Client)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
@@ -92,7 +96,7 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	}
 
 	if rs.LeaderElection.LeaderElect && rs.DryRun {
-		klog.V(1).InfoS("Warning: DryRun is set to True. You need to disable it to use Leader Election.")
+		klog.V(1).Info("Warning: DryRun is set to True. You need to disable it to use Leader Election.")
 	}
 
 	if rs.LeaderElection.LeaderElect && !rs.DryRun {
@@ -105,27 +109,34 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	return runFn()
 }
 
-func versionCompatibilityCheck(rs *options.DeschedulerServer) {
-	serverVersion, serverErr := rs.Client.Discovery().ServerVersion()
+func validateVersionCompatibility(discovery discovery.DiscoveryInterface, versionInfo version.Info) error {
+	serverVersion, serverErr := discovery.ServerVersion()
 	if serverErr != nil {
-		klog.V(1).InfoS("Warning: Get Kubernetes server version fail")
-		return
+		return errors.New("failed to get Kubernetes server version")
 	}
 
-	deschedulerMinorVersion := strings.Split(version.Get().Minor, ".")[0]
+	deschedulerMinorVersion := strings.Split(versionInfo.Minor, ".")[0]
 	deschedulerMinorVersionFloat, err := strconv.ParseFloat(deschedulerMinorVersion, 64)
 	if err != nil {
-		klog.Warning("Warning: Convert Descheduler minor version to float fail")
+		return errors.New("failed to convert Descheduler minor version to float")
 	}
 
 	kubernetesMinorVersionFloat, err := strconv.ParseFloat(serverVersion.Minor, 64)
 	if err != nil {
-		klog.Warning("Warning: Convert Kubernetes server minor version to float fail")
+		return errors.New("failed to convert Kubernetes server minor version to float")
 	}
 
 	if math.Abs(deschedulerMinorVersionFloat-kubernetesMinorVersionFloat) > 3 {
-		klog.Warningf("Warning: Descheduler minor version %v is not supported on your version of Kubernetes %v.%v. See compatibility docs for more info: https://github.com/kubernetes-sigs/descheduler#compatibility-matrix", deschedulerMinorVersion, serverVersion.Major, serverVersion.Minor)
+		return fmt.Errorf(
+			"descheduler minor version %v is not supported on your version of Kubernetes %v.%v. "+
+				"See compatibility docs for more info: https://github.com/kubernetes-sigs/descheduler#compatibility-matrix",
+			deschedulerMinorVersion,
+			serverVersion.Major,
+			serverVersion.Minor,
+		)
 	}
+
+	return nil
 }
 
 func cachedClient(
