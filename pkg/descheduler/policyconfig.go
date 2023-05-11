@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"os"
 
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
@@ -133,27 +135,22 @@ func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interfac
 }
 
 func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginregistry.Registry) error {
-	var errorsInProfiles error
+	var errorsInProfiles []error
 	for _, profile := range in.Profiles {
 		for _, pluginConfig := range profile.PluginConfigs {
-			if _, ok := registry[pluginConfig.Name]; ok {
-				pluginUtilities := registry[pluginConfig.Name]
-				if pluginUtilities.PluginArgValidator == nil {
-					continue
-				}
-				err := pluginUtilities.PluginArgValidator(pluginConfig.Args)
-				if err != nil {
-					if errorsInProfiles == nil {
-						errorsInProfiles = fmt.Errorf("in profile %s: %s", profile.Name, err.Error())
-					} else {
-						errorsInProfiles = fmt.Errorf("%w: %s", errorsInProfiles, fmt.Sprintf("in profile %s: %s", profile.Name, err.Error()))
-					}
-				}
-			} else {
-				errorsInProfiles = fmt.Errorf("%w: %s", errorsInProfiles, fmt.Sprintf("in profile %s: plugin %s in pluginConfig not registered", profile.Name, pluginConfig.Name))
+			if _, ok := registry[pluginConfig.Name]; !ok {
+				errorsInProfiles = append(errorsInProfiles, fmt.Errorf("in profile %s: plugin %s in pluginConfig not registered", profile.Name, pluginConfig.Name))
 				continue
+			}
+
+			pluginUtilities := registry[pluginConfig.Name]
+			if pluginUtilities.PluginArgValidator == nil {
+				continue
+			}
+			if err := pluginUtilities.PluginArgValidator(pluginConfig.Args); err != nil {
+				errorsInProfiles = append(errorsInProfiles, fmt.Errorf("in profile %s: %s", profile.Name, err.Error()))
 			}
 		}
 	}
-	return errorsInProfiles
+	return utilerrors.NewAggregate(errorsInProfiles)
 }

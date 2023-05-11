@@ -985,7 +985,7 @@ func TestValidateDeschedulerConfiguration(t *testing.T) {
 					},
 				},
 			},
-			result: fmt.Errorf("in profile RemoveFailedPods: only one of Include/Exclude namespaces can be set: in profile RemovePodsViolatingTopologySpreadConstraint: only one of Include/Exclude namespaces can be set"),
+			result: fmt.Errorf("[in profile RemoveFailedPods: only one of Include/Exclude namespaces can be set, in profile RemovePodsViolatingTopologySpreadConstraint: only one of Include/Exclude namespaces can be set]"),
 		},
 	}
 
