@@ -170,17 +170,18 @@ Deschedule Plugins: These plugins process pods one by one, and evict them in a s
 
 Balance Plugins: These plugins process all pods, or groups of pods, and determine which pods to evict based on how the group was intended to be spread.
 
-|Name|Extension Point Implemented|Description|
-|----|-----------|-----------|
-| [RemoveDuplicates](#removeduplicates) |Balance|Spreads replicas|
-| [LowNodeUtilization](#lownodeutilization) |Balance|Spreads pods according to pods resource requests and node resources available|
-| [HighNodeUtilization](#highnodeutilization) |Balance|Spreads pods according to pods resource requests and node resources available|
-| [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity) |Deschedule|Evicts pods violating pod anti affinity|
-| [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity) |Deschedule|Evicts pods violating node affinity|
-| [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints) |Deschedule|Evicts pods violating node taints|
-| [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint) |Balance|Evicts pods violating TopologySpreadConstraints|
-| [PodLifeTime](#podlifetime) |Deschedule|Evicts pods that have exceeded a specified age limit|
-| [RemoveFailedPods](#removefailedpods) |Deschedule|Evicts pods with certain failed reasons|
+|Name|Extension Point Implemented| Description                                                                   |
+|----|-----------|-------------------------------------------------------------------------------|
+| [RemoveDuplicates](#removeduplicates) |Balance| Spreads replicas                                                              |
+| [LowNodeUtilization](#lownodeutilization) |Balance| Spreads pods according to pods resource requests and node resources available |
+| [HighNodeUtilization](#highnodeutilization) |Balance| Spreads pods according to pods resource requests and node resources available |
+| [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity) |Deschedule| Evicts pods violating pod anti affinity                                       |
+| [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity) |Deschedule| Evicts pods violating node affinity                                           |
+| [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints) |Deschedule| Evicts pods violating node taints                                             |
+| [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint) |Balance| Evicts pods violating TopologySpreadConstraints                               |
+| [PodLifeTime](#podlifetime) |Deschedule| Evicts pods that have exceeded a specified age limit                          |
+| [RemoveFailedPods](#removefailedpods) |Deschedule| Evicts pods with certain failed reasons                                       |
+| [ScaleDownDeploymentHavingTooManyPodRestarts](#scaledowndeploymenthavingtoomanypodrestarts) |Deschedule| Scales down a deployment to zero when its pods have too many restarts         |
 
 
 ### RemoveDuplicates
@@ -685,6 +686,44 @@ profiles:
       deschedule:
         enabled:
           - "RemoveFailedPods"
+```
+
+### ScaleDownDeploymentHavingTooManyPodRestarts
+
+This strategy prevents pods with a high number of restarts from attempting further restarts.
+Unlike `RemovePodsHavingTooManyRestarts`, this strategy is useful when changing to a different node will not solve the root cause of the failure.
+This is particularly useful for saving resources when an application is stuck in an endless startup loop.
+It's also useful in development environments where application failures are common occurrences.
+When at least `replicasThreshold` pods have restarted more than `podRestartThreshold` times, the deployment will be scaled down to zero replicas.
+If `replicasThreshold` is 0, the deployment is scaled down to zero replicas when all pods' restarts exceeds the threshold.
+
+**Parameters:**
+
+|Name|Type|
+|---|---|
+|`replicasThreshold`|int|
+|`podRestartThreshold`|int|
+|`includingInitContainers`|bool|
+|`namespaces`|(see [namespace filtering](#namespace-filtering))|
+|`labelSelector`|(see [label filtering](#label-filtering))|
+
+**Example:**
+
+```yaml
+apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "ScaleDownDeploymentHavingTooManyPodRestarts"
+      args:
+        replicasThreshold: 3
+        podRestartThreshold: 100
+        includingInitContainers: true
+    plugins:
+      deschedule:
+        enabled:
+          - "ScaleDownDeploymentHavingTooManyPodRestarts"
 ```
 
 ## Filter Pods

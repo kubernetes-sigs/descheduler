@@ -50,6 +50,8 @@ IMAGE_GCLOUD:=$(REGISTRY)/descheduler:$(VERSION)
 
 HAS_HELM := $(shell which helm 2> /dev/null)
 
+K8S_VERSION?=v1.26.0
+
 all: build
 
 build:
@@ -164,7 +166,7 @@ test-helm: ensure-helm-install
 	./test/run-helm-tests.sh
 
 kind-multi-node:
-	kind create cluster --name kind --config ./hack/kind_config.yaml --wait 2m
+	kind create cluster --name kind --config ./hack/kind_config.yaml --wait 2m --image kindest/node:$(K8S_VERSION)
 
 ct-helm:
 	./hack/verify-chart.sh

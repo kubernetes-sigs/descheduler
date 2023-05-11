@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scaledowndeploymenthavingtoomanyrestarts
+package scaledowndeploymenthavingtoomanypodrestarts
 
 import (
 	"fmt"
@@ -34,8 +34,12 @@ func ValidateScaleDownDeploymentHavingTooManyPodRestartsArgs(obj runtime.Object)
 		}
 	}
 
+	if *args.ReplicasThreshold < 0 {
+		return fmt.Errorf("invalid ReplicasThreshold, must be greater than or equal to 0")
+	}
+
 	if args.PodRestartThreshold < 1 {
-		return fmt.Errorf("invalid PodsHavingTooManyRestarts threshold")
+		return fmt.Errorf("invalid PodsHavingTooManyRestarts threshold, must be greater than or equal to 1")
 	}
 
 	return nil

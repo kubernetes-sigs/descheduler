@@ -11,10 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scaledowndeploymenthavingtoomanyrestarts
+package scaledowndeploymenthavingtoomanypodrestarts
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
@@ -25,8 +26,13 @@ import (
 type ScaleDownDeploymentHavingTooManyPodRestartsArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	Namespaces              *api.Namespaces       `json:"namespaces"`
-	LabelSelector           *metav1.LabelSelector `json:"labelSelector"`
-	PodRestartThreshold     int32                 `json:"podRestartThreshold"`
-	IncludingInitContainers bool                  `json:"includingInitContainers"`
+	Namespaces    *api.Namespaces       `json:"namespaces"`
+	LabelSelector *metav1.LabelSelector `json:"labelSelector"`
+
+	// Scales down the deployment to zero replicas when at least ReplicasThreshold pods have restarted more than PodRestartThreshold times.
+	// If ReplicasThreshold is 0, the deployment is scaled down to zero replicas when all pods' restarts exceeds the threshold.
+	// Defaults to 1.
+	ReplicasThreshold       *int32 `json:"replicasThreshold"`
+	PodRestartThreshold     int32  `json:"podRestartThreshold"`
+	IncludingInitContainers bool   `json:"includingInitContainers"`
 }

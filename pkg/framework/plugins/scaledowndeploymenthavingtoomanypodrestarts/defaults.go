@@ -11,18 +11,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scaledowndeploymenthavingtoomanyrestarts
+package scaledowndeploymenthavingtoomanypodrestarts
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/pointer"
 )
 
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
-// SetDefaults_ScaleDownDeploymentHavingTooManyPodRestartsArgs
-// TODO: the final default values would be discussed in community
 func SetDefaults_ScaleDownDeploymentHavingTooManyPodRestartsArgs(obj runtime.Object) {
 	args := obj.(*ScaleDownDeploymentHavingTooManyPodRestartsArgs)
 	if args.Namespaces == nil {
@@ -30,6 +29,9 @@ func SetDefaults_ScaleDownDeploymentHavingTooManyPodRestartsArgs(obj runtime.Obj
 	}
 	if args.LabelSelector == nil {
 		args.LabelSelector = nil
+	}
+	if args.ReplicasThreshold == nil {
+		args.ReplicasThreshold = pointer.Int32(1)
 	}
 	if args.PodRestartThreshold == 0 {
 		args.PodRestartThreshold = 0

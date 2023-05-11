@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scaledowndeploymenthavingtoomanyrestarts
+package scaledowndeploymenthavingtoomanypodrestarts
 
 import (
 	"testing"
@@ -20,36 +20,41 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/utils/pointer"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
-func TestSetDefaults_RemovePodsHavingTooManyRestartsArgs(t *testing.T) {
+func TestSetDefaults_ScaleDownDeploymentHavingTooManyPodRestartsArgs(t *testing.T) {
 	tests := []struct {
 		name string
 		in   runtime.Object
 		want runtime.Object
 	}{
 		{
-			name: "RemovePodsHavingTooManyRestartsArgs empty",
-			in:   &RemovePodsHavingTooManyRestartsArgs{},
-			want: &RemovePodsHavingTooManyRestartsArgs{
+			name: "ScaleDownDeploymentHavingTooManyPodRestartsArgs empty",
+			in:   &ScaleDownDeploymentHavingTooManyPodRestartsArgs{},
+			want: &ScaleDownDeploymentHavingTooManyPodRestartsArgs{
 				Namespaces:              nil,
 				LabelSelector:           nil,
+				ReplicasThreshold:       pointer.Int32(1),
 				PodRestartThreshold:     0,
 				IncludingInitContainers: false,
 			},
 		},
 		{
-			name: "RemovePodsHavingTooManyRestartsArgs with value",
-			in: &RemovePodsHavingTooManyRestartsArgs{
+			name: "ScaleDownDeploymentHavingTooManyPodRestartsArgs with value",
+			in: &ScaleDownDeploymentHavingTooManyPodRestartsArgs{
 				Namespaces:              &api.Namespaces{},
 				LabelSelector:           &metav1.LabelSelector{},
+				ReplicasThreshold:       pointer.Int32(0),
 				PodRestartThreshold:     10,
 				IncludingInitContainers: true,
 			},
-			want: &RemovePodsHavingTooManyRestartsArgs{
+			want: &ScaleDownDeploymentHavingTooManyPodRestartsArgs{
 				Namespaces:              &api.Namespaces{},
 				LabelSelector:           &metav1.LabelSelector{},
+				ReplicasThreshold:       pointer.Int32(0),
 				PodRestartThreshold:     10,
 				IncludingInitContainers: true,
 			},
@@ -60,6 +65,7 @@ func TestSetDefaults_RemovePodsHavingTooManyRestartsArgs(t *testing.T) {
 		utilruntime.Must(AddToScheme(scheme))
 		t.Run(tc.name, func(t *testing.T) {
 			scheme.Default(tc.in)
+			SetDefaults_ScaleDownDeploymentHavingTooManyPodRestartsArgs(tc.in)
 			if diff := cmp.Diff(tc.in, tc.want); diff != "" {
 				t.Errorf("Got unexpected defaults (-want, +got):\n%s", diff)
 			}
