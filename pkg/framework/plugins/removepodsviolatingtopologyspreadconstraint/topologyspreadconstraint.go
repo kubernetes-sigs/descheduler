@@ -113,10 +113,10 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 	}
 	klog.V(1).InfoS("Processing namespaces for topology spread constraints")
 	podsForEviction := make(map[*v1.Pod]struct{})
-	var includedNamespaces, excludedNamespaces sets.String
+	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if d.args.Namespaces != nil {
-		includedNamespaces = sets.NewString(d.args.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(d.args.Namespaces.Exclude...)
+		includedNamespaces = sets.New(d.args.Namespaces.Include...)
+		excludedNamespaces = sets.New(d.args.Namespaces.Exclude...)
 	}
 
 	// 1. for each namespace...

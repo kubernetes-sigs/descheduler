@@ -50,10 +50,10 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("want args to be of type RemovePodsHavingTooManyRestartsArgs, got %T", args)
 	}
 
-	var includedNamespaces, excludedNamespaces sets.String
+	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if tooManyRestartsArgs.Namespaces != nil {
-		includedNamespaces = sets.NewString(tooManyRestartsArgs.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(tooManyRestartsArgs.Namespaces.Exclude...)
+		includedNamespaces = sets.New(tooManyRestartsArgs.Namespaces.Include...)
+		excludedNamespaces = sets.New(tooManyRestartsArgs.Namespaces.Exclude...)
 	}
 
 	// We can combine Filter and PreEvictionFilter since for this strategy it does not matter where we run PreEvictionFilter

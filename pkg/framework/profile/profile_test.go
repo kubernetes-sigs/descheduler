@@ -444,19 +444,19 @@ func TestProfileExtensionPoints(t *testing.T) {
 
 	// Validate the extension points of all registered plugins are properly detected
 
-	diff := cmp.Diff(sets.NewString("DeschedulePlugin_0", "DeschedulePlugin_1", "DeschedulePlugin_2", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2"), prfl.deschedule)
+	diff := cmp.Diff(sets.New("DeschedulePlugin_0", "DeschedulePlugin_1", "DeschedulePlugin_2", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2"), prfl.deschedule)
 	if diff != "" {
 		t.Errorf("check for deschedule failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
-	diff = cmp.Diff(sets.NewString("BalancePlugin_0", "BalancePlugin_1", "BalancePlugin_2", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2"), prfl.balance)
+	diff = cmp.Diff(sets.New("BalancePlugin_0", "BalancePlugin_1", "BalancePlugin_2", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2"), prfl.balance)
 	if diff != "" {
 		t.Errorf("check for balance failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
-	diff = cmp.Diff(sets.NewString("DefaultEvictor", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2", "FilterPlugin_0", "FilterPlugin_1", "FilterPlugin_2"), prfl.filter)
+	diff = cmp.Diff(sets.New("DefaultEvictor", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2", "FilterPlugin_0", "FilterPlugin_1", "FilterPlugin_2"), prfl.filter)
 	if diff != "" {
 		t.Errorf("check for filter failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
-	diff = cmp.Diff(sets.NewString("DefaultEvictor", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2", "FilterPlugin_0", "FilterPlugin_1", "FilterPlugin_2"), prfl.preEvictionFilter)
+	diff = cmp.Diff(sets.New("DefaultEvictor", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2", "FilterPlugin_0", "FilterPlugin_1", "FilterPlugin_2"), prfl.preEvictionFilter)
 	if diff != "" {
 		t.Errorf("check for preEvictionFilter failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
@@ -467,7 +467,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 		names = append(names, pl.Name())
 	}
 	sort.Strings(names)
-	diff = cmp.Diff(sets.NewString("FakePlugin_0"), sets.NewString(names...))
+	diff = cmp.Diff(sets.New("FakePlugin_0"), sets.New(names...))
 	if diff != "" {
 		t.Errorf("check for deschedule failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
@@ -478,7 +478,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 		names = append(names, pl.Name())
 	}
 	sort.Strings(names)
-	diff = cmp.Diff(sets.NewString(), sets.NewString(names...))
+	diff = cmp.Diff(sets.New[string](), sets.New(names...))
 	if diff != "" {
 		t.Errorf("check for balance failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
@@ -489,7 +489,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 		names = append(names, pl.Name())
 	}
 	sort.Strings(names)
-	diff = cmp.Diff(sets.NewString("DefaultEvictor", "FilterPlugin_0", "FilterPlugin_1"), sets.NewString(names...))
+	diff = cmp.Diff(sets.New("DefaultEvictor", "FilterPlugin_0", "FilterPlugin_1"), sets.New(names...))
 	if diff != "" {
 		t.Errorf("check for filter failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
