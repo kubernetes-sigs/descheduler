@@ -50,10 +50,10 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("want args to be of type RemoveFailedPodsArgs, got %T", args)
 	}
 
-	var includedNamespaces, excludedNamespaces sets.String
+	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if failedPodsArgs.Namespaces != nil {
-		includedNamespaces = sets.NewString(failedPodsArgs.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(failedPodsArgs.Namespaces.Exclude...)
+		includedNamespaces = sets.New(failedPodsArgs.Namespaces.Include...)
+		excludedNamespaces = sets.New(failedPodsArgs.Namespaces.Exclude...)
 	}
 
 	// We can combine Filter and PreEvictionFilter since for this strategy it does not matter where we run PreEvictionFilter
@@ -126,7 +126,7 @@ func validateCanEvict(pod *v1.Pod, failedPodArgs *RemoveFailedPodsArgs) error {
 	if len(failedPodArgs.ExcludeOwnerKinds) > 0 {
 		ownerRefList := podutil.OwnerRef(pod)
 		for _, owner := range ownerRefList {
-			if sets.NewString(failedPodArgs.ExcludeOwnerKinds...).Has(owner.Kind) {
+			if sets.New(failedPodArgs.ExcludeOwnerKinds...).Has(owner.Kind) {
 				errs = append(errs, fmt.Errorf("pod's owner kind of %s is excluded", owner.Kind))
 			}
 		}
@@ -143,7 +143,7 @@ func validateCanEvict(pod *v1.Pod, failedPodArgs *RemoveFailedPodsArgs) error {
 			reasons = append(reasons, getFailedContainerStatusReasons(pod.Status.InitContainerStatuses)...)
 		}
 
-		if !sets.NewString(failedPodArgs.Reasons...).HasAny(reasons...) {
+		if !sets.New(failedPodArgs.Reasons...).HasAny(reasons...) {
 			errs = append(errs, fmt.Errorf("pod does not match any of the reasons"))
 		}
 	}

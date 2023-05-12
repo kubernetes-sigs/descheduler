@@ -49,10 +49,10 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("want args to be of type PodLifeTimeArgs, got %T", args)
 	}
 
-	var includedNamespaces, excludedNamespaces sets.String
+	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if podLifeTimeArgs.Namespaces != nil {
-		includedNamespaces = sets.NewString(podLifeTimeArgs.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(podLifeTimeArgs.Namespaces.Exclude...)
+		includedNamespaces = sets.New(podLifeTimeArgs.Namespaces.Include...)
+		excludedNamespaces = sets.New(podLifeTimeArgs.Namespaces.Exclude...)
 	}
 
 	// We can combine Filter and PreEvictionFilter since for this strategy it does not matter where we run PreEvictionFilter
@@ -72,7 +72,7 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 	})
 
 	if len(podLifeTimeArgs.States) > 0 {
-		states := sets.NewString(podLifeTimeArgs.States...)
+		states := sets.New(podLifeTimeArgs.States...)
 		podFilter = podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
 			if states.Has(string(pod.Status.Phase)) {
 				return true

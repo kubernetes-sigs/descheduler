@@ -1215,12 +1215,12 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			}
 
 			if tc.expectedEvictedPods != nil {
-				diff := sets.NewString(tc.expectedEvictedPods...).Difference(sets.NewString(evictedPods...))
+				diff := sets.New(tc.expectedEvictedPods...).Difference(sets.New(evictedPods...))
 				if diff.Len() > 0 {
 					t.Errorf(
 						"Expected pods %v to be evicted but %v were not evicted. Actual pods evicted: %v",
 						tc.expectedEvictedPods,
-						diff.List(),
+						diff.UnsortedList(),
 						evictedPods,
 					)
 				}

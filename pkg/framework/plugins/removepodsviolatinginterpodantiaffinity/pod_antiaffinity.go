@@ -50,10 +50,10 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingInterPodAntiAffinityArgs, got %T", args)
 	}
 
-	var includedNamespaces, excludedNamespaces sets.String
+	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if interPodAntiAffinityArgs.Namespaces != nil {
-		includedNamespaces = sets.NewString(interPodAntiAffinityArgs.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(interPodAntiAffinityArgs.Namespaces.Exclude...)
+		includedNamespaces = sets.New(interPodAntiAffinityArgs.Namespaces.Include...)
+		excludedNamespaces = sets.New(interPodAntiAffinityArgs.Namespaces.Exclude...)
 	}
 
 	podFilter, err := podutil.NewOptions().
