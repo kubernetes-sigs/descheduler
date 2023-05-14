@@ -26,7 +26,7 @@ import (
 	"k8s.io/klog/v2"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 const LowNodeUtilizationPluginName = "LowNodeUtilization"
@@ -35,15 +35,15 @@ const LowNodeUtilizationPluginName = "LowNodeUtilization"
 // to calculate nodes' utilization and not the actual resource usage.
 
 type LowNodeUtilization struct {
-	handle    framework.Handle
+	handle    frameworktypes.Handle
 	args      *LowNodeUtilizationArgs
 	podFilter func(pod *v1.Pod) bool
 }
 
-var _ framework.BalancePlugin = &LowNodeUtilization{}
+var _ frameworktypes.BalancePlugin = &LowNodeUtilization{}
 
 // NewLowNodeUtilization builds plugin from its arguments while passing a handle
-func NewLowNodeUtilization(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	lowNodeUtilizationArgsArgs, ok := args.(*LowNodeUtilizationArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type LowNodeUtilizationArgs, got %T", args)
@@ -69,7 +69,7 @@ func (l *LowNodeUtilization) Name() string {
 }
 
 // Balance extension point implementation for the plugin
-func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	useDeviationThresholds := l.args.UseDeviationThresholds
 	thresholds := l.args.Thresholds
 	targetThresholds := l.args.TargetThresholds

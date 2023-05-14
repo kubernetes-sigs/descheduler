@@ -9,18 +9,18 @@ import (
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 type HandleImpl struct {
 	ClientsetImpl                 clientset.Interface
 	GetPodsAssignedToNodeFuncImpl podutil.GetPodsAssignedToNodeFunc
 	SharedInformerFactoryImpl     informers.SharedInformerFactory
-	EvictorFilterImpl             framework.EvictorPlugin
+	EvictorFilterImpl             frameworktypes.EvictorPlugin
 	PodEvictorImpl                *evictions.PodEvictor
 }
 
-var _ framework.Handle = &HandleImpl{}
+var _ frameworktypes.Handle = &HandleImpl{}
 
 func (hi *HandleImpl) ClientSet() clientset.Interface {
 	return hi.ClientsetImpl
@@ -34,7 +34,7 @@ func (hi *HandleImpl) SharedInformerFactory() informers.SharedInformerFactory {
 	return hi.SharedInformerFactoryImpl
 }
 
-func (hi *HandleImpl) Evictor() framework.Evictor {
+func (hi *HandleImpl) Evictor() frameworktypes.Evictor {
 	return hi
 }
 

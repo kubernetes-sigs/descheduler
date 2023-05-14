@@ -4,6 +4,9 @@ Starting with descheduler release v0.10.0 container images are available in the 
 
 Descheduler Version | Container Image                                 | Architectures           |
 ------------------- |-------------------------------------------------|-------------------------|
+v0.27.0             | registry.k8s.io/descheduler/descheduler:v0.27.0 | AMD64<br>ARM64<br>ARMv7 |
+v0.26.1             | registry.k8s.io/descheduler/descheduler:v0.26.1 | AMD64<br>ARM64<br>ARMv7 |
+v0.26.0             | registry.k8s.io/descheduler/descheduler:v0.26.0 | AMD64<br>ARM64<br>ARMv7 |
 v0.25.1             | registry.k8s.io/descheduler/descheduler:v0.25.1 | AMD64<br>ARM64<br>ARMv7 |
 v0.25.0             | registry.k8s.io/descheduler/descheduler:v0.25.0 | AMD64<br>ARM64<br>ARMv7 |
 v0.24.1             | registry.k8s.io/descheduler/descheduler:v0.24.1 | AMD64<br>ARM64<br>ARMv7 |
@@ -51,19 +54,23 @@ descheduler -v=3 --evict-local-storage-pods --policy-config-file=pod-life-time.y
 This policy configuration file ensures that pods created more than 7 days ago are evicted.
 ```
 ---
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
-strategies:
-  "PodLifeTime":
-    enabled: true
-    params:
-      podLifeTime:
-        maxPodLifeTimeSeconds: 604800 # pods run for a maximum of 7 days
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "PodLifeTime"
+      args:
+        maxPodLifeTimeSeconds: 604800
+    plugins:
+      deschedule:
+        enabled:
+          - "PodLifeTime"
 ```
 
 ### Balance Cluster By Node Memory Utilization
 If your cluster has been running for a long period of time, you may find that the resource utilization is not very
-balanced. The following two strategies can be used to rebalance your cluster based on `cpu`, `memory` 
+balanced. The following two strategies can be used to rebalance your cluster based on `cpu`, `memory`
 or `number of pods`.
 
 #### Balance high utilization nodes
@@ -71,17 +78,21 @@ Using `LowNodeUtilization`, descheduler will rebalance the cluster based on memo
 from nodes with memory utilization over 70% to nodes with memory utilization below 20%.
 
 ```
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
-strategies:
-  "LowNodeUtilization":
-    enabled: true
-    params:
-      nodeResourceUtilizationThresholds:
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "LowNodeUtilization"
+      args:
         thresholds:
           "memory": 20
         targetThresholds:
           "memory": 70
+    plugins:
+      balance:
+        enabled:
+          - "LowNodeUtilization"
 ```
 
 #### Balance low utilization nodes
@@ -90,15 +101,19 @@ from nodes with memory utilization lower than 20%. This should be use `NodeResou
 The evicted pods will be compacted into minimal set of nodes.
 
 ```
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
-strategies:
-  "HighNodeUtilization":
-    enabled: true
-    params:
-      nodeResourceUtilizationThresholds:
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "HighNodeUtilization"
+      args:
         thresholds:
           "memory": 20
+    plugins:
+      balance:
+        enabled:
+          - "HighNodeUtilization"
 ```
 
 ### Autoheal Node Problems

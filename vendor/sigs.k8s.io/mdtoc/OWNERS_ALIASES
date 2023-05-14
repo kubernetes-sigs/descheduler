@@ -7,7 +7,9 @@ aliases:
     - johnbelamaric
     - jeremyrickard
   sig-release-leads:
-    - alejandrox1
+    - cpanato
+    - jeremyrickard
     - justaugustus
+    - LappleApple
+    - puerco
     - saschagrunert
-    - tpepper

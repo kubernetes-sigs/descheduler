@@ -22,6 +22,16 @@ resources:
   #   cpu: 100m
   #   memory: 128Mi
 
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  privileged: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
 nameOverride: ""
 fullnameOverride: ""
 
@@ -59,6 +69,9 @@ leaderElection: {}
 
 cmdOptions:
   v: 3
+
+# Recommended to use the latest Policy API version supported by the Descheduler app version
+deschedulerPolicyAPIVersion: "descheduler/v1alpha1"
 
 deschedulerPolicy:
   # nodeSelector: "key1=value1,key2=value2"

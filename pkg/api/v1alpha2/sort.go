@@ -18,7 +18,7 @@ package v1alpha2
 
 import "sort"
 
-func SortProfilesByName(profiles []Profile) []Profile {
+func SortDeschedulerProfileByName(profiles []DeschedulerProfile) []DeschedulerProfile {
 	sort.Slice(profiles, func(i, j int) bool {
 		return profiles[i].Name < profiles[j].Name
 	})

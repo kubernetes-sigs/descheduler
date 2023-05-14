@@ -21,26 +21,37 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/conversion"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
-	"sigs.k8s.io/descheduler/pkg/utils"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
+)
+
+var (
+	// pluginArgConversionScheme is a scheme with internal and v1alpha2 registered,
+	// used for defaulting/converting typed PluginConfig Args.
+	// Access via getPluginArgConversionScheme()
+
+	Scheme = runtime.NewScheme()
+	Codecs = serializer.NewCodecFactory(Scheme, serializer.EnableStrict)
 )
 
 // evictorImpl implements the Evictor interface so plugins
 // can evict a pod without importing a specific pod evictor
 type evictorImpl struct {
 	podEvictor    *evictions.PodEvictor
-	evictorFilter framework.EvictorPlugin
+	evictorFilter frameworktypes.EvictorPlugin
 }
 
-var _ framework.Evictor = &evictorImpl{}
+var _ frameworktypes.Evictor = &evictorImpl{}
 
 // Filter checks if a pod can be evicted
 func (ei *evictorImpl) Filter(pod *v1.Pod) bool {
@@ -69,7 +80,7 @@ type handleImpl struct {
 	evictor                   *evictorImpl
 }
 
-var _ framework.Handle = &handleImpl{}
+var _ frameworktypes.Handle = &handleImpl{}
 
 // ClientSet retrieves kube client set
 func (hi *handleImpl) ClientSet() clientset.Interface {
@@ -87,15 +98,24 @@ func (hi *handleImpl) SharedInformerFactory() informers.SharedInformerFactory {
 }
 
 // Evictor retrieves evictor so plugins can filter and evict pods
-func (hi *handleImpl) Evictor() framework.Evictor {
+func (hi *handleImpl) Evictor() frameworktypes.Evictor {
 	return hi.evictor
 }
 
+func Convert_v1alpha1_DeschedulerPolicy_To_api_DeschedulerPolicy(in *DeschedulerPolicy, out *api.DeschedulerPolicy, s conversion.Scope) error {
+	err := V1alpha1ToInternal(in, pluginregistry.PluginRegistry, out, s)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func V1alpha1ToInternal(
-	client clientset.Interface,
 	deschedulerPolicy *DeschedulerPolicy,
 	registry pluginregistry.Registry,
-) (*api.DeschedulerPolicy, error) {
+	out *api.DeschedulerPolicy,
+	s conversion.Scope,
+) error {
 	var evictLocalStoragePods bool
 	if deschedulerPolicy.EvictLocalStoragePods != nil {
 		evictLocalStoragePods = *deschedulerPolicy.EvictLocalStoragePods
@@ -122,7 +142,7 @@ func V1alpha1ToInternal(
 		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
 	}
 
-	var profiles []api.Profile
+	var profiles []api.DeschedulerProfile
 
 	// Build profiles
 	for name, strategy := range deschedulerPolicy.Strategies {
@@ -140,7 +160,7 @@ func V1alpha1ToInternal(
 
 				if params.ThresholdPriority != nil && params.ThresholdPriorityClassName != "" {
 					klog.ErrorS(fmt.Errorf("priority threshold misconfigured"), "only one of priorityThreshold fields can be set", "pluginName", name)
-					return nil, fmt.Errorf("priority threshold misconfigured for plugin %v", name)
+					return fmt.Errorf("priority threshold misconfigured for plugin %v", name)
 				}
 
 				var priorityThreshold *api.PriorityThreshold
@@ -150,25 +170,21 @@ func V1alpha1ToInternal(
 						Name:  strategy.Params.ThresholdPriorityClassName,
 					}
 				}
-				thresholdPriority, err := utils.GetPriorityFromStrategyParams(context.TODO(), client, priorityThreshold)
-				if err != nil {
-					klog.ErrorS(err, "Failed to get threshold priority from strategy's params")
-					return nil, fmt.Errorf("failed to get threshold priority from strategy's params: %v", err)
-				}
 
 				var pluginConfig *api.PluginConfig
+				var err error
 				if pcFnc, exists := StrategyParamsToPluginArgs[string(name)]; exists {
 					pluginConfig, err = pcFnc(params)
 					if err != nil {
 						klog.ErrorS(err, "skipping strategy", "strategy", name)
-						return nil, fmt.Errorf("failed to get plugin config for strategy %v: %v", name, err)
+						return fmt.Errorf("failed to get plugin config for strategy %v: %v", name, err)
 					}
 				} else {
 					klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
-					return nil, fmt.Errorf("unknown strategy name: %v", name)
+					return fmt.Errorf("unknown strategy name: %v", name)
 				}
 
-				profile := api.Profile{
+				profile := api.DeschedulerProfile{
 					Name: fmt.Sprintf("strategy-%v-profile", name),
 					PluginConfigs: []api.PluginConfig{
 						{
@@ -179,15 +195,16 @@ func V1alpha1ToInternal(
 								IgnorePvcPods:           ignorePvcPods,
 								EvictFailedBarePods:     evictBarePods,
 								NodeFit:                 nodeFit,
-								PriorityThreshold: &api.PriorityThreshold{
-									Value: &thresholdPriority,
-								},
+								PriorityThreshold:       priorityThreshold,
 							},
 						},
 						*pluginConfig,
 					},
 					Plugins: api.Plugins{
-						Evict: api.PluginSet{
+						Filter: api.PluginSet{
+							Enabled: []string{defaultevictor.PluginName},
+						},
+						PreEvictionFilter: api.PluginSet{
 							Enabled: []string{defaultevictor.PluginName},
 						},
 					},
@@ -197,7 +214,7 @@ func V1alpha1ToInternal(
 				pluginInstance, err := registry[string(name)].PluginBuilder(pluginArgs, &handleImpl{})
 				if err != nil {
 					klog.ErrorS(fmt.Errorf("could not build plugin"), "plugin build error", "plugin", name)
-					return nil, fmt.Errorf("could not build plugin: %v", name)
+					return fmt.Errorf("could not build plugin: %v", name)
 				}
 
 				// pluginInstance can be of any of each type, or both
@@ -207,38 +224,48 @@ func V1alpha1ToInternal(
 			}
 		} else {
 			klog.ErrorS(fmt.Errorf("unknown strategy name"), "skipping strategy", "strategy", name)
-			return nil, fmt.Errorf("unknown strategy name: %v", name)
+			return fmt.Errorf("unknown strategy name: %v", name)
 		}
 	}
 
-	return &api.DeschedulerPolicy{
-		Profiles:                       profiles,
-		NodeSelector:                   deschedulerPolicy.NodeSelector,
-		MaxNoOfPodsToEvictPerNode:      deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
-		MaxNoOfPodsToEvictPerNamespace: deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
-	}, nil
+	out.Profiles = profiles
+	out.NodeSelector = deschedulerPolicy.NodeSelector
+	out.MaxNoOfPodsToEvictPerNamespace = deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace
+	out.MaxNoOfPodsToEvictPerNode = deschedulerPolicy.MaxNoOfPodsToEvictPerNode
+
+	return nil
 }
 
-func enableProfilePluginsByType(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
+func enableProfilePluginsByType(profilePlugins api.Plugins, pluginInstance frameworktypes.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
 	profilePlugins = checkBalance(profilePlugins, pluginInstance, pluginConfig)
 	profilePlugins = checkDeschedule(profilePlugins, pluginInstance, pluginConfig)
 	return profilePlugins
 }
 
-func checkBalance(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
-	_, ok := pluginInstance.(framework.BalancePlugin)
+func checkBalance(profilePlugins api.Plugins, pluginInstance frameworktypes.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
+	_, ok := pluginInstance.(frameworktypes.BalancePlugin)
 	if ok {
-		klog.V(3).Info("converting Balance plugin: %s", pluginInstance.Name())
+		klog.V(3).Infof("converting Balance plugin: %s", pluginInstance.Name())
 		profilePlugins.Balance.Enabled = []string{pluginConfig.Name}
 	}
 	return profilePlugins
 }
 
-func checkDeschedule(profilePlugins api.Plugins, pluginInstance framework.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
-	_, ok := pluginInstance.(framework.DeschedulePlugin)
+func checkDeschedule(profilePlugins api.Plugins, pluginInstance frameworktypes.Plugin, pluginConfig *api.PluginConfig) api.Plugins {
+	_, ok := pluginInstance.(frameworktypes.DeschedulePlugin)
 	if ok {
-		klog.V(3).Info("converting Deschedule plugin: %s", pluginInstance.Name())
+		klog.V(3).Infof("converting Deschedule plugin: %s", pluginInstance.Name())
 		profilePlugins.Deschedule.Enabled = []string{pluginConfig.Name}
 	}
 	return profilePlugins
+}
+
+// Register Conversions
+func RegisterConversions(s *runtime.Scheme) error {
+	if err := s.AddGeneratedConversionFunc((*DeschedulerPolicy)(nil), (*api.DeschedulerPolicy)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha1_DeschedulerPolicy_To_api_DeschedulerPolicy(a.(*DeschedulerPolicy), b.(*api.DeschedulerPolicy), scope)
+	}); err != nil {
+		return err
+	}
+	return nil
 }

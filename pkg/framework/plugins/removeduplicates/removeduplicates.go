@@ -34,7 +34,7 @@ import (
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 const PluginName = "RemoveDuplicates"
@@ -45,12 +45,12 @@ const PluginName = "RemoveDuplicates"
 // As of now, this plugin won't evict daemonsets, mirror pods, critical pods and pods with local storages.
 
 type RemoveDuplicates struct {
-	handle    framework.Handle
+	handle    frameworktypes.Handle
 	args      *RemoveDuplicatesArgs
 	podFilter podutil.FilterFunc
 }
 
-var _ framework.BalancePlugin = &RemoveDuplicates{}
+var _ frameworktypes.BalancePlugin = &RemoveDuplicates{}
 
 type podOwner struct {
 	namespace, kind, name string
@@ -58,7 +58,7 @@ type podOwner struct {
 }
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	removeDuplicatesArgs, ok := args.(*RemoveDuplicatesArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemoveDuplicatesArgs, got %T", args)
@@ -93,7 +93,7 @@ func (r *RemoveDuplicates) Name() string {
 }
 
 // Balance extension point implementation for the plugin
-func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	duplicatePods := make(map[podOwner]map[string][]*v1.Pod)
 	ownerKeyOccurence := make(map[podOwner]int32)
 	nodeCount := 0

@@ -1,0 +1,38 @@
+name: manifests
+
+on:
+  pull_request:
+
+jobs:
+  deploy:
+    strategy: 
+      matrix:
+        k8s-version: ["v1.27.0"]
+        descheduler-version: ["v0.27.0"]
+        descheduler-api: ["v1alpha1", "v1alpha2"]
+        manifest: ["deployment"]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.5.0
+        with:
+          node_image: kindest/node:${{ matrix.k8s-version }}
+          kubectl_version: ${{ matrix.k8s-version }}
+          config: test/kind-config.yaml
+      - name: Build image
+        run: |
+          VERSION="dev" make dev-image
+          docker tag descheduler:dev registry.k8s.io/descheduler/descheduler:${{ matrix.descheduler-version }}
+      - name: Kind load image
+        run: |
+          kind load docker-image registry.k8s.io/descheduler/descheduler:${{ matrix.descheduler-version }} --name chart-testing
+      - name: Create k8s manifests
+        run: |
+          kubectl create -f kubernetes/base/rbac.yaml
+          kubectl create -f test/manifests/${{ matrix.descheduler-api }}/configmap.yaml
+          kubectl create -f kubernetes/${{ matrix.manifest }}/${{ matrix.manifest }}.yaml
+      - name: Wait for ready condition
+        run: |
+          kubectl wait --for=condition=Available --timeout=60s ${{ matrix.manifest }} descheduler -n kube-system

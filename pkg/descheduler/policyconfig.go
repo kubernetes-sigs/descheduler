@@ -17,8 +17,11 @@ limitations under the License.
 package descheduler
 
 import (
+	"context"
 	"fmt"
 	"os"
+
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	clientset "k8s.io/client-go/kubernetes"
@@ -30,6 +33,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 func LoadPolicyConfig(policyConfigFile string, client clientset.Interface, registry pluginregistry.Registry) (*api.DeschedulerPolicy, error) {
@@ -47,35 +51,12 @@ func LoadPolicyConfig(policyConfigFile string, client clientset.Interface, regis
 }
 
 func decode(policyConfigFile string, policy []byte, client clientset.Interface, registry pluginregistry.Registry) (*api.DeschedulerPolicy, error) {
-	versionedPolicy := &v1alpha1.DeschedulerPolicy{}
 	internalPolicy := &api.DeschedulerPolicy{}
 	var err error
 
 	decoder := scheme.Codecs.UniversalDecoder(v1alpha1.SchemeGroupVersion, v1alpha2.SchemeGroupVersion, api.SchemeGroupVersion)
-	if err := runtime.DecodeInto(decoder, policy, versionedPolicy); err != nil {
-		// TODO: Right now we are checking this error string because we couldn't make a native
-		// Convert_v1alpha1_DeschedulerPolicy_To_api_DeschedulerPolicy in conversion.go
-		// and we are just calling  V1alpha1ToInternal directly (since it needs a client as an argument).
-		// We need to make V1alpha1ToInternal stop needing a client, use a native conversion function
-		// and just rely in a DecodeInto that would pick up any policy file directly into our internal api.
-		// An attempt of doing that is in b25a44c51c0fa31a7831b899e73d83abd12a789a. Relevant discussions in following comments:
-		// https://github.com/kubernetes-sigs/descheduler/pull/1006#discussion_r1062630128
-		if err.Error() == "converting (v1alpha2.DeschedulerPolicy) to (v1alpha1.DeschedulerPolicy): unknown conversion" {
-			klog.V(1).InfoS("Tried reading v1alpha2.DeschedulerPolicy and failed. Trying legacy conversion now.")
-		} else {
-			return nil, fmt.Errorf("failed decoding descheduler's policy config %q: %v", policyConfigFile, err)
-		}
-	}
-	if versionedPolicy.APIVersion == "descheduler/v1alpha1" {
-		// Build profiles
-		internalPolicy, err = v1alpha1.V1alpha1ToInternal(client, versionedPolicy, registry)
-		if err != nil {
-			return nil, fmt.Errorf("failed converting versioned policy to internal policy version: %v", err)
-		}
-	} else {
-		if err := runtime.DecodeInto(decoder, policy, internalPolicy); err != nil {
-			return nil, fmt.Errorf("failed decoding descheduler's policy config %q: %v", policyConfigFile, err)
-		}
+	if err := runtime.DecodeInto(decoder, policy, internalPolicy); err != nil {
+		return nil, fmt.Errorf("failed decoding descheduler's policy config %q: %v", policyConfigFile, err)
 	}
 
 	err = validateDeschedulerConfiguration(*internalPolicy, registry)
@@ -83,15 +64,15 @@ func decode(policyConfigFile string, policy []byte, client clientset.Interface, 
 		return nil, err
 	}
 
-	setDefaults(*internalPolicy, registry)
+	setDefaults(*internalPolicy, registry, client)
 
 	return internalPolicy, nil
 }
 
-func setDefaults(in api.DeschedulerPolicy, registry pluginregistry.Registry) *api.DeschedulerPolicy {
+func setDefaults(in api.DeschedulerPolicy, registry pluginregistry.Registry, client clientset.Interface) *api.DeschedulerPolicy {
 	for idx, profile := range in.Profiles {
 		// If we need to set defaults coming from loadtime in each profile we do it here
-		in.Profiles[idx] = setDefaultEvictor(profile)
+		in.Profiles[idx] = setDefaultEvictor(profile, client)
 		for _, pluginConfig := range profile.PluginConfigs {
 			setDefaultsPluginConfig(&pluginConfig, registry)
 		}
@@ -108,7 +89,16 @@ func setDefaultsPluginConfig(pluginConfig *api.PluginConfig, registry pluginregi
 	}
 }
 
-func setDefaultEvictor(profile api.Profile) api.Profile {
+func findPluginName(names []string, key string) bool {
+	for _, name := range names {
+		if name == key {
+			return true
+		}
+	}
+	return false
+}
+
+func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interface) api.DeschedulerProfile {
 	newPluginConfig := api.PluginConfig{
 		Name: defaultevictor.PluginName,
 		Args: &defaultevictor.DefaultEvictorArgs{
@@ -118,53 +108,49 @@ func setDefaultEvictor(profile api.Profile) api.Profile {
 			EvictFailedBarePods:     false,
 		},
 	}
-	if len(profile.Plugins.Evict.Enabled) == 0 && !hasPluginConfigsWithSameName(newPluginConfig, profile.PluginConfigs) {
-		profile.Plugins.Evict.Enabled = append(profile.Plugins.Evict.Enabled, defaultevictor.PluginName)
-		profile.PluginConfigs = append(profile.PluginConfigs, newPluginConfig)
+
+	// Always enable DefaultEvictor plugin for filter/preEvictionFilter extension points
+	if !findPluginName(profile.Plugins.Filter.Enabled, defaultevictor.PluginName) {
+		profile.Plugins.Filter.Enabled = append([]string{defaultevictor.PluginName}, profile.Plugins.Filter.Enabled...)
 	}
+
+	if !findPluginName(profile.Plugins.PreEvictionFilter.Enabled, defaultevictor.PluginName) {
+		profile.Plugins.PreEvictionFilter.Enabled = append([]string{defaultevictor.PluginName}, profile.Plugins.PreEvictionFilter.Enabled...)
+	}
+
+	defaultevictorPluginConfig, idx := GetPluginConfig(defaultevictor.PluginName, profile.PluginConfigs)
+	if defaultevictorPluginConfig == nil {
+		profile.PluginConfigs = append([]api.PluginConfig{newPluginConfig}, profile.PluginConfigs...)
+		defaultevictorPluginConfig = &newPluginConfig
+		idx = 0
+	}
+
+	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), client, defaultevictorPluginConfig.Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold)
+	if err != nil {
+		klog.Error(err, "Failed to get threshold priority from args")
+	}
+	profile.PluginConfigs[idx].Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold = &api.PriorityThreshold{}
+	profile.PluginConfigs[idx].Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold.Value = &thresholdPriority
 	return profile
 }
 
 func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginregistry.Registry) error {
-	var errorsInProfiles error
+	var errorsInProfiles []error
 	for _, profile := range in.Profiles {
-		// api.DeschedulerPolicy needs only 1 evictor plugin enabled
-		if len(profile.Plugins.Evict.Enabled) != 1 {
-			errTooManyEvictors := fmt.Errorf("profile with invalid number of evictor plugins enabled found. Please enable a single evictor plugin.")
-			errorsInProfiles = setErrorsInProfiles(errTooManyEvictors, profile.Name, errorsInProfiles)
-		}
 		for _, pluginConfig := range profile.PluginConfigs {
-			if _, ok := registry[pluginConfig.Name]; ok {
-				pluginUtilities := registry[pluginConfig.Name]
-				if pluginUtilities.PluginArgValidator != nil {
-					err := pluginUtilities.PluginArgValidator(pluginConfig.Args)
-					errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
-				}
+			if _, ok := registry[pluginConfig.Name]; !ok {
+				errorsInProfiles = append(errorsInProfiles, fmt.Errorf("in profile %s: plugin %s in pluginConfig not registered", profile.Name, pluginConfig.Name))
+				continue
+			}
+
+			pluginUtilities := registry[pluginConfig.Name]
+			if pluginUtilities.PluginArgValidator == nil {
+				continue
+			}
+			if err := pluginUtilities.PluginArgValidator(pluginConfig.Args); err != nil {
+				errorsInProfiles = append(errorsInProfiles, fmt.Errorf("in profile %s: %s", profile.Name, err.Error()))
 			}
 		}
 	}
-	if errorsInProfiles != nil {
-		return errorsInProfiles
-	}
-	return nil
-}
-
-func setErrorsInProfiles(err error, profileName string, errorsInProfiles error) error {
-	if err != nil {
-		if errorsInProfiles == nil {
-			errorsInProfiles = fmt.Errorf("in profile %s: %s", profileName, err.Error())
-		} else {
-			errorsInProfiles = fmt.Errorf("%w: %s", errorsInProfiles, fmt.Sprintf("in profile %s: %s", profileName, err.Error()))
-		}
-	}
-	return errorsInProfiles
-}
-
-func hasPluginConfigsWithSameName(newPluginConfig api.PluginConfig, pluginConfigs []api.PluginConfig) bool {
-	for _, pluginConfig := range pluginConfigs {
-		if newPluginConfig.Name == pluginConfig.Name {
-			return true
-		}
-	}
-	return false
+	return utilerrors.NewAggregate(errorsInProfiles)
 }

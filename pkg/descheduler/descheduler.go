@@ -18,12 +18,17 @@ package descheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
+	"time"
 
+	"k8s.io/client-go/discovery"
 	componentbaseconfig "k8s.io/component-base/config"
 	"k8s.io/klog/v2"
 
-	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -44,10 +49,10 @@ import (
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworkprofile "sigs.k8s.io/descheduler/pkg/framework/profile"
 	"sigs.k8s.io/descheduler/pkg/utils"
+	"sigs.k8s.io/descheduler/pkg/version"
 )
 
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
@@ -72,6 +77,11 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 		return fmt.Errorf("deschedulerPolicy is nil")
 	}
 
+	// Add k8s compatibility warnings to logs
+	if err := validateVersionCompatibility(rs.Client.Discovery(), version.Get()); err != nil {
+		klog.Warning(err.Error())
+	}
+
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(rs.Client)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		return err
@@ -86,7 +96,7 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	}
 
 	if rs.LeaderElection.LeaderElect && rs.DryRun {
-		klog.V(1).InfoS("Warning: DryRun is set to True. You need to disable it to use Leader Election.")
+		klog.V(1).Info("Warning: DryRun is set to True. You need to disable it to use Leader Election.")
 	}
 
 	if rs.LeaderElection.LeaderElect && !rs.DryRun {
@@ -97,6 +107,36 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	}
 
 	return runFn()
+}
+
+func validateVersionCompatibility(discovery discovery.DiscoveryInterface, versionInfo version.Info) error {
+	serverVersion, serverErr := discovery.ServerVersion()
+	if serverErr != nil {
+		return errors.New("failed to get Kubernetes server version")
+	}
+
+	deschedulerMinorVersion := strings.Split(versionInfo.Minor, ".")[0]
+	deschedulerMinorVersionFloat, err := strconv.ParseFloat(deschedulerMinorVersion, 64)
+	if err != nil {
+		return errors.New("failed to convert Descheduler minor version to float")
+	}
+
+	kubernetesMinorVersionFloat, err := strconv.ParseFloat(serverVersion.Minor, 64)
+	if err != nil {
+		return errors.New("failed to convert Kubernetes server minor version to float")
+	}
+
+	if math.Abs(deschedulerMinorVersionFloat-kubernetesMinorVersionFloat) > 3 {
+		return fmt.Errorf(
+			"descheduler minor version %v is not supported on your version of Kubernetes %v.%v. "+
+				"See compatibility docs for more info: https://github.com/kubernetes-sigs/descheduler#compatibility-matrix",
+			deschedulerMinorVersion,
+			serverVersion.Major,
+			serverVersion.Minor,
+		)
+	}
+
+	return nil
 }
 
 func cachedClient(
@@ -157,7 +197,7 @@ func cachedClient(
 
 	for _, item := range namespaces {
 		if _, err := fakeClient.CoreV1().Namespaces().Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
-			return nil, fmt.Errorf("unable to copy node: %v", err)
+			return nil, fmt.Errorf("unable to copy namespace: %v", err)
 		}
 	}
 
@@ -173,64 +213,6 @@ func cachedClient(
 	}
 
 	return fakeClient, nil
-}
-
-// evictorImpl implements the Evictor interface so plugins
-// can evict a pod without importing a specific pod evictor
-type evictorImpl struct {
-	podEvictor    *evictions.PodEvictor
-	evictorFilter framework.EvictorPlugin
-}
-
-var _ framework.Evictor = &evictorImpl{}
-
-// Filter checks if a pod can be evicted
-func (ei *evictorImpl) Filter(pod *v1.Pod) bool {
-	return ei.evictorFilter.Filter(pod)
-}
-
-// PreEvictionFilter checks if pod can be evicted right before eviction
-func (ei *evictorImpl) PreEvictionFilter(pod *v1.Pod) bool {
-	return ei.evictorFilter.PreEvictionFilter(pod)
-}
-
-// Evict evicts a pod (no pre-check performed)
-func (ei *evictorImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.EvictOptions) bool {
-	return ei.podEvictor.EvictPod(ctx, pod, opts)
-}
-
-func (ei *evictorImpl) NodeLimitExceeded(node *v1.Node) bool {
-	return ei.podEvictor.NodeLimitExceeded(node)
-}
-
-// handleImpl implements the framework handle which gets passed to plugins
-type handleImpl struct {
-	clientSet                 clientset.Interface
-	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
-	sharedInformerFactory     informers.SharedInformerFactory
-	evictor                   *evictorImpl
-}
-
-var _ framework.Handle = &handleImpl{}
-
-// ClientSet retrieves kube client set
-func (hi *handleImpl) ClientSet() clientset.Interface {
-	return hi.clientSet
-}
-
-// GetPodsAssignedToNodeFunc retrieves GetPodsAssignedToNodeFunc implementation
-func (hi *handleImpl) GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc {
-	return hi.getPodsAssignedToNodeFunc
-}
-
-// SharedInformerFactory retrieves shared informer factory
-func (hi *handleImpl) SharedInformerFactory() informers.SharedInformerFactory {
-	return hi.sharedInformerFactory
-}
-
-// Evictor retrieves evictor so plugins can filter and evict pods
-func (hi *handleImpl) Evictor() framework.Evictor {
-	return hi.evictor
 }
 
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string) error {
@@ -267,7 +249,11 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
 	defer eventBroadcaster.Shutdown()
 
+	cycleSharedInformerFactory := sharedInformerFactory
+
 	wait.NonSlidingUntil(func() {
+		loopStartDuration := time.Now()
+		defer metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
 		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeLister, nodeSelector)
 		if err != nil {
 			klog.V(1).InfoS("Unable to get ready nodes", "err", err)
@@ -281,7 +267,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			return
 		}
 
-		var podEvictorClient clientset.Interface
+		var client clientset.Interface
 		// When the dry mode is enable, collect all the relevant objects (mostly pods) under a fake client.
 		// So when evicting pods while running multiple strategies in a row have the cummulative effect
 		// as is when evicting pods for real.
@@ -294,7 +280,9 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 				return
 			}
 
+			// create a new instance of the shared informer factor from the cached client
 			fakeSharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			// register the pod informer, otherwise it will not get running
 			getPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(fakeSharedInformerFactory.Core().V1().Pods().Informer())
 			if err != nil {
 				klog.Errorf("build get pods assigned to node function error: %v", err)
@@ -306,14 +294,15 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			fakeSharedInformerFactory.Start(fakeCtx.Done())
 			fakeSharedInformerFactory.WaitForCacheSync(fakeCtx.Done())
 
-			podEvictorClient = fakeClient
+			client = fakeClient
+			cycleSharedInformerFactory = fakeSharedInformerFactory
 		} else {
-			podEvictorClient = rs.Client
+			client = rs.Client
 		}
 
 		klog.V(3).Infof("Building a pod evictor")
 		podEvictor := evictions.NewPodEvictor(
-			podEvictorClient,
+			client,
 			evictionPolicyGroupVersion,
 			rs.DryRun,
 			deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
@@ -323,84 +312,31 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 			eventRecorder,
 		)
 
-		var enabledDeschedulePlugins []framework.DeschedulePlugin
-		var enabledBalancePlugins []framework.BalancePlugin
-
-		// Build plugins
 		for _, profile := range deschedulerPolicy.Profiles {
-			pc := getPluginConfig(defaultevictor.PluginName, profile.PluginConfigs)
-			if pc == nil {
-				klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", defaultevictor.PluginName, "profile", profile.Name)
-				continue
-			}
-			evictorFilter, err := defaultevictor.New(
-				pc.Args,
-				&handleImpl{
-					clientSet:                 rs.Client,
-					getPodsAssignedToNodeFunc: getPodsAssignedToNode,
-					sharedInformerFactory:     sharedInformerFactory,
-				},
+			currProfile, err := frameworkprofile.NewProfile(
+				profile,
+				pluginregistry.PluginRegistry,
+				frameworkprofile.WithClientSet(client),
+				frameworkprofile.WithSharedInformerFactory(cycleSharedInformerFactory),
+				frameworkprofile.WithPodEvictor(podEvictor),
+				frameworkprofile.WithGetPodsAssignedToNodeFnc(getPodsAssignedToNode),
 			)
 			if err != nil {
-				klog.ErrorS(fmt.Errorf("unable to construct a plugin"), "skipping plugin", "plugin", defaultevictor.PluginName)
+				klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)
 				continue
 			}
-			handle := &handleImpl{
-				clientSet:                 rs.Client,
-				getPodsAssignedToNodeFunc: getPodsAssignedToNode,
-				sharedInformerFactory:     sharedInformerFactory,
-				evictor: &evictorImpl{
-					podEvictor:    podEvictor,
-					evictorFilter: evictorFilter.(framework.EvictorPlugin),
-				},
-			}
-			// Assuming only a list of enabled extension points.
-			// Later, when a default list of plugins and their extension points is established,
-			// compute the list of enabled extension points as (DefaultEnabled + Enabled - Disabled)
-			for _, plugin := range append(profile.Plugins.Deschedule.Enabled, profile.Plugins.Balance.Enabled...) {
-				pc := getPluginConfig(plugin, profile.PluginConfigs)
-				if pc == nil {
-					klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", plugin)
-					continue
-				}
-				registryPlugin, ok := pluginregistry.PluginRegistry[plugin]
-				pgFnc := registryPlugin.PluginBuilder
-				if !ok {
-					klog.ErrorS(fmt.Errorf("unable to find plugin in the pluginsMap"), "skipping plugin", "plugin", plugin)
-				}
-				pg, err := pgFnc(pc.Args, handle)
-				if err != nil {
-					klog.ErrorS(err, "unable to initialize a plugin", "pluginName", plugin)
-				}
-				if pg != nil {
-					// pg can be of any of each type, or both
-					enabledDeschedulePlugins, enabledBalancePlugins = includeProfilePluginsByType(enabledDeschedulePlugins, enabledBalancePlugins, pg)
-				}
-			}
-		}
 
-		// Execute extension points
-		for _, pg := range enabledDeschedulePlugins {
-			// TODO: strategyName should be accessible from within the strategy using a framework
-			// handle or function which the Evictor has access to. For migration/in-progress framework
-			// work, we are currently passing this via context. To be removed
-			// (See discussion thread https://github.com/kubernetes-sigs/descheduler/pull/885#discussion_r919962292)
-			childCtx := context.WithValue(ctx, "strategyName", pg.Name())
-			status := pg.Deschedule(childCtx, nodes)
+			// First deschedule
+			status := currProfile.RunDeschedulePlugins(ctx, nodes)
 			if status != nil && status.Err != nil {
-				klog.ErrorS(status.Err, "plugin finished with error", "pluginName", pg.Name())
+				klog.ErrorS(status.Err, "running deschedule extension point failed with error", "profile", profile.Name)
+				continue
 			}
-		}
-
-		for _, pg := range enabledBalancePlugins {
-			// TODO: strategyName should be accessible from within the strategy using a framework
-			// handle or function which the Evictor has access to. For migration/in-progress framework
-			// work, we are currently passing this via context. To be removed
-			// (See discussion thread https://github.com/kubernetes-sigs/descheduler/pull/885#discussion_r919962292)
-			childCtx := context.WithValue(ctx, "strategyName", pg.Name())
-			status := pg.Balance(childCtx, nodes)
+			// Then balance
+			status = currProfile.RunBalancePlugins(ctx, nodes)
 			if status != nil && status.Err != nil {
-				klog.ErrorS(status.Err, "plugin finished with error", "pluginName", pg.Name())
+				klog.ErrorS(status.Err, "running balance extension point failed with error", "profile", profile.Name)
+				continue
 			}
 		}
 
@@ -415,35 +351,13 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	return nil
 }
 
-func includeProfilePluginsByType(enabledDeschedulePlugins []framework.DeschedulePlugin, enabledBalancePlugins []framework.BalancePlugin, pg framework.Plugin) ([]framework.DeschedulePlugin, []framework.BalancePlugin) {
-	enabledDeschedulePlugins = includeDeschedule(enabledDeschedulePlugins, pg)
-	enabledBalancePlugins = includeBalance(enabledBalancePlugins, pg)
-	return enabledDeschedulePlugins, enabledBalancePlugins
-}
-
-func includeDeschedule(enabledDeschedulePlugins []framework.DeschedulePlugin, pg framework.Plugin) []framework.DeschedulePlugin {
-	_, ok := pg.(framework.DeschedulePlugin)
-	if ok {
-		enabledDeschedulePlugins = append(enabledDeschedulePlugins, pg.(framework.DeschedulePlugin))
-	}
-	return enabledDeschedulePlugins
-}
-
-func includeBalance(enabledBalancePlugins []framework.BalancePlugin, pg framework.Plugin) []framework.BalancePlugin {
-	_, ok := pg.(framework.BalancePlugin)
-	if ok {
-		enabledBalancePlugins = append(enabledBalancePlugins, pg.(framework.BalancePlugin))
-	}
-	return enabledBalancePlugins
-}
-
-func getPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) *api.PluginConfig {
-	for _, pluginConfig := range pluginConfigs {
+func GetPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) (*api.PluginConfig, int) {
+	for idx, pluginConfig := range pluginConfigs {
 		if pluginConfig.Name == pluginName {
-			return &pluginConfig
+			return &pluginConfig, idx
 		}
 	}
-	return nil
+	return nil, 0
 }
 
 func createClients(clientConnection componentbaseconfig.ClientConnectionConfiguration) (clientset.Interface, clientset.Interface, error) {

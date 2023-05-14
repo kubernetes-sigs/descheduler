@@ -31,9 +31,9 @@ import (
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -287,7 +287,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 				&frameworkfake.HandleImpl{
 					ClientsetImpl:                 fakeClient,
 					PodEvictorImpl:                podEvictor,
-					EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+					EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				})
@@ -295,7 +295,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin.(framework.DeschedulePlugin).Deschedule(ctx, tc.nodes)
+			plugin.(frameworktypes.DeschedulePlugin).Deschedule(ctx, tc.nodes)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, expected %v pod evictions, but got %v pod evictions\n", tc.description, tc.expectedEvictedPodCount, actualEvictedPodCount)

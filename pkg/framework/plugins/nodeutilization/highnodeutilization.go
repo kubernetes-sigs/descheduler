@@ -28,7 +28,7 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 const HighNodeUtilizationPluginName = "HighNodeUtilization"
@@ -37,15 +37,15 @@ const HighNodeUtilizationPluginName = "HighNodeUtilization"
 // Note that CPU/Memory requests are used to calculate nodes' utilization and not the actual resource usage.
 
 type HighNodeUtilization struct {
-	handle    framework.Handle
+	handle    frameworktypes.Handle
 	args      *HighNodeUtilizationArgs
 	podFilter func(pod *v1.Pod) bool
 }
 
-var _ framework.BalancePlugin = &HighNodeUtilization{}
+var _ frameworktypes.BalancePlugin = &HighNodeUtilization{}
 
 // NewHighNodeUtilization builds plugin from its arguments while passing a handle
-func NewHighNodeUtilization(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+func NewHighNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	highNodeUtilizatioArgs, ok := args.(*HighNodeUtilizationArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type HighNodeUtilizationArgs, got %T", args)
@@ -71,7 +71,7 @@ func (h *HighNodeUtilization) Name() string {
 }
 
 // Balance extension point implementation for the plugin
-func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	thresholds := h.args.Thresholds
 	targetThresholds := make(api.ResourceThresholds)
 

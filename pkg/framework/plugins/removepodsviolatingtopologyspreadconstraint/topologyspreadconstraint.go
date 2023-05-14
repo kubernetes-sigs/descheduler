@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -49,15 +49,15 @@ type topology struct {
 
 // RemovePodsViolatingTopologySpreadConstraint evicts pods which violate their topology spread constraints
 type RemovePodsViolatingTopologySpreadConstraint struct {
-	handle    framework.Handle
+	handle    frameworktypes.Handle
 	args      *RemovePodsViolatingTopologySpreadConstraintArgs
 	podFilter podutil.FilterFunc
 }
 
-var _ framework.BalancePlugin = &RemovePodsViolatingTopologySpreadConstraint{}
+var _ frameworktypes.BalancePlugin = &RemovePodsViolatingTopologySpreadConstraint{}
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	pluginArgs, ok := args.(*RemovePodsViolatingTopologySpreadConstraintArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingTopologySpreadConstraintArgs, got %T", args)
@@ -84,7 +84,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Name() string {
 }
 
 // nolint: gocyclo
-func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	nodeMap := make(map[string]*v1.Node, len(nodes))
 	for _, node := range nodes {
 		nodeMap[node.Name] = node
@@ -107,7 +107,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		klog.ErrorS(err, "Couldn't list namespaces")
-		return &framework.Status{
+		return &frameworktypes.Status{
 			Err: fmt.Errorf("list namespace: %w", err),
 		}
 	}

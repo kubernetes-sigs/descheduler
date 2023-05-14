@@ -13,10 +13,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/utils/pointer"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 var oneHourPodLifetimeSeconds uint = 3600
@@ -109,7 +109,7 @@ func TestFailedPods(t *testing.T) {
 				&frameworkfake.HandleImpl{
 					ClientsetImpl:                 clientSet,
 					PodEvictorImpl:                podEvictor,
-					EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+					EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 					SharedInformerFactoryImpl:     sharedInformerFactory,
 					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				},
@@ -118,7 +118,7 @@ func TestFailedPods(t *testing.T) {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin.(framework.DeschedulePlugin).Deschedule(ctx, nodes)
+			plugin.(frameworktypes.DeschedulePlugin).Deschedule(ctx, nodes)
 			t.Logf("Finished RemoveFailedPods strategy for %s", name)
 
 			if actualEvictedCount := podEvictor.TotalEvicted(); actualEvictedCount == tc.expectedEvictedCount {

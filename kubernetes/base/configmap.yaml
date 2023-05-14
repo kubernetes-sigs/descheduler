@@ -6,23 +6,28 @@ metadata:
   namespace: kube-system
 data:
   policy.yaml: |
-    apiVersion: "descheduler/v1alpha1"
+    apiVersion: "descheduler/v1alpha2"
     kind: "DeschedulerPolicy"
-    strategies:
-      "RemoveDuplicates":
-         enabled: true
-      "RemovePodsViolatingInterPodAntiAffinity":
-         enabled: true
-      "LowNodeUtilization":
-         enabled: true
-         params:
-           nodeResourceUtilizationThresholds:
-             thresholds:
-               "cpu" : 20
-               "memory": 20
-               "pods": 20
-             targetThresholds:
-               "cpu" : 50
-               "memory": 50
-               "pods": 50
-
+    profiles:
+      - name: ProfileName
+        pluginConfig:
+        - name: "DefaultEvictor"
+        - name: "RemovePodsViolatingInterPodAntiAffinity"
+        - name: "LowNodeUtilization"
+          args:
+            thresholds:
+              "cpu" : 20
+              "memory": 20
+              "pods": 20
+            targetThresholds:
+              "cpu" : 50
+              "memory": 50
+              "pods": 50
+        plugins:
+          balance:
+            enabled:
+              - "LowNodeUtilization"
+              - "RemoveDuplicates"
+          deschedule:
+            enabled:
+              - "RemovePodsViolatingInterPodAntiAffinity"
