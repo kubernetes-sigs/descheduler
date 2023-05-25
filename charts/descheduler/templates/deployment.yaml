@@ -44,17 +44,12 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (printf "v%s" .Chart.AppVersion) }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
-            - "/bin/descheduler"
+            {{- toYaml .Values.command | nindent 12 }}
           args:
-            - "--policy-config-file"
-            - "/policy-dir/policy.yaml"
-            - "--descheduling-interval"
-            - {{ required "deschedulingInterval required for running as Deployment" .Values.deschedulingInterval }}
+            - --policy-config-file=/policy-dir/policy.yaml
+            - --descheduling-interval={{ required "deschedulingInterval required for running as Deployment" .Values.deschedulingInterval }}
             {{- range $key, $value := .Values.cmdOptions }}
-            - {{ printf "--%s" $key | quote }}
-            {{- if $value }}
-            - {{ $value | quote }}
-            {{- end }}
+            - {{ printf "--%s" $key }}{{ if $value }}={{ $value }}{{ end }}
             {{- end }}
             {{- include "descheduler.leaderElection" . | nindent 12 }}
           ports:

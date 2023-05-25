@@ -67,6 +67,9 @@ leaderElection: {}
 #  resourceName: "descheduler"
 #  resourceNamescape: "kube-system"
 
+command:
+- "/bin/descheduler"
+
 cmdOptions:
   v: 3
 
