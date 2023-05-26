@@ -37,7 +37,7 @@ spec:
       serviceAccountName: {{ template "descheduler.serviceAccountName" . }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
-      {{- toYaml . | nindent 10 }}
+      {{- toYaml . | nindent 6 }}
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
