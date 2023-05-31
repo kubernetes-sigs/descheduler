@@ -19,7 +19,6 @@ package removepodsviolatinginterpodantiaffinity
 import (
 	"context"
 	"fmt"
-	"k8s.io/klog/v2"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -30,6 +29,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
 )
 
 const PluginName = "RemovePodsViolatingInterPodAntiAffinity"
