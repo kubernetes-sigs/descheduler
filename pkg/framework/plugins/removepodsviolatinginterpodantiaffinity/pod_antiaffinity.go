@@ -19,6 +19,7 @@ package removepodsviolatinginterpodantiaffinity
 import (
 	"context"
 	"fmt"
+	"k8s.io/klog/v2"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -79,7 +80,7 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Name() string {
 func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	podsList, err := d.handle.ClientSet().CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return &framework.Status{
+		return &frameworktypes.Status{
 			Err: fmt.Errorf("error listing all pods: %v", err),
 		}
 	}
@@ -177,7 +178,7 @@ func checkPodsWithAntiAffinityExist(pod *v1.Pod, pods map[string][]*v1.Pod, node
 				klog.ErrorS(err, "Unable to convert LabelSelector into Selector")
 				return false
 			}
-			for _, namespace := range namespaces.List() {
+			for namespace := range namespaces {
 				for _, existingPod := range pods[namespace] {
 					if existingPod.Name != pod.Name && utils.PodMatchesTermsNamespaceAndSelector(existingPod, namespaces, selector) {
 						node, ok := nodeMap[pod.Spec.NodeName]
