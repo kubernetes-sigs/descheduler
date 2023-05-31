@@ -8,7 +8,7 @@ metadata:
   labels:
     {{- include "descheduler.labels" . | nindent 4 }}
     {{- if .Values.serviceMonitor.additionalLabels }}
-    {{ toYaml .Values.serviceMonitor.additionalLabels }}
+    {{- toYaml .Values.serviceMonitor.additionalLabels | nindent 4 }}
     {{- end }}
 spec:
   jobLabel: jobLabel
