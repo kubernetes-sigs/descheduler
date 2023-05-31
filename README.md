@@ -201,6 +201,7 @@ Balance Plugins: These plugins process all pods, or groups of pods, and determin
 | [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity) |Deschedule|Evicts pods violating node affinity|
 | [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints) |Deschedule|Evicts pods violating node taints|
 | [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint) |Balance|Evicts pods violating TopologySpreadConstraints|
+| [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts) |Deschedule|Evicts pods having too many restarts|
 | [PodLifeTime](#podlifetime) |Deschedule|Evicts pods that have exceeded a specified age limit|
 | [RemoveFailedPods](#removefailedpods) |Deschedule|Evicts pods with certain failed reasons|
 
