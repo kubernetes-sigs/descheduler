@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/node"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -215,7 +215,7 @@ func evictPodsFromSourceNodes(
 	ctx context.Context,
 	evictableNamespaces *api.Namespaces,
 	sourceNodes, destinationNodes []NodeInfo,
-	podEvictor framework.Evictor,
+	podEvictor frameworktypes.Evictor,
 	podFilter func(pod *v1.Pod) bool,
 	resourceNames []v1.ResourceName,
 	continueEviction continueEvictionCond,
@@ -279,12 +279,12 @@ func evictPods(
 	nodeInfo NodeInfo,
 	totalAvailableUsage map[v1.ResourceName]*resource.Quantity,
 	taintsOfLowNodes map[string][]v1.Taint,
-	podEvictor framework.Evictor,
+	podEvictor frameworktypes.Evictor,
 	continueEviction continueEvictionCond,
 ) {
-	var excludedNamespaces sets.String
+	var excludedNamespaces sets.Set[string]
 	if evictableNamespaces != nil {
-		excludedNamespaces = sets.NewString(evictableNamespaces.Exclude...)
+		excludedNamespaces = sets.New(evictableNamespaces.Exclude...)
 	}
 
 	if continueEviction(nodeInfo, totalAvailableUsage) {

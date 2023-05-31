@@ -29,31 +29,31 @@ import (
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 const PluginName = "RemoveFailedPods"
 
 // RemoveFailedPods evicts pods in failed status phase that match the given args criteria
 type RemoveFailedPods struct {
-	handle    framework.Handle
+	handle    frameworktypes.Handle
 	args      *RemoveFailedPodsArgs
 	podFilter podutil.FilterFunc
 }
 
-var _ framework.DeschedulePlugin = &RemoveFailedPods{}
+var _ frameworktypes.DeschedulePlugin = &RemoveFailedPods{}
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	failedPodsArgs, ok := args.(*RemoveFailedPodsArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemoveFailedPodsArgs, got %T", args)
 	}
 
-	var includedNamespaces, excludedNamespaces sets.String
+	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if failedPodsArgs.Namespaces != nil {
-		includedNamespaces = sets.NewString(failedPodsArgs.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(failedPodsArgs.Namespaces.Exclude...)
+		includedNamespaces = sets.New(failedPodsArgs.Namespaces.Include...)
+		excludedNamespaces = sets.New(failedPodsArgs.Namespaces.Exclude...)
 	}
 
 	// We can combine Filter and PreEvictionFilter since for this strategy it does not matter where we run PreEvictionFilter
@@ -91,13 +91,13 @@ func (d *RemoveFailedPods) Name() string {
 }
 
 // Deschedule extension point implementation for the plugin
-func (d *RemoveFailedPods) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *RemoveFailedPods) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	for _, node := range nodes {
 		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListAllPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			// no pods evicted as error encountered retrieving evictable Pods
-			return &framework.Status{
+			return &frameworktypes.Status{
 				Err: fmt.Errorf("error listing pods on a node: %v", err),
 			}
 		}
@@ -126,7 +126,7 @@ func validateCanEvict(pod *v1.Pod, failedPodArgs *RemoveFailedPodsArgs) error {
 	if len(failedPodArgs.ExcludeOwnerKinds) > 0 {
 		ownerRefList := podutil.OwnerRef(pod)
 		for _, owner := range ownerRefList {
-			if sets.NewString(failedPodArgs.ExcludeOwnerKinds...).Has(owner.Kind) {
+			if sets.New(failedPodArgs.ExcludeOwnerKinds...).Has(owner.Kind) {
 				errs = append(errs, fmt.Errorf("pod's owner kind of %s is excluded", owner.Kind))
 			}
 		}
@@ -143,7 +143,7 @@ func validateCanEvict(pod *v1.Pod, failedPodArgs *RemoveFailedPodsArgs) error {
 			reasons = append(reasons, getFailedContainerStatusReasons(pod.Status.InitContainerStatuses)...)
 		}
 
-		if !sets.NewString(failedPodArgs.Reasons...).HasAny(reasons...) {
+		if !sets.New(failedPodArgs.Reasons...).HasAny(reasons...) {
 			errs = append(errs, fmt.Errorf("pod does not match any of the reasons"))
 		}
 	}

@@ -25,9 +25,10 @@ import (
 	utilpointer "k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
+	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
@@ -44,12 +45,9 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 		Name: defaultevictor.PluginName,
 		Args: &defaultevictor.DefaultEvictorArgs{
 			PriorityThreshold: &api.PriorityThreshold{
-				Value: utilpointer.Int32(utils.SystemCriticalPriority),
+				Value: nil,
 			},
 		},
-	}
-	defaultEvictorPluginSet := api.PluginSet{
-		Enabled: []string{defaultevictor.PluginName},
 	}
 	type testCase struct {
 		description string
@@ -92,7 +90,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 				},
 			},
 			result: &api.DeschedulerPolicy{
-				Profiles: []api.Profile{
+				Profiles: []api.DeschedulerProfile{
 					{
 						Name: fmt.Sprintf("strategy-%s-profile", removeduplicates.PluginName),
 						PluginConfigs: []api.PluginConfig{
@@ -112,7 +110,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{removeduplicates.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					// Disabled strategy is not generating internal plugin since it is not being used internally currently
@@ -200,7 +203,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 				},
 			},
 			result: &api.DeschedulerPolicy{
-				Profiles: []api.Profile{
+				Profiles: []api.DeschedulerProfile{
 					{
 						Name: fmt.Sprintf("strategy-%s-profile", nodeutilization.HighNodeUtilizationPluginName),
 						PluginConfigs: []api.PluginConfig{
@@ -220,7 +223,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{nodeutilization.HighNodeUtilizationPluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -247,7 +255,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{nodeutilization.LowNodeUtilizationPluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -263,7 +276,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{removeduplicates.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -279,7 +297,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removefailedpods.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -297,7 +320,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodshavingtoomanyrestarts.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -313,7 +341,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodsviolatinginterpodantiaffinity.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -331,7 +364,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodsviolatingnodeaffinity.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -347,7 +385,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodsviolatingnodetaints.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -363,7 +406,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{removepodsviolatingtopologyspreadconstraint.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 				},
@@ -457,7 +505,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 				},
 			},
 			result: &api.DeschedulerPolicy{
-				Profiles: []api.Profile{
+				Profiles: []api.DeschedulerProfile{
 					{
 						Name: fmt.Sprintf("strategy-%s-profile", nodeutilization.HighNodeUtilizationPluginName),
 						PluginConfigs: []api.PluginConfig{
@@ -477,7 +525,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{nodeutilization.HighNodeUtilizationPluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -506,7 +559,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{nodeutilization.LowNodeUtilizationPluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -524,7 +582,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{removeduplicates.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -545,7 +608,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removefailedpods.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -564,7 +632,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodshavingtoomanyrestarts.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -580,7 +653,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodsviolatinginterpodantiaffinity.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -598,7 +676,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodsviolatingnodeaffinity.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -616,7 +699,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodsviolatingnodetaints.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -634,7 +722,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{removepodsviolatingtopologyspreadconstraint.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 				},
@@ -681,8 +774,9 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			client := fakeclientset.NewSimpleClientset()
-			result, err := V1alpha1ToInternal(client, tc.policy, pluginbuilder.PluginRegistry)
+			result := &api.DeschedulerPolicy{}
+			scope := scope{}
+			err := v1alpha1.V1alpha1ToInternal(tc.policy, pluginregistry.PluginRegistry, result, scope)
 			if err != nil {
 				if err.Error() != tc.err.Error() {
 					t.Errorf("unexpected error: %s", err.Error())
@@ -690,11 +784,364 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 			}
 			if err == nil {
 				// sort to easily compare deepequality
-				result.Profiles = api.SortProfilesByName(result.Profiles)
+				result.Profiles = api.SortDeschedulerProfileByName(result.Profiles)
 				diff := cmp.Diff(tc.result, result)
 				if diff != "" {
 					t.Errorf("test '%s' failed. Results are not deep equal. mismatch (-want +got):\n%s", tc.description, diff)
 				}
+			}
+		})
+	}
+}
+
+func TestDecodeVersionedPolicy(t *testing.T) {
+	client := fakeclientset.NewSimpleClientset()
+	SetupPlugins()
+	defaultEvictorPluginConfig := api.PluginConfig{
+		Name: defaultevictor.PluginName,
+		Args: &defaultevictor.DefaultEvictorArgs{
+			PriorityThreshold: &api.PriorityThreshold{
+				Value: utilpointer.Int32(utils.SystemCriticalPriority),
+			},
+		},
+	}
+	type testCase struct {
+		description string
+		policy      []byte
+		err         error
+		result      *api.DeschedulerPolicy
+	}
+	testCases := []testCase{
+		{
+			description: "v1alpha1 to internal",
+			policy: []byte(`apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+    enabled: true
+    params:
+      podLifeTime:
+        maxPodLifeTimeSeconds: 5
+      namespaces:
+        include:
+          - "testleaderelection-a"
+`),
+			result: &api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: fmt.Sprintf("strategy-%s-profile", podlifetime.PluginName),
+						PluginConfigs: []api.PluginConfig{
+							defaultEvictorPluginConfig,
+							{
+								Name: podlifetime.PluginName,
+								Args: &podlifetime.PodLifeTimeArgs{
+									Namespaces: &api.Namespaces{
+										Include: []string{"testleaderelection-a"},
+									},
+									MaxPodLifeTimeSeconds: utilpointer.Uint(5),
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							Deschedule: api.PluginSet{
+								Enabled: []string{podlifetime.PluginName},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			description: "v1alpha2 to internal",
+			policy: []byte(`apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+      args:
+        evictSystemCriticalPods: true
+        evictFailedBarePods: true
+        evictLocalStoragePods: true
+        nodeFit: true
+    - name: "RemovePodsHavingTooManyRestarts"
+      args:
+        podRestartThreshold: 100
+        includingInitContainers: true
+    plugins:
+      deschedule:
+        enabled:
+          - "RemovePodsHavingTooManyRestarts"
+`),
+			result: &api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: "ProfileName",
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: defaultevictor.PluginName,
+								Args: &defaultevictor.DefaultEvictorArgs{
+									EvictSystemCriticalPods: true,
+									EvictFailedBarePods:     true,
+									EvictLocalStoragePods:   true,
+									PriorityThreshold:       &api.PriorityThreshold{Value: utilpointer.Int32(2000000000)},
+									NodeFit:                 true,
+								},
+							},
+							{
+								Name: removepodshavingtoomanyrestarts.PluginName,
+								Args: &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs{
+									PodRestartThreshold:     100,
+									IncludingInitContainers: true,
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							Deschedule: api.PluginSet{
+								Enabled: []string{removepodshavingtoomanyrestarts.PluginName},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			result, err := decode("filename", tc.policy, client, pluginregistry.PluginRegistry)
+			if err != nil {
+				if tc.err == nil {
+					t.Errorf("unexpected error: %s.", err.Error())
+				} else {
+					t.Errorf("unexpected error: %s. Was expecting %s", err.Error(), tc.err.Error())
+				}
+			}
+			diff := cmp.Diff(tc.result, result)
+			if diff != "" && err == nil {
+				t.Errorf("test '%s' failed. Results are not deep equal. mismatch (-want +got):\n%s", tc.description, diff)
+			}
+		})
+	}
+}
+
+func TestValidateDeschedulerConfiguration(t *testing.T) {
+	SetupPlugins()
+	type testCase struct {
+		description       string
+		deschedulerPolicy api.DeschedulerPolicy
+		result            error
+	}
+	testCases := []testCase{
+		{
+			description: "multiple errors",
+			deschedulerPolicy: api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: removefailedpods.PluginName,
+						Plugins: api.Plugins{
+							Deschedule: api.PluginSet{Enabled: []string{removefailedpods.PluginName}},
+						},
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: removefailedpods.PluginName,
+								Args: &removefailedpods.RemoveFailedPodsArgs{
+									Namespaces: &api.Namespaces{
+										Include: []string{"test1"},
+										Exclude: []string{"test1"},
+									},
+								},
+							},
+						},
+					},
+					{
+						Name: removepodsviolatingtopologyspreadconstraint.PluginName,
+						Plugins: api.Plugins{
+							Deschedule: api.PluginSet{Enabled: []string{removepodsviolatingtopologyspreadconstraint.PluginName}},
+						},
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: removepodsviolatingtopologyspreadconstraint.PluginName,
+								Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
+									Namespaces: &api.Namespaces{
+										Include: []string{"test1"},
+										Exclude: []string{"test1"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			result: fmt.Errorf("[in profile RemoveFailedPods: only one of Include/Exclude namespaces can be set, in profile RemovePodsViolatingTopologySpreadConstraint: only one of Include/Exclude namespaces can be set]"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			result := validateDeschedulerConfiguration(tc.deschedulerPolicy, pluginregistry.PluginRegistry)
+			if result.Error() != tc.result.Error() {
+				t.Errorf("test '%s' failed. expected \n'%s', got \n'%s'", tc.description, tc.result, result)
+			}
+		})
+	}
+}
+
+func TestDecodeDefaults(t *testing.T) {
+	client := fakeclientset.NewSimpleClientset()
+	SetupPlugins()
+	type testCase struct {
+		description string
+		policy      []byte
+		err         error
+		result      *api.DeschedulerPolicy
+	}
+	testCases := []testCase{
+		{
+			description: "use empty RemoveFailedPods, check MinPodLifetimeSeconds default",
+			policy: []byte(`apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+      args:
+        evictSystemCriticalPods: true
+        evictFailedBarePods: true
+        evictLocalStoragePods: true
+        nodeFit: true
+    - name: "RemoveFailedPods"
+    plugins:
+      filter:
+        enabled:
+          - "DefaultEvictor"
+      preEvictionFilter:
+        enabled:
+          - "DefaultEvictor"
+      deschedule:
+        enabled:
+          - "RemovePodsHavingTooManyRestarts"
+`),
+			result: &api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: "ProfileName",
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: defaultevictor.PluginName,
+								Args: &defaultevictor.DefaultEvictorArgs{
+									EvictSystemCriticalPods: true,
+									EvictFailedBarePods:     true,
+									EvictLocalStoragePods:   true,
+									PriorityThreshold:       &api.PriorityThreshold{Value: utilpointer.Int32(2000000000)},
+									NodeFit:                 true,
+								},
+							},
+							{
+								Name: removefailedpods.PluginName,
+								Args: &removefailedpods.RemoveFailedPodsArgs{
+									MinPodLifetimeSeconds: utilpointer.Uint(3600),
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							Deschedule: api.PluginSet{
+								Enabled: []string{removepodshavingtoomanyrestarts.PluginName},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			description: "omit default evictor extension point with their enablement",
+			policy: []byte(`apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+      args:
+        evictSystemCriticalPods: true
+        evictFailedBarePods: true
+        evictLocalStoragePods: true
+        nodeFit: true
+    - name: "RemoveFailedPods"
+    plugins:
+      deschedule:
+        enabled:
+          - "RemovePodsHavingTooManyRestarts"
+`),
+			result: &api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: "ProfileName",
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: defaultevictor.PluginName,
+								Args: &defaultevictor.DefaultEvictorArgs{
+									EvictSystemCriticalPods: true,
+									EvictFailedBarePods:     true,
+									EvictLocalStoragePods:   true,
+									PriorityThreshold:       &api.PriorityThreshold{Value: utilpointer.Int32(2000000000)},
+									NodeFit:                 true,
+								},
+							},
+							{
+								Name: removefailedpods.PluginName,
+								Args: &removefailedpods.RemoveFailedPodsArgs{
+									MinPodLifetimeSeconds: utilpointer.Uint(3600),
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							Deschedule: api.PluginSet{
+								Enabled: []string{removepodshavingtoomanyrestarts.PluginName},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			result, err := decode("filename", tc.policy, client, pluginregistry.PluginRegistry)
+			if err != nil {
+				if tc.err == nil {
+					t.Errorf("unexpected error: %s.", err.Error())
+				} else {
+					t.Errorf("unexpected error: %s. Was expecting %s", err.Error(), tc.err.Error())
+				}
+			}
+			diff := cmp.Diff(tc.result, result)
+			if diff != "" && err == nil {
+				t.Errorf("test '%s' failed. Results are not deep equal. mismatch (-want +got):\n%s", tc.description, diff)
 			}
 		})
 	}

@@ -27,7 +27,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/events"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -269,14 +269,14 @@ func TestPodAntiAffinity(t *testing.T) {
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
 				SharedInformerFactoryImpl:     sharedInformerFactory,
-				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 			}
 			plugin, err := New(
 				&RemovePodsViolatingInterPodAntiAffinityArgs{},
 				handle,
 			)
 
-			plugin.(framework.DeschedulePlugin).Deschedule(ctx, test.nodes)
+			plugin.(frameworktypes.DeschedulePlugin).Deschedule(ctx, test.nodes)
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != test.expectedEvictedPodCount {
 				t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, test.expectedEvictedPodCount)

@@ -25,31 +25,31 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 const PluginName = "RemovePodsViolatingNodeAffinity"
 
 // RemovePodsViolatingNodeAffinity evicts pods on the node which violate node affinity
 type RemovePodsViolatingNodeAffinity struct {
-	handle    framework.Handle
+	handle    frameworktypes.Handle
 	args      *RemovePodsViolatingNodeAffinityArgs
 	podFilter podutil.FilterFunc
 }
 
-var _ framework.DeschedulePlugin = &RemovePodsViolatingNodeAffinity{}
+var _ frameworktypes.DeschedulePlugin = &RemovePodsViolatingNodeAffinity{}
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	nodeAffinityArgs, ok := args.(*RemovePodsViolatingNodeAffinityArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingNodeAffinityArgs, got %T", args)
 	}
 
-	var includedNamespaces, excludedNamespaces sets.String
+	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if nodeAffinityArgs.Namespaces != nil {
-		includedNamespaces = sets.NewString(nodeAffinityArgs.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(nodeAffinityArgs.Namespaces.Exclude...)
+		includedNamespaces = sets.New(nodeAffinityArgs.Namespaces.Include...)
+		excludedNamespaces = sets.New(nodeAffinityArgs.Namespaces.Exclude...)
 	}
 
 	// We can combine Filter and PreEvictionFilter since for this strategy it does not matter where we run PreEvictionFilter
@@ -75,7 +75,7 @@ func (d *RemovePodsViolatingNodeAffinity) Name() string {
 	return PluginName
 }
 
-func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	for _, nodeAffinity := range d.args.NodeAffinityType {
 		klog.V(2).InfoS("Executing for nodeAffinityType", "nodeAffinity", nodeAffinity)
 
@@ -94,7 +94,7 @@ func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes 
 					}),
 				)
 				if err != nil {
-					return &framework.Status{
+					return &frameworktypes.Status{
 						Err: fmt.Errorf("error listing pods on a node: %v", err),
 					}
 				}

@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -33,26 +33,26 @@ import (
 
 const PluginName = "PodLifeTime"
 
-var _ framework.DeschedulePlugin = &PodLifeTime{}
+var _ frameworktypes.DeschedulePlugin = &PodLifeTime{}
 
 // PodLifeTime evicts pods on the node that violate the max pod lifetime threshold
 type PodLifeTime struct {
-	handle    framework.Handle
+	handle    frameworktypes.Handle
 	args      *PodLifeTimeArgs
 	podFilter podutil.FilterFunc
 }
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	podLifeTimeArgs, ok := args.(*PodLifeTimeArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type PodLifeTimeArgs, got %T", args)
 	}
 
-	var includedNamespaces, excludedNamespaces sets.String
+	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if podLifeTimeArgs.Namespaces != nil {
-		includedNamespaces = sets.NewString(podLifeTimeArgs.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(podLifeTimeArgs.Namespaces.Exclude...)
+		includedNamespaces = sets.New(podLifeTimeArgs.Namespaces.Include...)
+		excludedNamespaces = sets.New(podLifeTimeArgs.Namespaces.Exclude...)
 	}
 
 	// We can combine Filter and PreEvictionFilter since for this strategy it does not matter where we run PreEvictionFilter
@@ -72,7 +72,7 @@ func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error)
 	})
 
 	if len(podLifeTimeArgs.States) > 0 {
-		states := sets.NewString(podLifeTimeArgs.States...)
+		states := sets.New(podLifeTimeArgs.States...)
 		podFilter = podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
 			if states.Has(string(pod.Status.Phase)) {
 				return true
@@ -101,7 +101,7 @@ func (d *PodLifeTime) Name() string {
 }
 
 // Deschedule extension point implementation for the plugin
-func (d *PodLifeTime) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *PodLifeTime) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	podsToEvict := make([]*v1.Pod, 0)
 	nodeMap := make(map[string]*v1.Node, len(nodes))
 
@@ -110,7 +110,7 @@ func (d *PodLifeTime) Deschedule(ctx context.Context, nodes []*v1.Node) *framewo
 		pods, err := podutil.ListAllPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			// no pods evicted as error encountered retrieving evictable Pods
-			return &framework.Status{
+			return &frameworktypes.Status{
 				Err: fmt.Errorf("error listing pods on a node: %v", err),
 			}
 		}

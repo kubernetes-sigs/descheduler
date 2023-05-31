@@ -28,7 +28,7 @@ type DeschedulerPolicy struct {
 	metav1.TypeMeta
 
 	// Profiles
-	Profiles []Profile
+	Profiles []DeschedulerProfile
 
 	// NodeSelector for a set of nodes to operate over
 	NodeSelector *string
@@ -43,8 +43,8 @@ type DeschedulerPolicy struct {
 // Namespaces carries a list of included/excluded namespaces
 // for which a given strategy is applicable
 type Namespaces struct {
-	Include []string
-	Exclude []string
+	Include []string `json:"include"`
+	Exclude []string `json:"exclude"`
 }
 
 type (
@@ -53,11 +53,11 @@ type (
 )
 
 type PriorityThreshold struct {
-	Value *int32
-	Name  string
+	Value *int32 `json:"value"`
+	Name  string `json:"name"`
 }
 
-type Profile struct {
+type DeschedulerProfile struct {
 	Name          string
 	PluginConfigs []PluginConfig
 	Plugins       Plugins
@@ -73,7 +73,6 @@ type Plugins struct {
 	Sort              PluginSet
 	Deschedule        PluginSet
 	Balance           PluginSet
-	Evict             PluginSet
 	Filter            PluginSet
 	PreEvictionFilter PluginSet
 }

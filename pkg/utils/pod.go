@@ -105,7 +105,7 @@ func IsPodWithLocalStorage(pod *v1.Pod) bool {
 	return false
 }
 
-// IsPodWithLocalStorage returns true if the pod has claimed a persistent volume.
+// IsPodWithPVC returns true if the pod has claimed a persistent volume.
 func IsPodWithPVC(pod *v1.Pod) bool {
 	for _, volume := range pod.Spec.Volumes {
 		if volume.PersistentVolumeClaim != nil {

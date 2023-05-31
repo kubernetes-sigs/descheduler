@@ -1,8 +1,12 @@
-apiVersion: "descheduler/v1alpha1"
+apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
-strategies:
-  "RemovePodsViolatingTopologySpreadConstraint":
-     enabled: true
-     params:
-       nodeFit: true
-       includeSoftConstraints: true # Include 'ScheduleAnyways' constraints
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "RemovePodsViolatingTopologySpreadConstraint"
+      args:
+        includeSoftConstraints: true # Include 'ScheduleAnyways' constraints
+    plugins:
+      balance:
+        enabled:
+          - "RemovePodsViolatingTopologySpreadConstraint"

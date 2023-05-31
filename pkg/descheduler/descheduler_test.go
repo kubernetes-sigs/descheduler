@@ -9,21 +9,44 @@ import (
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/conversion"
 	"k8s.io/apimachinery/pkg/runtime"
+	apiversion "k8s.io/apimachinery/pkg/version"
+	fakediscovery "k8s.io/client-go/discovery/fake"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/pluginbuilder"
+	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
+	deschedulerversion "sigs.k8s.io/descheduler/pkg/version"
 	"sigs.k8s.io/descheduler/test"
 )
 
+// scope contains information about an ongoing conversion.
+type scope struct {
+	converter *conversion.Converter
+	meta      *conversion.Meta
+}
+
+// Convert continues a conversion.
+func (s scope) Convert(src, dest interface{}) error {
+	return s.converter.Convert(src, dest, s.meta)
+}
+
+// Meta returns the meta object that was originally passed to Convert.
+func (s scope) Meta() *conversion.Meta {
+	return s.meta
+}
+
 func TestTaintsUpdated(t *testing.T) {
-	pluginbuilder.PluginRegistry = pluginbuilder.NewRegistry()
-	pluginbuilder.Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, pluginbuilder.PluginRegistry)
+	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
+	pluginregistry.Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaints{}, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs, removepodsviolatingnodetaints.SetDefaults_RemovePodsViolatingNodeTaintsArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
+
 	ctx := context.Background()
 	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
@@ -74,7 +97,9 @@ func TestTaintsUpdated(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	internalDeschedulerPolicy, err := V1alpha1ToInternal(client, dp, pluginbuilder.PluginRegistry)
+	internalDeschedulerPolicy := &api.DeschedulerPolicy{}
+	scope := scope{}
+	err = v1alpha1.V1alpha1ToInternal(dp, pluginregistry.PluginRegistry, internalDeschedulerPolicy, scope)
 	if err != nil {
 		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
 	}
@@ -89,8 +114,10 @@ func TestTaintsUpdated(t *testing.T) {
 }
 
 func TestDuplicate(t *testing.T) {
-	pluginbuilder.PluginRegistry = pluginbuilder.NewRegistry()
-	pluginbuilder.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicatesArgs{}, pluginbuilder.PluginRegistry)
+	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
+	pluginregistry.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicates{}, &removeduplicates.RemoveDuplicatesArgs{}, removeduplicates.ValidateRemoveDuplicatesArgs, removeduplicates.SetDefaults_RemoveDuplicatesArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
+
 	ctx := context.Background()
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
@@ -136,7 +163,9 @@ func TestDuplicate(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	internalDeschedulerPolicy, err := V1alpha1ToInternal(client, dp, pluginbuilder.PluginRegistry)
+	internalDeschedulerPolicy := &api.DeschedulerPolicy{}
+	scope := scope{}
+	err = v1alpha1.V1alpha1ToInternal(dp, pluginregistry.PluginRegistry, internalDeschedulerPolicy, scope)
 	if err != nil {
 		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
 	}
@@ -156,7 +185,7 @@ func TestRootCancel(t *testing.T) {
 	client := fakeclientset.NewSimpleClientset(n1, n2)
 	eventClient := fakeclientset.NewSimpleClientset(n1, n2)
 	dp := &api.DeschedulerPolicy{
-		Profiles: []api.Profile{}, // no strategies needed for this test
+		Profiles: []api.DeschedulerProfile{}, // no strategies needed for this test
 	}
 
 	rs, err := options.NewDeschedulerServer()
@@ -191,7 +220,7 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 	client := fakeclientset.NewSimpleClientset(n1, n2)
 	eventClient := fakeclientset.NewSimpleClientset(n1, n2)
 	dp := &api.DeschedulerPolicy{
-		Profiles: []api.Profile{}, // no strategies needed for this test
+		Profiles: []api.DeschedulerProfile{}, // no strategies needed for this test
 	}
 
 	rs, err := options.NewDeschedulerServer()
@@ -216,6 +245,61 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 		}
 	case <-time.After(1 * time.Second):
 		t.Fatal("Root ctx should have canceled immediately")
+	}
+}
+
+func TestValidateVersionCompatibility(t *testing.T) {
+	type testCase struct {
+		name             string
+		deschedulerMinor string
+		serverMinor      string
+		expectError      bool
+	}
+	testCases := []testCase{
+		{
+			name:             "no error when descheduler minor equals to server minor",
+			deschedulerMinor: "26.0",
+			serverMinor:      "26",
+			expectError:      false,
+		},
+		{
+			name:             "no error when descheduler minor is 3 behind server minor",
+			deschedulerMinor: "23.0",
+			serverMinor:      "26",
+			expectError:      false,
+		},
+		{
+			name:             "no error when descheduler minor is 3 ahead of server minor",
+			deschedulerMinor: "26.0",
+			serverMinor:      "23",
+			expectError:      false,
+		},
+		{
+			name:             "error when descheduler minor is 4 behind server minor",
+			deschedulerMinor: "22.0",
+			serverMinor:      "26",
+			expectError:      true,
+		},
+		{
+			name:             "error when descheduler minor is 4 ahead of server minor",
+			deschedulerMinor: "27.0",
+			serverMinor:      "23",
+			expectError:      true,
+		},
+	}
+	client := fakeclientset.NewSimpleClientset()
+	fakeDiscovery, _ := client.Discovery().(*fakediscovery.FakeDiscovery)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeDiscovery.FakedServerVersion = &apiversion.Info{Major: "1", Minor: tc.serverMinor}
+			deschedulerVersion := deschedulerversion.Info{Major: "0", Minor: tc.deschedulerMinor}
+			err := validateVersionCompatibility(fakeDiscovery, deschedulerVersion)
+
+			hasError := err != nil
+			if tc.expectError != hasError {
+				t.Error("unexpected version compatibility behavior")
+			}
+		})
 	}
 }
 

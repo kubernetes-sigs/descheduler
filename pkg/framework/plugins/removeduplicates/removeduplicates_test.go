@@ -21,9 +21,9 @@ import (
 	"testing"
 
 	"k8s.io/client-go/tools/events"
-	"sigs.k8s.io/descheduler/pkg/framework"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -347,7 +347,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				ClientsetImpl:                 fakeClient,
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
@@ -360,7 +360,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin.(framework.BalancePlugin).Balance(ctx, testCase.nodes)
+			plugin.(frameworktypes.BalancePlugin).Balance(ctx, testCase.nodes)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != testCase.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", testCase.description, actualEvictedPodCount, testCase.expectedEvictedPodCount)
@@ -796,7 +796,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				ClientsetImpl:                 fakeClient,
 				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(framework.EvictorPlugin),
+				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
@@ -807,7 +807,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			plugin.(framework.BalancePlugin).Balance(ctx, testCase.nodes)
+			plugin.(frameworktypes.BalancePlugin).Balance(ctx, testCase.nodes)
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != testCase.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", testCase.description, actualEvictedPodCount, testCase.expectedEvictedPodCount)

@@ -19,13 +19,16 @@ package podlifetime
 import (
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/runtime"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 // ValidatePodLifeTimeArgs validates PodLifeTime arguments
-func ValidatePodLifeTimeArgs(args *PodLifeTimeArgs) error {
+func ValidatePodLifeTimeArgs(obj runtime.Object) error {
+	args := obj.(*PodLifeTimeArgs)
 	if args.MaxPodLifeTimeSeconds == nil {
 		return fmt.Errorf("MaxPodLifeTimeSeconds not set")
 	}
@@ -40,7 +43,7 @@ func ValidatePodLifeTimeArgs(args *PodLifeTimeArgs) error {
 			return fmt.Errorf("failed to get label selectors from strategy's params: %+v", err)
 		}
 	}
-	podLifeTimeAllowedStates := sets.NewString(
+	podLifeTimeAllowedStates := sets.New(
 		string(v1.PodRunning),
 		string(v1.PodPending),
 
@@ -50,7 +53,7 @@ func ValidatePodLifeTimeArgs(args *PodLifeTimeArgs) error {
 	)
 
 	if !podLifeTimeAllowedStates.HasAll(args.States...) {
-		return fmt.Errorf("states must be one of %v", podLifeTimeAllowedStates.List())
+		return fmt.Errorf("states must be one of %v", podLifeTimeAllowedStates.UnsortedList())
 	}
 
 	return nil

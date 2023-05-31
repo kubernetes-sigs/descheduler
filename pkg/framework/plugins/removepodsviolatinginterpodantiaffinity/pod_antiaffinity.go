@@ -24,36 +24,35 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/framework"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog/v2"
 )
 
 const PluginName = "RemovePodsViolatingInterPodAntiAffinity"
 
 // RemovePodsViolatingInterPodAntiAffinity evicts pods on the node which violate inter pod anti affinity
 type RemovePodsViolatingInterPodAntiAffinity struct {
-	handle    framework.Handle
+	handle    frameworktypes.Handle
 	args      *RemovePodsViolatingInterPodAntiAffinityArgs
 	podFilter podutil.FilterFunc
 }
 
-var _ framework.DeschedulePlugin = &RemovePodsViolatingInterPodAntiAffinity{}
+var _ frameworktypes.DeschedulePlugin = &RemovePodsViolatingInterPodAntiAffinity{}
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	interPodAntiAffinityArgs, ok := args.(*RemovePodsViolatingInterPodAntiAffinityArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingInterPodAntiAffinityArgs, got %T", args)
 	}
 
-	var includedNamespaces, excludedNamespaces sets.String
+	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if interPodAntiAffinityArgs.Namespaces != nil {
-		includedNamespaces = sets.NewString(interPodAntiAffinityArgs.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(interPodAntiAffinityArgs.Namespaces.Exclude...)
+		includedNamespaces = sets.New(interPodAntiAffinityArgs.Namespaces.Include...)
+		excludedNamespaces = sets.New(interPodAntiAffinityArgs.Namespaces.Exclude...)
 	}
 
 	podFilter, err := podutil.NewOptions().
@@ -77,7 +76,7 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Name() string {
 	return PluginName
 }
 
-func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *framework.Status {
+func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	podsList, err := d.handle.ClientSet().CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return &framework.Status{

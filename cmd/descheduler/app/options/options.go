@@ -85,9 +85,12 @@ func newDefaultComponentConfig() (*componentconfig.DeschedulerConfiguration, err
 func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&rs.Logging.Format, "logging-format", "text", `Sets the log format. Permitted formats: "text", "json". Non-default formats don't honor these flags: --add-dir-header, --alsologtostderr, --log-backtrace-at, --log_dir, --log_file, --log_file_max_size, --logtostderr, --skip-headers, --skip-log-headers, --stderrthreshold, --log-flush-frequency.\nNon-default choices are currently alpha and subject to change without warning.`)
 	fs.DurationVar(&rs.DeschedulingInterval, "descheduling-interval", rs.DeschedulingInterval, "Time interval between two consecutive descheduler executions. Setting this value instructs the descheduler to run in a continuous loop at the interval specified.")
-	fs.StringVar(&rs.KubeconfigFile, "kubeconfig", rs.KubeconfigFile, "File with  kube configuration.")
+	fs.StringVar(&rs.ClientConnection.Kubeconfig, "kubeconfig", rs.ClientConnection.Kubeconfig, "File with kube configuration. Deprecated, use client-connection-kubeconfig instead.")
+	fs.StringVar(&rs.ClientConnection.Kubeconfig, "client-connection-kubeconfig", rs.ClientConnection.Kubeconfig, "File path to kube configuration for interacting with kubernetes apiserver.")
+	fs.Float32Var(&rs.ClientConnection.QPS, "client-connection-qps", rs.ClientConnection.QPS, "QPS to use for interacting with kubernetes apiserver.")
+	fs.Int32Var(&rs.ClientConnection.Burst, "client-connection-burst", rs.ClientConnection.Burst, "Burst to use for interacting with kubernetes apiserver.")
 	fs.StringVar(&rs.PolicyConfigFile, "policy-config-file", rs.PolicyConfigFile, "File with descheduler policy configuration.")
-	fs.BoolVar(&rs.DryRun, "dry-run", rs.DryRun, "execute descheduler in dry run mode.")
+	fs.BoolVar(&rs.DryRun, "dry-run", rs.DryRun, "Execute descheduler in dry run mode.")
 	fs.BoolVar(&rs.DisableMetrics, "disable-metrics", rs.DisableMetrics, "Disables metrics. The metrics are by default served through https://localhost:10258/metrics. Secure address, resp. port can be changed through --bind-address, resp. --secure-port flags.")
 
 	componentbaseoptions.BindLeaderElectionFlags(&rs.LeaderElection, fs)

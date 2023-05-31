@@ -1,0 +1,29 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: descheduler-policy-configmap
+  namespace: kube-system
+data:
+  policy.yaml: |
+    apiVersion: "descheduler/v1alpha2"
+    kind: "DeschedulerPolicy"
+    profiles:
+      - name: ProfileName
+        pluginConfig:
+        - name: "DefaultEvictor"
+          args:
+            priorityThreshold:
+              value: 10000
+        - name: "PodLifeTime"
+          args:
+            maxPodLifeTimeSeconds: 86400
+            namespaces:
+              include:
+              - "namespace1"
+              - "namespace2"
+        plugins:
+          deschedule:
+            enabled:
+              - "PodLifeTime"
+

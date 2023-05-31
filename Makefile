@@ -26,7 +26,7 @@ ARCHS = amd64 arm arm64
 
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitbranch=${BRANCH} -X ${LDFLAG_LOCATION}.gitsha1=${SHA1}"
 
-GOLANGCI_VERSION := v1.49.0
+GOLANGCI_VERSION := v1.52.1
 HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint 2> /dev/null)
 
 GOFUMPT_VERSION := v0.4.0
@@ -100,7 +100,7 @@ clean:
 	rm -rf _output
 	rm -rf _tmp
 
-verify: verify-govet verify-spelling verify-gofmt verify-vendor lint lint-chart verify-toc verify-gen
+verify: verify-govet verify-spelling verify-gofmt verify-vendor lint lint-chart verify-gen
 
 verify-govet:
 	./hack/verify-govet.sh
@@ -114,8 +114,8 @@ verify-gofmt:
 verify-vendor:
 	./hack/verify-vendor.sh
 
-verify-toc:
-	./hack/verify-toc.sh
+verify-docs:
+	./hack/verify-docs.sh
 
 test-unit:
 	./test/run-unit-tests.sh
@@ -127,12 +127,13 @@ gen:
 	./hack/update-generated-conversions.sh
 	./hack/update-generated-deep-copies.sh
 	./hack/update-generated-defaulters.sh
-	./hack/update-toc.sh
+	./hack/update-docs.sh
 
 verify-gen:
 	./hack/verify-conversions.sh
 	./hack/verify-deep-copies.sh
 	./hack/verify-defaulters.sh
+	./hack/verify-docs.sh
 
 lint:
 ifndef HAS_GOLANGCI
