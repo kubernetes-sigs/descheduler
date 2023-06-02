@@ -75,6 +75,7 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `service.enabled`                   | If `true`, create a service for deployment                                                                            | `false`                                   |
 | `serviceMonitor.enabled`            | If `true`, create a ServiceMonitor for deployment                                                                     | `false`                                   |
 | `serviceMonitor.namespace`          | The namespace where Prometheus expects to find service monitors                                                       | `nil`                                     |
+| `serviceMonitor.additionalLabels`   | Add custom labels to the ServiceMonitor resource                                                                      | `{}`                                      |
 | `serviceMonitor.interval`           | The scrape interval. If not set, the Prometheus default scrape interval is used                                       | `nil`                                     |
 | `serviceMonitor.honorLabels`        | Keeps the scraped data's labels when labels are on collisions with target labels.                                     | `true`                                    |
 | `serviceMonitor.insecureSkipVerify` | Skip TLS certificate validation when scraping                                                                         | `true`                                    |
