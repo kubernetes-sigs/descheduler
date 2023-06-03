@@ -399,7 +399,9 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							defaultEvictorPluginConfig,
 							{
 								Name: removepodsviolatingtopologyspreadconstraint.PluginName,
-								Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{},
+								Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
+									TopologyBalanceNodeFit: utilpointer.Bool(true),
+								},
 							},
 						},
 						Plugins: api.Plugins{
@@ -715,6 +717,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 								Name: removepodsviolatingtopologyspreadconstraint.PluginName,
 								Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
 									IncludeSoftConstraints: true,
+									TopologyBalanceNodeFit: utilpointer.Bool(true),
 								},
 							},
 						},

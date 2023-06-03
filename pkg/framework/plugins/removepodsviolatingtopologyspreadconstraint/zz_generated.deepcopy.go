@@ -41,6 +41,11 @@ func (in *RemovePodsViolatingTopologySpreadConstraintArgs) DeepCopyInto(out *Rem
 		*out = new(v1.LabelSelector)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.TopologyBalanceNodeFit != nil {
+		in, out := &in.TopologyBalanceNodeFit, &out.TopologyBalanceNodeFit
+		*out = new(bool)
+		**out = **in
+	}
 	return
 }
 

@@ -20,8 +20,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	utilpointer "k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/pkg/api"
 )
+
+var scheme *runtime.Scheme
+
+func init() {
+	scheme = runtime.NewScheme()
+	scheme.AddTypeDefaultingFunc(&RemovePodsViolatingTopologySpreadConstraintArgs{}, func(obj interface{}) {
+		SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(obj.(*RemovePodsViolatingTopologySpreadConstraintArgs))
+	})
+	utilruntime.Must(AddToScheme(scheme))
+}
 
 func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.T) {
 	tests := []struct {
@@ -36,6 +47,7 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 				Namespaces:             nil,
 				LabelSelector:          nil,
 				IncludeSoftConstraints: false,
+				TopologyBalanceNodeFit: utilpointer.Bool(true),
 			},
 		},
 		{
@@ -49,12 +61,27 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 				Namespaces:             &api.Namespaces{},
 				LabelSelector:          &metav1.LabelSelector{},
 				IncludeSoftConstraints: true,
+				TopologyBalanceNodeFit: utilpointer.Bool(true),
+			},
+		},
+		{
+			name: "RemovePodsViolatingTopologySpreadConstraintArgs without TopologyBalanceNodeFit",
+			in:   &RemovePodsViolatingTopologySpreadConstraintArgs{},
+			want: &RemovePodsViolatingTopologySpreadConstraintArgs{
+				TopologyBalanceNodeFit: utilpointer.Bool(true),
+			},
+		},
+		{
+			name: "RemovePodsViolatingTopologySpreadConstraintArgs with TopologyBalanceNodeFit=false",
+			in: &RemovePodsViolatingTopologySpreadConstraintArgs{
+				TopologyBalanceNodeFit: utilpointer.Bool(false),
+			},
+			want: &RemovePodsViolatingTopologySpreadConstraintArgs{
+				TopologyBalanceNodeFit: utilpointer.Bool(false),
 			},
 		},
 	}
 	for _, tc := range tests {
-		scheme := runtime.NewScheme()
-		utilruntime.Must(AddToScheme(scheme))
 		t.Run(tc.name, func(t *testing.T) {
 			scheme.Default(tc.in)
 			if diff := cmp.Diff(tc.in, tc.want); diff != "" {

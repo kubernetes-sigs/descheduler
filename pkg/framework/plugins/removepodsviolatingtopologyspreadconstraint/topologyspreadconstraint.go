@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
+	utilpointer "k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -197,7 +198,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 				klog.V(2).InfoS("Skipping topology constraint because it is already balanced", "constraint", constraint)
 				continue
 			}
-			balanceDomains(d.handle.GetPodsAssignedToNodeFunc(), podsForEviction, constraint, constraintTopologies, sumPods, d.handle.Evictor().Filter, nodes)
+			d.balanceDomains(podsForEviction, constraint, constraintTopologies, sumPods, nodes)
 		}
 	}
 
@@ -270,17 +271,18 @@ func topologyIsBalanced(topology map[topologyPair][]*v1.Pod, constraint v1.Topol
 // Following this, the above topology domains end up "sorted" as:
 // [5, 5, 5, 5, 5, 5]
 // (assuming even distribution by the scheduler of the evicted pods)
-func balanceDomains(
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
+func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(
 	podsForEviction map[*v1.Pod]struct{},
 	constraint v1.TopologySpreadConstraint,
 	constraintTopologies map[topologyPair][]*v1.Pod,
 	sumPods float64,
-	isEvictable func(pod *v1.Pod) bool,
 	nodes []*v1.Node,
 ) {
 	idealAvg := sumPods / float64(len(constraintTopologies))
+	isEvictable := d.handle.Evictor().Filter
 	sortedDomains := sortDomains(constraintTopologies, isEvictable)
+	getPodsAssignedToNode := d.handle.GetPodsAssignedToNodeFunc()
+	topologyBalanceNodeFit := utilpointer.BoolDeref(d.args.TopologyBalanceNodeFit, true)
 
 	nodesBelowIdealAvg := filterNodesBelowIdealAvg(nodes, sortedDomains, constraint.TopologyKey, idealAvg)
 
@@ -335,7 +337,7 @@ func balanceDomains(
 			// This is because the chosen pods aren't sorted, but immovable pods still count as "evicted" toward the PTS algorithm.
 			// So, a better selection heuristic could improve performance.
 
-			if !node.PodFitsAnyOtherNode(getPodsAssignedToNode, aboveToEvict[k], nodesBelowIdealAvg) {
+			if topologyBalanceNodeFit && !node.PodFitsAnyOtherNode(getPodsAssignedToNode, aboveToEvict[k], nodesBelowIdealAvg) {
 				klog.V(2).InfoS("ignoring pod for eviction as it does not fit on any other node", "pod", klog.KObj(aboveToEvict[k]))
 				continue
 			}

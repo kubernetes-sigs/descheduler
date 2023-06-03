@@ -112,7 +112,7 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 
 ## Policy, Default Evictor and Strategy plugins
 
-**⚠️ v1alpha1 configuration is still suported, but deprecated (and soon will be removed). Please consider migrating to v1alpha2 (described bellow). For previous v1alpha1 documentation go to [docs/deprecated/v1alpha1.md](docs/deprecated/v1alpha1.md) ⚠️**
+**⚠️ v1alpha1 configuration is still supported, but deprecated (and soon will be removed). Please consider migrating to v1alpha2 (described bellow). For previous v1alpha1 documentation go to [docs/deprecated/v1alpha1.md](docs/deprecated/v1alpha1.md) ⚠️**
 
 The Descheduler Policy is configurable and includes default strategy plugins that can be enabled or disabled. It includes a common eviction configuration at the top level, as well as configuration from the Evictor plugin (Default Evictor, if not specified otherwise). Top-level configuration and Evictor plugin configuration are applied to all evictions.
 
@@ -525,6 +525,11 @@ This strategy requires k8s version 1.18 at a minimum.
 By default, this strategy only deals with hard constraints, setting parameter `includeSoftConstraints` to `true` will
 include soft constraints.
 
+The `topologyBalanceNodeFit` arg is used when balancing topology domains while the Default Evictor's `nodeFit` is used in pre-eviction to determine if a pod can be evicted.
+```yaml
+topologyBalanceNodeFit: false
+```
+
 Strategy parameter `labelSelector` is not utilized when balancing topology domains and is only applied during eviction to determine if the pod can be evicted.
 
 **Parameters:**
@@ -534,6 +539,7 @@ Strategy parameter `labelSelector` is not utilized when balancing topology domai
 |`includeSoftConstraints`|bool|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`topologyBalanceNodeFit`|bool|default `true`. [node fit filtering](#node-fit-filtering) when balancing topology domains|
 
 **Example:**
 

@@ -568,6 +568,7 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingTopologySpreadConstraint(t
 				Name: removepodsviolatingtopologyspreadconstraint.PluginName,
 				Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
 					IncludeSoftConstraints: true,
+					TopologyBalanceNodeFit: utilpointer.Bool(true),
 					Namespaces: &api.Namespaces{
 						Exclude: []string{"test1"},
 					},
