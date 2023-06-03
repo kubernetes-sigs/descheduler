@@ -522,8 +522,12 @@ This strategy makes sure that pods violating [topology spread constraints](https
 are evicted from nodes. Specifically, it tries to evict the minimum number of pods required to balance topology domains to within each constraint's `maxSkew`.
 This strategy requires k8s version 1.18 at a minimum.
 
-By default, this strategy only deals with hard constraints, setting parameter `includeSoftConstraints` to `true` will
-include soft constraints.
+By default, this strategy only includes hard constraints, you can explicitly set `constraints` as shown below to include both:
+```yaml
+constraints:
+- DoNotSchedule
+- ScheduleAnyway
+```
 
 The `topologyBalanceNodeFit` arg is used when balancing topology domains while the Default Evictor's `nodeFit` is used in pre-eviction to determine if a pod can be evicted.
 ```yaml
@@ -536,9 +540,9 @@ Strategy parameter `labelSelector` is not utilized when balancing topology domai
 
 |Name|Type|
 |---|---|
-|`includeSoftConstraints`|bool|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`constraints`|(see [whenUnsatisfiable](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.27/#topologyspreadconstraint-v1-core))||
 |`topologyBalanceNodeFit`|bool|default `true`. [node fit filtering](#node-fit-filtering) when balancing topology domains|
 
 **Example:**
@@ -551,7 +555,8 @@ profiles:
     pluginConfig:
     - name: "RemovePodsViolatingTopologySpreadConstraint"
       args:
-        includeSoftConstraints: false
+        constraints:
+          - DoNotSchedule
     plugins:
       balance:
         enabled:

@@ -118,6 +118,8 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 		}
 	}
 
+	allowedConstraints := sets.New[v1.UnsatisfiableConstraintAction](d.args.Constraints...)
+
 	namespacedPods := podutil.GroupByNamespace(pods)
 
 	// 1. for each namespace...
@@ -131,8 +133,8 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 		namespaceTopologySpreadConstraints := []v1.TopologySpreadConstraint{}
 		for _, pod := range namespacedPods[namespace] {
 			for _, constraint := range pod.Spec.TopologySpreadConstraints {
-				// Ignore soft topology constraints if they are not included
-				if constraint.WhenUnsatisfiable == v1.ScheduleAnyway && (d.args == nil || !d.args.IncludeSoftConstraints) {
+				// Ignore topology constraints if they are not included
+				if !allowedConstraints.Has(constraint.WhenUnsatisfiable) {
 					continue
 				}
 				// Need to check v1.TopologySpreadConstraint deepEquality because

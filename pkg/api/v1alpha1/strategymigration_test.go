@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	v1 "k8s.io/api/core/v1"
 	utilpointer "k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
@@ -567,11 +568,25 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingTopologySpreadConstraint(t
 			result: &api.PluginConfig{
 				Name: removepodsviolatingtopologyspreadconstraint.PluginName,
 				Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
-					IncludeSoftConstraints: true,
+					Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule, v1.ScheduleAnyway},
 					TopologyBalanceNodeFit: utilpointer.Bool(true),
 					Namespaces: &api.Namespaces{
 						Exclude: []string{"test1"},
 					},
+				},
+			},
+		},
+		{
+			description: "params without soft constraints",
+			params: &StrategyParameters{
+				IncludeSoftConstraints: false,
+			},
+			err: nil,
+			result: &api.PluginConfig{
+				Name: removepodsviolatingtopologyspreadconstraint.PluginName,
+				Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
+					Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
+					TopologyBalanceNodeFit: utilpointer.Bool(true),
 				},
 			},
 		},

@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	v1 "k8s.io/api/core/v1"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	utilpointer "k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -400,6 +401,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							{
 								Name: removepodsviolatingtopologyspreadconstraint.PluginName,
 								Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
+									Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
 									TopologyBalanceNodeFit: utilpointer.Bool(true),
 								},
 							},
@@ -716,7 +718,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							{
 								Name: removepodsviolatingtopologyspreadconstraint.PluginName,
 								Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
-									IncludeSoftConstraints: true,
+									Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule, v1.ScheduleAnyway},
 									TopologyBalanceNodeFit: utilpointer.Bool(true),
 								},
 							},
