@@ -26,9 +26,11 @@ import (
 	"time"
 
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/tools/events"
 	componentbaseconfig "k8s.io/component-base/config"
 	"k8s.io/klog/v2"
 
+	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -215,6 +217,129 @@ func cachedClient(
 	return fakeClient, nil
 }
 
+func RunDeschedulerLoop(ctx context.Context, rs *options.DeschedulerServer, nodes []*v1.Node, nodeSelector string,
+	podLister listersv1.PodLister, nodeLister listersv1.NodeLister, namespaceLister listersv1.NamespaceLister,
+	priorityClassLister schedulingv1.PriorityClassLister, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
+	cycleSharedInformerFactory informers.SharedInformerFactory, evictionPolicyGroupVersion string, deschedulerPolicy *api.DeschedulerPolicy, eventRecorder events.EventRecorder,
+) error {
+	var err error
+	// let us pass nodes explicitly for tests and simulations, but get them at every loop when running by default
+	if len(nodes) == 0 {
+		nodes, err = nodeutil.ReadyNodes(ctx, rs.Client, nodeLister, nodeSelector)
+		if err != nil {
+			return err
+		}
+	}
+	loopStartDuration := time.Now()
+	defer metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
+
+	// if len is still <= 1 error out
+	if len(nodes) <= 1 {
+		klog.V(1).InfoS("The cluster size is 0 or 1 meaning eviction causes service disruption or degradation. So aborting..")
+		return fmt.Errorf("the cluster size is 0 or 1")
+	}
+
+	var client clientset.Interface
+	// When the dry mode is enable, collect all the relevant objects (mostly pods) under a fake client.
+	// So when evicting pods while running multiple strategies in a row have the cummulative effect
+	// as is when evicting pods for real.
+	if rs.DryRun {
+		klog.V(3).Infof("Building a cached client from the cluster for the dry run")
+		// Create a new cache so we start from scratch without any leftovers
+		fakeClient, err := cachedClient(rs.Client, podLister, nodeLister, namespaceLister, priorityClassLister)
+		if err != nil {
+			return err
+		}
+
+		// create a new instance of the shared informer factor from the cached client
+		fakeSharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+		// register the pod informer, otherwise it will not get running
+		getPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(fakeSharedInformerFactory.Core().V1().Pods().Informer())
+		if err != nil {
+			return fmt.Errorf("build get pods assigned to node function error: %v", err)
+		}
+
+		fakeCtx, cncl := context.WithCancel(context.TODO())
+		defer cncl()
+		fakeSharedInformerFactory.Start(fakeCtx.Done())
+		fakeSharedInformerFactory.WaitForCacheSync(fakeCtx.Done())
+
+		client = fakeClient
+		cycleSharedInformerFactory = fakeSharedInformerFactory
+	} else {
+		client = rs.Client
+	}
+
+	klog.V(3).Infof("Building a pod evictor")
+	podEvictor := evictions.NewPodEvictor(
+		client,
+		evictionPolicyGroupVersion,
+		rs.DryRun,
+		deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
+		deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
+		nodes,
+		!rs.DisableMetrics,
+		eventRecorder,
+	)
+
+	RunProfiles(ctx, nodes, deschedulerPolicy, client, cycleSharedInformerFactory, podEvictor, getPodsAssignedToNode)
+
+	klog.V(1).InfoS("Number of evicted pods", "totalEvicted", podEvictor.TotalEvicted())
+
+	return nil
+}
+
+// RunProfiles runs all the deschedule plugins of all profiles and
+// later runs through all balance plugins of all profiles. (All Balance plugins should come after all Deschedule plugins)
+// see https://github.com/kubernetes-sigs/descheduler/issues/979
+func RunProfiles(ctx context.Context, nodes []*v1.Node, deschedulerPolicy *api.DeschedulerPolicy, client clientset.Interface,
+	cycleSharedInformerFactory informers.SharedInformerFactory, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
+) {
+	for _, profile := range deschedulerPolicy.Profiles {
+		currProfile, err := frameworkprofile.NewProfile(
+			profile,
+			pluginregistry.PluginRegistry,
+			frameworkprofile.WithClientSet(client),
+			frameworkprofile.WithSharedInformerFactory(cycleSharedInformerFactory),
+			frameworkprofile.WithPodEvictor(podEvictor),
+			frameworkprofile.WithGetPodsAssignedToNodeFnc(getPodsAssignedToNode),
+		)
+		if err != nil {
+			klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)
+			continue
+		}
+
+		// First deschedule
+		status := currProfile.RunDeschedulePlugins(ctx, nodes)
+		if status != nil && status.Err != nil {
+			klog.ErrorS(status.Err, "running deschedule extension point failed with error", "profile", profile.Name)
+			continue
+		}
+	}
+
+	for _, profile := range deschedulerPolicy.Profiles {
+		currProfile, err := frameworkprofile.NewProfile(
+			profile,
+			pluginregistry.PluginRegistry,
+			frameworkprofile.WithClientSet(client),
+			frameworkprofile.WithSharedInformerFactory(cycleSharedInformerFactory),
+			frameworkprofile.WithPodEvictor(podEvictor),
+			frameworkprofile.WithGetPodsAssignedToNodeFnc(getPodsAssignedToNode),
+		)
+		if err != nil {
+			klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)
+			continue
+		}
+
+		// Then balance
+		status := currProfile.RunBalancePlugins(ctx, nodes)
+		if status != nil && status.Err != nil {
+			klog.ErrorS(status.Err, "running balance extension point failed with error", "profile", profile.Name)
+			continue
+		}
+	}
+}
+
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string) error {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
@@ -252,96 +377,12 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	cycleSharedInformerFactory := sharedInformerFactory
 
 	wait.NonSlidingUntil(func() {
-		loopStartDuration := time.Now()
-		defer metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
-		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeLister, nodeSelector)
+		err := RunDeschedulerLoop(ctx, rs, []*v1.Node{}, nodeSelector, podLister, nodeLister, namespaceLister, priorityClassLister, getPodsAssignedToNode, cycleSharedInformerFactory, evictionPolicyGroupVersion, deschedulerPolicy, eventRecorder)
 		if err != nil {
-			klog.V(1).InfoS("Unable to get ready nodes", "err", err)
+			klog.Error(err)
 			cancel()
 			return
 		}
-
-		if len(nodes) <= 1 {
-			klog.V(1).InfoS("The cluster size is 0 or 1 meaning eviction causes service disruption or degradation. So aborting..")
-			cancel()
-			return
-		}
-
-		var client clientset.Interface
-		// When the dry mode is enable, collect all the relevant objects (mostly pods) under a fake client.
-		// So when evicting pods while running multiple strategies in a row have the cummulative effect
-		// as is when evicting pods for real.
-		if rs.DryRun {
-			klog.V(3).Infof("Building a cached client from the cluster for the dry run")
-			// Create a new cache so we start from scratch without any leftovers
-			fakeClient, err := cachedClient(rs.Client, podLister, nodeLister, namespaceLister, priorityClassLister)
-			if err != nil {
-				klog.Error(err)
-				return
-			}
-
-			// create a new instance of the shared informer factor from the cached client
-			fakeSharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			// register the pod informer, otherwise it will not get running
-			getPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(fakeSharedInformerFactory.Core().V1().Pods().Informer())
-			if err != nil {
-				klog.Errorf("build get pods assigned to node function error: %v", err)
-				return
-			}
-
-			fakeCtx, cncl := context.WithCancel(context.TODO())
-			defer cncl()
-			fakeSharedInformerFactory.Start(fakeCtx.Done())
-			fakeSharedInformerFactory.WaitForCacheSync(fakeCtx.Done())
-
-			client = fakeClient
-			cycleSharedInformerFactory = fakeSharedInformerFactory
-		} else {
-			client = rs.Client
-		}
-
-		klog.V(3).Infof("Building a pod evictor")
-		podEvictor := evictions.NewPodEvictor(
-			client,
-			evictionPolicyGroupVersion,
-			rs.DryRun,
-			deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
-			deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
-			nodes,
-			!rs.DisableMetrics,
-			eventRecorder,
-		)
-
-		for _, profile := range deschedulerPolicy.Profiles {
-			currProfile, err := frameworkprofile.NewProfile(
-				profile,
-				pluginregistry.PluginRegistry,
-				frameworkprofile.WithClientSet(client),
-				frameworkprofile.WithSharedInformerFactory(cycleSharedInformerFactory),
-				frameworkprofile.WithPodEvictor(podEvictor),
-				frameworkprofile.WithGetPodsAssignedToNodeFnc(getPodsAssignedToNode),
-			)
-			if err != nil {
-				klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)
-				continue
-			}
-
-			// First deschedule
-			status := currProfile.RunDeschedulePlugins(ctx, nodes)
-			if status != nil && status.Err != nil {
-				klog.ErrorS(status.Err, "running deschedule extension point failed with error", "profile", profile.Name)
-				continue
-			}
-			// Then balance
-			status = currProfile.RunBalancePlugins(ctx, nodes)
-			if status != nil && status.Err != nil {
-				klog.ErrorS(status.Err, "running balance extension point failed with error", "profile", profile.Name)
-				continue
-			}
-		}
-
-		klog.V(1).InfoS("Number of evicted pods", "totalEvicted", podEvictor.TotalEvicted())
-
 		// If there was no interval specified, send a signal to the stopChannel to end the wait.Until loop after 1 iteration
 		if rs.DeschedulingInterval.Seconds() == 0 {
 			cancel()
