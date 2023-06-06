@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	utilpointer "k8s.io/utils/pointer"
 )
 
 func TestValidateRemovePodLifeTimeArgs(t *testing.T) {
@@ -31,7 +32,7 @@ func TestValidateRemovePodLifeTimeArgs(t *testing.T) {
 		{
 			description: "valid arg, no errors",
 			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: func(i uint) *uint { return &i }(1),
+				MaxPodLifeTimeSeconds: utilpointer.Uint(1),
 				States:                []string{string(v1.PodRunning)},
 			},
 			expectError: false,
@@ -49,6 +50,14 @@ func TestValidateRemovePodLifeTimeArgs(t *testing.T) {
 				States: []string{string(v1.NodeRunning)},
 			},
 			expectError: true,
+		},
+		{
+			description: "allows CrashLoopBackOff state",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: utilpointer.Uint(1),
+				States:                []string{"CrashLoopBackOff"},
+			},
+			expectError: false,
 		},
 	}
 
