@@ -103,8 +103,8 @@ type preEvictionFilterPlugin interface {
 	PreEvictionFilter(pod *v1.Pod) bool
 }
 
-type profileImpl struct {
-	profileName string
+type ProfileImpl struct {
+	ProfileName string
 	podEvictor  *evictions.PodEvictor
 
 	deschedulePlugins        []frameworktypes.DeschedulePlugin
@@ -183,7 +183,7 @@ func buildPlugin(config api.DeschedulerProfile, pluginName string, handle *handl
 	return pg, nil
 }
 
-func (p *profileImpl) registryToExtensionPoints(registry pluginregistry.Registry) {
+func (p *ProfileImpl) registryToExtensionPoints(registry pluginregistry.Registry) {
 	p.deschedule = sets.New[string]()
 	p.balance = sets.New[string]()
 	p.filter = sets.New[string]()
@@ -203,7 +203,7 @@ func (p *profileImpl) registryToExtensionPoints(registry pluginregistry.Registry
 	}
 }
 
-func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts ...Option) (*profileImpl, error) {
+func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts ...Option) (*ProfileImpl, error) {
 	hOpts := &handleImplOpts{}
 	for _, optFnc := range opts {
 		optFnc(hOpts)
@@ -221,8 +221,8 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 		return nil, fmt.Errorf("podEvictor missing")
 	}
 
-	pi := &profileImpl{
-		profileName:              config.Name,
+	pi := &ProfileImpl{
+		ProfileName:              config.Name,
 		podEvictor:               hOpts.podEvictor,
 		deschedulePlugins:        []frameworktypes.DeschedulePlugin{},
 		balancePlugins:           []frameworktypes.BalancePlugin{},
@@ -297,7 +297,7 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 	return pi, nil
 }
 
-func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+func (d ProfileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	errs := []error{}
 	for _, pl := range d.deschedulePlugins {
 		evicted := d.podEvictor.TotalEvicted()
@@ -308,7 +308,7 @@ func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node)
 		strategyStart := time.Now()
 		childCtx := context.WithValue(ctx, "strategyName", pl.Name())
 		status := pl.Deschedule(childCtx, nodes)
-		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": d.profileName}).Observe(time.Since(strategyStart).Seconds())
+		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": d.ProfileName}).Observe(time.Since(strategyStart).Seconds())
 
 		if status != nil && status.Err != nil {
 			errs = append(errs, fmt.Errorf("plugin %q finished with error: %v", pl.Name(), status.Err))
@@ -326,7 +326,7 @@ func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node)
 	}
 }
 
-func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+func (d ProfileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	errs := []error{}
 	for _, pl := range d.balancePlugins {
 		evicted := d.podEvictor.TotalEvicted()
@@ -337,7 +337,7 @@ func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *f
 		strategyStart := time.Now()
 		childCtx := context.WithValue(ctx, "strategyName", pl.Name())
 		status := pl.Balance(childCtx, nodes)
-		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": d.profileName}).Observe(time.Since(strategyStart).Seconds())
+		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": d.ProfileName}).Observe(time.Since(strategyStart).Seconds())
 
 		if status != nil && status.Err != nil {
 			errs = append(errs, fmt.Errorf("plugin %q finished with error: %v", pl.Name(), status.Err))

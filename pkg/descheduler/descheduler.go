@@ -222,14 +222,6 @@ func RunDeschedulerLoop(ctx context.Context, rs *options.DeschedulerServer, node
 	priorityClassLister schedulingv1.PriorityClassLister, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 	cycleSharedInformerFactory informers.SharedInformerFactory, evictionPolicyGroupVersion string, deschedulerPolicy *api.DeschedulerPolicy, eventRecorder events.EventRecorder,
 ) error {
-	var err error
-	// let us pass nodes explicitly for tests and simulations, but get them at every loop when running by default
-	if len(nodes) == 0 {
-		nodes, err = nodeutil.ReadyNodes(ctx, rs.Client, nodeLister, nodeSelector)
-		if err != nil {
-			return err
-		}
-	}
 	loopStartDuration := time.Now()
 	defer metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
 
@@ -295,6 +287,7 @@ func RunDeschedulerLoop(ctx context.Context, rs *options.DeschedulerServer, node
 func RunProfiles(ctx context.Context, nodes []*v1.Node, deschedulerPolicy *api.DeschedulerPolicy, client clientset.Interface,
 	cycleSharedInformerFactory informers.SharedInformerFactory, podEvictor *evictions.PodEvictor, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 ) {
+	frameworkprofiles := []*frameworkprofile.ProfileImpl{}
 	for _, profile := range deschedulerPolicy.Profiles {
 		currProfile, err := frameworkprofile.NewProfile(
 			profile,
@@ -308,33 +301,23 @@ func RunProfiles(ctx context.Context, nodes []*v1.Node, deschedulerPolicy *api.D
 			klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)
 			continue
 		}
+		frameworkprofiles = append(frameworkprofiles, currProfile)
+	}
 
+	for _, profileImpl := range frameworkprofiles {
 		// First deschedule
-		status := currProfile.RunDeschedulePlugins(ctx, nodes)
+		status := profileImpl.RunDeschedulePlugins(ctx, nodes)
 		if status != nil && status.Err != nil {
-			klog.ErrorS(status.Err, "running deschedule extension point failed with error", "profile", profile.Name)
+			klog.ErrorS(status.Err, "running deschedule extension point failed with error", "profile", profileImpl.ProfileName)
 			continue
 		}
 	}
 
-	for _, profile := range deschedulerPolicy.Profiles {
-		currProfile, err := frameworkprofile.NewProfile(
-			profile,
-			pluginregistry.PluginRegistry,
-			frameworkprofile.WithClientSet(client),
-			frameworkprofile.WithSharedInformerFactory(cycleSharedInformerFactory),
-			frameworkprofile.WithPodEvictor(podEvictor),
-			frameworkprofile.WithGetPodsAssignedToNodeFnc(getPodsAssignedToNode),
-		)
-		if err != nil {
-			klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)
-			continue
-		}
-
+	for _, profileImpl := range frameworkprofiles {
 		// Then balance
-		status := currProfile.RunBalancePlugins(ctx, nodes)
+		status := profileImpl.RunBalancePlugins(ctx, nodes)
 		if status != nil && status.Err != nil {
-			klog.ErrorS(status.Err, "running balance extension point failed with error", "profile", profile.Name)
+			klog.ErrorS(status.Err, "running balance extension point failed with error", "profile", profileImpl.ProfileName)
 			continue
 		}
 	}
@@ -377,7 +360,13 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	cycleSharedInformerFactory := sharedInformerFactory
 
 	wait.NonSlidingUntil(func() {
-		err := RunDeschedulerLoop(ctx, rs, []*v1.Node{}, nodeSelector, podLister, nodeLister, namespaceLister, priorityClassLister, getPodsAssignedToNode, cycleSharedInformerFactory, evictionPolicyGroupVersion, deschedulerPolicy, eventRecorder)
+		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeLister, nodeSelector)
+		if err != nil {
+			klog.Error(err)
+			cancel()
+			return
+		}
+		err = RunDeschedulerLoop(ctx, rs, nodes, nodeSelector, podLister, nodeLister, namespaceLister, priorityClassLister, getPodsAssignedToNode, cycleSharedInformerFactory, evictionPolicyGroupVersion, deschedulerPolicy, eventRecorder)
 		if err != nil {
 			klog.Error(err)
 			cancel()
