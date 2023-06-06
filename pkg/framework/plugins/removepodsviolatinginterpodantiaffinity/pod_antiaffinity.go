@@ -78,20 +78,15 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Name() string {
 }
 
 func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
-	podsList, err := d.handle.ClientSet().CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	pods, err := podutil.ListPodsOnNodes(nodes, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 	if err != nil {
 		return &frameworktypes.Status{
 			Err: fmt.Errorf("error listing all pods: %v", err),
 		}
 	}
 
-	podsInANamespace := groupByNamespace(podsList)
-
-	runningPodFilter := func(pod *v1.Pod) bool {
-		return pod.Status.Phase != v1.PodSucceeded && pod.Status.Phase != v1.PodFailed
-	}
-	podsOnANode := groupByNodeName(podsList, podutil.WrapFilterFuncs(runningPodFilter, d.podFilter))
-
+	podsInANamespace := podutil.GroupByNamespace(pods)
+	podsOnANode := groupByNodeName(pods)
 	nodeMap := createNodeMap(nodes)
 
 loop:
@@ -136,25 +131,11 @@ func removePodFromNamespaceMap(podToRemove *v1.Pod, podMap map[string][]*v1.Pod)
 	return podMap
 }
 
-func groupByNamespace(pods *v1.PodList) map[string][]*v1.Pod {
+func groupByNodeName(pods []*v1.Pod) map[string][]*v1.Pod {
 	m := make(map[string][]*v1.Pod)
-	for i := 0; i < len(pods.Items); i++ {
-		pod := &(pods.Items[i])
-		m[pod.Namespace] = append(m[pod.Namespace], pod)
-	}
-	return m
-}
-
-func groupByNodeName(pods *v1.PodList, filter podutil.FilterFunc) map[string][]*v1.Pod {
-	m := make(map[string][]*v1.Pod)
-	if filter == nil {
-		filter = func(p *v1.Pod) bool { return true }
-	}
-	for i := 0; i < len(pods.Items); i++ {
-		pod := &(pods.Items[i])
-		if filter(pod) {
-			m[pod.Spec.NodeName] = append(m[pod.Spec.NodeName], pod)
-		}
+	for i := 0; i < len(pods); i++ {
+		pod := pods[i]
+		m[pod.Spec.NodeName] = append(m[pod.Spec.NodeName], pod)
 	}
 	return m
 }

@@ -102,15 +102,6 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 	// iterate through all topoPairs for this topologyKey and diff currentPods -minPods <=maxSkew
 	// if diff > maxSkew, add this pod in the current bucket for eviction
 
-	// First record all of the constraints by namespace
-	client := d.handle.ClientSet()
-	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		klog.ErrorS(err, "Couldn't list namespaces")
-		return &frameworktypes.Status{
-			Err: fmt.Errorf("list namespace: %w", err),
-		}
-	}
 	klog.V(1).InfoS("Processing namespaces for topology spread constraints")
 	podsForEviction := make(map[*v1.Pod]struct{})
 	var includedNamespaces, excludedNamespaces sets.Set[string]
@@ -119,21 +110,25 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 		excludedNamespaces = sets.New(d.args.Namespaces.Exclude...)
 	}
 
-	// 1. for each namespace...
-	for _, namespace := range namespaces.Items {
-		if (len(includedNamespaces) > 0 && !includedNamespaces.Has(namespace.Name)) ||
-			(len(excludedNamespaces) > 0 && excludedNamespaces.Has(namespace.Name)) {
-			continue
+	pods, err := podutil.ListPodsOnNodes(nodes, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
+	if err != nil {
+		return &frameworktypes.Status{
+			Err: fmt.Errorf("error listing all pods: %v", err),
 		}
-		namespacePods, err := client.CoreV1().Pods(namespace.Name).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			klog.ErrorS(err, "Couldn't list pods in namespace", "namespace", namespace)
+	}
+
+	namespacedPods := podutil.GroupByNamespace(pods)
+
+	// 1. for each namespace...
+	for namespace := range namespacedPods {
+		if (len(includedNamespaces) > 0 && !includedNamespaces.Has(namespace)) ||
+			(len(excludedNamespaces) > 0 && excludedNamespaces.Has(namespace)) {
 			continue
 		}
 
 		// ...where there is a topology constraint
 		namespaceTopologySpreadConstraints := []v1.TopologySpreadConstraint{}
-		for _, pod := range namespacePods.Items {
+		for _, pod := range namespacedPods[namespace] {
 			for _, constraint := range pod.Spec.TopologySpreadConstraints {
 				// Ignore soft topology constraints if they are not included
 				if constraint.WhenUnsatisfiable == v1.ScheduleAnyway && (d.args == nil || !d.args.IncludeSoftConstraints) {
@@ -172,18 +167,18 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 			// 3. for each evictable pod in that namespace
 			// (this loop is where we count the number of pods per topologyValue that match this constraint's selector)
 			var sumPods float64
-			for i := range namespacePods.Items {
+			for _, pod := range namespacedPods[namespace] {
 				// skip pods that are being deleted.
-				if utils.IsPodTerminating(&namespacePods.Items[i]) {
+				if utils.IsPodTerminating(pod) {
 					continue
 				}
 				// 4. if the pod matches this TopologySpreadConstraint LabelSelector
-				if !selector.Matches(labels.Set(namespacePods.Items[i].Labels)) {
+				if !selector.Matches(labels.Set(pod.Labels)) {
 					continue
 				}
 
 				// 5. If the pod's node matches this constraint's topologyKey, create a topoPair and add the pod
-				node, ok := nodeMap[namespacePods.Items[i].Spec.NodeName]
+				node, ok := nodeMap[pod.Spec.NodeName]
 				if !ok {
 					// If ok is false, node is nil in which case node.Labels will panic. In which case a pod is yet to be scheduled. So it's safe to just continue here.
 					continue
@@ -195,7 +190,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 				// 6. create a topoPair with key as this TopologySpreadConstraint
 				topoPair := topologyPair{key: constraint.TopologyKey, value: nodeValue}
 				// 7. add the pod with key as this topoPair
-				constraintTopologies[topoPair] = append(constraintTopologies[topoPair], &namespacePods.Items[i])
+				constraintTopologies[topoPair] = append(constraintTopologies[topoPair], pod)
 				sumPods++
 			}
 			if topologyIsBalanced(constraintTopologies, constraint) {
