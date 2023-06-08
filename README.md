@@ -561,6 +561,13 @@ include `podRestartThreshold`, which is the number of restarts (summed over all 
 should be evicted, and `includingInitContainers`, which determines whether init container restarts should be factored
 into that calculation.
 
+You can also specify `states` parameter to **only** evict pods matching the following conditions:
+- [Pod Phase](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase) status of: `Running`
+- [Container State Waiting](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-state-waiting) of: `CrashLoopBackOff`
+
+If a value for `states` or `podStatusPhases` is not specified,
+Pods in any state (even `Running`) are considered for eviction.
+
 **Parameters:**
 
 |Name|Type|
@@ -569,6 +576,7 @@ into that calculation.
 |`includingInitContainers`|bool|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`states`|list(string)|Only supported in v0.28+|
 
 **Example:**
 
