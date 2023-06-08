@@ -86,7 +86,7 @@ func TestRemoveDuplicates(t *testing.T) {
 					Containers: []v1.Container{{
 						Name:            "pause",
 						ImagePullPolicy: "Always",
-						Image:           "kubernetes/pause",
+						Image:           "registry.k8s.io/pause",
 						Ports:           []v1.ContainerPort{{ContainerPort: 80}},
 						SecurityContext: &v1.SecurityContext{
 							AllowPrivilegeEscalation: utilpointer.Bool(false),
