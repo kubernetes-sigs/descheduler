@@ -70,7 +70,7 @@ func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 		Containers: []v1.Container{{
 			Name:            "pause",
 			ImagePullPolicy: "Never",
-			Image:           "kubernetes/pause",
+			Image:           "registry.k8s.io/pause",
 			Ports:           []v1.ContainerPort{{ContainerPort: 80}},
 			Resources: v1.ResourceRequirements{
 				Limits: v1.ResourceList{
@@ -331,7 +331,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				Containers: []v1.Container{{
 					Name:            "pause",
 					ImagePullPolicy: "Never",
-					Image:           "kubernetes/pause",
+					Image:           "registry.k8s.io/pause",
 					Ports:           []v1.ContainerPort{{ContainerPort: 80}},
 					Resources: v1.ResourceRequirements{
 						Limits: v1.ResourceList{
@@ -1336,7 +1336,7 @@ func createBalancedPodForNodes(
 				Containers: []v1.Container{
 					{
 						Name:  "pause",
-						Image: "kubernetes/pause",
+						Image: "registry.k8s.io/pause",
 						Resources: v1.ResourceRequirements{
 							Limits:   needCreateResource,
 							Requests: needCreateResource,
