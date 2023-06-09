@@ -4,6 +4,10 @@ Starting with descheduler release v0.10.0 container images are available in the 
 
 Descheduler Version | Container Image                                 | Architectures           |
 ------------------- |-------------------------------------------------|-------------------------|
+v0.27.1             | registry.k8s.io/descheduler/descheduler:v0.27.1 | AMD64<br>ARM64<br>ARMv7 |
+v0.27.0             | registry.k8s.io/descheduler/descheduler:v0.27.0 | AMD64<br>ARM64<br>ARMv7 |
+v0.26.1             | registry.k8s.io/descheduler/descheduler:v0.26.1 | AMD64<br>ARM64<br>ARMv7 |
+v0.26.0             | registry.k8s.io/descheduler/descheduler:v0.26.0 | AMD64<br>ARM64<br>ARMv7 |
 v0.25.1             | registry.k8s.io/descheduler/descheduler:v0.25.1 | AMD64<br>ARM64<br>ARMv7 |
 v0.25.0             | registry.k8s.io/descheduler/descheduler:v0.25.0 | AMD64<br>ARM64<br>ARMv7 |
 v0.24.1             | registry.k8s.io/descheduler/descheduler:v0.24.1 | AMD64<br>ARM64<br>ARMv7 |
@@ -56,14 +60,10 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "PodLifeTime"
       args:
         maxPodLifeTimeSeconds: 604800
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -71,7 +71,7 @@ profiles:
 
 ### Balance Cluster By Node Memory Utilization
 If your cluster has been running for a long period of time, you may find that the resource utilization is not very
-balanced. The following two strategies can be used to rebalance your cluster based on `cpu`, `memory` 
+balanced. The following two strategies can be used to rebalance your cluster based on `cpu`, `memory`
 or `number of pods`.
 
 #### Balance high utilization nodes
@@ -84,7 +84,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "LowNodeUtilization"
       args:
         thresholds:
@@ -92,9 +91,6 @@ profiles:
         targetThresholds:
           "memory": 70
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "LowNodeUtilization"
@@ -111,15 +107,11 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "HighNodeUtilization"
       args:
         thresholds:
           "memory": 20
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "HighNodeUtilization"

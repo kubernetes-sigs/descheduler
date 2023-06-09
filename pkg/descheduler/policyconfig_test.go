@@ -49,9 +49,6 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 			},
 		},
 	}
-	defaultEvictorPluginSet := api.PluginSet{
-		Enabled: []string{defaultevictor.PluginName},
-	}
 	type testCase struct {
 		description string
 		policy      *v1alpha1.DeschedulerPolicy
@@ -113,7 +110,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{removeduplicates.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					// Disabled strategy is not generating internal plugin since it is not being used internally currently
@@ -221,7 +223,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{nodeutilization.HighNodeUtilizationPluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -248,7 +255,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{nodeutilization.LowNodeUtilizationPluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -264,7 +276,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{removeduplicates.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -280,7 +297,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removefailedpods.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -298,7 +320,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodshavingtoomanyrestarts.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -314,7 +341,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodsviolatinginterpodantiaffinity.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -332,7 +364,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodsviolatingnodeaffinity.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -348,7 +385,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodsviolatingnodetaints.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -364,7 +406,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{removepodsviolatingtopologyspreadconstraint.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 				},
@@ -478,7 +525,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{nodeutilization.HighNodeUtilizationPluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -507,7 +559,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{nodeutilization.LowNodeUtilizationPluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -525,7 +582,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{removeduplicates.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -546,7 +608,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removefailedpods.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -565,7 +632,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodshavingtoomanyrestarts.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -581,7 +653,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodsviolatinginterpodantiaffinity.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -599,7 +676,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodsviolatingnodeaffinity.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -617,7 +699,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Deschedule: api.PluginSet{
 								Enabled: []string{removepodsviolatingnodetaints.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 					{
@@ -635,7 +722,12 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 							Balance: api.PluginSet{
 								Enabled: []string{removepodsviolatingtopologyspreadconstraint.PluginName},
 							},
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 						},
 					},
 				},
@@ -713,9 +805,6 @@ func TestDecodeVersionedPolicy(t *testing.T) {
 			},
 		},
 	}
-	defaultEvictorPluginSet := api.PluginSet{
-		Enabled: []string{defaultevictor.PluginName},
-	}
 	type testCase struct {
 		description string
 		policy      []byte
@@ -754,7 +843,12 @@ strategies:
 							},
 						},
 						Plugins: api.Plugins{
-							Evict: defaultEvictorPluginSet,
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
 							Deschedule: api.PluginSet{
 								Enabled: []string{podlifetime.PluginName},
 							},
@@ -781,12 +875,6 @@ profiles:
         podRestartThreshold: 100
         includingInitContainers: true
     plugins:
-      filter:
-        enabled:
-          - "DefaultEvictor"
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemovePodsHavingTooManyRestarts"
@@ -815,10 +903,10 @@ profiles:
 							},
 						},
 						Plugins: api.Plugins{
-							Evict: api.PluginSet{
+							Filter: api.PluginSet{
 								Enabled: []string{defaultevictor.PluginName},
 							},
-							Filter: api.PluginSet{
+							PreEvictionFilter: api.PluginSet{
 								Enabled: []string{defaultevictor.PluginName},
 							},
 							Deschedule: api.PluginSet{
@@ -897,7 +985,7 @@ func TestValidateDeschedulerConfiguration(t *testing.T) {
 					},
 				},
 			},
-			result: fmt.Errorf("in profile RemoveFailedPods: profile with invalid number of evictor plugins enabled found. Please enable a single evictor plugin.: in profile RemoveFailedPods: only one of Include/Exclude namespaces can be set: in profile RemovePodsViolatingTopologySpreadConstraint: profile with invalid number of evictor plugins enabled found. Please enable a single evictor plugin.: in profile RemovePodsViolatingTopologySpreadConstraint: only one of Include/Exclude namespaces can be set"),
+			result: fmt.Errorf("[in profile RemoveFailedPods: only one of Include/Exclude namespaces can be set, in profile RemovePodsViolatingTopologySpreadConstraint: only one of Include/Exclude namespaces can be set]"),
 		},
 	}
 
@@ -939,7 +1027,7 @@ profiles:
       filter:
         enabled:
           - "DefaultEvictor"
-      evict:
+      preEvictionFilter:
         enabled:
           - "DefaultEvictor"
       deschedule:
@@ -969,10 +1057,66 @@ profiles:
 							},
 						},
 						Plugins: api.Plugins{
-							Evict: api.PluginSet{
+							Filter: api.PluginSet{
 								Enabled: []string{defaultevictor.PluginName},
 							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							Deschedule: api.PluginSet{
+								Enabled: []string{removepodshavingtoomanyrestarts.PluginName},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			description: "omit default evictor extension point with their enablement",
+			policy: []byte(`apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+      args:
+        evictSystemCriticalPods: true
+        evictFailedBarePods: true
+        evictLocalStoragePods: true
+        nodeFit: true
+    - name: "RemoveFailedPods"
+    plugins:
+      deschedule:
+        enabled:
+          - "RemovePodsHavingTooManyRestarts"
+`),
+			result: &api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: "ProfileName",
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: defaultevictor.PluginName,
+								Args: &defaultevictor.DefaultEvictorArgs{
+									EvictSystemCriticalPods: true,
+									EvictFailedBarePods:     true,
+									EvictLocalStoragePods:   true,
+									PriorityThreshold:       &api.PriorityThreshold{Value: utilpointer.Int32(2000000000)},
+									NodeFit:                 true,
+								},
+							},
+							{
+								Name: removefailedpods.PluginName,
+								Args: &removefailedpods.RemoveFailedPodsArgs{
+									MinPodLifetimeSeconds: utilpointer.Uint(3600),
+								},
+							},
+						},
+						Plugins: api.Plugins{
 							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
 								Enabled: []string{defaultevictor.PluginName},
 							},
 							Deschedule: api.PluginSet{

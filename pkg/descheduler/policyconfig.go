@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"os"
 
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
@@ -87,6 +89,15 @@ func setDefaultsPluginConfig(pluginConfig *api.PluginConfig, registry pluginregi
 	}
 }
 
+func findPluginName(names []string, key string) bool {
+	for _, name := range names {
+		if name == key {
+			return true
+		}
+	}
+	return false
+}
+
 func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interface) api.DeschedulerProfile {
 	newPluginConfig := api.PluginConfig{
 		Name: defaultevictor.PluginName,
@@ -97,16 +108,24 @@ func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interfac
 			EvictFailedBarePods:     false,
 		},
 	}
-	if len(profile.Plugins.Evict.Enabled) == 0 && !hasPluginConfigsWithSameName(newPluginConfig, profile.PluginConfigs) {
-		profile.Plugins.Evict.Enabled = append(profile.Plugins.Evict.Enabled, defaultevictor.PluginName)
-		profile.PluginConfigs = append(profile.PluginConfigs, newPluginConfig)
+
+	// Always enable DefaultEvictor plugin for filter/preEvictionFilter extension points
+	if !findPluginName(profile.Plugins.Filter.Enabled, defaultevictor.PluginName) {
+		profile.Plugins.Filter.Enabled = append([]string{defaultevictor.PluginName}, profile.Plugins.Filter.Enabled...)
 	}
-	var thresholdPriority int32
-	var err error
+
+	if !findPluginName(profile.Plugins.PreEvictionFilter.Enabled, defaultevictor.PluginName) {
+		profile.Plugins.PreEvictionFilter.Enabled = append([]string{defaultevictor.PluginName}, profile.Plugins.PreEvictionFilter.Enabled...)
+	}
+
 	defaultevictorPluginConfig, idx := GetPluginConfig(defaultevictor.PluginName, profile.PluginConfigs)
-	if defaultevictorPluginConfig != nil {
-		thresholdPriority, err = utils.GetPriorityFromStrategyParams(context.TODO(), client, defaultevictorPluginConfig.Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold)
+	if defaultevictorPluginConfig == nil {
+		profile.PluginConfigs = append([]api.PluginConfig{newPluginConfig}, profile.PluginConfigs...)
+		defaultevictorPluginConfig = &newPluginConfig
+		idx = 0
 	}
+
+	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), client, defaultevictorPluginConfig.Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold)
 	if err != nil {
 		klog.Error(err, "Failed to get threshold priority from args")
 	}
@@ -116,45 +135,22 @@ func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interfac
 }
 
 func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginregistry.Registry) error {
-	var errorsInProfiles error
+	var errorsInProfiles []error
 	for _, profile := range in.Profiles {
-		// api.DeschedulerPolicy needs only 1 evictor plugin enabled
-		if len(profile.Plugins.Evict.Enabled) != 1 {
-			errTooManyEvictors := fmt.Errorf("profile with invalid number of evictor plugins enabled found. Please enable a single evictor plugin.")
-			errorsInProfiles = setErrorsInProfiles(errTooManyEvictors, profile.Name, errorsInProfiles)
-		}
 		for _, pluginConfig := range profile.PluginConfigs {
-			if _, ok := registry[pluginConfig.Name]; ok {
-				pluginUtilities := registry[pluginConfig.Name]
-				if pluginUtilities.PluginArgValidator != nil {
-					err := pluginUtilities.PluginArgValidator(pluginConfig.Args)
-					errorsInProfiles = setErrorsInProfiles(err, profile.Name, errorsInProfiles)
-				}
+			if _, ok := registry[pluginConfig.Name]; !ok {
+				errorsInProfiles = append(errorsInProfiles, fmt.Errorf("in profile %s: plugin %s in pluginConfig not registered", profile.Name, pluginConfig.Name))
+				continue
+			}
+
+			pluginUtilities := registry[pluginConfig.Name]
+			if pluginUtilities.PluginArgValidator == nil {
+				continue
+			}
+			if err := pluginUtilities.PluginArgValidator(pluginConfig.Args); err != nil {
+				errorsInProfiles = append(errorsInProfiles, fmt.Errorf("in profile %s: %s", profile.Name, err.Error()))
 			}
 		}
 	}
-	if errorsInProfiles != nil {
-		return errorsInProfiles
-	}
-	return nil
-}
-
-func setErrorsInProfiles(err error, profileName string, errorsInProfiles error) error {
-	if err != nil {
-		if errorsInProfiles == nil {
-			errorsInProfiles = fmt.Errorf("in profile %s: %s", profileName, err.Error())
-		} else {
-			errorsInProfiles = fmt.Errorf("%w: %s", errorsInProfiles, fmt.Sprintf("in profile %s: %s", profileName, err.Error()))
-		}
-	}
-	return errorsInProfiles
-}
-
-func hasPluginConfigsWithSameName(newPluginConfig api.PluginConfig, pluginConfigs []api.PluginConfig) bool {
-	for _, pluginConfig := range pluginConfigs {
-		if newPluginConfig.Name == pluginConfig.Name {
-			return true
-		}
-	}
-	return false
+	return utilerrors.NewAggregate(errorsInProfiles)
 }

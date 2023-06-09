@@ -50,7 +50,6 @@ type Plugins struct {
 	Sort              PluginSet `json:"sort"`
 	Deschedule        PluginSet `json:"deschedule"`
 	Balance           PluginSet `json:"balance"`
-	Evict             PluginSet `json:"evict"`
 	Filter            PluginSet `json:"filter"`
 	PreEvictionFilter PluginSet `json:"preevictionfilter"`
 }

@@ -3,7 +3,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "LowNodeUtilization"
       args:
         thresholds:
@@ -11,9 +10,6 @@ profiles:
         targetThresholds:
           "memory": 70
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "LowNodeUtilization"

@@ -174,7 +174,6 @@ func (in *Plugins) DeepCopyInto(out *Plugins) {
 	in.Sort.DeepCopyInto(&out.Sort)
 	in.Deschedule.DeepCopyInto(&out.Deschedule)
 	in.Balance.DeepCopyInto(&out.Balance)
-	in.Evict.DeepCopyInto(&out.Evict)
 	in.Filter.DeepCopyInto(&out.Filter)
 	in.PreEvictionFilter.DeepCopyInto(&out.PreEvictionFilter)
 	return

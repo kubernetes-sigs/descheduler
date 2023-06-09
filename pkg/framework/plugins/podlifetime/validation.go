@@ -43,17 +43,19 @@ func ValidatePodLifeTimeArgs(obj runtime.Object) error {
 			return fmt.Errorf("failed to get label selectors from strategy's params: %+v", err)
 		}
 	}
-	podLifeTimeAllowedStates := sets.NewString(
+	podLifeTimeAllowedStates := sets.New(
+		// Pod phase reasons
 		string(v1.PodRunning),
 		string(v1.PodPending),
 
-		// Container state reasons: https://github.com/kubernetes/kubernetes/blob/release-1.24/pkg/kubelet/kubelet_pods.go#L76-L79
+		// Container state reasons
 		"PodInitializing",
 		"ContainerCreating",
+		"CrashLoopBackOff",
 	)
 
 	if !podLifeTimeAllowedStates.HasAll(args.States...) {
-		return fmt.Errorf("states must be one of %v", podLifeTimeAllowedStates.List())
+		return fmt.Errorf("states must be one of %v", podLifeTimeAllowedStates.UnsortedList())
 	}
 
 	return nil

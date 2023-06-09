@@ -30,6 +30,24 @@ Descheduler, based on its policy, finds pods that can be moved and evicts them. 
 note, in current implementation, descheduler does not schedule replacement of evicted pods
 but relies on the default scheduler for that.
 
+## ⚠️  Documentation Versions by Release
+
+If you are using a published release of Descheduler (such as
+`registry.k8s.io/descheduler/descheduler:v0.26.1`), follow the documentation in
+that version's release branch, as listed below:
+
+|Descheduler Version|Docs link|
+|---|---|
+|v0.27.x|[`release-1.27`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.27/README.md)|
+|v0.26.x|[`release-1.26`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.26/README.md)|
+|v0.25.x|[`release-1.25`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.25/README.md)|
+|v0.24.x|[`release-1.24`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.24/README.md)|
+
+The
+[`master`](https://github.com/kubernetes-sigs/descheduler/blob/master/README.md)
+branch is considered in-development and the information presented in it may not
+work for previous versions.
+
 ## Quick Start
 
 The descheduler can be run as a `Job`, `CronJob`, or `Deployment` inside of a k8s cluster. It has the
@@ -75,17 +93,17 @@ See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/ku
 
 Run As A Job
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.26.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.26.1' | kubectl apply -f -
 ```
 
 Run As A CronJob
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.26.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.26.1' | kubectl apply -f -
 ```
 
 Run As A Deployment
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.26.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.26.1' | kubectl apply -f -
 ```
 
 ## User Guide
@@ -125,7 +143,7 @@ The Default Evictor Plugin is used by default for filtering pods before processi
 
 ### Example policy
 
-As part of the policy, you will start deciding which top level configuration to use, then which Evictor plugin to use (if you have your own, the Default Evictor if not), followed by deciding the configuration passed to the Evictor Plugin. After that you will enable/disable eviction strategies plugins and configure them properly.
+As part of the policy, you will start deciding which top level configuration to use, then which Evictor plugin to use (if you have your own, the Default Evictor if not), followed by deciding the configuration passed to the Evictor Plugin. By default, the Default Evictor is enabled for both `filter` and `preEvictionFilter` extension points.  After that you will enable/disable eviction strategies plugins and configure them properly.
 
 See each strategy plugin section for details on available parameters.
 
@@ -147,9 +165,13 @@ profiles:
         evictLocalStoragePods: true
         nodeFit: true
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
+      # DefaultEvictor is enabled for both `filter` and `preEvictionFilter`
+      # filter:
+      #   enabled:
+      #     - "DefaultEvictor"
+      # preEvictionFilter:
+      #   enabled:
+      #     - "DefaultEvictor"
       deschedule:
         enabled:
           - ...
@@ -170,17 +192,18 @@ Deschedule Plugins: These plugins process pods one by one, and evict them in a s
 
 Balance Plugins: These plugins process all pods, or groups of pods, and determine which pods to evict based on how the group was intended to be spread.
 
-|Name|Extension Point Implemented| Description                                                                   |
-|----|-----------|-------------------------------------------------------------------------------|
-| [RemoveDuplicates](#removeduplicates) |Balance| Spreads replicas                                                              |
-| [LowNodeUtilization](#lownodeutilization) |Balance| Spreads pods according to pods resource requests and node resources available |
-| [HighNodeUtilization](#highnodeutilization) |Balance| Spreads pods according to pods resource requests and node resources available |
-| [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity) |Deschedule| Evicts pods violating pod anti affinity                                       |
-| [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity) |Deschedule| Evicts pods violating node affinity                                           |
-| [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints) |Deschedule| Evicts pods violating node taints                                             |
-| [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint) |Balance| Evicts pods violating TopologySpreadConstraints                               |
-| [PodLifeTime](#podlifetime) |Deschedule| Evicts pods that have exceeded a specified age limit                          |
-| [RemoveFailedPods](#removefailedpods) |Deschedule| Evicts pods with certain failed reasons                                       |
+|Name|Extension Point Implemented|Description|
+|----|-----------|-----------|
+| [RemoveDuplicates](#removeduplicates) |Balance|Spreads replicas|
+| [LowNodeUtilization](#lownodeutilization) |Balance|Spreads pods according to pods resource requests and node resources available|
+| [HighNodeUtilization](#highnodeutilization) |Balance|Spreads pods according to pods resource requests and node resources available|
+| [RemovePodsViolatingInterPodAntiAffinity](#removepodsviolatinginterpodantiaffinity) |Deschedule|Evicts pods violating pod anti affinity|
+| [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity) |Deschedule|Evicts pods violating node affinity|
+| [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints) |Deschedule|Evicts pods violating node taints|
+| [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint) |Balance|Evicts pods violating TopologySpreadConstraints|
+| [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts) |Deschedule|Evicts pods having too many restarts|
+| [PodLifeTime](#podlifetime) |Deschedule|Evicts pods that have exceeded a specified age limit|
+| [RemoveFailedPods](#removefailedpods) |Deschedule|Evicts pods with certain failed reasons|
 | [ScaleDownDeploymentHavingTooManyPodRestarts](#scaledowndeploymenthavingtoomanypodrestarts) |Deschedule| Scales down a deployment to zero when its pods have too many restarts         |
 
 
@@ -212,15 +235,11 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemoveDuplicates"
       args:
-        excludeOwnerKinds: 
+        excludeOwnerKinds:
           - "ReplicaSet"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "RemoveDuplicates"
@@ -279,7 +298,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "LowNodeUtilization"
       args:
         thresholds:
@@ -291,9 +309,6 @@ profiles:
           "memory": 50
           "pods": 50
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "LowNodeUtilization"
@@ -359,7 +374,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "HighNodeUtilization"
       args:
         thresholds:
@@ -370,11 +384,8 @@ profiles:
           namespaces:
             exclude:
             - "kube-system"
-            - "namespace1" 
+            - "namespace1"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "HighNodeUtilization"
@@ -414,12 +425,8 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemovePodsViolatingInterPodAntiAffinity"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemovePodsViolatingInterPodAntiAffinity"
@@ -459,15 +466,11 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemovePodsViolatingNodeAffinity"
       args:
         nodeAffinityType:
         - "requiredDuringSchedulingIgnoredDuringExecution"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemovePodsViolatingNodeAffinity"
@@ -503,16 +506,12 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemovePodsViolatingNodeTaints"
       args:
         excludedTaints:
         - dedicated=special-user # exclude taints with key "dedicated" and value "special-user"
         - reserved # exclude all taints with key "reserved"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemovePodsViolatingNodeTaints"
@@ -545,14 +544,10 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemovePodsViolatingTopologySpreadConstraint"
       args:
         includeSoftConstraints: false
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       balance:
         enabled:
           - "RemovePodsViolatingTopologySpreadConstraint"
@@ -584,15 +579,11 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemovePodsHavingTooManyRestarts"
       args:
         podRestartThreshold: 100
         includingInitContainers: true
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemovePodsHavingTooManyRestarts"
@@ -626,7 +617,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "PodLifeTime"
       args:
         maxPodLifeTimeSeconds: 86400
@@ -634,9 +624,6 @@ profiles:
         - "Pending"
         - "PodInitializing"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -670,7 +657,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemoveFailedPods"
       args:
         reasons:
@@ -680,9 +666,6 @@ profiles:
         - "Job"
         minPodLifetimeSeconds: 3600
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemoveFailedPods"
@@ -752,7 +735,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "PodLifeTime"
       args:
         maxPodLifeTimeSeconds: 86400
@@ -761,9 +743,6 @@ profiles:
           - "namespace1"
           - "namespace2"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -778,7 +757,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "PodLifeTime"
       args:
         maxPodLifeTimeSeconds: 86400
@@ -787,9 +765,6 @@ profiles:
           - "namespace1"
           - "namespace2"
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -825,9 +800,6 @@ profiles:
       args:
         maxPodLifeTimeSeconds: 86400
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -848,9 +820,6 @@ profiles:
       args:
         maxPodLifeTimeSeconds: 86400
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -882,7 +851,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "PodLifeTime"
       args:
         maxPodLifeTimeSeconds: 86400
@@ -893,9 +861,6 @@ profiles:
             - {key: tier, operator: In, values: [cache]}
             - {key: environment, operator: NotIn, values: [dev]}
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -926,9 +891,6 @@ profiles:
       args:
         maxPodLifeTimeSeconds: 86400
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "PodLifeTime"
@@ -1006,6 +968,7 @@ packages that it is compiled with.
 
 | Descheduler | Supported Kubernetes Version |
 |-------------|------------------------------|
+| v0.27       | v1.27                        |
 | v0.26       | v1.26                        |
 | v0.25       | v1.25                        |
 | v0.24       | v1.24                        |

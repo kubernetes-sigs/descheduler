@@ -53,8 +53,8 @@ func WrapFilterFuncs(filters ...FilterFunc) FilterFunc {
 
 type Options struct {
 	filter             FilterFunc
-	includedNamespaces sets.String
-	excludedNamespaces sets.String
+	includedNamespaces sets.Set[string]
+	excludedNamespaces sets.Set[string]
 	labelSelector      *metav1.LabelSelector
 }
 
@@ -71,13 +71,13 @@ func (o *Options) WithFilter(filter FilterFunc) *Options {
 }
 
 // WithNamespaces sets included namespaces
-func (o *Options) WithNamespaces(namespaces sets.String) *Options {
+func (o *Options) WithNamespaces(namespaces sets.Set[string]) *Options {
 	o.includedNamespaces = namespaces
 	return o
 }
 
 // WithoutNamespaces sets excluded namespaces
-func (o *Options) WithoutNamespaces(namespaces sets.String) *Options {
+func (o *Options) WithoutNamespaces(namespaces sets.Set[string]) *Options {
 	o.excludedNamespaces = namespaces
 	return o
 }

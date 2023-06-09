@@ -57,7 +57,10 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 					Deschedule: api.PluginSet{
 						Enabled: []string{"FakePlugin"},
 					},
-					Evict: api.PluginSet{
+					Filter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					PreEvictionFilter: api.PluginSet{
 						Enabled: []string{defaultevictor.PluginName},
 					},
 				},
@@ -87,7 +90,10 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 					Balance: api.PluginSet{
 						Enabled: []string{"FakePlugin"},
 					},
-					Evict: api.PluginSet{
+					Filter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					PreEvictionFilter: api.PluginSet{
 						Enabled: []string{defaultevictor.PluginName},
 					},
 				},
@@ -117,7 +123,10 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 					Balance: api.PluginSet{
 						Enabled: []string{"FakePlugin"},
 					},
-					Evict: api.PluginSet{
+					Filter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					PreEvictionFilter: api.PluginSet{
 						Enabled: []string{defaultevictor.PluginName},
 					},
 				},
@@ -147,7 +156,10 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 					Deschedule: api.PluginSet{
 						Enabled: []string{"FakePlugin"},
 					},
-					Evict: api.PluginSet{
+					Filter: api.PluginSet{
+						Enabled: []string{defaultevictor.PluginName},
+					},
+					PreEvictionFilter: api.PluginSet{
 						Enabled: []string{defaultevictor.PluginName},
 					},
 				},
@@ -413,9 +425,9 @@ func TestProfileExtensionPoints(t *testing.T) {
 					Enabled: []string{"FakePlugin_0"},
 				},
 				Filter: api.PluginSet{
-					Enabled: []string{"FilterPlugin_1", "FilterPlugin_0"},
+					Enabled: []string{defaultevictor.PluginName, "FilterPlugin_1", "FilterPlugin_0"},
 				},
-				Evict: api.PluginSet{
+				PreEvictionFilter: api.PluginSet{
 					Enabled: []string{defaultevictor.PluginName},
 				},
 			},
@@ -432,19 +444,19 @@ func TestProfileExtensionPoints(t *testing.T) {
 
 	// Validate the extension points of all registered plugins are properly detected
 
-	diff := cmp.Diff(sets.NewString("DeschedulePlugin_0", "DeschedulePlugin_1", "DeschedulePlugin_2", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2"), prfl.deschedule)
+	diff := cmp.Diff(sets.New("DeschedulePlugin_0", "DeschedulePlugin_1", "DeschedulePlugin_2", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2"), prfl.deschedule)
 	if diff != "" {
 		t.Errorf("check for deschedule failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
-	diff = cmp.Diff(sets.NewString("BalancePlugin_0", "BalancePlugin_1", "BalancePlugin_2", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2"), prfl.balance)
+	diff = cmp.Diff(sets.New("BalancePlugin_0", "BalancePlugin_1", "BalancePlugin_2", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2"), prfl.balance)
 	if diff != "" {
 		t.Errorf("check for balance failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
-	diff = cmp.Diff(sets.NewString("DefaultEvictor", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2", "FilterPlugin_0", "FilterPlugin_1", "FilterPlugin_2"), prfl.filter)
+	diff = cmp.Diff(sets.New("DefaultEvictor", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2", "FilterPlugin_0", "FilterPlugin_1", "FilterPlugin_2"), prfl.filter)
 	if diff != "" {
 		t.Errorf("check for filter failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
-	diff = cmp.Diff(sets.NewString("DefaultEvictor", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2", "FilterPlugin_0", "FilterPlugin_1", "FilterPlugin_2"), prfl.preEvictionFilter)
+	diff = cmp.Diff(sets.New("DefaultEvictor", "FakePlugin_0", "FakePlugin_1", "FakePlugin_2", "FilterPlugin_0", "FilterPlugin_1", "FilterPlugin_2"), prfl.preEvictionFilter)
 	if diff != "" {
 		t.Errorf("check for preEvictionFilter failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
@@ -455,7 +467,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 		names = append(names, pl.Name())
 	}
 	sort.Strings(names)
-	diff = cmp.Diff(sets.NewString("FakePlugin_0"), sets.NewString(names...))
+	diff = cmp.Diff(sets.New("FakePlugin_0"), sets.New(names...))
 	if diff != "" {
 		t.Errorf("check for deschedule failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
@@ -466,7 +478,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 		names = append(names, pl.Name())
 	}
 	sort.Strings(names)
-	diff = cmp.Diff(sets.NewString(), sets.NewString(names...))
+	diff = cmp.Diff(sets.New[string](), sets.New(names...))
 	if diff != "" {
 		t.Errorf("check for balance failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
@@ -477,7 +489,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 		names = append(names, pl.Name())
 	}
 	sort.Strings(names)
-	diff = cmp.Diff(sets.NewString("FilterPlugin_0", "FilterPlugin_1"), sets.NewString(names...))
+	diff = cmp.Diff(sets.New("DefaultEvictor", "FilterPlugin_0", "FilterPlugin_1"), sets.New(names...))
 	if diff != "" {
 		t.Errorf("check for filter failed. Results are not deep equal. mismatch (-want +got):\n%s", diff)
 	}
@@ -640,13 +652,10 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 					Enabled: []string{"FakePlugin_1", "FakePlugin_0", "FakePlugin_2"},
 				},
 				Filter: api.PluginSet{
-					Enabled: []string{"Filter_2", "Filter_1", "Filter_0"},
+					Enabled: []string{defaultevictor.PluginName, "Filter_2", "Filter_1", "Filter_0"},
 				},
 				PreEvictionFilter: api.PluginSet{
-					Enabled: []string{"Filter_2", "Filter_1", "Filter_0"},
-				},
-				Evict: api.PluginSet{
-					Enabled: []string{defaultevictor.PluginName},
+					Enabled: []string{defaultevictor.PluginName, "Filter_2", "Filter_1", "Filter_0"},
 				},
 			},
 		},

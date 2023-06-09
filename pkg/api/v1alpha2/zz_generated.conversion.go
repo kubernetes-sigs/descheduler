@@ -229,9 +229,6 @@ func autoConvert_v1alpha2_Plugins_To_api_Plugins(in *Plugins, out *api.Plugins, 
 	if err := Convert_v1alpha2_PluginSet_To_api_PluginSet(&in.Balance, &out.Balance, s); err != nil {
 		return err
 	}
-	if err := Convert_v1alpha2_PluginSet_To_api_PluginSet(&in.Evict, &out.Evict, s); err != nil {
-		return err
-	}
 	if err := Convert_v1alpha2_PluginSet_To_api_PluginSet(&in.Filter, &out.Filter, s); err != nil {
 		return err
 	}
@@ -257,9 +254,6 @@ func autoConvert_api_Plugins_To_v1alpha2_Plugins(in *api.Plugins, out *Plugins, 
 		return err
 	}
 	if err := Convert_api_PluginSet_To_v1alpha2_PluginSet(&in.Balance, &out.Balance, s); err != nil {
-		return err
-	}
-	if err := Convert_api_PluginSet_To_v1alpha2_PluginSet(&in.Evict, &out.Evict, s); err != nil {
 		return err
 	}
 	if err := Convert_api_PluginSet_To_v1alpha2_PluginSet(&in.Filter, &out.Filter, s); err != nil {

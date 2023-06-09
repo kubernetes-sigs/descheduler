@@ -3,7 +3,6 @@ kind: "DeschedulerPolicy"
 profiles:
   - name: ProfileName
     pluginConfig:
-    - name: "DefaultEvictor"
     - name: "RemoveDuplicates"
     - name: "RemovePodsViolatingInterPodAntiAffinity"
     - name: "LowNodeUtilization"
@@ -24,9 +23,6 @@ profiles:
       args:
         includeSoftConstraints: true
     plugins:
-      evict:
-        enabled:
-          - "DefaultEvictor"
       deschedule:
         enabled:
           - "RemovePodsViolatingInterPodAntiAffinity"
@@ -36,4 +32,3 @@ profiles:
           - "RemoveDuplicates"
           - "LowNodeUtilization"
           - "RemovePodsViolatingTopologySpreadConstraint"
-
