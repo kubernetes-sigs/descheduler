@@ -340,7 +340,7 @@ func balanceDomains(
 			// This is because the chosen pods aren't sorted, but immovable pods still count as "evicted" toward the PTS algorithm.
 			// So, a better selection heuristic could improve performance.
 
-			if !node.PodFitsAnyOtherNode(getPodsAssignedToNode, aboveToEvict[k], nodesBelowIdealAvg) {
+			if !node.PodFitsAnyOtherNode(getPodsAssignedToNode, aboveToEvict[k], nodesBelowIdealAvg, false) {
 				klog.V(2).InfoS("ignoring pod for eviction as it does not fit on any other node", "pod", klog.KObj(aboveToEvict[k]))
 				continue
 			}

@@ -103,10 +103,10 @@ func IsReady(node *v1.Node) bool {
 // This function is used when the NodeFit pod filtering feature of the Descheduler is enabled.
 // This function currently considers a subset of the Kubernetes Scheduler's predicates when
 // deciding if a pod would fit on a node, but more predicates may be added in the future.
-func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) []error {
+func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node, considerPreferredAffinity bool) []error {
 	// Check node selector and required affinity
 	var errors []error
-	if ok, err := utils.PodMatchNodeSelector(pod, node); err != nil {
+	if ok, err := utils.PodMatchNodeSelector(pod, node, considerPreferredAffinity); err != nil {
 		errors = append(errors, err)
 	} else if !ok {
 		errors = append(errors, fmt.Errorf("pod node selector does not match the node label"))
@@ -135,14 +135,14 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 
 // PodFitsAnyOtherNode checks if the given pod will fit any of the given nodes, besides the node
 // the pod is already running on. The predicates used to determine if the pod will fit can be found in the NodeFit function.
-func PodFitsAnyOtherNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node) bool {
+func PodFitsAnyOtherNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node, considerPreferredAffinity bool) bool {
 	for _, node := range nodes {
 		// Skip node pod is already on
 		if node.Name == pod.Spec.NodeName {
 			continue
 		}
 
-		errors := NodeFit(nodeIndexer, pod, node)
+		errors := NodeFit(nodeIndexer, pod, node, considerPreferredAffinity)
 		if len(errors) == 0 {
 			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			return true
@@ -158,9 +158,9 @@ func PodFitsAnyOtherNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.
 
 // PodFitsAnyNode checks if the given pod will fit any of the given nodes. The predicates used
 // to determine if the pod will fit can be found in the NodeFit function.
-func PodFitsAnyNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node) bool {
+func PodFitsAnyNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node, considerPreferredAffinity bool) bool {
 	for _, node := range nodes {
-		errors := NodeFit(nodeIndexer, pod, node)
+		errors := NodeFit(nodeIndexer, pod, node, considerPreferredAffinity)
 		if len(errors) == 0 {
 			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			return true
@@ -176,8 +176,8 @@ func PodFitsAnyNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, 
 
 // PodFitsCurrentNode checks if the given pod will fit onto the given node. The predicates used
 // to determine if the pod will fit can be found in the NodeFit function.
-func PodFitsCurrentNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) bool {
-	errors := NodeFit(nodeIndexer, pod, node)
+func PodFitsCurrentNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node, considerPreferredAffinity bool) bool {
+	errors := NodeFit(nodeIndexer, pod, node, considerPreferredAffinity)
 	if len(errors) == 0 {
 		klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 		return true

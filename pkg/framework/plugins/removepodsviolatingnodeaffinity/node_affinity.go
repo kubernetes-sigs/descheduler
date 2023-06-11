@@ -76,41 +76,49 @@ func (d *RemovePodsViolatingNodeAffinity) Name() string {
 }
 
 func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	var err *frameworktypes.Status = nil
 	for _, nodeAffinity := range d.args.NodeAffinityType {
 		klog.V(2).InfoS("Executing for nodeAffinityType", "nodeAffinity", nodeAffinity)
 
 		switch nodeAffinity {
 		case "requiredDuringSchedulingIgnoredDuringExecution":
-			for _, node := range nodes {
-				klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
-
-				pods, err := podutil.ListPodsOnANode(
-					node.Name,
-					d.handle.GetPodsAssignedToNodeFunc(),
-					podutil.WrapFilterFuncs(d.podFilter, func(pod *v1.Pod) bool {
-						return d.handle.Evictor().Filter(pod) &&
-							!nodeutil.PodFitsCurrentNode(d.handle.GetPodsAssignedToNodeFunc(), pod, node) &&
-							nodeutil.PodFitsAnyNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes)
-					}),
-				)
-				if err != nil {
-					return &frameworktypes.Status{
-						Err: fmt.Errorf("error listing pods on a node: %v", err),
-					}
-				}
-
-				for _, pod := range pods {
-					if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-						klog.V(1).InfoS("Evicting pod", "pod", klog.KObj(pod))
-						d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{})
-						if d.handle.Evictor().NodeLimitExceeded(node) {
-							break
-						}
-					}
-				}
-			}
+			err = d.processNodes(ctx, nodes, false)
+		case "preferredDuringSchedulingIgnoredDuringExecution":
+			err = d.processNodes(ctx, nodes, true)
 		default:
 			klog.ErrorS(nil, "Invalid nodeAffinityType", "nodeAffinity", nodeAffinity)
+		}
+	}
+	return err
+}
+
+func (d *RemovePodsViolatingNodeAffinity) processNodes(ctx context.Context, nodes []*v1.Node, removePodsViolatingPreferredNodeAffinity bool) *frameworktypes.Status {
+	for _, node := range nodes {
+		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
+
+		pods, err := podutil.ListPodsOnANode(
+			node.Name,
+			d.handle.GetPodsAssignedToNodeFunc(),
+			podutil.WrapFilterFuncs(d.podFilter, func(pod *v1.Pod) bool {
+				return d.handle.Evictor().Filter(pod) &&
+					!nodeutil.PodFitsCurrentNode(d.handle.GetPodsAssignedToNodeFunc(), pod, node, false) &&
+					nodeutil.PodFitsAnyNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes, false)
+			}),
+		)
+		if err != nil {
+			return &frameworktypes.Status{
+				Err: fmt.Errorf("error listing pods on a node: %v", err),
+			}
+		}
+
+		for _, pod := range pods {
+			if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil && pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
+				klog.V(1).InfoS("Evicting pod", "pod", klog.KObj(pod))
+				d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{})
+				if d.handle.Evictor().NodeLimitExceeded(node) {
+					break
+				}
+			}
 		}
 	}
 	return nil

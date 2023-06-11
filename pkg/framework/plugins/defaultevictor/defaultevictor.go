@@ -159,7 +159,7 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 			klog.ErrorS(fmt.Errorf("Pod fails the following checks"), "pod", klog.KObj(pod))
 			return false
 		}
-		if !nodeutil.PodFitsAnyOtherNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) {
+		if !nodeutil.PodFitsAnyOtherNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes, false) {
 			klog.ErrorS(fmt.Errorf("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable"), "pod", klog.KObj(pod))
 			return false
 		}

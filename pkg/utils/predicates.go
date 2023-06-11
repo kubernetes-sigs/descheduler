@@ -34,18 +34,18 @@ import (
 // remains untouched
 
 // PodMatchNodeSelector checks if a pod node selector matches the node label.
-func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) (bool, error) {
+func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node, considerPreferredAffinity bool) (bool, error) {
 	if node == nil {
 		return false, fmt.Errorf("node not found")
 	}
-	if podMatchesNodeLabels(pod, node) {
+	if podMatchesNodeLabels(pod, node, considerPreferredAffinity) {
 		return true, nil
 	}
 	return false, nil
 }
 
 // The pod can only schedule onto nodes that satisfy requirements in both NodeAffinity and nodeSelector.
-func podMatchesNodeLabels(pod *v1.Pod, node *v1.Node) bool {
+func podMatchesNodeLabels(pod *v1.Pod, node *v1.Node, considerPreferredAffinity bool) bool {
 	// Check if node.Labels match pod.Spec.NodeSelector.
 	if len(pod.Spec.NodeSelector) > 0 {
 		selector := labels.SelectorFromSet(pod.Spec.NodeSelector)
@@ -64,19 +64,34 @@ func podMatchesNodeLabels(pod *v1.Pod, node *v1.Node) bool {
 	affinity := pod.Spec.Affinity
 	if affinity != nil && affinity.NodeAffinity != nil {
 		nodeAffinity := affinity.NodeAffinity
-		// if no required NodeAffinity requirements, will do no-op, means select all nodes.
-		if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
-			return true
-		}
 
-		// Match node selector for requiredDuringSchedulingIgnoredDuringExecution.
 		if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
+			// Match node selector for requiredDuringSchedulingIgnoredDuringExecution.
 			klog.V(10).InfoS("Match for RequiredDuringSchedulingIgnoredDuringExecution node selector", "selector", nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
 			matches, err := corev1.MatchNodeSelectorTerms(node, nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
 			if err != nil {
 				klog.ErrorS(err, "error parsing node selector", "selector", nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
 			}
-			return matches
+			if !matches {
+				return false
+			}
+		}
+
+		if considerPreferredAffinity && len(nodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) > 0 {
+			// Treat the node selector from the preferred affinity as if it was a node selector from a required affinity
+			preferredNodeSelector := &v1.NodeSelector{}
+			for _, preferredAffinity := range nodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+				preferredNodeSelector.NodeSelectorTerms = append(preferredNodeSelector.NodeSelectorTerms, preferredAffinity.Preference)
+			}
+			// Match node selector for PreferredDuringSchedulingIgnoredDuringExecution.
+			klog.V(10).InfoS("Match for PreferredDuringSchedulingIgnoredDuringExecution node selector", "selector", preferredNodeSelector)
+			matches, err := corev1.MatchNodeSelectorTerms(node, preferredNodeSelector)
+			if err != nil {
+				klog.ErrorS(err, "error parsing node selector", "selector", preferredNodeSelector)
+			}
+			if !matches {
+				return false
+			}
 		}
 	}
 	return true

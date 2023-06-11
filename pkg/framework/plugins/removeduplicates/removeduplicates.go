@@ -254,7 +254,7 @@ func getTargetNodes(podNodes map[string][]*v1.Pod, nodes []*v1.Node) []*v1.Node 
 			}) {
 				continue
 			}
-			if match, err := utils.PodMatchNodeSelector(pod, node); err == nil && !match {
+			if match, err := utils.PodMatchNodeSelector(pod, node, false); err == nil && !match {
 				continue
 			}
 			matchingNodes[node.Name] = node

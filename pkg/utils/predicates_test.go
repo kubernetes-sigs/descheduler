@@ -5,7 +5,164 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func TestPodMatchesNodeLabels(t *testing.T) {
+	tests := []struct {
+		name                      string
+		pod                       *v1.Pod
+		node                      *v1.Node
+		considerPreferredAffinity bool
+		expectedResult            bool
+	}{
+		{
+			name: "pod with node selector that matches node",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					NodeSelector: map[string]string{
+						"kubernetes.io/hostname": "worker0",
+					},
+				},
+			},
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"kubernetes.io/hostname": "worker0",
+					},
+				},
+			},
+			considerPreferredAffinity: false,
+			expectedResult:            true,
+		},
+		{
+			name: "pod with node selector that doesn't match the node",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					NodeSelector: map[string]string{
+						"kubernetes.io/hostname": "worker1",
+					},
+				},
+			},
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"kubernetes.io/hostname": "worker0",
+					},
+				},
+			},
+			considerPreferredAffinity: false,
+			expectedResult:            false,
+		},
+		{
+			name: "considerPreferredAffinity false, pod with required node affinity matches node, but preferred affinity don't",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "failure-domain.beta.kubernetes.io/zone",
+												Operator: "In",
+												Values:   []string{"A"},
+											},
+										},
+									},
+								},
+							},
+							PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
+								{
+									Preference: v1.NodeSelectorTerm{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "kubernetes.io/hostname",
+												Operator: "In",
+												Values:   []string{"worker1"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"kubernetes.io/hostname":                 "worker0",
+						"failure-domain.beta.kubernetes.io/zone": "A",
+					},
+				},
+			},
+			considerPreferredAffinity: false,
+			expectedResult:            true,
+		},
+		{
+			name: "considerPreferredAffinity true, pod with required node affinity matches node, but preferred affinity don't",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Affinity: &v1.Affinity{
+						NodeAffinity: &v1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+								NodeSelectorTerms: []v1.NodeSelectorTerm{
+									{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "failure-domain.beta.kubernetes.io/zone",
+												Operator: "In",
+												Values:   []string{"A"},
+											},
+										},
+									},
+								},
+							},
+							PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
+								{
+									Preference: v1.NodeSelectorTerm{
+										MatchExpressions: []v1.NodeSelectorRequirement{
+											{
+												Key:      "kubernetes.io/hostname",
+												Operator: "In",
+												Values:   []string{"worker1"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"kubernetes.io/hostname":                 "worker0",
+						"failure-domain.beta.kubernetes.io/zone": "A",
+					},
+				},
+			},
+			considerPreferredAffinity: true,
+			expectedResult:            false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := podMatchesNodeLabels(test.pod, test.node, test.considerPreferredAffinity)
+			if result != test.expectedResult {
+				if test.expectedResult {
+					t.Errorf("the test expected a match between the pod %#v and the node %#v, but it didn't", test.pod, test.node)
+				} else {
+					t.Errorf("the test didn't expect a match between the pod %#v and the node %#v, but it did", test.pod, test.node)
+				}
+			}
+		})
+	}
+}
 
 func TestUniqueSortTolerations(t *testing.T) {
 	tests := []struct {
