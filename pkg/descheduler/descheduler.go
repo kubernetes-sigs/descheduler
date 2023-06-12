@@ -46,6 +46,7 @@ import (
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
+	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/pkg/version"
 )
 
@@ -210,7 +211,16 @@ func cachedClient(
 }
 
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string) error {
-	descheduler, err := NewDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion)
+	var eventClient clientset.Interface
+	if rs.DryRun {
+		eventClient = fakeclientset.NewSimpleClientset()
+	} else {
+		eventClient = rs.Client
+	}
+	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
+	defer eventBroadcaster.Shutdown()
+
+	descheduler, err := NewDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder)
 	if err != nil {
 		return err
 	}

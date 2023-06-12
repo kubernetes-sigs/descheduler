@@ -24,7 +24,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
-	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	schedulingv1 "k8s.io/client-go/listers/scheduling/v1"
 	"k8s.io/client-go/tools/events"
@@ -37,7 +36,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	frameworkprofile "sigs.k8s.io/descheduler/pkg/framework/profile"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 type eprunner func(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status
@@ -61,7 +59,7 @@ type Descheduler struct {
 	EventRecorder              events.EventRecorder
 }
 
-func NewDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string) (*Descheduler, error) {
+func NewDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder) (*Descheduler, error) {
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 	podLister := sharedInformerFactory.Core().V1().Pods().Lister()
@@ -81,16 +79,6 @@ func NewDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 	if deschedulerPolicy.NodeSelector != nil {
 		nodeSelector = *deschedulerPolicy.NodeSelector
 	}
-
-	var eventClient clientset.Interface
-	if rs.DryRun {
-		eventClient = fakeclientset.NewSimpleClientset()
-	} else {
-		eventClient = rs.Client
-	}
-
-	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
-	defer eventBroadcaster.Shutdown()
 
 	cycleSharedInformerFactory := sharedInformerFactory
 
