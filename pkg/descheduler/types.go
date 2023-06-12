@@ -40,6 +40,13 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+type eprunner func(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status
+
+type profileRunner struct {
+	name                      string
+	descheduleEPs, balanceEPs eprunner
+}
+
 type Descheduler struct {
 	rs                         *options.DeschedulerServer
 	NodeSelector               string
@@ -166,11 +173,6 @@ func (d *Descheduler) RunDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 // later runs through all balance plugins of all profiles. (All Balance plugins should come after all Deschedule plugins)
 // see https://github.com/kubernetes-sigs/descheduler/issues/979
 func (d *Descheduler) RunProfiles(ctx context.Context, client clientset.Interface, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
-	type eprunner func(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status
-	type profileRunner struct {
-		name                      string
-		descheduleEPs, balanceEPs eprunner
-	}
 	var profileRunners []profileRunner
 	for _, profile := range d.DeschedulerPolicy.Profiles {
 		currProfile, err := frameworkprofile.NewProfile(
