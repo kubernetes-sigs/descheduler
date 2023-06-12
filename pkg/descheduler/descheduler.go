@@ -69,15 +69,15 @@ type profileRunner struct {
 type Descheduler struct {
 	rs                         *options.DeschedulerServer
 	NodeSelector               string
-	PodLister                  listersv1.PodLister
+	podLister                  listersv1.PodLister
 	NodeLister                 listersv1.NodeLister
-	NamespaceLister            listersv1.NamespaceLister
-	PriorityClassLister        schedulingv1.PriorityClassLister
-	GetPodsAssignedToNode      podutil.GetPodsAssignedToNodeFunc
-	CycleSharedInformerFactory informers.SharedInformerFactory
-	EvictionPolicyGroupVersion string
-	DeschedulerPolicy          *api.DeschedulerPolicy
-	EventRecorder              events.EventRecorder
+	namespaceLister            listersv1.NamespaceLister
+	priorityClassLister        schedulingv1.PriorityClassLister
+	getPodsAssignedToNode      podutil.GetPodsAssignedToNodeFunc
+	cycleSharedInformerFactory informers.SharedInformerFactory
+	evictionPolicyGroupVersion string
+	deschedulerPolicy          *api.DeschedulerPolicy
+	eventRecorder              events.EventRecorder
 }
 
 func NewDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder) (*Descheduler, error) {
@@ -106,15 +106,15 @@ func NewDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 	return &Descheduler{
 		rs:                         rs,
 		NodeSelector:               nodeSelector,
-		PodLister:                  podLister,
+		podLister:                  podLister,
 		NodeLister:                 nodeLister,
-		NamespaceLister:            namespaceLister,
-		PriorityClassLister:        priorityClassLister,
-		GetPodsAssignedToNode:      getPodsAssignedToNode,
-		CycleSharedInformerFactory: cycleSharedInformerFactory,
-		EvictionPolicyGroupVersion: evictionPolicyGroupVersion,
-		DeschedulerPolicy:          deschedulerPolicy,
-		EventRecorder:              eventRecorder,
+		namespaceLister:            namespaceLister,
+		priorityClassLister:        priorityClassLister,
+		getPodsAssignedToNode:      getPodsAssignedToNode,
+		cycleSharedInformerFactory: cycleSharedInformerFactory,
+		evictionPolicyGroupVersion: evictionPolicyGroupVersion,
+		deschedulerPolicy:          deschedulerPolicy,
+		eventRecorder:              eventRecorder,
 	}, nil
 }
 
@@ -135,7 +135,7 @@ func (d *Descheduler) RunDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 	if d.rs.DryRun {
 		klog.V(3).Infof("Building a cached client from the cluster for the dry run")
 		// Create a new cache so we start from scratch without any leftovers
-		fakeClient, err := cachedClient(d.rs.Client, d.PodLister, d.NodeLister, d.NamespaceLister, d.PriorityClassLister)
+		fakeClient, err := cachedClient(d.rs.Client, d.podLister, d.NodeLister, d.namespaceLister, d.priorityClassLister)
 		if err != nil {
 			return err
 		}
@@ -143,7 +143,7 @@ func (d *Descheduler) RunDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 		// create a new instance of the shared informer factor from the cached client
 		fakeSharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 		// register the pod informer, otherwise it will not get running
-		d.GetPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(fakeSharedInformerFactory.Core().V1().Pods().Informer())
+		d.getPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(fakeSharedInformerFactory.Core().V1().Pods().Informer())
 		if err != nil {
 			return fmt.Errorf("build get pods assigned to node function error: %v", err)
 		}
@@ -154,7 +154,7 @@ func (d *Descheduler) RunDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 		fakeSharedInformerFactory.WaitForCacheSync(fakeCtx.Done())
 
 		client = fakeClient
-		d.CycleSharedInformerFactory = fakeSharedInformerFactory
+		d.cycleSharedInformerFactory = fakeSharedInformerFactory
 	} else {
 		client = d.rs.Client
 	}
@@ -162,13 +162,13 @@ func (d *Descheduler) RunDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 	klog.V(3).Infof("Building a pod evictor")
 	podEvictor := evictions.NewPodEvictor(
 		client,
-		d.EvictionPolicyGroupVersion,
+		d.evictionPolicyGroupVersion,
 		d.rs.DryRun,
-		d.DeschedulerPolicy.MaxNoOfPodsToEvictPerNode,
-		d.DeschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
+		d.deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
+		d.deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
 		nodes,
 		!d.rs.DisableMetrics,
-		d.EventRecorder,
+		d.eventRecorder,
 	)
 
 	d.RunProfiles(ctx, client, nodes, podEvictor)
@@ -183,14 +183,14 @@ func (d *Descheduler) RunDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 // see https://github.com/kubernetes-sigs/descheduler/issues/979
 func (d *Descheduler) RunProfiles(ctx context.Context, client clientset.Interface, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	var profileRunners []profileRunner
-	for _, profile := range d.DeschedulerPolicy.Profiles {
+	for _, profile := range d.deschedulerPolicy.Profiles {
 		currProfile, err := frameworkprofile.NewProfile(
 			profile,
 			pluginregistry.PluginRegistry,
 			frameworkprofile.WithClientSet(client),
-			frameworkprofile.WithSharedInformerFactory(d.CycleSharedInformerFactory),
+			frameworkprofile.WithSharedInformerFactory(d.cycleSharedInformerFactory),
 			frameworkprofile.WithPodEvictor(podEvictor),
-			frameworkprofile.WithGetPodsAssignedToNodeFnc(d.GetPodsAssignedToNode),
+			frameworkprofile.WithGetPodsAssignedToNodeFnc(d.getPodsAssignedToNode),
 		)
 		if err != nil {
 			klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)
