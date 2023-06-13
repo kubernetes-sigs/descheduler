@@ -75,6 +75,23 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return true
 	})
 
+	if len(tooManyRestartsArgs.States) > 0 {
+		states := sets.New(tooManyRestartsArgs.States...)
+		podFilter = podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
+			if states.Has(string(pod.Status.Phase)) {
+				return true
+			}
+
+			for _, containerStatus := range pod.Status.ContainerStatuses {
+				if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
+					return true
+				}
+			}
+
+			return false
+		})
+	}
+
 	return &RemovePodsHavingTooManyRestarts{
 		handle:    handle,
 		args:      tooManyRestartsArgs,

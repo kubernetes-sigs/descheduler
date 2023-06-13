@@ -44,14 +44,12 @@ func ValidatePodLifeTimeArgs(obj runtime.Object) error {
 		}
 	}
 	podLifeTimeAllowedStates := sets.New(
-		// Pod phase reasons
 		string(v1.PodRunning),
 		string(v1.PodPending),
 
-		// Container state reasons
+		// Container state reasons: https://github.com/kubernetes/kubernetes/blob/release-1.24/pkg/kubelet/kubelet_pods.go#L76-L79
 		"PodInitializing",
 		"ContainerCreating",
-		"CrashLoopBackOff",
 	)
 
 	if !podLifeTimeAllowedStates.HasAll(args.States...) {

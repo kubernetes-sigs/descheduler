@@ -41,6 +41,11 @@ func (in *RemovePodsHavingTooManyRestartsArgs) DeepCopyInto(out *RemovePodsHavin
 		*out = new(v1.LabelSelector)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.States != nil {
+		in, out := &in.States, &out.States
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 
