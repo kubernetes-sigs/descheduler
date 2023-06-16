@@ -3,6 +3,7 @@ package removepodsviolatingtopologyspreadconstraint
 import (
 	"context"
 	"fmt"
+	"sort"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -611,7 +612,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 5,
-			expectedEvictedPods:  []string{"pod-5", "pod-6", "pod-7", "pod-8"},
+			expectedEvictedPods:  []string{"pod-5", "pod-6", "pod-7", "pod-8", "pod-9"},
 			namespaces:           []string{"ns1"},
 			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
 		},
@@ -1137,9 +1138,19 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			podsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 			if err != nil {
 				t.Errorf("Build get pods assigned to node function error: %v", err)
+			}
+
+			// workaround to ensure that pods are returned sorted so 'expectedEvictedPods' would work consistently
+			getPodsAssignedToNode := func(s string, filterFunc podutil.FilterFunc) ([]*v1.Pod, error) {
+				pods, err := podsAssignedToNode(s, filterFunc)
+				sort.Slice(pods, func(i, j int) bool {
+					return pods[i].Name < pods[j].Name
+				})
+
+				return pods, err
 			}
 
 			sharedInformerFactory.Start(ctx.Done())
