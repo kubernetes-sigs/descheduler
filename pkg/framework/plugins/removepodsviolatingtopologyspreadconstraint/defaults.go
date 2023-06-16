@@ -14,7 +14,9 @@ limitations under the License.
 package removepodsviolatingtopologyspreadconstraint
 
 import (
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilpointer "k8s.io/utils/pointer"
 )
 
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
@@ -31,7 +33,10 @@ func SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(obj runtime.Obj
 	if args.LabelSelector == nil {
 		args.LabelSelector = nil
 	}
-	if !args.IncludeSoftConstraints {
-		args.IncludeSoftConstraints = false
+	if args.TopologyBalanceNodeFit == nil {
+		args.TopologyBalanceNodeFit = utilpointer.Bool(true)
+	}
+	if len(args.Constraints) == 0 {
+		args.Constraints = append(args.Constraints, v1.DoNotSchedule)
 	}
 }

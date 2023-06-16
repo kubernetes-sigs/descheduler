@@ -21,7 +21,9 @@ profiles:
         includingInitContainers: true
     - name: "RemovePodsViolatingTopologySpreadConstraint"
       args:
-        includeSoftConstraints: true
+        constraints:
+          - DoNotSchedule
+          - ScheduleAnyway
     plugins:
       deschedule:
         enabled:
