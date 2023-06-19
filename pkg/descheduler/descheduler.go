@@ -66,22 +66,20 @@ type profileRunner struct {
 	descheduleEPs, balanceEPs eprunner
 }
 
-type Descheduler struct {
+type descheduler struct {
 	rs                         *options.DeschedulerServer
-	NodeSelector               string
 	podLister                  listersv1.PodLister
-	NodeLister                 listersv1.NodeLister
+	nodeLister                 listersv1.NodeLister
 	namespaceLister            listersv1.NamespaceLister
 	priorityClassLister        schedulingv1.PriorityClassLister
 	getPodsAssignedToNode      podutil.GetPodsAssignedToNodeFunc
-	cycleSharedInformerFactory informers.SharedInformerFactory
+	sharedInformerFactory      informers.SharedInformerFactory
 	evictionPolicyGroupVersion string
 	deschedulerPolicy          *api.DeschedulerPolicy
 	eventRecorder              events.EventRecorder
 }
 
-func NewDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder) (*Descheduler, error) {
-	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
+func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory informers.SharedInformerFactory) (*descheduler, error) {
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 	podLister := sharedInformerFactory.Core().V1().Pods().Lister()
 	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
@@ -93,32 +91,21 @@ func NewDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 		return nil, fmt.Errorf("build get pods assigned to node function error: %v", err)
 	}
 
-	sharedInformerFactory.Start(ctx.Done())
-	sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-	var nodeSelector string
-	if deschedulerPolicy.NodeSelector != nil {
-		nodeSelector = *deschedulerPolicy.NodeSelector
-	}
-
-	cycleSharedInformerFactory := sharedInformerFactory
-
-	return &Descheduler{
+	return &descheduler{
 		rs:                         rs,
-		NodeSelector:               nodeSelector,
 		podLister:                  podLister,
-		NodeLister:                 nodeLister,
+		nodeLister:                 nodeLister,
 		namespaceLister:            namespaceLister,
 		priorityClassLister:        priorityClassLister,
 		getPodsAssignedToNode:      getPodsAssignedToNode,
-		cycleSharedInformerFactory: cycleSharedInformerFactory,
+		sharedInformerFactory:      sharedInformerFactory,
 		evictionPolicyGroupVersion: evictionPolicyGroupVersion,
 		deschedulerPolicy:          deschedulerPolicy,
 		eventRecorder:              eventRecorder,
 	}, nil
 }
 
-func (d *Descheduler) RunDeschedulerLoop(ctx context.Context, nodes []*v1.Node) error {
+func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) error {
 	loopStartDuration := time.Now()
 	defer metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
 
@@ -135,7 +122,7 @@ func (d *Descheduler) RunDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 	if d.rs.DryRun {
 		klog.V(3).Infof("Building a cached client from the cluster for the dry run")
 		// Create a new cache so we start from scratch without any leftovers
-		fakeClient, err := cachedClient(d.rs.Client, d.podLister, d.NodeLister, d.namespaceLister, d.priorityClassLister)
+		fakeClient, err := cachedClient(d.rs.Client, d.podLister, d.nodeLister, d.namespaceLister, d.priorityClassLister)
 		if err != nil {
 			return err
 		}
@@ -154,7 +141,7 @@ func (d *Descheduler) RunDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 		fakeSharedInformerFactory.WaitForCacheSync(fakeCtx.Done())
 
 		client = fakeClient
-		d.cycleSharedInformerFactory = fakeSharedInformerFactory
+		d.sharedInformerFactory = fakeSharedInformerFactory
 	} else {
 		client = d.rs.Client
 	}
@@ -171,24 +158,24 @@ func (d *Descheduler) RunDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 		d.eventRecorder,
 	)
 
-	d.RunProfiles(ctx, client, nodes, podEvictor)
+	d.runProfiles(ctx, client, nodes, podEvictor)
 
 	klog.V(1).InfoS("Number of evicted pods", "totalEvicted", podEvictor.TotalEvicted())
 
 	return nil
 }
 
-// RunProfiles runs all the deschedule plugins of all profiles and
+// runProfiles runs all the deschedule plugins of all profiles and
 // later runs through all balance plugins of all profiles. (All Balance plugins should come after all Deschedule plugins)
 // see https://github.com/kubernetes-sigs/descheduler/issues/979
-func (d *Descheduler) RunProfiles(ctx context.Context, client clientset.Interface, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interface, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
 	var profileRunners []profileRunner
 	for _, profile := range d.deschedulerPolicy.Profiles {
 		currProfile, err := frameworkprofile.NewProfile(
 			profile,
 			pluginregistry.PluginRegistry,
 			frameworkprofile.WithClientSet(client),
-			frameworkprofile.WithSharedInformerFactory(d.cycleSharedInformerFactory),
+			frameworkprofile.WithSharedInformerFactory(d.sharedInformerFactory),
 			frameworkprofile.WithPodEvictor(podEvictor),
 			frameworkprofile.WithGetPodsAssignedToNodeFnc(d.getPodsAssignedToNode),
 		)
@@ -379,6 +366,14 @@ func cachedClient(
 }
 
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string) error {
+	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
+	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
+
+	var nodeSelector string
+	if deschedulerPolicy.NodeSelector != nil {
+		nodeSelector = *deschedulerPolicy.NodeSelector
+	}
+
 	var eventClient clientset.Interface
 	if rs.DryRun {
 		eventClient = fakeclientset.NewSimpleClientset()
@@ -388,21 +383,24 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
 	defer eventBroadcaster.Shutdown()
 
-	descheduler, err := NewDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder)
+	descheduler, err := newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, sharedInformerFactory)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
 	wait.NonSlidingUntil(func() {
-		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, descheduler.NodeLister, descheduler.NodeSelector)
+		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeLister, nodeSelector)
 		if err != nil {
 			klog.Error(err)
 			cancel()
 			return
 		}
-		err = descheduler.RunDeschedulerLoop(ctx, nodes)
+		err = descheduler.runDeschedulerLoop(ctx, nodes)
 		if err != nil {
 			klog.Error(err)
 			cancel()
