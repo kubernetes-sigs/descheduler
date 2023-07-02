@@ -73,7 +73,7 @@ type descheduler struct {
 	nodeLister                  corelisters.NodeLister
 	namespaceLister             corelisters.NamespaceLister
 	priorityClassLister         schedulingv1.PriorityClassLister
-	replicasetLister 		    appslisters.ReplicaSetLister
+	replicasetLister            appslisters.ReplicaSetLister
 	replicationcontrollerLister corelisters.ReplicationControllerLister
 	statefulsetLister           appslisters.StatefulSetLister
 	getPodsAssignedToNode       podutil.GetPodsAssignedToNodeFunc
@@ -104,9 +104,9 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 		nodeLister:                  nodeLister,
 		namespaceLister:             namespaceLister,
 		priorityClassLister:         priorityClassLister,
-		replicasetLister:			 replicasetLister,
+		replicasetLister:            replicasetLister,
 		replicationcontrollerLister: replicationcontrollerLister,
-		statefulsetLister:			 statefulsetLister,
+		statefulsetLister:           statefulsetLister,
 		getPodsAssignedToNode:       getPodsAssignedToNode,
 		sharedInformerFactory:       sharedInformerFactory,
 		evictionPolicyGroupVersion:  evictionPolicyGroupVersion,
