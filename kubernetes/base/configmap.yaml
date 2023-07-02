@@ -12,6 +12,8 @@ data:
       - name: ProfileName
         pluginConfig:
         - name: "DefaultEvictor"
+          args:
+            replicas: 2
         - name: "RemovePodsViolatingInterPodAntiAffinity"
         - name: "LowNodeUtilization"
           args:
@@ -23,6 +25,7 @@ data:
               "cpu" : 50
               "memory": 50
               "pods": 50
+        - name: "RemoveDuplicates"
         plugins:
           balance:
             enabled:

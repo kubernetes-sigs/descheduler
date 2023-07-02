@@ -163,7 +163,17 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 			klog.ErrorS(fmt.Errorf("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable"), "pod", klog.KObj(pod))
 			return false
 		}
-		return true
+		// return true
+	}
+	if defaultEvictorArgs.Replicas != 0 {
+		podReplicasCount, err := podutil.GetReplicasCount(d.handle.SharedInformerFactory(), pod)
+		if err != nil {
+			return false
+		}
+		if podReplicasCount <= int(defaultEvictorArgs.Replicas) {
+			klog.ErrorS(fmt.Errorf("pod replicas is less than set"), "pod", klog.KObj(pod))
+			return false
+		}
 	}
 	return true
 }

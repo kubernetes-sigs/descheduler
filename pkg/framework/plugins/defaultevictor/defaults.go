@@ -49,4 +49,7 @@ func SetDefaults_DefaultEvictorArgs(obj runtime.Object) {
 	if !args.NodeFit {
 		args.NodeFit = false
 	}
+	if args.Replicas == 0 {
+		args.Replicas = 0
+	}
 }
