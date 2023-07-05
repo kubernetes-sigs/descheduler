@@ -106,7 +106,7 @@ func (d *PodLifeTime) Deschedule(ctx context.Context, nodes []*v1.Node) *framewo
 	nodeMap := make(map[string]*v1.Node, len(nodes))
 
 	for _, node := range nodes {
-		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
+		klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListAllPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			// no pods evicted as error encountered retrieving evictable Pods

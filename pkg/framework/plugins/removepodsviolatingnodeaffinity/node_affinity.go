@@ -82,7 +82,7 @@ func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes 
 		switch nodeAffinity {
 		case "requiredDuringSchedulingIgnoredDuringExecution":
 			for _, node := range nodes {
-				klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
+				klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
 
 				pods, err := podutil.ListPodsOnANode(
 					node.Name,

@@ -103,7 +103,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 	// iterate through all topoPairs for this topologyKey and diff currentPods -minPods <=maxSkew
 	// if diff > maxSkew, add this pod in the current bucket for eviction
 
-	klog.V(1).InfoS("Processing namespaces for topology spread constraints")
+	klog.V(1).Info("Processing namespaces for topology spread constraints")
 	podsForEviction := make(map[*v1.Pod]struct{})
 	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if d.args.Namespaces != nil {
@@ -124,6 +124,8 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 
 	// 1. for each namespace...
 	for namespace := range namespacedPods {
+		klog.V(4).InfoS("Processing namespace for topology spread constraints", "namespace", namespace)
+
 		if (len(includedNamespaces) > 0 && !includedNamespaces.Has(namespace)) ||
 			(len(excludedNamespaces) > 0 && excludedNamespaces.Has(namespace)) {
 			continue
