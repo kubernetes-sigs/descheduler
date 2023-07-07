@@ -863,6 +863,79 @@ strategies:
 			},
 		},
 		{
+			description: "v1alpha1 to internal with priorityThreshold",
+			policy: []byte(`apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+    enabled: true
+    params:
+      podLifeTime:
+        maxPodLifeTimeSeconds: 5
+      namespaces:
+        include:
+          - "testleaderelection-a"
+      thresholdPriority: null
+      thresholdPriorityClassName: prioritym
+`),
+			result: &api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: fmt.Sprintf("strategy-%s-profile", podlifetime.PluginName),
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: "DefaultEvictor",
+								Args: &defaultevictor.DefaultEvictorArgs{
+									PriorityThreshold: &api.PriorityThreshold{
+										Value: utilpointer.Int32(0),
+									},
+								},
+							},
+							{
+								Name: podlifetime.PluginName,
+								Args: &podlifetime.PodLifeTimeArgs{
+									Namespaces: &api.Namespaces{
+										Include: []string{"testleaderelection-a"},
+									},
+									MaxPodLifeTimeSeconds: utilpointer.Uint(5),
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							Deschedule: api.PluginSet{
+								Enabled: []string{podlifetime.PluginName},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			description: "v1alpha1 to internal with priorityThreshold value and name should return error",
+			policy: []byte(`apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "PodLifeTime":
+    enabled: true
+    params:
+      podLifeTime:
+        maxPodLifeTimeSeconds: 5
+      namespaces:
+        include:
+          - "testleaderelection-a"
+      thresholdPriority: 222
+      thresholdPriorityClassName: prioritym
+`),
+			result: nil,
+			err:    fmt.Errorf("failed decoding descheduler's policy config \"filename\": priority threshold misconfigured for plugin PodLifeTime"),
+		},
+		{
 			description: "v1alpha2 to internal",
 			policy: []byte(`apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
@@ -930,7 +1003,7 @@ profiles:
 			if err != nil {
 				if tc.err == nil {
 					t.Errorf("unexpected error: %s.", err.Error())
-				} else {
+				} else if err.Error() != tc.err.Error() {
 					t.Errorf("unexpected error: %s. Was expecting %s", err.Error(), tc.err.Error())
 				}
 			}

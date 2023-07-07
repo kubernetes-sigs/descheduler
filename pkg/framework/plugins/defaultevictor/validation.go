@@ -22,7 +22,7 @@ import (
 func ValidateDefaultEvictorArgs(obj runtime.Object) error {
 	args := obj.(*DefaultEvictorArgs)
 
-	if args.PriorityThreshold != nil && len(args.PriorityThreshold.Name) > 0 {
+	if args.PriorityThreshold != nil && args.PriorityThreshold.Value != nil && len(args.PriorityThreshold.Name) > 0 {
 		return fmt.Errorf("priority threshold misconfigured, only one of priorityThreshold fields can be set, got %v", args)
 	}
 
