@@ -274,7 +274,7 @@ func GetReplicasCount(informer informers.SharedInformerFactory, pod *v1.Pod) (in
 			}
 			for _, owner := range owners {
 				if owner.Name == ownerRef.Name {
-					count = int(math.Max(float64(count), float64(owner.Status.Replicas)))
+					count = int(math.Max(float64(count), float64(owner.Status.ReadyReplicas)))
 					klog.V(4).Infof("pod belong to ReplicaSet %s and its count is %d", owner.Name, count)
 				}
 			}
@@ -285,7 +285,7 @@ func GetReplicasCount(informer informers.SharedInformerFactory, pod *v1.Pod) (in
 			}
 			for _, owner := range owners {
 				if owner.Name == ownerRef.Name {
-					count = int(math.Max(float64(count), float64(owner.Status.Replicas)))
+					count = int(math.Max(float64(count), float64(owner.Status.ReadyReplicas)))
 					klog.V(4).Infof("pod belong to ReplicationController %s and its count is %d", owner.Name, count)
 				}
 			}
@@ -296,7 +296,7 @@ func GetReplicasCount(informer informers.SharedInformerFactory, pod *v1.Pod) (in
 			}
 			for _, owner := range owners {
 				if owner.Name == ownerRef.Name {
-					count = int(math.Max(float64(count), float64(owner.Status.Replicas)))
+					count = int(math.Max(float64(count), float64(owner.Status.ReadyReplicas)))
 					klog.V(4).Infof("pod belong to StatefulSet %s and its count is %d", owner.Name, count)
 				}
 			}
