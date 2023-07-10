@@ -67,6 +67,9 @@ leaderElection: {}
 #  resourceName: "descheduler"
 #  resourceNamescape: "kube-system"
 
+command:
+- "/bin/descheduler"
+
 cmdOptions:
   v: 3
 
@@ -177,6 +180,9 @@ serviceMonitor:
   enabled: false
   # The namespace where Prometheus expects to find service monitors.
   # namespace: ""
+  # Add custom labels to the ServiceMonitor resource
+  additionalLabels: {}
+    # prometheus: kube-prometheus-stack
   interval: ""
   # honorLabels: true
   insecureSkipVerify: true

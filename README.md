@@ -112,7 +112,7 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 
 ## Policy, Default Evictor and Strategy plugins
 
-**⚠️ v1alpha1 configuration is still suported, but deprecated (and soon will be removed). Please consider migrating to v1alpha2 (described bellow). For previous v1alpha1 documentation go to [docs/deprecated/v1alpha1.md](docs/deprecated/v1alpha1.md) ⚠️**
+**⚠️ v1alpha1 configuration is still supported, but deprecated (and soon will be removed). Please consider migrating to v1alpha2 (described bellow). For previous v1alpha1 documentation go to [docs/deprecated/v1alpha1.md](docs/deprecated/v1alpha1.md) ⚠️**
 
 The Descheduler Policy is configurable and includes default strategy plugins that can be enabled or disabled. It includes a common eviction configuration at the top level, as well as configuration from the Evictor plugin (Default Evictor, if not specified otherwise). Top-level configuration and Evictor plugin configuration are applied to all evictions.
 
@@ -201,6 +201,7 @@ Balance Plugins: These plugins process all pods, or groups of pods, and determin
 | [RemovePodsViolatingNodeAffinity](#removepodsviolatingnodeaffinity) |Deschedule|Evicts pods violating node affinity|
 | [RemovePodsViolatingNodeTaints](#removepodsviolatingnodetaints) |Deschedule|Evicts pods violating node taints|
 | [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint) |Balance|Evicts pods violating TopologySpreadConstraints|
+| [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts) |Deschedule|Evicts pods having too many restarts|
 | [PodLifeTime](#podlifetime) |Deschedule|Evicts pods that have exceeded a specified age limit|
 | [RemoveFailedPods](#removefailedpods) |Deschedule|Evicts pods with certain failed reasons|
 
@@ -521,8 +522,17 @@ This strategy makes sure that pods violating [topology spread constraints](https
 are evicted from nodes. Specifically, it tries to evict the minimum number of pods required to balance topology domains to within each constraint's `maxSkew`.
 This strategy requires k8s version 1.18 at a minimum.
 
-By default, this strategy only deals with hard constraints, setting parameter `includeSoftConstraints` to `true` will
-include soft constraints.
+By default, this strategy only includes hard constraints, you can explicitly set `constraints` as shown below to include both:
+```yaml
+constraints:
+- DoNotSchedule
+- ScheduleAnyway
+```
+
+The `topologyBalanceNodeFit` arg is used when balancing topology domains while the Default Evictor's `nodeFit` is used in pre-eviction to determine if a pod can be evicted.
+```yaml
+topologyBalanceNodeFit: false
+```
 
 Strategy parameter `labelSelector` is not utilized when balancing topology domains and is only applied during eviction to determine if the pod can be evicted.
 
@@ -530,9 +540,10 @@ Strategy parameter `labelSelector` is not utilized when balancing topology domai
 
 |Name|Type|
 |---|---|
-|`includeSoftConstraints`|bool|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`constraints`|(see [whenUnsatisfiable](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.27/#topologyspreadconstraint-v1-core))||
+|`topologyBalanceNodeFit`|bool|default `true`. [node fit filtering](#node-fit-filtering) when balancing topology domains|
 
 **Example:**
 
@@ -544,7 +555,8 @@ profiles:
     pluginConfig:
     - name: "RemovePodsViolatingTopologySpreadConstraint"
       args:
-        includeSoftConstraints: false
+        constraints:
+          - DoNotSchedule
     plugins:
       balance:
         enabled:
@@ -560,6 +572,13 @@ include `podRestartThreshold`, which is the number of restarts (summed over all 
 should be evicted, and `includingInitContainers`, which determines whether init container restarts should be factored
 into that calculation.
 
+You can also specify `states` parameter to **only** evict pods matching the following conditions:
+- [Pod Phase](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase) status of: `Running`
+- [Container State Waiting](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-state-waiting) of: `CrashLoopBackOff`
+
+If a value for `states` or `podStatusPhases` is not specified,
+Pods in any state (even `Running`) are considered for eviction.
+
 **Parameters:**
 
 |Name|Type|
@@ -568,6 +587,7 @@ into that calculation.
 |`includingInitContainers`|bool|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+|`states`|list(string)|Only supported in v0.28+|
 
 **Example:**
 

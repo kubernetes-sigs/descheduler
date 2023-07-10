@@ -113,10 +113,10 @@ type profileImpl struct {
 	preEvictionFilterPlugins []preEvictionFilterPlugin
 
 	// Each extension point with a list of plugins implementing the extension point.
-	deschedule        sets.String
-	balance           sets.String
-	filter            sets.String
-	preEvictionFilter sets.String
+	deschedule        sets.Set[string]
+	balance           sets.Set[string]
+	filter            sets.Set[string]
+	preEvictionFilter sets.Set[string]
 }
 
 // Option for the handleImpl.
@@ -184,10 +184,10 @@ func buildPlugin(config api.DeschedulerProfile, pluginName string, handle *handl
 }
 
 func (p *profileImpl) registryToExtensionPoints(registry pluginregistry.Registry) {
-	p.deschedule = sets.NewString()
-	p.balance = sets.NewString()
-	p.filter = sets.NewString()
-	p.preEvictionFilter = sets.NewString()
+	p.deschedule = sets.New[string]()
+	p.balance = sets.New[string]()
+	p.filter = sets.New[string]()
+	p.preEvictionFilter = sets.New[string]()
 
 	for plugin, pluginUtilities := range registry {
 		if _, ok := pluginUtilities.PluginType.(frameworktypes.DeschedulePlugin); ok {
@@ -232,16 +232,16 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 	pi.registryToExtensionPoints(reg)
 
 	if !pi.deschedule.HasAll(config.Plugins.Deschedule.Enabled...) {
-		return nil, fmt.Errorf("profile %q configures deschedule extension point of non-existing plugins: %v", config.Name, sets.NewString(config.Plugins.Deschedule.Enabled...).Difference(pi.deschedule))
+		return nil, fmt.Errorf("profile %q configures deschedule extension point of non-existing plugins: %v", config.Name, sets.New(config.Plugins.Deschedule.Enabled...).Difference(pi.deschedule))
 	}
 	if !pi.balance.HasAll(config.Plugins.Balance.Enabled...) {
-		return nil, fmt.Errorf("profile %q configures balance extension point of non-existing plugins: %v", config.Name, sets.NewString(config.Plugins.Balance.Enabled...).Difference(pi.balance))
+		return nil, fmt.Errorf("profile %q configures balance extension point of non-existing plugins: %v", config.Name, sets.New(config.Plugins.Balance.Enabled...).Difference(pi.balance))
 	}
 	if !pi.filter.HasAll(config.Plugins.Filter.Enabled...) {
-		return nil, fmt.Errorf("profile %q configures filter extension point of non-existing plugins: %v", config.Name, sets.NewString(config.Plugins.Filter.Enabled...).Difference(pi.filter))
+		return nil, fmt.Errorf("profile %q configures filter extension point of non-existing plugins: %v", config.Name, sets.New(config.Plugins.Filter.Enabled...).Difference(pi.filter))
 	}
 	if !pi.preEvictionFilter.HasAll(config.Plugins.PreEvictionFilter.Enabled...) {
-		return nil, fmt.Errorf("profile %q configures preEvictionFilter extension point of non-existing plugins: %v", config.Name, sets.NewString(config.Plugins.PreEvictionFilter.Enabled...).Difference(pi.preEvictionFilter))
+		return nil, fmt.Errorf("profile %q configures preEvictionFilter extension point of non-existing plugins: %v", config.Name, sets.New(config.Plugins.PreEvictionFilter.Enabled...).Difference(pi.preEvictionFilter))
 	}
 
 	handle := &handleImpl{
@@ -258,7 +258,7 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 	pluginNames = append(pluginNames, config.Plugins.PreEvictionFilter.Enabled...)
 
 	plugins := make(map[string]frameworktypes.Plugin)
-	for _, plugin := range sets.NewString(pluginNames...).List() {
+	for _, plugin := range sets.New(pluginNames...).UnsortedList() {
 		pg, err := buildPlugin(config, plugin, handle, reg)
 		if err != nil {
 			return nil, fmt.Errorf("unable to build %v plugin: %v", plugin, err)

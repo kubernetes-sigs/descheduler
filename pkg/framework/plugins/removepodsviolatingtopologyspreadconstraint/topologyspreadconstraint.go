@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
+	utilpointer "k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -102,41 +103,40 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 	// iterate through all topoPairs for this topologyKey and diff currentPods -minPods <=maxSkew
 	// if diff > maxSkew, add this pod in the current bucket for eviction
 
-	// First record all of the constraints by namespace
-	client := d.handle.ClientSet()
-	namespaces, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		klog.ErrorS(err, "Couldn't list namespaces")
-		return &frameworktypes.Status{
-			Err: fmt.Errorf("list namespace: %w", err),
-		}
-	}
-	klog.V(1).InfoS("Processing namespaces for topology spread constraints")
+	klog.V(1).Info("Processing namespaces for topology spread constraints")
 	podsForEviction := make(map[*v1.Pod]struct{})
-	var includedNamespaces, excludedNamespaces sets.String
+	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if d.args.Namespaces != nil {
-		includedNamespaces = sets.NewString(d.args.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(d.args.Namespaces.Exclude...)
+		includedNamespaces = sets.New(d.args.Namespaces.Include...)
+		excludedNamespaces = sets.New(d.args.Namespaces.Exclude...)
 	}
 
-	// 1. for each namespace...
-	for _, namespace := range namespaces.Items {
-		if (len(includedNamespaces) > 0 && !includedNamespaces.Has(namespace.Name)) ||
-			(len(excludedNamespaces) > 0 && excludedNamespaces.Has(namespace.Name)) {
-			continue
+	pods, err := podutil.ListPodsOnNodes(nodes, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
+	if err != nil {
+		return &frameworktypes.Status{
+			Err: fmt.Errorf("error listing all pods: %v", err),
 		}
-		namespacePods, err := client.CoreV1().Pods(namespace.Name).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			klog.ErrorS(err, "Couldn't list pods in namespace", "namespace", namespace)
+	}
+
+	allowedConstraints := sets.New[v1.UnsatisfiableConstraintAction](d.args.Constraints...)
+
+	namespacedPods := podutil.GroupByNamespace(pods)
+
+	// 1. for each namespace...
+	for namespace := range namespacedPods {
+		klog.V(4).InfoS("Processing namespace for topology spread constraints", "namespace", namespace)
+
+		if (len(includedNamespaces) > 0 && !includedNamespaces.Has(namespace)) ||
+			(len(excludedNamespaces) > 0 && excludedNamespaces.Has(namespace)) {
 			continue
 		}
 
 		// ...where there is a topology constraint
 		namespaceTopologySpreadConstraints := []v1.TopologySpreadConstraint{}
-		for _, pod := range namespacePods.Items {
+		for _, pod := range namespacedPods[namespace] {
 			for _, constraint := range pod.Spec.TopologySpreadConstraints {
-				// Ignore soft topology constraints if they are not included
-				if constraint.WhenUnsatisfiable == v1.ScheduleAnyway && (d.args == nil || !d.args.IncludeSoftConstraints) {
+				// Ignore topology constraints if they are not included
+				if !allowedConstraints.Has(constraint.WhenUnsatisfiable) {
 					continue
 				}
 				// Need to check v1.TopologySpreadConstraint deepEquality because
@@ -172,18 +172,18 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 			// 3. for each evictable pod in that namespace
 			// (this loop is where we count the number of pods per topologyValue that match this constraint's selector)
 			var sumPods float64
-			for i := range namespacePods.Items {
+			for _, pod := range namespacedPods[namespace] {
 				// skip pods that are being deleted.
-				if utils.IsPodTerminating(&namespacePods.Items[i]) {
+				if utils.IsPodTerminating(pod) {
 					continue
 				}
 				// 4. if the pod matches this TopologySpreadConstraint LabelSelector
-				if !selector.Matches(labels.Set(namespacePods.Items[i].Labels)) {
+				if !selector.Matches(labels.Set(pod.Labels)) {
 					continue
 				}
 
 				// 5. If the pod's node matches this constraint's topologyKey, create a topoPair and add the pod
-				node, ok := nodeMap[namespacePods.Items[i].Spec.NodeName]
+				node, ok := nodeMap[pod.Spec.NodeName]
 				if !ok {
 					// If ok is false, node is nil in which case node.Labels will panic. In which case a pod is yet to be scheduled. So it's safe to just continue here.
 					continue
@@ -195,14 +195,14 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 				// 6. create a topoPair with key as this TopologySpreadConstraint
 				topoPair := topologyPair{key: constraint.TopologyKey, value: nodeValue}
 				// 7. add the pod with key as this topoPair
-				constraintTopologies[topoPair] = append(constraintTopologies[topoPair], &namespacePods.Items[i])
+				constraintTopologies[topoPair] = append(constraintTopologies[topoPair], pod)
 				sumPods++
 			}
 			if topologyIsBalanced(constraintTopologies, constraint) {
 				klog.V(2).InfoS("Skipping topology constraint because it is already balanced", "constraint", constraint)
 				continue
 			}
-			balanceDomains(d.handle.GetPodsAssignedToNodeFunc(), podsForEviction, constraint, constraintTopologies, sumPods, d.handle.Evictor().Filter, nodes)
+			d.balanceDomains(podsForEviction, constraint, constraintTopologies, sumPods, nodes)
 		}
 	}
 
@@ -275,17 +275,18 @@ func topologyIsBalanced(topology map[topologyPair][]*v1.Pod, constraint v1.Topol
 // Following this, the above topology domains end up "sorted" as:
 // [5, 5, 5, 5, 5, 5]
 // (assuming even distribution by the scheduler of the evicted pods)
-func balanceDomains(
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
+func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(
 	podsForEviction map[*v1.Pod]struct{},
 	constraint v1.TopologySpreadConstraint,
 	constraintTopologies map[topologyPair][]*v1.Pod,
 	sumPods float64,
-	isEvictable func(pod *v1.Pod) bool,
 	nodes []*v1.Node,
 ) {
 	idealAvg := sumPods / float64(len(constraintTopologies))
+	isEvictable := d.handle.Evictor().Filter
 	sortedDomains := sortDomains(constraintTopologies, isEvictable)
+	getPodsAssignedToNode := d.handle.GetPodsAssignedToNodeFunc()
+	topologyBalanceNodeFit := utilpointer.BoolDeref(d.args.TopologyBalanceNodeFit, true)
 
 	nodesBelowIdealAvg := filterNodesBelowIdealAvg(nodes, sortedDomains, constraint.TopologyKey, idealAvg)
 
@@ -340,7 +341,7 @@ func balanceDomains(
 			// This is because the chosen pods aren't sorted, but immovable pods still count as "evicted" toward the PTS algorithm.
 			// So, a better selection heuristic could improve performance.
 
-			if !node.PodFitsAnyOtherNode(getPodsAssignedToNode, aboveToEvict[k], nodesBelowIdealAvg) {
+			if topologyBalanceNodeFit && !node.PodFitsAnyOtherNode(getPodsAssignedToNode, aboveToEvict[k], nodesBelowIdealAvg) {
 				klog.V(2).InfoS("ignoring pod for eviction as it does not fit on any other node", "pod", klog.KObj(aboveToEvict[k]))
 				continue
 			}

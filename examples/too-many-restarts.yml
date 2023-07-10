@@ -1,0 +1,15 @@
+apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "RemovePodsHavingTooManyRestarts"
+      args:
+        podRestartThreshold: 100
+        includingInitContainers: true
+        states:
+        - CrashLoopBackOff
+    plugins:
+      deschedule:
+        enabled:
+          - "RemovePodsHavingTooManyRestarts"

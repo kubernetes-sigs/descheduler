@@ -43,7 +43,7 @@ func ValidatePodLifeTimeArgs(obj runtime.Object) error {
 			return fmt.Errorf("failed to get label selectors from strategy's params: %+v", err)
 		}
 	}
-	podLifeTimeAllowedStates := sets.NewString(
+	podLifeTimeAllowedStates := sets.New(
 		string(v1.PodRunning),
 		string(v1.PodPending),
 
@@ -53,7 +53,7 @@ func ValidatePodLifeTimeArgs(obj runtime.Object) error {
 	)
 
 	if !podLifeTimeAllowedStates.HasAll(args.States...) {
-		return fmt.Errorf("states must be one of %v", podLifeTimeAllowedStates.List())
+		return fmt.Errorf("states must be one of %v", podLifeTimeAllowedStates.UnsortedList())
 	}
 
 	return nil
