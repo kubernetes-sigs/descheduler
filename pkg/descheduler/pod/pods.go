@@ -53,8 +53,8 @@ func WrapFilterFuncs(filters ...FilterFunc) FilterFunc {
 
 type Options struct {
 	filter             FilterFunc
-	includedNamespaces sets.String
-	excludedNamespaces sets.String
+	includedNamespaces sets.Set[string]
+	excludedNamespaces sets.Set[string]
 	labelSelector      *metav1.LabelSelector
 }
 
@@ -71,13 +71,13 @@ func (o *Options) WithFilter(filter FilterFunc) *Options {
 }
 
 // WithNamespaces sets included namespaces
-func (o *Options) WithNamespaces(namespaces sets.String) *Options {
+func (o *Options) WithNamespaces(namespaces sets.Set[string]) *Options {
 	o.includedNamespaces = namespaces
 	return o
 }
 
 // WithoutNamespaces sets excluded namespaces
-func (o *Options) WithoutNamespaces(namespaces sets.String) *Options {
+func (o *Options) WithoutNamespaces(namespaces sets.Set[string]) *Options {
 	o.excludedNamespaces = namespaces
 	return o
 }
@@ -157,6 +157,20 @@ func BuildGetPodsAssignedToNodeFunc(podInformer cache.SharedIndexInformer) (GetP
 	return getPodsAssignedToNode, nil
 }
 
+// ListPodsOnNodes returns all pods on given nodes.
+func ListPodsOnNodes(nodes []*v1.Node, getPodsAssignedToNode GetPodsAssignedToNodeFunc, filter FilterFunc) ([]*v1.Pod, error) {
+	pods := make([]*v1.Pod, 0)
+	for _, node := range nodes {
+		podsOnNode, err := ListPodsOnANode(node.Name, getPodsAssignedToNode, filter)
+		if err != nil {
+			return nil, err
+		}
+
+		pods = append(pods, podsOnNode...)
+	}
+	return pods, nil
+}
+
 // ListPodsOnANode lists all pods on a node.
 // It also accepts a "filter" function which can be used to further limit the pods that are returned.
 // (Usually this is podEvictor.Evictable().IsEvictable, in order to only list the evictable pods on a node, but can
@@ -185,6 +199,15 @@ func ListAllPodsOnANode(
 	}
 
 	return pods, nil
+}
+
+func GroupByNamespace(pods []*v1.Pod) map[string][]*v1.Pod {
+	m := make(map[string][]*v1.Pod)
+	for i := 0; i < len(pods); i++ {
+		pod := pods[i]
+		m[pod.Namespace] = append(m[pod.Namespace], pod)
+	}
+	return m
 }
 
 // OwnerRef returns the ownerRefList for the pod.

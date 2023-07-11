@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -37,6 +38,7 @@ func TestSetDefaults_RemovePodsHavingTooManyRestartsArgs(t *testing.T) {
 				LabelSelector:           nil,
 				PodRestartThreshold:     0,
 				IncludingInitContainers: false,
+				States:                  nil,
 			},
 		},
 		{
@@ -46,12 +48,14 @@ func TestSetDefaults_RemovePodsHavingTooManyRestartsArgs(t *testing.T) {
 				LabelSelector:           &metav1.LabelSelector{},
 				PodRestartThreshold:     10,
 				IncludingInitContainers: true,
+				States:                  []string{string(v1.PodRunning)},
 			},
 			want: &RemovePodsHavingTooManyRestartsArgs{
 				Namespaces:              &api.Namespaces{},
 				LabelSelector:           &metav1.LabelSelector{},
 				PodRestartThreshold:     10,
 				IncludingInitContainers: true,
+				States:                  []string{string(v1.PodRunning)},
 			},
 		},
 	}

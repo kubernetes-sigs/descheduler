@@ -22,6 +22,7 @@ limitations under the License.
 package removepodsviolatingtopologyspreadconstraint
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	api "sigs.k8s.io/descheduler/pkg/api"
@@ -40,6 +41,16 @@ func (in *RemovePodsViolatingTopologySpreadConstraintArgs) DeepCopyInto(out *Rem
 		in, out := &in.LabelSelector, &out.LabelSelector
 		*out = new(v1.LabelSelector)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.Constraints != nil {
+		in, out := &in.Constraints, &out.Constraints
+		*out = make([]corev1.UnsatisfiableConstraintAction, len(*in))
+		copy(*out, *in)
+	}
+	if in.TopologyBalanceNodeFit != nil {
+		in, out := &in.TopologyBalanceNodeFit, &out.TopologyBalanceNodeFit
+		*out = new(bool)
+		**out = **in
 	}
 	return
 }
