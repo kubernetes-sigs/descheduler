@@ -19,6 +19,7 @@ package evictions
 import (
 	"context"
 	"fmt"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
@@ -173,6 +174,26 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 }
 
 func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string) error {
+	fakePod := NewFakePod(pod)
+	createOptions := metav1.CreateOptions{}
+	create, err2 := client.CoreV1().Pods(pod.Namespace).Create(ctx, fakePod, createOptions)
+	klog.Info(create, err2)
+
+	getOptions := metav1.GetOptions{}
+	for {
+		getPod, getError := client.CoreV1().Pods(fakePod.Namespace).Get(ctx, fakePod.Name, getOptions)
+		klog.Info(getPod, getError)
+		time.Sleep(time.Second)
+		if getPod.Annotations[FakePod] != "" {
+			deleteError := client.CoreV1().Pods(fakePod.Namespace).Delete(ctx, fakePod.Name, metav1.DeleteOptions{})
+			klog.Info(deleteError)
+			break
+		}
+	}
+	pod.Annotations["scheduling.k8s.io/group-name"] = "job1-e7f18111-1cec-11ea-b688-fa163ec79500"
+	update, err2 := client.CoreV1().Pods(pod.Namespace).Update(context.TODO(), pod, metav1.UpdateOptions{})
+	fmt.Println(update, err2)
+
 	deleteOptions := &metav1.DeleteOptions{}
 	// GracePeriodSeconds ?
 	eviction := &policy.Eviction{
@@ -195,4 +216,23 @@ func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, poli
 		return fmt.Errorf("pod not found when evicting %q: %v", pod.Name, err)
 	}
 	return err
+}
+
+const IsFake = "is-fake"
+const FakePod = "fake-pod"
+
+func NewFakePod(pod1 *v1.Pod) *v1.Pod {
+	pod := pod1.DeepCopy()
+	pod.Labels = nil
+	pod.Spec.NodeName = ""
+	pod.Spec.SchedulerName = "volcano"
+	pod.OwnerReferences = nil
+	pod.ResourceVersion = ""
+	pod.Name = pod.Name + "-fake"
+	pod.Annotations[IsFake] = "true"
+	return pod
+}
+
+func EvictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string) {
+	evictPod(ctx, client, pod, policyGroupVersion)
 }
