@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/events"
@@ -46,6 +48,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
+	"sigs.k8s.io/descheduler/pkg/tracing"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/pkg/version"
 
@@ -106,6 +109,9 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 }
 
 func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) error {
+	var span trace.Span
+	ctx, span = tracing.Tracer().Start(ctx, "runDeschedulerLoop")
+	defer span.End()
 	loopStartDuration := time.Now()
 	defer metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
 
@@ -169,6 +175,9 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 // later runs through all balance plugins of all profiles. (All Balance plugins should come after all Deschedule plugins)
 // see https://github.com/kubernetes-sigs/descheduler/issues/979
 func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interface, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+	var span trace.Span
+	ctx, span = tracing.Tracer().Start(ctx, "runProfiles")
+	defer span.End()
 	var profileRunners []profileRunner
 	for _, profile := range d.deschedulerPolicy.Profiles {
 		currProfile, err := frameworkprofile.NewProfile(
@@ -190,6 +199,7 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 		// First deschedule
 		status := profileR.descheduleEPs(ctx, nodes)
 		if status != nil && status.Err != nil {
+			span.AddEvent("failed to perform deschedule operations", trace.WithAttributes(attribute.String("err", status.Err.Error()), attribute.String("profile", profileR.name), attribute.String("operation", tracing.DescheduleOperation)))
 			klog.ErrorS(status.Err, "running deschedule extension point failed with error", "profile", profileR.name)
 			continue
 		}
@@ -199,6 +209,7 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 		// Balance Later
 		status := profileR.balanceEPs(ctx, nodes)
 		if status != nil && status.Err != nil {
+			span.AddEvent("failed to perform balance operations", trace.WithAttributes(attribute.String("err", status.Err.Error()), attribute.String("profile", profileR.name), attribute.String("operation", tracing.BalanceOperation)))
 			klog.ErrorS(status.Err, "running balance extension point failed with error", "profile", profileR.name)
 			continue
 		}
@@ -206,6 +217,9 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 }
 
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
+	var span trace.Span
+	ctx, span = tracing.Tracer().Start(ctx, "Run")
+	defer span.End()
 	metrics.Register()
 
 	clientConnection := rs.ClientConnection
@@ -242,6 +256,7 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	}
 
 	if rs.LeaderElection.LeaderElect && rs.DeschedulingInterval.Seconds() == 0 {
+		span.AddEvent("Validation Failure", trace.WithAttributes(attribute.String("err", "leaderElection must be used with deschedulingInterval")))
 		return fmt.Errorf("leaderElection must be used with deschedulingInterval")
 	}
 
@@ -251,6 +266,7 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 
 	if rs.LeaderElection.LeaderElect && !rs.DryRun {
 		if err := NewLeaderElection(runFn, rsclient, &rs.LeaderElection, ctx); err != nil {
+			span.AddEvent("Leader Election Failure", trace.WithAttributes(attribute.String("err", err.Error())))
 			return fmt.Errorf("leaderElection: %w", err)
 		}
 		return nil
@@ -366,6 +382,9 @@ func cachedClient(
 }
 
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string) error {
+	var span trace.Span
+	ctx, span = tracing.Tracer().Start(ctx, "RunDeschedulerStrategies")
+	defer span.End()
 	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
 	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
 
@@ -385,6 +404,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 
 	descheduler, err := newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, sharedInformerFactory)
 	if err != nil {
+		span.AddEvent("Failed to create new descheduler", trace.WithAttributes(attribute.String("err", err.Error())))
 		return err
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -394,14 +414,19 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
 	wait.NonSlidingUntil(func() {
-		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeLister, nodeSelector)
+		// A next context is created here intentionally to avoid nesting the spans via context.
+		sCtx, sSpan := tracing.Tracer().Start(ctx, "NonSlidingUntil")
+		defer sSpan.End()
+		nodes, err := nodeutil.ReadyNodes(sCtx, rs.Client, nodeLister, nodeSelector)
 		if err != nil {
+			sSpan.AddEvent("Failed to detect ready nodes", trace.WithAttributes(attribute.String("err", err.Error())))
 			klog.Error(err)
 			cancel()
 			return
 		}
-		err = descheduler.runDeschedulerLoop(ctx, nodes)
+		err = descheduler.runDeschedulerLoop(sCtx, nodes)
 		if err != nil {
+			sSpan.AddEvent("Failed to run descheduler loop", trace.WithAttributes(attribute.String("err", err.Error())))
 			klog.Error(err)
 			cancel()
 			return
