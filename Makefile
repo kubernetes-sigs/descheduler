@@ -43,6 +43,10 @@ IMAGE:=descheduler:$(VERSION)
 # IMAGE_GCLOUD is the image name of descheduler in the remote registry
 IMAGE_GCLOUD:=$(REGISTRY)/descheduler:$(VERSION)
 
+# CURRENT_DIR is the current dir where the Makefile exists
+CURRENT_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+
+
 # TODO: upload binaries to GCS bucket
 #
 # In the future binaries can be uploaded to
@@ -128,6 +132,9 @@ gen:
 	./hack/update-generated-deep-copies.sh
 	./hack/update-generated-defaulters.sh
 	./hack/update-docs.sh
+
+gen-docker:
+	$(CONTAINER_ENGINE) run --entrypoint make -it -v $(CURRENT_DIR):/go/src/sigs.k8s.io/descheduler -w /go/src/sigs.k8s.io/descheduler golang:1.20.3 gen
 
 verify-gen:
 	./hack/verify-conversions.sh
