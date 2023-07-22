@@ -1,0 +1,6 @@
+# Always check-out / check-in files with LF line endings.
+* text=auto eol=lf
+
+go.sum merge=union
+**/zz_generated.*.go linguist-generated=true
+vendor/** linguist-vendored
