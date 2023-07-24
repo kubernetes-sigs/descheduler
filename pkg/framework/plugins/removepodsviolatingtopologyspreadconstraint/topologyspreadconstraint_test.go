@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/events"
+	"k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	utilpointer "k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -1413,7 +1414,15 @@ func TestCheckIdenticalConstraints(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			isIdentical := hasIdenticalConstraints(tc.newConstraint, tc.namespaceTopologySpreadConstraints)
+			var constraintSets []topologyConstraintSet
+			for _, constraints := range tc.namespaceTopologySpreadConstraints {
+				constraintSets = append(constraintSets, topologyConstraintSet{
+					constraint:      constraints,
+					podNodeAffinity: nodeaffinity.RequiredNodeAffinity{},
+					podTolerations:  []v1.Toleration{},
+				})
+			}
+			isIdentical := hasIdenticalConstraints(tc.newConstraint, constraintSets)
 			if isIdentical != tc.expectedResult {
 				t.Errorf("Test error for description: %s. Expected result %v, got %v", tc.name, tc.expectedResult, isIdentical)
 			}
