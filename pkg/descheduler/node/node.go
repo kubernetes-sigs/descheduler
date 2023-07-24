@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	clientset "k8s.io/client-go/kubernetes"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/klog/v2"
@@ -120,8 +121,7 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 	}
 	// Check if the pod can fit on a node based off it's requests
 	if pod.Spec.NodeName == "" || pod.Spec.NodeName != node.Name {
-		ok, reqErrors := fitsRequest(nodeIndexer, pod, node)
-		if !ok {
+		if ok, reqErrors := fitsRequest(nodeIndexer, pod, node); !ok {
 			errors = append(errors, reqErrors...)
 		}
 	}
@@ -146,13 +146,11 @@ func PodFitsAnyOtherNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.
 		if len(errors) == 0 {
 			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			return true
-		} else {
-			klog.V(4).InfoS("Pod does not fit on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
-			for _, err := range errors {
-				klog.V(4).InfoS(err.Error())
-			}
 		}
+		klog.V(4).InfoS("Pod does not fit on node",
+			"pod:", klog.KObj(pod), "node:", klog.KObj(node), "error:", utilerrors.NewAggregate(errors).Error())
 	}
+
 	return false
 }
 
@@ -164,13 +162,11 @@ func PodFitsAnyNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, 
 		if len(errors) == 0 {
 			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			return true
-		} else {
-			klog.V(4).InfoS("Pod does not fit on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
-			for _, err := range errors {
-				klog.V(4).InfoS(err.Error())
-			}
 		}
+		klog.V(4).InfoS("Pod does not fit on node",
+			"pod:", klog.KObj(pod), "node:", klog.KObj(node), "error:", utilerrors.NewAggregate(errors).Error())
 	}
+
 	return false
 }
 
@@ -181,12 +177,11 @@ func PodFitsCurrentNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.P
 	if len(errors) == 0 {
 		klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 		return true
-	} else {
-		klog.V(4).InfoS("Pod does not fit on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
-		for _, err := range errors {
-			klog.V(4).InfoS(err.Error())
-		}
 	}
+
+	klog.V(4).InfoS("Pod does not fit on node",
+		"pod:", klog.KObj(pod), "node:", klog.KObj(node), "error:", utilerrors.NewAggregate(errors).Error())
+
 	return false
 }
 
