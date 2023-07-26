@@ -200,6 +200,12 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 					continue
 				}
 				namespaceTopologySpreadConstraints = append(namespaceTopologySpreadConstraints, namespaceTopologySpreadConstraint)
+				requiredSchedulingTerm := nodeaffinity.GetRequiredNodeAffinity(pod)
+				namespaceTopologySpreadConstraints = append(namespaceTopologySpreadConstraints, topologyConstraintSet{
+					constraint:      constraint,
+					podNodeAffinity: requiredSchedulingTerm,
+					podTolerations:  pod.Spec.Tolerations,
+				})
 			}
 		}
 		if len(namespaceTopologySpreadConstraints) == 0 {
@@ -215,6 +221,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 			// pre-populate the topologyPair map with all the topologies available from the nodeMap
 			// (we can't just build it from existing pods' nodes because a topology may have 0 pods)
 			for _, node := range nodeMap {
+
 				if val, ok := node.Labels[constraint.TopologyKey]; ok {
 					if matchNodeInclusionPolicies(&constraint, tolerations, node, nodeAffinity) {
 						constraintTopologies[topologyPair{key: constraint.TopologyKey, value: val}] = make([]*v1.Pod, 0)
