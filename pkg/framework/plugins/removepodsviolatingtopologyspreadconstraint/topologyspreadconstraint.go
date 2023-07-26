@@ -87,9 +87,9 @@ type topologyConstraintSet struct {
 	podTolerations  []v1.Toleration
 }
 
-// DoNotScheduleTaintsFilterFunc returns the filter function that can
+// doNotScheduleTaintsFilterFunc returns the filter function that can
 // filter out the node taints that reject scheduling Pod on a Node.
-func DoNotScheduleTaintsFilterFunc() func(t *v1.Taint) bool {
+func doNotScheduleTaintsFilterFunc() func(t *v1.Taint) bool {
 	return func(t *v1.Taint) bool {
 		// PodToleratesNodeTaints is only interested in NoSchedule and NoExecute taints.
 		return t.Effect == v1.TaintEffectNoSchedule || t.Effect == v1.TaintEffectNoExecute
@@ -120,7 +120,7 @@ func matchNodeInclusionPolicies(tsc *v1.TopologySpreadConstraint, tolerations []
 
 	// Nil is equivalent to ignore
 	if tsc.NodeTaintsPolicy != nil && *tsc.NodeTaintsPolicy == v1.NodeInclusionPolicyHonor {
-		if _, untolerated := v1helper.FindMatchingUntoleratedTaint(node.Spec.Taints, tolerations, DoNotScheduleTaintsFilterFunc()); untolerated {
+		if _, untolerated := v1helper.FindMatchingUntoleratedTaint(node.Spec.Taints, tolerations, doNotScheduleTaintsFilterFunc()); untolerated {
 			return false
 		}
 	}
@@ -187,25 +187,19 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 				if !allowedConstraints.Has(constraint.WhenUnsatisfiable) {
 					continue
 				}
-				// Need to check v1.TopologySpreadConstraint deepEquality because
-				// v1.TopologySpreadConstraint has pointer fields
-				// and we don't need to go over duplicated constraints later on
 				requiredSchedulingTerm := nodeaffinity.GetRequiredNodeAffinity(pod)
 				namespaceTopologySpreadConstraint := topologyConstraintSet{
 					constraint:      constraint,
 					podNodeAffinity: requiredSchedulingTerm,
 					podTolerations:  pod.Spec.Tolerations,
 				}
+				// Need to check v1.TopologySpreadConstraint deepEquality because
+				// v1.TopologySpreadConstraint has pointer fields
+				// and we don't need to go over duplicated constraints later on
 				if hasIdenticalConstraints(namespaceTopologySpreadConstraint, namespaceTopologySpreadConstraints) {
 					continue
 				}
 				namespaceTopologySpreadConstraints = append(namespaceTopologySpreadConstraints, namespaceTopologySpreadConstraint)
-				requiredSchedulingTerm := nodeaffinity.GetRequiredNodeAffinity(pod)
-				namespaceTopologySpreadConstraints = append(namespaceTopologySpreadConstraints, topologyConstraintSet{
-					constraint:      constraint,
-					podNodeAffinity: requiredSchedulingTerm,
-					podTolerations:  pod.Spec.Tolerations,
-				})
 			}
 		}
 		if len(namespaceTopologySpreadConstraints) == 0 {
@@ -221,7 +215,6 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 			// pre-populate the topologyPair map with all the topologies available from the nodeMap
 			// (we can't just build it from existing pods' nodes because a topology may have 0 pods)
 			for _, node := range nodeMap {
-
 				if val, ok := node.Labels[constraint.TopologyKey]; ok {
 					if matchNodeInclusionPolicies(&constraint, tolerations, node, nodeAffinity) {
 						constraintTopologies[topologyPair{key: constraint.TopologyKey, value: val}] = make([]*v1.Pod, 0)
@@ -295,7 +288,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 // hasIdenticalConstraints checks if we already had an identical TopologySpreadConstraint in namespaceTopologySpreadConstraints slice
 func hasIdenticalConstraints(newConstraint topologyConstraintSet, namespaceTopologySpreadConstraints []topologyConstraintSet) bool {
 	for _, constraint := range namespaceTopologySpreadConstraints {
-		if reflect.DeepEqual(newConstraint.constraint, constraint.constraint) && reflect.DeepEqual(newConstraint.podNodeAffinity, constraint.podNodeAffinity) && reflect.DeepEqual(newConstraint.podTolerations, constraint.podTolerations) {
+		if reflect.DeepEqual(newConstraint, constraint) {
 			return true
 		}
 	}
