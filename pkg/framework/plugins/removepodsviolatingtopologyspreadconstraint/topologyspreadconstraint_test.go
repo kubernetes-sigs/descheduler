@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/events"
+	"k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	utilpointer "k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -303,12 +304,14 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:        1,
 					node:         "n1",
 					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultTopologyConstraints(1),
 					nodeSelector: map[string]string{"zone": "zoneA"},
 				},
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 					nodeAffinity: &v1.Affinity{NodeAffinity: &v1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{NodeSelectorTerms: []v1.NodeSelectorTerm{
 							{MatchExpressions: []v1.NodeSelectorRequirement{{Key: "foo", Values: []string{"bar"}, Operator: v1.NodeSelectorOpIn}}},
@@ -316,9 +319,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					}},
 				},
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
+					count:       1,
+					node:        "n1",
+					constraints: getDefaultTopologyConstraints(1),
+					labels:      map[string]string{"foo": "bar"},
 				},
 			}),
 			expectedEvictedCount: 1,
@@ -1413,7 +1417,19 @@ func TestCheckIdenticalConstraints(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			isIdentical := hasIdenticalConstraints(tc.newConstraint, tc.namespaceTopologySpreadConstraints)
+			var constraintSets []topologyConstraintSet
+			for _, constraints := range tc.namespaceTopologySpreadConstraints {
+				constraintSets = append(constraintSets, topologyConstraintSet{
+					constraint:      constraints,
+					podNodeAffinity: nodeaffinity.RequiredNodeAffinity{},
+					podTolerations:  []v1.Toleration{},
+				})
+			}
+			isIdentical := hasIdenticalConstraints(topologyConstraintSet{
+				constraint:      tc.newConstraint,
+				podNodeAffinity: nodeaffinity.RequiredNodeAffinity{},
+				podTolerations:  []v1.Toleration{},
+			}, constraintSets)
 			if isIdentical != tc.expectedResult {
 				t.Errorf("Test error for description: %s. Expected result %v, got %v", tc.name, tc.expectedResult, isIdentical)
 			}
