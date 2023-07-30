@@ -275,3 +275,29 @@ func TolerationsEqual(t1, t2 []v1.Toleration) bool {
 	}
 	return true
 }
+
+// Returns the weight that the pod gives to a node by analyzing the
+// soft node affinity of that pod
+// (nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution)
+func PodNodeAffinityWeight(pod *v1.Pod, node *v1.Node) (int32, error) {
+	if pod.Spec.Affinity == nil ||
+		pod.Spec.Affinity.NodeAffinity == nil ||
+		len(pod.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) == 0 {
+		return 0, nil
+	}
+	// Iterate over each PreferredSchedulingTerm and check if it matches with the current node labels.
+	// If so, add the weight of the PreferredSchedulingTerm to the sum of weight. With that, we'll know
+	// the weight that the nodeAffinity from this pod gives to this node.
+	var sumWeights int32 = 0
+	for _, prefSchedulTerm := range pod.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+		preferredNodeSelector := &v1.NodeSelector{NodeSelectorTerms: []v1.NodeSelectorTerm{prefSchedulTerm.Preference}}
+		match, err := corev1.MatchNodeSelectorTerms(node, preferredNodeSelector)
+		if err != nil {
+			klog.ErrorS(err, "error parsing node selector", "selector", preferredNodeSelector)
+		}
+		if match {
+			sumWeights += prefSchedulTerm.Weight
+		}
+	}
+	return sumWeights, nil
+}
