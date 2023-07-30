@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
@@ -46,10 +45,10 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingNodeAffinityArgs, got %T", args)
 	}
 
-	var includedNamespaces, excludedNamespaces sets.Set[string]
+	var includedNamespaces, excludedNamespaces []string
 	if nodeAffinityArgs.Namespaces != nil {
-		includedNamespaces = sets.New(nodeAffinityArgs.Namespaces.Include...)
-		excludedNamespaces = sets.New(nodeAffinityArgs.Namespaces.Exclude...)
+		includedNamespaces = nodeAffinityArgs.Namespaces.Include
+		excludedNamespaces = nodeAffinityArgs.Namespaces.Exclude
 	}
 
 	// We can combine Filter and PreEvictionFilter since for this strategy it does not matter where we run PreEvictionFilter

@@ -17,12 +17,12 @@ limitations under the License.
 package pod
 
 import (
+	"regexp"
 	"sort"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -53,8 +53,8 @@ func WrapFilterFuncs(filters ...FilterFunc) FilterFunc {
 
 type Options struct {
 	filter             FilterFunc
-	includedNamespaces sets.Set[string]
-	excludedNamespaces sets.Set[string]
+	includedNamespaces []string
+	excludedNamespaces []string
 	labelSelector      *metav1.LabelSelector
 }
 
@@ -71,13 +71,13 @@ func (o *Options) WithFilter(filter FilterFunc) *Options {
 }
 
 // WithNamespaces sets included namespaces
-func (o *Options) WithNamespaces(namespaces sets.Set[string]) *Options {
+func (o *Options) WithNamespaces(namespaces []string) *Options {
 	o.includedNamespaces = namespaces
 	return o
 }
 
 // WithoutNamespaces sets excluded namespaces
-func (o *Options) WithoutNamespaces(namespaces sets.Set[string]) *Options {
+func (o *Options) WithoutNamespaces(namespaces []string) *Options {
 	o.excludedNamespaces = namespaces
 	return o
 }
@@ -98,14 +98,24 @@ func (o *Options) BuildFilterFunc() (FilterFunc, error) {
 			return nil, err
 		}
 	}
+
+	includedNamespaces, err := compileRegexPatterns(o.includedNamespaces)
+	if err != nil {
+		return nil, err
+	}
+	excludedNamespaces, err := compileRegexPatterns(o.excludedNamespaces)
+	if err != nil {
+		return nil, err
+	}
+
 	return func(pod *v1.Pod) bool {
 		if o.filter != nil && !o.filter(pod) {
 			return false
 		}
-		if len(o.includedNamespaces) > 0 && !o.includedNamespaces.Has(pod.Namespace) {
+		if len(includedNamespaces) > 0 && !hasMatchingRegex(pod.Namespace, includedNamespaces) {
 			return false
 		}
-		if len(o.excludedNamespaces) > 0 && o.excludedNamespaces.Has(pod.Namespace) {
+		if len(excludedNamespaces) > 0 && hasMatchingRegex(pod.Namespace, excludedNamespaces) {
 			return false
 		}
 		if s != nil && !s.Matches(labels.Set(pod.GetLabels())) {
@@ -256,4 +266,31 @@ func SortPodsBasedOnAge(pods []*v1.Pod) {
 	sort.Slice(pods, func(i, j int) bool {
 		return pods[i].CreationTimestamp.Before(&pods[j].CreationTimestamp)
 	})
+}
+
+// compileRegexPatterns compiles a slice of given string patterns into a slice
+// of regular expression objects. It adds "^" and "$" at the beginning and end
+// of each pattern to ensure matching the entire string.
+func compileRegexPatterns(patterns []string) ([]*regexp.Regexp, error) {
+	regexes := []*regexp.Regexp{}
+
+	for _, p := range patterns {
+		r, err := regexp.Compile("^" + p + "$")
+		if err != nil {
+			return nil, err
+		}
+		regexes = append(regexes, r)
+	}
+	return regexes, nil
+}
+
+// hasMatchingRegex checks if the input string matches any of the regular
+// expressions in the provided slice.
+func hasMatchingRegex(s string, regexes []*regexp.Regexp) bool {
+	for _, regex := range regexes {
+		if regex.MatchString(s) {
+			return true
+		}
+	}
+	return false
 }

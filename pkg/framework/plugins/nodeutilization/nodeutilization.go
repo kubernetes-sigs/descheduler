@@ -24,7 +24,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -282,9 +281,9 @@ func evictPods(
 	podEvictor frameworktypes.Evictor,
 	continueEviction continueEvictionCond,
 ) {
-	var excludedNamespaces sets.Set[string]
+	var excludedNamespaces []string
 	if evictableNamespaces != nil {
-		excludedNamespaces = sets.New(evictableNamespaces.Exclude...)
+		excludedNamespaces = evictableNamespaces.Exclude
 	}
 
 	if continueEviction(nodeInfo, totalAvailableUsage) {

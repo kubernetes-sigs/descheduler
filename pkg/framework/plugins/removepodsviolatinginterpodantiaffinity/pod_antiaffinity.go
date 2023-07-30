@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -50,10 +49,10 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingInterPodAntiAffinityArgs, got %T", args)
 	}
 
-	var includedNamespaces, excludedNamespaces sets.Set[string]
+	var includedNamespaces, excludedNamespaces []string
 	if interPodAntiAffinityArgs.Namespaces != nil {
-		includedNamespaces = sets.New(interPodAntiAffinityArgs.Namespaces.Include...)
-		excludedNamespaces = sets.New(interPodAntiAffinityArgs.Namespaces.Exclude...)
+		includedNamespaces = interPodAntiAffinityArgs.Namespaces.Include
+		excludedNamespaces = interPodAntiAffinityArgs.Namespaces.Exclude
 	}
 
 	podFilter, err := podutil.NewOptions().

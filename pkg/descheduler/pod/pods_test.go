@@ -39,11 +39,13 @@ var (
 
 func TestListPodsOnANode(t *testing.T) {
 	testCases := []struct {
-		name             string
-		pods             []*v1.Pod
-		node             *v1.Node
-		labelSelector    *metav1.LabelSelector
-		expectedPodCount int
+		name               string
+		pods               []*v1.Pod
+		node               *v1.Node
+		labelSelector      *metav1.LabelSelector
+		includedNamespaces []string
+		excludedNamespaces []string
+		expectedPodCount   int
 	}{
 		{
 			name: "test listing pods on a node",
@@ -80,6 +82,32 @@ func TestListPodsOnANode(t *testing.T) {
 			},
 			expectedPodCount: 2,
 		},
+		{
+			name: "test listing pods with included namespaces",
+			pods: []*v1.Pod{
+				test.BuildTestPod("pod1", 100, 0, "n1", nil),
+				test.BuildTestPod("pod2", 100, 0, "n1", func(pod *v1.Pod) {
+					pod.Namespace = "ns1"
+				}),
+				test.BuildTestPod("pod3", 100, 0, "n2", nil),
+			},
+			node:               test.BuildTestNode("n1", 2000, 3000, 10, nil),
+			includedNamespaces: []string{"ns.*"},
+			expectedPodCount:   1,
+		},
+		{
+			name: "test listing pods with excluded namespaces",
+			pods: []*v1.Pod{
+				test.BuildTestPod("pod1", 100, 0, "n1", nil),
+				test.BuildTestPod("pod2", 100, 0, "n1", func(pod *v1.Pod) {
+					pod.Namespace = "ns1"
+				}),
+				test.BuildTestPod("pod3", 100, 0, "n2", nil),
+			},
+			node:               test.BuildTestNode("n1", 2000, 3000, 10, nil),
+			excludedNamespaces: []string{"ns.*"},
+			expectedPodCount:   1,
+		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -104,7 +132,7 @@ func TestListPodsOnANode(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			filter, err := NewOptions().WithLabelSelector(testCase.labelSelector).BuildFilterFunc()
+			filter, err := NewOptions().WithLabelSelector(testCase.labelSelector).WithNamespaces(testCase.includedNamespaces).WithoutNamespaces(testCase.excludedNamespaces).BuildFilterFunc()
 			if err != nil {
 				t.Errorf("Build filter function error: %v", err)
 			}
