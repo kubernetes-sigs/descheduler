@@ -26,6 +26,7 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 const PluginName = "RemovePodsViolatingNodeAffinity"
@@ -88,7 +89,8 @@ func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes 
 		case "requiredDuringSchedulingIgnoredDuringExecution":
 			// In this specific case, the pod must also violate the nodeSelector to be evicted
 			filterFunc := func(pod *v1.Pod, node *v1.Node, nodes []*v1.Node) bool {
-				return d.handle.Evictor().Filter(pod) &&
+				return utils.PodHasNodeAffinity(pod, utils.RequiredDuringSchedulingIgnoredDuringExecution) &&
+					d.handle.Evictor().Filter(pod) &&
 					nodeutil.PodFitsAnyNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) &&
 					!nodeutil.PodMatchNodeSelector(pod, node)
 			}
@@ -97,9 +99,10 @@ func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes 
 			// In this specific case, the pod must have a better fit on another node than
 			// in the current one based on the preferred node affinity
 			filterFunc := func(pod *v1.Pod, node *v1.Node, nodes []*v1.Node) bool {
-				return d.handle.Evictor().Filter(pod) &&
+				return utils.PodHasNodeAffinity(pod, utils.PreferredDuringSchedulingIgnoredDuringExecution) &&
+					d.handle.Evictor().Filter(pod) &&
 					nodeutil.PodFitsAnyNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) &&
-					(nodeutil.BestPodNodeAffinityWeight(pod, nodes) > nodeutil.PodNodeAffinityWeight(pod, node))
+					(nodeutil.GetBestNodeWeightGivenPodPreferredAffinity(pod, nodes) > nodeutil.GetNodeWeightGivenPodPreferredAffinity(pod, node))
 			}
 			err = d.processNodes(ctx, nodes, filterFunc)
 		default:

@@ -279,10 +279,8 @@ func TolerationsEqual(t1, t2 []v1.Toleration) bool {
 // Returns the weight that the pod gives to a node by analyzing the
 // soft node affinity of that pod
 // (nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution)
-func PodNodeAffinityWeight(pod *v1.Pod, node *v1.Node) (int32, error) {
-	if pod.Spec.Affinity == nil ||
-		pod.Spec.Affinity.NodeAffinity == nil ||
-		len(pod.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) == 0 {
+func GetNodeWeightGivenPodPreferredAffinity(pod *v1.Pod, node *v1.Node) (int32, error) {
+	if !PodHasNodeAffinity(pod, PreferredDuringSchedulingIgnoredDuringExecution) {
 		return 0, nil
 	}
 	// Iterate over each PreferredSchedulingTerm and check if it matches with the current node labels.

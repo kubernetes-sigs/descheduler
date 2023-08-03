@@ -875,7 +875,7 @@ func TestBestPodNodeAffinityWeight(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.description, func(t *testing.T) {
-			bestWeight := BestPodNodeAffinityWeight(tc.pod, tc.nodes)
+			bestWeight := GetBestNodeWeightGivenPodPreferredAffinity(tc.pod, tc.nodes)
 			if bestWeight != tc.expectedWeight {
 				t.Errorf("Test %#v failed", tc.description)
 			}

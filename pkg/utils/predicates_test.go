@@ -1031,7 +1031,7 @@ func TestPodNodeAffinityWeight(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			pod := v1.Pod{}
 			pod.Spec.Affinity = test.affinity
-			totalWeight, err := PodNodeAffinityWeight(&pod, &defaultNode)
+			totalWeight, err := GetNodeWeightGivenPodPreferredAffinity(&pod, &defaultNode)
 			if err != nil {
 				t.Error("Found non nil error")
 			}
