@@ -289,3 +289,37 @@ func IsBasicResource(name v1.ResourceName) bool {
 		return false
 	}
 }
+
+// GetNodeWeightGivenPodPreferredAffinity returns the weight
+// that the pod gives to a node by analyzing the soft node affinity of that pod
+// (nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution)
+func GetNodeWeightGivenPodPreferredAffinity(pod *v1.Pod, node *v1.Node) int32 {
+	totalWeight, err := utils.GetNodeWeightGivenPodPreferredAffinity(pod, node)
+	if err != nil {
+		return 0
+	}
+	return totalWeight
+}
+
+// GetBestNodeWeightGivenPodPreferredAffinity returns the best weight
+// (maximum one) that the pod gives to the best node by analyzing the soft node affinity
+// of that pod (nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution)
+func GetBestNodeWeightGivenPodPreferredAffinity(pod *v1.Pod, nodes []*v1.Node) int32 {
+	var bestWeight int32 = 0
+	for _, node := range nodes {
+		weight := GetNodeWeightGivenPodPreferredAffinity(pod, node)
+		if weight > bestWeight {
+			bestWeight = weight
+		}
+	}
+	return bestWeight
+}
+
+// PodMatchNodeSelector checks if a pod node selector matches the node label.
+func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) bool {
+	matches, err := utils.PodMatchNodeSelector(pod, node)
+	if err != nil {
+		return false
+	}
+	return matches
+}

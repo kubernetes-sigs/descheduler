@@ -811,6 +811,78 @@ func TestNodeFit(t *testing.T) {
 	}
 }
 
+func TestBestPodNodeAffinityWeight(t *testing.T) {
+	defaultPod := test.BuildTestPod("p1", 0, 0, "node1", func(p *v1.Pod) {
+		p.Spec.Affinity = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []v1.PreferredSchedulingTerm{
+					{
+						Weight: 10,
+						Preference: v1.NodeSelectorTerm{
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      "key1",
+									Operator: "In",
+									Values:   []string{"value1"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	})
+	tests := []struct {
+		description    string
+		pod            *v1.Pod
+		nodes          []*v1.Node
+		expectedWeight int32
+	}{
+		{
+			description: "No node matches the preferred affinity",
+			pod:         defaultPod,
+			nodes: []*v1.Node{
+				test.BuildTestNode("node2", 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						"key2": "value2",
+					}
+				}),
+				test.BuildTestNode("node3", 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						"key3": "value3",
+					}
+				}),
+			},
+			expectedWeight: 0,
+		},
+		{
+			description: "A single node matches the preferred affinity",
+			pod:         defaultPod,
+			nodes: []*v1.Node{
+				test.BuildTestNode("node1", 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						"key1": "value1",
+					}
+				}),
+				test.BuildTestNode("node2", 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						"key2": "value2",
+					}
+				}),
+			},
+			expectedWeight: 10,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			bestWeight := GetBestNodeWeightGivenPodPreferredAffinity(tc.pod, tc.nodes)
+			if bestWeight != tc.expectedWeight {
+				t.Errorf("Test %#v failed", tc.description)
+			}
+		})
+	}
+}
+
 // createResourceList builds a small resource list of core resources
 func createResourceList(cpu, memory, ephemeralStorage int64) v1.ResourceList {
 	resourceList := make(map[v1.ResourceName]resource.Quantity)
