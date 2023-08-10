@@ -112,8 +112,9 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 	var span trace.Span
 	ctx, span = tracing.Tracer().Start(ctx, "runDeschedulerLoop")
 	defer span.End()
-	loopStartDuration := time.Now()
-	defer metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
+	defer func(loopStartDuration time.Time) {
+		metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
+	}(time.Now())
 
 	// if len is still <= 1 error out
 	if len(nodes) <= 1 {
