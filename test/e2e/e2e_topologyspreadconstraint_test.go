@@ -2,14 +2,13 @@ package e2e
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"strings"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
+	"k8s.io/apimachinery/pkg/labels"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
@@ -35,32 +34,69 @@ func TestTopologySpreadConstraint(t *testing.T) {
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
 	testCases := map[string]struct {
-		replicaCount int
-		maxSkew      int
-		labelKey     string
-		labelValue   string
-		constraint   v1.UnsatisfiableConstraintAction
+		replicaCount             int
+		topologySpreadConstraint v1.TopologySpreadConstraint
 	}{
 		"test-rc-topology-spread-hard-constraint": {
 			replicaCount: 4,
-			maxSkew:      1,
-			labelKey:     "test",
-			labelValue:   "topology-spread-hard-constraint",
-			constraint:   v1.DoNotSchedule,
+			topologySpreadConstraint: v1.TopologySpreadConstraint{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "topology-spread-hard-constraint",
+					},
+				},
+				MaxSkew:           1,
+				TopologyKey:       zoneTopologyKey,
+				WhenUnsatisfiable: v1.DoNotSchedule,
+			},
 		},
 		"test-rc-topology-spread-soft-constraint": {
 			replicaCount: 4,
-			maxSkew:      1,
-			labelKey:     "test",
-			labelValue:   "topology-spread-soft-constraint",
-			constraint:   v1.ScheduleAnyway,
+			topologySpreadConstraint: v1.TopologySpreadConstraint{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "topology-spread-soft-constraint",
+					},
+				},
+				MaxSkew:           1,
+				TopologyKey:       zoneTopologyKey,
+				WhenUnsatisfiable: v1.ScheduleAnyway,
+			},
+		},
+		"test-rc-node-taints-policy-honor": {
+			replicaCount: 4,
+			topologySpreadConstraint: v1.TopologySpreadConstraint{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "node-taints-policy-honor",
+					},
+				},
+				MaxSkew:           1,
+				NodeTaintsPolicy:  nodeInclusionPolicyRef(v1.NodeInclusionPolicyHonor),
+				TopologyKey:       zoneTopologyKey,
+				WhenUnsatisfiable: v1.DoNotSchedule,
+			},
+		},
+		"test-rc-node-affinity-policy-ignore": {
+			replicaCount: 4,
+			topologySpreadConstraint: v1.TopologySpreadConstraint{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "node-taints-policy-honor",
+					},
+				},
+				MaxSkew:            1,
+				NodeAffinityPolicy: nodeInclusionPolicyRef(v1.NodeInclusionPolicyIgnore),
+				TopologyKey:        zoneTopologyKey,
+				WhenUnsatisfiable:  v1.DoNotSchedule,
+			},
 		},
 	}
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			t.Logf("Creating RC %s with %d replicas", name, tc.replicaCount)
-			rc := RcByNameContainer(name, testNamespace.Name, int32(tc.replicaCount), map[string]string{tc.labelKey: tc.labelValue}, nil, "")
-			rc.Spec.Template.Spec.TopologySpreadConstraints = makeTopologySpreadConstraints(tc.maxSkew, tc.labelKey, tc.labelValue, tc.constraint)
+			rc := RcByNameContainer(name, testNamespace.Name, int32(tc.replicaCount), tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels, nil, "")
+			rc.Spec.Template.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{tc.topologySpreadConstraint}
 			if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, rc, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Error creating RC %s %v", name, err)
 			}
@@ -69,10 +105,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 
 			// Create a "Violator" RC that has the same label and is forced to be on the same node using a nodeSelector
 			violatorRcName := name + "-violator"
-			violatorCount := tc.maxSkew + 1
-			violatorRc := RcByNameContainer(violatorRcName, testNamespace.Name, int32(violatorCount), map[string]string{tc.labelKey: tc.labelValue}, nil, "")
+			violatorCount := tc.topologySpreadConstraint.MaxSkew + 1
+			violatorRc := RcByNameContainer(violatorRcName, testNamespace.Name, violatorCount, tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels, nil, "")
 			violatorRc.Spec.Template.Spec.NodeSelector = map[string]string{zoneTopologyKey: workerNodes[0].Labels[zoneTopologyKey]}
-			rc.Spec.Template.Spec.TopologySpreadConstraints = makeTopologySpreadConstraints(tc.maxSkew, tc.labelKey, tc.labelValue, tc.constraint)
+			rc.Spec.Template.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{tc.topologySpreadConstraint}
 			if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, violatorRc, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Error creating RC %s: %v", violatorRcName, err)
 			}
@@ -103,7 +139,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			}
 
 			plugin, err := removepodsviolatingtopologyspreadconstraint.New(&removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
-				Constraints: []v1.UnsatisfiableConstraintAction{tc.constraint},
+				Constraints: []v1.UnsatisfiableConstraintAction{tc.topologySpreadConstraint.WhenUnsatisfiable},
 			},
 				&frameworkfake.HandleImpl{
 					ClientsetImpl:                 clientSet,
@@ -131,7 +167,8 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			// Ensure recently evicted Pod are rescheduled and running before asserting for a balanced topology spread
 			waitForRCPodsRunning(ctx, t, clientSet, rc)
 
-			pods, err := clientSet.CoreV1().Pods(testNamespace.Name).List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", tc.labelKey, tc.labelValue)})
+			listOptions := metav1.ListOptions{LabelSelector: labels.SelectorFromSet(tc.topologySpreadConstraint.LabelSelector.MatchLabels).String()}
+			pods, err := clientSet.CoreV1().Pods(testNamespace.Name).List(ctx, listOptions)
 			if err != nil {
 				t.Errorf("Error listing pods for %s: %v", name, err)
 			}
@@ -146,23 +183,12 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			}
 
 			min, max := getMinAndMaxPodDistribution(nodePodCountMap)
-			if max-min > tc.maxSkew {
-				t.Errorf("Pod distribution for %s is still violating the max skew of %d as it is %d", name, tc.maxSkew, max-min)
+			if max-min > int(tc.topologySpreadConstraint.MaxSkew) {
+				t.Errorf("Pod distribution for %s is still violating the max skew of %d as it is %d", name, tc.topologySpreadConstraint.MaxSkew, max-min)
 			}
 
-			t.Logf("Pods for %s were distributed in line with max skew of %d", name, tc.maxSkew)
+			t.Logf("Pods for %s were distributed in line with max skew of %d", name, tc.topologySpreadConstraint.MaxSkew)
 		})
-	}
-}
-
-func makeTopologySpreadConstraints(maxSkew int, labelKey, labelValue string, constraint v1.UnsatisfiableConstraintAction) []v1.TopologySpreadConstraint {
-	return []v1.TopologySpreadConstraint{
-		{
-			MaxSkew:           int32(maxSkew),
-			TopologyKey:       zoneTopologyKey,
-			WhenUnsatisfiable: constraint,
-			LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{labelKey: labelValue}},
-		},
 	}
 }
 
@@ -179,4 +205,8 @@ func getMinAndMaxPodDistribution(nodePodCountMap map[string]int) (int, int) {
 	}
 
 	return min, max
+}
+
+func nodeInclusionPolicyRef(policy v1.NodeInclusionPolicy) *v1.NodeInclusionPolicy {
+	return &policy
 }

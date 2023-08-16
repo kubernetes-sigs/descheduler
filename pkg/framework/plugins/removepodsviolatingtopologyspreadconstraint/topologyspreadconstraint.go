@@ -87,46 +87,6 @@ type topologyConstraintSet struct {
 	podTolerations  []v1.Toleration
 }
 
-// doNotScheduleTaintsFilterFunc returns the filter function that can
-// filter out the node taints that reject scheduling Pod on a Node.
-func doNotScheduleTaintsFilterFunc() func(t *v1.Taint) bool {
-	return func(t *v1.Taint) bool {
-		// PodToleratesNodeTaints is only interested in NoSchedule and NoExecute taints.
-		return t.Effect == v1.TaintEffectNoSchedule || t.Effect == v1.TaintEffectNoExecute
-	}
-}
-
-func filterEligibleNodes(nodes []*v1.Node, constraintSet topologyConstraintSet) []*v1.Node {
-	constraint := constraintSet.constraint
-	nodeAffinity := constraintSet.podNodeAffinity
-	tolerations := constraintSet.podTolerations
-	var eligibleNodes []*v1.Node
-	for _, node := range nodes {
-		if matchNodeInclusionPolicies(&constraint, tolerations, node, nodeAffinity) {
-			eligibleNodes = append(eligibleNodes, node)
-		}
-	}
-	return eligibleNodes
-}
-
-func matchNodeInclusionPolicies(tsc *v1.TopologySpreadConstraint, tolerations []v1.Toleration, node *v1.Node, require nodeaffinity.RequiredNodeAffinity) bool {
-	// Nil is equivalent to honor
-	if tsc.NodeAffinityPolicy == nil || *tsc.NodeAffinityPolicy == v1.NodeInclusionPolicyHonor {
-		// We ignore parsing errors here for backwards compatibility.
-		if match, _ := require.Match(node); !match {
-			return false
-		}
-	}
-
-	// Nil is equivalent to ignore
-	if tsc.NodeTaintsPolicy != nil && *tsc.NodeTaintsPolicy == v1.NodeInclusionPolicyHonor {
-		if _, untolerated := v1helper.FindMatchingUntoleratedTaint(node.Spec.Taints, tolerations, doNotScheduleTaintsFilterFunc()); untolerated {
-			return false
-		}
-	}
-	return true
-}
-
 // Name retrieves the plugin name
 func (d *RemovePodsViolatingTopologySpreadConstraint) Name() string {
 	return PluginName
@@ -495,4 +455,44 @@ func comparePodsByPriority(iPod, jPod *v1.Pod) bool {
 		// it doesn't matter. just return true
 		return true
 	}
+}
+
+// doNotScheduleTaintsFilterFunc returns the filter function that can
+// filter out the node taints that reject scheduling Pod on a Node.
+func doNotScheduleTaintsFilterFunc() func(t *v1.Taint) bool {
+	return func(t *v1.Taint) bool {
+		// PodToleratesNodeTaints is only interested in NoSchedule and NoExecute taints.
+		return t.Effect == v1.TaintEffectNoSchedule || t.Effect == v1.TaintEffectNoExecute
+	}
+}
+
+func filterEligibleNodes(nodes []*v1.Node, constraintSet topologyConstraintSet) []*v1.Node {
+	constraint := constraintSet.constraint
+	nodeAffinity := constraintSet.podNodeAffinity
+	tolerations := constraintSet.podTolerations
+	var eligibleNodes []*v1.Node
+	for _, node := range nodes {
+		if matchNodeInclusionPolicies(&constraint, tolerations, node, nodeAffinity) {
+			eligibleNodes = append(eligibleNodes, node)
+		}
+	}
+	return eligibleNodes
+}
+
+func matchNodeInclusionPolicies(tsc *v1.TopologySpreadConstraint, tolerations []v1.Toleration, node *v1.Node, require nodeaffinity.RequiredNodeAffinity) bool {
+	// Nil is equivalent to honor
+	if tsc.NodeAffinityPolicy == nil || *tsc.NodeAffinityPolicy == v1.NodeInclusionPolicyHonor {
+		// We ignore parsing errors here for backwards compatibility.
+		if match, _ := require.Match(node); !match {
+			return false
+		}
+	}
+
+	// Nil is equivalent to ignore
+	if tsc.NodeTaintsPolicy != nil && *tsc.NodeTaintsPolicy == v1.NodeInclusionPolicyHonor {
+		if _, untolerated := v1helper.FindMatchingUntoleratedTaint(node.Spec.Taints, tolerations, doNotScheduleTaintsFilterFunc()); untolerated {
+			return false
+		}
+	}
+	return true
 }
