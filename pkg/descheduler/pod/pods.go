@@ -17,6 +17,7 @@ limitations under the License.
 package pod
 
 import (
+	"context"
 	"math"
 	"sort"
 
@@ -24,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 
@@ -261,45 +262,32 @@ func SortPodsBasedOnAge(pods []*v1.Pod) {
 	})
 }
 
-func GetReplicasCount(informer informers.SharedInformerFactory, pod *v1.Pod) (int, error) {
+func GetReplicasCount(ctx context.Context, client clientset.Interface, pod *v1.Pod) (int, error) {
 	count := 0
 	ownerRefList := OwnerRef(pod)
 	for _, ownerRef := range ownerRefList {
 		switch ownerRef.Kind {
 		case "ReplicaSet":
-			// owner, err := informer.Apps().V1().ReplicaSets().Lister().ReplicaSets(v1.NamespaceAll).Get(ownerRef.Name)
-			owners, err := informer.Apps().V1().ReplicaSets().Lister().ReplicaSets(v1.NamespaceAll).List(labels.Everything())
+			owner, err := client.AppsV1().ReplicaSets(pod.ObjectMeta.Namespace).Get(ctx, ownerRef.Name, metav1.GetOptions{})
 			if err != nil {
 				return 0, err
 			}
-			for _, owner := range owners {
-				if owner.Name == ownerRef.Name {
-					count = int(math.Max(float64(count), float64(owner.Status.ReadyReplicas)))
-					klog.V(4).Infof("pod belong to ReplicaSet %s and its count is %d", owner.Name, count)
-				}
-			}
+			count = int(math.Max(float64(count), float64(owner.Status.ReadyReplicas)))
+			klog.V(4).Infof("pod belong to ReplicaSet %s and its count is %d", owner.Name, count)
 		case "ReplicationController":
-			owners, err := informer.Core().V1().ReplicationControllers().Lister().ReplicationControllers(v1.NamespaceAll).List(labels.Everything())
+			owner, err := client.CoreV1().ReplicationControllers(pod.ObjectMeta.Namespace).Get(ctx, ownerRef.Name, metav1.GetOptions{})
 			if err != nil {
 				return 0, err
 			}
-			for _, owner := range owners {
-				if owner.Name == ownerRef.Name {
-					count = int(math.Max(float64(count), float64(owner.Status.ReadyReplicas)))
-					klog.V(4).Infof("pod belong to ReplicationController %s and its count is %d", owner.Name, count)
-				}
-			}
+			count = int(math.Max(float64(count), float64(owner.Status.ReadyReplicas)))
+			klog.V(4).Infof("pod belong to ReplicationController %s and its count is %d", owner.Name, count)
 		case "StatefulSet":
-			owners, err := informer.Apps().V1().StatefulSets().Lister().StatefulSets(v1.NamespaceAll).List(labels.Everything())
+			owner, err := client.AppsV1().StatefulSets(pod.ObjectMeta.Namespace).Get(ctx, ownerRef.Name, metav1.GetOptions{})
 			if err != nil {
 				return 0, err
 			}
-			for _, owner := range owners {
-				if owner.Name == ownerRef.Name {
-					count = int(math.Max(float64(count), float64(owner.Status.ReadyReplicas)))
-					klog.V(4).Infof("pod belong to StatefulSet %s and its count is %d", owner.Name, count)
-				}
-			}
+			count = int(math.Max(float64(count), float64(owner.Status.ReadyReplicas)))
+			klog.V(4).Infof("pod belong to StatefulSet %s and its count is %d", owner.Name, count)
 		default:
 			klog.V(4).Infof("pod is non managed by RS/RC/SS - owner name %s kind %s", ownerRef.Name, ownerRef.Kind)
 			count = 1

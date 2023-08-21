@@ -39,8 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
-	appslisters "k8s.io/client-go/listers/apps/v1"
-	corelisters "k8s.io/client-go/listers/core/v1"
+	listersv1 "k8s.io/client-go/listers/core/v1"
 	schedulingv1 "k8s.io/client-go/listers/scheduling/v1"
 	core "k8s.io/client-go/testing"
 
@@ -68,19 +67,16 @@ type profileRunner struct {
 }
 
 type descheduler struct {
-	rs                          *options.DeschedulerServer
-	podLister                   corelisters.PodLister
-	nodeLister                  corelisters.NodeLister
-	namespaceLister             corelisters.NamespaceLister
-	priorityClassLister         schedulingv1.PriorityClassLister
-	replicasetLister            appslisters.ReplicaSetLister
-	replicationcontrollerLister corelisters.ReplicationControllerLister
-	statefulsetLister           appslisters.StatefulSetLister
-	getPodsAssignedToNode       podutil.GetPodsAssignedToNodeFunc
-	sharedInformerFactory       informers.SharedInformerFactory
-	evictionPolicyGroupVersion  string
-	deschedulerPolicy           *api.DeschedulerPolicy
-	eventRecorder               events.EventRecorder
+	rs                         *options.DeschedulerServer
+	podLister                  listersv1.PodLister
+	nodeLister                 listersv1.NodeLister
+	namespaceLister            listersv1.NamespaceLister
+	priorityClassLister        schedulingv1.PriorityClassLister
+	getPodsAssignedToNode      podutil.GetPodsAssignedToNodeFunc
+	sharedInformerFactory      informers.SharedInformerFactory
+	evictionPolicyGroupVersion string
+	deschedulerPolicy          *api.DeschedulerPolicy
+	eventRecorder              events.EventRecorder
 }
 
 func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory informers.SharedInformerFactory) (*descheduler, error) {
@@ -89,9 +85,6 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
 	namespaceLister := sharedInformerFactory.Core().V1().Namespaces().Lister()
 	priorityClassLister := sharedInformerFactory.Scheduling().V1().PriorityClasses().Lister()
-	replicasetLister := sharedInformerFactory.Apps().V1().ReplicaSets().Lister()
-	replicationcontrollerLister := sharedInformerFactory.Core().V1().ReplicationControllers().Lister()
-	statefulsetLister := sharedInformerFactory.Apps().V1().StatefulSets().Lister()
 
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
@@ -99,19 +92,16 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 	}
 
 	return &descheduler{
-		rs:                          rs,
-		podLister:                   podLister,
-		nodeLister:                  nodeLister,
-		namespaceLister:             namespaceLister,
-		priorityClassLister:         priorityClassLister,
-		replicasetLister:            replicasetLister,
-		replicationcontrollerLister: replicationcontrollerLister,
-		statefulsetLister:           statefulsetLister,
-		getPodsAssignedToNode:       getPodsAssignedToNode,
-		sharedInformerFactory:       sharedInformerFactory,
-		evictionPolicyGroupVersion:  evictionPolicyGroupVersion,
-		deschedulerPolicy:           deschedulerPolicy,
-		eventRecorder:               eventRecorder,
+		rs:                         rs,
+		podLister:                  podLister,
+		nodeLister:                 nodeLister,
+		namespaceLister:            namespaceLister,
+		priorityClassLister:        priorityClassLister,
+		getPodsAssignedToNode:      getPodsAssignedToNode,
+		sharedInformerFactory:      sharedInformerFactory,
+		evictionPolicyGroupVersion: evictionPolicyGroupVersion,
+		deschedulerPolicy:          deschedulerPolicy,
+		eventRecorder:              eventRecorder,
 	}, nil
 }
 
@@ -132,7 +122,7 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 	if d.rs.DryRun {
 		klog.V(3).Infof("Building a cached client from the cluster for the dry run")
 		// Create a new cache so we start from scratch without any leftovers
-		fakeClient, err := cachedClient(d.rs.Client, d.podLister, d.nodeLister, d.namespaceLister, d.priorityClassLister, d.replicasetLister, d.replicationcontrollerLister, d.statefulsetLister)
+		fakeClient, err := cachedClient(d.rs.Client, d.podLister, d.nodeLister, d.namespaceLister, d.priorityClassLister)
 		if err != nil {
 			return err
 		}
@@ -301,13 +291,10 @@ func validateVersionCompatibility(discovery discovery.DiscoveryInterface, versio
 
 func cachedClient(
 	realClient clientset.Interface,
-	podLister corelisters.PodLister,
-	nodeLister corelisters.NodeLister,
-	namespaceLister corelisters.NamespaceLister,
+	podLister listersv1.PodLister,
+	nodeLister listersv1.NodeLister,
+	namespaceLister listersv1.NamespaceLister,
 	priorityClassLister schedulingv1.PriorityClassLister,
-	replicasetLister appslisters.ReplicaSetLister,
-	replicationcontrollerLister corelisters.ReplicationControllerLister,
-	statefulsetLister appslisters.StatefulSetLister,
 ) (clientset.Interface, error) {
 	fakeClient := fakeclientset.NewSimpleClientset()
 	// simulate a pod eviction by deleting a pod
@@ -372,39 +359,6 @@ func cachedClient(
 	for _, item := range priorityClasses {
 		if _, err := fakeClient.SchedulingV1().PriorityClasses().Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
 			return nil, fmt.Errorf("unable to copy priorityclass: %v", err)
-		}
-	}
-
-	replicasets, err := replicasetLister.List(labels.Everything())
-	if err != nil {
-		return nil, fmt.Errorf("unable to list replicasets: %v", err)
-	}
-
-	for _, item := range replicasets {
-		if _, err := fakeClient.AppsV1().ReplicaSets(metav1.NamespaceAll).Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
-			return nil, fmt.Errorf("unable to copy replicaset: %v", err)
-		}
-	}
-
-	repilcationcontrollers, err := replicationcontrollerLister.List(labels.Everything())
-	if err != nil {
-		return nil, fmt.Errorf("unable to list repilcationcontrollers: %v", err)
-	}
-
-	for _, item := range repilcationcontrollers {
-		if _, err := fakeClient.CoreV1().ReplicationControllers(metav1.NamespaceAll).Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
-			return nil, fmt.Errorf("unable to copy repilcationcontroller: %v", err)
-		}
-	}
-
-	statefulsets, err := statefulsetLister.List(labels.Everything())
-	if err != nil {
-		return nil, fmt.Errorf("unable to list statefulsets: %v", err)
-	}
-
-	for _, item := range statefulsets {
-		if _, err := fakeClient.AppsV1().StatefulSets(metav1.NamespaceAll).Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
-			return nil, fmt.Errorf("unable to copy statefulset: %v", err)
 		}
 	}
 

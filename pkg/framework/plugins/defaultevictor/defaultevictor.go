@@ -166,7 +166,7 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 		// return true
 	}
 	if defaultEvictorArgs.Replicas != 0 {
-		podReplicasCount, err := podutil.GetReplicasCount(d.handle.SharedInformerFactory(), pod)
+		podReplicasCount, err := podutil.GetReplicasCount(context.TODO(), d.handle.ClientSet(), pod)
 		if err != nil {
 			return false
 		}
