@@ -50,10 +50,10 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("want args to be of type RemovePodsHavingTooManyRestartsArgs, got %T", args)
 	}
 
-	var includedNamespaces, excludedNamespaces sets.String
+	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if tooManyRestartsArgs.Namespaces != nil {
-		includedNamespaces = sets.NewString(tooManyRestartsArgs.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(tooManyRestartsArgs.Namespaces.Exclude...)
+		includedNamespaces = sets.New(tooManyRestartsArgs.Namespaces.Include...)
+		excludedNamespaces = sets.New(tooManyRestartsArgs.Namespaces.Exclude...)
 	}
 
 	// We can combine Filter and PreEvictionFilter since for this strategy it does not matter where we run PreEvictionFilter
@@ -75,6 +75,23 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return true
 	})
 
+	if len(tooManyRestartsArgs.States) > 0 {
+		states := sets.New(tooManyRestartsArgs.States...)
+		podFilter = podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
+			if states.Has(string(pod.Status.Phase)) {
+				return true
+			}
+
+			for _, containerStatus := range pod.Status.ContainerStatuses {
+				if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
+					return true
+				}
+			}
+
+			return false
+		})
+	}
+
 	return &RemovePodsHavingTooManyRestarts{
 		handle:    handle,
 		args:      tooManyRestartsArgs,
@@ -90,7 +107,7 @@ func (d *RemovePodsHavingTooManyRestarts) Name() string {
 // Deschedule extension point implementation for the plugin
 func (d *RemovePodsHavingTooManyRestarts) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	for _, node := range nodes {
-		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
+		klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListAllPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			// no pods evicted as error encountered retrieving evictable Pods

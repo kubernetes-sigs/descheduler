@@ -3,6 +3,7 @@ package removepodsviolatingtopologyspreadconstraint
 import (
 	"context"
 	"fmt"
+	"sort"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -14,6 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/events"
+	utilpointer "k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -99,6 +101,43 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
 		},
 		{
+			name: "2 domains, sizes [3,1], maxSkew=1, move 1 pod to achieve [2,2] (both constraints)",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:  1,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+					constraints: []v1.TopologySpreadConstraint{
+						{
+							MaxSkew:           1,
+							TopologyKey:       "zone",
+							WhenUnsatisfiable: v1.ScheduleAnyway,
+							LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+						},
+					},
+				},
+				{
+					count:  2,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+				{
+					count:  1,
+					node:   "n2",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			namespaces:           []string{"ns1"},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				Constraints: []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule, v1.ScheduleAnyway},
+			},
+		},
+		{
 			name: "2 domains, sizes [3,1], maxSkew=1, move 1 pod to achieve [2,2] (soft constraints)",
 			nodes: []*v1.Node{
 				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
@@ -131,7 +170,9 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			}),
 			expectedEvictedCount: 1,
 			namespaces:           []string{"ns1"},
-			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{IncludeSoftConstraints: true},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				Constraints: []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule, v1.ScheduleAnyway},
+			},
 		},
 		{
 			name: "2 domains, sizes [3,1], maxSkew=1, no pods eligible, move 0 pods",
@@ -587,7 +628,9 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			}),
 			expectedEvictedCount: 1,
 			namespaces:           []string{"ns1"},
-			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{IncludeSoftConstraints: true},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				Constraints: []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule, v1.ScheduleAnyway},
+			},
 		},
 		{
 			name: "3 domains size [8 7 0], maxSkew=1, should move 5 to get [5 5 5]",
@@ -611,7 +654,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			expectedEvictedCount: 5,
-			expectedEvictedPods:  []string{"pod-5", "pod-6", "pod-7", "pod-8"},
+			expectedEvictedPods:  []string{"pod-5", "pod-6", "pod-7", "pod-8", "pod-9"},
 			namespaces:           []string{"ns1"},
 			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
 		},
@@ -924,6 +967,38 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			nodeFit:              true,
 		},
 		{
+			name: "3 domains, sizes [2,3,4], maxSkew=1, args.NodeFit is false, and not enough cpu on zoneA; 1 should be moved to force scale-up",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 250, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 1000, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+				test.BuildTestNode("n3", 1000, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneC" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       2,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:       3,
+					node:        "n2",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:       4,
+					node:        "n3",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+			}),
+			expectedEvictedCount: 1,
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{TopologyBalanceNodeFit: utilpointer.Bool(false)},
+			nodeFit:              true,
+		},
+		{
 			name: "3 domains, sizes [[1,0], [1,1], [2,1]], maxSkew=1, NodeFit is enabled, and not enough cpu on ZoneA; nothing should be moved",
 			nodes: []*v1.Node{
 				test.BuildTestNode("A1", 150, 2000, 9, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
@@ -1137,9 +1212,19 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			podsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 			if err != nil {
 				t.Errorf("Build get pods assigned to node function error: %v", err)
+			}
+
+			// workaround to ensure that pods are returned sorted so 'expectedEvictedPods' would work consistently
+			getPodsAssignedToNode := func(s string, filterFunc podutil.FilterFunc) ([]*v1.Pod, error) {
+				pods, err := podsAssignedToNode(s, filterFunc)
+				sort.Slice(pods, func(i, j int) bool {
+					return pods[i].Name < pods[j].Name
+				})
+
+				return pods, err
 			}
 
 			sharedInformerFactory.Start(ctx.Done())
@@ -1200,6 +1285,8 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
+			SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(&tc.args)
+
 			plugin, err := New(
 				&tc.args,
 				handle,
@@ -1215,12 +1302,12 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			}
 
 			if tc.expectedEvictedPods != nil {
-				diff := sets.NewString(tc.expectedEvictedPods...).Difference(sets.NewString(evictedPods...))
+				diff := sets.New(tc.expectedEvictedPods...).Difference(sets.New(evictedPods...))
 				if diff.Len() > 0 {
 					t.Errorf(
 						"Expected pods %v to be evicted but %v were not evicted. Actual pods evicted: %v",
 						tc.expectedEvictedPods,
-						diff.List(),
+						diff.UnsortedList(),
 						evictedPods,
 					)
 				}
@@ -1297,8 +1384,7 @@ func TestCheckIdenticalConstraints(t *testing.T) {
 		WhenUnsatisfiable: v1.DoNotSchedule,
 		LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
 	}
-	namespaceTopologySpreadConstraint := []v1.TopologySpreadConstraint{}
-	namespaceTopologySpreadConstraint = []v1.TopologySpreadConstraint{
+	namespaceTopologySpreadConstraint := []v1.TopologySpreadConstraint{
 		{
 			MaxSkew:           2,
 			TopologyKey:       "zone",

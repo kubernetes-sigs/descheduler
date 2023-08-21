@@ -88,7 +88,7 @@ func convertToInternalPluginConfigArgs(out *api.DeschedulerPolicy) error {
 func Convert_v1alpha2_PluginConfig_To_api_PluginConfig(in *PluginConfig, out *api.PluginConfig, s conversion.Scope) error {
 	out.Name = in.Name
 	if _, ok := pluginregistry.PluginRegistry[in.Name]; ok {
-		out.Args = pluginregistry.PluginRegistry[in.Name].PluginArgInstance
+		out.Args = pluginregistry.PluginRegistry[in.Name].PluginArgInstance.DeepCopyObject()
 		if in.Args.Raw != nil {
 			_, _, err := Codecs.UniversalDecoder().Decode(in.Args.Raw, nil, out.Args)
 			if err != nil {

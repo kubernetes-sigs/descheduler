@@ -37,4 +37,7 @@ func SetDefaults_RemovePodsHavingTooManyRestartsArgs(obj runtime.Object) {
 	if !args.IncludingInitContainers {
 		args.IncludingInitContainers = false
 	}
+	if args.States == nil {
+		args.States = nil
+	}
 }

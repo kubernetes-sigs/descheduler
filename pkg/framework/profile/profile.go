@@ -18,12 +18,15 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"sigs.k8s.io/descheduler/metrics"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
+	"sigs.k8s.io/descheduler/pkg/tracing"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/errors"
@@ -113,10 +116,10 @@ type profileImpl struct {
 	preEvictionFilterPlugins []preEvictionFilterPlugin
 
 	// Each extension point with a list of plugins implementing the extension point.
-	deschedule        sets.String
-	balance           sets.String
-	filter            sets.String
-	preEvictionFilter sets.String
+	deschedule        sets.Set[string]
+	balance           sets.Set[string]
+	filter            sets.Set[string]
+	preEvictionFilter sets.Set[string]
 }
 
 // Option for the handleImpl.
@@ -184,10 +187,10 @@ func buildPlugin(config api.DeschedulerProfile, pluginName string, handle *handl
 }
 
 func (p *profileImpl) registryToExtensionPoints(registry pluginregistry.Registry) {
-	p.deschedule = sets.NewString()
-	p.balance = sets.NewString()
-	p.filter = sets.NewString()
-	p.preEvictionFilter = sets.NewString()
+	p.deschedule = sets.New[string]()
+	p.balance = sets.New[string]()
+	p.filter = sets.New[string]()
+	p.preEvictionFilter = sets.New[string]()
 
 	for plugin, pluginUtilities := range registry {
 		if _, ok := pluginUtilities.PluginType.(frameworktypes.DeschedulePlugin); ok {
@@ -232,16 +235,16 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 	pi.registryToExtensionPoints(reg)
 
 	if !pi.deschedule.HasAll(config.Plugins.Deschedule.Enabled...) {
-		return nil, fmt.Errorf("profile %q configures deschedule extension point of non-existing plugins: %v", config.Name, sets.NewString(config.Plugins.Deschedule.Enabled...).Difference(pi.deschedule))
+		return nil, fmt.Errorf("profile %q configures deschedule extension point of non-existing plugins: %v", config.Name, sets.New(config.Plugins.Deschedule.Enabled...).Difference(pi.deschedule))
 	}
 	if !pi.balance.HasAll(config.Plugins.Balance.Enabled...) {
-		return nil, fmt.Errorf("profile %q configures balance extension point of non-existing plugins: %v", config.Name, sets.NewString(config.Plugins.Balance.Enabled...).Difference(pi.balance))
+		return nil, fmt.Errorf("profile %q configures balance extension point of non-existing plugins: %v", config.Name, sets.New(config.Plugins.Balance.Enabled...).Difference(pi.balance))
 	}
 	if !pi.filter.HasAll(config.Plugins.Filter.Enabled...) {
-		return nil, fmt.Errorf("profile %q configures filter extension point of non-existing plugins: %v", config.Name, sets.NewString(config.Plugins.Filter.Enabled...).Difference(pi.filter))
+		return nil, fmt.Errorf("profile %q configures filter extension point of non-existing plugins: %v", config.Name, sets.New(config.Plugins.Filter.Enabled...).Difference(pi.filter))
 	}
 	if !pi.preEvictionFilter.HasAll(config.Plugins.PreEvictionFilter.Enabled...) {
-		return nil, fmt.Errorf("profile %q configures preEvictionFilter extension point of non-existing plugins: %v", config.Name, sets.NewString(config.Plugins.PreEvictionFilter.Enabled...).Difference(pi.preEvictionFilter))
+		return nil, fmt.Errorf("profile %q configures preEvictionFilter extension point of non-existing plugins: %v", config.Name, sets.New(config.Plugins.PreEvictionFilter.Enabled...).Difference(pi.preEvictionFilter))
 	}
 
 	handle := &handleImpl{
@@ -258,7 +261,7 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 	pluginNames = append(pluginNames, config.Plugins.PreEvictionFilter.Enabled...)
 
 	plugins := make(map[string]frameworktypes.Plugin)
-	for _, plugin := range sets.NewString(pluginNames...).List() {
+	for _, plugin := range sets.New(pluginNames...).UnsortedList() {
 		pg, err := buildPlugin(config, plugin, handle, reg)
 		if err != nil {
 			return nil, fmt.Errorf("unable to build %v plugin: %v", plugin, err)
@@ -300,6 +303,9 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	errs := []error{}
 	for _, pl := range d.deschedulePlugins {
+		var span trace.Span
+		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("prpfile", d.profileName), attribute.String("operation", tracing.DescheduleOperation)))
+		defer span.End()
 		evicted := d.podEvictor.TotalEvicted()
 		// TODO: strategyName should be accessible from within the strategy using a framework
 		// handle or function which the Evictor has access to. For migration/in-progress framework
@@ -311,6 +317,7 @@ func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node)
 		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": d.profileName}).Observe(time.Since(strategyStart).Seconds())
 
 		if status != nil && status.Err != nil {
+			span.AddEvent("Plugin Execution Failed", trace.WithAttributes(attribute.String("err", status.Err.Error())))
 			errs = append(errs, fmt.Errorf("plugin %q finished with error: %v", pl.Name(), status.Err))
 		}
 		klog.V(1).InfoS("Total number of pods evicted", "extension point", "Deschedule", "evictedPods", d.podEvictor.TotalEvicted()-evicted)
@@ -329,6 +336,9 @@ func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node)
 func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	errs := []error{}
 	for _, pl := range d.balancePlugins {
+		var span trace.Span
+		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("prpfile", d.profileName), attribute.String("operation", tracing.BalanceOperation)))
+		defer span.End()
 		evicted := d.podEvictor.TotalEvicted()
 		// TODO: strategyName should be accessible from within the strategy using a framework
 		// handle or function which the Evictor has access to. For migration/in-progress framework
@@ -340,6 +350,7 @@ func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *f
 		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": d.profileName}).Observe(time.Since(strategyStart).Seconds())
 
 		if status != nil && status.Err != nil {
+			span.AddEvent("Plugin Execution Failed", trace.WithAttributes(attribute.String("err", status.Err.Error())))
 			errs = append(errs, fmt.Errorf("plugin %q finished with error: %v", pl.Name(), status.Err))
 		}
 		klog.V(1).InfoS("Total number of pods evicted", "extension point", "Balance", "evictedPods", d.podEvictor.TotalEvicted()-evicted)

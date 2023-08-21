@@ -87,7 +87,7 @@ func TestTooManyRestarts(t *testing.T) {
 					Containers: []v1.Container{{
 						Name:            "pause",
 						ImagePullPolicy: "Always",
-						Image:           "kubernetes/pause",
+						Image:           "registry.k8s.io/pause",
 						Command:         []string{"/bin/sh"},
 						Args:            []string{"-c", "sleep 1s && exit 1"},
 						Ports:           []v1.ContainerPort{{ContainerPort: 80}},

@@ -64,10 +64,10 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("want args to be of type RemoveDuplicatesArgs, got %T", args)
 	}
 
-	var includedNamespaces, excludedNamespaces sets.String
+	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if removeDuplicatesArgs.Namespaces != nil {
-		includedNamespaces = sets.NewString(removeDuplicatesArgs.Namespaces.Include...)
-		excludedNamespaces = sets.NewString(removeDuplicatesArgs.Namespaces.Exclude...)
+		includedNamespaces = sets.New(removeDuplicatesArgs.Namespaces.Include...)
+		excludedNamespaces = sets.New(removeDuplicatesArgs.Namespaces.Exclude...)
 	}
 
 	// We can combine Filter and PreEvictionFilter since for this strategy it does not matter where we run PreEvictionFilter
@@ -100,7 +100,7 @@ func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) *frame
 	nodeMap := make(map[string]*v1.Node)
 
 	for _, node := range nodes {
-		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
+		klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListPodsOnANode(node.Name, r.handle.GetPodsAssignedToNodeFunc(), r.podFilter)
 		if err != nil {
 			klog.ErrorS(err, "Error listing evictable pods on node", "node", klog.KObj(node))
@@ -279,7 +279,7 @@ func hasExcludedOwnerRefKind(ownerRefs []metav1.OwnerReference, excludeOwnerKind
 		return false
 	}
 
-	exclude := sets.NewString(excludeOwnerKinds...)
+	exclude := sets.New(excludeOwnerKinds...)
 	for _, owner := range ownerRefs {
 		if exclude.Has(owner.Kind) {
 			return true

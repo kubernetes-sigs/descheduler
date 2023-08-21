@@ -67,6 +67,9 @@ leaderElection: {}
 #  resourceName: "descheduler"
 #  resourceNamescape: "kube-system"
 
+command:
+- "/bin/descheduler"
+
 cmdOptions:
   v: 3
 
@@ -77,6 +80,13 @@ deschedulerPolicy:
   # nodeSelector: "key1=value1,key2=value2"
   # maxNoOfPodsToEvictPerNode: 10
   # maxNoOfPodsToEvictPerNamespace: 10
+  # tracing:
+  #   collectorEndpoint: otel-collector.observability.svc.cluster.local:4317
+  #   transportCert: ""
+  #   serviceName: ""
+  #   serviceNamespace: ""
+  #   sampleRate: 1.0
+  #   fallbackToNoOpProviderOnError: true
   profiles:
     - name: default
       pluginConfig:
@@ -184,6 +194,9 @@ serviceMonitor:
   enabled: false
   # The namespace where Prometheus expects to find service monitors.
   # namespace: ""
+  # Add custom labels to the ServiceMonitor resource
+  additionalLabels: {}
+    # prometheus: kube-prometheus-stack
   interval: ""
   # honorLabels: true
   insecureSkipVerify: true

@@ -104,8 +104,6 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 	node4 := test.BuildTestNode("node4", 200, 3000, 10, nil)
 	node5 := test.BuildTestNode("node5", 2000, 3000, 10, nil)
 
-	pods := append(append(initPods(node1), test.BuildTestPod("CPU-consumer-1", 150, 100, node4.Name, nil)), test.BuildTestPod("CPU-consumer-2", 150, 100, node5.Name, nil))
-
 	createRemovePodsHavingTooManyRestartsAgrs := func(
 		podRestartThresholds int32,
 		includingInitContainers bool,
@@ -126,6 +124,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		maxPodsToEvictPerNode          *uint
 		maxNoOfPodsToEvictPerNamespace *uint
 		nodeFit                        bool
+		applyFunc                      func([]*v1.Pod)
 	}{
 		{
 			description:             "All pods have total restarts under threshold, no pod evictions",
@@ -191,7 +190,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			maxNoOfPodsToEvictPerNamespace: &uint3,
 		},
 		{
-			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node is tained, 0 pod evictions",
+			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node is tainted, 0 pod evictions",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(1, true),
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
@@ -222,10 +221,68 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			maxPodsToEvictPerNode:   &uint3,
 			nodeFit:                 true,
 		},
+		{
+			description:             "pods are in CrashLoopBackOff with states=CrashLoopBackOff, 3 pod evictions",
+			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}},
+			nodes:                   []*v1.Node{node1, node5},
+			expectedEvictedPodCount: 3,
+			maxPodsToEvictPerNode:   &uint3,
+			nodeFit:                 true,
+			applyFunc: func(pods []*v1.Pod) {
+				for _, pod := range pods {
+					if len(pod.Status.ContainerStatuses) > 0 {
+						pod.Status.ContainerStatuses[0].State = v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
+						}
+					}
+				}
+			},
+		},
+		{
+			description:             "pods without CrashLoopBackOff with states=CrashLoopBackOff, 0 pod evictions",
+			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}},
+			nodes:                   []*v1.Node{node1, node5},
+			expectedEvictedPodCount: 0,
+			maxPodsToEvictPerNode:   &uint3,
+			nodeFit:                 true,
+		},
+		{
+			description:             "pods running with state=Running, 3 pod evictions",
+			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{string(v1.PodRunning)}},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 3,
+			maxPodsToEvictPerNode:   &uint3,
+			applyFunc: func(pods []*v1.Pod) {
+				for _, pod := range pods {
+					pod.Status.Phase = v1.PodRunning
+				}
+			},
+		},
+		{
+			description:             "pods pending with state=Running, 0 pod evictions",
+			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{string(v1.PodRunning)}},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 0,
+			maxPodsToEvictPerNode:   &uint3,
+			applyFunc: func(pods []*v1.Pod) {
+				for _, pod := range pods {
+					pod.Status.Phase = v1.PodPending
+				}
+			},
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.description, func(t *testing.T) {
+			pods := append(
+				initPods(node1),
+				test.BuildTestPod("CPU-consumer-1", 150, 100, node4.Name, nil),
+				test.BuildTestPod("CPU-consumer-2", 150, 100, node5.Name, nil),
+			)
+			if tc.applyFunc != nil {
+				tc.applyFunc(pods)
+			}
+
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
