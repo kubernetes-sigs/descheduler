@@ -304,7 +304,7 @@ func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node)
 	errs := []error{}
 	for _, pl := range d.deschedulePlugins {
 		var span trace.Span
-		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("prpfile", d.profileName), attribute.String("operation", tracing.DescheduleOperation)))
+		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("profile", d.profileName), attribute.String("operation", tracing.DescheduleOperation)))
 		defer span.End()
 		evicted := d.podEvictor.TotalEvicted()
 		// TODO: strategyName should be accessible from within the strategy using a framework
@@ -337,7 +337,7 @@ func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *f
 	errs := []error{}
 	for _, pl := range d.balancePlugins {
 		var span trace.Span
-		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("prpfile", d.profileName), attribute.String("operation", tracing.BalanceOperation)))
+		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("profile", d.profileName), attribute.String("operation", tracing.BalanceOperation)))
 		defer span.End()
 		evicted := d.podEvictor.TotalEvicted()
 		// TODO: strategyName should be accessible from within the strategy using a framework
