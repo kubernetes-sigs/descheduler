@@ -134,7 +134,7 @@ gen:
 	./hack/update-docs.sh
 
 gen-docker:
-	$(CONTAINER_ENGINE) run --entrypoint make -it -v $(CURRENT_DIR):/go/src/sigs.k8s.io/descheduler -w /go/src/sigs.k8s.io/descheduler golang:1.20.3 gen
+	$(CONTAINER_ENGINE) run --entrypoint make -it -v $(CURRENT_DIR):/go/src/sigs.k8s.io/descheduler -w /go/src/sigs.k8s.io/descheduler golang:1.20.7 gen
 
 verify-gen:
 	./hack/verify-conversions.sh
