@@ -156,11 +156,11 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 	if defaultEvictorArgs.NodeFit {
 		nodes, err := nodeutil.ReadyNodes(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Nodes().Lister(), defaultEvictorArgs.NodeSelector)
 		if err != nil {
-			klog.ErrorS(fmt.Errorf("Pod fails the following checks"), "pod", klog.KObj(pod))
+			klog.ErrorS(err, "unable to list ready nodes", "pod", klog.KObj(pod))
 			return false
 		}
 		if !nodeutil.PodFitsAnyOtherNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) {
-			klog.ErrorS(fmt.Errorf("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable"), "pod", klog.KObj(pod))
+			klog.ErrorS(err, "pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable", "pod", klog.KObj(pod))
 			return false
 		}
 		return true
