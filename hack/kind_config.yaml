@@ -1,5 +1,9 @@
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+featureGates:
+  # beta as of 1.27 but we currently run e2e on 1.26
+  # this flag should be removed as part of Descheduler 0.29 release
+  MatchLabelKeysInPodTopologySpread: true
 nodes:
 - role: control-plane
 - role: worker

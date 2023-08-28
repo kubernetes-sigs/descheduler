@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -34,11 +35,13 @@ func TestTopologySpreadConstraint(t *testing.T) {
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
 	testCases := map[string]struct {
+		expectedEvictedCount     uint
 		replicaCount             int
 		topologySpreadConstraint v1.TopologySpreadConstraint
 	}{
 		"test-rc-topology-spread-hard-constraint": {
-			replicaCount: 4,
+			expectedEvictedCount: 1,
+			replicaCount:         4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -51,7 +54,8 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 		},
 		"test-rc-topology-spread-soft-constraint": {
-			replicaCount: 4,
+			expectedEvictedCount: 1,
+			replicaCount:         4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -64,7 +68,8 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 		},
 		"test-rc-node-taints-policy-honor": {
-			replicaCount: 4,
+			expectedEvictedCount: 1,
+			replicaCount:         4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -78,7 +83,8 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 		},
 		"test-rc-node-affinity-policy-ignore": {
-			replicaCount: 4,
+			expectedEvictedCount: 1,
+			replicaCount:         4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -89,6 +95,21 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				NodeAffinityPolicy: nodeInclusionPolicyRef(v1.NodeInclusionPolicyIgnore),
 				TopologyKey:        zoneTopologyKey,
 				WhenUnsatisfiable:  v1.DoNotSchedule,
+			},
+		},
+		"test-rc-match-label-keys": {
+			expectedEvictedCount: 0,
+			replicaCount:         4,
+			topologySpreadConstraint: v1.TopologySpreadConstraint{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"test": "match-label-keys",
+					},
+				},
+				MatchLabelKeys:    []string{appsv1.DefaultDeploymentUniqueLabelKey},
+				MaxSkew:           1,
+				TopologyKey:       zoneTopologyKey,
+				WhenUnsatisfiable: v1.DoNotSchedule,
 			},
 		},
 	}
@@ -158,10 +179,14 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			t.Logf("Wait for terminating pods of %s to disappear", name)
 			waitForTerminatingPodsToDisappear(ctx, t, clientSet, rc.Namespace)
 
-			if totalEvicted := podEvictor.TotalEvicted(); totalEvicted > 0 {
+			if totalEvicted := podEvictor.TotalEvicted(); totalEvicted == tc.expectedEvictedCount {
 				t.Logf("Total of %d Pods were evicted for %s", totalEvicted, name)
 			} else {
-				t.Fatalf("Pods were not evicted for %s TopologySpreadConstraint", name)
+				t.Fatalf("Expected %d evictions but got %d for %s TopologySpreadConstraint", tc.expectedEvictedCount, totalEvicted, name)
+			}
+
+			if tc.expectedEvictedCount == 0 {
+				return
 			}
 
 			// Ensure recently evicted Pod are rescheduled and running before asserting for a balanced topology spread

@@ -147,12 +147,9 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 				if !allowedConstraints.Has(constraint.WhenUnsatisfiable) {
 					continue
 				}
-				requiredSchedulingTerm := nodeaffinity.GetRequiredNodeAffinity(pod)
-				namespaceTopologySpreadConstraint := topologyConstraintSet{
-					constraint:      constraint,
-					podNodeAffinity: requiredSchedulingTerm,
-					podTolerations:  pod.Spec.Tolerations,
-				}
+
+				namespaceTopologySpreadConstraint := newTopologyConstraintSet(constraint, pod)
+
 				// Need to check v1.TopologySpreadConstraint deepEquality because
 				// v1.TopologySpreadConstraint has pointer fields
 				// and we don't need to go over duplicated constraints later on
@@ -495,4 +492,23 @@ func matchNodeInclusionPolicies(tsc *v1.TopologySpreadConstraint, tolerations []
 		}
 	}
 	return true
+}
+
+func newTopologyConstraintSet(constraint v1.TopologySpreadConstraint, pod *v1.Pod) topologyConstraintSet {
+	if pod.Labels != nil && len(constraint.MatchLabelKeys) > 0 {
+		if constraint.LabelSelector == nil {
+			constraint.LabelSelector = &metav1.LabelSelector{}
+		}
+
+		for _, labelKey := range constraint.MatchLabelKeys {
+			metav1.AddLabelToSelector(constraint.LabelSelector, labelKey, pod.Labels[labelKey])
+		}
+	}
+
+	requiredSchedulingTerm := nodeaffinity.GetRequiredNodeAffinity(pod)
+	return topologyConstraintSet{
+		constraint:      constraint,
+		podNodeAffinity: requiredSchedulingTerm,
+		podTolerations:  pod.Spec.Tolerations,
+	}
 }
