@@ -68,7 +68,7 @@ spec:
               command:
                 {{- toYaml .Values.command | nindent 16 }}
               args:
-                - --policy-config-file: "/policy-dir/policy.yaml"
+                - --policy-config-file=/policy-dir/policy.yaml
                 {{- range $key, $value := .Values.cmdOptions }}
                 - {{ printf "--%s" $key }}{{ if $value }}={{ $value }}{{ end }}
                 {{- end }}
