@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
+	"sigs.k8s.io/descheduler/test"
 )
 
 const zoneTopologyKey string = "topology.kubernetes.io/zone"
@@ -39,7 +40,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 		replicaCount             int
 		topologySpreadConstraint v1.TopologySpreadConstraint
 	}{
-		"test-rc-topology-spread-hard-constraint": {
+		"test-topology-spread-hard-constraint": {
 			expectedEvictedCount: 1,
 			replicaCount:         4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
@@ -53,7 +54,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				WhenUnsatisfiable: v1.DoNotSchedule,
 			},
 		},
-		"test-rc-topology-spread-soft-constraint": {
+		"test-topology-spread-soft-constraint": {
 			expectedEvictedCount: 1,
 			replicaCount:         4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
@@ -67,7 +68,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				WhenUnsatisfiable: v1.ScheduleAnyway,
 			},
 		},
-		"test-rc-node-taints-policy-honor": {
+		"test-node-taints-policy-honor": {
 			expectedEvictedCount: 1,
 			replicaCount:         4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
@@ -82,7 +83,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				WhenUnsatisfiable: v1.DoNotSchedule,
 			},
 		},
-		"test-rc-node-affinity-policy-ignore": {
+		"test-node-affinity-policy-ignore": {
 			expectedEvictedCount: 1,
 			replicaCount:         4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
@@ -97,7 +98,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				WhenUnsatisfiable:  v1.DoNotSchedule,
 			},
 		},
-		"test-rc-match-label-keys": {
+		"test-match-label-keys": {
 			expectedEvictedCount: 0,
 			replicaCount:         4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
@@ -115,26 +116,27 @@ func TestTopologySpreadConstraint(t *testing.T) {
 	}
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
-			t.Logf("Creating RC %s with %d replicas", name, tc.replicaCount)
-			rc := RcByNameContainer(name, testNamespace.Name, int32(tc.replicaCount), tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels, nil, "")
-			rc.Spec.Template.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{tc.topologySpreadConstraint}
-			if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, rc, metav1.CreateOptions{}); err != nil {
-				t.Fatalf("Error creating RC %s %v", name, err)
+			t.Logf("Creating Deployment %s with %d replicas", name, tc.replicaCount)
+			deployment := test.BuildTestDeployment(name, testNamespace.Name, int32(tc.replicaCount), tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels, func(d *appsv1.Deployment) {
+				d.Spec.Template.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{tc.topologySpreadConstraint}
+			})
+			if _, err := clientSet.AppsV1().Deployments(deployment.Namespace).Create(ctx, deployment, metav1.CreateOptions{}); err != nil {
+				t.Fatalf("Error creating Deployment %s %v", name, err)
 			}
-			defer deleteRC(ctx, t, clientSet, rc)
-			waitForRCPodsRunning(ctx, t, clientSet, rc)
+			defer test.DeleteDeployment(ctx, t, clientSet, deployment)
+			test.WaitForDeploymentPodsRunning(ctx, t, clientSet, deployment)
 
-			// Create a "Violator" RC that has the same label and is forced to be on the same node using a nodeSelector
-			violatorRcName := name + "-violator"
+			// Create a "Violator" Deployment that has the same label and is forced to be on the same node using a nodeSelector
+			violatorDeploymentName := name + "-violator"
 			violatorCount := tc.topologySpreadConstraint.MaxSkew + 1
-			violatorRc := RcByNameContainer(violatorRcName, testNamespace.Name, violatorCount, tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels, nil, "")
-			violatorRc.Spec.Template.Spec.NodeSelector = map[string]string{zoneTopologyKey: workerNodes[0].Labels[zoneTopologyKey]}
-			rc.Spec.Template.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{tc.topologySpreadConstraint}
-			if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, violatorRc, metav1.CreateOptions{}); err != nil {
-				t.Fatalf("Error creating RC %s: %v", violatorRcName, err)
+			violatorDeployment := test.BuildTestDeployment(violatorDeploymentName, testNamespace.Name, violatorCount, tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels, func(d *appsv1.Deployment) {
+				d.Spec.Template.Spec.NodeSelector = map[string]string{zoneTopologyKey: workerNodes[0].Labels[zoneTopologyKey]}
+			})
+			if _, err := clientSet.AppsV1().Deployments(deployment.Namespace).Create(ctx, violatorDeployment, metav1.CreateOptions{}); err != nil {
+				t.Fatalf("Error creating Deployment %s: %v", violatorDeploymentName, err)
 			}
-			defer deleteRC(ctx, t, clientSet, violatorRc)
-			waitForRCPodsRunning(ctx, t, clientSet, violatorRc)
+			defer test.DeleteDeployment(ctx, t, clientSet, violatorDeployment)
+			test.WaitForDeploymentPodsRunning(ctx, t, clientSet, violatorDeployment)
 
 			podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
 
@@ -177,7 +179,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			t.Logf("Finished RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
 
 			t.Logf("Wait for terminating pods of %s to disappear", name)
-			waitForTerminatingPodsToDisappear(ctx, t, clientSet, rc.Namespace)
+			waitForTerminatingPodsToDisappear(ctx, t, clientSet, deployment.Namespace)
 
 			if totalEvicted := podEvictor.TotalEvicted(); totalEvicted == tc.expectedEvictedCount {
 				t.Logf("Total of %d Pods were evicted for %s", totalEvicted, name)
@@ -190,7 +192,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			}
 
 			// Ensure recently evicted Pod are rescheduled and running before asserting for a balanced topology spread
-			waitForRCPodsRunning(ctx, t, clientSet, rc)
+			test.WaitForDeploymentPodsRunning(ctx, t, clientSet, deployment)
 
 			listOptions := metav1.ListOptions{LabelSelector: labels.SelectorFromSet(tc.topologySpreadConstraint.LabelSelector.MatchLabels).String()}
 			pods, err := clientSet.CoreV1().Pods(testNamespace.Name).List(ctx, listOptions)

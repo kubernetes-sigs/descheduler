@@ -16,7 +16,6 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/events"
-	"k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	utilpointer "k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -1606,30 +1605,29 @@ func getDefaultTopologyConstraintsWithPodTemplateHashMatch(maxSkew int32) []v1.T
 }
 
 func TestCheckIdenticalConstraints(t *testing.T) {
-	newConstraintSame := v1.TopologySpreadConstraint{
-		MaxSkew:           2,
-		TopologyKey:       "zone",
-		WhenUnsatisfiable: v1.DoNotSchedule,
-		LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+	selector, _ := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}})
+
+	newConstraintSame := topologySpreadConstraint{
+		maxSkew:     2,
+		topologyKey: "zone",
+		selector:    selector.DeepCopySelector(),
 	}
-	newConstraintDifferent := v1.TopologySpreadConstraint{
-		MaxSkew:           3,
-		TopologyKey:       "node",
-		WhenUnsatisfiable: v1.DoNotSchedule,
-		LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+	newConstraintDifferent := topologySpreadConstraint{
+		maxSkew:     3,
+		topologyKey: "node",
+		selector:    selector.DeepCopySelector(),
 	}
-	namespaceTopologySpreadConstraint := []v1.TopologySpreadConstraint{
+	namespaceTopologySpreadConstraint := []topologySpreadConstraint{
 		{
-			MaxSkew:           2,
-			TopologyKey:       "zone",
-			WhenUnsatisfiable: v1.DoNotSchedule,
-			LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+			maxSkew:     2,
+			topologyKey: "zone",
+			selector:    selector.DeepCopySelector(),
 		},
 	}
 	testCases := []struct {
 		name                               string
-		namespaceTopologySpreadConstraints []v1.TopologySpreadConstraint
-		newConstraint                      v1.TopologySpreadConstraint
+		namespaceTopologySpreadConstraints []topologySpreadConstraint
+		newConstraint                      topologySpreadConstraint
 		expectedResult                     bool
 	}{
 		{
@@ -1647,19 +1645,7 @@ func TestCheckIdenticalConstraints(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var constraintSets []topologyConstraintSet
-			for _, constraints := range tc.namespaceTopologySpreadConstraints {
-				constraintSets = append(constraintSets, topologyConstraintSet{
-					constraint:      constraints,
-					podNodeAffinity: nodeaffinity.RequiredNodeAffinity{},
-					podTolerations:  []v1.Toleration{},
-				})
-			}
-			isIdentical := hasIdenticalConstraints(topologyConstraintSet{
-				constraint:      tc.newConstraint,
-				podNodeAffinity: nodeaffinity.RequiredNodeAffinity{},
-				podTolerations:  []v1.Toleration{},
-			}, constraintSets)
+			isIdentical := hasIdenticalConstraints(tc.newConstraint, tc.namespaceTopologySpreadConstraints)
 			if isIdentical != tc.expectedResult {
 				t.Errorf("Test error for description: %s. Expected result %v, got %v", tc.name, tc.expectedResult, isIdentical)
 			}
