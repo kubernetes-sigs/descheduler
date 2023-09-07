@@ -33,6 +33,7 @@ import (
 const (
 	PluginName            = "DefaultEvictor"
 	evictPodAnnotationKey = "descheduler.alpha.kubernetes.io/evict"
+	doNotEvictPodAnnotationKey = "descheduler.alpha.kubernetes.io/donotevict"
 )
 
 var _ frameworktypes.EvictorPlugin = &DefaultEvictor{}
@@ -58,6 +59,11 @@ func IsPodEvictableBasedOnPriority(pod *v1.Pod, priority int32) bool {
 // HaveEvictAnnotation checks if the pod have evict annotation
 func HaveEvictAnnotation(pod *v1.Pod) bool {
 	_, found := pod.ObjectMeta.Annotations[evictPodAnnotationKey]
+	return found
+}
+// HaveDoNotEvictAnnotation checks if the pod have donotevict annotation
+func HaveDoNotEvictAnnotation(pod *v1.Pod) bool {
+	_, found := pod.ObjectMeta.Annotations[doNotEvictPodAnnotationKey]
 	return found
 }
 
@@ -170,6 +176,11 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 
 func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
 	checkErrs := []error{}
+
+	if HaveDoNotEvictAnnotation(pod) {
+        klog.V(4).InfoS("Pod has the donotevict annotation and should be skipped", "pod", klog.KObj(pod))
+		return false
+	}
 
 	if HaveEvictAnnotation(pod) {
 		return true
