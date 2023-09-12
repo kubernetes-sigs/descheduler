@@ -1,5 +1,5 @@
 run:
-  deadline: 2m
+  timeout: 2m
 
 linters:
   disable-all: true
@@ -15,4 +15,4 @@ linters-settings:
   gofumpt:
     extra-rules: true
   goimports:
-local-prefixes: sigs.k8s.io/descheduler
+    local-prefixes: sigs.k8s.io/descheduler
