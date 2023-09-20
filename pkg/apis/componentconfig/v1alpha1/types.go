@@ -55,6 +55,9 @@ type DeschedulerConfiguration struct {
 	// IgnorePVCPods sets whether PVC pods should be allowed to be evicted
 	IgnorePVCPods bool `json:"ignorePvcPods,omitempty"`
 
+	// Tracing is used to setup the required OTEL tracing configuration
+	Tracing TracingConfiguration `json:"tracing,omitempty"`
+
 	// LeaderElection starts Deployment using leader election loop
 	LeaderElection componentbaseconfig.LeaderElectionConfiguration `json:"leaderElection,omitempty"`
 
@@ -65,4 +68,26 @@ type DeschedulerConfiguration struct {
 	// ClientConnection specifies the kubeconfig file and client connection settings to use when communicating with the apiserver.
 	// Refer to [ClientConnection](https://pkg.go.dev/k8s.io/kubernetes/pkg/apis/componentconfig#ClientConnectionConfiguration) for more information.
 	ClientConnection componentbaseconfig.ClientConnectionConfiguration `json:"clientConnection,omitempty"`
+}
+
+type TracingConfiguration struct {
+	// CollectorEndpoint is the address of the OpenTelemetry collector.
+	// If not specified, tracing will be used NoopTraceProvider.
+	CollectorEndpoint string `json:"collectorEndpoint"`
+	// TransportCert is the path to the certificate file for the OpenTelemetry collector.
+	// If not specified, provider will start in insecure mode.
+	TransportCert string `json:"transportCert,omitempty"`
+	// ServiceName is the name of the service to be used in the OpenTelemetry collector.
+	// If not specified, the default value is "descheduler".
+	ServiceName string `json:"serviceName,omitempty"`
+	// ServiceNamespace is the namespace of the service to be used in the OpenTelemetry collector.
+	// If not specified, tracing will be used default namespace.
+	ServiceNamespace string `json:"serviceNamespace,omitempty"`
+	// SampleRate is used to configure the sample rate of the OTEL trace collection. This value will
+	// be used as the Base value with sample ratio. A value >= 1.0 will sample everything and < 0 will
+	// not sample anything. Everything else is a percentage value.
+	SampleRate float64 `json:"sampleRate"`
+	// FallbackToNoOpProviderOnError can be set in case if you want your trace provider to fallback to
+	// no op provider in case if the configured end point based provider can't be setup.
+	FallbackToNoOpProviderOnError bool `json:"fallbackToNoOpProviderOnError"`
 }

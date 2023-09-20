@@ -82,6 +82,13 @@ deschedulerPolicy:
   # maxNoOfPodsToEvictPerNamespace: 10
   # ignorePvcPods: true
   # evictLocalStoragePods: true
+  # tracing:
+  #   collectorEndpoint: otel-collector.observability.svc.cluster.local:4317
+  #   transportCert: ""
+  #   serviceName: ""
+  #   serviceNamespace: ""
+  #   sampleRate: 1.0
+  #   fallbackToNoOpProviderOnError: true
   strategies:
     RemoveDuplicates:
       enabled: true

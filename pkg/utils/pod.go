@@ -213,3 +213,28 @@ func PodToleratesTaints(pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
 	}
 	return false
 }
+
+// PodHasNodeAffinity returns true if the pod has a node affinity of type
+// `nodeAffinityType` defined. The nodeAffinityType param can take this two values:
+// "requiredDuringSchedulingIgnoredDuringExecution" or "requiredDuringSchedulingIgnoredDuringExecution"
+func PodHasNodeAffinity(pod *v1.Pod, nodeAffinityType NodeAffinityType) bool {
+	if pod.Spec.Affinity == nil {
+		return false
+	}
+	if pod.Spec.Affinity.NodeAffinity == nil {
+		return false
+	}
+	if nodeAffinityType == RequiredDuringSchedulingIgnoredDuringExecution {
+		return pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil
+	} else if nodeAffinityType == PreferredDuringSchedulingIgnoredDuringExecution {
+		return len(pod.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) > 0
+	}
+	return false
+}
+
+type NodeAffinityType string
+
+const (
+	RequiredDuringSchedulingIgnoredDuringExecution  NodeAffinityType = "requiredDuringSchedulingIgnoredDuringExecution"
+	PreferredDuringSchedulingIgnoredDuringExecution NodeAffinityType = "preferredDuringSchedulingIgnoredDuringExecution"
+)

@@ -38,6 +38,7 @@ that version's release branch, as listed below:
 
 |Descheduler Version|Docs link|
 |---|---|
+|v0.28.x|[`release-1.28`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.28/README.md)|
 |v0.27.x|[`release-1.27`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.27/README.md)|
 |v0.26.x|[`release-1.26`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.26/README.md)|
 |v0.25.x|[`release-1.25`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.25/README.md)|
@@ -436,7 +437,10 @@ profiles:
 This strategy makes sure all pods violating
 [node affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#node-affinity)
 are eventually removed from nodes. Node affinity rules allow a pod to specify
-`requiredDuringSchedulingIgnoredDuringExecution` type, which tells the scheduler
+`requiredDuringSchedulingIgnoredDuringExecution` and/or
+`preferredDuringSchedulingIgnoredDuringExecution`.
+
+The `requiredDuringSchedulingIgnoredDuringExecution` type tells the scheduler
 to respect node affinity when scheduling the pod but kubelet to ignore
 in case node changes over time and no longer respects the affinity.
 When enabled, the strategy serves as a temporary implementation
@@ -448,6 +452,14 @@ affinity rule `requiredDuringSchedulingIgnoredDuringExecution` at the time
 of scheduling. Over time nodeA stops to satisfy the rule. When the strategy gets
 executed and there is another node available that satisfies the node affinity rule,
 podA gets evicted from nodeA.
+
+The `preferredDuringSchedulingIgnoredDuringExecution` type tells the scheduler
+to respect node affinity when scheduling if that's possible. If not, the pod
+gets scheduled anyway. It may happen that, over time, the state of the cluster
+changes and now the pod can be scheduled on a node that actually fits its
+preferred node affinity. When enabled, the strategy serves as a temporary
+implementation of `preferredDuringSchedulingPreferredDuringExecution`, so the
+pod will be evicted if it can be scheduled on a "better" node.
 
 **Parameters:**
 
