@@ -13,6 +13,7 @@ data:
         pluginConfig:
         - name: "DefaultEvictor"
         - name: "RemovePodsViolatingInterPodAntiAffinity"
+        - name: "RemoveDuplicates"
         - name: "LowNodeUtilization"
           args:
             thresholds:

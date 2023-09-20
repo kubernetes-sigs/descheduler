@@ -48,26 +48,49 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	unschedulableNodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
 	unschedulableNodeWithLabels.Spec.Unschedulable = true
 
-	addPodsToNode := func(node *v1.Node, deletionTimestamp *metav1.Time) []*v1.Pod {
+	addPodsToNode := func(node *v1.Node, deletionTimestamp *metav1.Time, affinityType string) []*v1.Pod {
 		podWithNodeAffinity := test.BuildTestPod("podWithNodeAffinity", 100, 0, node.Name, nil)
 		podWithNodeAffinity.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: &v1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-					NodeSelectorTerms: []v1.NodeSelectorTerm{
-						{
-							MatchExpressions: []v1.NodeSelectorRequirement{
-								{
-									Key:      nodeLabelKey,
-									Operator: "In",
-									Values: []string{
-										nodeLabelValue,
-									},
+			NodeAffinity: &v1.NodeAffinity{},
+		}
+
+		switch affinityType {
+		case "requiredDuringSchedulingIgnoredDuringExecution":
+			podWithNodeAffinity.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{
+					{
+						MatchExpressions: []v1.NodeSelectorRequirement{
+							{
+								Key:      nodeLabelKey,
+								Operator: "In",
+								Values: []string{
+									nodeLabelValue,
 								},
 							},
 						},
 					},
 				},
-			},
+			}
+		case "preferredDuringSchedulingIgnoredDuringExecution":
+			podWithNodeAffinity.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = []v1.PreferredSchedulingTerm{
+				{
+					Weight: 10,
+					Preference: v1.NodeSelectorTerm{
+						MatchExpressions: []v1.NodeSelectorRequirement{
+							{
+								Key:      nodeLabelKey,
+								Operator: "In",
+								Values: []string{
+									nodeLabelValue,
+								},
+							},
+						},
+					},
+				},
+			}
+		case "requiredDuringSchedulingRequiredDuringExecution":
+		default:
+			t.Fatalf("Invalid affinity type %s", affinityType)
 		}
 
 		pod1 := test.BuildTestPod("pod1", 100, 0, node.Name, nil)
@@ -77,6 +100,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		pod1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 		pod2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
+		podWithNodeAffinity.DeletionTimestamp = deletionTimestamp
 		pod1.DeletionTimestamp = deletionTimestamp
 		pod2.DeletionTimestamp = deletionTimestamp
 
@@ -87,6 +111,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		}
 	}
 
+	var uint0 uint = 0
 	var uint1 uint = 1
 	tests := []struct {
 		description                    string
@@ -104,16 +129,25 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 				NodeAffinityType: []string{"requiredDuringSchedulingRequiredDuringExecution"},
 			},
 			expectedEvictedPodCount: 0,
-			pods:                    addPodsToNode(nodeWithoutLabels, nil),
+			pods:                    addPodsToNode(nodeWithoutLabels, nil, "requiredDuringSchedulingRequiredDuringExecution"),
 			nodes:                   []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 		},
 		{
-			description: "Pod is correctly scheduled on node, no eviction expected",
+			description: "Pod is correctly scheduled on node, no eviction expected [required affinity]",
 			args: RemovePodsViolatingNodeAffinityArgs{
 				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
 			},
 			expectedEvictedPodCount: 0,
-			pods:                    addPodsToNode(nodeWithLabels, nil),
+			pods:                    addPodsToNode(nodeWithLabels, nil, "requiredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                   []*v1.Node{nodeWithLabels},
+		},
+		{
+			description: "Pod is correctly scheduled on node, no eviction expected [preferred affinity]",
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"preferredDuringSchedulingIgnoredDuringExecution"},
+			},
+			expectedEvictedPodCount: 0,
+			pods:                    addPodsToNode(nodeWithLabels, nil, "preferredDuringSchedulingIgnoredDuringExecution"),
 			nodes:                   []*v1.Node{nodeWithLabels},
 		},
 		{
@@ -122,66 +156,176 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			args: RemovePodsViolatingNodeAffinityArgs{
 				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
 			},
-			pods:  addPodsToNode(nodeWithoutLabels, nil),
+			pods:  addPodsToNode(nodeWithoutLabels, nil, "requiredDuringSchedulingIgnoredDuringExecution"),
 			nodes: []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 		},
 		{
-			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvictPerNode set to 1, should not be evicted",
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available with better fit, should be evicted",
+			expectedEvictedPodCount: 1,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"preferredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:  addPodsToNode(nodeWithoutLabels, nil, "preferredDuringSchedulingIgnoredDuringExecution"),
+			nodes: []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvictPerNode set to 1, should be evicted [required affinity]",
 			expectedEvictedPodCount: 1,
 			args: RemovePodsViolatingNodeAffinityArgs{
 				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
 			},
-			pods:                  addPodsToNode(nodeWithoutLabels, nil),
+			pods:                  addPodsToNode(nodeWithoutLabels, nil, "requiredDuringSchedulingIgnoredDuringExecution"),
 			nodes:                 []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 			maxPodsToEvictPerNode: &uint1,
 		},
 		{
-			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvictPerNode set to 1, no pod evicted since pod terminting",
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvictPerNode set to 1, should be evicted [preferred affinity]",
 			expectedEvictedPodCount: 1,
 			args: RemovePodsViolatingNodeAffinityArgs{
-				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
+				NodeAffinityType: []string{"preferredDuringSchedulingIgnoredDuringExecution"},
 			},
-			pods:                  addPodsToNode(nodeWithoutLabels, &metav1.Time{}),
+			pods:                  addPodsToNode(nodeWithoutLabels, nil, "preferredDuringSchedulingIgnoredDuringExecution"),
 			nodes:                 []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 			maxPodsToEvictPerNode: &uint1,
 		},
 		{
-			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 1, should not be evicted",
-			expectedEvictedPodCount: 1,
-			args: RemovePodsViolatingNodeAffinityArgs{
-				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
-			},
-			pods:                           addPodsToNode(nodeWithoutLabels, nil),
-			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			maxNoOfPodsToEvictPerNamespace: &uint1,
-		},
-		{
-			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 1, no pod evicted since pod terminting",
-			expectedEvictedPodCount: 1,
-			args: RemovePodsViolatingNodeAffinityArgs{
-				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
-			},
-			pods:                           addPodsToNode(nodeWithoutLabels, &metav1.Time{}),
-			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
-			maxNoOfPodsToEvictPerNamespace: &uint1,
-		},
-		{
-			description:             "Pod is scheduled on node without matching labels, but no node where pod fits is available, should not evict",
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvictPerNode set to 0, should be not evicted [required affinity]",
 			expectedEvictedPodCount: 0,
 			args: RemovePodsViolatingNodeAffinityArgs{
 				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
 			},
-			pods:    addPodsToNode(nodeWithoutLabels, nil),
+			pods:                  addPodsToNode(nodeWithoutLabels, nil, "requiredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                 []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxPodsToEvictPerNode: &uint0,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvictPerNode set to 0, should be not evicted [preferred affinity]",
+			expectedEvictedPodCount: 0,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"preferredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:                  addPodsToNode(nodeWithoutLabels, nil, "preferredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                 []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxPodsToEvictPerNode: &uint0,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvictPerNode set to 1, no pod evicted since pod terminating [required affinity]",
+			expectedEvictedPodCount: 0,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:                  addPodsToNode(nodeWithoutLabels, &metav1.Time{}, "requiredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                 []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxPodsToEvictPerNode: &uint1,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxPodsToEvictPerNode set to 1, no pod evicted since pod terminating [preferred affinity]",
+			expectedEvictedPodCount: 0,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"preferredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:                  addPodsToNode(nodeWithoutLabels, &metav1.Time{}, "preferredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                 []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxPodsToEvictPerNode: &uint1,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 1, should be evicted [required affinity]",
+			expectedEvictedPodCount: 1,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:                           addPodsToNode(nodeWithoutLabels, nil, "requiredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxNoOfPodsToEvictPerNamespace: &uint1,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 1, should be evicted [preferred affinity]",
+			expectedEvictedPodCount: 1,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"preferredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:                           addPodsToNode(nodeWithoutLabels, nil, "preferredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxNoOfPodsToEvictPerNamespace: &uint1,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 0, should not be evicted [required affinity]",
+			expectedEvictedPodCount: 0,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:                           addPodsToNode(nodeWithoutLabels, nil, "requiredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxNoOfPodsToEvictPerNamespace: &uint0,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 0, should not be evicted [preferred affinity]",
+			expectedEvictedPodCount: 0,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"preferredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:                           addPodsToNode(nodeWithoutLabels, nil, "preferredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxNoOfPodsToEvictPerNamespace: &uint0,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 1, no pod evicted since pod terminting [required affinity]",
+			expectedEvictedPodCount: 0,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:                           addPodsToNode(nodeWithoutLabels, &metav1.Time{}, "requiredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxNoOfPodsToEvictPerNamespace: &uint1,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 1, no pod evicted since pod terminting [preferred affinity]",
+			expectedEvictedPodCount: 0,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"preferredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:                           addPodsToNode(nodeWithoutLabels, &metav1.Time{}, "preferredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxNoOfPodsToEvictPerNamespace: &uint1,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, but no node where pod fits is available, should not evict [required affinity]",
+			expectedEvictedPodCount: 0,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:    addPodsToNode(nodeWithoutLabels, nil, "requiredDuringSchedulingIgnoredDuringExecution"),
 			nodes:   []*v1.Node{nodeWithoutLabels, unschedulableNodeWithLabels},
 			nodefit: true,
 		},
 		{
-			description:             "Pod is scheduled on node without matching labels, and node where pod fits is available, should evict",
+			description:             "Pod is scheduled on node without matching labels, but no node where pod fits is available, should not evict [preferred affinity]",
+			expectedEvictedPodCount: 0,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"preferredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:    addPodsToNode(nodeWithoutLabels, nil, "preferredDuringSchedulingIgnoredDuringExecution"),
+			nodes:   []*v1.Node{nodeWithoutLabels, unschedulableNodeWithLabels},
+			nodefit: true,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, and unschedulable node where pod could fit is available, should not evict [required affinity]",
 			expectedEvictedPodCount: 0,
 			args: RemovePodsViolatingNodeAffinityArgs{
 				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
 			},
-			pods:                  addPodsToNode(nodeWithoutLabels, nil),
+			pods:                  addPodsToNode(nodeWithoutLabels, nil, "requiredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                 []*v1.Node{nodeWithLabels, unschedulableNodeWithLabels},
+			maxPodsToEvictPerNode: &uint1,
+			nodefit:               true,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, and unschedulable node where pod could fit is available, should not evict [preferred affinity]",
+			expectedEvictedPodCount: 0,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"preferredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:                  addPodsToNode(nodeWithoutLabels, nil, "preferredDuringSchedulingIgnoredDuringExecution"),
 			nodes:                 []*v1.Node{nodeWithLabels, unschedulableNodeWithLabels},
 			maxPodsToEvictPerNode: &uint1,
 			nodefit:               true,
