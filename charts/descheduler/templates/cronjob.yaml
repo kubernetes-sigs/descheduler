@@ -21,6 +21,9 @@ spec:
   {{- if .Values.failedJobsHistoryLimit }}
   failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
   {{- end }}
+  {{- if .Values.timeZone }}
+  timeZone: {{ .Values.timeZone }}
+  {{- end }}
   jobTemplate:
     spec:
       {{- if .Values.ttlSecondsAfterFinished }}
