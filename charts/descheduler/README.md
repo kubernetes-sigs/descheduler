@@ -55,6 +55,7 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `cronJobApiVersion`                 | CronJob API Group Version                                                                                             | `"batch/v1"`                              |
 | `schedule`                          | The cron schedule to run the _descheduler_ job on                                                                     | `"*/2 * * * *"`                           |
 | `startingDeadlineSeconds`           | If set, configure `startingDeadlineSeconds` for the _descheduler_ job                                                 | `nil`                                     |
+| `timeZone`                          | configure `timeZone` for CronJob                                                                                      | `nil`                                     |
 | `successfulJobsHistoryLimit`        | If set, configure `successfulJobsHistoryLimit` for the _descheduler_ job                                              | `3`                                       |
 | `failedJobsHistoryLimit`            | If set, configure `failedJobsHistoryLimit` for the _descheduler_ job                                                  | `1`                                       |
 | `ttlSecondsAfterFinished`           | If set, configure `ttlSecondsAfterFinished` for the _descheduler_ job                                                 | `nil`                                     |

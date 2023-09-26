@@ -45,6 +45,7 @@ suspend: false
 # successfulJobsHistoryLimit: 3
 # failedJobsHistoryLimit: 1
 # ttlSecondsAfterFinished 600
+# timeZone: Etc/UTC
 
 # Required when running as a Deployment
 deschedulingInterval: 5m
