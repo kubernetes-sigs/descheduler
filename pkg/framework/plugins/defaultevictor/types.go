@@ -33,4 +33,5 @@ type DefaultEvictorArgs struct {
 	LabelSelector           *metav1.LabelSelector  `json:"labelSelector"`
 	PriorityThreshold       *api.PriorityThreshold `json:"priorityThreshold"`
 	NodeFit                 bool                   `json:"nodeFit"`
+	MinReplicas             uint                   `json:"minReplicas"`
 }

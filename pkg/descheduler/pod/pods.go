@@ -142,19 +142,23 @@ func BuildGetPodsAssignedToNodeFunc(podInformer cache.SharedIndexInformer) (GetP
 		if err != nil {
 			return nil, err
 		}
-		pods := make([]*v1.Pod, 0, len(objs))
-		for _, obj := range objs {
-			pod, ok := obj.(*v1.Pod)
-			if !ok {
-				continue
-			}
-			if filter(pod) {
-				pods = append(pods, pod)
-			}
-		}
-		return pods, nil
+		return ConvertToPods(objs, filter), nil
 	}
 	return getPodsAssignedToNode, nil
+}
+
+func ConvertToPods(objs []interface{}, filter FilterFunc) []*v1.Pod {
+	pods := make([]*v1.Pod, 0, len(objs))
+	for _, obj := range objs {
+		pod, ok := obj.(*v1.Pod)
+		if !ok {
+			continue
+		}
+		if filter == nil || filter(pod) {
+			pods = append(pods, pod)
+		}
+	}
+	return pods
 }
 
 // ListPodsOnNodes returns all pods on given nodes.
@@ -213,6 +217,14 @@ func GroupByNamespace(pods []*v1.Pod) map[string][]*v1.Pod {
 // OwnerRef returns the ownerRefList for the pod.
 func OwnerRef(pod *v1.Pod) []metav1.OwnerReference {
 	return pod.ObjectMeta.GetOwnerReferences()
+}
+
+func OwnerRefUIDs(pod *v1.Pod) []string {
+	var ownerRefUIDs []string
+	for _, ownerRef := range OwnerRef(pod) {
+		ownerRefUIDs = append(ownerRefUIDs, string(ownerRef.UID))
+	}
+	return ownerRefUIDs
 }
 
 func IsBestEffortPod(pod *v1.Pod) bool {
