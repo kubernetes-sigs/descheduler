@@ -86,30 +86,25 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context
 	}
 
 	podsInANamespace := podutil.GroupByNamespace(pods)
-	podsOnANode := groupByNodeName(pods)
 	nodeMap := createNodeMap(nodes)
 
-loop:
-	for _, node := range nodes {
-		klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
-		pods := podsOnANode[node.Name]
-		// sort the evict-able Pods based on priority, if there are multiple pods with same priority, they are sorted based on QoS tiers.
-		podutil.SortPodsBasedOnPriorityLowToHigh(pods)
-		totalPods := len(pods)
-		for i := 0; i < totalPods; i++ {
-			if checkPodsWithAntiAffinityExist(pods[i], podsInANamespace, nodeMap) && d.handle.Evictor().Filter(pods[i]) && d.handle.Evictor().PreEvictionFilter(pods[i]) {
-				if d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{}) {
-					// Since the current pod is evicted all other pods which have anti-affinity with this
-					// pod need not be evicted.
-					// Update allPods.
-					podsInANamespace = removePodFromNamespaceMap(pods[i], podsInANamespace)
-					pods = append(pods[:i], pods[i+1:]...)
-					i--
-					totalPods--
-				}
-			}
-			if d.handle.Evictor().NodeLimitExceeded(node) {
-				continue loop
+	// sort the evict-able Pods based on priority, if there are multiple pods with same priority, they are sorted based on QoS tiers.
+	podutil.SortPodsBasedOnPriorityLowToHigh(pods)
+	totalPods := len(pods)
+	for i := 0; i < totalPods; i++ {
+		pod := pods[i]
+		if d.handle.Evictor().NodeLimitExceeded(nodeMap[pod.Spec.NodeName]) {
+			continue
+		}
+		if checkPodsWithAntiAffinityExist(pod, podsInANamespace, nodeMap) && d.handle.Evictor().Filter(pod) && d.handle.Evictor().PreEvictionFilter(pod) {
+			if d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{}) {
+				// Since the current pod is evicted all other pods which have anti-affinity with this
+				// pod need not be evicted.
+				// Update allPods.
+				podsInANamespace = removePodFromNamespaceMap(pod, podsInANamespace)
+				pods = append(pods[:i], pods[i+1:]...)
+				i--
+				totalPods--
 			}
 		}
 	}
@@ -129,15 +124,6 @@ func removePodFromNamespaceMap(podToRemove *v1.Pod, podMap map[string][]*v1.Pod)
 		}
 	}
 	return podMap
-}
-
-func groupByNodeName(pods []*v1.Pod) map[string][]*v1.Pod {
-	m := make(map[string][]*v1.Pod)
-	for i := 0; i < len(pods); i++ {
-		pod := pods[i]
-		m[pod.Spec.NodeName] = append(m[pod.Spec.NodeName], pod)
-	}
-	return m
 }
 
 func createNodeMap(nodes []*v1.Node) map[string]*v1.Node {
