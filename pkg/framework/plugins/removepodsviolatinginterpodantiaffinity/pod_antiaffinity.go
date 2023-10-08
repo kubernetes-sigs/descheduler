@@ -19,17 +19,15 @@ package removepodsviolatinginterpodantiaffinity
 import (
 	"context"
 	"fmt"
-
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
-
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog/v2"
 )
 
 const PluginName = "RemovePodsViolatingInterPodAntiAffinity"
@@ -88,8 +86,11 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context
 	podsInANamespace := podutil.GroupByNamespace(pods)
 	nodeMap := createNodeMap(nodes)
 
+	// sort the evict-able Pods based on age. Generally, newer pod is good to evict, if there are multiple pods with same priority.
+	podutil.ReverseSortPodsBasedOnAge(pods)
 	// sort the evict-able Pods based on priority, if there are multiple pods with same priority, they are sorted based on QoS tiers.
-	podutil.SortPodsBasedOnPriorityLowToHigh(pods)
+	// To keep ordering based on age(sorted above), use stable sort.
+	podutil.StableSortPodsBasedOnPriorityLowToHigh(pods)
 	totalPods := len(pods)
 	for i := 0; i < totalPods; i++ {
 		pod := pods[i]
