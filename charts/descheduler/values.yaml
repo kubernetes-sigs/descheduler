@@ -172,6 +172,8 @@ podAnnotations: {}
 
 podLabels: {}
 
+dnsConfig: {}
+
 livenessProbe:
   failureThreshold: 3
   httpGet:
