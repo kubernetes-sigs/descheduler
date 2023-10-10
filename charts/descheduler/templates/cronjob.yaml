@@ -52,7 +52,8 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- if .Values.dnsConfig }}
-          dnsConfig: {{ .Values.dnsConfig }}
+          dnsConfig:
+            {{- .Values.dnsConfig | toYaml | nindent 12 }}
           {{- end }}
           {{- with .Values.tolerations }}
           tolerations:
