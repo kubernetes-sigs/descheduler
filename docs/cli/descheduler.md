@@ -21,6 +21,7 @@ descheduler [flags]
       --descheduling-interval duration           Time interval between two consecutive descheduler executions. Setting this value instructs the descheduler to run in a continuous loop at the interval specified.
       --disable-metrics                          Disables metrics. The metrics are by default served through https://localhost:10258/metrics. Secure address, resp. port can be changed through --bind-address, resp. --secure-port flags.
       --dry-run                                  Execute descheduler in dry run mode.
+      --enable-http2                             If http/2 should be enabled for the metrics and health check
   -h, --help                                     help for descheduler
       --http2-max-streams-per-connection int     The limit that the server gives to clients for the maximum number of streams in an HTTP/2 connection. Zero means to use golang's default.
       --kubeconfig string                        File with kube configuration. Deprecated, use client-connection-kubeconfig instead.
