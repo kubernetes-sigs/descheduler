@@ -381,10 +381,9 @@ profiles:
           "memory": 20
           "pods": 20
         evictableNamespaces:
-          namespaces:
-            exclude:
-            - "kube-system"
-            - "namespace1"
+          exclude:
+          - "kube-system"
+          - "namespace1"
     plugins:
       balance:
         enabled:

@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/events"
+	"k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	utilpointer "k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -303,12 +304,14 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					count:        1,
 					node:         "n1",
 					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultTopologyConstraints(1),
 					nodeSelector: map[string]string{"zone": "zoneA"},
 				},
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
 					nodeAffinity: &v1.Affinity{NodeAffinity: &v1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{NodeSelectorTerms: []v1.NodeSelectorTerm{
 							{MatchExpressions: []v1.NodeSelectorRequirement{{Key: "foo", Values: []string{"bar"}, Operator: v1.NodeSelectorOpIn}}},
@@ -316,12 +319,170 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					}},
 				},
 				{
-					count:  1,
-					node:   "n1",
-					labels: map[string]string{"foo": "bar"},
+					count:       1,
+					node:        "n1",
+					constraints: getDefaultTopologyConstraints(1),
+					labels:      map[string]string{"foo": "bar"},
 				},
 			}),
 			expectedEvictedCount: 1,
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
+			nodeFit:              true,
+		},
+		{
+			name: "6 domains, sizes [0,0,0,3,3,2], maxSkew=1, No pod is evicted since topology is balanced",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "linNodeA"; n.Labels["os"] = "linux" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "linNodeB"; n.Labels["os"] = "linux" }),
+				test.BuildTestNode("n3", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "linNodeC"; n.Labels["os"] = "linux" }),
+
+				test.BuildTestNode("n4", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "winNodeA"; n.Labels["os"] = "windows" }),
+				test.BuildTestNode("n5", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "winNodeB"; n.Labels["os"] = "windows" }),
+				test.BuildTestNode("n6", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "winNodeC"; n.Labels["os"] = "windows" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:        3,
+					node:         "n4",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultNodeTopologyConstraints(1),
+					nodeSelector: map[string]string{"os": "windows"},
+				},
+				{
+					count:        3,
+					node:         "n5",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultNodeTopologyConstraints(1),
+					nodeSelector: map[string]string{"os": "windows"},
+				},
+				{
+					count:        2,
+					node:         "n6",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultNodeTopologyConstraints(1),
+					nodeSelector: map[string]string{"os": "windows"},
+				},
+			}),
+			expectedEvictedCount: 0,
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
+			nodeFit:              false,
+		},
+		{
+			name: "7 domains, sizes [0,0,0,3,3,2], maxSkew=1, two pods are evicted and moved to new node added",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "linNodeA"; n.Labels["os"] = "linux" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "linNodeB"; n.Labels["os"] = "linux" }),
+				test.BuildTestNode("n3", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "linNodeC"; n.Labels["os"] = "linux" }),
+
+				test.BuildTestNode("n4", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "winNodeA"; n.Labels["os"] = "windows" }),
+				test.BuildTestNode("n5", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "winNodeB"; n.Labels["os"] = "windows" }),
+				test.BuildTestNode("n6", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "winNodeC"; n.Labels["os"] = "windows" }),
+				test.BuildTestNode("n7", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "winNodeD"; n.Labels["os"] = "windows" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:        3,
+					node:         "n4",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultNodeTopologyConstraints(1),
+					nodeSelector: map[string]string{"os": "windows"},
+				},
+				{
+					count:        3,
+					node:         "n5",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultNodeTopologyConstraints(1),
+					nodeSelector: map[string]string{"os": "windows"},
+				},
+				{
+					count:        2,
+					node:         "n6",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultNodeTopologyConstraints(1),
+					nodeSelector: map[string]string{"os": "windows"},
+				},
+			}),
+			expectedEvictedCount: 2,
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
+			nodeFit:              false,
+		},
+		{
+			name: "6 domains, sizes [0,0,0,4,3,1], maxSkew=1, 1 pod is evicted from node 4",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "linNodeA"; n.Labels["os"] = "linux" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "linNodeB"; n.Labels["os"] = "linux" }),
+				test.BuildTestNode("n3", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "linNodeC"; n.Labels["os"] = "linux" }),
+
+				test.BuildTestNode("n4", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "winNodeA"; n.Labels["os"] = "windows" }),
+				test.BuildTestNode("n5", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "winNodeB"; n.Labels["os"] = "windows" }),
+				test.BuildTestNode("n6", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "winNodeC"; n.Labels["os"] = "windows" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:        4,
+					node:         "n4",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultNodeTopologyConstraints(1),
+					nodeSelector: map[string]string{"os": "windows"},
+				},
+				{
+					count:        3,
+					node:         "n5",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultNodeTopologyConstraints(1),
+					nodeSelector: map[string]string{"os": "windows"},
+				},
+				{
+					count:        1,
+					node:         "n6",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultNodeTopologyConstraints(1),
+					nodeSelector: map[string]string{"os": "windows"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
+			nodeFit:              false,
+		},
+		{
+			name: "6 domains, sizes [0,0,0,4,3,1], maxSkew=1, 0 pod is evicted as pods of node:winNodeA can only be scheduled on this node and nodeFit is true ",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "linNodeA"; n.Labels["os"] = "linux" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "linNodeB"; n.Labels["os"] = "linux" }),
+				test.BuildTestNode("n3", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "linNodeC"; n.Labels["os"] = "linux" }),
+
+				test.BuildTestNode("n4", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "winNodeA"; n.Labels["os"] = "windows" }),
+				test.BuildTestNode("n5", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "winNodeB"; n.Labels["os"] = "windows" }),
+				test.BuildTestNode("n6", 2000, 3000, 10, func(n *v1.Node) { n.Labels["node"] = "winNodeC"; n.Labels["os"] = "windows" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:        4,
+					node:         "n4",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultNodeTopologyConstraints(1),
+					nodeSelector: map[string]string{"node": "winNodeA"},
+				},
+				{
+					count:        3,
+					node:         "n5",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultNodeTopologyConstraints(1),
+					nodeSelector: map[string]string{"os": "windows"},
+				},
+				{
+					count:        1,
+					node:         "n6",
+					labels:       map[string]string{"foo": "bar"},
+					constraints:  getDefaultNodeTopologyConstraints(1),
+					nodeSelector: map[string]string{"os": "windows"},
+				},
+			}),
+			expectedEvictedCount: 0,
 			namespaces:           []string{"ns1"},
 			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
 			nodeFit:              true,
@@ -1371,6 +1532,17 @@ func getDefaultTopologyConstraints(maxSkew int32) []v1.TopologySpreadConstraint 
 	}
 }
 
+func getDefaultNodeTopologyConstraints(maxSkew int32) []v1.TopologySpreadConstraint {
+	return []v1.TopologySpreadConstraint{
+		{
+			MaxSkew:           maxSkew,
+			TopologyKey:       "node",
+			WhenUnsatisfiable: v1.DoNotSchedule,
+			LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+		},
+	}
+}
+
 func TestCheckIdenticalConstraints(t *testing.T) {
 	newConstraintSame := v1.TopologySpreadConstraint{
 		MaxSkew:           2,
@@ -1413,7 +1585,19 @@ func TestCheckIdenticalConstraints(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			isIdentical := hasIdenticalConstraints(tc.newConstraint, tc.namespaceTopologySpreadConstraints)
+			var constraintSets []topologyConstraintSet
+			for _, constraints := range tc.namespaceTopologySpreadConstraints {
+				constraintSets = append(constraintSets, topologyConstraintSet{
+					constraint:      constraints,
+					podNodeAffinity: nodeaffinity.RequiredNodeAffinity{},
+					podTolerations:  []v1.Toleration{},
+				})
+			}
+			isIdentical := hasIdenticalConstraints(topologyConstraintSet{
+				constraint:      tc.newConstraint,
+				podNodeAffinity: nodeaffinity.RequiredNodeAffinity{},
+				podTolerations:  []v1.Toleration{},
+			}, constraintSets)
 			if isIdentical != tc.expectedResult {
 				t.Errorf("Test error for description: %s. Expected result %v, got %v", tc.name, tc.expectedResult, isIdentical)
 			}
