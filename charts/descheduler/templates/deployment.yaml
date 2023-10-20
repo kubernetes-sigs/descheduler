@@ -31,6 +31,10 @@ spec:
         {{- .Values.podAnnotations | toYaml | nindent 8 }}
         {{- end }}
     spec:
+      {{- if .Values.dnsConfig }}
+      dnsConfig:
+        {{- .Values.dnsConfig | toYaml | nindent 8 }}
+      {{- end }}
       {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}
       {{- end }}

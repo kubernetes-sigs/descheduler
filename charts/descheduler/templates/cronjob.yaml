@@ -21,6 +21,9 @@ spec:
   {{- if .Values.failedJobsHistoryLimit }}
   failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
   {{- end }}
+  {{- if .Values.timeZone }}
+  timeZone: {{ .Values.timeZone }}
+  {{- end }}
   jobTemplate:
     spec:
       {{- if .Values.ttlSecondsAfterFinished }}
@@ -48,6 +51,10 @@ spec:
           affinity:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- if .Values.dnsConfig }}
+          dnsConfig:
+            {{- .Values.dnsConfig | toYaml | nindent 12 }}
+          {{- end }}
           {{- with .Values.tolerations }}
           tolerations:
             {{- toYaml . | nindent 12 }}
@@ -68,7 +75,7 @@ spec:
               command:
                 {{- toYaml .Values.command | nindent 16 }}
               args:
-                - --policy-config-file: "/policy-dir/policy.yaml"
+                - --policy-config-file=/policy-dir/policy.yaml
                 {{- range $key, $value := .Values.cmdOptions }}
                 - {{ printf "--%s" $key }}{{ if $value }}={{ $value }}{{ end }}
                 {{- end }}
