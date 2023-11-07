@@ -1,4 +1,4 @@
-# Old-skool build tools.
+# Old-skool build tools
 #
 # Targets (see each target for more information):
 #   all: Build code.
@@ -136,7 +136,7 @@ build-rpms:
 .PHONY: build-rpms
 
 # Build images from the official RPMs
-# 
+#
 # Args:
 #
 # Example:
