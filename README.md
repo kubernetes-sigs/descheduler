@@ -381,10 +381,9 @@ profiles:
           "memory": 20
           "pods": 20
         evictableNamespaces:
-          namespaces:
-            exclude:
-            - "kube-system"
-            - "namespace1"
+          exclude:
+          - "kube-system"
+          - "namespace1"
     plugins:
       balance:
         enabled:
@@ -547,6 +546,19 @@ topologyBalanceNodeFit: false
 ```
 
 Strategy parameter `labelSelector` is not utilized when balancing topology domains and is only applied during eviction to determine if the pod can be evicted.
+
+[Supported Constraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/#spread-constraint-definition) fields:
+
+|Name|Supported?|
+|----|----------|
+|`maxSkew`|Yes|
+|`minDomains`|No|
+|`topologyKey`|Yes|
+|`whenUnsatisfiable`|Yes|
+|`labelSelector`|Yes|
+|`matchLabelKeys`|Yes|
+|`nodeAffinityPolicy`|Yes|
+|`nodeTaintsPolicy`|Yes|
 
 **Parameters:**
 

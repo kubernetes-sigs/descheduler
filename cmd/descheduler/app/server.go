@@ -65,6 +65,8 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 				return
 			}
 
+			SecureServing.DisableHTTP2 = !s.EnableHTTP2
+
 			var factory registry.LogFormatFactory
 			if s.Logging.Format == "json" {
 				factory = jsonLog.Factory{}

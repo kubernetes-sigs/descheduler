@@ -21,6 +21,9 @@ spec:
   {{- if .Values.failedJobsHistoryLimit }}
   failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
   {{- end }}
+  {{- if .Values.timeZone }}
+  timeZone: {{ .Values.timeZone }}
+  {{- end }}
   jobTemplate:
     spec:
       {{- if .Values.ttlSecondsAfterFinished }}
@@ -47,6 +50,10 @@ spec:
           {{- with .Values.affinity }}
           affinity:
             {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.dnsConfig }}
+          dnsConfig:
+            {{- .Values.dnsConfig | toYaml | nindent 12 }}
           {{- end }}
           {{- with .Values.tolerations }}
           tolerations:
