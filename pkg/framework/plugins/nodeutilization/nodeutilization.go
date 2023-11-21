@@ -164,7 +164,7 @@ func resourceThreshold(nodeCapacity v1.ResourceList, resourceName v1.ResourceNam
 	return resource.NewQuantity(resourceCapacityFraction(resourceCapacityQuantity.Value()), defaultFormat)
 }
 
-func roundTo2Digits(percentage float64) float64 {
+func roundTo2Decimals(percentage float64) float64 {
 	return math.Round(percentage*100) / 100
 }
 
@@ -179,7 +179,7 @@ func resourceUsagePercentages(nodeUsage NodeUsage) map[v1.ResourceName]float64 {
 		cap := nodeCapacity[resourceName]
 		if !cap.IsZero() {
 			resourceUsagePercentage[resourceName] = 100 * float64(resourceUsage.MilliValue()) / float64(cap.MilliValue())
-			resourceUsagePercentage[resourceName] = roundTo2Digits(resourceUsagePercentage[resourceName])
+			resourceUsagePercentage[resourceName] = roundTo2Decimals(resourceUsagePercentage[resourceName])
 		}
 	}
 
