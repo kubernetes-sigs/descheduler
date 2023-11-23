@@ -21,7 +21,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	componentbaseconfig "k8s.io/component-base/config"
-	registry "k8s.io/component-base/logs/api/v1"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -60,10 +59,6 @@ type DeschedulerConfiguration struct {
 
 	// LeaderElection starts Deployment using leader election loop
 	LeaderElection componentbaseconfig.LeaderElectionConfiguration `json:"leaderElection,omitempty"`
-
-	// Logging specifies the options of logging.
-	// Refer to [Logs Options](https://github.com/kubernetes/component-base/blob/master/logs/api/v1/options.go) for more information.
-	Logging registry.LoggingConfiguration `json:"logging,omitempty"`
 
 	// ClientConnection specifies the kubeconfig file and client connection settings to use when communicating with the apiserver.
 	// Refer to [ClientConnection](https://pkg.go.dev/k8s.io/kubernetes/pkg/apis/componentconfig#ClientConnectionConfiguration) for more information.
