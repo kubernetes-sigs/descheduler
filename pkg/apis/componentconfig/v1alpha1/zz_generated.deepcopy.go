@@ -31,7 +31,6 @@ func (in *DeschedulerConfiguration) DeepCopyInto(out *DeschedulerConfiguration) 
 	out.TypeMeta = in.TypeMeta
 	out.Tracing = in.Tracing
 	out.LeaderElection = in.LeaderElection
-	in.Logging.DeepCopyInto(&out.Logging)
 	out.ClientConnection = in.ClientConnection
 	return
 }
