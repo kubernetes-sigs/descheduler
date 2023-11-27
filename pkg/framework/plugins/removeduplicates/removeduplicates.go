@@ -57,6 +57,10 @@ type podOwner struct {
 	imagesHash            string
 }
 
+func (po podOwner) String() string {
+	return fmt.Sprintf("%s/%s/%s/%s", po.namespace, po.kind, po.name, po.imagesHash)
+}
+
 // New builds plugin from its arguments while passing a handle
 func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	removeDuplicatesArgs, ok := args.(*RemoveDuplicatesArgs)

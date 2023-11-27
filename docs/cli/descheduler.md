@@ -32,7 +32,10 @@ descheduler [flags]
       --leader-elect-resource-name string        The name of resource object that is used for locking during leader election. (default "descheduler")
       --leader-elect-resource-namespace string   The namespace of resource object that is used for locking during leader election. (default "kube-system")
       --leader-elect-retry-period duration       The duration the clients should wait between attempting acquisition and renewal of a leadership. This is only applicable if leader election is enabled. (default 26s)
-      --logging-format string                    Sets the log format. Permitted formats: "text", "json". Non-default formats don't honor these flags: --add-dir-header, --alsologtostderr, --log-backtrace-at, --log_dir, --log_file, --log_file_max_size, --logtostderr, --skip-headers, --skip-log-headers, --stderrthreshold, --log-flush-frequency.\nNon-default choices are currently alpha and subject to change without warning. (default "text")
+      --log-flush-frequency duration             Maximum number of seconds between log flushes (default 5s)
+      --log-json-info-buffer-size quantity       [Alpha] In JSON format with split output streams, the info messages can be buffered for a while to increase performance. The default value of zero bytes disables buffering. The size can be specified as number of bytes (512), multiples of 1000 (1K), multiples of 1024 (2Ki), or powers of those (3M, 4G, 5Mi, 6Gi). Enable the LoggingAlphaOptions feature gate to use this.
+      --log-json-split-stream                    [Alpha] In JSON format, write error messages to stderr and info messages to stdout. The default is to write a single stream to stdout. Enable the LoggingAlphaOptions feature gate to use this.
+      --logging-format string                    Sets the log format. Permitted formats: "json" (gated by LoggingBetaOptions), "text". (default "text")
       --otel-collector-endpoint string           Set this flag to the OpenTelemetry Collector Service Address
       --otel-fallback-no-op-on-error             Fallback to NoOp Tracer in case of error
       --otel-sample-rate float                   Sample rate to collect the Traces (default 1)
@@ -50,6 +53,8 @@ descheduler [flags]
       --tls-min-version string                   Minimum TLS version supported. Possible values: VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13
       --tls-private-key-file string              File containing the default x509 private key matching --tls-cert-file.
       --tls-sni-cert-key namedCertKey            A pair of x509 certificate and private key file paths, optionally suffixed with a list of domain patterns which are fully qualified domain names, possibly with prefixed wildcard segments. The domain patterns also allow IP addresses, but IPs should only be used if the apiserver has visibility to the IP address requested by a client. If no domain patterns are provided, the names of the certificate are extracted. Non-wildcard matches trump over wildcard matches, explicit domain patterns trump over extracted names. For multiple key/certificate pairs, use the --tls-sni-cert-key multiple times. Examples: "example.crt,example.key" or "foo.crt,foo.key:*.foo.com,foo.com". (default [])
+  -v, --v Level                                  number for the log level verbosity
+      --vmodule pattern=N,...                    comma-separated list of pattern=N settings for file-filtered logging (only works for text log format)
 ```
 
 ### SEE ALSO
