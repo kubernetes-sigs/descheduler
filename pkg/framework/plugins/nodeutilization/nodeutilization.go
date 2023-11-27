@@ -18,6 +18,7 @@ package nodeutilization
 
 import (
 	"context"
+	"math"
 	"sort"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -163,6 +164,10 @@ func resourceThreshold(nodeCapacity v1.ResourceList, resourceName v1.ResourceNam
 	return resource.NewQuantity(resourceCapacityFraction(resourceCapacityQuantity.Value()), defaultFormat)
 }
 
+func roundTo2Decimals(percentage float64) float64 {
+	return math.Round(percentage*100) / 100
+}
+
 func resourceUsagePercentages(nodeUsage NodeUsage) map[v1.ResourceName]float64 {
 	nodeCapacity := nodeUsage.node.Status.Capacity
 	if len(nodeUsage.node.Status.Allocatable) > 0 {
@@ -174,6 +179,7 @@ func resourceUsagePercentages(nodeUsage NodeUsage) map[v1.ResourceName]float64 {
 		cap := nodeCapacity[resourceName]
 		if !cap.IsZero() {
 			resourceUsagePercentage[resourceName] = 100 * float64(resourceUsage.MilliValue()) / float64(cap.MilliValue())
+			resourceUsagePercentage[resourceName] = roundTo2Decimals(resourceUsagePercentage[resourceName])
 		}
 	}
 
