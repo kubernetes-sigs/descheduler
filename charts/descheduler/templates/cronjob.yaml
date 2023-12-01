@@ -88,6 +88,10 @@ spec:
               volumeMounts:
                 - mountPath: /policy-dir
                   name: policy-volume
+          {{- if .Values.podSecurityContext }}
+          securityContext:
+            {{- .Values.podSecurityContext | toYaml | nindent 12 }}
+          {{- end }}
           volumes:
           - name: policy-volume
             configMap:
