@@ -171,6 +171,7 @@ func TestRemoveDuplicates(t *testing.T) {
 				nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{

@@ -36,6 +36,10 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	noRecordEventsForEvictionFailures = false
+)
+
 func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	nodeLabelKey := "kubernetes.io/desiredNode"
 	nodeLabelValue := "yes"
@@ -368,6 +372,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 				tc.nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
