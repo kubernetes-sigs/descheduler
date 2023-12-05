@@ -32,6 +32,10 @@ securityContext:
   runAsNonRoot: true
   runAsUser: 1000
 
+# podSecurityContext -- [Security context for pod](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/)
+podSecurityContext: {}
+  # fsGroup: 1000
+
 nameOverride: ""
 fullnameOverride: ""
 
