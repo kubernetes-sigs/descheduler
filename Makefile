@@ -22,7 +22,7 @@ BRANCH?=$(shell git branch --show-current)
 SHA1?=$(shell git rev-parse HEAD)
 BUILD=$(shell date +%FT%T%z)
 LDFLAG_LOCATION=sigs.k8s.io/descheduler/pkg/version
-ARCHS = amd64 arm arm64
+ARCHS = amd64 arm arm64 ppc64le
 
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitbranch=${BRANCH} -X ${LDFLAG_LOCATION}.gitsha1=${SHA1}"
 
@@ -68,6 +68,10 @@ build.arm:
 build.arm64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ${LDFLAGS} -o _output/bin/descheduler sigs.k8s.io/descheduler/cmd/descheduler
 
+build.ppc64le:
+        CGO_ENABLED=0 GOOS=linux GOARCH=ppc64le go build ${LDFLAGS} -o _output/bin/descheduler sigs.k8s.io/descheduler/cmd/descheduler
+
+
 dev-image: build
 	$(CONTAINER_ENGINE) build -f Dockerfile.dev -t $(IMAGE) .
 
@@ -82,6 +86,9 @@ image.arm:
 
 image.arm64:
 	$(CONTAINER_ENGINE) build --build-arg VERSION="$(VERSION)" --build-arg ARCH="arm64" -t $(IMAGE)-arm64 .
+
+image.ppc64le:
+        docker build --build-arg VERSION="$(VERSION)" --build-arg ARCH="ppc64le" -t $(IMAGE)-ppc64le .
 
 push: image
 	gcloud auth configure-docker
