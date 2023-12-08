@@ -95,7 +95,7 @@ deschedulerPolicy:
   #   sampleRate: 1.0
   #   fallbackToNoOpProviderOnError: true
   profiles:
-    - name: ProfileName
+    - name: DefaultPolicyProfile
       pluginConfig:
       - name: "RemoveDuplicates"
       - name: "RemovePodsHavingTooManyRestarts"
