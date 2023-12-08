@@ -79,7 +79,7 @@ cmdOptions:
   v: 3
 
 # Recommended to use the latest Policy API version supported by the Descheduler app version
-deschedulerPolicyAPIVersion: "descheduler/v1alpha1"
+deschedulerPolicyAPIVersion: "descheduler/v1alpha2"
 
 deschedulerPolicy:
   # nodeSelector: "key1=value1,key2=value2"
@@ -94,40 +94,47 @@ deschedulerPolicy:
   #   serviceNamespace: ""
   #   sampleRate: 1.0
   #   fallbackToNoOpProviderOnError: true
-  strategies:
-    RemoveDuplicates:
-      enabled: true
-    RemovePodsHavingTooManyRestarts:
-      enabled: true
-      params:
-        podsHavingTooManyRestarts:
+  profiles:
+    - name: ProfileName
+      pluginConfig:
+      - name: "RemoveDuplicates"
+      - name: "RemovePodsHavingTooManyRestarts"
+        args:
           podRestartThreshold: 100
           includingInitContainers: true
-    RemovePodsViolatingNodeTaints:
-      enabled: true
-    RemovePodsViolatingNodeAffinity:
-      enabled: true
-      params:
-        nodeAffinityType:
-        - requiredDuringSchedulingIgnoredDuringExecution
-    RemovePodsViolatingInterPodAntiAffinity:
-      enabled: true
-    RemovePodsViolatingTopologySpreadConstraint:
-      enabled: true
-      params:
-        includeSoftConstraints: false
-    LowNodeUtilization:
-      enabled: true
-      params:
-        nodeResourceUtilizationThresholds:
+      - name: "RemovePodsViolatingNodeTaints"
+      - name: "RemovePodsViolatingNodeAffinity"
+        args:
+          nodeAffinityType:
+          - "requiredDuringSchedulingIgnoredDuringExecution"
+      - name: "RemovePodsViolatingInterPodAntiAffinity"
+      - name: "RemovePodsViolatingTopologySpreadConstraint"
+        args:
+          constraints:
+          - DoNotSchedule
+          - ScheduleAnyway
+      - name: "LowNodeUtilization"
+        args:
           thresholds:
-            cpu: 20
-            memory: 20
-            pods: 20
+            "cpu" : 20
+            "memory": 20
+            "pods": 20
           targetThresholds:
-            cpu: 50
-            memory: 50
-            pods: 50
+            "cpu" : 50
+            "memory": 50
+            "pods": 50
+      plugins:
+        deschedule:
+          enabled:
+          - "RemovePodsHavingTooManyRestarts"
+          - "RemovePodsViolatingNodeTaints"
+          - "RemovePodsViolatingNodeAffinity"
+          - "RemovePodsViolatingInterPodAntiAffinity"
+        balance:
+          enabled:
+          - "RemoveDuplicates"
+          - "LowNodeUtilization"
+          - "RemovePodsViolatingTopologySpreadConstraint"
 
 priorityClassName: system-cluster-critical
 
