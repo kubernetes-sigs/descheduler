@@ -1608,20 +1608,20 @@ func TestCheckIdenticalConstraints(t *testing.T) {
 	selector, _ := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}})
 
 	newConstraintSame := topologySpreadConstraint{
-		maxSkew:     2,
-		topologyKey: "zone",
-		selector:    selector.DeepCopySelector(),
+		MaxSkew:     2,
+		TopologyKey: "zone",
+		Selector:    selector.DeepCopySelector(),
 	}
 	newConstraintDifferent := topologySpreadConstraint{
-		maxSkew:     3,
-		topologyKey: "node",
-		selector:    selector.DeepCopySelector(),
+		MaxSkew:     3,
+		TopologyKey: "node",
+		Selector:    selector.DeepCopySelector(),
 	}
 	namespaceTopologySpreadConstraint := []topologySpreadConstraint{
 		{
-			maxSkew:     2,
-			topologyKey: "zone",
-			selector:    selector.DeepCopySelector(),
+			MaxSkew:     2,
+			TopologyKey: "zone",
+			Selector:    selector.DeepCopySelector(),
 		},
 	}
 	testCases := []struct {
