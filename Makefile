@@ -88,7 +88,7 @@ image.arm64:
 	$(CONTAINER_ENGINE) build --build-arg VERSION="$(VERSION)" --build-arg ARCH="arm64" -t $(IMAGE)-arm64 .
 
 image.ppc64le:
-        docker build --build-arg VERSION="$(VERSION)" --build-arg ARCH="ppc64le" -t $(IMAGE)-ppc64le .
+	$(CONTAINER_ENGINE) build --build-arg VERSION="$(VERSION)" --build-arg ARCH="ppc64le" -t $(IMAGE)-ppc64le .
 
 push: image
 	gcloud auth configure-docker
