@@ -28,6 +28,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/events"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
@@ -149,6 +150,7 @@ func TestPodLifeTime(t *testing.T) {
 		ignorePvcPods              bool
 		maxPodsToEvictPerNode      *uint
 		maxPodsToEvictPerNamespace *uint
+		applyPodsFunc              func(pods []*v1.Pod)
 	}{
 		{
 			description: "Two pods in the `dev` Namespace, 1 is new and 1 very is old. 1 should be evicted.",
@@ -303,7 +305,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			pods:                       []*v1.Pod{p1, p2, p9},
 			nodes:                      []*v1.Node{node1},
-			maxPodsToEvictPerNamespace: func(i uint) *uint { return &i }(1),
+			maxPodsToEvictPerNamespace: utilptr.To[uint](1),
 			expectedEvictedPodCount:    1,
 		},
 		{
@@ -313,8 +315,46 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			pods:                    []*v1.Pod{p1, p2, p9},
 			nodes:                   []*v1.Node{node1},
-			maxPodsToEvictPerNode:   func(i uint) *uint { return &i }(1),
+			maxPodsToEvictPerNode:   utilptr.To[uint](1),
 			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "1 pod with container status ImagePullBackOff should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"ImagePullBackOff"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "ImagePullBackOff"},
+						},
+					},
+				}
+			},
+		},
+		{
+			description: "1 pod without ImagePullBackOff States should be ignored",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"ContainerCreating"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 0,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "ImagePullBackOff"},
+						},
+					},
+				}
+			},
 		},
 	}
 
@@ -322,6 +362,10 @@ func TestPodLifeTime(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
+
+			if tc.applyPodsFunc != nil {
+				tc.applyPodsFunc(tc.pods)
+			}
 
 			var objs []runtime.Object
 			for _, node := range tc.nodes {

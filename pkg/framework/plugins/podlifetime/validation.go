@@ -50,6 +50,9 @@ func ValidatePodLifeTimeArgs(obj runtime.Object) error {
 		// Container state reasons: https://github.com/kubernetes/kubernetes/blob/release-1.24/pkg/kubelet/kubelet_pods.go#L76-L79
 		"PodInitializing",
 		"ContainerCreating",
+
+		// containerStatuses[*].state.waiting.reason: ImagePullBackOff
+		"ImagePullBackOff",
 	)
 
 	if !podLifeTimeAllowedStates.HasAll(args.States...) {
