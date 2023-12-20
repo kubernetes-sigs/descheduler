@@ -637,7 +637,7 @@ This strategy evicts pods that are older than `maxPodLifeTimeSeconds`.
 
 You can also specify `states` parameter to **only** evict pods matching the following conditions:
   - [Pod Phase](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase) status of: `Running`, `Pending`
-  - [Container State Waiting](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-state-waiting) condition of: `PodInitializing`, `ContainerCreating`
+  - [Container State Waiting](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-state-waiting) condition of: `PodInitializing`, `ContainerCreating`, `ImagePullBackOff`
 
 If a value for `states` or `podStatusPhases` is not specified,
 Pods in any state (even `Running`) are considered for eviction.
