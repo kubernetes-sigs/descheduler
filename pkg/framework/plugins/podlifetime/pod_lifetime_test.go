@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/events"
 	utilptr "k8s.io/utils/ptr"
+
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
@@ -72,7 +73,7 @@ func TestPodLifeTime(t *testing.T) {
 	p5.ObjectMeta.CreationTimestamp = newerPodCreationTime
 	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, nil)
 	p6.Namespace = "dev"
-	p6.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(time.Second * 605))
+	p6.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Second * 605))
 
 	ownerRef3 := test.GetReplicaSetOwnerRefList()
 	p5.ObjectMeta.OwnerReferences = ownerRef3
@@ -84,7 +85,7 @@ func TestPodLifeTime(t *testing.T) {
 	p7.ObjectMeta.CreationTimestamp = newerPodCreationTime
 	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, nil)
 	p8.Namespace = "dev"
-	p8.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(time.Second * 595))
+	p8.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Second * 595))
 
 	ownerRef4 := test.GetReplicaSetOwnerRefList()
 	p5.ObjectMeta.OwnerReferences = ownerRef4
