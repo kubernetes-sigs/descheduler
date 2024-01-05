@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -176,7 +177,7 @@ func main() {
 		log.Fatalf("%s requires the configuration file as it's only argument", os.Args[0])
 	}
 
-	configFile := os.Args[1]
+	configFile := filepath.Clean(os.Args[1])
 	importRestrictions, err := loadImportRestrictions(configFile)
 	if err != nil {
 		log.Fatalf("Failed to load import restrictions: %v", err)
