@@ -141,6 +141,12 @@ func TestPodLifeTime(t *testing.T) {
 	p14.DeletionTimestamp = &metav1.Time{}
 	p15.DeletionTimestamp = &metav1.Time{}
 
+	p16 := test.BuildTestPod("p16", 100, 0, node1.Name, nil)
+	p16.Namespace = "dev"
+	p16.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p16.Status.Phase = v1.PodUnknown
+	p16.ObjectMeta.OwnerReferences = ownerRef1
+
 	var maxLifeTime uint = 600
 	testCases := []struct {
 		description                string
@@ -336,6 +342,166 @@ func TestPodLifeTime(t *testing.T) {
 						},
 					},
 				}
+			},
+		},
+		{
+			description: "1 pod with container status CrashLoopBackOff should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"CrashLoopBackOff"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
+						},
+					},
+				}
+			},
+		},
+		{
+			description: "1 pod with container status CreateContainerConfigError should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"CreateContainerConfigError"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "CreateContainerConfigError"},
+						},
+					},
+				}
+			},
+		},
+		{
+			description: "1 pod with container status ErrImagePull should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"ErrImagePull"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "ErrImagePull"},
+						},
+					},
+				}
+			},
+		},
+		{
+			description: "1 pod with container status CreateContainerError should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"CreateContainerError"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "CreateContainerError"},
+						},
+					},
+				}
+			},
+		},
+		{
+			description: "1 pod with container status InvalidImageName should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"InvalidImageName"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "InvalidImageName"},
+						},
+					},
+				}
+			},
+		},
+		{
+			description: "1 pod with pod status reason NodeLost should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"NodeLost"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.Reason = "NodeLost"
+			},
+		},
+		{
+			description: "1 pod with pod status reason NodeAffinity should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"NodeAffinity"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.Reason = "NodeAffinity"
+			},
+		},
+		{
+			description: "1 pod with pod status reason Shutdown should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"Shutdown"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.Reason = "Shutdown"
+			},
+		},
+		{
+			description: "1 pod with pod status reason UnexpectedAdmissionError should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"UnexpectedAdmissionError"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.Reason = "UnexpectedAdmissionError"
+			},
+		},
+		{
+			description: "1 pod with pod status phase v1.PodUnknown should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{string(v1.PodUnknown)},
+			},
+			pods:                    []*v1.Pod{p16},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.Phase = v1.PodUnknown
 			},
 		},
 		{

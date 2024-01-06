@@ -75,10 +75,17 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 	if len(podLifeTimeArgs.States) > 0 {
 		states := sets.New(podLifeTimeArgs.States...)
 		podFilter = podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
+			// Pod Status Phase
 			if states.Has(string(pod.Status.Phase)) {
 				return true
 			}
 
+			// Pod Status Reason
+			if states.Has(pod.Status.Reason) {
+				return true
+			}
+
+			// Container Status Reason
 			for _, containerStatus := range pod.Status.ContainerStatuses {
 				if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
 					return true

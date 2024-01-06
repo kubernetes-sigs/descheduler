@@ -37,6 +37,14 @@ func TestValidateRemovePodLifeTimeArgs(t *testing.T) {
 			expectError: false,
 		},
 		{
+			description: "Pod Status Reasons CrashLoopBackOff ",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: func(i uint) *uint { return &i }(1),
+				States:                []string{"CrashLoopBackOff"},
+			},
+			expectError: false,
+		},
+		{
 			description: "nil MaxPodLifeTimeSeconds arg, expects errors",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: nil,
