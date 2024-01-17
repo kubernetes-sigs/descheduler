@@ -51,6 +51,10 @@ spec:
           affinity:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .Values.topologySpreadConstraints }}
+          topologySpreadConstraints:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- if .Values.dnsConfig }}
           dnsConfig:
             {{- .Values.dnsConfig | toYaml | nindent 12 }}
