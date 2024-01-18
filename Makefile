@@ -12,6 +12,7 @@ include $(addprefix ./vendor/github.com/openshift/build-machinery-go/make/, \
 # Exclude e2e tests from unit testing
 GO_TEST_PACKAGES :=./pkg/... ./cmd/...
 GO_BUILD_FLAGS :=-tags strictfipsruntime
+GO_LD_EXTRAFLAGS :=-X sigs.k8s.io/descheduler/pkg/version=0.28.0
 IMAGE_REGISTRY :=registry.svc.ci.openshift.org
 
 # This will call a macro called "build-image" which will generate image specific targets based on the parameters:
