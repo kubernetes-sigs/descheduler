@@ -540,8 +540,8 @@ func (s *sharedIndexInformer) AddIndexers(indexers Indexers) error {
 	s.startedLock.Lock()
 	defer s.startedLock.Unlock()
 
-	if s.stopped {
-		return fmt.Errorf("indexer was not added because it has stopped already")
+	if s.started {
+		return fmt.Errorf("informer has already started")
 	}
 
 	return s.indexer.AddIndexers(indexers)

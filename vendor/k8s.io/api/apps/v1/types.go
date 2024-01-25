@@ -211,7 +211,6 @@ type StatefulSetSpec struct {
 	// any volumes in the template, with the same name.
 	// TODO: Define the behavior if a claim already exists with the same name.
 	// +optional
-	// +listType=atomic
 	VolumeClaimTemplates []v1.PersistentVolumeClaim `json:"volumeClaimTemplates,omitempty" protobuf:"bytes,4,rep,name=volumeClaimTemplates"`
 
 	// serviceName is the name of the service that governs this StatefulSet.
@@ -306,8 +305,6 @@ type StatefulSetStatus struct {
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
-	// +listType=map
-	// +listMapKey=type
 	Conditions []StatefulSetCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,10,rep,name=conditions"`
 
 	// Total number of available pods (ready for at least minReadySeconds) targeted by this statefulset.
@@ -510,8 +507,6 @@ type DeploymentStatus struct {
 	// Represents the latest available observations of a deployment's current state.
 	// +patchMergeKey=type
 	// +patchStrategy=merge
-	// +listType=map
-	// +listMapKey=type
 	Conditions []DeploymentCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,6,rep,name=conditions"`
 
 	// Count of hash collisions for the Deployment. The Deployment controller uses this
@@ -719,8 +714,6 @@ type DaemonSetStatus struct {
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
-	// +listType=map
-	// +listMapKey=type
 	Conditions []DaemonSetCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,10,rep,name=conditions"`
 }
 
@@ -891,8 +884,6 @@ type ReplicaSetStatus struct {
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
-	// +listType=map
-	// +listMapKey=type
 	Conditions []ReplicaSetCondition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,6,rep,name=conditions"`
 }
 
