@@ -30,7 +30,7 @@ DESCHEDULER_ROOT=$(dirname "${BASH_SOURCE}")/..
 
 GO_VERSION=($(go version))
 
-if [[ -z $(echo "${GO_VERSION[2]}" | grep -E 'go1.18|go1.19|go1.20') ]]; then
+if [[ -z $(echo "${GO_VERSION[2]}" | grep -E 'go1.18|go1.19|go1.20|go1.21') ]]; then
   echo "Unknown go version '${GO_VERSION[2]}', skipping gofmt."
   exit 1
 fi

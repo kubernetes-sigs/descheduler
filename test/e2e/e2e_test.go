@@ -55,46 +55,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
+	"sigs.k8s.io/descheduler/test"
 )
-
-func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
-	return v1.PodSpec{
-		SecurityContext: &v1.PodSecurityContext{
-			RunAsNonRoot: utilpointer.Bool(true),
-			RunAsUser:    utilpointer.Int64(1000),
-			RunAsGroup:   utilpointer.Int64(1000),
-			SeccompProfile: &v1.SeccompProfile{
-				Type: v1.SeccompProfileTypeRuntimeDefault,
-			},
-		},
-		Containers: []v1.Container{{
-			Name:            "pause",
-			ImagePullPolicy: "Never",
-			Image:           "registry.k8s.io/pause",
-			Ports:           []v1.ContainerPort{{ContainerPort: 80}},
-			Resources: v1.ResourceRequirements{
-				Limits: v1.ResourceList{
-					v1.ResourceCPU:    resource.MustParse("100m"),
-					v1.ResourceMemory: resource.MustParse("200Mi"),
-				},
-				Requests: v1.ResourceList{
-					v1.ResourceCPU:    resource.MustParse("100m"),
-					v1.ResourceMemory: resource.MustParse("100Mi"),
-				},
-			},
-			SecurityContext: &v1.SecurityContext{
-				AllowPrivilegeEscalation: utilpointer.Bool(false),
-				Capabilities: &v1.Capabilities{
-					Drop: []v1.Capability{
-						"ALL",
-					},
-				},
-			},
-		}},
-		PriorityClassName:             priorityClassName,
-		TerminationGracePeriodSeconds: gracePeriod,
-	}
-}
 
 // RcByNameContainer returns a ReplicationController with specified name and container
 func RcByNameContainer(name, namespace string, replicas int32, labels map[string]string, gracePeriod *int64, priorityClassName string) *v1.ReplicationController {
@@ -121,7 +83,7 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
 				},
-				Spec: MakePodSpec(priorityClassName, gracePeriod),
+				Spec: test.MakePodSpec(priorityClassName, gracePeriod),
 			},
 		},
 	}

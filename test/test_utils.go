@@ -17,12 +17,57 @@ limitations under the License.
 package test
 
 import (
+	"context"
 	"fmt"
+	"strings"
+	"testing"
+	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
+	clientset "k8s.io/client-go/kubernetes"
+	utilpointer "k8s.io/utils/pointer"
 )
+
+func BuildTestDeployment(name, namespace string, replicas int32, labels map[string]string, apply func(deployment *appsv1.Deployment)) *appsv1.Deployment {
+	// Add "name": name to the labels, overwriting if it exists.
+	labels["name"] = name
+
+	deployment := &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Deployment",
+			APIVersion: "apps/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: utilpointer.Int32(replicas),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"name": name,
+				},
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: MakePodSpec("", utilpointer.Int64(0)),
+			},
+		},
+	}
+
+	if apply != nil {
+		apply(deployment)
+	}
+
+	return deployment
+}
 
 // BuildTestPod creates a test pod with given parameters.
 func BuildTestPod(name string, cpu, memory int64, nodeName string, apply func(*v1.Pod)) *v1.Pod {
@@ -124,6 +169,45 @@ func BuildTestNode(name string, millicpu, mem, pods int64, apply func(*v1.Node))
 	return node
 }
 
+func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
+	return v1.PodSpec{
+		SecurityContext: &v1.PodSecurityContext{
+			RunAsNonRoot: utilpointer.Bool(true),
+			RunAsUser:    utilpointer.Int64(1000),
+			RunAsGroup:   utilpointer.Int64(1000),
+			SeccompProfile: &v1.SeccompProfile{
+				Type: v1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
+		Containers: []v1.Container{{
+			Name:            "pause",
+			ImagePullPolicy: "Never",
+			Image:           "registry.k8s.io/pause",
+			Ports:           []v1.ContainerPort{{ContainerPort: 80}},
+			Resources: v1.ResourceRequirements{
+				Limits: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("100m"),
+					v1.ResourceMemory: resource.MustParse("200Mi"),
+				},
+				Requests: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("100m"),
+					v1.ResourceMemory: resource.MustParse("100Mi"),
+				},
+			},
+			SecurityContext: &v1.SecurityContext{
+				AllowPrivilegeEscalation: utilpointer.Bool(false),
+				Capabilities: &v1.Capabilities{
+					Drop: []v1.Capability{
+						"ALL",
+					},
+				},
+			},
+		}},
+		PriorityClassName:             priorityClassName,
+		TerminationGracePeriodSeconds: gracePeriod,
+	}
+}
+
 // MakeBestEffortPod makes the given pod a BestEffort pod
 func MakeBestEffortPod(pod *v1.Pod) {
 	pod.Spec.Containers[0].Resources.Requests = nil
@@ -179,8 +263,77 @@ func SetPodExtendedResourceRequest(pod *v1.Pod, resourceName v1.ResourceName, re
 	pod.Spec.Containers[0].Resources.Requests[resourceName] = *resource.NewQuantity(requestQuantity, resource.DecimalSI)
 }
 
-// SetNodeExtendedResouces sets the given node's extended resources
+// SetNodeExtendedResource sets the given node's extended resources
 func SetNodeExtendedResource(node *v1.Node, resourceName v1.ResourceName, requestQuantity int64) {
 	node.Status.Capacity[resourceName] = *resource.NewQuantity(requestQuantity, resource.DecimalSI)
 	node.Status.Allocatable[resourceName] = *resource.NewQuantity(requestQuantity, resource.DecimalSI)
+}
+
+func DeleteDeployment(ctx context.Context, t *testing.T, clientSet clientset.Interface, deployment *appsv1.Deployment) {
+	// set number of replicas to 0
+	deploymentCopy := deployment.DeepCopy()
+	deploymentCopy.Spec.Replicas = utilpointer.Int32(0)
+	if _, err := clientSet.AppsV1().Deployments(deploymentCopy.Namespace).Update(ctx, deploymentCopy, metav1.UpdateOptions{}); err != nil {
+		t.Fatalf("Error updating replica controller %v", err)
+	}
+
+	// wait 30 seconds until all pods are deleted
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 30*time.Second, true, func(c context.Context) (bool, error) {
+		scale, err := clientSet.AppsV1().Deployments(deployment.Namespace).GetScale(c, deployment.Name, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		return scale.Spec.Replicas == 0, nil
+	}); err != nil {
+		t.Fatalf("Error deleting Deployment pods %v", err)
+	}
+
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 30*time.Second, true, func(c context.Context) (bool, error) {
+		podList, _ := clientSet.CoreV1().Pods(deployment.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(deployment.Spec.Template.Labels).String()})
+		t.Logf("Waiting for %v Deployment pods to disappear, still %v remaining", deployment.Name, len(podList.Items))
+		if len(podList.Items) > 0 {
+			return false, nil
+		}
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for Deployment pods to disappear: %v", err)
+	}
+
+	if err := clientSet.AppsV1().Deployments(deployment.Namespace).Delete(ctx, deployment.Name, metav1.DeleteOptions{}); err != nil {
+		t.Fatalf("Error deleting Deployment %v", err)
+	}
+
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 30*time.Second, true, func(c context.Context) (bool, error) {
+		_, err := clientSet.AppsV1().Deployments(deployment.Namespace).Get(ctx, deployment.Name, metav1.GetOptions{})
+		if err != nil && strings.Contains(err.Error(), "not found") {
+			return true, nil
+		}
+		return false, nil
+	}); err != nil {
+		t.Fatalf("Error deleting Deployment %v", err)
+	}
+}
+
+func WaitForDeploymentPodsRunning(ctx context.Context, t *testing.T, clientSet clientset.Interface, deployment *appsv1.Deployment) {
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 30*time.Second, true, func(c context.Context) (bool, error) {
+		podList, err := clientSet.CoreV1().Pods(deployment.Namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: labels.SelectorFromSet(deployment.Spec.Template.ObjectMeta.Labels).String(),
+		})
+		if err != nil {
+			return false, err
+		}
+		if len(podList.Items) != int(*deployment.Spec.Replicas) {
+			t.Logf("Waiting for %v pods to be created, got %v instead", *deployment.Spec.Replicas, len(podList.Items))
+			return false, nil
+		}
+		for _, pod := range podList.Items {
+			if pod.Status.Phase != v1.PodRunning {
+				t.Logf("Pod %v not running yet, is %v instead", pod.Name, pod.Status.Phase)
+				return false, nil
+			}
+		}
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for pods running: %v", err)
+	}
 }

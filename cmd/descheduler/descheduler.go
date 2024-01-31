@@ -21,13 +21,7 @@ import (
 
 	"k8s.io/component-base/cli"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app"
-	"sigs.k8s.io/descheduler/pkg/descheduler"
 )
-
-func init() {
-	app.SetupLogs()
-	descheduler.SetupPlugins()
-}
 
 func main() {
 	out := os.Stdout

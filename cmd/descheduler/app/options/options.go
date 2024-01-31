@@ -87,7 +87,6 @@ func newDefaultComponentConfig() (*componentconfig.DeschedulerConfiguration, err
 
 // AddFlags adds flags for a specific SchedulerServer to the specified FlagSet
 func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
-	fs.StringVar(&rs.Logging.Format, "logging-format", "text", `Sets the log format. Permitted formats: "text", "json". Non-default formats don't honor these flags: --add-dir-header, --alsologtostderr, --log-backtrace-at, --log_dir, --log_file, --log_file_max_size, --logtostderr, --skip-headers, --skip-log-headers, --stderrthreshold, --log-flush-frequency.\nNon-default choices are currently alpha and subject to change without warning.`)
 	fs.DurationVar(&rs.DeschedulingInterval, "descheduling-interval", rs.DeschedulingInterval, "Time interval between two consecutive descheduler executions. Setting this value instructs the descheduler to run in a continuous loop at the interval specified.")
 	fs.StringVar(&rs.ClientConnection.Kubeconfig, "kubeconfig", rs.ClientConnection.Kubeconfig, "File with kube configuration. Deprecated, use client-connection-kubeconfig instead.")
 	fs.StringVar(&rs.ClientConnection.Kubeconfig, "client-connection-kubeconfig", rs.ClientConnection.Kubeconfig, "File path to kube configuration for interacting with kubernetes apiserver.")

@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
+
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -67,17 +68,24 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 	}
 
 	podFilter = podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
-		podAgeSeconds := uint(metav1.Now().Sub(pod.GetCreationTimestamp().Local()).Seconds())
-		return podAgeSeconds > *podLifeTimeArgs.MaxPodLifeTimeSeconds
+		podAgeSeconds := int(metav1.Now().Sub(pod.GetCreationTimestamp().Local()).Seconds())
+		return podAgeSeconds > int(*podLifeTimeArgs.MaxPodLifeTimeSeconds)
 	})
 
 	if len(podLifeTimeArgs.States) > 0 {
 		states := sets.New(podLifeTimeArgs.States...)
 		podFilter = podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
+			// Pod Status Phase
 			if states.Has(string(pod.Status.Phase)) {
 				return true
 			}
 
+			// Pod Status Reason
+			if states.Has(pod.Status.Reason) {
+				return true
+			}
+
+			// Container Status Reason
 			for _, containerStatus := range pod.Status.ContainerStatuses {
 				if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
 					return true

@@ -84,6 +84,7 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `serviceMonitor.metricRelabelings`  | MetricRelabelConfigs to apply to samples after scraping, but before ingestion                                         | `[]`                                      |
 | `serviceMonitor.relabelings`        | RelabelConfigs to apply to samples before scraping                                                                    | `[]`                                      |
 | `affinity`                          | Node affinity to run the descheduler cronjob/deployment on specific nodes                                             | `nil`                                     |
+| `topologySpreadConstraints`         | Topology Spread Constraints to spread the descheduler cronjob/deployment across the cluster                           | `[]`                                     |
 | `tolerations`                       | tolerations to run the descheduler cronjob/deployment on specific nodes                                               | `nil`                                     |
 | `suspend`                           | Set spec.suspend in descheduler cronjob                                                                               | `false`                                   |
 | `commonLabels`                      | Labels to apply to all resources                                                                                      | `{}`                                      |
