@@ -6,6 +6,7 @@ import (
 	"sort"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,7 +16,6 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/events"
-	"k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	utilpointer "k8s.io/utils/pointer"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -1065,6 +1065,55 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{LabelSelector: getLabelSelector("foo", []string{"baz"}, metav1.LabelSelectorOpNotIn)},
 		},
 		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 1 pods given matchLabelKeys on same replicaset",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar", appsv1.DefaultDeploymentUniqueLabelKey: "foo"},
+					constraints: getDefaultTopologyConstraintsWithPodTemplateHashMatch(1),
+				},
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar", appsv1.DefaultDeploymentUniqueLabelKey: "foo"},
+					constraints: getDefaultTopologyConstraintsWithPodTemplateHashMatch(1),
+				},
+			}),
+			expectedEvictedCount: 1,
+			expectedEvictedPods:  []string{"pod-1"},
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{LabelSelector: getLabelSelector("foo", []string{"baz"}, metav1.LabelSelectorOpNotIn)},
+		},
+		{
+			name: "2 domains, sizes [2,0], maxSkew=1, move 0 pods given matchLabelKeys on two different replicasets",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar", appsv1.DefaultDeploymentUniqueLabelKey: "foo"},
+					constraints: getDefaultTopologyConstraintsWithPodTemplateHashMatch(1),
+				},
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar", appsv1.DefaultDeploymentUniqueLabelKey: "bar"},
+					constraints: getDefaultTopologyConstraintsWithPodTemplateHashMatch(1),
+				},
+			}),
+			expectedEvictedCount: 0,
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{LabelSelector: getLabelSelector("foo", []string{"baz"}, metav1.LabelSelectorOpNotIn)},
+		},
+		{
 			name: "2 domains, sizes [4,2], maxSkew=1, 2 pods in termination; nothing should be moved",
 			nodes: []*v1.Node{
 				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
@@ -1543,31 +1592,42 @@ func getDefaultNodeTopologyConstraints(maxSkew int32) []v1.TopologySpreadConstra
 	}
 }
 
-func TestCheckIdenticalConstraints(t *testing.T) {
-	newConstraintSame := v1.TopologySpreadConstraint{
-		MaxSkew:           2,
-		TopologyKey:       "zone",
-		WhenUnsatisfiable: v1.DoNotSchedule,
-		LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-	}
-	newConstraintDifferent := v1.TopologySpreadConstraint{
-		MaxSkew:           3,
-		TopologyKey:       "node",
-		WhenUnsatisfiable: v1.DoNotSchedule,
-		LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-	}
-	namespaceTopologySpreadConstraint := []v1.TopologySpreadConstraint{
+func getDefaultTopologyConstraintsWithPodTemplateHashMatch(maxSkew int32) []v1.TopologySpreadConstraint {
+	return []v1.TopologySpreadConstraint{
 		{
-			MaxSkew:           2,
+			MaxSkew:           maxSkew,
 			TopologyKey:       "zone",
 			WhenUnsatisfiable: v1.DoNotSchedule,
 			LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+			MatchLabelKeys:    []string{appsv1.DefaultDeploymentUniqueLabelKey},
+		},
+	}
+}
+
+func TestCheckIdenticalConstraints(t *testing.T) {
+	selector, _ := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}})
+
+	newConstraintSame := topologySpreadConstraint{
+		MaxSkew:     2,
+		TopologyKey: "zone",
+		Selector:    selector.DeepCopySelector(),
+	}
+	newConstraintDifferent := topologySpreadConstraint{
+		MaxSkew:     3,
+		TopologyKey: "node",
+		Selector:    selector.DeepCopySelector(),
+	}
+	namespaceTopologySpreadConstraint := []topologySpreadConstraint{
+		{
+			MaxSkew:     2,
+			TopologyKey: "zone",
+			Selector:    selector.DeepCopySelector(),
 		},
 	}
 	testCases := []struct {
 		name                               string
-		namespaceTopologySpreadConstraints []v1.TopologySpreadConstraint
-		newConstraint                      v1.TopologySpreadConstraint
+		namespaceTopologySpreadConstraints []topologySpreadConstraint
+		newConstraint                      topologySpreadConstraint
 		expectedResult                     bool
 	}{
 		{
@@ -1585,19 +1645,7 @@ func TestCheckIdenticalConstraints(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var constraintSets []topologyConstraintSet
-			for _, constraints := range tc.namespaceTopologySpreadConstraints {
-				constraintSets = append(constraintSets, topologyConstraintSet{
-					constraint:      constraints,
-					podNodeAffinity: nodeaffinity.RequiredNodeAffinity{},
-					podTolerations:  []v1.Toleration{},
-				})
-			}
-			isIdentical := hasIdenticalConstraints(topologyConstraintSet{
-				constraint:      tc.newConstraint,
-				podNodeAffinity: nodeaffinity.RequiredNodeAffinity{},
-				podTolerations:  []v1.Toleration{},
-			}, constraintSets)
+			isIdentical := hasIdenticalConstraints(tc.newConstraint, tc.namespaceTopologySpreadConstraints)
 			if isIdentical != tc.expectedResult {
 				t.Errorf("Test error for description: %s. Expected result %v, got %v", tc.name, tc.expectedResult, isIdentical)
 			}

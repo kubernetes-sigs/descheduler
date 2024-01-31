@@ -5,10 +5,10 @@ on:
 
 jobs:
   deploy:
-    strategy: 
+    strategy:
       matrix:
-        k8s-version: ["v1.28.0"]
-        descheduler-version: ["v0.28.0"]
+        k8s-version: ["v1.29.0"]
+        descheduler-version: ["v0.29.0"]
         descheduler-api: ["v1alpha1", "v1alpha2"]
         manifest: ["deployment"]
     runs-on: ubuntu-latest
@@ -21,6 +21,10 @@ jobs:
           node_image: kindest/node:${{ matrix.k8s-version }}
           kubectl_version: ${{ matrix.k8s-version }}
           config: test/kind-config.yaml
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
       - name: Build image
         run: |
           VERSION="dev" make dev-image

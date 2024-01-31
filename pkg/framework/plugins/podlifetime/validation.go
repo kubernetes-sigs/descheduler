@@ -44,12 +44,29 @@ func ValidatePodLifeTimeArgs(obj runtime.Object) error {
 		}
 	}
 	podLifeTimeAllowedStates := sets.New(
+		// Pod Status Phase
 		string(v1.PodRunning),
 		string(v1.PodPending),
+		string(v1.PodUnknown),
 
+		// Pod Status Reasons
+		"NodeAffinity",
+		"NodeLost",
+		"Shutdown",
+		"UnexpectedAdmissionError",
+
+		// Container Status Reasons
 		// Container state reasons: https://github.com/kubernetes/kubernetes/blob/release-1.24/pkg/kubelet/kubelet_pods.go#L76-L79
 		"PodInitializing",
 		"ContainerCreating",
+
+		// containerStatuses[*].state.waiting.reason: ImagePullBackOff, etc.
+		"ImagePullBackOff",
+		"CrashLoopBackOff",
+		"CreateContainerConfigError",
+		"ErrImagePull",
+		"CreateContainerError",
+		"InvalidImageName",
 	)
 
 	if !podLifeTimeAllowedStates.HasAll(args.States...) {

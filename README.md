@@ -38,6 +38,7 @@ that version's release branch, as listed below:
 
 |Descheduler Version|Docs link|
 |---|---|
+|v0.29.x|[`release-1.29`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.29/README.md)|
 |v0.28.x|[`release-1.28`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.28/README.md)|
 |v0.27.x|[`release-1.27`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.27/README.md)|
 |v0.26.x|[`release-1.26`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.26/README.md)|
@@ -547,6 +548,19 @@ topologyBalanceNodeFit: false
 
 Strategy parameter `labelSelector` is not utilized when balancing topology domains and is only applied during eviction to determine if the pod can be evicted.
 
+[Supported Constraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/#spread-constraint-definition) fields:
+
+|Name|Supported?|
+|----|----------|
+|`maxSkew`|Yes|
+|`minDomains`|No|
+|`topologyKey`|Yes|
+|`whenUnsatisfiable`|Yes|
+|`labelSelector`|Yes|
+|`matchLabelKeys`|Yes|
+|`nodeAffinityPolicy`|Yes|
+|`nodeTaintsPolicy`|Yes|
+
 **Parameters:**
 
 |Name|Type|
@@ -623,8 +637,9 @@ profiles:
 This strategy evicts pods that are older than `maxPodLifeTimeSeconds`.
 
 You can also specify `states` parameter to **only** evict pods matching the following conditions:
-  - [Pod Phase](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase) status of: `Running`, `Pending`
-  - [Container State Waiting](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-state-waiting) condition of: `PodInitializing`, `ContainerCreating`
+  - [Pod Phase](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase) status of: `Running`, `Pending`, `Unknown`
+  - [Pod Reason](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-conditions) reasons of: `NodeAffinity`, `NodeLost`, `Shutdown`, `UnexpectedAdmissionError`
+  - [Container State Waiting](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-state-waiting) condition of: `PodInitializing`, `ContainerCreating`, `ImagePullBackOff`, `CrashLoopBackOff`, `CreateContainerConfigError`, `ErrImagePull`, `ImagePullBackOff`, `CreateContainerError`, `InvalidImageName`
 
 If a value for `states` or `podStatusPhases` is not specified,
 Pods in any state (even `Running`) are considered for eviction.

@@ -250,49 +250,55 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 
 func TestValidateVersionCompatibility(t *testing.T) {
 	type testCase struct {
-		name             string
-		deschedulerMinor string
-		serverMinor      string
-		expectError      bool
+		name               string
+		deschedulerVersion string
+		serverVersion      string
+		expectError        bool
 	}
 	testCases := []testCase{
 		{
-			name:             "no error when descheduler minor equals to server minor",
-			deschedulerMinor: "26.0",
-			serverMinor:      "26",
-			expectError:      false,
+			name:               "no error when descheduler minor equals to server minor",
+			deschedulerVersion: "v0.26",
+			serverVersion:      "v1.26.1",
+			expectError:        false,
 		},
 		{
-			name:             "no error when descheduler minor is 3 behind server minor",
-			deschedulerMinor: "23.0",
-			serverMinor:      "26",
-			expectError:      false,
+			name:               "no error when descheduler minor is 3 behind server minor",
+			deschedulerVersion: "0.23",
+			serverVersion:      "v1.26.1",
+			expectError:        false,
 		},
 		{
-			name:             "no error when descheduler minor is 3 ahead of server minor",
-			deschedulerMinor: "26.0",
-			serverMinor:      "23",
-			expectError:      false,
+			name:               "no error when descheduler minor is 3 ahead of server minor",
+			deschedulerVersion: "v0.26",
+			serverVersion:      "v1.26.1",
+			expectError:        false,
 		},
 		{
-			name:             "error when descheduler minor is 4 behind server minor",
-			deschedulerMinor: "22.0",
-			serverMinor:      "26",
-			expectError:      true,
+			name:               "error when descheduler minor is 4 behind server minor",
+			deschedulerVersion: "v0.22",
+			serverVersion:      "v1.26.1",
+			expectError:        true,
 		},
 		{
-			name:             "error when descheduler minor is 4 ahead of server minor",
-			deschedulerMinor: "27.0",
-			serverMinor:      "23",
-			expectError:      true,
+			name:               "error when descheduler minor is 4 ahead of server minor",
+			deschedulerVersion: "v0.27",
+			serverVersion:      "v1.23.1",
+			expectError:        true,
+		},
+		{
+			name:               "no error when using managed provider version",
+			deschedulerVersion: "v0.25",
+			serverVersion:      "v1.25.12-eks-2d98532",
+			expectError:        false,
 		},
 	}
 	client := fakeclientset.NewSimpleClientset()
 	fakeDiscovery, _ := client.Discovery().(*fakediscovery.FakeDiscovery)
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			fakeDiscovery.FakedServerVersion = &apiversion.Info{Major: "1", Minor: tc.serverMinor}
-			deschedulerVersion := deschedulerversion.Info{Major: "0", Minor: tc.deschedulerMinor}
+			fakeDiscovery.FakedServerVersion = &apiversion.Info{GitVersion: tc.serverVersion}
+			deschedulerVersion := deschedulerversion.Info{GitVersion: tc.deschedulerVersion}
 			err := validateVersionCompatibility(fakeDiscovery, deschedulerVersion)
 
 			hasError := err != nil

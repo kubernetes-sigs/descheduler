@@ -21,8 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strconv"
-	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -38,6 +36,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilversion "k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
@@ -277,29 +276,29 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 }
 
 func validateVersionCompatibility(discovery discovery.DiscoveryInterface, versionInfo version.Info) error {
-	serverVersion, serverErr := discovery.ServerVersion()
-	if serverErr != nil {
-		return errors.New("failed to get Kubernetes server version")
+	serverVersionInfo, err := discovery.ServerVersion()
+	if err != nil {
+		return errors.New("failed to discover Kubernetes server version")
 	}
 
-	deschedulerMinorVersion := strings.Split(versionInfo.Minor, ".")[0]
-	deschedulerMinorVersionFloat, err := strconv.ParseFloat(deschedulerMinorVersion, 64)
+	serverVersion, err := utilversion.ParseSemantic(serverVersionInfo.String())
+	if err != nil {
+		return errors.New("failed to parse Kubernetes server version")
+	}
+
+	deschedulerVersion, err := utilversion.ParseGeneric(versionInfo.GitVersion)
 	if err != nil {
 		return errors.New("failed to convert Descheduler minor version to float")
 	}
 
-	kubernetesMinorVersionFloat, err := strconv.ParseFloat(serverVersion.Minor, 64)
-	if err != nil {
-		return errors.New("failed to convert Kubernetes server minor version to float")
-	}
-
-	if math.Abs(deschedulerMinorVersionFloat-kubernetesMinorVersionFloat) > 3 {
+	deschedulerMinor := float64(deschedulerVersion.Minor())
+	serverMinor := float64(serverVersion.Minor())
+	if math.Abs(deschedulerMinor-serverMinor) > 3 {
 		return fmt.Errorf(
-			"descheduler minor version %v is not supported on your version of Kubernetes %v.%v. "+
+			"descheduler version %v may not be supported on your version of Kubernetes %v."+
 				"See compatibility docs for more info: https://github.com/kubernetes-sigs/descheduler#compatibility-matrix",
-			deschedulerMinorVersion,
-			serverVersion.Major,
-			serverVersion.Minor,
+			deschedulerVersion.String(),
+			serverVersionInfo.String(),
 		)
 	}
 

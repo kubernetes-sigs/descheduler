@@ -103,6 +103,8 @@ func (hi *handleImpl) Evictor() frameworktypes.Evictor {
 }
 
 func Convert_v1alpha1_DeschedulerPolicy_To_api_DeschedulerPolicy(in *DeschedulerPolicy, out *api.DeschedulerPolicy, s conversion.Scope) error {
+	klog.V(1).Info("Warning: v1alpha1 API is deprecated and will be removed in a future release. Use v1alpha2 API instead.")
+
 	err := V1alpha1ToInternal(in, pluginregistry.PluginRegistry, out, s)
 	if err != nil {
 		return err
