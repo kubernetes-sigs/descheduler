@@ -82,7 +82,13 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 				return true
 			}
 
-			for _, containerStatus := range pod.Status.ContainerStatuses {
+			containerStatuses := pod.Status.ContainerStatuses
+
+			if tooManyRestartsArgs.IncludingInitContainers {
+				containerStatuses = append(containerStatuses, pod.Status.InitContainerStatuses...)
+			}
+
+			for _, containerStatus := range containerStatuses {
 				if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
 					return true
 				}
