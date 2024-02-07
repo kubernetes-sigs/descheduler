@@ -231,7 +231,18 @@ func IsGuaranteedPod(pod *v1.Pod) bool {
 // If pods have same priorities, they will be sorted by QoS in the following order:
 // BestEffort, Burstable, Guaranteed
 func SortPodsBasedOnPriorityLowToHigh(pods []*v1.Pod) {
-	sort.Slice(pods, func(i, j int) bool {
+	sort.Slice(pods, lessFuncByPriority(pods))
+}
+
+// StableSortPodsBasedOnPriorityLowToHigh sorts pods stably based on their priorities from low to high.
+// If pods have same priorities, they will be sorted by QoS in the following order:
+// BestEffort, Burstable, Guaranteed
+func StableSortPodsBasedOnPriorityLowToHigh(pods []*v1.Pod) {
+	sort.SliceStable(pods, lessFuncByPriority(pods))
+}
+
+func lessFuncByPriority(pods []*v1.Pod) func(i, j int) bool {
+	return func(i, j int) bool {
 		if pods[i].Spec.Priority == nil && pods[j].Spec.Priority != nil {
 			return true
 		}
@@ -248,12 +259,19 @@ func SortPodsBasedOnPriorityLowToHigh(pods []*v1.Pod) {
 			return false
 		}
 		return *pods[i].Spec.Priority < *pods[j].Spec.Priority
-	})
+	}
 }
 
 // SortPodsBasedOnAge sorts Pods from oldest to most recent in place
 func SortPodsBasedOnAge(pods []*v1.Pod) {
 	sort.Slice(pods, func(i, j int) bool {
 		return pods[i].CreationTimestamp.Before(&pods[j].CreationTimestamp)
+	})
+}
+
+// ReverseSortPodsBasedOnAge sorts Pods from most recent to oldest in place
+func ReverseSortPodsBasedOnAge(pods []*v1.Pod) {
+	sort.Slice(pods, func(i, j int) bool {
+		return !pods[i].CreationTimestamp.Before(&pods[j].CreationTimestamp)
 	})
 }
