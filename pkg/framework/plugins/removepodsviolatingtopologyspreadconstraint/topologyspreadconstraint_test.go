@@ -27,6 +27,10 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	noRecordEventsForEvictionFailures = false
+)
+
 func TestTopologySpreadConstraint(t *testing.T) {
 	testCases := []struct {
 		name                 string
@@ -1465,6 +1469,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				tc.nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{

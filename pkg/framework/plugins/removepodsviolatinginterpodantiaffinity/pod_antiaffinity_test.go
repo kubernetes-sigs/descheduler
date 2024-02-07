@@ -37,6 +37,10 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	noRecordEventsForEvictionFailures = false
+)
+
 func TestPodAntiAffinity(t *testing.T) {
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, func(node *v1.Node) {
 		node.ObjectMeta.Labels = map[string]string{
@@ -242,6 +246,7 @@ func TestPodAntiAffinity(t *testing.T) {
 				test.nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{

@@ -38,6 +38,10 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	noRecordEventsForEvictionFailures = false
+)
+
 func TestPodLifeTime(t *testing.T) {
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	olderPodCreationTime := metav1.NewTime(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
@@ -565,6 +569,7 @@ func TestPodLifeTime(t *testing.T) {
 				tc.nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{

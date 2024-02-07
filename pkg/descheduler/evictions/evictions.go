@@ -42,16 +42,17 @@ type (
 )
 
 type PodEvictor struct {
-	client                     clientset.Interface
-	nodes                      []*v1.Node
-	policyGroupVersion         string
-	dryRun                     bool
-	maxPodsToEvictPerNode      *uint
-	maxPodsToEvictPerNamespace *uint
-	nodepodCount               nodePodEvictedCount
-	namespacePodCount          namespacePodEvictCount
-	metricsEnabled             bool
-	eventRecorder              events.EventRecorder
+	client                        clientset.Interface
+	nodes                         []*v1.Node
+	policyGroupVersion            string
+	dryRun                        bool
+	maxPodsToEvictPerNode         *uint
+	maxPodsToEvictPerNamespace    *uint
+	nodepodCount                  nodePodEvictedCount
+	namespacePodCount             namespacePodEvictCount
+	metricsEnabled                bool
+	eventRecorder                 events.EventRecorder
+	recordEventsForEvictionErrors bool
 }
 
 func NewPodEvictor(
@@ -63,6 +64,7 @@ func NewPodEvictor(
 	nodes []*v1.Node,
 	metricsEnabled bool,
 	eventRecorder events.EventRecorder,
+	recordEventsForEvictionErrors bool,
 ) *PodEvictor {
 	nodePodCount := make(nodePodEvictedCount)
 	namespacePodCount := make(namespacePodEvictCount)
@@ -72,16 +74,17 @@ func NewPodEvictor(
 	}
 
 	return &PodEvictor{
-		client:                     client,
-		nodes:                      nodes,
-		policyGroupVersion:         policyGroupVersion,
-		dryRun:                     dryRun,
-		maxPodsToEvictPerNode:      maxPodsToEvictPerNode,
-		maxPodsToEvictPerNamespace: maxPodsToEvictPerNamespace,
-		nodepodCount:               nodePodCount,
-		namespacePodCount:          namespacePodCount,
-		metricsEnabled:             metricsEnabled,
-		eventRecorder:              eventRecorder,
+		client:                        client,
+		nodes:                         nodes,
+		policyGroupVersion:            policyGroupVersion,
+		dryRun:                        dryRun,
+		maxPodsToEvictPerNode:         maxPodsToEvictPerNode,
+		maxPodsToEvictPerNamespace:    maxPodsToEvictPerNamespace,
+		nodepodCount:                  nodePodCount,
+		namespacePodCount:             namespacePodCount,
+		metricsEnabled:                metricsEnabled,
+		eventRecorder:                 eventRecorder,
+		recordEventsForEvictionErrors: recordEventsForEvictionErrors,
 	}
 }
 
@@ -153,6 +156,10 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		if pe.metricsEnabled {
 			metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
 		}
+		if pe.recordEventsForEvictionErrors {
+			reason := extractReason(opts, strategy)
+			pe.eventRecorder.Eventf(pod, nil, v1.EventTypeNormal, reason, "Descheduled", "pod cannot be evicted from %v node by sigs.k8s.io/descheduler: %v", pod.Spec.NodeName, err)
+		}
 		return false
 	}
 
@@ -169,16 +176,21 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", strategy, "node", pod.Spec.NodeName)
 	} else {
 		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", strategy, "node", pod.Spec.NodeName)
-		reason := opts.Reason
-		if len(reason) == 0 {
-			reason = strategy
-			if len(reason) == 0 {
-				reason = "NotSet"
-			}
-		}
+		reason := extractReason(opts, strategy)
 		pe.eventRecorder.Eventf(pod, nil, v1.EventTypeNormal, reason, "Descheduled", "pod evicted from %v node by sigs.k8s.io/descheduler", pod.Spec.NodeName)
 	}
 	return true
+}
+
+func extractReason(opts EvictOptions, strategy string) string {
+	reason := opts.Reason
+	if len(reason) == 0 {
+		reason = strategy
+		if len(reason) == 0 {
+			reason = "NotSet"
+		}
+	}
+	return reason
 }
 
 func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string) error {
