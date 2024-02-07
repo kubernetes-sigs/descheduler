@@ -25,6 +25,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/events"
@@ -385,7 +386,8 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	var span trace.Span
 	ctx, span = tracing.Tracer().Start(ctx, "RunDeschedulerStrategies")
 	defer span.End()
-	sharedInformerFactory := informers.NewSharedInformerFactory(rs.Client, 0)
+
+	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
 	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
 
 	var nodeSelector string
@@ -461,4 +463,11 @@ func createClients(clientConnection componentbaseconfig.ClientConnectionConfigur
 	}
 
 	return kClient, eventClient, nil
+}
+
+func trimManagedFields(obj interface{}) (interface{}, error) {
+	if accessor, err := meta.Accessor(obj); err == nil {
+		accessor.SetManagedFields(nil)
+	}
+	return obj, nil
 }
