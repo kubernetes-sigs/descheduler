@@ -103,7 +103,7 @@ func (d *RemoveFailedPods) Deschedule(ctx context.Context, nodes []*v1.Node) *fr
 		}
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
-			d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{})
+			d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
 			if d.handle.Evictor().NodeLimitExceeded(node) {
 				break
 			}

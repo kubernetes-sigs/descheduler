@@ -98,7 +98,7 @@ loop:
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
 			if checkPodsWithAntiAffinityExist(pods[i], podsInANamespace, nodeMap) && d.handle.Evictor().Filter(pods[i]) && d.handle.Evictor().PreEvictionFilter(pods[i]) {
-				if d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{}) {
+				if d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName}) {
 					// Since the current pod is evicted all other pods which have anti-affinity with this
 					// pod need not be evicted.
 					// Update allPods.

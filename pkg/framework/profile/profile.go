@@ -40,6 +40,7 @@ import (
 // evictorImpl implements the Evictor interface so plugins
 // can evict a pod without importing a specific pod evictor
 type evictorImpl struct {
+	profileName       string
 	podEvictor        *evictions.PodEvictor
 	filter            podutil.FilterFunc
 	preEvictionFilter podutil.FilterFunc
@@ -59,6 +60,7 @@ func (ei *evictorImpl) PreEvictionFilter(pod *v1.Pod) bool {
 
 // Evict evicts a pod (no pre-check performed)
 func (ei *evictorImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.EvictOptions) bool {
+	opts.ProfileName = ei.profileName
 	return ei.podEvictor.EvictPod(ctx, pod, opts)
 }
 
@@ -224,8 +226,6 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 		return nil, fmt.Errorf("podEvictor missing")
 	}
 
-	hOpts.podEvictor.ProfileName(config.Name)
-
 	pi := &profileImpl{
 		profileName:              config.Name,
 		podEvictor:               hOpts.podEvictor,
@@ -254,7 +254,8 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 		getPodsAssignedToNodeFunc: hOpts.getPodsAssignedToNodeFunc,
 		sharedInformerFactory:     hOpts.sharedInformerFactory,
 		evictor: &evictorImpl{
-			podEvictor: hOpts.podEvictor,
+			profileName: config.Name,
+			podEvictor:  hOpts.podEvictor,
 		},
 	}
 
@@ -309,13 +310,8 @@ func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node)
 		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("profile", d.profileName), attribute.String("operation", tracing.DescheduleOperation)))
 		defer span.End()
 		evicted := d.podEvictor.TotalEvicted()
-		// TODO: strategyName should be accessible from within the strategy using a framework
-		// handle or function which the Evictor has access to. For migration/in-progress framework
-		// work, we are currently passing this via context. To be removed
-		// (See discussion thread https://github.com/kubernetes-sigs/descheduler/pull/885#discussion_r919962292)
 		strategyStart := time.Now()
-		childCtx := context.WithValue(ctx, "strategyName", pl.Name())
-		status := pl.Deschedule(childCtx, nodes)
+		status := pl.Deschedule(ctx, nodes)
 		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": d.profileName}).Observe(time.Since(strategyStart).Seconds())
 
 		if status != nil && status.Err != nil {
@@ -342,13 +338,8 @@ func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *f
 		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("profile", d.profileName), attribute.String("operation", tracing.BalanceOperation)))
 		defer span.End()
 		evicted := d.podEvictor.TotalEvicted()
-		// TODO: strategyName should be accessible from within the strategy using a framework
-		// handle or function which the Evictor has access to. For migration/in-progress framework
-		// work, we are currently passing this via context. To be removed
-		// (See discussion thread https://github.com/kubernetes-sigs/descheduler/pull/885#discussion_r919962292)
 		strategyStart := time.Now()
-		childCtx := context.WithValue(ctx, "strategyName", pl.Name())
-		status := pl.Balance(childCtx, nodes)
+		status := pl.Balance(ctx, nodes)
 		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": d.profileName}).Observe(time.Since(strategyStart).Seconds())
 
 		if status != nil && status.Err != nil {
