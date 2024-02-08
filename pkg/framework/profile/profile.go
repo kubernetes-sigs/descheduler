@@ -224,6 +224,8 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 		return nil, fmt.Errorf("podEvictor missing")
 	}
 
+	hOpts.podEvictor.ProfileName(config.Name)
+
 	pi := &profileImpl{
 		profileName:              config.Name,
 		podEvictor:               hOpts.podEvictor,
