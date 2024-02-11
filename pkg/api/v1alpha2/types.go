@@ -37,6 +37,9 @@ type DeschedulerPolicy struct {
 
 	// MaxNoOfPodsToEvictPerNamespace restricts maximum of pods to be evicted per namespace.
 	MaxNoOfPodsToEvictPerNamespace *uint `json:"maxNoOfPodsToEvictPerNamespace,omitempty"`
+
+	// IgnoreMinNodesCheck allows skipping the min nodes check, if set to true.
+	IgnoreMinNodesCheck *bool `json:"ignoreMinNodesCheck,omitempty"`
 }
 
 type DeschedulerProfile struct {
