@@ -130,6 +130,13 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 		errors = append(errors, fmt.Errorf("node is not schedulable"))
 	}
 
+	// Check if pod matches pod anti-affinity rule of other pod on node
+	if ok, err := utils.PodMatchesAntiAffinityRule(pod, node); err != nil {
+		errors = append(errors, err)
+	} else if !ok {
+		errors = append(errors, fmt.Errorf("pod violates pod anti-affinity rule of other pod on the node"))
+	}
+
 	return errors
 }
 
