@@ -37,5 +37,9 @@ func ValidateRemovePodsViolatingNodeTaintsArgs(obj runtime.Object) error {
 		}
 	}
 
+	if len(args.ExcludedTaints) > 0 && len(args.IncludedTaints) > 0 {
+		return fmt.Errorf("either includedTaints or excludedTaints can be set, but not both")
+	}
+
 	return nil
 }

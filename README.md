@@ -500,18 +500,22 @@ key=value matches an excludedTaints entry, the taint will be ignored.
 For example, excludedTaints entry "dedicated" would match all taints with key "dedicated", regardless of value.
 excludedTaints entry "dedicated=special-user" would match taints with key "dedicated" and value "special-user".
 
+If a list of includedTaints is provided, a taint will be considered if and only if it matches an included key **or** key=value from the list. Otherwise it will be ignored. Leaving includedTaints unset will include any taint by default. 
+
 **Parameters:**
 
 |Name|Type|
 |---|---|
 |`excludedTaints`|list(string)|
+|`includedTaints`|list(string)|
 |`includePreferNoSchedule`|bool|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
 
 **Example:**
 
-````yaml
+Setting `excludedTaints`
+```yaml
 apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 profiles:
@@ -526,7 +530,25 @@ profiles:
       deschedule:
         enabled:
           - "RemovePodsViolatingNodeTaints"
-````
+```
+
+Setting `includedTaints`
+```yaml
+apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "RemovePodsViolatingNodeTaints"
+      args:
+        includedTaints:
+        - decommissioned=end-of-life # include only taints with key "decommissioned" and value "end-of-life"
+        - reserved # include all taints with key "reserved"
+    plugins:
+      deschedule:
+        enabled:
+          - "RemovePodsViolatingNodeTaints"
+```
 
 ### RemovePodsViolatingTopologySpreadConstraint
 
