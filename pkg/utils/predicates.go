@@ -299,9 +299,3 @@ func GetNodeWeightGivenPodPreferredAffinity(pod *v1.Pod, node *v1.Node) (int32, 
 	}
 	return sumWeights, nil
 }
-
-// PodMatchesAntiAffinityRule checks if a pod anti-affinity rule matches that of any other pod(s)
-// that are already on the node.
-func PodMatchesAntiAffinityRule(pod *v1.Pod, nodes *v1.Node) (bool, error) {
-	return true, nil
-}

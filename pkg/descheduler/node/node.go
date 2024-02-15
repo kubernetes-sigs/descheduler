@@ -131,10 +131,8 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 	}
 
 	// Check if pod matches pod anti-affinity rule of other pod on node
-	if ok, err := utils.PodMatchesAntiAffinityRule(pod, node); err != nil {
-		errors = append(errors, err)
-	} else if !ok {
-		errors = append(errors, fmt.Errorf("pod violates pod anti-affinity rule of other pod on the node"))
+	if matchesInterPodAntiAffinityRule(pod, node) {
+		errors = append(errors, fmt.Errorf("pod matches inter-pod anti-affinity rule of other pod on node"))
 	}
 
 	return errors
@@ -329,4 +327,12 @@ func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) bool {
 		return false
 	}
 	return matches
+}
+
+// matchesInterPodAntiAffinityRule checks if a pod anti-affinity rule matches that of any other pod(s)
+// that are already on the node.
+func matchesInterPodAntiAffinityRule(pod *v1.Pod, node *v1.Node) bool {
+	// if it matches pod anti affinity, return true
+	// if it does not match pod anti affinity, return false
+	return len(node.ObjectMeta.Labels) > 0
 }

@@ -20,6 +20,7 @@ set -o nounset
 
 # Set to empty if unbound/empty
 SKIP_INSTALL=${SKIP_INSTALL:-}
+KIND_E2E=${KIND_E2E:-}
 
 # This just runs e2e tests.
 if [ -n "$KIND_E2E" ]; then
