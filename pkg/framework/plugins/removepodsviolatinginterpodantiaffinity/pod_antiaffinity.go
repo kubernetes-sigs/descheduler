@@ -182,10 +182,13 @@ func checkPodsWithAntiAffinityExist(pod *v1.Pod, pods map[string][]*v1.Pod, node
 	return false
 }
 
+// hasSameLabelValue checks if the pods are in the same topology zone.
 func hasSameLabelValue(node1, node2 *v1.Node, key string) bool {
 	if node1.Name == node2.Name {
 		return true
 	}
+
+	// no match if node has empty labels
 	node1Labels := node1.Labels
 	if node1Labels == nil {
 		return false
@@ -194,6 +197,8 @@ func hasSameLabelValue(node1, node2 *v1.Node, key string) bool {
 	if node2Labels == nil {
 		return false
 	}
+
+	// no match if node has no topology zone label with given key
 	value1, ok := node1Labels[key]
 	if !ok {
 		return false
@@ -202,6 +207,7 @@ func hasSameLabelValue(node1, node2 *v1.Node, key string) bool {
 	if !ok {
 		return false
 	}
+
 	return value1 == value2
 }
 

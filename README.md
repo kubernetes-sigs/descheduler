@@ -881,6 +881,7 @@ profiles:
 - `nodeAffinity` on the pod
 - Resource `requests` made by the pod and the resources available on other nodes
 - Whether any of the other nodes are marked as `unschedulable`
+- Any `podAntiAffinity` between the pod and the pods on the other nodes
 
 E.g.
 
@@ -902,7 +903,7 @@ profiles:
           - "PodLifeTime"
 ```
 
-Note that node fit filtering references the current pod spec, and not that of it's owner.
+Note that node fit filtering references the current pod spec, and not that of its owner.
 Thus, if the pod is owned by a ReplicationController (and that ReplicationController was modified recently),
 the pod may be running with an outdated spec, which the descheduler will reference when determining node fit.
 This is expected behavior as the descheduler is a "best-effort" mechanism.
