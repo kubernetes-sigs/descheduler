@@ -97,44 +97,44 @@ deschedulerPolicy:
   profiles:
     - name: DefaultPolicyProfile
       pluginConfig:
-      - name: "RemoveDuplicates"
-      - name: "RemovePodsHavingTooManyRestarts"
+      - name: RemoveDuplicates
+      - name: RemovePodsHavingTooManyRestarts
         args:
           podRestartThreshold: 100
           includingInitContainers: true
-      - name: "RemovePodsViolatingNodeTaints"
-      - name: "RemovePodsViolatingNodeAffinity"
+      - name: RemovePodsViolatingNodeTaints
+      - name: RemovePodsViolatingNodeAffinity
         args:
           nodeAffinityType:
-          - "requiredDuringSchedulingIgnoredDuringExecution"
-      - name: "RemovePodsViolatingInterPodAntiAffinity"
-      - name: "RemovePodsViolatingTopologySpreadConstraint"
+          - requiredDuringSchedulingIgnoredDuringExecution
+      - name: RemovePodsViolatingInterPodAntiAffinity
+      - name: RemovePodsViolatingTopologySpreadConstraint
         args:
           constraints:
           - DoNotSchedule
           - ScheduleAnyway
-      - name: "LowNodeUtilization"
+      - name: LowNodeUtilization
         args:
           thresholds:
-            "cpu" : 20
-            "memory": 20
-            "pods": 20
+            cpu: 20
+            memory: 20
+            pods: 20
           targetThresholds:
-            "cpu" : 50
-            "memory": 50
-            "pods": 50
+            cpu: 50
+            memory: 50
+            pods: 50
       plugins:
         deschedule:
           enabled:
-          - "RemovePodsHavingTooManyRestarts"
-          - "RemovePodsViolatingNodeTaints"
-          - "RemovePodsViolatingNodeAffinity"
-          - "RemovePodsViolatingInterPodAntiAffinity"
+          - RemovePodsHavingTooManyRestarts
+          - RemovePodsViolatingNodeTaints
+          - RemovePodsViolatingNodeAffinity
+          - RemovePodsViolatingInterPodAntiAffinity
         balance:
           enabled:
-          - "RemoveDuplicates"
-          - "LowNodeUtilization"
-          - "RemovePodsViolatingTopologySpreadConstraint"
+          - RemoveDuplicates
+          - LowNodeUtilization
+          - RemovePodsViolatingTopologySpreadConstraint
 
 priorityClassName: system-cluster-critical
 
