@@ -134,7 +134,6 @@ The Default Evictor Plugin is used by default for filtering pods before processi
 
 | Name |type| Default Value | Description |
 |------|----|---------------|-------------|
-| `nodeSelector` |`string`| `nil` | limiting the nodes which are processed |
 | `evictLocalStoragePods` |`bool`| `false` | allows eviction of pods with local storage |
 | `evictSystemCriticalPods` |`bool`| `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
 | `ignorePvcPods` |`bool`| `false` | set whether PVC pods should be evicted or ignored |
@@ -142,6 +141,7 @@ The Default Evictor Plugin is used by default for filtering pods before processi
 |`labelSelector`|`metav1.LabelSelector`||(see [label filtering](#label-filtering))|
 |`priorityThreshold`|`priorityThreshold`||(see [priority filtering](#priority-filtering))|
 |`nodeFit`|`bool`|`false`|(see [node fit filtering](#node-fit-filtering))|
+| `nodeSelector` |`string`| `nil` | limit the nodes considered as future targets for evicted pods (needs nodeFit)|
 
 ### Example policy
 
@@ -166,6 +166,7 @@ profiles:
         evictFailedBarePods: true
         evictLocalStoragePods: true
         nodeFit: true
+        nodeSelector: aws.amazon.com/ec2.asg.name notin (ingress,ssd)
     plugins:
       # DefaultEvictor is enabled for both `filter` and `preEvictionFilter`
       # filter:
@@ -876,7 +877,7 @@ profiles:
 ### Node Fit filtering
 
  NodeFit can be configured via the Default Evictor Filter. If set to `true` the descheduler will consider whether or not the pods that meet eviction criteria will fit on other nodes before evicting them. If a pod cannot be rescheduled to another node, it will not be evicted. Currently the following criteria are considered when setting `nodeFit` to `true`:
-- A `nodeSelector` on the pod
+- A `nodeSelector` on the pod; only evict pods that can schedule on machines other than those matched by the nodeSelector. Pods on non-selected nodes can still be evicted, if they can be scheduled on another host.
 - Any `tolerations` on the pod and any `taints` on the other nodes
 - `nodeAffinity` on the pod
 - Resource `requests` made by the pod and the resources available on other nodes
@@ -893,6 +894,7 @@ profiles:
     - name: "DefaultEvictor"
       args:
         nodeFit: true
+        nodeSelector: aws.amazon.com/ec2.asg.name notin (ingress,ssd)
     - name: "PodLifeTime"
       args:
         maxPodLifeTimeSeconds: 86400
