@@ -1,0 +1,16 @@
+title: Extend descheduler eviction handling for eviction requests
+kep-number: NNNN
+authors:
+  - "@ingvagabund"
+owning-sig: sig-scheduling
+participating-sigs:
+  - TBD
+status: provisional
+creation-date: 2024-02-26
+reviewers:
+  - TBD
+approvers:
+  - TBD
+feature-gates:
+  - TBD
+stage: alpha
