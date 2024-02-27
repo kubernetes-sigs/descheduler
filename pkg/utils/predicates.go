@@ -332,7 +332,7 @@ func CheckPodsWithAntiAffinityExist(pod *v1.Pod, pods map[string][]*v1.Pod, node
 							continue
 						}
 						if hasSameLabelValue(node, nodeHavingExistingPod, term.TopologyKey) {
-							klog.V(1).InfoS("Found Pods violating PodAntiAffinity", "pod to evicted", klog.KObj(pod))
+							klog.V(1).InfoS("Found Pods matching PodAntiAffinity", "pod with anti-affinity", klog.KObj(pod))
 							return true
 						}
 					}

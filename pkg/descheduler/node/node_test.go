@@ -754,15 +754,11 @@ func TestPodFitsAnyOtherNode(t *testing.T) {
 }
 
 func TestNodeFit(t *testing.T) {
-	node := test.BuildTestNode("node", 64000, 128*1000*1000*1000, 2, nil)
-
-	// pod anti-affinity pods
-	podAntiAffinityPod1 := test.BuildTestPod("p1", 1000, 1000, "node", nil)
-	test.SetPodAntiAffinity(podAntiAffinityPod1, "foo", "bar")
-
-	podAntiAffinityPod2 := test.BuildTestPod("p2", 1000, 1000, "node2", nil)
-	test.SetPodAntiAffinity(podAntiAffinityPod2, "foo", "bar")
-
+	node := test.BuildTestNode("node", 64000, 128*1000*1000*1000, 2, func(node *v1.Node) {
+		node.ObjectMeta.Labels = map[string]string{
+			"region": "main-region",
+		}
+	})
 	tests := []struct {
 		description string
 		pod         *v1.Pod
@@ -791,14 +787,12 @@ func TestNodeFit(t *testing.T) {
 		},
 		{
 			description: "matches inter-pod anti-affinity rule of pod on node",
-			pod:         podAntiAffinityPod1,
-			node: test.BuildTestNode("node2", 2000, 3000, 10, func(node *v1.Node) {
-				node.ObjectMeta.Labels = map[string]string{
-					"region": "main-region",
-				}
-			}),
-			podsOnNode: []*v1.Pod{podAntiAffinityPod2},
-			err:        errors.New("pod matches inter-pod anti-affinity rule of other pod on node"),
+			pod:         test.PodWithPodAntiAffinity(test.BuildTestPod("p1", 1000, 1000, node.Name, nil), "foo", "bar"),
+			node:        node,
+			podsOnNode: []*v1.Pod{
+				test.PodWithPodAntiAffinity(test.BuildTestPod("p2", 1000, 1000, node.Name, nil), "foo", "bar"),
+			},
+			err: errors.New("pod matches inter-pod anti-affinity rule of other pod on node"),
 		},
 		{
 			description: "pod fits on node",

@@ -176,3 +176,67 @@ func TestSortPodsBasedOnAge(t *testing.T) {
 		}
 	}
 }
+
+func TestGroupByNodeName(t *testing.T) {
+	tests := []struct {
+		name   string
+		pods   []*v1.Pod
+		expMap map[string][]*v1.Pod
+	}{
+		{
+			name:   "list of pods is empty",
+			pods:   []*v1.Pod{},
+			expMap: map[string][]*v1.Pod{},
+		},
+		{
+			name: "pods are on same node",
+			pods: []*v1.Pod{
+				{Spec: v1.PodSpec{
+					NodeName: "node1",
+				}},
+				{Spec: v1.PodSpec{
+					NodeName: "node1",
+				}},
+			},
+			expMap: map[string][]*v1.Pod{"node1": {
+				{Spec: v1.PodSpec{
+					NodeName: "node1",
+				}},
+				{Spec: v1.PodSpec{
+					NodeName: "node1",
+				}},
+			}},
+		},
+		{
+			name: "pods are on different nodes",
+			pods: []*v1.Pod{
+				{Spec: v1.PodSpec{
+					NodeName: "node1",
+				}},
+				{Spec: v1.PodSpec{
+					NodeName: "node2",
+				}},
+			},
+			expMap: map[string][]*v1.Pod{
+				"node1": {
+					{Spec: v1.PodSpec{
+						NodeName: "node1",
+					}},
+				},
+				"node2": {
+					{Spec: v1.PodSpec{
+						NodeName: "node2",
+					}},
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			resultMap := GroupByNodeName(test.pods)
+			if !reflect.DeepEqual(resultMap, test.expMap) {
+				t.Errorf("Expected %v node map, got %v", test.expMap, resultMap)
+			}
+		})
+	}
+}
