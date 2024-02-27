@@ -310,7 +310,7 @@ func evictPods(
 			}
 
 			if preEvictionFilterWithOptions(pod) {
-				if podEvictor.Evict(ctx, pod, evictions.EvictOptions{StrategyName: "NodeUtilization"}) {
+				if podEvictor.Evict(ctx, pod, evictions.EvictOptions{}) {
 					klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
 
 					for name := range totalAvailableUsage {
