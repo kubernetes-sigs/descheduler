@@ -130,8 +130,10 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 		errors = append(errors, fmt.Errorf("node is not schedulable"))
 	}
 
-	// Check if pod matches pod anti-affinity rule of other pod on node
-	if matchesInterPodAntiAffinityRule(pod, node) {
+	// Check if pod matches inter-pod anti-affinity rule of pod on node
+	if match, err := podMatchesInterPodAntiAffinity(nodeIndexer, pod, node); err != nil {
+		errors = append(errors, err)
+	} else if match {
 		errors = append(errors, fmt.Errorf("pod matches inter-pod anti-affinity rule of other pod on node"))
 	}
 
@@ -329,10 +331,17 @@ func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) bool {
 	return matches
 }
 
-// matchesInterPodAntiAffinityRule checks if a pod anti-affinity rule matches that of any other pod(s)
-// that are already on the node.
-func matchesInterPodAntiAffinityRule(pod *v1.Pod, node *v1.Node) bool {
-	// if it matches pod anti affinity, return true
-	// if it does not match pod anti affinity, return false
-	return len(node.ObjectMeta.Labels) > 0
+// podMatchesInterPodAntiAffinity checks if the pod matches the anti-affinity rule
+// of another pod that is already on the given node.
+// If a match is found, it returns true.
+func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, error) {
+	podsOnNode, err := podutil.ListPodsOnANode(node.Name, nodeIndexer, nil)
+	if err != nil {
+		return false, fmt.Errorf("error listing all pods: %v", err)
+	}
+
+	podsInANamespace := podutil.GroupByNamespace(podsOnNode)
+	nodeMap := utils.CreateNodeMap([]*v1.Node{node})
+
+	return utils.CheckPodsWithAntiAffinityExist(pod, podsInANamespace, nodeMap), nil
 }

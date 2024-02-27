@@ -22,6 +22,7 @@ import (
 	"sort"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/component-helpers/scheduling/corev1"
 	"k8s.io/klog/v2"
@@ -298,4 +299,85 @@ func GetNodeWeightGivenPodPreferredAffinity(pod *v1.Pod, node *v1.Node) (int32, 
 		}
 	}
 	return sumWeights, nil
+}
+
+func CreateNodeMap(nodes []*v1.Node) map[string]*v1.Node {
+	m := make(map[string]*v1.Node, len(nodes))
+	for _, node := range nodes {
+		m[node.GetName()] = node
+	}
+	return m
+}
+
+// CheckPodsWithAntiAffinityExist checks if there are other pods on the node that the current pod cannot tolerate.
+func CheckPodsWithAntiAffinityExist(pod *v1.Pod, pods map[string][]*v1.Pod, nodeMap map[string]*v1.Node) bool {
+	affinity := pod.Spec.Affinity
+	if affinity != nil && affinity.PodAntiAffinity != nil {
+		for _, term := range getPodAntiAffinityTerms(affinity.PodAntiAffinity) {
+			namespaces := getNamespacesFromPodAffinityTerm(pod, &term)
+			selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
+			if err != nil {
+				klog.ErrorS(err, "Unable to convert LabelSelector into Selector")
+				return false
+			}
+			for namespace := range namespaces {
+				for _, existingPod := range pods[namespace] {
+					if existingPod.Name != pod.Name && podMatchesTermsNamespaceAndSelector(existingPod, namespaces, selector) {
+						node, ok := nodeMap[pod.Spec.NodeName]
+						if !ok {
+							continue
+						}
+						nodeHavingExistingPod, ok := nodeMap[existingPod.Spec.NodeName]
+						if !ok {
+							continue
+						}
+						if hasSameLabelValue(node, nodeHavingExistingPod, term.TopologyKey) {
+							klog.V(1).InfoS("Found Pods violating PodAntiAffinity", "pod to evicted", klog.KObj(pod))
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// getPodAntiAffinityTerms gets the antiaffinity terms for the given pod.
+func getPodAntiAffinityTerms(podAntiAffinity *v1.PodAntiAffinity) (terms []v1.PodAffinityTerm) {
+	if podAntiAffinity != nil {
+		if len(podAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution) != 0 {
+			terms = podAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		}
+	}
+	return terms
+}
+
+// hasSameLabelValue checks if the pods are in the same topology zone.
+func hasSameLabelValue(node1, node2 *v1.Node, key string) bool {
+	if node1.Name == node2.Name {
+		return true
+	}
+
+	// no match if node has empty labels
+	node1Labels := node1.Labels
+	if node1Labels == nil {
+		return false
+	}
+	node2Labels := node2.Labels
+	if node2Labels == nil {
+		return false
+	}
+
+	// no match if node has no topology zone label with given key
+	value1, ok := node1Labels[key]
+	if !ok {
+		return false
+	}
+	value2, ok := node2Labels[key]
+	if !ok {
+		return false
+	}
+
+	return value1 == value2
 }

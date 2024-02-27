@@ -790,7 +790,7 @@ func TestNodeFit(t *testing.T) {
 			err: errors.New("insufficient pods"),
 		},
 		{
-			description: "matches pod anti-affinity rule of pod on node",
+			description: "matches inter-pod anti-affinity rule of pod on node",
 			pod:         podAntiAffinityPod1,
 			node: test.BuildTestNode("node2", 2000, 3000, 10, func(node *v1.Node) {
 				node.ObjectMeta.Labels = map[string]string{

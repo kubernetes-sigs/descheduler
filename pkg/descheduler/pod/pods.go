@@ -257,3 +257,12 @@ func SortPodsBasedOnAge(pods []*v1.Pod) {
 		return pods[i].CreationTimestamp.Before(&pods[j].CreationTimestamp)
 	})
 }
+
+func GroupByNodeName(pods []*v1.Pod) map[string][]*v1.Pod {
+	m := make(map[string][]*v1.Pod)
+	for i := 0; i < len(pods); i++ {
+		pod := pods[i]
+		m[pod.Spec.NodeName] = append(m[pod.Spec.NodeName], pod)
+	}
+	return m
+}
