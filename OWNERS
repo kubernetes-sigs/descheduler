@@ -1,9 +1,7 @@
 reviewers:
   - knelasevero
-  - soltysh
   - ingvagabund
 approvers:
   - knelasevero
-  - soltysh
   - ingvagabund
-component: "kube-scheduler"
+component: "descheduler"
