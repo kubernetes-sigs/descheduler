@@ -222,6 +222,7 @@ func evictPodsFromSourceNodes(
 	evictableNamespaces *api.Namespaces,
 	sourceNodes, destinationNodes []NodeInfo,
 	podEvictor frameworktypes.Evictor,
+	evictOptions evictions.EvictOptions,
 	podFilter func(pod *v1.Pod) bool,
 	resourceNames []v1.ResourceName,
 	continueEviction continueEvictionCond,
@@ -273,7 +274,7 @@ func evictPodsFromSourceNodes(
 		klog.V(1).InfoS("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
-		evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, continueEviction)
+		evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction)
 
 	}
 }
@@ -286,6 +287,7 @@ func evictPods(
 	totalAvailableUsage map[v1.ResourceName]*resource.Quantity,
 	taintsOfLowNodes map[string][]v1.Taint,
 	podEvictor frameworktypes.Evictor,
+	evictOptions evictions.EvictOptions,
 	continueEviction continueEvictionCond,
 ) {
 	var excludedNamespaces sets.Set[string]
@@ -310,7 +312,7 @@ func evictPods(
 			}
 
 			if preEvictionFilterWithOptions(pod) {
-				if podEvictor.Evict(ctx, pod, evictions.EvictOptions{}) {
+				if podEvictor.Evict(ctx, pod, evictOptions) {
 					klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
 
 					for name := range totalAvailableUsage {
