@@ -71,7 +71,6 @@ build.arm64:
 build.ppc64le:
         CGO_ENABLED=0 GOOS=linux GOARCH=ppc64le go build ${LDFLAGS} -o _output/bin/descheduler sigs.k8s.io/descheduler/cmd/descheduler
 
-
 dev-image: build
 	$(CONTAINER_ENGINE) build -f Dockerfile.dev -t $(IMAGE) .
 
