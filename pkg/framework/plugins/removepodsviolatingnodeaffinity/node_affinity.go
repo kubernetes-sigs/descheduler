@@ -136,7 +136,7 @@ func (d *RemovePodsViolatingNodeAffinity) processNodes(ctx context.Context, node
 
 		for _, pod := range pods {
 			klog.V(1).InfoS("Evicting pod", "pod", klog.KObj(pod))
-			d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{})
+			d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
 			if d.handle.Evictor().NodeLimitExceeded(node) {
 				break
 			}

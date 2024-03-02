@@ -133,7 +133,7 @@ func (d *PodLifeTime) Deschedule(ctx context.Context, nodes []*v1.Node) *framewo
 
 	for _, pod := range podsToEvict {
 		if !d.handle.Evictor().NodeLimitExceeded(nodeMap[pod.Spec.NodeName]) {
-			d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{})
+			d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
 		}
 	}
 
