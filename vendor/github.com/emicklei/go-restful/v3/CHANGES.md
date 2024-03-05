@@ -1,5 +1,9 @@
 # Change history of go-restful
 
+## [v3.11.1, v3.11.2] - 2024-01-09
+
+- fix by restoring custom JSON handler functions (Mike Beaumont #540)
+
 ## [v3.11.0] - 2023-08-19
 
 - restored behavior as <= v3.9.0 with option to change path strategy using TrimRightSlashEnabled. 

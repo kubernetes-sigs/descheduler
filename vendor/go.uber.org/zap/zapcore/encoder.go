@@ -22,6 +22,7 @@ package zapcore
 
 import (
 	"encoding/json"
+	"io"
 	"time"
 
 	"go.uber.org/zap/buffer"
@@ -36,6 +37,9 @@ const DefaultLineEnding = "\n"
 const OmitKey = ""
 
 // A LevelEncoder serializes a Level to a primitive type.
+//
+// This function must make exactly one call
+// to a PrimitiveArrayEncoder's Append* method.
 type LevelEncoder func(Level, PrimitiveArrayEncoder)
 
 // LowercaseLevelEncoder serializes a Level to a lowercase string. For example,
@@ -89,6 +93,9 @@ func (e *LevelEncoder) UnmarshalText(text []byte) error {
 }
 
 // A TimeEncoder serializes a time.Time to a primitive type.
+//
+// This function must make exactly one call
+// to a PrimitiveArrayEncoder's Append* method.
 type TimeEncoder func(time.Time, PrimitiveArrayEncoder)
 
 // EpochTimeEncoder serializes a time.Time to a floating-point number of seconds
@@ -187,10 +194,13 @@ func (e *TimeEncoder) UnmarshalText(text []byte) error {
 
 // UnmarshalYAML unmarshals YAML to a TimeEncoder.
 // If value is an object with a "layout" field, it will be unmarshaled to  TimeEncoder with given layout.
-//     timeEncoder:
-//       layout: 06/01/02 03:04pm
+//
+//	timeEncoder:
+//	  layout: 06/01/02 03:04pm
+//
 // If value is string, it uses UnmarshalText.
-//     timeEncoder: iso8601
+//
+//	timeEncoder: iso8601
 func (e *TimeEncoder) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var o struct {
 		Layout string `json:"layout" yaml:"layout"`
@@ -215,6 +225,9 @@ func (e *TimeEncoder) UnmarshalJSON(data []byte) error {
 }
 
 // A DurationEncoder serializes a time.Duration to a primitive type.
+//
+// This function must make exactly one call
+// to a PrimitiveArrayEncoder's Append* method.
 type DurationEncoder func(time.Duration, PrimitiveArrayEncoder)
 
 // SecondsDurationEncoder serializes a time.Duration to a floating-point number of seconds elapsed.
@@ -258,6 +271,9 @@ func (e *DurationEncoder) UnmarshalText(text []byte) error {
 }
 
 // A CallerEncoder serializes an EntryCaller to a primitive type.
+//
+// This function must make exactly one call
+// to a PrimitiveArrayEncoder's Append* method.
 type CallerEncoder func(EntryCaller, PrimitiveArrayEncoder)
 
 // FullCallerEncoder serializes a caller in /full/path/to/package/file:line
@@ -288,6 +304,9 @@ func (e *CallerEncoder) UnmarshalText(text []byte) error {
 
 // A NameEncoder serializes a period-separated logger name to a primitive
 // type.
+//
+// This function must make exactly one call
+// to a PrimitiveArrayEncoder's Append* method.
 type NameEncoder func(string, PrimitiveArrayEncoder)
 
 // FullNameEncoder serializes the logger name as-is.
@@ -312,14 +331,15 @@ func (e *NameEncoder) UnmarshalText(text []byte) error {
 type EncoderConfig struct {
 	// Set the keys used for each log entry. If any key is empty, that portion
 	// of the entry is omitted.
-	MessageKey    string `json:"messageKey" yaml:"messageKey"`
-	LevelKey      string `json:"levelKey" yaml:"levelKey"`
-	TimeKey       string `json:"timeKey" yaml:"timeKey"`
-	NameKey       string `json:"nameKey" yaml:"nameKey"`
-	CallerKey     string `json:"callerKey" yaml:"callerKey"`
-	FunctionKey   string `json:"functionKey" yaml:"functionKey"`
-	StacktraceKey string `json:"stacktraceKey" yaml:"stacktraceKey"`
-	LineEnding    string `json:"lineEnding" yaml:"lineEnding"`
+	MessageKey     string `json:"messageKey" yaml:"messageKey"`
+	LevelKey       string `json:"levelKey" yaml:"levelKey"`
+	TimeKey        string `json:"timeKey" yaml:"timeKey"`
+	NameKey        string `json:"nameKey" yaml:"nameKey"`
+	CallerKey      string `json:"callerKey" yaml:"callerKey"`
+	FunctionKey    string `json:"functionKey" yaml:"functionKey"`
+	StacktraceKey  string `json:"stacktraceKey" yaml:"stacktraceKey"`
+	SkipLineEnding bool   `json:"skipLineEnding" yaml:"skipLineEnding"`
+	LineEnding     string `json:"lineEnding" yaml:"lineEnding"`
 	// Configure the primitive representations of common complex types. For
 	// example, some users may want all time.Times serialized as floating-point
 	// seconds since epoch, while others may prefer ISO8601 strings.
@@ -330,6 +350,9 @@ type EncoderConfig struct {
 	// Unlike the other primitive type encoders, EncodeName is optional. The
 	// zero value falls back to FullNameEncoder.
 	EncodeName NameEncoder `json:"nameEncoder" yaml:"nameEncoder"`
+	// Configure the encoder for interface{} type objects.
+	// If not provided, objects are encoded using json.Encoder
+	NewReflectedEncoder func(io.Writer) ReflectedEncoder `json:"-" yaml:"-"`
 	// Configures the field separator used by the console encoder. Defaults
 	// to tab.
 	ConsoleSeparator string `json:"consoleSeparator" yaml:"consoleSeparator"`
