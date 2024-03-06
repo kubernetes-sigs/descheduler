@@ -147,7 +147,7 @@ func PodFitsAnyOtherNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.
 			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			return true
 		}
-		klog.V(4).InfoS("Pod does not fit on node",
+		klog.V(4).InfoS("Pod does not fit on any other node",
 			"pod:", klog.KObj(pod), "node:", klog.KObj(node), "error:", utilerrors.NewAggregate(errors).Error())
 	}
 
@@ -163,7 +163,7 @@ func PodFitsAnyNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, 
 			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			return true
 		}
-		klog.V(4).InfoS("Pod does not fit on node",
+		klog.V(4).InfoS("Pod does not fit on any node",
 			"pod:", klog.KObj(pod), "node:", klog.KObj(node), "error:", utilerrors.NewAggregate(errors).Error())
 	}
 
@@ -179,7 +179,7 @@ func PodFitsCurrentNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.P
 		return true
 	}
 
-	klog.V(4).InfoS("Pod does not fit on node",
+	klog.V(4).InfoS("Pod does not fit on current node",
 		"pod:", klog.KObj(pod), "node:", klog.KObj(node), "error:", utilerrors.NewAggregate(errors).Error())
 
 	return false
