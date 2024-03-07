@@ -79,9 +79,10 @@ var StrategyParamsToPluginArgs = map[string]func(params *StrategyParameters) (*a
 	},
 	"RemovePodsViolatingNodeAffinity": func(params *StrategyParameters) (*api.PluginConfig, error) {
 		args := &removepodsviolatingnodeaffinity.RemovePodsViolatingNodeAffinityArgs{
-			Namespaces:       v1alpha1NamespacesToInternal(params.Namespaces),
-			LabelSelector:    params.LabelSelector,
-			NodeAffinityType: params.NodeAffinityType,
+			Namespaces:         v1alpha1NamespacesToInternal(params.Namespaces),
+			LabelSelector:      params.LabelSelector,
+			NodeAffinityType:   params.NodeAffinityType,
+			EnableFullEviction: params.EnableFullEviction,
 		}
 		if err := removepodsviolatingnodeaffinity.ValidateRemovePodsViolatingNodeAffinityArgs(args); err != nil {
 			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingnodeaffinity.PluginName)

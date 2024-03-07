@@ -83,15 +83,15 @@ func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes 
 
 		// The pods that we'll evict must be evictable. For example, the current number of replicas
 		// must be greater than the pdb.minValue.
-		// The pods must be able to get scheduled on a different node. Otherwise, it doesn't make much
-		// sense to evict them.
+		// If EnableFullEviction is enabled, then pods will be evicted even if there are no other suitable nodes.
+		// Otherwise, the pods must be able to be scheduled on a different node.
 		switch nodeAffinity {
 		case "requiredDuringSchedulingIgnoredDuringExecution":
 			// In this specific case, the pod must also violate the nodeSelector to be evicted
 			filterFunc := func(pod *v1.Pod, node *v1.Node, nodes []*v1.Node) bool {
 				return utils.PodHasNodeAffinity(pod, utils.RequiredDuringSchedulingIgnoredDuringExecution) &&
 					d.handle.Evictor().Filter(pod) &&
-					nodeutil.PodFitsAnyNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) &&
+					(d.args.EnableFullEviction || nodeutil.PodFitsAnyNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes)) &&
 					!nodeutil.PodMatchNodeSelector(pod, node)
 			}
 			err = d.processNodes(ctx, nodes, filterFunc)
