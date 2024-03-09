@@ -67,8 +67,10 @@ type DeschedulerStrategy struct {
 	Params *StrategyParameters `json:"params,omitempty"`
 }
 
-// Namespaces carries a list of included/excluded namespaces
-// for which a given strategy is applicable.
+// Namespaces carries a list of included/excluded namespaces for which a given
+// strategy is applicable. They are string patterns and compiled into regular
+// expressions. It adds "^" and "$" at the beginning and end of each pattern to
+// ensure matching the entire string.
 type Namespaces struct {
 	Include []string `json:"include"`
 	Exclude []string `json:"exclude"`

@@ -50,10 +50,10 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("want args to be of type RemoveFailedPodsArgs, got %T", args)
 	}
 
-	var includedNamespaces, excludedNamespaces sets.Set[string]
+	var includedNamespaces, excludedNamespaces []string
 	if failedPodsArgs.Namespaces != nil {
-		includedNamespaces = sets.New(failedPodsArgs.Namespaces.Include...)
-		excludedNamespaces = sets.New(failedPodsArgs.Namespaces.Exclude...)
+		includedNamespaces = failedPodsArgs.Namespaces.Include
+		excludedNamespaces = failedPodsArgs.Namespaces.Exclude
 	}
 
 	// We can combine Filter and PreEvictionFilter since for this strategy it does not matter where we run PreEvictionFilter

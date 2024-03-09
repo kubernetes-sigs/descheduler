@@ -729,6 +729,8 @@ The following strategies accept a `namespaces` parameter which allows to specify
 * `RemovePodsViolatingTopologySpreadConstraint`
 * `RemoveFailedPods`
 
+The list of including, excluding namespaces are treated as string patterns and compiled into regular expressions.
+It adds `^` and `$` at the beginning and end of each pattern to ensure matching the entire string.
 
 The following strategies accept a `evictableNamespaces` parameter which allows to specify a list of excluding namespaces:
 * `LowNodeUtilization` and `HighNodeUtilization` (Only filtered right before eviction)
@@ -748,13 +750,14 @@ profiles:
           include:
           - "namespace1"
           - "namespace2"
+          - "namespace1\d"
     plugins:
       deschedule:
         enabled:
           - "PodLifeTime"
 ```
 
-In the example `PodLifeTime` gets executed only over `namespace1` and `namespace2`.
+In the example `PodLifeTime` gets executed only over `namespace1`, `namespace2` and namespaces matched with `^namespace1\d$` pattern.
 The similar holds for `exclude` field:
 
 ```yaml
@@ -770,13 +773,14 @@ profiles:
           exclude:
           - "namespace1"
           - "namespace2"
+          - "namespace1\d"
     plugins:
       deschedule:
         enabled:
           - "PodLifeTime"
 ```
 
-The strategy gets executed over all namespaces but `namespace1` and `namespace2`.
+The strategy gets executed over all namespaces but `namespace1`, `namespace2` and namespaces matched with `^namespace1\d$` pattern.
 
 It's not allowed to compute `include` with `exclude` field.
 
