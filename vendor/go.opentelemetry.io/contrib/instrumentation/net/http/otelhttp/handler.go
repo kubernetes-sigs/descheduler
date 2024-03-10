@@ -26,7 +26,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
-	semconv "go.opentelemetry.io/otel/semconv/v1.20.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -43,12 +43,10 @@ type middleware struct {
 	writeEvent        bool
 	filters           []Filter
 	spanNameFormatter func(string, *http.Request) string
+	counters          map[string]metric.Int64Counter
+	valueRecorders    map[string]metric.Float64Histogram
 	publicEndpoint    bool
 	publicEndpointFn  func(*http.Request) bool
-
-	requestBytesCounter  metric.Int64Counter
-	responseBytesCounter metric.Int64Counter
-	serverLatencyMeasure metric.Float64Histogram
 }
 
 func defaultHandlerFormatter(operation string, _ *http.Request) string {
@@ -106,27 +104,21 @@ func handleErr(err error) {
 }
 
 func (h *middleware) createMeasures() {
-	var err error
-	h.requestBytesCounter, err = h.meter.Int64Counter(
-		serverRequestSize,
-		metric.WithUnit("By"),
-		metric.WithDescription("Measures the size of HTTP request messages."),
-	)
+	h.counters = make(map[string]metric.Int64Counter)
+	h.valueRecorders = make(map[string]metric.Float64Histogram)
+
+	requestBytesCounter, err := h.meter.Int64Counter(RequestContentLength)
 	handleErr(err)
 
-	h.responseBytesCounter, err = h.meter.Int64Counter(
-		serverResponseSize,
-		metric.WithUnit("By"),
-		metric.WithDescription("Measures the size of HTTP response messages."),
-	)
+	responseBytesCounter, err := h.meter.Int64Counter(ResponseContentLength)
 	handleErr(err)
 
-	h.serverLatencyMeasure, err = h.meter.Float64Histogram(
-		serverDuration,
-		metric.WithUnit("ms"),
-		metric.WithDescription("Measures the duration of inbound HTTP requests."),
-	)
+	serverLatencyMeasure, err := h.meter.Float64Histogram(ServerLatency)
 	handleErr(err)
+
+	h.counters[RequestContentLength] = requestBytesCounter
+	h.counters[ResponseContentLength] = responseBytesCounter
+	h.valueRecorders[ServerLatency] = serverLatencyMeasure
 }
 
 // serveHTTP sets up tracing and calls the given next http.Handler with the span
@@ -224,7 +216,7 @@ func (h *middleware) serveHTTP(w http.ResponseWriter, r *http.Request, next http
 
 	next.ServeHTTP(w, r.WithContext(ctx))
 
-	setAfterServeAttributes(span, bw.read.Load(), rww.written, rww.statusCode, bw.err, rww.err)
+	setAfterServeAttributes(span, bw.read, rww.written, rww.statusCode, bw.err, rww.err)
 
 	// Add metrics
 	attributes := append(labeler.Get(), semconvutil.HTTPServerRequestMetrics(h.server, r)...)
@@ -232,13 +224,13 @@ func (h *middleware) serveHTTP(w http.ResponseWriter, r *http.Request, next http
 		attributes = append(attributes, semconv.HTTPStatusCode(rww.statusCode))
 	}
 	o := metric.WithAttributes(attributes...)
-	h.requestBytesCounter.Add(ctx, bw.read.Load(), o)
-	h.responseBytesCounter.Add(ctx, rww.written, o)
+	h.counters[RequestContentLength].Add(ctx, bw.read, o)
+	h.counters[ResponseContentLength].Add(ctx, rww.written, o)
 
 	// Use floating point division here for higher precision (instead of Millisecond method).
 	elapsedTime := float64(time.Since(requestStartTime)) / float64(time.Millisecond)
 
-	h.serverLatencyMeasure.Record(ctx, elapsedTime, o)
+	h.valueRecorders[ServerLatency].Record(ctx, elapsedTime, o)
 }
 
 func setAfterServeAttributes(span trace.Span, read, wrote int64, statusCode int, rerr, werr error) {

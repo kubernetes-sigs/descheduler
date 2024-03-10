@@ -5,9 +5,7 @@ package(
         "//cel:__subpackages__",
         "//checker:__subpackages__",
         "//common:__subpackages__",
-        "//ext:__subpackages__",
         "//interpreter:__subpackages__",
-        "//parser:__subpackages__",
     ],
     licenses = ["notice"],  # Apache 2.0
 )
@@ -16,14 +14,10 @@ go_library(
     name = "go_default_library",
     srcs = [
         "ast.go",
-        "conversion.go",
         "expr.go",
-        "factory.go",
-        "navigable.go",
     ],
     importpath = "github.com/google/cel-go/common/ast",
     deps = [    
-        "//common:go_default_library",
         "//common/types:go_default_library",
         "//common/types/ref:go_default_library",
         "@org_golang_google_genproto_googleapis_api//expr/v1alpha1:go_default_library",
@@ -35,9 +29,7 @@ go_test(
     name = "go_default_test",
     srcs = [
         "ast_test.go",
-        "conversion_test.go",
         "expr_test.go",
-        "navigable_test.go",
     ],
     embed = [
         ":go_default_library",
@@ -56,6 +48,5 @@ go_test(
         "//test/proto3pb:go_default_library",
         "@org_golang_google_genproto_googleapis_api//expr/v1alpha1:go_default_library",
         "@org_golang_google_protobuf//proto:go_default_library",
-        "@org_golang_google_protobuf//encoding/prototext:go_default_library",
     ],
 )
