@@ -335,6 +335,10 @@ func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) bool {
 // of another pod that is already on the given node.
 // If a match is found, it returns true.
 func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, error) {
+	if pod.Spec.Affinity == nil || pod.Spec.Affinity.PodAntiAffinity == nil {
+		return false, nil
+	}
+
 	podsOnNode, err := podutil.ListPodsOnANode(node.Name, nodeIndexer, nil)
 	if err != nil {
 		return false, fmt.Errorf("error listing all pods: %v", err)
