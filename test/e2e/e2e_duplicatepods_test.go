@@ -107,6 +107,7 @@ func TestRemoveDuplicates(t *testing.T) {
 		replicasNum             int
 		beforeFunc              func(deployment *appsv1.Deployment)
 		expectedEvictedPodCount uint
+		minReplicas             uint
 	}{
 		{
 			description: "Evict Pod even Pods schedule to specific node",
@@ -134,6 +135,15 @@ func TestRemoveDuplicates(t *testing.T) {
 				}
 			},
 			expectedEvictedPodCount: 2,
+		},
+		{
+			description: "Ignores eviction with minReplicas of 4",
+			replicasNum: 3,
+			beforeFunc: func(deployment *appsv1.Deployment) {
+				deployment.Spec.Replicas = pointer.Int32(3)
+			},
+			expectedEvictedPodCount: 0,
+			minReplicas:             4,
 		},
 	}
 	for _, tc := range tests {
@@ -179,6 +189,7 @@ func TestRemoveDuplicates(t *testing.T) {
 				IgnorePvcPods:           false,
 				EvictFailedBarePods:     false,
 				NodeFit:                 false,
+				MinReplicas:             tc.minReplicas,
 			}
 
 			evictorFilter, err := defaultevictor.New(

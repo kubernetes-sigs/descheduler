@@ -16,13 +16,15 @@ package defaultevictor
 import (
 	// "context"
 	"context"
+	"errors"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/errors"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -143,6 +145,36 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		})
 	}
 
+	if defaultEvictorArgs.MinReplicas > 1 {
+		indexName := "metadata.ownerReferences"
+		indexer, err := getPodIndexerByOwnerRefs(indexName, handle)
+		if err != nil {
+			return nil, err
+		}
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			if len(pod.OwnerReferences) == 0 {
+				return nil
+			}
+
+			if len(pod.OwnerReferences) > 1 {
+				klog.V(5).InfoS("pod has multiple owner references which is not supported for minReplicas check", "size", len(pod.OwnerReferences), "pod", klog.KObj(pod))
+				return nil
+			}
+
+			ownerRef := pod.OwnerReferences[0]
+			objs, err := indexer.ByIndex(indexName, string(ownerRef.UID))
+			if err != nil {
+				return fmt.Errorf("unable to list pods for minReplicas filter in the policy parameter")
+			}
+
+			if uint(len(objs)) < defaultEvictorArgs.MinReplicas {
+				return fmt.Errorf("owner has %d replicas which is less than minReplicas of %d", len(objs), defaultEvictorArgs.MinReplicas)
+			}
+
+			return nil
+		})
+	}
+
 	return ev, nil
 }
 
@@ -199,9 +231,28 @@ func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
 	}
 
 	if len(checkErrs) > 0 {
-		klog.V(4).InfoS("Pod fails the following checks", "pod", klog.KObj(pod), "checks", errors.NewAggregate(checkErrs).Error())
+		klog.V(4).InfoS("Pod fails the following checks", "pod", klog.KObj(pod), "checks", utilerrors.NewAggregate(checkErrs).Error())
 		return false
 	}
 
 	return true
+}
+
+func getPodIndexerByOwnerRefs(indexName string, handle frameworktypes.Handle) (cache.Indexer, error) {
+	podInformer := handle.SharedInformerFactory().Core().V1().Pods().Informer()
+	if err := podInformer.AddIndexers(cache.Indexers{
+		indexName: func(obj interface{}) ([]string, error) {
+			pod, ok := obj.(*v1.Pod)
+			if !ok {
+				return []string{}, errors.New("unexpected object")
+			}
+
+			return podutil.OwnerRefUIDs(pod), nil
+		},
+	}); err != nil {
+		return nil, err
+	}
+
+	indexer := podInformer.GetIndexer()
+	return indexer, nil
 }
