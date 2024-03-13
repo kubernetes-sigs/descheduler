@@ -90,6 +90,7 @@ type StrategyParameters struct {
 	NodeFit                           bool                               `json:"nodeFit"`
 	IncludePreferNoSchedule           bool                               `json:"includePreferNoSchedule"`
 	ExcludedTaints                    []string                           `json:"excludedTaints,omitempty"`
+	EnableFullEviction                bool                               `json:"enableFullEviction"`
 }
 
 type (
