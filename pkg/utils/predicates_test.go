@@ -6,6 +6,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/descheduler/test"
 )
 
 func TestUniqueSortTolerations(t *testing.T) {
@@ -1037,6 +1038,74 @@ func TestPodNodeAffinityWeight(t *testing.T) {
 			}
 			if totalWeight != test.expectedWeight {
 				t.Errorf("Expected total weight is %v but actual total weight is %v", test.expectedWeight, totalWeight)
+			}
+		})
+	}
+}
+
+func TestCheckPodsWithAntiAffinityExist(t *testing.T) {
+	tests := []struct {
+		name            string
+		pod             *v1.Pod
+		podsInNamespace map[string][]*v1.Pod
+		nodeMap         map[string]*v1.Node
+		affinity        *v1.PodAntiAffinity
+		expMatch        bool
+	}{
+		{
+			name: "found pod matching pod anti-affinity",
+			pod:  test.PodWithPodAntiAffinity(test.BuildTestPod("p1", 1000, 1000, "node", nil), "foo", "bar"),
+			podsInNamespace: map[string][]*v1.Pod{
+				"default": {
+					test.PodWithPodAntiAffinity(test.BuildTestPod("p2", 1000, 1000, "node", nil), "foo", "bar"),
+				},
+			},
+			nodeMap: map[string]*v1.Node{
+				"node": test.BuildTestNode("node", 64000, 128*1000*1000*1000, 2, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						"region": "main-region",
+					}
+				}),
+			},
+			expMatch: true,
+		},
+		{
+			name: "no match with invalid label selector",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Affinity: &v1.Affinity{
+						PodAntiAffinity: &v1.PodAntiAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+								{
+									LabelSelector: &metav1.LabelSelector{
+										MatchLabels: map[string]string{
+											"wrong": "selector",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			podsInNamespace: map[string][]*v1.Pod{},
+			nodeMap:         map[string]*v1.Node{},
+			expMatch:        false,
+		},
+		{
+			name: "no match if pod does not match terms namespace",
+			pod: test.PodWithPodAntiAffinity(test.BuildTestPod("p1", 1000, 1000, "node", func(pod *v1.Pod) {
+				pod.Namespace = "other"
+			}), "foo", "bar"),
+			podsInNamespace: map[string][]*v1.Pod{},
+			nodeMap:         map[string]*v1.Node{},
+			expMatch:        false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if match := CheckPodsWithAntiAffinityExist(test.pod, test.podsInNamespace, test.nodeMap); match != test.expMatch {
+				t.Errorf("exp %v got %v", test.expMatch, match)
 			}
 		})
 	}

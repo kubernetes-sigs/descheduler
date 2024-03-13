@@ -96,14 +96,14 @@ func TestPodAntiAffinity(t *testing.T) {
 	test.SetNormalOwnerRef(p11)
 
 	// set pod anti affinity
-	setPodAntiAffinity(p1, "foo", "bar")
-	setPodAntiAffinity(p3, "foo", "bar")
-	setPodAntiAffinity(p4, "foo", "bar")
-	setPodAntiAffinity(p5, "foo1", "bar1")
-	setPodAntiAffinity(p6, "foo1", "bar1")
-	setPodAntiAffinity(p7, "foo", "bar")
-	setPodAntiAffinity(p9, "foo", "bar")
-	setPodAntiAffinity(p10, "foo", "bar")
+	test.SetPodAntiAffinity(p1, "foo", "bar")
+	test.SetPodAntiAffinity(p3, "foo", "bar")
+	test.SetPodAntiAffinity(p4, "foo", "bar")
+	test.SetPodAntiAffinity(p5, "foo1", "bar1")
+	test.SetPodAntiAffinity(p6, "foo1", "bar1")
+	test.SetPodAntiAffinity(p7, "foo", "bar")
+	test.SetPodAntiAffinity(p9, "foo", "bar")
+	test.SetPodAntiAffinity(p10, "foo", "bar")
 
 	// set pod priority
 	test.SetPodPriority(p5, 100)
@@ -282,26 +282,5 @@ func TestPodAntiAffinity(t *testing.T) {
 				t.Errorf("Unexpected no of pods evicted: pods evicted: %d, expected: %d", podsEvicted, test.expectedEvictedPodCount)
 			}
 		})
-	}
-}
-
-func setPodAntiAffinity(inputPod *v1.Pod, labelKey, labelValue string) {
-	inputPod.Spec.Affinity = &v1.Affinity{
-		PodAntiAffinity: &v1.PodAntiAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
-				{
-					LabelSelector: &metav1.LabelSelector{
-						MatchExpressions: []metav1.LabelSelectorRequirement{
-							{
-								Key:      labelKey,
-								Operator: metav1.LabelSelectorOpIn,
-								Values:   []string{labelValue},
-							},
-						},
-					},
-					TopologyKey: "region",
-				},
-			},
-		},
 	}
 }

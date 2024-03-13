@@ -754,7 +754,11 @@ func TestPodFitsAnyOtherNode(t *testing.T) {
 }
 
 func TestNodeFit(t *testing.T) {
-	node := test.BuildTestNode("node", 64000, 128*1000*1000*1000, 2, nil)
+	node := test.BuildTestNode("node", 64000, 128*1000*1000*1000, 2, func(node *v1.Node) {
+		node.ObjectMeta.Labels = map[string]string{
+			"region": "main-region",
+		}
+	})
 	tests := []struct {
 		description string
 		pod         *v1.Pod
@@ -781,6 +785,22 @@ func TestNodeFit(t *testing.T) {
 			},
 			err: errors.New("insufficient pods"),
 		},
+		{
+			description: "matches inter-pod anti-affinity rule of pod on node",
+			pod:         test.PodWithPodAntiAffinity(test.BuildTestPod("p1", 1000, 1000, node.Name, nil), "foo", "bar"),
+			node:        node,
+			podsOnNode: []*v1.Pod{
+				test.PodWithPodAntiAffinity(test.BuildTestPod("p2", 1000, 1000, node.Name, nil), "foo", "bar"),
+			},
+			err: errors.New("pod matches inter-pod anti-affinity rule of other pod on node"),
+		},
+		{
+			description: "pod fits on node",
+			pod:         test.BuildTestPod("p1", 1000, 1000, "", func(pod *v1.Pod) {}),
+			node:        node,
+			podsOnNode:  []*v1.Pod{},
+			err:         nil,
+		},
 	}
 
 	for _, tc := range tests {
@@ -804,7 +824,8 @@ func TestNodeFit(t *testing.T) {
 
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-			if errs := NodeFit(getPodsAssignedToNode, tc.pod, tc.node); (len(errs) == 0 && tc.err != nil) || errs[0].Error() != tc.err.Error() {
+			errs := NodeFit(getPodsAssignedToNode, tc.pod, tc.node)
+			if (len(errs) == 0 && tc.err != nil) || (len(errs) > 0 && errs[0].Error() != tc.err.Error()) {
 				t.Errorf("Test %#v failed, got %v, expect %v", tc.description, errs, tc.err)
 			}
 		})
