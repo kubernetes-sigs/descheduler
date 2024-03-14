@@ -238,7 +238,7 @@ func getTargetNodes(podNodes map[string][]*v1.Pod, nodes []*v1.Node) []*v1.Node 
 					utils.NodeSelectorsEqual(getNodeAffinityNodeSelector(pod), getNodeAffinityNodeSelector(dp)) &&
 					reflect.DeepEqual(pod.Spec.NodeSelector, dp.Spec.NodeSelector) {
 					duplicated = true
-					continue
+					break
 				}
 			}
 			if duplicated {
