@@ -72,6 +72,11 @@ func (in *DeschedulerPolicy) DeepCopyInto(out *DeschedulerPolicy) {
 		*out = new(uint)
 		**out = **in
 	}
+	if in.IgnoreMinNodesCheck != nil {
+		in, out := &in.IgnoreMinNodesCheck, &out.IgnoreMinNodesCheck
+		*out = new(bool)
+		**out = **in
+	}
 	return
 }
 

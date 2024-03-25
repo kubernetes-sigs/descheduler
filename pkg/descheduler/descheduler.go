@@ -25,25 +25,25 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/events"
-	componentbaseconfig "k8s.io/component-base/config"
-	"k8s.io/klog/v2"
-
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilversion "k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	schedulingv1 "k8s.io/client-go/listers/scheduling/v1"
 	core "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/events"
+	componentbaseconfig "k8s.io/component-base/config"
+	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
@@ -116,8 +116,9 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 		metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
 	}(time.Now())
 
+	shouldCheckMinNodes := !ptr.Deref(d.deschedulerPolicy.IgnoreMinNodesCheck, false)
 	// if len is still <= 1 error out
-	if len(nodes) <= 1 {
+	if shouldCheckMinNodes && len(nodes) <= 1 {
 		klog.V(1).InfoS("The cluster size is 0 or 1 meaning eviction causes service disruption or degradation. So aborting..")
 		return fmt.Errorf("the cluster size is 0 or 1")
 	}

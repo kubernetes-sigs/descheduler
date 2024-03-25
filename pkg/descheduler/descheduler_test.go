@@ -13,8 +13,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	apiversion "k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
+	"k8s.io/client-go/informers"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/events"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
@@ -245,6 +248,64 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 		}
 	case <-time.After(1 * time.Second):
 		t.Fatal("Root ctx should have canceled immediately")
+	}
+}
+
+func TestRunDeschedulerLoop(t *testing.T) {
+	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
+
+	testCases := map[string]struct {
+		expectError       bool
+		deschedulerPolicy *api.DeschedulerPolicy
+		nodes             []*v1.Node
+	}{
+		"nodes=1, IgnoreMinNodesCheck=true, no error": {
+			expectError:       false,
+			deschedulerPolicy: &api.DeschedulerPolicy{IgnoreMinNodesCheck: ptr.To[bool](true)},
+			nodes:             []*v1.Node{n1},
+		},
+		"nodes=1, IgnoreMinNodesCheck=false, has error": {
+			expectError:       true,
+			deschedulerPolicy: &api.DeschedulerPolicy{IgnoreMinNodesCheck: ptr.To[bool](false)},
+			nodes:             []*v1.Node{n1},
+		},
+		"nodes=1, IgnoreMinNodesCheck=nil, has error": {
+			expectError:       true,
+			deschedulerPolicy: &api.DeschedulerPolicy{IgnoreMinNodesCheck: nil},
+			nodes:             []*v1.Node{n1},
+		},
+		"nodes=2, IgnoreMinNodesCheck=false, no error": {
+			expectError:       false,
+			deschedulerPolicy: &api.DeschedulerPolicy{IgnoreMinNodesCheck: ptr.To[bool](false)},
+			nodes:             []*v1.Node{n1, n2},
+		},
+		"nodes=2, IgnoreMinNodesCheck=true, no error": {
+			expectError:       false,
+			deschedulerPolicy: &api.DeschedulerPolicy{IgnoreMinNodesCheck: ptr.To[bool](true)},
+			nodes:             []*v1.Node{n1, n2},
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			fakeClient := fakeclientset.NewSimpleClientset(n1, n2)
+
+			eventRecorder := &events.FakeRecorder{}
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+
+			instance, err := newDescheduler(ctx, &options.DeschedulerServer{}, tc.deschedulerPolicy, "v1", eventRecorder, sharedInformerFactory)
+			if err != nil {
+				t.Fatalf("unable to initialize descheduler")
+			}
+
+			err = instance.runDeschedulerLoop(ctx, tc.nodes)
+			hasError := err != nil
+			if tc.expectError != hasError {
+				t.Errorf("unexpected descheduler loop behavior. err %v", err)
+			}
+		})
 	}
 }
 
