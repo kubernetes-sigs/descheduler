@@ -1,0 +1,49 @@
+// For format details, see https://aka.ms/vscode-remote/devcontainer.json or this file's README at:
+// https://github.com/microsoft/vscode-dev-containers/tree/v0.195.0/containers/go
+{
+	"name": "Go",
+	"build": {
+	  "dockerfile": "Dockerfile",
+	  "args": {
+		// Update the VARIANT arg to pick a version of Go: 1, 1.16, 1.17
+		// Append -bullseye or -buster to pin to an OS version.
+		// Use -bullseye variants on local arm64/Apple Silicon.
+		"VARIANT": "1.20-bullseye",
+		// Options
+		"NODE_VERSION": "lts/*"
+	  }
+	},
+	"runArgs": [
+	  "--cap-add=SYS_PTRACE",
+	  "--security-opt",
+	  "seccomp=unconfined",
+	  "--network=host"
+	],
+  
+	// Configure tool-specific properties.
+	"customizations": {
+	  // Configure properties specific to VS Code.
+	  "vscode": {
+		// Set *default* container specific settings.json values on container create.
+		"settings": {
+		  "go.toolsManagement.checkForUpdates": "local",
+		  "go.useLanguageServer": true,
+		  "go.gopath": "/go",
+		  "go.goroot": "/usr/local/go"
+		},
+  
+		// Add the IDs of extensions you want installed when the container is created.
+		"extensions": ["golang.Go"]
+	  }
+	},
+  
+	"features": {
+	  "ghcr.io/devcontainers/features/sshd:1": {
+		  "version": "latest"
+	  }
+	},
+  
+	"mounts": [
+	  "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+	]
+  }
