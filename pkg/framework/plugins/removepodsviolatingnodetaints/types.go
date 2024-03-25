@@ -32,4 +32,5 @@ type RemovePodsViolatingNodeTaintsArgs struct {
 	LabelSelector           *metav1.LabelSelector `json:"labelSelector"`
 	IncludePreferNoSchedule bool                  `json:"includePreferNoSchedule"`
 	ExcludedTaints          []string              `json:"excludedTaints"`
+	IncludedTaints          []string              `json:"includedTaints"`
 }

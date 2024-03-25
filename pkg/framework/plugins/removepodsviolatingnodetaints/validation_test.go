@@ -54,6 +54,21 @@ func TestValidateRemovePodsViolatingNodeTaintsArgs(t *testing.T) {
 			},
 			expectError: true,
 		},
+		{
+			description: "valid taint filters, no errors",
+			args: &RemovePodsViolatingNodeTaintsArgs{
+				ExcludedTaints: []string{"testTaint1=test1"},
+			},
+			expectError: false,
+		},
+		{
+			description: "invalid taint filters args, expects errors",
+			args: &RemovePodsViolatingNodeTaintsArgs{
+				ExcludedTaints: []string{"do-not-evict"},
+				IncludedTaints: []string{"testTaint1=test1"},
+			},
+			expectError: true,
+		},
 	}
 
 	for _, tc := range testCases {
