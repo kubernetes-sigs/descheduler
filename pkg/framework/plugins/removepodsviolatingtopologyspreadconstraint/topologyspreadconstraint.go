@@ -150,6 +150,12 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 		// ...where there is a topology constraint
 		var namespaceTopologySpreadConstraints []topologySpreadConstraint
 		for _, pod := range namespacedPods[namespace] {
+
+			// Ignore Completed or Failed Pods.
+			if pod.Status.Phase == v1.PodSucceeded || pod.Status.Phase == v1.PodFailed {
+				continue
+			}
+
 			for _, constraint := range pod.Spec.TopologySpreadConstraints {
 				// Ignore topology constraints if they are not included
 				if !allowedConstraints.Has(constraint.WhenUnsatisfiable) {
