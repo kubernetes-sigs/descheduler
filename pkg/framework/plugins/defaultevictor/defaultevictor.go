@@ -124,6 +124,15 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 			return nil
 		})
 	}
+	if !defaultEvictorArgs.EvictDaemonSetPods {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			ownerRefList := podutil.OwnerRef(pod)
+			if utils.IsDaemonsetPod(ownerRefList) {
+				return fmt.Errorf("pod is related to daemonset and descheduler is not configured with evictDaemonSetPods")
+			}
+			return nil
+		})
+	}
 	if defaultEvictorArgs.IgnorePvcPods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			if utils.IsPodWithPVC(pod) {
@@ -205,11 +214,6 @@ func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
 
 	if HaveEvictAnnotation(pod) {
 		return true
-	}
-
-	ownerRefList := podutil.OwnerRef(pod)
-	if utils.IsDaemonsetPod(ownerRefList) {
-		checkErrs = append(checkErrs, fmt.Errorf("pod is a DaemonSet pod"))
 	}
 
 	if utils.IsMirrorPod(pod) {

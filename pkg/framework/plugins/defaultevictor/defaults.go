@@ -31,6 +31,9 @@ func SetDefaults_DefaultEvictorArgs(obj runtime.Object) {
 	if !args.EvictLocalStoragePods {
 		args.EvictLocalStoragePods = false
 	}
+	if !args.EvictDaemonSetPods {
+		args.EvictDaemonSetPods = false
+	}
 	if !args.EvictSystemCriticalPods {
 		args.EvictSystemCriticalPods = false
 	}

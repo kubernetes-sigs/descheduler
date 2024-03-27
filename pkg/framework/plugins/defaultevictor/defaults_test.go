@@ -35,6 +35,7 @@ func TestSetDefaults_DefaultEvictorArgs(t *testing.T) {
 			want: &DefaultEvictorArgs{
 				NodeSelector:            "",
 				EvictLocalStoragePods:   false,
+				EvictDaemonSetPods:      false,
 				EvictSystemCriticalPods: false,
 				IgnorePvcPods:           false,
 				EvictFailedBarePods:     false,
@@ -48,6 +49,7 @@ func TestSetDefaults_DefaultEvictorArgs(t *testing.T) {
 			in: &DefaultEvictorArgs{
 				NodeSelector:            "NodeSelector",
 				EvictLocalStoragePods:   true,
+				EvictDaemonSetPods:      true,
 				EvictSystemCriticalPods: true,
 				IgnorePvcPods:           true,
 				EvictFailedBarePods:     true,
@@ -60,6 +62,7 @@ func TestSetDefaults_DefaultEvictorArgs(t *testing.T) {
 			want: &DefaultEvictorArgs{
 				NodeSelector:            "NodeSelector",
 				EvictLocalStoragePods:   true,
+				EvictDaemonSetPods:      true,
 				EvictSystemCriticalPods: true,
 				IgnorePvcPods:           true,
 				EvictFailedBarePods:     true,

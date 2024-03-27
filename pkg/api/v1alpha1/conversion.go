@@ -139,6 +139,14 @@ func V1alpha1ToInternal(
 		}
 	}
 
+	evictDaemonSetPods := false
+	if deschedulerPolicy.EvictDaemonSetPods != nil {
+		evictDaemonSetPods = *deschedulerPolicy.EvictDaemonSetPods
+		if evictDaemonSetPods {
+			klog.V(1).Info("Warning: EvictDaemonSetPods is set to True. This could cause eviction of Kubernetes DaemonSet pods.")
+		}
+	}
+
 	ignorePvcPods := false
 	if deschedulerPolicy.IgnorePVCPods != nil {
 		ignorePvcPods = *deschedulerPolicy.IgnorePVCPods
@@ -193,6 +201,7 @@ func V1alpha1ToInternal(
 							Name: defaultevictor.PluginName,
 							Args: &defaultevictor.DefaultEvictorArgs{
 								EvictLocalStoragePods:   evictLocalStoragePods,
+								EvictDaemonSetPods:      evictDaemonSetPods,
 								EvictSystemCriticalPods: evictSystemCriticalPods,
 								IgnorePvcPods:           ignorePvcPods,
 								EvictFailedBarePods:     evictBarePods,
