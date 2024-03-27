@@ -27,6 +27,7 @@ type DefaultEvictorArgs struct {
 
 	NodeSelector            string                 `json:"nodeSelector"`
 	EvictLocalStoragePods   bool                   `json:"evictLocalStoragePods"`
+	EvictDaemonSetPods      bool                   `json:"evictDaemonSetPods"`
 	EvictSystemCriticalPods bool                   `json:"evictSystemCriticalPods"`
 	IgnorePvcPods           bool                   `json:"ignorePvcPods"`
 	EvictFailedBarePods     bool                   `json:"evictFailedBarePods"`
