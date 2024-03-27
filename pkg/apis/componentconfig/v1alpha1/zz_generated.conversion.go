@@ -67,6 +67,7 @@ func autoConvert_v1alpha1_DeschedulerConfiguration_To_componentconfig_Deschedule
 	out.NodeSelector = in.NodeSelector
 	out.MaxNoOfPodsToEvictPerNode = in.MaxNoOfPodsToEvictPerNode
 	out.EvictLocalStoragePods = in.EvictLocalStoragePods
+	out.EvictDaemonSetPods = in.EvictDaemonSetPods
 	out.IgnorePVCPods = in.IgnorePVCPods
 	if err := Convert_v1alpha1_TracingConfiguration_To_componentconfig_TracingConfiguration(&in.Tracing, &out.Tracing, s); err != nil {
 		return err
@@ -89,6 +90,7 @@ func autoConvert_componentconfig_DeschedulerConfiguration_To_v1alpha1_Deschedule
 	out.NodeSelector = in.NodeSelector
 	out.MaxNoOfPodsToEvictPerNode = in.MaxNoOfPodsToEvictPerNode
 	out.EvictLocalStoragePods = in.EvictLocalStoragePods
+	out.EvictDaemonSetPods = in.EvictDaemonSetPods
 	out.IgnorePVCPods = in.IgnorePVCPods
 	if err := Convert_componentconfig_TracingConfiguration_To_v1alpha1_TracingConfiguration(&in.Tracing, &out.Tracing, s); err != nil {
 		return err
