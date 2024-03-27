@@ -135,6 +135,71 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 			},
 		},
 		{
+			description: "convert global policy fields to defaultevictor",
+			policy: &v1alpha1.DeschedulerPolicy{
+				EvictFailedBarePods:     utilpointer.Bool(true),
+				EvictLocalStoragePods:   utilpointer.Bool(true),
+				EvictSystemCriticalPods: utilpointer.Bool(true),
+				EvictDaemonSetPods:      utilpointer.Bool(true),
+				IgnorePVCPods:           utilpointer.Bool(true),
+				Strategies: v1alpha1.StrategyList{
+					removeduplicates.PluginName: v1alpha1.DeschedulerStrategy{
+						Enabled: true,
+						Params: &v1alpha1.StrategyParameters{
+							Namespaces: &v1alpha1.Namespaces{
+								Exclude: []string{
+									"test2",
+								},
+							},
+						},
+					},
+				},
+			},
+			result: &api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: fmt.Sprintf("strategy-%s-profile", removeduplicates.PluginName),
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: defaultevictor.PluginName,
+								Args: &defaultevictor.DefaultEvictorArgs{
+									EvictLocalStoragePods:   true,
+									EvictDaemonSetPods:      true,
+									EvictSystemCriticalPods: true,
+									IgnorePvcPods:           true,
+									EvictFailedBarePods:     true,
+									PriorityThreshold: &api.PriorityThreshold{
+										Value: nil,
+									},
+								},
+							},
+							{
+								Name: removeduplicates.PluginName,
+								Args: &removeduplicates.RemoveDuplicatesArgs{
+									Namespaces: &api.Namespaces{
+										Exclude: []string{
+											"test2",
+										},
+									},
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Balance: api.PluginSet{
+								Enabled: []string{removeduplicates.PluginName},
+							},
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			description: "convert all strategies",
 			policy: &v1alpha1.DeschedulerPolicy{
 				Strategies: v1alpha1.StrategyList{
@@ -947,6 +1012,7 @@ profiles:
         evictSystemCriticalPods: true
         evictFailedBarePods: true
         evictLocalStoragePods: true
+        evictDaemonSetPods: true
         nodeFit: true
     - name: "RemovePodsHavingTooManyRestarts"
       args:
@@ -968,6 +1034,7 @@ profiles:
 									EvictSystemCriticalPods: true,
 									EvictFailedBarePods:     true,
 									EvictLocalStoragePods:   true,
+									EvictDaemonSetPods:      true,
 									PriorityThreshold:       &api.PriorityThreshold{Value: utilpointer.Int32(2000000000)},
 									NodeFit:                 true,
 								},
@@ -1099,6 +1166,7 @@ profiles:
         evictSystemCriticalPods: true
         evictFailedBarePods: true
         evictLocalStoragePods: true
+        evictDaemonSetPods: true
         nodeFit: true
     - name: "RemoveFailedPods"
     plugins:
@@ -1123,6 +1191,7 @@ profiles:
 									EvictSystemCriticalPods: true,
 									EvictFailedBarePods:     true,
 									EvictLocalStoragePods:   true,
+									EvictDaemonSetPods:      true,
 									PriorityThreshold:       &api.PriorityThreshold{Value: utilpointer.Int32(2000000000)},
 									NodeFit:                 true,
 								},
@@ -1161,6 +1230,7 @@ profiles:
         evictSystemCriticalPods: true
         evictFailedBarePods: true
         evictLocalStoragePods: true
+        evictDaemonSetPods: true
         nodeFit: true
     - name: "RemoveFailedPods"
     plugins:
@@ -1179,6 +1249,7 @@ profiles:
 									EvictSystemCriticalPods: true,
 									EvictFailedBarePods:     true,
 									EvictLocalStoragePods:   true,
+									EvictDaemonSetPods:      true,
 									PriorityThreshold:       &api.PriorityThreshold{Value: utilpointer.Int32(2000000000)},
 									NodeFit:                 true,
 								},
