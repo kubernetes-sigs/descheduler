@@ -335,6 +335,7 @@ func CheckPodsWithAntiAffinityExist(pod *v1.Pod, pods map[string][]*v1.Pod, node
 							klog.V(1).InfoS("Found Pods matching PodAntiAffinity", "pod with anti-affinity", klog.KObj(pod))
 							return true
 						}
+						klog.V(4).InfoS("did not find matching Pod anti-afffinity on node", "node", klog.KObj(nodeHavingExistingPod))
 					}
 				}
 			}
