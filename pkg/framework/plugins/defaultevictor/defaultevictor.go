@@ -47,7 +47,7 @@ type constraint func(pod *v1.Pod) error
 // This plugin is only meant to customize other actions (extension points) of the evictor,
 // like filtering, sorting, and other ones that might be relevant in the future
 type DefaultEvictor struct {
-	args        runtime.Object
+	args        *DefaultEvictorArgs
 	constraints []constraint
 	handle      frameworktypes.Handle
 }
@@ -70,9 +70,10 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("want args to be of type defaultEvictorFilterArgs, got %T", args)
 	}
 
-	ev := &DefaultEvictor{}
-	ev.handle = handle
-	ev.args = defaultEvictorArgs
+	ev := &DefaultEvictor{
+		handle: handle,
+		args:   defaultEvictorArgs,
+	}
 
 	if defaultEvictorArgs.EvictFailedBarePods {
 		klog.V(1).InfoS("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
@@ -184,9 +185,8 @@ func (d *DefaultEvictor) Name() string {
 }
 
 func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
-	defaultEvictorArgs := d.args.(*DefaultEvictorArgs)
-	if defaultEvictorArgs.NodeFit {
-		nodes, err := nodeutil.ReadyNodes(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Nodes().Lister(), defaultEvictorArgs.NodeSelector)
+	if d.args.NodeFit {
+		nodes, err := nodeutil.ReadyNodes(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Nodes().Lister(), d.args.NodeSelector)
 		if err != nil {
 			klog.ErrorS(err, "unable to list ready nodes", "pod", klog.KObj(pod))
 			return false
