@@ -125,13 +125,20 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 	defer span.End()
 
 	if pod.Spec.NodeName != "" {
-		if pe.maxPodsToEvictPerNode != nil && pe.nodepodCount[pod.Spec.NodeName]+1 > *pe.maxPodsToEvictPerNode {
-			if pe.metricsEnabled {
-				metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
+		if pe.maxPodsToEvictPerNode != nil {
+			if pe.nodepodCount[pod.Spec.NodeName]+1 == *pe.maxPodsToEvictPerNode {
+				if pe.metricsEnabled {
+					metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node will reach", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
+					klog.Warningf("Warning maximum number of evicted pods per node will reach, limit %d, node %s", *pe.maxPodsToEvictPerNode, pod.Spec.NodeName)
+				}
+			} else if pe.nodepodCount[pod.Spec.NodeName]+1 > *pe.maxPodsToEvictPerNode {
+				if pe.metricsEnabled {
+					metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
+				}
+				span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", "Maximum number of evicted pods per node reached")))
+				klog.ErrorS(fmt.Errorf("maximum number of evicted pods per node reached"), "Error evicting pod", "limit", *pe.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
+				return false
 			}
-			span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", "Maximum number of evicted pods per node reached")))
-			klog.ErrorS(fmt.Errorf("maximum number of evicted pods per node reached"), "Error evicting pod", "limit", *pe.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
-			return false
 		}
 	}
 
