@@ -325,17 +325,19 @@ func CheckPodsWithAntiAffinityExist(pod *v1.Pod, pods map[string][]*v1.Pod, node
 					if existingPod.Name != pod.Name && podMatchesTermsNamespaceAndSelector(existingPod, namespaces, selector) {
 						node, ok := nodeMap[pod.Spec.NodeName]
 						if !ok {
+							klog.V(4).InfoS("antiaffinity check: pod not in node", "pod", klog.KObj(pod), "node", klog.KObjs(node))
 							continue
 						}
 						nodeHavingExistingPod, ok := nodeMap[existingPod.Spec.NodeName]
 						if !ok {
+							klog.V(4).InfoS("antiaffinity check: existing pod not in existing node", "existingPod", klog.KObj(pod), "existing node", klog.KObjs(nodeHavingExistingPod))
 							continue
 						}
 						if hasSameLabelValue(node, nodeHavingExistingPod, term.TopologyKey) {
-							klog.V(1).InfoS("Found Pods matching PodAntiAffinity", "pod with anti-affinity", klog.KObj(pod))
+							klog.V(1).InfoS("Found Pods matching PodAntiAffinity", "evaluated pod", klog.KObj(pod), "existing pod", klog.KObj(existingPod))
 							return true
 						}
-						klog.V(4).InfoS("did not find matching Pod anti-afffinity on node", "node", klog.KObj(nodeHavingExistingPod))
+						klog.V(4).InfoS("did not find matching Pod AntiAfffinity on node", "node", klog.KObj(nodeHavingExistingPod))
 					}
 				}
 			}

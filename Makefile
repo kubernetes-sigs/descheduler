@@ -17,7 +17,7 @@
 export CONTAINER_ENGINE ?= docker
 
 # VERSION is based on a date stamp plus the last commit
-VERSION?=$(shell git rev-parse --short HEAD)-$(shell date +%Y%m%d)
+VERSION?=$(shell git rev-parse --short HEAD)
 BRANCH?=$(shell git branch --show-current)
 SHA1?=$(shell git rev-parse HEAD)
 BUILD=$(shell date +%FT%T%z)

@@ -9,6 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
@@ -31,10 +32,12 @@ func getNamespacesFromPodAffinityTerm(pod *v1.Pod, podAffinityTerm *v1.PodAffini
 // matches the namespace and selector defined by <affinityPod>`s <term>.
 func podMatchesTermsNamespaceAndSelector(pod *v1.Pod, namespaces sets.Set[string], selector labels.Selector) bool {
 	if !namespaces.Has(pod.Namespace) {
+		klog.V(4).InfoS("antiaffinity check: pod does not match namespace", "pod", klog.KObj(pod), "given namespaces", klog.KObjs(namespaces))
 		return false
 	}
 
 	if !selector.Matches(labels.Set(pod.Labels)) {
+		klog.V(4).InfoS("antiaffinity check: pod does not match labels", "pod", klog.KObj(pod), "given selector", klog.KObjs(selector))
 		return false
 	}
 	return true

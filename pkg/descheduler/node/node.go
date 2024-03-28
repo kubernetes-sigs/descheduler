@@ -134,7 +134,7 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 	if match, err := podMatchesInterPodAntiAffinity(nodeIndexer, pod, node); err != nil {
 		errors = append(errors, err)
 	} else if match {
-		errors = append(errors, fmt.Errorf("pod matches inter-pod anti-affinity rule of other pod on node"))
+		errors = append(errors, fmt.Errorf("pod matches inter-pod antiaffinity rule of other pod on node"))
 	}
 
 	return errors
@@ -336,7 +336,7 @@ func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) bool {
 // If a match is found, it returns true.
 func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, error) {
 	if pod.Spec.Affinity == nil || pod.Spec.Affinity.PodAntiAffinity == nil {
-		klog.V(4).InfoS("no Pod anti-affinity rule found", "pod", klog.KObj(pod))
+		klog.V(4).InfoS("no Pod antiaffinity rule found", "pod", klog.KObj(pod))
 		return false, nil
 	}
 
