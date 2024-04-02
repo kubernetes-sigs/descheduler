@@ -30,16 +30,18 @@ func getNamespacesFromPodAffinityTerm(pod *v1.Pod, podAffinityTerm *v1.PodAffini
 
 // podMatchesTermsNamespaceAndSelector returns true if the given <pod>
 // matches the namespace and selector defined by <affinityPod>`s <term>.
-func podMatchesTermsNamespaceAndSelector(pod *v1.Pod, namespaces sets.Set[string], selector labels.Selector) bool {
-	if !namespaces.Has(pod.Namespace) {
-		klog.V(4).InfoS("antiaffinity check: pod does not match namespace", "pod", klog.KObj(pod), "given namespaces", klog.KObjs(namespaces))
+func podMatchesTermsNamespaceAndSelector(existingPod, evaluatedPod *v1.Pod, namespaces sets.Set[string], selector labels.Selector) bool {
+	if !namespaces.Has(existingPod.Namespace) {
+		klog.V(4).InfoS("antiaffinity check: pod does not match namespace", "pod", klog.KObj(existingPod), "given namespaces", klog.KObjs(namespaces))
 		return false
 	}
 
-	if !selector.Matches(labels.Set(pod.Labels)) {
-		klog.V(4).InfoS("antiaffinity check: pod does not match labels", "pod", klog.KObj(pod), "given selector", klog.KObjs(selector))
+	if !selector.Matches(labels.Set(existingPod.Labels)) {
+		klog.V(4).InfoS("antiaffinity check: selector of Pod being evaluated does not match existing Pod's labels", "evaluated pod", klog.KObj(evaluatedPod), "existing pod", klog.KObj(existingPod))
 		return false
 	}
+
+	klog.V(4).InfoS("antiaffinity check: selector of Pod being evaluated matches labels of existing Pod", "evaluated pod", klog.KObj(evaluatedPod), "existing pod", klog.KObj(existingPod))
 	return true
 }
 

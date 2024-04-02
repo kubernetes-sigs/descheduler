@@ -322,10 +322,11 @@ func CheckPodsWithAntiAffinityExist(pod *v1.Pod, pods map[string][]*v1.Pod, node
 			}
 			for namespace := range namespaces {
 				for _, existingPod := range pods[namespace] {
-					if existingPod.Name != pod.Name && podMatchesTermsNamespaceAndSelector(existingPod, namespaces, selector) {
+					if existingPod.Name != pod.Name && podMatchesTermsNamespaceAndSelector(existingPod, pod, namespaces, selector) {
+						// only check if pod is on existing node for RemovePodsViolatingInterPodAntiAffinity
 						node, ok := nodeMap[pod.Spec.NodeName]
 						if !ok {
-							klog.V(4).InfoS("antiaffinity check: pod not in node", "pod", klog.KObj(pod), "node", klog.KObjs(node))
+							klog.V(4).InfoS("antiaffinity check: pod being evaluated not in node", "pod", klog.KObj(pod), "node", klog.KObjs(node))
 							continue
 						}
 						nodeHavingExistingPod, ok := nodeMap[existingPod.Spec.NodeName]
