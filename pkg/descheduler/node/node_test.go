@@ -754,7 +754,12 @@ func TestPodFitsAnyOtherNode(t *testing.T) {
 }
 
 func TestNodeFit(t *testing.T) {
-	node := test.BuildTestNode("node", 64000, 128*1000*1000*1000, 2, func(node *v1.Node) {
+	currentNode := test.BuildTestNode("current-node", 64000, 128*1000*1000*1000, 2, func(node *v1.Node) {
+		node.ObjectMeta.Labels = map[string]string{
+			"region": "main-region",
+		}
+	})
+	otherNode := test.BuildTestNode("other-node", 64000, 128*1000*1000*1000, 2, func(node *v1.Node) {
 		node.ObjectMeta.Labels = map[string]string{
 			"region": "main-region",
 		}
@@ -768,36 +773,36 @@ func TestNodeFit(t *testing.T) {
 	}{
 		{
 			description: "insufficient cpu",
-			pod:         test.BuildTestPod("p1", 10000, 2*1000*1000*1000, "", nil),
-			node:        node,
+			pod:         test.BuildTestPod("p1", 10000, 2*1000*1000*1000, currentNode.GetName(), nil),
+			node:        otherNode,
 			podsOnNode: []*v1.Pod{
-				test.BuildTestPod("p2", 60000, 60*1000*1000*1000, "node", nil),
+				test.BuildTestPod("p2", 60000, 60*1000*1000*1000, otherNode.GetName(), nil),
 			},
 			err: errors.New("insufficient cpu"),
 		},
 		{
 			description: "insufficient pod num",
-			pod:         test.BuildTestPod("p1", 1000, 2*1000*1000*1000, "", nil),
-			node:        node,
+			pod:         test.BuildTestPod("p1", 1000, 2*1000*1000*1000, currentNode.GetName(), nil),
+			node:        otherNode,
 			podsOnNode: []*v1.Pod{
-				test.BuildTestPod("p2", 1000, 2*1000*1000*1000, "node", nil),
-				test.BuildTestPod("p3", 1000, 2*1000*1000*1000, "node", nil),
+				test.BuildTestPod("p2", 1000, 2*1000*1000*1000, otherNode.GetName(), nil),
+				test.BuildTestPod("p3", 1000, 2*1000*1000*1000, otherNode.GetName(), nil),
 			},
 			err: errors.New("insufficient pods"),
 		},
 		{
-			description: "matches inter-pod anti-affinity rule of pod on node",
-			pod:         test.PodWithPodAntiAffinity(test.BuildTestPod("p1", 1000, 1000, node.Name, nil), "foo", "bar"),
-			node:        node,
+			description: "matches inter-pod anti-affinity rule of pod on other node",
+			pod:         test.PodWithPodAntiAffinity(test.BuildTestPod("p1", 1000, 1000, currentNode.GetName(), nil), "foo", "bar"),
+			node:        otherNode,
 			podsOnNode: []*v1.Pod{
-				test.PodWithPodAntiAffinity(test.BuildTestPod("p2", 1000, 1000, node.Name, nil), "foo", "bar"),
+				test.PodWithPodAntiAffinity(test.BuildTestPod("p2", 1000, 1000, otherNode.GetName(), nil), "foo", "bar"),
 			},
-			err: errors.New("pod matches inter-pod anti-affinity rule of other pod on node"),
+			err: errors.New("pod matches interpod antiaffinity rule of other pod on node"),
 		},
 		{
-			description: "pod fits on node",
-			pod:         test.BuildTestPod("p1", 1000, 1000, "", func(pod *v1.Pod) {}),
-			node:        node,
+			description: "pod fits on other node",
+			pod:         test.BuildTestPod("p1", 1000, 1000, currentNode.GetName(), func(pod *v1.Pod) {}),
+			node:        otherNode,
 			podsOnNode:  []*v1.Pod{},
 			err:         nil,
 		},

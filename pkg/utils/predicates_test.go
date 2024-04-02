@@ -1101,6 +1101,28 @@ func TestCheckPodsWithAntiAffinityExist(t *testing.T) {
 			nodeMap:         map[string]*v1.Node{},
 			expMatch:        false,
 		},
+		{
+			name: "found pod with matching anti-affinity on different node",
+			pod:  test.PodWithPodAntiAffinity(test.BuildTestPod("current-pod", 1000, 1000, "current-node", nil), "foo", "bar"),
+			podsInNamespace: map[string][]*v1.Pod{
+				"default": {
+					test.PodWithPodAntiAffinity(test.BuildTestPod("other-pod", 1000, 1000, "other-node", nil), "foo", "bar"),
+				},
+			},
+			nodeMap: map[string]*v1.Node{
+				"current-node": test.BuildTestNode("current-node", 64000, 128*1000*1000*1000, 2, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						"region": "main-region",
+					}
+				}),
+				"other-node": test.BuildTestNode("other-node", 64000, 128*1000*1000*1000, 2, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						"region": "main-region",
+					}
+				}),
+			},
+			expMatch: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

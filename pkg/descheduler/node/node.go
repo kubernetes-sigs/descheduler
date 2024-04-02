@@ -134,7 +134,7 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 	if match, err := podMatchesInterPodAntiAffinity(nodeIndexer, pod, node); err != nil {
 		errors = append(errors, err)
 	} else if match {
-		errors = append(errors, fmt.Errorf("pod matches inter-pod antiaffinity rule of other pod on node"))
+		errors = append(errors, fmt.Errorf("pod matches interpod antiaffinity rule of other pod on node"))
 	}
 
 	return errors
