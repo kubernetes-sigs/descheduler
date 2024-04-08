@@ -1,0 +1,29 @@
+title: Descheduling framework
+kep-number: 753
+authors:
+  - "@ingvagabund"
+  - "@damemi"
+owning-sig: sig-scheduling
+status: provisional
+creation-date: 2024-04-08
+reviewers:
+  - "@ingvagabund"
+  - "@damemi"
+  - "@a7i"
+  - "@knelasevero"
+approvers:
+  - "@ingvagabund"
+  - "@damemi"
+  - "@a7i"
+  - "@knelasevero"
+#replaces:
+
+# The target maturity stage in the current dev cycle for this KEP.
+stage: alpha
+
+# The most recent milestone for which work toward delivery of this KEP has been
+# done. This can be the current (upcoming) milestone, if it is being actively
+# worked on.
+# latest-milestone: "v1.19"
+
+# disable-supported: true
