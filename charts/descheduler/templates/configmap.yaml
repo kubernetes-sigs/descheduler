@@ -1,3 +1,4 @@
+{{- if not  .Values.existingPolicyConfigMap }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,3 +11,4 @@ data:
     apiVersion: "{{ .Values.deschedulerPolicyAPIVersion }}"
     kind: "DeschedulerPolicy"
 {{ toYaml .Values.deschedulerPolicy | trim | indent 4 }}
+{{- end }}
