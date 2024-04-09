@@ -941,7 +941,7 @@ When the descheduler decides to evict pods from a node, it employs the following
 * [Critical pods](https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/) (with priorityClassName set to system-cluster-critical or system-node-critical) are never evicted (unless `evictSystemCriticalPods: true` is set).
 * Pods (static or mirrored pods or standalone pods) not part of an ReplicationController, ReplicaSet(Deployment), StatefulSet, or Job are
 never evicted because these pods won't be recreated. (Standalone pods in failed status phase can be evicted by setting `evictFailedBarePods: true`)
-* Pods associated with DaemonSets are never evicted.
+* Pods associated with DaemonSets are never evicted (unless `evictDaemonSetPods: true` is set).
 * Pods with local storage are never evicted (unless `evictLocalStoragePods: true` is set).
 * Pods with PVCs are evicted (unless `ignorePvcPods: true` is set).
 * In `LowNodeUtilization` and `RemovePodsViolatingInterPodAntiAffinity`, pods are evicted by their priority from low to high, and if they have same priority,
