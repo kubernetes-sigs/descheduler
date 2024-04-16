@@ -84,7 +84,7 @@ deschedulerPolicyAPIVersion: "descheduler/v1alpha2"
 # deschedulerPolicy contains the policies the descheduler will execute. 
 # To use policies stored in an existing configMap use:
 # NOTE: The name of the cm should comply to {{ template "descheduler.fullname" . }}
-# deschedulerPolicy: []
+# deschedulerPolicy: {}
 deschedulerPolicy:
   # nodeSelector: "key1=value1,key2=value2"
   # maxNoOfPodsToEvictPerNode: 10
