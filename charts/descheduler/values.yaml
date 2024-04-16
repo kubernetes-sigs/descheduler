@@ -81,7 +81,7 @@ cmdOptions:
 # Recommended to use the latest Policy API version supported by the Descheduler app version
 deschedulerPolicyAPIVersion: "descheduler/v1alpha2"
 
-# deschedulerPolicy contains the policies the descheduler will execute. 
+# deschedulerPolicy contains the policies the descheduler will execute.
 # To use policies stored in an existing configMap use:
 # NOTE: The name of the cm should comply to {{ template "descheduler.fullname" . }}
 # deschedulerPolicy: {}
