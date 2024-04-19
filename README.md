@@ -743,7 +743,7 @@ profiles:
 
 ### Namespace filtering
 
-The following strategies accept a `namespaces` parameter which allows to specify a list of including, resp. excluding namespaces:
+The following strategies accept a `namespaces` parameter which allows to specify a list of including and excluding namespaces respectively:
 * `PodLifeTime`
 * `RemovePodsHavingTooManyRestarts`
 * `RemovePodsViolatingNodeTaints`
@@ -753,11 +753,10 @@ The following strategies accept a `namespaces` parameter which allows to specify
 * `RemovePodsViolatingTopologySpreadConstraint`
 * `RemoveFailedPods`
 
-
-The following strategies accept a `evictableNamespaces` parameter which allows to specify a list of excluding namespaces:
+The following strategies accept an `evictableNamespaces` parameter which allows to specify a list of excluding namespaces:
 * `LowNodeUtilization` and `HighNodeUtilization` (Only filtered right before eviction)
 
-For example with PodLifeTime:
+In the following example with `PodLifeTime`, `PodLifeTime` gets executed only over `namespace1` and `namespace2`.
 
 ```yaml
 apiVersion: "descheduler/v1alpha2"
@@ -778,8 +777,7 @@ profiles:
           - "PodLifeTime"
 ```
 
-In the example `PodLifeTime` gets executed only over `namespace1` and `namespace2`.
-The similar holds for `exclude` field:
+The similar holds for `exclude` field. The strategy gets executed over all namespaces but `namespace1` and `namespace2` in the following example.
 
 ```yaml
 apiVersion: "descheduler/v1alpha2"
@@ -800,9 +798,7 @@ profiles:
           - "PodLifeTime"
 ```
 
-The strategy gets executed over all namespaces but `namespace1` and `namespace2`.
-
-It's not allowed to compute `include` with `exclude` field.
+It's not allowed to combine `include` with `exclude` field.
 
 ### Priority filtering
 
