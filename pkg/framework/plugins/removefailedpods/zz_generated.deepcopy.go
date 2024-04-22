@@ -56,6 +56,11 @@ func (in *RemoveFailedPodsArgs) DeepCopyInto(out *RemoveFailedPodsArgs) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.ExitCodes != nil {
+		in, out := &in.ExitCodes, &out.ExitCodes
+		*out = make([]int32, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 
