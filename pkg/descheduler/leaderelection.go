@@ -42,7 +42,7 @@ func NewLeaderElection(
 		// on errors, make sure we're unique
 		id = string(uuid.NewUUID())
 	} else {
-		// add an uniquifier so that two processes on the same host don't accidentally both become active
+		// add a uniquifier so that two processes on the same host don't accidentally both become active
 		id = hostname + "_" + string(uuid.NewUUID())
 	}
 

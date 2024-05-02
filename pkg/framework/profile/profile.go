@@ -303,22 +303,22 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 	return pi, nil
 }
 
-func (p profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	errs := []error{}
-	for _, pl := range p.deschedulePlugins {
+	for _, pl := range d.deschedulePlugins {
 		var span trace.Span
-		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("profile", p.profileName), attribute.String("operation", tracing.DescheduleOperation)))
+		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("profile", d.profileName), attribute.String("operation", tracing.DescheduleOperation)))
 		defer span.End()
-		evicted := p.podEvictor.TotalEvicted()
+		evicted := d.podEvictor.TotalEvicted()
 		strategyStart := time.Now()
 		status := pl.Deschedule(ctx, nodes)
-		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": p.profileName}).Observe(time.Since(strategyStart).Seconds())
+		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": d.profileName}).Observe(time.Since(strategyStart).Seconds())
 
 		if status != nil && status.Err != nil {
 			span.AddEvent("Plugin Execution Failed", trace.WithAttributes(attribute.String("err", status.Err.Error())))
 			errs = append(errs, fmt.Errorf("plugin %q finished with error: %v", pl.Name(), status.Err))
 		}
-		klog.V(1).InfoS("Total number of pods evicted", "extension point", "Deschedule", "evictedPods", p.podEvictor.TotalEvicted()-evicted)
+		klog.V(1).InfoS("Total number of pods evicted", "extension point", "Deschedule", "evictedPods", d.podEvictor.TotalEvicted()-evicted)
 	}
 
 	aggrErr := errors.NewAggregate(errs)
@@ -331,22 +331,22 @@ func (p profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node)
 	}
 }
 
-func (p profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	errs := []error{}
-	for _, pl := range p.balancePlugins {
+	for _, pl := range d.balancePlugins {
 		var span trace.Span
-		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("profile", p.profileName), attribute.String("operation", tracing.BalanceOperation)))
+		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("profile", d.profileName), attribute.String("operation", tracing.BalanceOperation)))
 		defer span.End()
-		evicted := p.podEvictor.TotalEvicted()
+		evicted := d.podEvictor.TotalEvicted()
 		strategyStart := time.Now()
 		status := pl.Balance(ctx, nodes)
-		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": p.profileName}).Observe(time.Since(strategyStart).Seconds())
+		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": d.profileName}).Observe(time.Since(strategyStart).Seconds())
 
 		if status != nil && status.Err != nil {
 			span.AddEvent("Plugin Execution Failed", trace.WithAttributes(attribute.String("err", status.Err.Error())))
 			errs = append(errs, fmt.Errorf("plugin %q finished with error: %v", pl.Name(), status.Err))
 		}
-		klog.V(1).InfoS("Total number of pods evicted", "extension point", "Balance", "evictedPods", p.podEvictor.TotalEvicted()-evicted)
+		klog.V(1).InfoS("Total number of pods evicted", "extension point", "Balance", "evictedPods", d.podEvictor.TotalEvicted()-evicted)
 	}
 
 	aggrErr := errors.NewAggregate(errs)
