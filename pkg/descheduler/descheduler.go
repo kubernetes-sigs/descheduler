@@ -128,27 +128,11 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 	// as is when evicting pods for real.
 	if d.rs.DryRun {
 		klog.V(3).Infof("Building a cached client from the cluster for the dry run")
-		// Create a new cache so we start from scratch without any leftovers
-		fakeClient, err := cachedClient(d.rs.Client, d.podLister, d.nodeLister, d.namespaceLister, d.priorityClassLister)
+		var err error
+		client, err = d.handleDryRun()
 		if err != nil {
 			return err
 		}
-
-		// create a new instance of the shared informer factor from the cached client
-		fakeSharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-		// register the pod informer, otherwise it will not get running
-		d.getPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(fakeSharedInformerFactory.Core().V1().Pods().Informer())
-		if err != nil {
-			return fmt.Errorf("build get pods assigned to node function error: %v", err)
-		}
-
-		fakeCtx, cncl := context.WithCancel(context.TODO())
-		defer cncl()
-		fakeSharedInformerFactory.Start(fakeCtx.Done())
-		fakeSharedInformerFactory.WaitForCacheSync(fakeCtx.Done())
-
-		client = fakeClient
-		d.sharedInformerFactory = fakeSharedInformerFactory
 	} else {
 		client = d.rs.Client
 	}
@@ -170,6 +154,32 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 	klog.V(1).InfoS("Number of evicted pods", "totalEvicted", podEvictor.TotalEvicted())
 
 	return nil
+}
+
+// handleDryRun handles dry-run mode. It creates a fake client and informer
+func (d *descheduler) handleDryRun() (clientset.Interface, error) {
+	// Create a new cache, so we start from scratch without any leftovers
+	fakeClient, err := cachedClient(d.rs.Client, d.podLister, d.nodeLister, d.namespaceLister, d.priorityClassLister)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new instance of the shared informer factory from the cached client
+	fakeSharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+
+	// Register the pod informer, otherwise it will not start running
+	d.getPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(fakeSharedInformerFactory.Core().V1().Pods().Informer())
+	if err != nil {
+		return nil, fmt.Errorf("build get pods assigned to node function error: %v", err)
+	}
+
+	fakeCtx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+	fakeSharedInformerFactory.Start(fakeCtx.Done())
+	fakeSharedInformerFactory.WaitForCacheSync(fakeCtx.Done())
+
+	d.sharedInformerFactory = fakeSharedInformerFactory
+	return fakeClient, nil
 }
 
 // runProfiles runs all the deschedule plugins of all profiles and

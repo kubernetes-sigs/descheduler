@@ -87,8 +87,8 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 	return ev, nil
 }
 
-func (c *FakePlugin) AddReactor(extensionPoint string, reaction ReactionFunc) {
-	c.ReactionChain = append(c.ReactionChain, &SimpleReactor{ExtensionPoint: extensionPoint, Reaction: reaction})
+func (d *FakePlugin) AddReactor(extensionPoint string, reaction ReactionFunc) {
+	d.ReactionChain = append(d.ReactionChain, &SimpleReactor{ExtensionPoint: extensionPoint, Reaction: reaction})
 }
 
 // Name retrieves the plugin name
@@ -178,7 +178,7 @@ func NewFakeDeschedulePluginFncFromFake(fp *FakeDeschedulePlugin) pluginregistry
 	}
 }
 
-// New builds plugin from its arguments while passing a handle
+// NewFakeDeschedule builds plugin from its arguments while passing a handle
 func NewFakeDeschedule(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	fakePluginArgs, ok := args.(*FakeDeschedulePluginArgs)
 	if !ok {
@@ -192,8 +192,8 @@ func NewFakeDeschedule(args runtime.Object, handle frameworktypes.Handle) (frame
 	return ev, nil
 }
 
-func (c *FakeDeschedulePlugin) AddReactor(extensionPoint string, reaction ReactionFunc) {
-	c.ReactionChain = append(c.ReactionChain, &SimpleReactor{ExtensionPoint: extensionPoint, Reaction: reaction})
+func (d *FakeDeschedulePlugin) AddReactor(extensionPoint string, reaction ReactionFunc) {
+	d.ReactionChain = append(d.ReactionChain, &SimpleReactor{ExtensionPoint: extensionPoint, Reaction: reaction})
 }
 
 // Name retrieves the plugin name
@@ -265,7 +265,7 @@ func NewFakeBalancePluginFncFromFake(fp *FakeBalancePlugin) pluginregistry.Plugi
 	}
 }
 
-// New builds plugin from its arguments while passing a handle
+// NewFakeBalance builds plugin from its arguments while passing a handle
 func NewFakeBalance(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	fakePluginArgs, ok := args.(*FakeBalancePluginArgs)
 	if !ok {
@@ -279,8 +279,8 @@ func NewFakeBalance(args runtime.Object, handle frameworktypes.Handle) (framewor
 	return ev, nil
 }
 
-func (c *FakeBalancePlugin) AddReactor(extensionPoint string, reaction ReactionFunc) {
-	c.ReactionChain = append(c.ReactionChain, &SimpleReactor{ExtensionPoint: extensionPoint, Reaction: reaction})
+func (d *FakeBalancePlugin) AddReactor(extensionPoint string, reaction ReactionFunc) {
+	d.ReactionChain = append(d.ReactionChain, &SimpleReactor{ExtensionPoint: extensionPoint, Reaction: reaction})
 }
 
 // Name retrieves the plugin name
@@ -352,7 +352,7 @@ func NewFakeFilterPluginFncFromFake(fp *FakeFilterPlugin) pluginregistry.PluginB
 	}
 }
 
-// New builds plugin from its arguments while passing a handle
+// NewFakeFilter builds plugin from its arguments while passing a handle
 func NewFakeFilter(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	fakePluginArgs, ok := args.(*FakeFilterPluginArgs)
 	if !ok {
@@ -366,8 +366,8 @@ func NewFakeFilter(args runtime.Object, handle frameworktypes.Handle) (framework
 	return ev, nil
 }
 
-func (c *FakeFilterPlugin) AddReactor(extensionPoint string, reaction ReactionFunc) {
-	c.ReactionChain = append(c.ReactionChain, &SimpleReactor{ExtensionPoint: extensionPoint, Reaction: reaction})
+func (d *FakeFilterPlugin) AddReactor(extensionPoint string, reaction ReactionFunc) {
+	d.ReactionChain = append(d.ReactionChain, &SimpleReactor{ExtensionPoint: extensionPoint, Reaction: reaction})
 }
 
 // Name retrieves the plugin name

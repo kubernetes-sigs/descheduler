@@ -106,13 +106,13 @@ func (d DescheduleActionImpl) Nodes() []*v1.Node {
 	return d.nodes
 }
 
-func (a DescheduleActionImpl) DeepCopy() Action {
+func (d DescheduleActionImpl) DeepCopy() Action {
 	nodesCopy := []*v1.Node{}
-	for _, node := range a.nodes {
+	for _, node := range d.nodes {
 		nodesCopy = append(nodesCopy, node.DeepCopy())
 	}
 	return DescheduleActionImpl{
-		ActionImpl: a.ActionImpl.DeepCopy().(ActionImpl),
+		ActionImpl: d.ActionImpl.DeepCopy().(ActionImpl),
 		nodes:      nodesCopy,
 	}
 }
@@ -130,13 +130,13 @@ func (d BalanceActionImpl) Nodes() []*v1.Node {
 	return d.nodes
 }
 
-func (a BalanceActionImpl) DeepCopy() Action {
+func (d BalanceActionImpl) DeepCopy() Action {
 	nodesCopy := []*v1.Node{}
-	for _, node := range a.nodes {
+	for _, node := range d.nodes {
 		nodesCopy = append(nodesCopy, node.DeepCopy())
 	}
 	return BalanceActionImpl{
-		ActionImpl: a.ActionImpl.DeepCopy().(ActionImpl),
+		ActionImpl: d.ActionImpl.DeepCopy().(ActionImpl),
 		nodes:      nodesCopy,
 	}
 }
@@ -149,9 +149,9 @@ func (d FilterActionImpl) CanFilter() bool {
 	return true
 }
 
-func (a FilterActionImpl) DeepCopy() Action {
+func (d FilterActionImpl) DeepCopy() Action {
 	return FilterActionImpl{
-		ActionImpl: a.ActionImpl.DeepCopy().(ActionImpl),
+		ActionImpl: d.ActionImpl.DeepCopy().(ActionImpl),
 	}
 }
 
@@ -163,8 +163,8 @@ func (d PreEvictionFilterActionImpl) CanPreEvictionFilter() bool {
 	return true
 }
 
-func (a PreEvictionFilterActionImpl) DeepCopy() Action {
+func (d PreEvictionFilterActionImpl) DeepCopy() Action {
 	return PreEvictionFilterActionImpl{
-		ActionImpl: a.ActionImpl.DeepCopy().(ActionImpl),
+		ActionImpl: d.ActionImpl.DeepCopy().(ActionImpl),
 	}
 }
