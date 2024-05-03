@@ -53,7 +53,7 @@ spec:
             - --policy-config-file=/policy-dir/policy.yaml
             - --descheduling-interval={{ required "deschedulingInterval required for running as Deployment" .Values.deschedulingInterval }}
             {{- range $key, $value := .Values.cmdOptions }}
-            - {{ printf "--%s" $key }}{{ if $value }}={{ $value }}{{ end }}
+            - {{printf "--%s=%s" $key (toString $value)}}
             {{- end }}
             {{- include "descheduler.leaderElection" . | nindent 12 }}
           ports:
