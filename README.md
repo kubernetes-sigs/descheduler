@@ -207,7 +207,7 @@ Balance Plugins: These plugins process all pods, or groups of pods, and determin
 | [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint) |Balance|Evicts pods violating TopologySpreadConstraints|
 | [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts) |Deschedule|Evicts pods having too many restarts|
 | [PodLifeTime](#podlifetime) |Deschedule|Evicts pods that have exceeded a specified age limit|
-| [RemoveFailedPods](#removefailedpods) |Deschedule|Evicts pods with certain failed reasons|
+| [RemoveFailedPods](#removefailedpods) |Deschedule|Evicts pods with certain failed reasons and exit codes|
 
 
 ### RemoveDuplicates
@@ -698,10 +698,8 @@ profiles:
 ```
 
 ### RemoveFailedPods
-
 This strategy evicts pods that are in failed status phase.
-You can provide an optional parameter to filter by failed `reasons`.
-`reasons` can be expanded to include reasons of InitContainers as well by setting the optional parameter `includingInitContainers` to `true`.
+You can provide optional parameters to filter by failed pods' and containters' `reasons`. and `exitCodes`. `exitCodes` apply to failed pods' containers with `terminated` state only. `reasons` and `exitCodes` can be expanded to include those of InitContainers as well by setting the optional parameter `includingInitContainers` to `true`.
 You can specify an optional parameter `minPodLifetimeSeconds` to evict pods that are older than specified seconds.
 Lastly, you can specify the optional parameter `excludeOwnerKinds` and if a pod
 has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
@@ -713,6 +711,7 @@ has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considere
 |`minPodLifetimeSeconds`|uint|
 |`excludeOwnerKinds`|list(string)|
 |`reasons`|list(string)|
+|`exitCodes`|list(int32)|
 |`includingInitContainers`|bool|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
@@ -729,6 +728,8 @@ profiles:
       args:
         reasons:
         - "NodeAffinity"
+        exitCodes:
+        - 1
         includingInitContainers: true
         excludeOwnerKinds:
         - "Job"
