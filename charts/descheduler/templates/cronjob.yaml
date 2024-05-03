@@ -81,7 +81,7 @@ spec:
               args:
                 - --policy-config-file=/policy-dir/policy.yaml
                 {{- range $key, $value := .Values.cmdOptions }}
-                - {{ printf "--%s" $key }}{{ if $value }}={{ $value }}{{ end }}
+                - {{ printf "--%s=%s" $key (toString $value) }}
                 {{- end }}
               livenessProbe:
                 {{- toYaml .Values.livenessProbe | nindent 16 }}
