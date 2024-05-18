@@ -26,7 +26,7 @@ KIND_E2E=${KIND_E2E:-}
 if [ -n "$KIND_E2E" ]; then
     # If we did not set SKIP_INSTALL
     if [ -z "$SKIP_INSTALL" ]; then
-        K8S_VERSION=${KUBERNETES_VERSION:-v1.29.0}
+        K8S_VERSION=${KUBERNETES_VERSION:-v1.30.0}
         curl -Lo kubectl https://dl.k8s.io/release/${K8S_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/
         wget https://github.com/kubernetes-sigs/kind/releases/download/v0.20.0/kind-linux-amd64
         chmod +x kind-linux-amd64
