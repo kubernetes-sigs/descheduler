@@ -6,6 +6,6 @@ go build -o "${OS_OUTPUT_BINPATH}/deepcopy-gen" "k8s.io/code-generator/cmd/deepc
 
 ${OS_OUTPUT_BINPATH}/deepcopy-gen \
                 --go-header-file "hack/boilerplate/boilerplate.go.txt" \
-                --input-dirs "$(find_dirs_containing_comment_tags "+k8s:deepcopy-gen=")" \
-                --output-file-base zz_generated.deepcopy
+                --output-file zz_generated.deepcopy.go \
+                $(find_dirs_containing_comment_tags "+k8s:deepcopy-gen=")
 

@@ -20,6 +20,6 @@ function find_dirs_containing_comment_tags() {
      | LC_ALL=C sort -u \
      )
 
-   IFS=",";
+   IFS=" ";
    printf '%s' "${array[*]}";
 }
