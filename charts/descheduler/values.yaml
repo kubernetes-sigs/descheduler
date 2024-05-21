@@ -111,14 +111,13 @@ deschedulerPolicy:
           args:
             podRestartThreshold: 100
             includingInitContainers: true
-        - name: RemovePodsViolatingNodeTaints
+        - name: RemovePodsViolatingNodeAffinity
           args:
             nodeAffinityType:
-              - requiredDuringSchedulingIgnoredDuringExecution
+            - requiredDuringSchedulingIgnoredDuringExecution
+        - name: RemovePodsViolatingNodeTaints
         - name: RemovePodsViolatingInterPodAntiAffinity
         - name: RemovePodsViolatingTopologySpreadConstraint
-          args:
-            includeSoftConstraints: false
         - name: LowNodeUtilization
           args:
             thresholds:
@@ -133,7 +132,6 @@ deschedulerPolicy:
         balance:
           enabled:
             - RemoveDuplicates
-            - RemovePodsViolatingNodeAffinity
             - RemovePodsViolatingTopologySpreadConstraint
             - LowNodeUtilization
         deschedule:
