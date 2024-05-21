@@ -59,6 +59,10 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	noRecordEventsForEvictionFailures = false
+)
+
 // RcByNameContainer returns a ReplicationController with specified name and container
 func RcByNameContainer(name, namespace string, replicas int32, labels map[string]string, gracePeriod *int64, priorityClassName string) *v1.ReplicationController {
 	// Add "name": name to the labels, overwriting if it exists.
@@ -201,6 +205,7 @@ func runPodLifetimePlugin(
 		nodes,
 		false,
 		&events.FakeRecorder{},
+		noRecordEventsForEvictionFailures,
 	)
 
 	var thresholdPriority int32
@@ -1598,5 +1603,6 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 		nodes,
 		false,
 		eventRecorder,
+		noRecordEventsForEvictionFailures,
 	)
 }

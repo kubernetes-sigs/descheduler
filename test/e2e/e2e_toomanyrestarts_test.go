@@ -171,6 +171,7 @@ func TestTooManyRestarts(t *testing.T) {
 				nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{

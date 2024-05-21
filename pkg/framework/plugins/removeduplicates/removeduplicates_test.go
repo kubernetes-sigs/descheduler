@@ -39,6 +39,10 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	noRecordEventsForEvictionFailures = false
+)
+
 func buildTestPodWithImage(podName, node, image string) *v1.Pod {
 	pod := test.BuildTestPod(podName, 100, 0, node, test.SetRSOwnerRef)
 	pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
@@ -322,6 +326,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				testCase.nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			nodeFit := testCase.nodefit
@@ -771,6 +776,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				testCase.nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{

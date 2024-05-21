@@ -38,6 +38,10 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	noRecordEventsForEvictionFailures = false
+)
+
 func createNoScheduleTaint(key, value string, index int) v1.Taint {
 	return v1.Taint{
 		Key:    "testTaint" + fmt.Sprintf("%v", index),
@@ -409,6 +413,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				tc.nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{

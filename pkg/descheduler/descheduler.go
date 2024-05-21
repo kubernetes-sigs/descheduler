@@ -163,6 +163,7 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 		nodes,
 		!d.rs.DisableMetrics,
 		d.eventRecorder,
+		d.rs.RecordEventsForEvictionErrors,
 	)
 
 	d.runProfiles(ctx, client, nodes, podEvictor)

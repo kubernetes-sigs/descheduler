@@ -66,6 +66,9 @@ type DeschedulerConfiguration struct {
 	// ClientConnection specifies the kubeconfig file and client connection settings to use when communicating with the apiserver.
 	// Refer to [ClientConnection](https://pkg.go.dev/k8s.io/kubernetes/pkg/apis/componentconfig#ClientConnectionConfiguration) for more information.
 	ClientConnection componentbaseconfig.ClientConnectionConfiguration `json:"clientConnection,omitempty"`
+
+	// RecordEventsForEvictionErrors sets event recording in case of eviction errorGws
+	RecordEventsForEvictionErrors bool
 }
 
 type TracingConfiguration struct {

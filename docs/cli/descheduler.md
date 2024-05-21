@@ -47,6 +47,7 @@ descheduler [flags]
       --permit-address-sharing                   If true, SO_REUSEADDR will be used when binding the port. This allows binding to wildcard IPs like 0.0.0.0 and specific IPs in parallel, and it avoids waiting for the kernel to release sockets in TIME_WAIT state. [default=false]
       --permit-port-sharing                      If true, SO_REUSEPORT will be used when binding the port, which allows more than one instance to bind on the same address and port. [default=false]
       --policy-config-file string                File with descheduler policy configuration.
+      --record-events-for-eviction-errors        Set this flag to record events in case of eviction errors
       --secure-port int                          The port on which to serve HTTPS with authentication and authorization. If 0, don't serve HTTPS at all. (default 10258)
       --tls-cert-file string                     File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert). If HTTPS serving is enabled, and --tls-cert-file and --tls-private-key-file are not provided, a self-signed certificate and key are generated for the public address and saved to the directory specified by --cert-dir.
       --tls-cipher-suites strings                Comma-separated list of cipher suites for the server. If omitted, the default Go cipher suites will be used. 

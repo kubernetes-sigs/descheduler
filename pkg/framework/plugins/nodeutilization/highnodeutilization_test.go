@@ -493,6 +493,7 @@ func TestHighNodeUtilization(t *testing.T) {
 				testCase.nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
@@ -645,6 +646,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 				item.nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{

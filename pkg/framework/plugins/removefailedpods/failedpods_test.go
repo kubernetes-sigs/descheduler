@@ -36,6 +36,10 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	noRecordEventsForEvictionFailures = false
+)
+
 var OneHourInSeconds uint = 3600
 
 func TestRemoveFailedPods(t *testing.T) {
@@ -384,6 +388,7 @@ func TestRemoveFailedPods(t *testing.T) {
 				tc.nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{

@@ -37,6 +37,10 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	noRecordEventsForEvictionFailures = false
+)
+
 func initPods(node *v1.Node) []*v1.Pod {
 	pods := make([]*v1.Pod, 0)
 
@@ -353,6 +357,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 				tc.nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
