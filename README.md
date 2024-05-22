@@ -2,7 +2,7 @@
 ![Release Charts](https://github.com/kubernetes-sigs/descheduler/workflows/Release%20Charts/badge.svg)
 
 <p align="left">
-	↖️ Click at the [bullet list icon] at the top left corner of the Readme visualization for the github generated table of contents.
+	↗️️ Click at the [bullet list icon] at the top right corner of the Readme visualization for the github generated table of contents.
 </p>
 
 <p align="center">
