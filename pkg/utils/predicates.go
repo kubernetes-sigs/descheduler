@@ -325,8 +325,11 @@ func CheckPodsWithAntiAffinityExist(pod *v1.Pod, pods map[string][]*v1.Pod, node
 					if existingPod.Name != pod.Name && podMatchesTermsNamespaceAndSelector(existingPod, pod, namespaces, selector) {
 						nodeCount := len(nodeMap)
 						if nodeCount == 1 {
-							klog.V(1).InfoS("Found Pod with matching antiaffinity", "evaluated pod", klog.KObj(pod), "existing pod", klog.KObj(existingPod))
-							return true
+							if hasSameTopologyKey() {
+								klog.V(1).InfoS("Found Pod with matching antiaffinity", "evaluated pod", klog.KObj(pod), "existing pod", klog.KObj(existingPod))
+								return true
+							}
+							continue
 						} else if nodeCount == 2 {
 							node, ok := nodeMap[pod.Spec.NodeName]
 							if !ok {
@@ -389,4 +392,15 @@ func hasSameLabelValue(node1, node2 *v1.Node, key string) bool {
 	}
 
 	return value1 == value2
+}
+
+func hasSameTopologyKey(currentPod, existingPod *v1.Pod) bool {
+	if currentPod.Spec.Affinity != nil {
+		if currentPod.Spec.Affinity.PodAntiAffinity != nil {
+			return true
+		}
+	}
+
+	// next: add unit tests
+	return false
 }
