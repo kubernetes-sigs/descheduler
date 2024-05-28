@@ -77,7 +77,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 
 			secureServing.DisableHTTP2 = !s.EnableHTTP2
 
-			ctx, done := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			ctx, done := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 
 			pathRecorderMux := mux.NewPathRecorderMux("descheduler")
 			if !s.DisableMetrics {
