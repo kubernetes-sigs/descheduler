@@ -264,7 +264,7 @@ The [evacuation API](https://github.com/kubernetes/enhancements/pull/4565) is ex
 to replace the [eviction API](https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/).
 Instead of checking whether an eviction was successful or failed, an evacuation request is created.
 In case the request fails to be created a pod eviction is skipped as previously.
-In addition, each cycle will keep a number of evacution requests created
+In addition, each cycle will keep a number of evacuation requests created
 instead of a number of pods evicted.
 
 The annotation based approach is a special case of invoking the eviction API:
@@ -273,7 +273,7 @@ The annotation based approach is a special case of invoking the eviction API:
 |--|--|--|
 |**Eviction handling**|Eviction of a pod with `descheduler.alpha.kubernetes.io/request-evict-only` annotation. Checking the eviction error, return code and response text. Interpreting a specific error code and a presence of a known suffix in the response text. |Creation of an evacuation CR for the given pod. Checking the evacuation CR creation error.|
 |**Pod nomination and sorting**|Preferring pods with both `descheduler.alpha.kubernetes.io/request-evict-only` and `descheduler.alpha.kubernetes.io/eviction-in-progress` annotations.|Preferring pods that have a corresponding evacuation CR present.|
-|**Cache reconstruction**|When a descheduler gets restarted and a new internal caches (with tracked annotations) cleared the descheduler lists all pods and populate the cache with any pod that has both annotation (`descheduler.alpha.kubernetes.io/request-evict-only` and `descheduler.alpha.kubernetes.io/eviction-in-progress`) present. In case only the first annotation is present but the eviction request was already created, the update event handler will catch the second annotation addition and the cache gets synced. In the worst case the limit of max number of pods evicted gets exceeded.|The descheduler waits until all evacution CRs are synced.|
+|**Cache reconstruction**|When a descheduler gets restarted and a new internal caches (with tracked annotations) cleared the descheduler lists all pods and populate the cache with any pod that has both annotation (`descheduler.alpha.kubernetes.io/request-evict-only` and `descheduler.alpha.kubernetes.io/eviction-in-progress`) present. In case only the first annotation is present but the eviction request was already created, the update event handler will catch the second annotation addition and the cache gets synced. In the worst case the limit of max number of pods evicted gets exceeded.|The descheduler waits until all evacuation CRs are synced.|
 
 Given the evacuation API is still a work in progress without any
 existing implementation, the annotation based eviction can be seen
@@ -295,6 +295,8 @@ without following additional eviction policies.
 
 #### Workflow Steps
 
+##### Annotation based evacuation (v1alpha1)
+
 1. Policy configuration
    1. The cluster administrator configures the descheduler to enable the new functionality.
 2. A user deploys a workload through various nodes
@@ -302,19 +304,31 @@ without following additional eviction policies.
 3. Eviction nomination
    1. At the beginning of each descheduling cycle the descheduler increases
       all the internal counters to take into account all pods that are subjects
-      to background eviction. Either by checking `descheduler.alpha.kubernetes.io/eviction-in-progress` annotation,
-      list of evacuation requests or confronting the internal caches.
+      to background eviction. By checking `descheduler.alpha.kubernetes.io/eviction-in-progress`
+      annotation or confronting the internal caches.
    2. Each descheduling plugin nominates a set of pods to be evicted.
    3. All the nominated pods are sorted based on the eviction-in-progress first priority.
 4. Pod eviction: the descheduler starts evicting nominated pods until a limit is reached
-   1. If an annotation based eviction is enabled:
-      1. If a pod is not annotated with `descheduler.alpha.kubernetes.io/request-evict-only` evict
-         the pod normally without additional handling.
-      2. If a pod is annotated with `descheduler.alpha.kubernetes.io/request-evict-only` evict the pod.
-         1. If the eviction fails intepret the error as a request for eviction in background.
-         2. Error code, resp. response text is checked to distinguish between
-            a genuine error and a confirmation of an eviction in background.
-   2. If the evacuation API is utilized create an evacution request
+   1. If a pod is not annotated with `descheduler.alpha.kubernetes.io/request-evict-only` evict
+      the pod normally without additional handling.
+   2. If a pod is annotated with `descheduler.alpha.kubernetes.io/request-evict-only` evict the pod.
+      1. If the eviction fails intepret the error as a request for eviction in background.
+      2. Error code, resp. response text is checked to distinguish between
+         a genuine error and a confirmation of an eviction in background.
+
+##### Evacuation API (v1alphaN or beta)
+
+1. Policy configuration
+   1. The cluster administrator configures the descheduler to enable the new functionality.
+2. A user deploys a workload through various nodes
+   1. A scheduler distributes the pods based on configured scheduling policies
+3. Eviction nomination
+   1. At the beginning of each descheduling cycle the descheduler increases
+      all the internal counters to take into account all pods that are subjects
+      to background eviction. By listing evacuation requests or confronting the internal caches.
+   2. Each descheduling plugin nominates a set of pods to be evicted.
+   3. All the nominated pods are sorted based on the eviction-in-progress first priority.
+4. Pod eviction: the descheduler creates an evacuation request for each nominated pod until a limit is reached
 
 ### Notes/Constraints/Caveats (Optional)
 
@@ -344,6 +358,8 @@ without following additional eviction policies.
   resource utilization.
 - This new functionality needs to stay feature gated until
   the evacuation API is available and stable.
+- When `descheduler.alpha.kubernetes.io/request-evict-only` annotation is deprecated
+  workload that forgets to remove the annotation will not be evacuated.
 
 ## Design Details
 
@@ -406,6 +422,10 @@ without following additional eviction policies.
   Existing deployments will need to remove `descheduler.alpha.kubernetes.io/request-evict-only`
   annotation to utilize the new evacuation API.
   Otherwise, the eviction API will be used as a fallback.
+  Workload owners utilizing the new evacuation API are expected to replace both annotations
+  with [evacuation.coordination.k8s.io/priority_${EVACUATOR_CLASS}: ${PRIORITY}/${ROLE}](https://github.com/kubernetes/enhancements/blob/2d7dbab6c95575d68395c30fa789f87d9a2c3c01/keps/sig-apps/4563-evacuation-api/README.md#evacuator).
+  Important: the new annotation have different semantics than the deprecated ones.
+  Users are strongly recommended to review the evacuation API proposal for necessary details.
 - The evacuation API expects the evacuation request to be reconciled during each descheduling cycle.
   Given each cycle starts from scratch the descheduler needs to first list
   all evacuation requests and sort the pods accordingly in each plugin.
@@ -414,9 +434,10 @@ without following additional eviction policies.
   E.g. by creating a snapshot (per cycle, per strategy) to avoid inconsistencies.
   An evacuation request may exist without a corresponding pod
   before the evacuation controller garbage collects the request.
-- The descheduler needs to keep a cache of evacution API requests (CRs)
+- The descheduler needs to keep a cache of evacuation API requests (CRs)
   and remove itself from finalizers if the request is no longer needed.
   E.g. `evacuation.coordination.k8s.io/instigator_descheduler.sigs.k8s.io` as a finalizer.
+  The removal is allowed only when the evacuation request has its cancellation policy set `Allow`.
 - Read the eviction status from the [evacuation CR status](https://github.com/kubernetes/enhancements/pull/4565).
 
 #### Code changes
@@ -442,14 +463,14 @@ A new metric `pod_evacuations` for counting the number of evacuated pods is intr
 The descheduler will not observe whether a pod was ultimately evicted.
 Only provide a summary about how many pods were requested to be evacuated.
 If needed, another metric `pod_evacuations_in_progress` for counting
-the number of evacutions that are reconciled can be introduced.
+the number of evacuations that are reconciled can be introduced.
 
 ### Open Questions [optional]
 
 This is where to call out areas of the design that require closure before deciding
 to implement the design.
 
-* The evacution API proposal mentions the evacuation instigator should remove
+* The evacuation API proposal mentions the evacuation instigator should remove
   its intent when the evacuation is no longer necessary.
   Should each descheduling cycle reset all the eviction requests
   or wait until some of the eviction requests were completed
@@ -458,18 +479,18 @@ to implement the design.
   The descheduler will account for existing requests and update the internal counters accordingally.
   In the future a mechanism for deleting too old evacuation requests can be introduced.
   I.e. based on a new `--max-evacuation-request-ttl` option.
-* The evacution API proposal mentions more than a one entity can request an eviction.
+* The evacuation API proposal mentions more than a one entity can request an eviction.
   Should the descheduler take these into account as well?
   What if another entity decides to evict a pod that is of a low priority
   from the descheduler's point of view?
   **Answer**: The first implementation will consider all pods with an existing
   evacuation request as "already getting evacuated". Independent of the pod priorities.
-* With evacution requests a plugin does not evict a pod right away.
+* With evacuation requests a plugin does not evict a pod right away.
   Meaning, other plugins will need to check whether a pod has a corresponding
   evacuation request present.
   If so, take each such pod into account when constructing a list of nominated pods.
   For that it might be easier to see the current evictions as marking pods
-  for future evacuation and perform the actual eviction/evacution
+  for future evacuation and perform the actual eviction/evacuation
   at the end of each descheduling cycle instead of evicting pods from within plugins.
   **Answer**: This is a breaking change for existing plugins.
   The first implementation will filter out pods that has already
@@ -538,9 +559,9 @@ Current coverages:
 
 These tests will be added:
 - New tests  will be added under `sigs.k8s.io/descheduler/pkg/framework/plugins` for each
-  mentioned plugin to test evacution (replacement of the eviction API).
+  mentioned plugin to test evacuation (replacement of the eviction API).
 - New tests will be added under `sigs.k8s.io/descheduler/pkg/descheduler/evictions` to test
-  the new evacution (annotation based, API based) implementation.
+  the new evacuation (annotation based, API based) implementation.
 - New tests under  `sigs.k8s.io/descheduler/pkg/descheduler` will be created for:
   - the new internal sorting and filtering algorithms
   - validating the evacuation limits are respected with already existing
@@ -600,8 +621,8 @@ These tests will be added:
   3. At the beginning of the next descheduling cycle the descheduler checks for all
      evacuation requests/pods with `descheduler.alpha.kubernetes.io/request-evict-only` annotation
      and remove finalizer/entry from the cache.
-  4. During the descheduling cycle the descheduler creates eviction/evacution requests.
-  5. Check there's an expected number of eviction/evacution requests.
+  4. During the descheduling cycle the descheduler creates eviction/evacuation requests.
+  5. Check there's an expected number of eviction/evacuation requests.
 
 ### Graduation Criteria
 
@@ -672,12 +693,16 @@ in back-to-back releases.
 - Feature implemented behind a feature flag
 - Initial e2e tests completed and enabled
 - Annotation based evictions
+- Workloads do not set `descheduler.alpha.kubernetes.io/request-evict-only` annotation
+  when deprecated
 
 #### Beta
 
 - Gather feedback from developers and surveys
 - Evacuation API based evictions
 - Identifying corner cases that are not addressed by the evacuation API
+- `descheduler.alpha.kubernetes.io/request-evict-only` annotation is deprecated
+- Workloads do not set `descheduler.alpha.kubernetes.io/request-evict-only` annotation
 
 #### GA
 
@@ -775,7 +800,7 @@ automations, so be extremely careful here.
 -->
 
 Eviction of pods can be delayed. Users need to make sure they have a reliable external
-components that can evict a pod based on the corresponding evacution request.
+components that can evict a pod based on the corresponding evacuation request.
 
 For the annotation based eviction only pods annotated
 with `descheduler.alpha.kubernetes.io/request-evict-only` are effected.
