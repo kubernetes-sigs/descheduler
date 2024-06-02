@@ -24,9 +24,36 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/component-helpers/scheduling/corev1"
 	"k8s.io/klog/v2"
 )
+
+// GetNamespacesFromPodAffinityTerm returns a set of names
+// according to the namespaces indicated in podAffinityTerm.
+// If namespaces is empty it considers the given pod's namespace.
+func GetNamespacesFromPodAffinityTerm(pod *v1.Pod, podAffinityTerm *v1.PodAffinityTerm) sets.Set[string] {
+	names := sets.New[string]()
+	if len(podAffinityTerm.Namespaces) == 0 {
+		names.Insert(pod.Namespace)
+	} else {
+		names.Insert(podAffinityTerm.Namespaces...)
+	}
+	return names
+}
+
+// PodMatchesTermsNamespaceAndSelector returns true if the given <pod>
+// matches the namespace and selector defined by <affinityPod>`s <term>.
+func PodMatchesTermsNamespaceAndSelector(pod *v1.Pod, namespaces sets.Set[string], selector labels.Selector) bool {
+	if !namespaces.Has(pod.Namespace) {
+		return false
+	}
+
+	if !selector.Matches(labels.Set(pod.Labels)) {
+		return false
+	}
+	return true
+}
 
 // The following code has been copied from predicates package to avoid the
 // huge vendoring issues, mostly copied from
@@ -309,42 +336,52 @@ func CreateNodeMap(nodes []*v1.Node) map[string]*v1.Node {
 	return m
 }
 
-// CheckPodsWithAntiAffinityExist checks if there are other pods on the node that the current pod cannot tolerate.
-func CheckPodsWithAntiAffinityExist(pod *v1.Pod, pods map[string][]*v1.Pod, nodeMap map[string]*v1.Node) bool {
-	affinity := pod.Spec.Affinity
-	if affinity != nil && affinity.PodAntiAffinity != nil {
-		for _, term := range getPodAntiAffinityTerms(affinity.PodAntiAffinity) {
-			namespaces := getNamespacesFromPodAffinityTerm(pod, &term)
-			selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
-			if err != nil {
-				klog.ErrorS(err, "Unable to convert LabelSelector into Selector")
-				return false
-			}
-			for namespace := range namespaces {
-				for _, existingPod := range pods[namespace] {
-					if existingPod.Name != pod.Name && podMatchesTermsNamespaceAndSelector(existingPod, namespaces, selector) {
-						node, ok := nodeMap[pod.Spec.NodeName]
-						if !ok {
-							continue
-						}
-						nodeHavingExistingPod, ok := nodeMap[existingPod.Spec.NodeName]
-						if !ok {
-							continue
-						}
-						if hasSameLabelValue(node, nodeHavingExistingPod, term.TopologyKey) {
-							klog.V(1).InfoS("Found Pods matching PodAntiAffinity", "pod with anti-affinity", klog.KObj(pod))
-							return true
-						}
-					}
+// CheckPodsWithAntiAffinityExist checks if there are other pods on the node that the current candidate pod cannot tolerate.
+func CheckPodsWithAntiAffinityExist(candidatePod *v1.Pod, assignedPods map[string][]*v1.Pod, nodeMap map[string]*v1.Node) bool {
+	nodeHavingCandidatePod, ok := nodeMap[candidatePod.Spec.NodeName]
+	if !ok {
+		klog.Warningf("CandidatePod %s does not exist in nodeMap", klog.KObj(candidatePod))
+		return false
+	}
+
+	affinity := candidatePod.Spec.Affinity
+	if affinity == nil || affinity.PodAntiAffinity == nil {
+		return false
+	}
+
+	for _, term := range GetPodAntiAffinityTerms(affinity.PodAntiAffinity) {
+		namespaces := GetNamespacesFromPodAffinityTerm(candidatePod, &term)
+		selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
+		if err != nil {
+			klog.ErrorS(err, "Unable to convert LabelSelector into Selector")
+			return false
+		}
+
+		for namespace := range namespaces {
+			for _, assignedPod := range assignedPods[namespace] {
+				if assignedPod.Name == candidatePod.Name || !PodMatchesTermsNamespaceAndSelector(assignedPod, namespaces, selector) {
+					klog.V(4).InfoS("CandidatePod doesn't matches inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(candidatePod), "assignedPod", klog.KObj(assignedPod))
+					continue
+				}
+
+				nodeHavingAssignedPod, ok := nodeMap[assignedPod.Spec.NodeName]
+				if !ok {
+					continue
+				}
+
+				if hasSameLabelValue(nodeHavingCandidatePod, nodeHavingAssignedPod, term.TopologyKey) {
+					klog.V(1).InfoS("CandidatePod matches inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(candidatePod), "assignedPod", klog.KObj(assignedPod))
+					return true
 				}
 			}
 		}
 	}
+
 	return false
 }
 
-// getPodAntiAffinityTerms gets the antiaffinity terms for the given pod.
-func getPodAntiAffinityTerms(podAntiAffinity *v1.PodAntiAffinity) (terms []v1.PodAffinityTerm) {
+// GetPodAntiAffinityTerms gets the antiaffinity terms for the given pod.
+func GetPodAntiAffinityTerms(podAntiAffinity *v1.PodAntiAffinity) (terms []v1.PodAffinityTerm) {
 	if podAntiAffinity != nil {
 		if len(podAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution) != 0 {
 			terms = podAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
