@@ -824,9 +824,9 @@ func TestNodeFit(t *testing.T) {
 
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-			errs := NodeFit(getPodsAssignedToNode, tc.pod, tc.node)
-			if (len(errs) == 0 && tc.err != nil) || (len(errs) > 0 && errs[0].Error() != tc.err.Error()) {
-				t.Errorf("Test %#v failed, got %v, expect %v", tc.description, errs, tc.err)
+			err = NodeFit(getPodsAssignedToNode, tc.pod, tc.node)
+			if (err == nil && tc.err != nil) || (err != nil && err.Error() != tc.err.Error()) {
+				t.Errorf("Test %#v failed, got %v, expect %v", tc.description, err, tc.err)
 			}
 		})
 	}
