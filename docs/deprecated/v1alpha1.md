@@ -109,17 +109,17 @@ See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/ku
 
 Run As A Job
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.29.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.30.0' | kubectl apply -f -
 ```
 
 Run As A CronJob
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.29.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.30.0' | kubectl apply -f -
 ```
 
 Run As A Deployment
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.29.0' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.30.0' | kubectl apply -f -
 ```
 
 ## User Guide
@@ -135,6 +135,7 @@ The policy includes a common configuration that applies to all the strategies:
 |------|---------------|-------------|
 | `nodeSelector` | `nil` | limiting the nodes which are processed |
 | `evictLocalStoragePods` | `false` | allows eviction of pods with local storage |
+| `evictDaemonSetPods` | `false` | allows eviction of pods associated to DaemonSet resources |
 | `evictSystemCriticalPods` | `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
 | `ignorePvcPods` | `false` | set whether PVC pods should be evicted or ignored |
 | `maxNoOfPodsToEvictPerNode` | `nil` | maximum number of pods evicted from each node (summed through all strategies) |
@@ -152,6 +153,7 @@ kind: "DeschedulerPolicy"
 nodeSelector: prod=dev
 evictFailedBarePods: false
 evictLocalStoragePods: true
+evictDaemonSetPods: true
 evictSystemCriticalPods: true
 maxNoOfPodsToEvictPerNode: 40
 ignorePvcPods: false

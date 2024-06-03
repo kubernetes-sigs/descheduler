@@ -82,7 +82,13 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 				return true
 			}
 
-			for _, containerStatus := range pod.Status.ContainerStatuses {
+			containerStatuses := pod.Status.ContainerStatuses
+
+			if tooManyRestartsArgs.IncludingInitContainers {
+				containerStatuses = append(containerStatuses, pod.Status.InitContainerStatuses...)
+			}
+
+			for _, containerStatus := range containerStatuses {
 				if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
 					return true
 				}
@@ -117,7 +123,7 @@ func (d *RemovePodsHavingTooManyRestarts) Deschedule(ctx context.Context, nodes 
 		}
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
-			d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{})
+			d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
 			if d.handle.Evictor().NodeLimitExceeded(node) {
 				break
 			}

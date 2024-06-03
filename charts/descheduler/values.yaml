@@ -79,14 +79,19 @@ cmdOptions:
   v: 3
 
 # Recommended to use the latest Policy API version supported by the Descheduler app version
-deschedulerPolicyAPIVersion: "descheduler/v1alpha1"
+deschedulerPolicyAPIVersion: "descheduler/v1alpha2"
 
+# deschedulerPolicy contains the policies the descheduler will execute.
+# To use policies stored in an existing configMap use:
+# NOTE: The name of the cm should comply to {{ template "descheduler.fullname" . }}
+# deschedulerPolicy: {}
 deschedulerPolicy:
   # nodeSelector: "key1=value1,key2=value2"
   # maxNoOfPodsToEvictPerNode: 10
   # maxNoOfPodsToEvictPerNamespace: 10
   # ignorePvcPods: true
   # evictLocalStoragePods: true
+  # evictDaemonSetPods: true
   # tracing:
   #   collectorEndpoint: otel-collector.observability.svc.cluster.local:4317
   #   transportCert: ""
@@ -94,40 +99,47 @@ deschedulerPolicy:
   #   serviceNamespace: ""
   #   sampleRate: 1.0
   #   fallbackToNoOpProviderOnError: true
-  strategies:
-    RemoveDuplicates:
-      enabled: true
-    RemovePodsHavingTooManyRestarts:
-      enabled: true
-      params:
-        podsHavingTooManyRestarts:
-          podRestartThreshold: 100
-          includingInitContainers: true
-    RemovePodsViolatingNodeTaints:
-      enabled: true
-    RemovePodsViolatingNodeAffinity:
-      enabled: true
-      params:
-        nodeAffinityType:
-        - requiredDuringSchedulingIgnoredDuringExecution
-    RemovePodsViolatingInterPodAntiAffinity:
-      enabled: true
-    RemovePodsViolatingTopologySpreadConstraint:
-      enabled: true
-      params:
-        includeSoftConstraints: false
-    LowNodeUtilization:
-      enabled: true
-      params:
-        nodeResourceUtilizationThresholds:
-          thresholds:
-            cpu: 20
-            memory: 20
-            pods: 20
-          targetThresholds:
-            cpu: 50
-            memory: 50
-            pods: 50
+  profiles:
+    - name: default
+      pluginConfig:
+        - name: DefaultEvictor
+          args:
+            ignorePvcPods: true
+            evictLocalStoragePods: true
+        - name: RemoveDuplicates
+        - name: RemovePodsHavingTooManyRestarts
+          args:
+            podRestartThreshold: 100
+            includingInitContainers: true
+        - name: RemovePodsViolatingNodeAffinity
+          args:
+            nodeAffinityType:
+            - requiredDuringSchedulingIgnoredDuringExecution
+        - name: RemovePodsViolatingNodeTaints
+        - name: RemovePodsViolatingInterPodAntiAffinity
+        - name: RemovePodsViolatingTopologySpreadConstraint
+        - name: LowNodeUtilization
+          args:
+            thresholds:
+              cpu: 20
+              memory: 20
+              pods: 20
+            targetThresholds:
+              cpu: 50
+              memory: 50
+              pods: 50
+      plugins:
+        balance:
+          enabled:
+            - RemoveDuplicates
+            - RemovePodsViolatingTopologySpreadConstraint
+            - LowNodeUtilization
+        deschedule:
+          enabled:
+            - RemovePodsHavingTooManyRestarts
+            - RemovePodsViolatingNodeTaints
+            - RemovePodsViolatingNodeAffinity
+            - RemovePodsViolatingInterPodAntiAffinity
 
 priorityClassName: system-cluster-critical
 

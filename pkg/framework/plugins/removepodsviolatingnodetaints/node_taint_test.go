@@ -100,6 +100,10 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		createPreferNoScheduleTaint("testTaint", "test", 1),
 	}
 
+	node7 := test.BuildTestNode("n7", 2000, 3000, 10, nil)
+	node7 = addTaintsToNode(node7, "testTaint", "test", []int{1})
+	node7 = addTaintsToNode(node7, "testingTaint", "testing", []int{1})
+
 	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
 	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, nil)
 	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, nil)
@@ -161,6 +165,15 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	// PreferNoSchedule:testTaint0=test0 so the pod is not tolarated
 	p13 = addTolerationToPod(p13, "testTaint", "test", 0, v1.TaintEffectPreferNoSchedule)
 
+	p14 := test.BuildTestPod("p14", 100, 0, node7.Name, nil)
+	p14.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	p14 = addTolerationToPod(p14, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
+
+	p15 := test.BuildTestPod("p15", 100, 0, node7.Name, nil)
+	p15.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	p15 = addTolerationToPod(p15, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
+	p15 = addTolerationToPod(p15, "testingTaint", "testing", 1, v1.TaintEffectNoSchedule)
+
 	var uint1 uint = 1
 
 	tests := []struct {
@@ -175,6 +188,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		nodeFit                        bool
 		includePreferNoSchedule        bool
 		excludedTaints                 []string
+		includedTaints                 []string
 	}{
 		{
 			description:             "Pods not tolerating node taint should be evicted",
@@ -322,6 +336,41 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			expectedEvictedPodCount: 0, // p2 and p7 can't be evicted
 			nodeFit:                 true,
 		},
+		{
+			description:             "Pods tolerating included taints should not get evicted even with other taints present",
+			pods:                    []*v1.Pod{p1},
+			nodes:                   []*v1.Node{node7},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			includedTaints:          []string{"testTaint1=test1"},
+			expectedEvictedPodCount: 0, // nothing gets evicted, as p1 tolerates the included taint, and taint "testingTaint1=testing1" is not included
+		},
+		{
+			description:             "Pods not tolerating not included taints should not get evicted",
+			pods:                    []*v1.Pod{p1, p2, p4},
+			nodes:                   []*v1.Node{node1},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			includedTaints:          []string{"testTaint2=test2"},
+			expectedEvictedPodCount: 0, // nothing gets evicted, as taint is not included, even though the pods' p2 and p4 tolerations do not match node1's taint
+		},
+		{
+			description:             "Pods tolerating includedTaint should not get evicted. Pods not tolerating includedTaints should get evicted",
+			pods:                    []*v1.Pod{p1, p2, p3},
+			nodes:                   []*v1.Node{node1},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			includedTaints:          []string{"testTaint1=test1"},
+			expectedEvictedPodCount: 1, // node1 taint is included. p1 and p3 tolerate the included taint, p2 gets evicted
+		},
+		{
+			description:             "Pods not tolerating all taints are evicted when includedTaints is empty",
+			pods:                    []*v1.Pod{p14, p15},
+			nodes:                   []*v1.Node{node7},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			expectedEvictedPodCount: 1, // includedTaints is empty so all taints are included. p15 tolerates both node taints and does not get evicted. p14 tolerate only one and gets evicted
+		},
 	}
 
 	for _, tc := range tests {
@@ -393,6 +442,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			plugin, err := New(&RemovePodsViolatingNodeTaintsArgs{
 				IncludePreferNoSchedule: tc.includePreferNoSchedule,
 				ExcludedTaints:          tc.excludedTaints,
+				IncludedTaints:          tc.includedTaints,
 			},
 				handle,
 			)

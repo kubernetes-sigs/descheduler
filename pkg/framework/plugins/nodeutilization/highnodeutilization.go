@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -144,6 +145,7 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		sourceNodes,
 		highNodes,
 		h.handle.Evictor(),
+		evictions.EvictOptions{StrategyName: HighNodeUtilizationPluginName},
 		h.podFilter,
 		resourceNames,
 		continueEvictionCond)

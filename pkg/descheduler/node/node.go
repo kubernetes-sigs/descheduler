@@ -130,6 +130,13 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 		errors = append(errors, fmt.Errorf("node is not schedulable"))
 	}
 
+	// Check if pod matches inter-pod anti-affinity rule of pod on node
+	if match, err := podMatchesInterPodAntiAffinity(nodeIndexer, pod, node); err != nil {
+		errors = append(errors, err)
+	} else if match {
+		errors = append(errors, fmt.Errorf("pod matches inter-pod anti-affinity rule of other pod on node"))
+	}
+
 	return errors
 }
 
@@ -147,7 +154,7 @@ func PodFitsAnyOtherNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.
 			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			return true
 		}
-		klog.V(4).InfoS("Pod does not fit on node",
+		klog.V(4).InfoS("Pod does not fit on any other node",
 			"pod:", klog.KObj(pod), "node:", klog.KObj(node), "error:", utilerrors.NewAggregate(errors).Error())
 	}
 
@@ -163,7 +170,7 @@ func PodFitsAnyNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, 
 			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			return true
 		}
-		klog.V(4).InfoS("Pod does not fit on node",
+		klog.V(4).InfoS("Pod does not fit on any node",
 			"pod:", klog.KObj(pod), "node:", klog.KObj(node), "error:", utilerrors.NewAggregate(errors).Error())
 	}
 
@@ -179,7 +186,7 @@ func PodFitsCurrentNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.P
 		return true
 	}
 
-	klog.V(4).InfoS("Pod does not fit on node",
+	klog.V(4).InfoS("Pod does not fit on current node",
 		"pod:", klog.KObj(pod), "node:", klog.KObj(node), "error:", utilerrors.NewAggregate(errors).Error())
 
 	return false
@@ -322,4 +329,44 @@ func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) bool {
 		return false
 	}
 	return matches
+}
+
+// podMatchesInterPodAntiAffinity checks if the pod matches the anti-affinity rule
+// of another pod that is already on the given node.
+// If a match is found, it returns true.
+func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, error) {
+	if pod.Spec.Affinity == nil || pod.Spec.Affinity.PodAntiAffinity == nil {
+		return false, nil
+	}
+
+	podsOnNode, err := podutil.ListPodsOnANode(node.Name, nodeIndexer, nil)
+	if err != nil {
+		return false, fmt.Errorf("error listing all pods: %v", err)
+	}
+	assignedPodsInNamespace := podutil.GroupByNamespace(podsOnNode)
+
+	for _, term := range utils.GetPodAntiAffinityTerms(pod.Spec.Affinity.PodAntiAffinity) {
+		namespaces := utils.GetNamespacesFromPodAffinityTerm(pod, &term)
+		selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
+		if err != nil {
+			klog.ErrorS(err, "Unable to convert LabelSelector into Selector")
+			return false, err
+		}
+
+		for namespace := range namespaces {
+			for _, assignedPod := range assignedPodsInNamespace[namespace] {
+				if assignedPod.Name == pod.Name || !utils.PodMatchesTermsNamespaceAndSelector(assignedPod, namespaces, selector) {
+					klog.V(4).InfoS("Pod doesn't match inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(pod), "assignedPod", klog.KObj(assignedPod))
+					continue
+				}
+
+				if _, ok := node.Labels[term.TopologyKey]; ok {
+					klog.V(1).InfoS("Pod matches inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(pod), "assignedPod", klog.KObj(assignedPod))
+					return true, nil
+				}
+			}
+		}
+	}
+
+	return false, nil
 }

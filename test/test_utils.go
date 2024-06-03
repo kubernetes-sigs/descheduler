@@ -337,3 +337,30 @@ func WaitForDeploymentPodsRunning(ctx context.Context, t *testing.T, clientSet c
 		t.Fatalf("Error waiting for pods running: %v", err)
 	}
 }
+
+func SetPodAntiAffinity(inputPod *v1.Pod, labelKey, labelValue string) {
+	inputPod.Spec.Affinity = &v1.Affinity{
+		PodAntiAffinity: &v1.PodAntiAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+				{
+					LabelSelector: &metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key:      labelKey,
+								Operator: metav1.LabelSelectorOpIn,
+								Values:   []string{labelValue},
+							},
+						},
+					},
+					TopologyKey: "region",
+				},
+			},
+		},
+	}
+}
+
+func PodWithPodAntiAffinity(inputPod *v1.Pod, labelKey, labelValue string) *v1.Pod {
+	SetPodAntiAffinity(inputPod, labelKey, labelValue)
+	inputPod.Labels = map[string]string{labelKey: labelValue}
+	return inputPod
+}
