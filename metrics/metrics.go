@@ -36,7 +36,7 @@ var (
 			Name:           "pods_evicted",
 			Help:           "Number of evicted pods, by the result, by the strategy, by the namespace, by the node name. 'error' result means a pod could not be evicted",
 			StabilityLevel: metrics.ALPHA,
-		}, []string{"result", "strategy", "namespace", "node"})
+		}, []string{"result", "strategy", "profile", "namespace", "node"})
 
 	buildInfo = metrics.NewGauge(
 		&metrics.GaugeOpts{

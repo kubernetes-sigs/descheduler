@@ -111,6 +111,10 @@ func (pe *PodEvictor) NodeLimitExceeded(node *v1.Node) bool {
 type EvictOptions struct {
 	// Reason allows for passing details about the specific eviction for logging.
 	Reason string
+	// ProfileName allows for passing details about profile for observability.
+	ProfileName string
+	// StrategyName allows for passing details about strategy for observability.
+	StrategyName string
 }
 
 // EvictPod evicts a pod while exercising eviction limits.
@@ -119,16 +123,11 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 	var span trace.Span
 	ctx, span = tracing.Tracer().Start(ctx, "EvictPod", trace.WithAttributes(attribute.String("podName", pod.Name), attribute.String("podNamespace", pod.Namespace), attribute.String("reason", opts.Reason), attribute.String("operation", tracing.EvictOperation)))
 	defer span.End()
-	// TODO: Replace context-propagated Strategy name with a defined framework handle for accessing Strategy info
-	strategy := ""
-	if ctx.Value("strategyName") != nil {
-		strategy = ctx.Value("strategyName").(string)
-	}
 
 	if pod.Spec.NodeName != "" {
 		if pe.maxPodsToEvictPerNode != nil && pe.nodepodCount[pod.Spec.NodeName]+1 > *pe.maxPodsToEvictPerNode {
 			if pe.metricsEnabled {
-				metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
+				metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
 			}
 			span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", "Maximum number of evicted pods per node reached")))
 			klog.ErrorS(fmt.Errorf("maximum number of evicted pods per node reached"), "Error evicting pod", "limit", *pe.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
@@ -138,7 +137,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 
 	if pe.maxPodsToEvictPerNamespace != nil && pe.namespacePodCount[pod.Namespace]+1 > *pe.maxPodsToEvictPerNamespace {
 		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per namespace reached", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
+			metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per namespace reached", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
 		}
 		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", "Maximum number of evicted pods per namespace reached")))
 		klog.ErrorS(fmt.Errorf("maximum number of evicted pods per namespace reached"), "Error evicting pod", "limit", *pe.maxPodsToEvictPerNamespace, "namespace", pod.Namespace)
@@ -151,7 +150,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
 		klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", opts.Reason)
 		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
+			metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
 		}
 		return false
 	}
@@ -162,16 +161,16 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 	pe.namespacePodCount[pod.Namespace]++
 
 	if pe.metricsEnabled {
-		metrics.PodsEvicted.With(map[string]string{"result": "success", "strategy": strategy, "namespace": pod.Namespace, "node": pod.Spec.NodeName}).Inc()
+		metrics.PodsEvicted.With(map[string]string{"result": "success", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
 	}
 
 	if pe.dryRun {
-		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", strategy, "node", pod.Spec.NodeName)
+		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", opts.StrategyName, "node", pod.Spec.NodeName, "profile", opts.ProfileName)
 	} else {
-		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", strategy, "node", pod.Spec.NodeName)
+		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", opts.StrategyName, "node", pod.Spec.NodeName, "profile", opts.ProfileName)
 		reason := opts.Reason
 		if len(reason) == 0 {
-			reason = strategy
+			reason = opts.StrategyName
 			if len(reason) == 0 {
 				reason = "NotSet"
 			}

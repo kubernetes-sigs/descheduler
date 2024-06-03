@@ -30,5 +30,6 @@ type RemoveFailedPodsArgs struct {
 	ExcludeOwnerKinds       []string              `json:"excludeOwnerKinds"`
 	MinPodLifetimeSeconds   *uint                 `json:"minPodLifetimeSeconds"`
 	Reasons                 []string              `json:"reasons"`
+	ExitCodes               []int32               `json:"exitCodes"`
 	IncludingInitContainers bool                  `json:"includingInitContainers"`
 }

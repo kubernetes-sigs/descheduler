@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -89,6 +90,38 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 	}
 }
 
+// DsByNameContainer returns a DaemonSet with specified name and container
+func DsByNameContainer(name, namespace string, labels map[string]string, gracePeriod *int64) *appsv1.DaemonSet {
+	// Add "name": name to the labels, overwriting if it exists.
+	labels["name"] = name
+	if gracePeriod == nil {
+		gracePeriod = pointer.Int64(0)
+	}
+	return &appsv1.DaemonSet{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "DaemonSet",
+			APIVersion: "apps/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"name": name,
+				},
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: test.MakePodSpec("", gracePeriod),
+			},
+		},
+	}
+}
+
 func initializeClient(t *testing.T) (clientset.Interface, informers.SharedInformerFactory, listersv1.NodeLister, podutil.GetPodsAssignedToNodeFunc, chan struct{}) {
 	clientSet, err := client.CreateClient(componentbaseconfig.ClientConnectionConfiguration{Kubeconfig: os.Getenv("KUBECONFIG")}, "")
 	if err != nil {
@@ -144,6 +177,7 @@ func runPodLifetimePlugin(
 	priorityClass string,
 	priority *int32,
 	evictCritical bool,
+	evictDaemonSet bool,
 	maxPodsToEvictPerNamespace *uint,
 	labelSelector *metav1.LabelSelector,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
@@ -182,6 +216,7 @@ func runPodLifetimePlugin(
 	defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
 		EvictLocalStoragePods:   false,
 		EvictSystemCriticalPods: evictCritical,
+		EvictDaemonSetPods:      evictDaemonSet,
 		IgnorePvcPods:           false,
 		EvictFailedBarePods:     false,
 		PriorityThreshold: &api.PriorityThreshold{
@@ -451,7 +486,7 @@ func TestNamespaceConstraintsInclude(t *testing.T) {
 	t.Logf("run the plugin to delete pods from %v namespace", rc.Namespace)
 	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, &deschedulerapi.Namespaces{
 		Include: []string{rc.Namespace},
-	}, "", nil, false, nil, nil, getPodsAssignedToNode)
+	}, "", nil, false, false, nil, nil, getPodsAssignedToNode)
 
 	// All pods are supposed to be deleted, wait until all the old pods are deleted
 	if err := wait.PollImmediate(time.Second, 20*time.Second, func() (bool, error) {
@@ -522,7 +557,7 @@ func TestNamespaceConstraintsExclude(t *testing.T) {
 	t.Logf("run the plugin to delete pods from namespaces except the %v namespace", rc.Namespace)
 	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, &deschedulerapi.Namespaces{
 		Exclude: []string{rc.Namespace},
-	}, "", nil, false, nil, nil, getPodsAssignedToNode)
+	}, "", nil, false, false, nil, nil, getPodsAssignedToNode)
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
@@ -635,13 +670,81 @@ func testEvictSystemCritical(t *testing.T, isPriorityClass bool) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	if isPriorityClass {
-		runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, true, nil, nil, getPodsAssignedToNode)
+		runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, true, false, nil, nil, getPodsAssignedToNode)
 	} else {
-		runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, true, nil, nil, getPodsAssignedToNode)
+		runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, true, false, nil, nil, getPodsAssignedToNode)
 	}
 
 	// All pods are supposed to be deleted, wait until all pods in the test namespace are terminating
 	t.Logf("All pods in the test namespace, no matter their priority (including system-node-critical and system-cluster-critical), will be deleted")
+	if err := wait.PollImmediate(time.Second, 30*time.Second, func() (bool, error) {
+		podList, err := clientSet.CoreV1().Pods(testNamespace.Name).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return false, nil
+		}
+		currentPodNames := getPodNames(podList.Items)
+		// validate all pod were deleted
+		if len(intersectStrings(initialPodNames, currentPodNames)) > 0 {
+			t.Logf("Waiting until %v pods get deleted", intersectStrings(initialPodNames, currentPodNames))
+			// check if there's at least one pod not in Terminating state
+			for _, pod := range podList.Items {
+				// In case podList contains newly created pods
+				if len(intersectStrings(initialPodNames, []string{pod.Name})) == 0 {
+					continue
+				}
+				if pod.DeletionTimestamp == nil {
+					t.Logf("Pod %v not in terminating state", pod.Name)
+					return false, nil
+				}
+			}
+			t.Logf("All %v pods are terminating", intersectStrings(initialPodNames, currentPodNames))
+		}
+
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for pods to be deleted: %v", err)
+	}
+}
+
+func TestEvictDaemonSetPod(t *testing.T) {
+	testEvictDaemonSetPod(t, true)
+}
+
+func testEvictDaemonSetPod(t *testing.T, isDaemonSet bool) {
+	ctx := context.Background()
+
+	clientSet, _, nodeInformer, getPodsAssignedToNode, stopCh := initializeClient(t)
+	defer close(stopCh)
+
+	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
+	if _, err := clientSet.CoreV1().Namespaces().Create(ctx, testNamespace, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("Unable to create ns %v", testNamespace.Name)
+	}
+	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
+
+	daemonSet := DsByNameContainer("test-ds-evictdaemonsetpods", testNamespace.Name,
+		map[string]string{"test": "evictdaemonsetpods"}, nil)
+	if _, err := clientSet.AppsV1().DaemonSets(daemonSet.Namespace).Create(ctx, daemonSet, metav1.CreateOptions{}); err != nil {
+		t.Errorf("Error creating ds %s: %v", daemonSet.Name, err)
+	}
+	defer deleteDS(ctx, t, clientSet, daemonSet)
+
+	// wait for a while so all the pods are at least few seconds older
+	time.Sleep(5 * time.Second)
+
+	podListDaemonSet, err := clientSet.CoreV1().Pods(daemonSet.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(daemonSet.Spec.Template.Labels).String()})
+	if err != nil {
+		t.Fatalf("Unable to list pods: %v", err)
+	}
+
+	initialPodNames := getPodNames(podListDaemonSet.Items)
+	sort.Strings(initialPodNames)
+	t.Logf("Existing pods: %v", initialPodNames)
+
+	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", nil, false, isDaemonSet, nil, nil, getPodsAssignedToNode)
+
+	// All pods are supposed to be deleted, wait until all pods in the test namespace are terminating
+	t.Logf("All daemonset pods in the test namespace, will be deleted")
 	if err := wait.PollImmediate(time.Second, 30*time.Second, func() (bool, error) {
 		podList, err := clientSet.CoreV1().Pods(testNamespace.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -754,10 +857,10 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 
 	if isPriorityClass {
 		t.Logf("run the plugin to delete pods with priority lower than priority class %s", highPriorityClass.Name)
-		runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, false, nil, nil, getPodsAssignedToNode)
+		runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, false, false, nil, nil, getPodsAssignedToNode)
 	} else {
 		t.Logf("run the plugin to delete pods with priority lower than %d", highPriority)
-		runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, false, nil, nil, getPodsAssignedToNode)
+		runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, false, false, nil, nil, getPodsAssignedToNode)
 	}
 
 	t.Logf("Waiting 10s")
@@ -861,7 +964,7 @@ func TestPodLabelSelector(t *testing.T) {
 	t.Logf("Pods not expected to be evicted: %v, pods expected to be evicted: %v", expectReservePodNames, expectEvictPodNames)
 
 	t.Logf("run the plugin to delete pods with label test:podlifetime-evict")
-	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", nil, false, nil, &metav1.LabelSelector{MatchLabels: map[string]string{"test": "podlifetime-evict"}}, getPodsAssignedToNode)
+	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", nil, false, false, nil, &metav1.LabelSelector{MatchLabels: map[string]string{"test": "podlifetime-evict"}}, getPodsAssignedToNode)
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
@@ -961,7 +1064,7 @@ func TestEvictAnnotation(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Log("Running PodLifetime plugin")
-	runPodLifetimePlugin(ctx, t, clientSet, nodeLister, nil, "", nil, false, nil, nil, getPodsAssignedToNode)
+	runPodLifetimePlugin(ctx, t, clientSet, nodeLister, nil, "", nil, false, false, nil, nil, getPodsAssignedToNode)
 
 	if err := wait.PollImmediate(5*time.Second, time.Minute, func() (bool, error) {
 		podList, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
@@ -1027,7 +1130,7 @@ func TestPodLifeTimeOldestEvicted(t *testing.T) {
 
 	t.Log("Running PodLifetime plugin with maxPodsToEvictPerNamespace=1 to ensure only the oldest pod is evicted")
 	var maxPodsToEvictPerNamespace uint = 1
-	runPodLifetimePlugin(ctx, t, clientSet, nodeLister, nil, "", nil, false, &maxPodsToEvictPerNamespace, nil, getPodsAssignedToNode)
+	runPodLifetimePlugin(ctx, t, clientSet, nodeLister, nil, "", nil, false, false, &maxPodsToEvictPerNamespace, nil, getPodsAssignedToNode)
 	t.Log("Finished PodLifetime plugin")
 
 	t.Logf("Wait for terminating pod to disappear")
@@ -1120,6 +1223,43 @@ func waitForTerminatingPodsToDisappear(ctx context.Context, t *testing.T, client
 		return true, nil
 	}); err != nil {
 		t.Fatalf("Error waiting for terminating pods to disappear: %v", err)
+	}
+}
+
+func deleteDS(ctx context.Context, t *testing.T, clientSet clientset.Interface, ds *appsv1.DaemonSet) {
+	// adds nodeselector to avoid any nodes by setting an unused label
+	dsDeepCopy := ds.DeepCopy()
+	dsDeepCopy.Spec.Template.Spec.NodeSelector = map[string]string{
+		"avoid-all-nodes": "true",
+	}
+
+	if _, err := clientSet.AppsV1().DaemonSets(dsDeepCopy.Namespace).Update(ctx, dsDeepCopy, metav1.UpdateOptions{}); err != nil {
+		t.Fatalf("Error updating daemonset %v", err)
+	}
+
+	if err := wait.PollImmediate(5*time.Second, time.Minute, func() (bool, error) {
+		podList, _ := clientSet.CoreV1().Pods(ds.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(ds.Spec.Template.Labels).String()})
+		t.Logf("Waiting for %v DS pods to disappear, still %v remaining", ds.Name, len(podList.Items))
+		if len(podList.Items) > 0 {
+			return false, nil
+		}
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for ds pods to disappear: %v", err)
+	}
+
+	if err := clientSet.AppsV1().DaemonSets(ds.Namespace).Delete(ctx, ds.Name, metav1.DeleteOptions{}); err != nil {
+		t.Fatalf("Error deleting ds %v", err)
+	}
+
+	if err := wait.PollImmediate(time.Second, 10*time.Second, func() (bool, error) {
+		_, err := clientSet.AppsV1().DaemonSets(ds.Namespace).Get(ctx, ds.Name, metav1.GetOptions{})
+		if err != nil && strings.Contains(err.Error(), "not found") {
+			return true, nil
+		}
+		return false, nil
+	}); err != nil {
+		t.Fatalf("Error deleting ds %v", err)
 	}
 }
 

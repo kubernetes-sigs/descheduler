@@ -19,7 +19,7 @@ spec:
       serviceAccountName: descheduler-sa
       containers:
         - name: descheduler
-          image: registry.k8s.io/descheduler/descheduler:v0.29.0
+          image: registry.k8s.io/descheduler/descheduler:v0.30.0
           imagePullPolicy: IfNotPresent
           command:
             - "/bin/descheduler"

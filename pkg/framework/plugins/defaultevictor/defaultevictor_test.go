@@ -20,6 +20,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -363,6 +364,8 @@ func TestDefaultEvictorFilter(t *testing.T) {
 	nodeTaintKey := "hardware"
 	nodeTaintValue := "gpu"
 
+	ownerRefUUID := uuid.NewUUID()
+
 	type testCase struct {
 		description             string
 		pods                    []*v1.Pod
@@ -372,6 +375,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 		evictSystemCriticalPods bool
 		priorityThreshold       *int32
 		nodeFit                 bool
+		minReplicas             uint
 		result                  bool
 	}
 
@@ -527,7 +531,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			result:                  true,
 		}, {
-			description: "Pod not evicted becasuse it is part of a daemonSet",
+			description: "Pod not evicted because it is part of a daemonSet",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p8", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -538,7 +542,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			result:                  false,
 		}, {
-			description: "Pod is evicted becasuse it is part of a daemonSet, but it has scheduler.alpha.kubernetes.io/evict annotation",
+			description: "Pod is evicted because it is part of a daemonSet, but it has scheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p9", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
@@ -549,7 +553,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			result:                  true,
 		}, {
-			description: "Pod not evicted becasuse it is a mirror poddsa",
+			description: "Pod not evicted because it is a mirror poddsa",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p10", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -560,7 +564,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			result:                  false,
 		}, {
-			description: "Pod is evicted becasuse it is a mirror pod, but it has scheduler.alpha.kubernetes.io/evict annotation",
+			description: "Pod is evicted because it is a mirror pod, but it has scheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p11", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -572,7 +576,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			result:                  true,
 		}, {
-			description: "Pod not evicted becasuse it has system critical priority",
+			description: "Pod not evicted because it has system critical priority",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p12", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -584,7 +588,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			result:                  false,
 		}, {
-			description: "Pod is evicted becasuse it has system critical priority, but it has scheduler.alpha.kubernetes.io/evict annotation",
+			description: "Pod is evicted because it has system critical priority, but it has scheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p13", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -599,7 +603,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			result:                  true,
 		}, {
-			description: "Pod not evicted becasuse it has a priority higher than the configured priority threshold",
+			description: "Pod not evicted because it has a priority higher than the configured priority threshold",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p14", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -611,7 +615,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			priorityThreshold:       &lowPriority,
 			result:                  false,
 		}, {
-			description: "Pod is evicted becasuse it has a priority higher than the configured priority threshold, but it has scheduler.alpha.kubernetes.io/evict annotation",
+			description: "Pod is evicted because it has a priority higher than the configured priority threshold, but it has scheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p15", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -624,7 +628,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			priorityThreshold:       &lowPriority,
 			result:                  true,
 		}, {
-			description: "Pod is evicted becasuse it has system critical priority, but evictSystemCriticalPods = true",
+			description: "Pod is evicted because it has system critical priority, but evictSystemCriticalPods = true",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p16", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -636,7 +640,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: true,
 			result:                  true,
 		}, {
-			description: "Pod is evicted becasuse it has system critical priority, but evictSystemCriticalPods = true and it has scheduler.alpha.kubernetes.io/evict annotation",
+			description: "Pod is evicted because it has system critical priority, but evictSystemCriticalPods = true and it has scheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p16", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -649,7 +653,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: true,
 			result:                  true,
 		}, {
-			description: "Pod is evicted becasuse it has a priority higher than the configured priority threshold, but evictSystemCriticalPods = true",
+			description: "Pod is evicted because it has a priority higher than the configured priority threshold, but evictSystemCriticalPods = true",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p17", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -661,7 +665,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			priorityThreshold:       &lowPriority,
 			result:                  true,
 		}, {
-			description: "Pod is evicted becasuse it has a priority higher than the configured priority threshold, but evictSystemCriticalPods = true and it has scheduler.alpha.kubernetes.io/evict annotation",
+			description: "Pod is evicted because it has a priority higher than the configured priority threshold, but evictSystemCriticalPods = true and it has scheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p17", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -704,6 +708,47 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			nodeFit:                 true,
 			result:                  true,
+		}, {
+			description: "minReplicas of 2, owner with 2 replicas, evicts",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.ObjectMeta.OwnerReferences[0].UID = ownerRefUUID
+				}),
+				test.BuildTestPod("p2", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.ObjectMeta.OwnerReferences[0].UID = ownerRefUUID
+				}),
+			},
+			minReplicas: 2,
+			result:      true,
+		}, {
+			description: "minReplicas of 3, owner with 2 replicas, no eviction",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.ObjectMeta.OwnerReferences[0].UID = ownerRefUUID
+				}),
+				test.BuildTestPod("p2", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.ObjectMeta.OwnerReferences[0].UID = ownerRefUUID
+				}),
+			},
+			minReplicas: 3,
+			result:      false,
+		}, {
+			description: "minReplicas of 2, multiple owners, no eviction",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = append(test.GetNormalPodOwnerRefList(), test.GetNormalPodOwnerRefList()...)
+					pod.ObjectMeta.OwnerReferences[0].UID = ownerRefUUID
+				}),
+				test.BuildTestPod("p2", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+				}),
+			},
+			minReplicas: 2,
+			result:      true,
 		},
 	}
 
@@ -741,7 +786,8 @@ func TestDefaultEvictorFilter(t *testing.T) {
 				PriorityThreshold: &api.PriorityThreshold{
 					Value: test.priorityThreshold,
 				},
-				NodeFit: test.nodeFit,
+				NodeFit:     test.nodeFit,
+				MinReplicas: test.minReplicas,
 			}
 
 			evictorPlugin, err := New(

@@ -2,7 +2,7 @@
 ![Release Charts](https://github.com/kubernetes-sigs/descheduler/workflows/Release%20Charts/badge.svg)
 
 <p align="left">
-	↖️ Click at the [bullet list icon] at the top left corner of the Readme visualization for the github generated table of contents.
+	↗️️ Click at the [bullet list icon] at the top right corner of the Readme visualization for the github generated table of contents.
 </p>
 
 <p align="center">
@@ -38,6 +38,7 @@ that version's release branch, as listed below:
 
 |Descheduler Version|Docs link|
 |---|---|
+|v0.30.x|[`release-1.30`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.30/README.md)|
 |v0.29.x|[`release-1.29`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.29/README.md)|
 |v0.28.x|[`release-1.28`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.28/README.md)|
 |v0.27.x|[`release-1.27`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.27/README.md)|
@@ -142,6 +143,7 @@ The Default Evictor Plugin is used by default for filtering pods before processi
 |`labelSelector`|`metav1.LabelSelector`||(see [label filtering](#label-filtering))|
 |`priorityThreshold`|`priorityThreshold`||(see [priority filtering](#priority-filtering))|
 |`nodeFit`|`bool`|`false`|(see [node fit filtering](#node-fit-filtering))|
+|`minReplicas`|`uint`|`0`| ignore eviction of pods where owner (e.g. `ReplicaSet`) replicas is below this threshold |
 
 ### Example policy
 
@@ -166,6 +168,7 @@ profiles:
         evictFailedBarePods: true
         evictLocalStoragePods: true
         nodeFit: true
+        minReplicas: 2
     plugins:
       # DefaultEvictor is enabled for both `filter` and `preEvictionFilter`
       # filter:
@@ -205,7 +208,7 @@ Balance Plugins: These plugins process all pods, or groups of pods, and determin
 | [RemovePodsViolatingTopologySpreadConstraint](#removepodsviolatingtopologyspreadconstraint) |Balance|Evicts pods violating TopologySpreadConstraints|
 | [RemovePodsHavingTooManyRestarts](#removepodshavingtoomanyrestarts) |Deschedule|Evicts pods having too many restarts|
 | [PodLifeTime](#podlifetime) |Deschedule|Evicts pods that have exceeded a specified age limit|
-| [RemoveFailedPods](#removefailedpods) |Deschedule|Evicts pods with certain failed reasons|
+| [RemoveFailedPods](#removefailedpods) |Deschedule|Evicts pods with certain failed reasons and exit codes|
 
 
 ### RemoveDuplicates
@@ -500,18 +503,22 @@ key=value matches an excludedTaints entry, the taint will be ignored.
 For example, excludedTaints entry "dedicated" would match all taints with key "dedicated", regardless of value.
 excludedTaints entry "dedicated=special-user" would match taints with key "dedicated" and value "special-user".
 
+If a list of includedTaints is provided, a taint will be considered if and only if it matches an included key **or** key=value from the list. Otherwise it will be ignored. Leaving includedTaints unset will include any taint by default. 
+
 **Parameters:**
 
 |Name|Type|
 |---|---|
 |`excludedTaints`|list(string)|
+|`includedTaints`|list(string)|
 |`includePreferNoSchedule`|bool|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
 
 **Example:**
 
-````yaml
+Setting `excludedTaints`
+```yaml
 apiVersion: "descheduler/v1alpha2"
 kind: "DeschedulerPolicy"
 profiles:
@@ -526,7 +533,25 @@ profiles:
       deschedule:
         enabled:
           - "RemovePodsViolatingNodeTaints"
-````
+```
+
+Setting `includedTaints`
+```yaml
+apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "RemovePodsViolatingNodeTaints"
+      args:
+        includedTaints:
+        - decommissioned=end-of-life # include only taints with key "decommissioned" and value "end-of-life"
+        - reserved # include all taints with key "reserved"
+    plugins:
+      deschedule:
+        enabled:
+          - "RemovePodsViolatingNodeTaints"
+```
 
 ### RemovePodsViolatingTopologySpreadConstraint
 
@@ -674,10 +699,8 @@ profiles:
 ```
 
 ### RemoveFailedPods
-
 This strategy evicts pods that are in failed status phase.
-You can provide an optional parameter to filter by failed `reasons`.
-`reasons` can be expanded to include reasons of InitContainers as well by setting the optional parameter `includingInitContainers` to `true`.
+You can provide optional parameters to filter by failed pods' and containters' `reasons`. and `exitCodes`. `exitCodes` apply to failed pods' containers with `terminated` state only. `reasons` and `exitCodes` can be expanded to include those of InitContainers as well by setting the optional parameter `includingInitContainers` to `true`.
 You can specify an optional parameter `minPodLifetimeSeconds` to evict pods that are older than specified seconds.
 Lastly, you can specify the optional parameter `excludeOwnerKinds` and if a pod
 has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considered for eviction.
@@ -689,6 +712,7 @@ has any of these `Kind`s listed as an `OwnerRef`, that pod will not be considere
 |`minPodLifetimeSeconds`|uint|
 |`excludeOwnerKinds`|list(string)|
 |`reasons`|list(string)|
+|`exitCodes`|list(int32)|
 |`includingInitContainers`|bool|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
@@ -705,6 +729,8 @@ profiles:
       args:
         reasons:
         - "NodeAffinity"
+        exitCodes:
+        - 1
         includingInitContainers: true
         excludeOwnerKinds:
         - "Job"
@@ -719,7 +745,7 @@ profiles:
 
 ### Namespace filtering
 
-The following strategies accept a `namespaces` parameter which allows to specify a list of including, resp. excluding namespaces:
+The following strategies accept a `namespaces` parameter which allows to specify a list of including and excluding namespaces respectively:
 * `PodLifeTime`
 * `RemovePodsHavingTooManyRestarts`
 * `RemovePodsViolatingNodeTaints`
@@ -729,11 +755,10 @@ The following strategies accept a `namespaces` parameter which allows to specify
 * `RemovePodsViolatingTopologySpreadConstraint`
 * `RemoveFailedPods`
 
-
-The following strategies accept a `evictableNamespaces` parameter which allows to specify a list of excluding namespaces:
+The following strategies accept an `evictableNamespaces` parameter which allows to specify a list of excluding namespaces:
 * `LowNodeUtilization` and `HighNodeUtilization` (Only filtered right before eviction)
 
-For example with PodLifeTime:
+In the following example with `PodLifeTime`, `PodLifeTime` gets executed only over `namespace1` and `namespace2`.
 
 ```yaml
 apiVersion: "descheduler/v1alpha2"
@@ -754,8 +779,7 @@ profiles:
           - "PodLifeTime"
 ```
 
-In the example `PodLifeTime` gets executed only over `namespace1` and `namespace2`.
-The similar holds for `exclude` field:
+The similar holds for `exclude` field. The strategy gets executed over all namespaces but `namespace1` and `namespace2` in the following example.
 
 ```yaml
 apiVersion: "descheduler/v1alpha2"
@@ -776,9 +800,7 @@ profiles:
           - "PodLifeTime"
 ```
 
-The strategy gets executed over all namespaces but `namespace1` and `namespace2`.
-
-It's not allowed to compute `include` with `exclude` field.
+It's not allowed to combine `include` with `exclude` field.
 
 ### Priority filtering
 
@@ -881,6 +903,7 @@ profiles:
 - `nodeAffinity` on the pod
 - Resource `requests` made by the pod and the resources available on other nodes
 - Whether any of the other nodes are marked as `unschedulable`
+- Any `podAntiAffinity` between the pod and the pods on the other nodes
 
 E.g.
 
@@ -902,7 +925,7 @@ profiles:
           - "PodLifeTime"
 ```
 
-Note that node fit filtering references the current pod spec, and not that of it's owner.
+Note that node fit filtering references the current pod spec, and not that of its owner.
 Thus, if the pod is owned by a ReplicationController (and that ReplicationController was modified recently),
 the pod may be running with an outdated spec, which the descheduler will reference when determining node fit.
 This is expected behavior as the descheduler is a "best-effort" mechanism.
@@ -916,7 +939,7 @@ When the descheduler decides to evict pods from a node, it employs the following
 * [Critical pods](https://kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/) (with priorityClassName set to system-cluster-critical or system-node-critical) are never evicted (unless `evictSystemCriticalPods: true` is set).
 * Pods (static or mirrored pods or standalone pods) not part of an ReplicationController, ReplicaSet(Deployment), StatefulSet, or Job are
 never evicted because these pods won't be recreated. (Standalone pods in failed status phase can be evicted by setting `evictFailedBarePods: true`)
-* Pods associated with DaemonSets are never evicted.
+* Pods associated with DaemonSets are never evicted (unless `evictDaemonSetPods: true` is set).
 * Pods with local storage are never evicted (unless `evictLocalStoragePods: true` is set).
 * Pods with PVCs are evicted (unless `ignorePvcPods: true` is set).
 * In `LowNodeUtilization` and `RemovePodsViolatingInterPodAntiAffinity`, pods are evicted by their priority from low to high, and if they have same priority,

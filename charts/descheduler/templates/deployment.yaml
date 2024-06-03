@@ -7,7 +7,7 @@ metadata:
   labels:
     {{- include "descheduler.labels" . | nindent 4 }}
 spec:
-  {{- if gt .Values.replicas 1.0}}
+  {{- if gt (.Values.replicas | int) 1 }}
   {{- if not .Values.leaderElection.enabled }}
   {{- fail "You must set leaderElection to use more than 1 replica"}}
   {{- end}}
@@ -53,7 +53,11 @@ spec:
             - --policy-config-file=/policy-dir/policy.yaml
             - --descheduling-interval={{ required "deschedulingInterval required for running as Deployment" .Values.deschedulingInterval }}
             {{- range $key, $value := .Values.cmdOptions }}
-            - {{ printf "--%s" $key }}{{ if $value }}={{ $value }}{{ end }}
+            {{- if ne $value nil }}
+            - {{ printf "--%s=%s" $key (toString $value) }}
+            {{- else }}
+            - {{ printf "--%s" $key }}
+            {{- end }}
             {{- end }}
             {{- include "descheduler.leaderElection" . | nindent 12 }}
           ports:

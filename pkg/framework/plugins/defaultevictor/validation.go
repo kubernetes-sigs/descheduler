@@ -16,6 +16,8 @@ package defaultevictor
 import (
 	"fmt"
 
+	"k8s.io/klog/v2"
+
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -24,6 +26,10 @@ func ValidateDefaultEvictorArgs(obj runtime.Object) error {
 
 	if args.PriorityThreshold != nil && args.PriorityThreshold.Value != nil && len(args.PriorityThreshold.Name) > 0 {
 		return fmt.Errorf("priority threshold misconfigured, only one of priorityThreshold fields can be set, got %v", args)
+	}
+
+	if args.MinReplicas == 1 {
+		klog.V(4).Info("DefaultEvictor minReplicas must be greater than 1 to check for min pods during eviction. This check will be ignored during eviction.")
 	}
 
 	return nil
