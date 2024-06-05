@@ -37,4 +37,7 @@ func SetDefaults_RemovePodsViolatingNodeTaintsArgs(obj runtime.Object) {
 	if args.ExcludedTaints == nil {
 		args.ExcludedTaints = nil
 	}
+	if args.IncludedTaints == nil {
+		args.IncludedTaints = nil
+	}
 }

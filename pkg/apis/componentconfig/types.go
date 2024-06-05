@@ -51,6 +51,9 @@ type DeschedulerConfiguration struct {
 	// EvictLocalStoragePods allows pods using local storage to be evicted.
 	EvictLocalStoragePods bool
 
+	// EvictDaemonSetPods allows pods owned by a DaemonSet resource to be evicted.
+	EvictDaemonSetPods bool
+
 	// IgnorePVCPods sets whether PVC pods should be allowed to be evicted
 	IgnorePVCPods bool
 

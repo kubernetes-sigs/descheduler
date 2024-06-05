@@ -41,6 +41,9 @@ type DeschedulerPolicy struct {
 	// EvictSystemCriticalPods allows eviction of pods of any priority (including Kubernetes system pods)
 	EvictSystemCriticalPods *bool `json:"evictSystemCriticalPods,omitempty"`
 
+	// EvictDaemonSetPods allows pods owned by a DaemonSet resource to be evicted.
+	EvictDaemonSetPods *bool `json:"evictDaemonSetPods,omitempty"`
+
 	// IgnorePVCPods prevents pods with PVCs from being evicted.
 	IgnorePVCPods *bool `json:"ignorePvcPods,omitempty"`
 
@@ -90,6 +93,7 @@ type StrategyParameters struct {
 	NodeFit                           bool                               `json:"nodeFit"`
 	IncludePreferNoSchedule           bool                               `json:"includePreferNoSchedule"`
 	ExcludedTaints                    []string                           `json:"excludedTaints,omitempty"`
+	IncludedTaints                    []string                           `json:"includedTaints,omitempty"`
 }
 
 type (

@@ -67,16 +67,25 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
 	}
 
+	includedTaints := sets.New(nodeTaintsArgs.IncludedTaints...)
+	includeTaint := func(taint *v1.Taint) bool {
+		// Include only taints by key *or* key=value
+		// Always returns true if no includedTaints argument is provided
+		return (nodeTaintsArgs.IncludedTaints == nil) || includedTaints.Has(taint.Key) || (taint.Value != "" && includedTaints.Has(fmt.Sprintf("%s=%s", taint.Key, taint.Value)))
+	}
+
 	excludedTaints := sets.New(nodeTaintsArgs.ExcludedTaints...)
 	excludeTaint := func(taint *v1.Taint) bool {
 		// Exclude taints by key *or* key=value
 		return excludedTaints.Has(taint.Key) || (taint.Value != "" && excludedTaints.Has(fmt.Sprintf("%s=%s", taint.Key, taint.Value)))
 	}
 
-	taintFilterFnc := func(taint *v1.Taint) bool { return (taint.Effect == v1.TaintEffectNoSchedule) && !excludeTaint(taint) }
+	taintFilterFnc := func(taint *v1.Taint) bool {
+		return (taint.Effect == v1.TaintEffectNoSchedule) && !excludeTaint(taint) && includeTaint(taint)
+	}
 	if nodeTaintsArgs.IncludePreferNoSchedule {
 		taintFilterFnc = func(taint *v1.Taint) bool {
-			return (taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectPreferNoSchedule) && !excludeTaint(taint)
+			return (taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectPreferNoSchedule) && !excludeTaint(taint) && includeTaint(taint)
 		}
 	}
 
@@ -112,7 +121,7 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 				d.taintFilterFnc,
 			) {
 				klog.V(2).InfoS("Not all taints with NoSchedule effect are tolerated after update for pod on node", "pod", klog.KObj(pods[i]), "node", klog.KObj(node))
-				d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{})
+				d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
 				if d.handle.Evictor().NodeLimitExceeded(node) {
 					break
 				}

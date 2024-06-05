@@ -46,6 +46,11 @@ func (in *RemovePodsViolatingNodeTaintsArgs) DeepCopyInto(out *RemovePodsViolati
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.IncludedTaints != nil {
+		in, out := &in.IncludedTaints, &out.IncludedTaints
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 

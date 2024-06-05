@@ -103,7 +103,7 @@ func (d *RemoveFailedPods) Deschedule(ctx context.Context, nodes []*v1.Node) *fr
 		}
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
-			d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{})
+			d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
 			if d.handle.Evictor().NodeLimitExceeded(node) {
 				break
 			}
@@ -148,6 +148,17 @@ func validateCanEvict(pod *v1.Pod, failedPodArgs *RemoveFailedPodsArgs) error {
 		}
 	}
 
+	if len(failedPodArgs.ExitCodes) > 0 {
+		exitCodes := getFailedContainerStatusExitCodes(pod.Status.ContainerStatuses)
+		if failedPodArgs.IncludingInitContainers {
+			exitCodes = append(exitCodes, getFailedContainerStatusExitCodes(pod.Status.InitContainerStatuses)...)
+		}
+
+		if !sets.New(failedPodArgs.ExitCodes...).HasAny(exitCodes...) {
+			errs = append(errs, fmt.Errorf("pod does not match any of the exitCodes"))
+		}
+	}
+
 	return utilerrors.NewAggregate(errs)
 }
 
@@ -164,4 +175,16 @@ func getFailedContainerStatusReasons(containerStatuses []v1.ContainerStatus) []s
 	}
 
 	return reasons
+}
+
+func getFailedContainerStatusExitCodes(containerStatuses []v1.ContainerStatus) []int32 {
+	exitCodes := make([]int32, 0)
+
+	for _, containerStatus := range containerStatuses {
+		if containerStatus.State.Terminated != nil {
+			exitCodes = append(exitCodes, containerStatus.State.Terminated.ExitCode)
+		}
+	}
+
+	return exitCodes
 }
