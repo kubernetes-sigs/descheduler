@@ -32,6 +32,8 @@ HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint 2> /dev/null)
 GOFUMPT_VERSION := v0.4.0
 HAS_GOFUMPT := $(shell command -v gofumpt 2> /dev/null)
 
+GO_VERSION := $(shell sed -En 's/^go (.*)$$/\1/p' go.mod)
+
 # REGISTRY is the container registry to push
 # into. The default is to push to the staging
 # registry, not production.
@@ -134,7 +136,7 @@ gen:
 	./hack/update-docs.sh
 
 gen-docker:
-	$(CONTAINER_ENGINE) run --entrypoint make -it -v $(CURRENT_DIR):/go/src/sigs.k8s.io/descheduler -w /go/src/sigs.k8s.io/descheduler golang:1.22.3 gen
+	$(CONTAINER_ENGINE) run --entrypoint make -it -v $(CURRENT_DIR):/go/src/sigs.k8s.io/descheduler -w /go/src/sigs.k8s.io/descheduler golang:$(GO_VERSION) gen
 
 verify-gen:
 	./hack/verify-conversions.sh
