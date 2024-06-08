@@ -32,7 +32,7 @@ HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint 2> /dev/null)
 GOFUMPT_VERSION := v0.4.0
 HAS_GOFUMPT := $(shell command -v gofumpt 2> /dev/null)
 
-GO_VERSION := $(shell sed -En 's/^go (.*)$$/\1/p' go.mod)
+GO_VERSION := $(shell (command -v jq > /dev/null && (go mod edit -json | jq -r .Go)) || (sed -En 's/^go (.*)$$/\1/p' go.mod))
 
 # REGISTRY is the container registry to push
 # into. The default is to push to the staging
