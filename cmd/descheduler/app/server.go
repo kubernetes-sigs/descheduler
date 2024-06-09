@@ -117,9 +117,10 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	err := tracing.NewTracerProvider(ctx, rs.Tracing.CollectorEndpoint, rs.Tracing.TransportCert, rs.Tracing.ServiceName, rs.Tracing.ServiceNamespace, rs.Tracing.SampleRate, rs.Tracing.FallbackToNoOpProviderOnError)
 	if err != nil {
-		return err
+		klog.ErrorS(err, "failed to create tracer provider")
 	}
 	defer tracing.Shutdown(ctx)
+
 	// increase the fake watch channel so the dry-run mode can be run
 	// over a cluster with thousands of pods
 	watch.DefaultChanSize = 100000

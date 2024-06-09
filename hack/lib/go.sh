@@ -1,4 +1,6 @@
-# Copyright 2017 The Kubernetes Authors.
+#!/bin/bash
+
+# Copyright 2024 The Kubernetes Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,20 +13,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-FROM golang:1.22.4
 
-WORKDIR /go/src/sigs.k8s.io/descheduler
-COPY . .
-ARG ARCH
-ARG VERSION
-RUN VERSION=${VERSION} make build.$ARCH
+# go::verify_version verifies the go version is supported by the project.
+# descheduler actively supports 3 versions, therefore 3 go versions are supported.
+go::verify_version() {
+  GO_VERSION=($(go version))
 
-FROM scratch
-
-MAINTAINER Kubernetes SIG Scheduling <kubernetes-sig-scheduling@googlegroups.com>
-
-USER 1000
-
-COPY --from=0 /go/src/sigs.k8s.io/descheduler/_output/bin/descheduler /bin/descheduler
-
-CMD ["/bin/descheduler", "--help"]
+  if [[ -z $(echo "${GO_VERSION[2]}" | grep -E 'go1.20|go1.21|go1.22') ]]; then
+    echo "Unknown go version '${GO_VERSION[2]}', skipping gofmt."
+    exit 1
+  fi
+}
