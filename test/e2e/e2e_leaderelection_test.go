@@ -41,8 +41,7 @@ func TestLeaderElection(t *testing.T) {
 	descheduler.SetupPlugins()
 	ctx := context.Background()
 
-	clientSet, _, _, _, stopCh := initializeClient(t)
-	defer close(stopCh)
+	clientSet, _, _, _ := initializeClient(ctx, t)
 
 	ns1 := "e2e-" + strings.ToLower(t.Name()+"-a")
 	ns2 := "e2e-" + strings.ToLower(t.Name()+"-b")
