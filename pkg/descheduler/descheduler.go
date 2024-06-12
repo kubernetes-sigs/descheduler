@@ -82,7 +82,7 @@ type descheduler struct {
 	eventRecorder              events.EventRecorder
 }
 
-func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory informers.SharedInformerFactory) (*descheduler, error) {
+func newDescheduler(rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory informers.SharedInformerFactory) (*descheduler, error) {
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 	podLister := sharedInformerFactory.Core().V1().Pods().Lister()
 	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
@@ -388,7 +388,6 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	defer span.End()
 
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
-	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
 
 	var nodeSelector string
 	if deschedulerPolicy.NodeSelector != nil {
@@ -404,7 +403,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
 	defer eventBroadcaster.Shutdown()
 
-	descheduler, err := newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, sharedInformerFactory)
+	descheduler, err := newDescheduler(rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, sharedInformerFactory)
 	if err != nil {
 		span.AddEvent("Failed to create new descheduler", trace.WithAttributes(attribute.String("err", err.Error())))
 		return err
@@ -419,7 +418,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		// A next context is created here intentionally to avoid nesting the spans via context.
 		sCtx, sSpan := tracing.Tracer().Start(ctx, "NonSlidingUntil")
 		defer sSpan.End()
-		nodes, err := nodeutil.ReadyNodes(sCtx, rs.Client, nodeLister, nodeSelector)
+		nodes, err := nodeutil.ReadyNodes(sCtx, rs.Client, descheduler.nodeLister, nodeSelector)
 		if err != nil {
 			sSpan.AddEvent("Failed to detect ready nodes", trace.WithAttributes(attribute.String("err", err.Error())))
 			klog.Error(err)
