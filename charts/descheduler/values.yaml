@@ -70,7 +70,7 @@ leaderElection: {}
 #  retryPeriod: 2s
 #  resourceLock: "leases"
 #  resourceName: "descheduler"
-#  resourceNamescape: "kube-system"
+#  resourceNamespace: "kube-system"
 
 command:
 - "/bin/descheduler"
