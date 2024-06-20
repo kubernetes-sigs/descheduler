@@ -43,8 +43,7 @@ import (
 func TestTooManyRestarts(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, sharedInformerFactory, _, getPodsAssignedToNode, stopCh := initializeClient(t)
-	defer close(stopCh)
+	clientSet, sharedInformerFactory, _, getPodsAssignedToNode := initializeClient(ctx, t)
 
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {

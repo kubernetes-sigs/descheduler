@@ -24,8 +24,7 @@ var oneHourPodLifetimeSeconds uint = 3600
 
 func TestFailedPods(t *testing.T) {
 	ctx := context.Background()
-	clientSet, sharedInformerFactory, _, getPodsAssignedToNode, stopCh := initializeClient(t)
-	defer close(stopCh)
+	clientSet, sharedInformerFactory, _, getPodsAssignedToNode := initializeClient(ctx, t)
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Error listing node with %v", err)
@@ -154,7 +153,7 @@ func initFailedJob(name, namespace string) *batchv1.Job {
 
 func waitForJobPodPhase(ctx context.Context, t *testing.T, clientSet clientset.Interface, job *batchv1.Job, phase v1.PodPhase) {
 	podClient := clientSet.CoreV1().Pods(job.Namespace)
-	if err := wait.PollImmediate(5*time.Second, 30*time.Second, func() (bool, error) {
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		t.Log(labels.FormatLabels(job.Labels))
 		if podList, err := podClient.List(ctx, metav1.ListOptions{LabelSelector: labels.FormatLabels(job.Labels)}); err != nil {
 			return false, err
