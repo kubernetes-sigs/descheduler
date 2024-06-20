@@ -74,6 +74,7 @@ func autoConvert_v1alpha1_DeschedulerConfiguration_To_componentconfig_Deschedule
 	}
 	out.LeaderElection = in.LeaderElection
 	out.ClientConnection = in.ClientConnection
+	out.RecordEventsForEvictionErrors = in.RecordEventsForEvictionErrors
 	return nil
 }
 
@@ -97,6 +98,7 @@ func autoConvert_componentconfig_DeschedulerConfiguration_To_v1alpha1_Deschedule
 	}
 	out.LeaderElection = in.LeaderElection
 	out.ClientConnection = in.ClientConnection
+	out.RecordEventsForEvictionErrors = in.RecordEventsForEvictionErrors
 	return nil
 }
 

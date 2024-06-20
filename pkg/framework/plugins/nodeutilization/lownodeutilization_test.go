@@ -41,6 +41,10 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	noRecordEventsForEvictionFailures = false
+)
+
 func TestLowNodeUtilization(t *testing.T) {
 	n1NodeName := "n1"
 	n2NodeName := "n2"
@@ -895,6 +899,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{
@@ -1067,6 +1072,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				item.nodes,
 				false,
 				eventRecorder,
+				noRecordEventsForEvictionFailures,
 			)
 
 			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{
