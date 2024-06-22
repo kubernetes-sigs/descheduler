@@ -27,7 +27,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error listing node with %v", err)
 	}
-	nodes, workerNodes := splitNodesAndWorkerNodes(nodeList.Items)
+	_, workerNodes := splitNodesAndWorkerNodes(nodeList.Items)
 	t.Log("Creating testing namespace")
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
 	if _, err := clientSet.CoreV1().Namespaces().Create(ctx, testNamespace, metav1.CreateOptions{}); err != nil {
@@ -138,7 +138,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			defer test.DeleteDeployment(ctx, t, clientSet, violatorDeployment)
 			test.WaitForDeploymentPodsRunning(ctx, t, clientSet, violatorDeployment)
 
-			podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
+			podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode)
 
 			// Run TopologySpreadConstraint strategy
 			t.Logf("Running RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)

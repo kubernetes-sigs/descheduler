@@ -196,7 +196,6 @@ func runPodLifetimePlugin(
 		false,
 		nil,
 		maxPodsToEvictPerNamespace,
-		nodes,
 		false,
 		&events.FakeRecorder{},
 	)
@@ -285,7 +284,7 @@ func TestLowNodeUtilization(t *testing.T) {
 		t.Errorf("Error listing node with %v", err)
 	}
 
-	nodes, workerNodes := splitNodesAndWorkerNodes(nodeList.Items)
+	_, workerNodes := splitNodesAndWorkerNodes(nodeList.Items)
 
 	t.Log("Creating testing namespace")
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -374,7 +373,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	waitForRCPodsRunning(ctx, t, clientSet, rc)
 
 	// Run LowNodeUtilization plugin
-	podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
+	podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode)
 
 	defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
 		EvictLocalStoragePods:   true,
@@ -1570,7 +1569,7 @@ func splitNodesAndWorkerNodes(nodes []v1.Node) ([]*v1.Node, []*v1.Node) {
 	return allNodes, workerNodes
 }
 
-func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, nodes []*v1.Node) *evictions.PodEvictor {
+func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc) *evictions.PodEvictor {
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		t.Fatalf("Error creating eviction policy group: %v", err)
@@ -1584,7 +1583,6 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 		false,
 		nil,
 		nil,
-		nodes,
 		false,
 		eventRecorder,
 	)

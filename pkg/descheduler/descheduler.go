@@ -160,7 +160,6 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 		d.rs.DryRun,
 		d.deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
 		d.deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
-		nodes,
 		!d.rs.DisableMetrics,
 		d.eventRecorder,
 	)

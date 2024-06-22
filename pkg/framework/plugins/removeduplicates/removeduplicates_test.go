@@ -319,7 +319,6 @@ func TestFindDuplicatePods(t *testing.T) {
 				false,
 				nil,
 				nil,
-				testCase.nodes,
 				false,
 				eventRecorder,
 			)
@@ -768,7 +767,6 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				false,
 				nil,
 				nil,
-				testCase.nodes,
 				false,
 				eventRecorder,
 			)
