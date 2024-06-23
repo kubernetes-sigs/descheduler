@@ -70,16 +70,17 @@ type profileRunner struct {
 }
 
 type descheduler struct {
-	rs                    *options.DeschedulerServer
-	podLister             listersv1.PodLister
-	nodeLister            listersv1.NodeLister
-	namespaceLister       listersv1.NamespaceLister
-	priorityClassLister   schedulingv1.PriorityClassLister
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc
-	sharedInformerFactory informers.SharedInformerFactory
-	deschedulerPolicy     *api.DeschedulerPolicy
-	eventRecorder         events.EventRecorder
-	podEvictor            *evictions.PodEvictor
+	rs                     *options.DeschedulerServer
+	podLister              listersv1.PodLister
+	nodeLister             listersv1.NodeLister
+	namespaceLister        listersv1.NamespaceLister
+	priorityClassLister    schedulingv1.PriorityClassLister
+	getPodsAssignedToNode  podutil.GetPodsAssignedToNodeFunc
+	sharedInformerFactory  informers.SharedInformerFactory
+	deschedulerPolicy      *api.DeschedulerPolicy
+	eventRecorder          events.EventRecorder
+	podEvictor             *evictions.PodEvictor
+	podEvictionReactionFnc func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error)
 }
 
 func newDescheduler(rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory informers.SharedInformerFactory) (*descheduler, error) {
@@ -105,16 +106,17 @@ func newDescheduler(rs *options.DeschedulerServer, deschedulerPolicy *api.Desche
 	)
 
 	return &descheduler{
-		rs:                    rs,
-		podLister:             podLister,
-		nodeLister:            nodeLister,
-		namespaceLister:       namespaceLister,
-		priorityClassLister:   priorityClassLister,
-		getPodsAssignedToNode: getPodsAssignedToNode,
-		sharedInformerFactory: sharedInformerFactory,
-		deschedulerPolicy:     deschedulerPolicy,
-		eventRecorder:         eventRecorder,
-		podEvictor:            podEvictor,
+		rs:                     rs,
+		podLister:              podLister,
+		nodeLister:             nodeLister,
+		namespaceLister:        namespaceLister,
+		priorityClassLister:    priorityClassLister,
+		getPodsAssignedToNode:  getPodsAssignedToNode,
+		sharedInformerFactory:  sharedInformerFactory,
+		deschedulerPolicy:      deschedulerPolicy,
+		eventRecorder:          eventRecorder,
+		podEvictor:             podEvictor,
+		podEvictionReactionFnc: podEvictionReactionFnc,
 	}, nil
 }
 
@@ -141,7 +143,7 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 		// Create a new cache so we start from scratch without any leftovers
 		fakeClient := fakeclientset.NewSimpleClientset()
 		// simulate a pod eviction by deleting a pod
-		fakeClient.PrependReactor("create", "pods", podEvictionReactionFnc(fakeClient))
+		fakeClient.PrependReactor("create", "pods", d.podEvictionReactionFnc(fakeClient))
 		err := cachedClient(d.rs.Client, fakeClient, d.podLister, d.nodeLister, d.namespaceLister, d.priorityClassLister)
 		if err != nil {
 			return err

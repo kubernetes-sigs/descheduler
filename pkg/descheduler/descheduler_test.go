@@ -390,6 +390,11 @@ func TestPodEvictorReset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to create a descheduler instance: %v", err)
 	}
+	var fakeEvictedPods []string
+	descheduler.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
+		return podEvictionReactionTestingFnc(&fakeEvictedPods)
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -406,8 +411,8 @@ func TestPodEvictorReset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
-	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 2 {
-		t.Fatalf("Expected (2,2) pods evicted, got (%v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods))
+	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 2 || len(fakeEvictedPods) != 0 {
+		t.Fatalf("Expected (2,2,0) pods evicted, got (%v, %v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
 	}
 
 	// a single pod eviction expected
@@ -415,7 +420,27 @@ func TestPodEvictorReset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
-	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 4 {
-		t.Fatalf("Expected (2,4) pods evicted, got (%v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods))
+	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 4 || len(fakeEvictedPods) != 0 {
+		t.Fatalf("Expected (2,4,0) pods evicted, got (%v, %v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
+	}
+
+	// check the fake client syncing and the right pods evicted
+	rs.DryRun = true
+	evictedPods = []string{}
+	// a single pod eviction expected
+	err = descheduler.runDeschedulerLoop(ctx, nodes)
+	if err != nil {
+		t.Fatalf("Unable to run a descheduling loop: %v", err)
+	}
+	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 0 || len(fakeEvictedPods) != 2 {
+		t.Fatalf("Expected (2,0,2) pods evicted, got (%v, %v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
+	}
+	// a single pod eviction expected
+	err = descheduler.runDeschedulerLoop(ctx, nodes)
+	if err != nil {
+		t.Fatalf("Unable to run a descheduling loop: %v", err)
+	}
+	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 0 || len(fakeEvictedPods) != 4 {
+		t.Fatalf("Expected (2,0,4) pods evicted, got (%v, %v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
 	}
 }
