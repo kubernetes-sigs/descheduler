@@ -70,16 +70,16 @@ type profileRunner struct {
 }
 
 type descheduler struct {
-	rs                         *options.DeschedulerServer
-	podLister                  listersv1.PodLister
-	nodeLister                 listersv1.NodeLister
-	namespaceLister            listersv1.NamespaceLister
-	priorityClassLister        schedulingv1.PriorityClassLister
-	getPodsAssignedToNode      podutil.GetPodsAssignedToNodeFunc
-	sharedInformerFactory      informers.SharedInformerFactory
-	evictionPolicyGroupVersion string
-	deschedulerPolicy          *api.DeschedulerPolicy
-	eventRecorder              events.EventRecorder
+	rs                    *options.DeschedulerServer
+	podLister             listersv1.PodLister
+	nodeLister            listersv1.NodeLister
+	namespaceLister       listersv1.NamespaceLister
+	priorityClassLister   schedulingv1.PriorityClassLister
+	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc
+	sharedInformerFactory informers.SharedInformerFactory
+	deschedulerPolicy     *api.DeschedulerPolicy
+	eventRecorder         events.EventRecorder
+	podEvictor            *evictions.PodEvictor
 }
 
 func newDescheduler(rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory informers.SharedInformerFactory) (*descheduler, error) {
@@ -94,17 +94,27 @@ func newDescheduler(rs *options.DeschedulerServer, deschedulerPolicy *api.Desche
 		return nil, fmt.Errorf("build get pods assigned to node function error: %v", err)
 	}
 
+	podEvictor := evictions.NewPodEvictor(
+		nil,
+		evictionPolicyGroupVersion,
+		rs.DryRun,
+		deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
+		deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
+		!rs.DisableMetrics,
+		eventRecorder,
+	)
+
 	return &descheduler{
-		rs:                         rs,
-		podLister:                  podLister,
-		nodeLister:                 nodeLister,
-		namespaceLister:            namespaceLister,
-		priorityClassLister:        priorityClassLister,
-		getPodsAssignedToNode:      getPodsAssignedToNode,
-		sharedInformerFactory:      sharedInformerFactory,
-		evictionPolicyGroupVersion: evictionPolicyGroupVersion,
-		deschedulerPolicy:          deschedulerPolicy,
-		eventRecorder:              eventRecorder,
+		rs:                    rs,
+		podLister:             podLister,
+		nodeLister:            nodeLister,
+		namespaceLister:       namespaceLister,
+		priorityClassLister:   priorityClassLister,
+		getPodsAssignedToNode: getPodsAssignedToNode,
+		sharedInformerFactory: sharedInformerFactory,
+		deschedulerPolicy:     deschedulerPolicy,
+		eventRecorder:         eventRecorder,
+		podEvictor:            podEvictor,
 	}, nil
 }
 
@@ -153,20 +163,13 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 		client = d.rs.Client
 	}
 
-	klog.V(3).Infof("Building a pod evictor")
-	podEvictor := evictions.NewPodEvictor(
-		client,
-		d.evictionPolicyGroupVersion,
-		d.rs.DryRun,
-		d.deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
-		d.deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
-		!d.rs.DisableMetrics,
-		d.eventRecorder,
-	)
+	klog.V(3).Infof("Setting up the pod evictor")
+	d.podEvictor.SetClient(client)
+	d.podEvictor.ResetCounters()
 
-	d.runProfiles(ctx, client, nodes, podEvictor)
+	d.runProfiles(ctx, client, nodes)
 
-	klog.V(1).InfoS("Number of evicted pods", "totalEvicted", podEvictor.TotalEvicted())
+	klog.V(1).InfoS("Number of evicted pods", "totalEvicted", d.podEvictor.TotalEvicted())
 
 	return nil
 }
@@ -174,7 +177,7 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 // runProfiles runs all the deschedule plugins of all profiles and
 // later runs through all balance plugins of all profiles. (All Balance plugins should come after all Deschedule plugins)
 // see https://github.com/kubernetes-sigs/descheduler/issues/979
-func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interface, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interface, nodes []*v1.Node) {
 	var span trace.Span
 	ctx, span = tracing.Tracer().Start(ctx, "runProfiles")
 	defer span.End()
@@ -185,7 +188,7 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 			pluginregistry.PluginRegistry,
 			frameworkprofile.WithClientSet(client),
 			frameworkprofile.WithSharedInformerFactory(d.sharedInformerFactory),
-			frameworkprofile.WithPodEvictor(podEvictor),
+			frameworkprofile.WithPodEvictor(d.podEvictor),
 			frameworkprofile.WithGetPodsAssignedToNodeFnc(d.getPodsAssignedToNode),
 		)
 		if err != nil {

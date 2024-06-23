@@ -97,6 +97,15 @@ func (pe *PodEvictor) NodeLimitExceeded(node *v1.Node) bool {
 	return false
 }
 
+func (pe *PodEvictor) ResetCounters() {
+	pe.nodepodCount = make(nodePodEvictedCount)
+	pe.namespacePodCount = make(namespacePodEvictCount)
+}
+
+func (pe *PodEvictor) SetClient(client clientset.Interface) {
+	pe.client = client
+}
+
 // EvictOptions provides a handle for passing additional info to EvictPod
 type EvictOptions struct {
 	// Reason allows for passing details about the specific eviction for logging.
