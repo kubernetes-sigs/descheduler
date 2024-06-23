@@ -98,7 +98,7 @@ func TestTaintsUpdated(t *testing.T) {
 	}
 
 	var evictedPods []string
-	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
+	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods))
 
 	internalDeschedulerPolicy := &api.DeschedulerPolicy{}
 	scope := scope{}
@@ -164,7 +164,7 @@ func TestDuplicate(t *testing.T) {
 	}
 
 	var evictedPods []string
-	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
+	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods))
 
 	internalDeschedulerPolicy := &api.DeschedulerPolicy{}
 	scope := scope{}
@@ -312,7 +312,7 @@ func TestValidateVersionCompatibility(t *testing.T) {
 	}
 }
 
-func podEvictionReactionFuc(evictedPods *[]string) func(action core.Action) (bool, runtime.Object, error) {
+func podEvictionReactionTestingFnc(evictedPods *[]string) func(action core.Action) (bool, runtime.Object, error) {
 	return func(action core.Action) (bool, runtime.Object, error) {
 		if action.GetSubresource() == "eviction" {
 			createAct, matched := action.(core.CreateActionImpl)
@@ -380,7 +380,7 @@ func TestPodEvictorReset(t *testing.T) {
 	rs.EventClient = eventClient
 
 	var evictedPods []string
-	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
+	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods))
 
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
