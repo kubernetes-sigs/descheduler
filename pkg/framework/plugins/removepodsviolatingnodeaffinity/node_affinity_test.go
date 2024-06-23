@@ -371,8 +371,10 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			eventRecorder := &events.FakeRecorder{}
 
 			podEvictor := evictions.NewPodEvictor(
+				ctx,
 				fakeClient,
 				eventRecorder,
+				sharedInformerFactory.Core().V1().Pods().Informer(),
 				evictions.NewOptions().
 					WithMaxPodsToEvictPerNode(tc.maxPodsToEvictPerNode).
 					WithMaxPodsToEvictPerNamespace(tc.maxNoOfPodsToEvictPerNamespace).

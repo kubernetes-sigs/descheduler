@@ -83,7 +83,16 @@ type descheduler struct {
 	podEvictionReactionFnc func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error)
 }
 
-func newDescheduler(rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory informers.SharedInformerFactory) (*descheduler, error) {
+func newDescheduler(
+	ctx context.Context,
+	rs *options.DeschedulerServer,
+	deschedulerPolicy *api.DeschedulerPolicy,
+	evictionPolicyGroupVersion string,
+	eventRecorder events.EventRecorder,
+	sharedInformerFactory informers.SharedInformerFactory,
+	assumedRequestTimeout uint,
+	evictionRequestsCacheResyncPeriod time.Duration,
+) (*descheduler, error) {
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 	podLister := sharedInformerFactory.Core().V1().Pods().Lister()
 	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
@@ -96,15 +105,19 @@ func newDescheduler(rs *options.DeschedulerServer, deschedulerPolicy *api.Desche
 	}
 
 	podEvictor := evictions.NewPodEvictor(
-		nil,
+		ctx,
+		rs.Client,
 		eventRecorder,
+		podInformer,
 		evictions.NewOptions().
 			WithPolicyGroupVersion(evictionPolicyGroupVersion).
 			WithMaxPodsToEvictPerNode(deschedulerPolicy.MaxNoOfPodsToEvictPerNode).
 			WithMaxPodsToEvictPerNamespace(deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace).
 			WithMaxPodsToEvictTotal(deschedulerPolicy.MaxNoOfPodsToEvictTotal).
 			WithDryRun(rs.DryRun).
-			WithMetricsEnabled(!rs.DisableMetrics),
+			WithMetricsEnabled(!rs.DisableMetrics).
+			WithAssumedRequestTimeout(assumedRequestTimeout).
+			WithEvictionRequestsCacheResyncPeriod(evictionRequestsCacheResyncPeriod),
 	)
 
 	return &descheduler{
@@ -170,13 +183,13 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 		client = d.rs.Client
 	}
 
-	klog.V(3).Infof("Setting up the pod evictor")
+	klog.V(0).Infof("Setting up the pod evictor")
 	d.podEvictor.SetClient(client)
 	d.podEvictor.ResetCounters()
 
 	d.runProfiles(ctx, client, nodes)
 
-	klog.V(1).InfoS("Number of evicted pods", "totalEvicted", d.podEvictor.TotalEvicted())
+	klog.V(0).InfoS("Number of evictions/requests", "totalEvicted", d.podEvictor.TotalEvicted(), "evictionRequests", d.podEvictor.TotalEvictionRequests())
 
 	return nil
 }
@@ -224,6 +237,7 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 			continue
 		}
 	}
+
 }
 
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
@@ -413,7 +427,16 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
 	defer eventBroadcaster.Shutdown()
 
-	descheduler, err := newDescheduler(rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, sharedInformerFactory)
+	descheduler, err := newDescheduler(
+		ctx,
+		rs,
+		deschedulerPolicy,
+		evictionPolicyGroupVersion,
+		eventRecorder,
+		sharedInformerFactory,
+		evictions.AssumedEvictionRequestTimeoutSeconds,
+		evictions.EvictionRequestsCacheResyncPeriod,
+	)
 	if err != nil {
 		span.AddEvent("Failed to create new descheduler", trace.WithAttributes(attribute.String("err", err.Error())))
 		return err
