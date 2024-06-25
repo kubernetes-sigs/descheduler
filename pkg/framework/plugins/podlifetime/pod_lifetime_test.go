@@ -562,7 +562,6 @@ func TestPodLifeTime(t *testing.T) {
 				false,
 				tc.maxPodsToEvictPerNode,
 				tc.maxPodsToEvictPerNamespace,
-				tc.nodes,
 				false,
 				eventRecorder,
 			)

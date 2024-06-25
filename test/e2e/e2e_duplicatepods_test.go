@@ -48,7 +48,7 @@ func TestRemoveDuplicates(t *testing.T) {
 		t.Errorf("Error listing node with %v", err)
 	}
 
-	nodes, workerNodes := splitNodesAndWorkerNodes(nodeList.Items)
+	_, workerNodes := splitNodesAndWorkerNodes(nodeList.Items)
 
 	t.Log("Creating testing namespace")
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -177,7 +177,6 @@ func TestRemoveDuplicates(t *testing.T) {
 				false,
 				nil,
 				nil,
-				nodes,
 				false,
 				eventRecorder,
 			)

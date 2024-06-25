@@ -70,16 +70,17 @@ type profileRunner struct {
 }
 
 type descheduler struct {
-	rs                         *options.DeschedulerServer
-	podLister                  listersv1.PodLister
-	nodeLister                 listersv1.NodeLister
-	namespaceLister            listersv1.NamespaceLister
-	priorityClassLister        schedulingv1.PriorityClassLister
-	getPodsAssignedToNode      podutil.GetPodsAssignedToNodeFunc
-	sharedInformerFactory      informers.SharedInformerFactory
-	evictionPolicyGroupVersion string
-	deschedulerPolicy          *api.DeschedulerPolicy
-	eventRecorder              events.EventRecorder
+	rs                     *options.DeschedulerServer
+	podLister              listersv1.PodLister
+	nodeLister             listersv1.NodeLister
+	namespaceLister        listersv1.NamespaceLister
+	priorityClassLister    schedulingv1.PriorityClassLister
+	getPodsAssignedToNode  podutil.GetPodsAssignedToNodeFunc
+	sharedInformerFactory  informers.SharedInformerFactory
+	deschedulerPolicy      *api.DeschedulerPolicy
+	eventRecorder          events.EventRecorder
+	podEvictor             *evictions.PodEvictor
+	podEvictionReactionFnc func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error)
 }
 
 func newDescheduler(rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory informers.SharedInformerFactory) (*descheduler, error) {
@@ -94,17 +95,28 @@ func newDescheduler(rs *options.DeschedulerServer, deschedulerPolicy *api.Desche
 		return nil, fmt.Errorf("build get pods assigned to node function error: %v", err)
 	}
 
+	podEvictor := evictions.NewPodEvictor(
+		nil,
+		evictionPolicyGroupVersion,
+		rs.DryRun,
+		deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
+		deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
+		!rs.DisableMetrics,
+		eventRecorder,
+	)
+
 	return &descheduler{
-		rs:                         rs,
-		podLister:                  podLister,
-		nodeLister:                 nodeLister,
-		namespaceLister:            namespaceLister,
-		priorityClassLister:        priorityClassLister,
-		getPodsAssignedToNode:      getPodsAssignedToNode,
-		sharedInformerFactory:      sharedInformerFactory,
-		evictionPolicyGroupVersion: evictionPolicyGroupVersion,
-		deschedulerPolicy:          deschedulerPolicy,
-		eventRecorder:              eventRecorder,
+		rs:                     rs,
+		podLister:              podLister,
+		nodeLister:             nodeLister,
+		namespaceLister:        namespaceLister,
+		priorityClassLister:    priorityClassLister,
+		getPodsAssignedToNode:  getPodsAssignedToNode,
+		sharedInformerFactory:  sharedInformerFactory,
+		deschedulerPolicy:      deschedulerPolicy,
+		eventRecorder:          eventRecorder,
+		podEvictor:             podEvictor,
+		podEvictionReactionFnc: podEvictionReactionFnc,
 	}, nil
 }
 
@@ -129,7 +141,10 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 	if d.rs.DryRun {
 		klog.V(3).Infof("Building a cached client from the cluster for the dry run")
 		// Create a new cache so we start from scratch without any leftovers
-		fakeClient, err := cachedClient(d.rs.Client, d.podLister, d.nodeLister, d.namespaceLister, d.priorityClassLister)
+		fakeClient := fakeclientset.NewSimpleClientset()
+		// simulate a pod eviction by deleting a pod
+		fakeClient.PrependReactor("create", "pods", d.podEvictionReactionFnc(fakeClient))
+		err := cachedClient(d.rs.Client, fakeClient, d.podLister, d.nodeLister, d.namespaceLister, d.priorityClassLister)
 		if err != nil {
 			return err
 		}
@@ -153,21 +168,13 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 		client = d.rs.Client
 	}
 
-	klog.V(3).Infof("Building a pod evictor")
-	podEvictor := evictions.NewPodEvictor(
-		client,
-		d.evictionPolicyGroupVersion,
-		d.rs.DryRun,
-		d.deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
-		d.deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
-		nodes,
-		!d.rs.DisableMetrics,
-		d.eventRecorder,
-	)
+	klog.V(3).Infof("Setting up the pod evictor")
+	d.podEvictor.SetClient(client)
+	d.podEvictor.ResetCounters()
 
-	d.runProfiles(ctx, client, nodes, podEvictor)
+	d.runProfiles(ctx, client, nodes)
 
-	klog.V(1).InfoS("Number of evicted pods", "totalEvicted", podEvictor.TotalEvicted())
+	klog.V(1).InfoS("Number of evicted pods", "totalEvicted", d.podEvictor.TotalEvicted())
 
 	return nil
 }
@@ -175,7 +182,7 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 // runProfiles runs all the deschedule plugins of all profiles and
 // later runs through all balance plugins of all profiles. (All Balance plugins should come after all Deschedule plugins)
 // see https://github.com/kubernetes-sigs/descheduler/issues/979
-func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interface, nodes []*v1.Node, podEvictor *evictions.PodEvictor) {
+func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interface, nodes []*v1.Node) {
 	var span trace.Span
 	ctx, span = tracing.Tracer().Start(ctx, "runProfiles")
 	defer span.End()
@@ -186,7 +193,7 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 			pluginregistry.PluginRegistry,
 			frameworkprofile.WithClientSet(client),
 			frameworkprofile.WithSharedInformerFactory(d.sharedInformerFactory),
-			frameworkprofile.WithPodEvictor(podEvictor),
+			frameworkprofile.WithPodEvictor(d.podEvictor),
 			frameworkprofile.WithGetPodsAssignedToNodeFnc(d.getPodsAssignedToNode),
 		)
 		if err != nil {
@@ -306,16 +313,8 @@ func validateVersionCompatibility(discovery discovery.DiscoveryInterface, versio
 	return nil
 }
 
-func cachedClient(
-	realClient clientset.Interface,
-	podLister listersv1.PodLister,
-	nodeLister listersv1.NodeLister,
-	namespaceLister listersv1.NamespaceLister,
-	priorityClassLister schedulingv1.PriorityClassLister,
-) (clientset.Interface, error) {
-	fakeClient := fakeclientset.NewSimpleClientset()
-	// simulate a pod eviction by deleting a pod
-	fakeClient.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+func podEvictionReactionFnc(fakeClient *fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
+	return func(action core.Action) (bool, runtime.Object, error) {
 		if action.GetSubresource() == "eviction" {
 			createAct, matched := action.(core.CreateActionImpl)
 			if !matched {
@@ -332,54 +331,63 @@ func cachedClient(
 		}
 		// fallback to the default reactor
 		return false, nil, nil
-	})
+	}
+}
 
+func cachedClient(
+	realClient clientset.Interface,
+	fakeClient *fakeclientset.Clientset,
+	podLister listersv1.PodLister,
+	nodeLister listersv1.NodeLister,
+	namespaceLister listersv1.NamespaceLister,
+	priorityClassLister schedulingv1.PriorityClassLister,
+) error {
 	klog.V(3).Infof("Pulling resources for the cached client from the cluster")
 	pods, err := podLister.List(labels.Everything())
 	if err != nil {
-		return nil, fmt.Errorf("unable to list pods: %v", err)
+		return fmt.Errorf("unable to list pods: %v", err)
 	}
 
 	for _, item := range pods {
 		if _, err := fakeClient.CoreV1().Pods(item.Namespace).Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
-			return nil, fmt.Errorf("unable to copy pod: %v", err)
+			return fmt.Errorf("unable to copy pod: %v", err)
 		}
 	}
 
 	nodes, err := nodeLister.List(labels.Everything())
 	if err != nil {
-		return nil, fmt.Errorf("unable to list nodes: %v", err)
+		return fmt.Errorf("unable to list nodes: %v", err)
 	}
 
 	for _, item := range nodes {
 		if _, err := fakeClient.CoreV1().Nodes().Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
-			return nil, fmt.Errorf("unable to copy node: %v", err)
+			return fmt.Errorf("unable to copy node: %v", err)
 		}
 	}
 
 	namespaces, err := namespaceLister.List(labels.Everything())
 	if err != nil {
-		return nil, fmt.Errorf("unable to list namespaces: %v", err)
+		return fmt.Errorf("unable to list namespaces: %v", err)
 	}
 
 	for _, item := range namespaces {
 		if _, err := fakeClient.CoreV1().Namespaces().Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
-			return nil, fmt.Errorf("unable to copy namespace: %v", err)
+			return fmt.Errorf("unable to copy namespace: %v", err)
 		}
 	}
 
 	priorityClasses, err := priorityClassLister.List(labels.Everything())
 	if err != nil {
-		return nil, fmt.Errorf("unable to list priorityclasses: %v", err)
+		return fmt.Errorf("unable to list priorityclasses: %v", err)
 	}
 
 	for _, item := range priorityClasses {
 		if _, err := fakeClient.SchedulingV1().PriorityClasses().Create(context.TODO(), item, metav1.CreateOptions{}); err != nil {
-			return nil, fmt.Errorf("unable to copy priorityclass: %v", err)
+			return fmt.Errorf("unable to copy priorityclass: %v", err)
 		}
 	}
 
-	return fakeClient, nil
+	return nil
 }
 
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string) error {

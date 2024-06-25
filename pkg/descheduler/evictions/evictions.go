@@ -43,7 +43,6 @@ type (
 
 type PodEvictor struct {
 	client                     clientset.Interface
-	nodes                      []*v1.Node
 	policyGroupVersion         string
 	dryRun                     bool
 	maxPodsToEvictPerNode      *uint
@@ -60,26 +59,17 @@ func NewPodEvictor(
 	dryRun bool,
 	maxPodsToEvictPerNode *uint,
 	maxPodsToEvictPerNamespace *uint,
-	nodes []*v1.Node,
 	metricsEnabled bool,
 	eventRecorder events.EventRecorder,
 ) *PodEvictor {
-	nodePodCount := make(nodePodEvictedCount)
-	namespacePodCount := make(namespacePodEvictCount)
-	for _, node := range nodes {
-		// Initialize podsEvicted till now with 0.
-		nodePodCount[node.Name] = 0
-	}
-
 	return &PodEvictor{
 		client:                     client,
-		nodes:                      nodes,
 		policyGroupVersion:         policyGroupVersion,
 		dryRun:                     dryRun,
 		maxPodsToEvictPerNode:      maxPodsToEvictPerNode,
 		maxPodsToEvictPerNamespace: maxPodsToEvictPerNamespace,
-		nodepodCount:               nodePodCount,
-		namespacePodCount:          namespacePodCount,
+		nodepodCount:               make(nodePodEvictedCount),
+		namespacePodCount:          make(namespacePodEvictCount),
 		metricsEnabled:             metricsEnabled,
 		eventRecorder:              eventRecorder,
 	}
@@ -105,6 +95,15 @@ func (pe *PodEvictor) NodeLimitExceeded(node *v1.Node) bool {
 		return pe.nodepodCount[node.Name] == *pe.maxPodsToEvictPerNode
 	}
 	return false
+}
+
+func (pe *PodEvictor) ResetCounters() {
+	pe.nodepodCount = make(nodePodEvictedCount)
+	pe.namespacePodCount = make(namespacePodEvictCount)
+}
+
+func (pe *PodEvictor) SetClient(client clientset.Interface) {
+	pe.client = client
 }
 
 // EvictOptions provides a handle for passing additional info to EvictPod

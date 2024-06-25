@@ -909,7 +909,6 @@ func TestLowNodeUtilization(t *testing.T) {
 				false,
 				nil,
 				nil,
-				test.nodes,
 				false,
 				eventRecorder,
 			)
@@ -1081,7 +1080,6 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				false,
 				&item.evictionsExpected,
 				nil,
-				item.nodes,
 				false,
 				eventRecorder,
 			)

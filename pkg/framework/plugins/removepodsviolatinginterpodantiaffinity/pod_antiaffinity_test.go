@@ -239,7 +239,6 @@ func TestPodAntiAffinity(t *testing.T) {
 				false,
 				test.maxPodsToEvictPerNode,
 				test.maxNoOfPodsToEvictPerNamespace,
-				test.nodes,
 				false,
 				eventRecorder,
 			)
