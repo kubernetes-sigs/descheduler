@@ -312,8 +312,8 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			pods := append(
 				initPods(node1),
-				test.BuildTestPod("CPU-consumer-1", 150, 100, node4.Name, nil),
-				test.BuildTestPod("CPU-consumer-2", 150, 100, node5.Name, nil),
+				test.BuildTestPod("CPU-consumer-1", 150, 100, node4.Name, test.SetNormalOwnerRef),
+				test.BuildTestPod("CPU-consumer-2", 150, 100, node5.Name, test.SetNormalOwnerRef),
 			)
 			if tc.applyFunc != nil {
 				tc.applyFunc(pods)
