@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ template "descheduler.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "descheduler.namespace" . }}
   labels:
     {{- include "descheduler.labels" . | nindent 4 }}
 data:

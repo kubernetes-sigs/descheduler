@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "descheduler.labels" . | nindent 4 }}
   name: {{ template "descheduler.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "descheduler.namespace" . }}
 spec:
   clusterIP: None
   {{- if .Values.service.ipFamilyPolicy }}

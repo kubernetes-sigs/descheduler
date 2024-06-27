@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ template "descheduler.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ include "descheduler.namespace" . }}
   labels:
     {{- include "descheduler.labels" . | nindent 4 }}
 spec:

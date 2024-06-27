@@ -12,5 +12,5 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ template "descheduler.serviceAccountName" . }}
-    namespace: {{ .Release.Namespace }}
+    namespace: {{ include "descheduler.namespace" . }}
 {{- end -}}
