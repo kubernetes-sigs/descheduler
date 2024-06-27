@@ -12,6 +12,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.24.0
 	go.opentelemetry.io/otel/sdk v1.24.0
 	go.opentelemetry.io/otel/trace v1.24.0
+	go.uber.org/automaxprocs v1.5.3
 	google.golang.org/grpc v1.62.0
 	k8s.io/api v0.30.0
 	k8s.io/apimachinery v0.30.0
