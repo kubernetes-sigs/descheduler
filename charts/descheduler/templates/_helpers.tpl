@@ -87,8 +87,10 @@ Leader Election
 {{- if .Values.leaderElection.resourceName }}
 - --leader-elect-resource-name={{ .Values.leaderElection.resourceName }}
 {{- end }}
-{{- if .Values.leaderElection.resourceNamescape }}
-- --leader-elect-resource-namespace={{ .Values.leaderElection.resourceNamescape }}
+{{- if .Values.leaderElection.resourceNamespace }}
+- --leader-elect-resource-namespace={{ .Values.leaderElection.resourceNamespace }}
+{{- else if .Values.leaderElection.resourceNamescape }}
+{{- fail "'leaderElection.resourceNamescape' is deprecated. instead use 'leaderElection.resourceNamespace'" }}
 {{- end -}}
 {{- end }}
 {{- end }}
