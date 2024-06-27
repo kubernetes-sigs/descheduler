@@ -66,10 +66,7 @@ func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) (bool, error) {
 	if node == nil {
 		return false, fmt.Errorf("node not found")
 	}
-	if podMatchesNodeLabels(pod, node) {
-		return true, nil
-	}
-	return false, nil
+	return podMatchesNodeLabels(pod, node), nil
 }
 
 // The pod can only schedule onto nodes that satisfy requirements in both NodeAffinity and nodeSelector.
