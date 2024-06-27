@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -283,30 +284,30 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	return runFn()
 }
 
-func validateVersionCompatibility(discovery discovery.DiscoveryInterface, versionInfo version.Info) error {
-	serverVersionInfo, err := discovery.ServerVersion()
+func validateVersionCompatibility(discovery discovery.DiscoveryInterface, deschedulerVersionInfo version.Info) error {
+	kubeServerVersionInfo, err := discovery.ServerVersion()
 	if err != nil {
 		return errors.New("failed to discover Kubernetes server version")
 	}
 
-	serverVersion, err := utilversion.ParseSemantic(serverVersionInfo.String())
+	kubeServerVersion, err := utilversion.ParseSemantic(kubeServerVersionInfo.String())
 	if err != nil {
 		return errors.New("failed to parse Kubernetes server version")
 	}
 
-	deschedulerVersion, err := utilversion.ParseGeneric(versionInfo.GitVersion)
+	deschedulerMinor, err := strconv.ParseFloat(deschedulerVersionInfo.Minor, 64)
 	if err != nil {
 		return errors.New("failed to convert Descheduler minor version to float")
 	}
 
-	deschedulerMinor := float64(deschedulerVersion.Minor())
-	serverMinor := float64(serverVersion.Minor())
-	if math.Abs(deschedulerMinor-serverMinor) > 3 {
+	kubeServerMinor := float64(kubeServerVersion.Minor())
+	if math.Abs(deschedulerMinor-kubeServerMinor) > 3 {
 		return fmt.Errorf(
-			"descheduler version %v may not be supported on your version of Kubernetes %v."+
+			"descheduler version %s.%s may not be supported on your version of Kubernetes %v."+
 				"See compatibility docs for more info: https://github.com/kubernetes-sigs/descheduler#compatibility-matrix",
-			deschedulerVersion.String(),
-			serverVersionInfo.String(),
+			deschedulerVersionInfo.Major,
+			deschedulerVersionInfo.Minor,
+			kubeServerVersionInfo.String(),
 		)
 	}
 
