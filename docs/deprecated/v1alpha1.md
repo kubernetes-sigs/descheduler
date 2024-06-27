@@ -157,6 +157,7 @@ evictDaemonSetPods: true
 evictSystemCriticalPods: true
 maxNoOfPodsToEvictPerNode: 40
 ignorePvcPods: false
+ignoreMinNodesCheck: false
 strategies:
   ...
 ```
