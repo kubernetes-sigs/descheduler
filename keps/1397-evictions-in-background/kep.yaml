@@ -1,0 +1,16 @@
+title: descheduler integration with evacuation API as an alternative to eviction API
+kep-number: 1397
+authors:
+  - "@ingvagabund"
+owning-sig: sig-scheduling
+participating-sigs:
+  - sig-apps
+status: provisional
+creation-date: 2024-04-14
+reviewers:
+  - atiratree
+approvers:
+  - TBD
+feature-gates:
+  - TBD
+stage: alpha
