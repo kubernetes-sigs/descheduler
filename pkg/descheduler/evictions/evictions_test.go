@@ -130,6 +130,7 @@ func TestNewPodEvictor(t *testing.T) {
 		false,
 		utilpointer.Uint(1),
 		nil,
+		nil,
 		false,
 		eventRecorder,
 	)

@@ -196,6 +196,7 @@ func runPodLifetimePlugin(
 		false,
 		nil,
 		maxPodsToEvictPerNamespace,
+		nil,
 		false,
 		&events.FakeRecorder{},
 	)
@@ -1581,6 +1582,7 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 		clientSet,
 		evictionPolicyGroupVersion,
 		false,
+		nil,
 		nil,
 		nil,
 		false,

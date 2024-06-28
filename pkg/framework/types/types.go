@@ -49,6 +49,8 @@ type Evictor interface {
 	Evict(context.Context, *v1.Pod, evictions.EvictOptions) bool
 	// NodeLimitExceeded checks if the number of evictions for a node was exceeded
 	NodeLimitExceeded(node *v1.Node) bool
+	// TotalLimitExceeded checks whether the total number of evictions for the cluster has been exceeded
+	TotalLimitExceeded() bool
 }
 
 // Status describes result of an extension point invocation

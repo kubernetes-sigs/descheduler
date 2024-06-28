@@ -68,8 +68,14 @@ func (ei *evictorImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.Ev
 	return ei.podEvictor.EvictPod(ctx, pod, opts)
 }
 
+// NodeLimitExceeded checks if the number of evictions for a node was exceeded
 func (ei *evictorImpl) NodeLimitExceeded(node *v1.Node) bool {
 	return ei.podEvictor.NodeLimitExceeded(node)
+}
+
+// TotalLimitExceeded checks whether the total number of evictions for the cluster has been exceeded
+func (ei *evictorImpl) TotalLimitExceeded() bool {
+	return ei.podEvictor.TotalLimitExceeded()
 }
 
 // handleImpl implements the framework handle which gets passed to plugins

@@ -124,6 +124,9 @@ func (d *RemovePodsHavingTooManyRestarts) Deschedule(ctx context.Context, nodes 
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
 			d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
+			if d.handle.Evictor().TotalLimitExceeded() {
+				return nil
+			}
 			if d.handle.Evictor().NodeLimitExceeded(node) {
 				break
 			}

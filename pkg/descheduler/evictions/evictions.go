@@ -47,8 +47,10 @@ type PodEvictor struct {
 	dryRun                     bool
 	maxPodsToEvictPerNode      *uint
 	maxPodsToEvictPerNamespace *uint
-	nodepodCount               nodePodEvictedCount
+	maxPodsToEvictTotal        *uint
+	nodePodCount               nodePodEvictedCount
 	namespacePodCount          namespacePodEvictCount
+	totalPodCount              uint
 	metricsEnabled             bool
 	eventRecorder              events.EventRecorder
 }
@@ -59,6 +61,7 @@ func NewPodEvictor(
 	dryRun bool,
 	maxPodsToEvictPerNode *uint,
 	maxPodsToEvictPerNamespace *uint,
+	maxPodsToEvictTotal *uint,
 	metricsEnabled bool,
 	eventRecorder events.EventRecorder,
 ) *PodEvictor {
@@ -68,7 +71,8 @@ func NewPodEvictor(
 		dryRun:                     dryRun,
 		maxPodsToEvictPerNode:      maxPodsToEvictPerNode,
 		maxPodsToEvictPerNamespace: maxPodsToEvictPerNamespace,
-		nodepodCount:               make(nodePodEvictedCount),
+		maxPodsToEvictTotal:        maxPodsToEvictTotal,
+		nodePodCount:               make(nodePodEvictedCount),
 		namespacePodCount:          make(namespacePodEvictCount),
 		metricsEnabled:             metricsEnabled,
 		eventRecorder:              eventRecorder,
@@ -77,29 +81,34 @@ func NewPodEvictor(
 
 // NodeEvicted gives a number of pods evicted for node
 func (pe *PodEvictor) NodeEvicted(node *v1.Node) uint {
-	return pe.nodepodCount[node.Name]
+	return pe.nodePodCount[node.Name]
 }
 
 // TotalEvicted gives a number of pods evicted through all nodes
 func (pe *PodEvictor) TotalEvicted() uint {
-	var total uint
-	for _, count := range pe.nodepodCount {
-		total += count
-	}
-	return total
+	return pe.totalPodCount
 }
 
 // NodeLimitExceeded checks if the number of evictions for a node was exceeded
 func (pe *PodEvictor) NodeLimitExceeded(node *v1.Node) bool {
 	if pe.maxPodsToEvictPerNode != nil {
-		return pe.nodepodCount[node.Name] == *pe.maxPodsToEvictPerNode
+		return pe.nodePodCount[node.Name] == *pe.maxPodsToEvictPerNode
+	}
+	return false
+}
+
+// TotalLimitExceeded checks whether the total number of evictions for the cluster has been exceeded
+func (pe *PodEvictor) TotalLimitExceeded() bool {
+	if pe.maxPodsToEvictTotal != nil {
+		return pe.totalPodCount == *pe.maxPodsToEvictTotal
 	}
 	return false
 }
 
 func (pe *PodEvictor) ResetCounters() {
-	pe.nodepodCount = make(nodePodEvictedCount)
+	pe.nodePodCount = make(nodePodEvictedCount)
 	pe.namespacePodCount = make(namespacePodEvictCount)
+	pe.totalPodCount = 0
 }
 
 func (pe *PodEvictor) SetClient(client clientset.Interface) {
@@ -123,8 +132,13 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 	ctx, span = tracing.Tracer().Start(ctx, "EvictPod", trace.WithAttributes(attribute.String("podName", pod.Name), attribute.String("podNamespace", pod.Namespace), attribute.String("reason", opts.Reason), attribute.String("operation", tracing.EvictOperation)))
 	defer span.End()
 
+	if pe.maxPodsToEvictTotal != nil && pe.totalPodCount+1 > *pe.maxPodsToEvictTotal {
+		klog.ErrorS(fmt.Errorf("maximum number of evicted pods total reached"), "Error evicting pod", "limit", *pe.maxPodsToEvictTotal)
+		return false
+	}
+
 	if pod.Spec.NodeName != "" {
-		if pe.maxPodsToEvictPerNode != nil && pe.nodepodCount[pod.Spec.NodeName]+1 > *pe.maxPodsToEvictPerNode {
+		if pe.maxPodsToEvictPerNode != nil && pe.nodePodCount[pod.Spec.NodeName]+1 > *pe.maxPodsToEvictPerNode {
 			if pe.metricsEnabled {
 				metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
 			}
@@ -155,9 +169,10 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 	}
 
 	if pod.Spec.NodeName != "" {
-		pe.nodepodCount[pod.Spec.NodeName]++
+		pe.nodePodCount[pod.Spec.NodeName]++
 	}
 	pe.namespacePodCount[pod.Namespace]++
+	pe.totalPodCount++
 
 	if pe.metricsEnabled {
 		metrics.PodsEvicted.With(map[string]string{"result": "success", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()

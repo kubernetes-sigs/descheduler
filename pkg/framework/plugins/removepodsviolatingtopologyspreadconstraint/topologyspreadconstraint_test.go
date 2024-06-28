@@ -1462,6 +1462,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				false,
 				nil,
 				nil,
+				nil,
 				false,
 				eventRecorder,
 			)

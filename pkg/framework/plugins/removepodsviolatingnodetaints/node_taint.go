@@ -122,6 +122,9 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 			) {
 				klog.V(2).InfoS("Not all taints with NoSchedule effect are tolerated after update for pod on node", "pod", klog.KObj(pods[i]), "node", klog.KObj(node))
 				d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
+				if d.handle.Evictor().TotalLimitExceeded() {
+					return nil
+				}
 				if d.handle.Evictor().NodeLimitExceeded(node) {
 					break
 				}
