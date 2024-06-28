@@ -131,6 +131,8 @@ func (d *RemovePodsHavingTooManyRestarts) Deschedule(ctx context.Context, nodes 
 			switch err.(type) {
 			case *evictions.EvictionNodeLimitError:
 				break loop
+			case *evictions.EvictionTotalLimitError:
+				return nil
 			default:
 				klog.Errorf("eviction failed: %v", err)
 			}

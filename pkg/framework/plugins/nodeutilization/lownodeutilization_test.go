@@ -979,11 +979,14 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 		},
 	}
 
+	var uint0, uint1 uint = 0, 1
 	tests := []struct {
-		name              string
-		nodes             []*v1.Node
-		pods              []*v1.Pod
-		evictionsExpected uint
+		name                  string
+		nodes                 []*v1.Node
+		pods                  []*v1.Pod
+		maxPodsToEvictPerNode *uint
+		maxPodsToEvictTotal   *uint
+		evictionsExpected     uint
 	}{
 		{
 			name:  "No taints",
@@ -1038,6 +1041,26 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n3withTaints.Name), 200, 0, n3withTaints.Name, test.SetRSOwnerRef),
 			},
 			evictionsExpected: 1,
+		},
+		{
+			name:  "Pod which tolerates node taint, set maxPodsToEvictTotal(0), should not be expelled",
+			nodes: []*v1.Node{n1, n3withTaints},
+			pods: []*v1.Pod{
+				// Node 1 pods
+				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				podThatToleratesTaint,
+				// Node 3 pods
+				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n3withTaints.Name), 200, 0, n3withTaints.Name, test.SetRSOwnerRef),
+			},
+			maxPodsToEvictPerNode: &uint1,
+			maxPodsToEvictTotal:   &uint0,
+			evictionsExpected:     0,
 		},
 	}
 

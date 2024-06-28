@@ -112,6 +112,8 @@ loop:
 					switch err.(type) {
 					case *evictions.EvictionNodeLimitError:
 						continue loop
+					case *evictions.EvictionTotalLimitError:
+						return nil
 					default:
 						klog.Errorf("eviction failed: %v", err)
 					}

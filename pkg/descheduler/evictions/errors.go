@@ -31,3 +31,15 @@ func NewEvictionNamespaceLimitError(namespace string) *EvictionNamespaceLimitErr
 }
 
 var _ error = &EvictionNamespaceLimitError{}
+
+type EvictionTotalLimitError struct{}
+
+func (e EvictionTotalLimitError) Error() string {
+	return "maximum number of evicted pods total reached"
+}
+
+func NewEvictionTotalLimitError() *EvictionTotalLimitError {
+	return &EvictionTotalLimitError{}
+}
+
+var _ error = &EvictionTotalLimitError{}

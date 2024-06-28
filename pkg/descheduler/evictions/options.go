@@ -9,6 +9,7 @@ type Options struct {
 	dryRun                     bool
 	maxPodsToEvictPerNode      *uint
 	maxPodsToEvictPerNamespace *uint
+	maxPodsToEvictTotal        *uint
 	metricsEnabled             bool
 }
 
@@ -36,6 +37,11 @@ func (o *Options) WithMaxPodsToEvictPerNode(maxPodsToEvictPerNode *uint) *Option
 
 func (o *Options) WithMaxPodsToEvictPerNamespace(maxPodsToEvictPerNamespace *uint) *Options {
 	o.maxPodsToEvictPerNamespace = maxPodsToEvictPerNamespace
+	return o
+}
+
+func (o *Options) WithMaxPodsToEvictTotal(maxPodsToEvictTotal *uint) *Options {
+	o.maxPodsToEvictTotal = maxPodsToEvictTotal
 	return o
 }
 

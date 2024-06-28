@@ -51,6 +51,11 @@ func (in *DeschedulerPolicy) DeepCopyInto(out *DeschedulerPolicy) {
 		*out = new(uint)
 		**out = **in
 	}
+	if in.MaxNoOfPodsToEvictTotal != nil {
+		in, out := &in.MaxNoOfPodsToEvictTotal, &out.MaxNoOfPodsToEvictTotal
+		*out = new(uint)
+		**out = **in
+	}
 	return
 }
 

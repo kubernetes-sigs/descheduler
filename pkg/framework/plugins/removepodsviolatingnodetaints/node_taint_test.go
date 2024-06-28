@@ -177,7 +177,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p15 = addTolerationToPod(p15, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
 	p15 = addTolerationToPod(p15, "testingTaint", "testing", 1, v1.TaintEffectNoSchedule)
 
-	var uint1 uint = 1
+	var uint1, uint2 uint = 1, 2
 
 	tests := []struct {
 		description                    string
@@ -187,6 +187,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		evictSystemCriticalPods        bool
 		maxPodsToEvictPerNode          *uint
 		maxNoOfPodsToEvictPerNamespace *uint
+		maxNoOfPodsToEvictTotal        *uint
 		expectedEvictedPodCount        uint
 		nodeFit                        bool
 		includePreferNoSchedule        bool
@@ -210,6 +211,16 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			expectedEvictedPodCount: 1, // p4 gets evicted
 		},
 		{
+			description:             "Only <maxNoOfPodsToEvictTotal> number of Pods not tolerating node taint should be evicted",
+			pods:                    []*v1.Pod{p1, p5, p6},
+			nodes:                   []*v1.Node{node1},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			maxPodsToEvictPerNode:   &uint2,
+			maxNoOfPodsToEvictTotal: &uint1,
+			expectedEvictedPodCount: 1, // p5 or p6 gets evicted
+		},
+		{
 			description:             "Only <maxPodsToEvictPerNode> number of Pods not tolerating node taint should be evicted",
 			pods:                    []*v1.Pod{p1, p5, p6},
 			nodes:                   []*v1.Node{node1},
@@ -217,6 +228,15 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			evictSystemCriticalPods: false,
 			maxPodsToEvictPerNode:   &uint1,
 			expectedEvictedPodCount: 1, // p5 or p6 gets evicted
+		},
+		{
+			description:                    "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
+			pods:                           []*v1.Pod{p1, p5, p6},
+			nodes:                          []*v1.Node{node1},
+			evictLocalStoragePods:          false,
+			evictSystemCriticalPods:        false,
+			maxNoOfPodsToEvictPerNamespace: &uint1,
+			expectedEvictedPodCount:        1, // p5 or p6 gets evicted
 		},
 		{
 			description:                    "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
@@ -408,7 +428,8 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				eventRecorder,
 				evictions.NewOptions().
 					WithMaxPodsToEvictPerNode(tc.maxPodsToEvictPerNode).
-					WithMaxPodsToEvictPerNamespace(tc.maxNoOfPodsToEvictPerNamespace),
+					WithMaxPodsToEvictPerNamespace(tc.maxNoOfPodsToEvictPerNamespace).
+					WithMaxPodsToEvictTotal(tc.maxNoOfPodsToEvictTotal),
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{

@@ -156,6 +156,7 @@ func TestPodLifeTime(t *testing.T) {
 		ignorePvcPods              bool
 		maxPodsToEvictPerNode      *uint
 		maxPodsToEvictPerNamespace *uint
+		maxPodsToEvictTotal        *uint
 		applyPodsFunc              func(pods []*v1.Pod)
 	}{
 		{
@@ -312,6 +313,17 @@ func TestPodLifeTime(t *testing.T) {
 			pods:                       []*v1.Pod{p1, p2, p9},
 			nodes:                      []*v1.Node{node1},
 			maxPodsToEvictPerNamespace: utilptr.To[uint](1),
+			expectedEvictedPodCount:    1,
+		},
+		{
+			description: "1 Oldest pod should be evicted when maxPodsToEvictTotal is set to 1",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+			},
+			pods:                       []*v1.Pod{p1, p2, p9},
+			nodes:                      []*v1.Node{node1},
+			maxPodsToEvictPerNamespace: utilptr.To[uint](2),
+			maxPodsToEvictTotal:        utilptr.To[uint](1),
 			expectedEvictedPodCount:    1,
 		},
 		{
@@ -560,7 +572,8 @@ func TestPodLifeTime(t *testing.T) {
 				eventRecorder,
 				evictions.NewOptions().
 					WithMaxPodsToEvictPerNode(tc.maxPodsToEvictPerNode).
-					WithMaxPodsToEvictPerNamespace(tc.maxPodsToEvictPerNamespace),
+					WithMaxPodsToEvictPerNamespace(tc.maxPodsToEvictPerNamespace).
+					WithMaxPodsToEvictTotal(tc.maxPodsToEvictTotal),
 			)
 
 			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{

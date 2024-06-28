@@ -274,8 +274,14 @@ func evictPodsFromSourceNodes(
 		klog.V(1).InfoS("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
-		evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction)
-
+		err := evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction)
+		if err != nil {
+			switch err.(type) {
+			case *evictions.EvictionTotalLimitError:
+				return
+			default:
+			}
+		}
 	}
 }
 
@@ -289,7 +295,7 @@ func evictPods(
 	podEvictor frameworktypes.Evictor,
 	evictOptions evictions.EvictOptions,
 	continueEviction continueEvictionCond,
-) {
+) error {
 	var excludedNamespaces sets.Set[string]
 	if evictableNamespaces != nil {
 		excludedNamespaces = sets.New(evictableNamespaces.Exclude...)
@@ -349,13 +355,14 @@ func evictPods(
 				continue
 			}
 			switch err.(type) {
-			case *evictions.EvictionNodeLimitError:
-				return
+			case *evictions.EvictionNodeLimitError, *evictions.EvictionTotalLimitError:
+				return err
 			default:
 				klog.Errorf("eviction failed: %v", err)
 			}
 		}
 	}
+	return nil
 }
 
 // sortNodesByUsage sorts nodes based on usage according to the given plugin.
