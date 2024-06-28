@@ -211,6 +211,9 @@ func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) *frame
 				// TODO(jchaloup): check if the pod has a different node to lend to
 				for _, pod := range pods[upperAvg-1:] {
 					r.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
+					if r.handle.Evictor().TotalLimitExceeded() {
+						return nil
+					}
 					if r.handle.Evictor().NodeLimitExceeded(nodeMap[nodeName]) {
 						continue loop
 					}

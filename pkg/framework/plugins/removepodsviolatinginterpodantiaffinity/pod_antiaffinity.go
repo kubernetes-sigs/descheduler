@@ -109,6 +109,9 @@ loop:
 					}
 				}
 			}
+			if d.handle.Evictor().TotalLimitExceeded() {
+				return nil
+			}
 			if d.handle.Evictor().NodeLimitExceeded(node) {
 				continue loop
 			}

@@ -122,6 +122,7 @@ func TestPodAntiAffinity(t *testing.T) {
 		description                    string
 		maxPodsToEvictPerNode          *uint
 		maxNoOfPodsToEvictPerNamespace *uint
+		maxNoOfPodsToEvictTotal        *uint
 		pods                           []*v1.Pod
 		expectedEvictedPodCount        uint
 		nodeFit                        bool
@@ -146,6 +147,14 @@ func TestPodAntiAffinity(t *testing.T) {
 			pods:                           []*v1.Pod{p1, p2, p3, p4},
 			nodes:                          []*v1.Node{node1},
 			expectedEvictedPodCount:        3,
+		},
+		{
+			description:                    "Maximum pods to evict (maxNoOfPodsToEvictTotal)",
+			maxNoOfPodsToEvictPerNamespace: &uint3,
+			maxNoOfPodsToEvictTotal:        &uint1,
+			pods:                           []*v1.Pod{p1, p2, p3, p4},
+			nodes:                          []*v1.Node{node1},
+			expectedEvictedPodCount:        1,
 		},
 		{
 			description:             "Evict only 1 pod after sorting",
@@ -239,6 +248,7 @@ func TestPodAntiAffinity(t *testing.T) {
 				false,
 				test.maxPodsToEvictPerNode,
 				test.maxNoOfPodsToEvictPerNamespace,
+				test.maxNoOfPodsToEvictTotal,
 				false,
 				eventRecorder,
 			)

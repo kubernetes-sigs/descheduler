@@ -261,6 +261,9 @@ func evictPodsFromSourceNodes(
 	klog.V(1).InfoS("Total capacity to be moved", keysAndValues...)
 
 	for _, node := range sourceNodes {
+		if podEvictor.TotalLimitExceeded() {
+			return
+		}
 		klog.V(3).InfoS("Evicting pods from node", "node", klog.KObj(node.node), "usage", node.usage)
 
 		nonRemovablePods, removablePods := classifyPods(node.allPods, podFilter)
@@ -275,7 +278,6 @@ func evictPodsFromSourceNodes(
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
 		evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction)
-
 	}
 }
 
@@ -344,6 +346,9 @@ func evictPods(
 						break
 					}
 				}
+			}
+			if podEvictor.TotalLimitExceeded() {
+				return
 			}
 			if podEvictor.NodeLimitExceeded(nodeInfo.node) {
 				return

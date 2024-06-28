@@ -53,3 +53,7 @@ func (hi *HandleImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.Evi
 func (hi *HandleImpl) NodeLimitExceeded(node *v1.Node) bool {
 	return hi.PodEvictorImpl.NodeLimitExceeded(node)
 }
+
+func (hi *HandleImpl) TotalLimitExceeded() bool {
+	return hi.PodEvictorImpl.TotalLimitExceeded()
+}

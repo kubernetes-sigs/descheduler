@@ -319,6 +319,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				false,
 				nil,
 				nil,
+				nil,
 				false,
 				eventRecorder,
 			)
@@ -765,6 +766,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				fakeClient,
 				policyv1.SchemeGroupVersion.String(),
 				false,
+				nil,
 				nil,
 				nil,
 				false,

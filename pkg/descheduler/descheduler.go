@@ -101,6 +101,7 @@ func newDescheduler(rs *options.DeschedulerServer, deschedulerPolicy *api.Desche
 		rs.DryRun,
 		deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
 		deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
+		deschedulerPolicy.MaxNoOfPodsToEvictTotal,
 		!rs.DisableMetrics,
 		eventRecorder,
 	)

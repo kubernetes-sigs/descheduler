@@ -492,6 +492,7 @@ func TestHighNodeUtilization(t *testing.T) {
 				false,
 				nil,
 				nil,
+				nil,
 				false,
 				eventRecorder,
 			)
@@ -642,6 +643,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 				"policy/v1",
 				false,
 				&item.evictionsExpected,
+				nil,
 				nil,
 				false,
 				eventRecorder,
