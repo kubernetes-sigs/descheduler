@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	utilpointer "k8s.io/utils/pointer"
@@ -76,6 +77,7 @@ func BuildTestPod(name string, cpu, memory int64, nodeName string, apply func(*v
 			Namespace: "default",
 			Name:      name,
 			SelfLink:  fmt.Sprintf("/api/v1/namespaces/default/pods/%s", name),
+			UID:       uuid.NewUUID(),
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{
