@@ -430,7 +430,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
 				test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
 			},
-			// All pods are assumed to be burstable (test.BuildTestNode always sets both cpu/memory resource requests to some value)
+			// All pods are assumed to be burstable (tc.BuildTestNode always sets both cpu/memory resource requests to some value)
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					test.SetRSOwnerRef(pod)
@@ -855,16 +855,16 @@ func TestLowNodeUtilization(t *testing.T) {
 		},
 	}
 
-	for _, test := range testCases {
-		t.Run(test.name, func(t *testing.T) {
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
 			var objs []runtime.Object
-			for _, node := range test.nodes {
+			for _, node := range tc.nodes {
 				objs = append(objs, node)
 			}
-			for _, pod := range test.pods {
+			for _, pod := range tc.pods {
 				objs = append(objs, pod)
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
@@ -878,12 +878,12 @@ func TestLowNodeUtilization(t *testing.T) {
 			}
 
 			podsForEviction := make(map[string]struct{})
-			for _, pod := range test.evictedPods {
+			for _, pod := range tc.evictedPods {
 				podsForEviction[pod] = struct{}{}
 			}
 
 			evictionFailed := false
-			if len(test.evictedPods) > 0 {
+			if len(tc.evictedPods) > 0 {
 				fakeClient.Fake.AddReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
 					getAction := action.(core.CreateAction)
 					obj := getAction.GetObject()
@@ -903,15 +903,7 @@ func TestLowNodeUtilization(t *testing.T) {
 
 			eventRecorder := &events.FakeRecorder{}
 
-			podEvictor := evictions.NewPodEvictor(
-				fakeClient,
-				policy.SchemeGroupVersion.String(),
-				false,
-				nil,
-				nil,
-				false,
-				eventRecorder,
-			)
+			podEvictor := evictions.NewPodEvictor(fakeClient, eventRecorder, nil)
 
 			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{
 				EvictLocalStoragePods:   false,
@@ -942,20 +934,20 @@ func TestLowNodeUtilization(t *testing.T) {
 			}
 
 			plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
-				Thresholds:             test.thresholds,
-				TargetThresholds:       test.targetThresholds,
-				UseDeviationThresholds: test.useDeviationThresholds,
-				EvictableNamespaces:    test.evictableNamespaces,
+				Thresholds:             tc.thresholds,
+				TargetThresholds:       tc.targetThresholds,
+				UseDeviationThresholds: tc.useDeviationThresholds,
+				EvictableNamespaces:    tc.evictableNamespaces,
 			},
 				handle)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
-			plugin.(frameworktypes.BalancePlugin).Balance(ctx, test.nodes)
+			plugin.(frameworktypes.BalancePlugin).Balance(ctx, tc.nodes)
 
 			podsEvicted := podEvictor.TotalEvicted()
-			if test.expectedPodsEvicted != podsEvicted {
-				t.Errorf("Expected %v pods to be evicted but %v got evicted", test.expectedPodsEvicted, podsEvicted)
+			if tc.expectedPodsEvicted != podsEvicted {
+				t.Errorf("Expected %v pods to be evicted but %v got evicted", tc.expectedPodsEvicted, podsEvicted)
 			}
 			if evictionFailed {
 				t.Errorf("Pod evictions failed unexpectedly")
@@ -1076,12 +1068,8 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
-				policy.SchemeGroupVersion.String(),
-				false,
-				&item.evictionsExpected,
-				nil,
-				false,
 				eventRecorder,
+				evictions.NewOptions().WithMaxPodsToEvictPerNode(&item.evictionsExpected),
 			)
 
 			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{

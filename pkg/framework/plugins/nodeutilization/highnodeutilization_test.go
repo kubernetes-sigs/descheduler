@@ -486,15 +486,7 @@ func TestHighNodeUtilization(t *testing.T) {
 
 			eventRecorder := &events.FakeRecorder{}
 
-			podEvictor := evictions.NewPodEvictor(
-				fakeClient,
-				"v1",
-				false,
-				nil,
-				nil,
-				false,
-				eventRecorder,
-			)
+			podEvictor := evictions.NewPodEvictor(fakeClient, eventRecorder, nil)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
 				EvictLocalStoragePods:   false,
@@ -639,12 +631,8 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
-				"policy/v1",
-				false,
-				&item.evictionsExpected,
-				nil,
-				false,
 				eventRecorder,
+				evictions.NewOptions().WithMaxPodsToEvictPerNode(&item.evictionsExpected),
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{

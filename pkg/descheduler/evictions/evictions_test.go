@@ -126,12 +126,8 @@ func TestNewPodEvictor(t *testing.T) {
 
 	podEvictor := NewPodEvictor(
 		fakeClient,
-		"policy/v1",
-		false,
-		utilpointer.Uint(1),
-		nil,
-		false,
 		eventRecorder,
+		NewOptions().WithMaxPodsToEvictPerNode(utilpointer.Uint(1)),
 	)
 
 	stubNode := &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node"}}

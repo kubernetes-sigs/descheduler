@@ -192,12 +192,10 @@ func runPodLifetimePlugin(
 
 	podEvictor := evictions.NewPodEvictor(
 		clientset,
-		evictionPolicyGroupVersion,
-		false,
-		nil,
-		maxPodsToEvictPerNamespace,
-		false,
 		&events.FakeRecorder{},
+		evictions.NewOptions().
+			WithPolicyGroupVersion(evictionPolicyGroupVersion).
+			WithMaxPodsToEvictPerNamespace(maxPodsToEvictPerNamespace),
 	)
 
 	var thresholdPriority int32
@@ -1579,11 +1577,7 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 
 	return evictions.NewPodEvictor(
 		clientSet,
-		evictionPolicyGroupVersion,
-		false,
-		nil,
-		nil,
-		false,
 		eventRecorder,
+		evictions.NewOptions().WithPolicyGroupVersion(evictionPolicyGroupVersion),
 	)
 }

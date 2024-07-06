@@ -22,7 +22,6 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
@@ -558,12 +557,10 @@ func TestPodLifeTime(t *testing.T) {
 
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
-				policyv1.SchemeGroupVersion.String(),
-				false,
-				tc.maxPodsToEvictPerNode,
-				tc.maxPodsToEvictPerNamespace,
-				false,
 				eventRecorder,
+				evictions.NewOptions().
+					WithMaxPodsToEvictPerNode(tc.maxPodsToEvictPerNode).
+					WithMaxPodsToEvictPerNamespace(tc.maxPodsToEvictPerNamespace),
 			)
 
 			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{

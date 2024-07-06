@@ -163,12 +163,8 @@ func TestTooManyRestarts(t *testing.T) {
 
 			podEvictor := evictions.NewPodEvictor(
 				clientSet,
-				evictionPolicyGroupVersion,
-				false,
-				nil,
-				nil,
-				false,
 				eventRecorder,
+				evictions.NewOptions().WithPolicyGroupVersion(evictionPolicyGroupVersion),
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
