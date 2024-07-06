@@ -235,10 +235,16 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 		}
 
 		if d.handle.Evictor().PreEvictionFilter(pod) {
-			d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
-		}
-		if d.handle.Evictor().NodeLimitExceeded(nodeMap[pod.Spec.NodeName]) {
-			nodeLimitExceeded[pod.Spec.NodeName] = true
+			err := d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
+			if err == nil {
+				continue
+			}
+			switch err.(type) {
+			case *evictions.EvictionNodeLimitError:
+				nodeLimitExceeded[pod.Spec.NodeName] = true
+			default:
+				klog.Errorf("eviction failed: %v", err)
+			}
 		}
 	}
 

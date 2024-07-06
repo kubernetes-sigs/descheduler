@@ -141,12 +141,8 @@ func TestNewPodEvictor(t *testing.T) {
 		t.Errorf("Expected 0 total evictions, got %q instead", evictions)
 	}
 
-	if podEvictor.NodeLimitExceeded(stubNode) {
-		t.Errorf("Expected NodeLimitExceeded to return false, got true instead")
-	}
-
-	if !podEvictor.EvictPod(context.TODO(), pod1, EvictOptions{}) {
-		t.Errorf("Expected a pod eviction, got no eviction instead")
+	if err := podEvictor.EvictPod(context.TODO(), pod1, EvictOptions{}); err != nil {
+		t.Errorf("Expected a pod eviction, got an eviction error instead: %v", err)
 	}
 
 	// 1 node eviction expected
@@ -157,7 +153,15 @@ func TestNewPodEvictor(t *testing.T) {
 	if evictions := podEvictor.TotalEvicted(); evictions != 1 {
 		t.Errorf("Expected 1 total evictions, got %q instead", evictions)
 	}
-	if !podEvictor.NodeLimitExceeded(stubNode) {
-		t.Errorf("Expected NodeLimitExceeded to return true, got false instead")
+
+	err := podEvictor.EvictPod(context.TODO(), pod1, EvictOptions{})
+	if err == nil {
+		t.Errorf("Expected a pod eviction error, got nil instead")
+	}
+	switch err.(type) {
+	case *EvictionNodeLimitError:
+		// all good
+	default:
+		t.Errorf("Expected a pod eviction EvictionNodeLimitError error, got a different error instead: %v", err)
 	}
 }

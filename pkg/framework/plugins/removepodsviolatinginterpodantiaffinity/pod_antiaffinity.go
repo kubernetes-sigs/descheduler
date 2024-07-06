@@ -98,7 +98,8 @@ loop:
 		for i := 0; i < totalPods; i++ {
 			if utils.CheckPodsWithAntiAffinityExist(pods[i], podsInANamespace, nodeMap) {
 				if d.handle.Evictor().Filter(pods[i]) && d.handle.Evictor().PreEvictionFilter(pods[i]) {
-					if d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName}) {
+					err := d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
+					if err == nil {
 						// Since the current pod is evicted all other pods which have anti-affinity with this
 						// pod need not be evicted.
 						// Update allPods.
@@ -106,11 +107,15 @@ loop:
 						pods = append(pods[:i], pods[i+1:]...)
 						i--
 						totalPods--
+						continue
+					}
+					switch err.(type) {
+					case *evictions.EvictionNodeLimitError:
+						continue loop
+					default:
+						klog.Errorf("eviction failed: %v", err)
 					}
 				}
-			}
-			if d.handle.Evictor().NodeLimitExceeded(node) {
-				continue loop
 			}
 		}
 	}

@@ -102,10 +102,17 @@ func (d *RemoveFailedPods) Deschedule(ctx context.Context, nodes []*v1.Node) *fr
 			}
 		}
 		totalPods := len(pods)
+	loop:
 		for i := 0; i < totalPods; i++ {
-			d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
-			if d.handle.Evictor().NodeLimitExceeded(node) {
-				break
+			err := d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
+			if err == nil {
+				continue
+			}
+			switch err.(type) {
+			case *evictions.EvictionNodeLimitError:
+				break loop
+			default:
+				klog.Errorf("eviction failed: %v", err)
 			}
 		}
 	}

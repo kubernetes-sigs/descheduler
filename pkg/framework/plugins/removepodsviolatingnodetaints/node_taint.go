@@ -114,6 +114,7 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 			}
 		}
 		totalPods := len(pods)
+	loop:
 		for i := 0; i < totalPods; i++ {
 			if !utils.TolerationsTolerateTaintsWithFilter(
 				pods[i].Spec.Tolerations,
@@ -121,9 +122,15 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 				d.taintFilterFnc,
 			) {
 				klog.V(2).InfoS("Not all taints with NoSchedule effect are tolerated after update for pod on node", "pod", klog.KObj(pods[i]), "node", klog.KObj(node))
-				d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
-				if d.handle.Evictor().NodeLimitExceeded(node) {
-					break
+				err := d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
+				if err == nil {
+					continue
+				}
+				switch err.(type) {
+				case *evictions.EvictionNodeLimitError:
+					break loop
+				default:
+					klog.Errorf("eviction failed: %v", err)
 				}
 			}
 		}
