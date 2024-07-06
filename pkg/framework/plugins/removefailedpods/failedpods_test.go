@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
@@ -375,15 +374,7 @@ func TestRemoveFailedPods(t *testing.T) {
 
 			eventRecorder := &events.FakeRecorder{}
 
-			podEvictor := evictions.NewPodEvictor(
-				fakeClient,
-				policyv1.SchemeGroupVersion.String(),
-				false,
-				nil,
-				nil,
-				false,
-				eventRecorder,
-			)
+			podEvictor := evictions.NewPodEvictor(fakeClient, eventRecorder, nil)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
 				EvictLocalStoragePods:   false,

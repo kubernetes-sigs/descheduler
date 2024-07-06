@@ -55,23 +55,23 @@ type PodEvictor struct {
 
 func NewPodEvictor(
 	client clientset.Interface,
-	policyGroupVersion string,
-	dryRun bool,
-	maxPodsToEvictPerNode *uint,
-	maxPodsToEvictPerNamespace *uint,
-	metricsEnabled bool,
 	eventRecorder events.EventRecorder,
+	options *Options,
 ) *PodEvictor {
+	if options == nil {
+		options = NewOptions()
+	}
+
 	return &PodEvictor{
 		client:                     client,
-		policyGroupVersion:         policyGroupVersion,
-		dryRun:                     dryRun,
-		maxPodsToEvictPerNode:      maxPodsToEvictPerNode,
-		maxPodsToEvictPerNamespace: maxPodsToEvictPerNamespace,
+		eventRecorder:              eventRecorder,
+		policyGroupVersion:         options.policyGroupVersion,
+		dryRun:                     options.dryRun,
+		maxPodsToEvictPerNode:      options.maxPodsToEvictPerNode,
+		maxPodsToEvictPerNamespace: options.maxPodsToEvictPerNamespace,
+		metricsEnabled:             options.metricsEnabled,
 		nodepodCount:               make(nodePodEvictedCount),
 		namespacePodCount:          make(namespacePodEvictCount),
-		metricsEnabled:             metricsEnabled,
-		eventRecorder:              eventRecorder,
 	}
 }
 

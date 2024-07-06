@@ -26,7 +26,6 @@ import (
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
 	v1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -313,15 +312,7 @@ func TestFindDuplicatePods(t *testing.T) {
 
 			eventRecorder := &events.FakeRecorder{}
 
-			podEvictor := evictions.NewPodEvictor(
-				fakeClient,
-				"v1",
-				false,
-				nil,
-				nil,
-				false,
-				eventRecorder,
-			)
+			podEvictor := evictions.NewPodEvictor(fakeClient, eventRecorder, nil)
 
 			nodeFit := testCase.nodefit
 
@@ -761,15 +752,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 
 			eventRecorder := &events.FakeRecorder{}
 
-			podEvictor := evictions.NewPodEvictor(
-				fakeClient,
-				policyv1.SchemeGroupVersion.String(),
-				false,
-				nil,
-				nil,
-				false,
-				eventRecorder,
-			)
+			podEvictor := evictions.NewPodEvictor(fakeClient, eventRecorder, nil)
 
 			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{
 				EvictLocalStoragePods:   false,

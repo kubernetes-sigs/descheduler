@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
@@ -346,12 +345,10 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 
 			podEvictor := evictions.NewPodEvictor(
 				fakeClient,
-				policyv1.SchemeGroupVersion.String(),
-				false,
-				tc.maxPodsToEvictPerNode,
-				tc.maxNoOfPodsToEvictPerNamespace,
-				false,
 				eventRecorder,
+				evictions.NewOptions().
+					WithMaxPodsToEvictPerNode(tc.maxPodsToEvictPerNode).
+					WithMaxPodsToEvictPerNamespace(tc.maxNoOfPodsToEvictPerNamespace),
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{

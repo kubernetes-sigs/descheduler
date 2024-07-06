@@ -97,12 +97,13 @@ func newDescheduler(rs *options.DeschedulerServer, deschedulerPolicy *api.Desche
 
 	podEvictor := evictions.NewPodEvictor(
 		nil,
-		evictionPolicyGroupVersion,
-		rs.DryRun,
-		deschedulerPolicy.MaxNoOfPodsToEvictPerNode,
-		deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace,
-		!rs.DisableMetrics,
 		eventRecorder,
+		evictions.NewOptions().
+			WithPolicyGroupVersion(evictionPolicyGroupVersion).
+			WithMaxPodsToEvictPerNode(deschedulerPolicy.MaxNoOfPodsToEvictPerNode).
+			WithMaxPodsToEvictPerNamespace(deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace).
+			WithDryRun(rs.DryRun).
+			WithMetricsEnabled(!rs.DisableMetrics),
 	)
 
 	return &descheduler{
