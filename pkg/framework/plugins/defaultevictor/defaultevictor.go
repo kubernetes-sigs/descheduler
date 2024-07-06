@@ -244,6 +244,15 @@ func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
 
 func getPodIndexerByOwnerRefs(indexName string, handle frameworktypes.Handle) (cache.Indexer, error) {
 	podInformer := handle.SharedInformerFactory().Core().V1().Pods().Informer()
+	indexer := podInformer.GetIndexer()
+
+	// do not reinitialize the indexer, if it's been defined already
+	for name := range indexer.GetIndexers() {
+		if name == indexName {
+			return indexer, nil
+		}
+	}
+
 	if err := podInformer.AddIndexers(cache.Indexers{
 		indexName: func(obj interface{}) ([]string, error) {
 			pod, ok := obj.(*v1.Pod)
@@ -257,6 +266,5 @@ func getPodIndexerByOwnerRefs(indexName string, handle frameworktypes.Handle) (c
 		return nil, err
 	}
 
-	indexer := podInformer.GetIndexer()
 	return indexer, nil
 }
