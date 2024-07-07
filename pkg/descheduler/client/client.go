@@ -67,11 +67,11 @@ func GetMasterFromKubeconfig(filename string) (string, error) {
 
 	context, ok := config.Contexts[config.CurrentContext]
 	if !ok {
-		return "", fmt.Errorf("failed to get master address from kubeconfig")
+		return "", fmt.Errorf("failed to get master address from kubeconfig: current context not found")
 	}
 
 	if val, ok := config.Clusters[context.Cluster]; ok {
 		return val.Server, nil
 	}
-	return "", fmt.Errorf("failed to get master address from kubeconfig")
+	return "", fmt.Errorf("failed to get master address from kubeconfig: cluster information not found")
 }
