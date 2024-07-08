@@ -46,9 +46,7 @@ type Evictor interface {
 	// PreEvictionFilter checks if pod can be evicted right before eviction
 	PreEvictionFilter(*v1.Pod) bool
 	// Evict evicts a pod (no pre-check performed)
-	Evict(context.Context, *v1.Pod, evictions.EvictOptions) bool
-	// NodeLimitExceeded checks if the number of evictions for a node was exceeded
-	NodeLimitExceeded(node *v1.Node) bool
+	Evict(context.Context, *v1.Pod, evictions.EvictOptions) error
 }
 
 // Status describes result of an extension point invocation

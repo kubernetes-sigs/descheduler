@@ -131,9 +131,17 @@ func (d *PodLifeTime) Deschedule(ctx context.Context, nodes []*v1.Node) *framewo
 	// in the event that PDB or settings such maxNoOfPodsToEvictPer* prevent too much eviction
 	podutil.SortPodsBasedOnAge(podsToEvict)
 
+loop:
 	for _, pod := range podsToEvict {
-		if !d.handle.Evictor().NodeLimitExceeded(nodeMap[pod.Spec.NodeName]) {
-			d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
+		err := d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
+		if err == nil {
+			continue
+		}
+		switch err.(type) {
+		case *evictions.EvictionNodeLimitError:
+			continue loop
+		default:
+			klog.Errorf("eviction failed: %v", err)
 		}
 	}
 

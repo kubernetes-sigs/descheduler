@@ -185,10 +185,11 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 			if test.extensionPoint == frameworktypes.DescheduleExtensionPoint {
 				fakePlugin.AddReactor(string(frameworktypes.DescheduleExtensionPoint), func(action fakeplugin.Action) (handled, filter bool, err error) {
 					if dAction, ok := action.(fakeplugin.DescheduleAction); ok {
-						if dAction.Handle().Evictor().Evict(ctx, p1, evictions.EvictOptions{StrategyName: fakePlugin.PluginName}) {
+						err := dAction.Handle().Evictor().Evict(ctx, p1, evictions.EvictOptions{StrategyName: fakePlugin.PluginName})
+						if err == nil {
 							return true, false, nil
 						}
-						return true, false, fmt.Errorf("pod not evicted")
+						return true, false, fmt.Errorf("pod not evicted: %v", err)
 					}
 					return false, false, nil
 				})
@@ -196,10 +197,11 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 			if test.extensionPoint == frameworktypes.BalanceExtensionPoint {
 				fakePlugin.AddReactor(string(frameworktypes.BalanceExtensionPoint), func(action fakeplugin.Action) (handled, filter bool, err error) {
 					if dAction, ok := action.(fakeplugin.BalanceAction); ok {
-						if dAction.Handle().Evictor().Evict(ctx, p1, evictions.EvictOptions{StrategyName: fakePlugin.PluginName}) {
+						err := dAction.Handle().Evictor().Evict(ctx, p1, evictions.EvictOptions{StrategyName: fakePlugin.PluginName})
+						if err == nil {
 							return true, false, nil
 						}
-						return true, false, fmt.Errorf("pod not evicted")
+						return true, false, fmt.Errorf("pod not evicted: %v", err)
 					}
 					return false, false, nil
 				})
