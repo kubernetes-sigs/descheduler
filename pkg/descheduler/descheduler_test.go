@@ -106,9 +106,7 @@ func TestTaintsUpdated(t *testing.T) {
 	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 
 	p1 := test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, nil)
-	p1.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
-		{},
-	}
+	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 
 	client := fakeclientset.NewSimpleClientset(n1, n2, p1)
 	eventClient := fakeclientset.NewSimpleClientset(n1, n2, p1)
