@@ -98,6 +98,37 @@ func removeDuplicatesPolicy() *api.DeschedulerPolicy {
 	}
 }
 
+func initDescheduler(t *testing.T, ctx context.Context, internalDeschedulerPolicy *api.DeschedulerPolicy, objects ...runtime.Object) (*options.DeschedulerServer, *descheduler, *fakeclientset.Clientset, func()) {
+	client := fakeclientset.NewSimpleClientset(objects...)
+	eventClient := fakeclientset.NewSimpleClientset(objects...)
+
+	rs, err := options.NewDeschedulerServer()
+	if err != nil {
+		t.Fatalf("Unable to initialize server: %v", err)
+	}
+	rs.Client = client
+	rs.EventClient = eventClient
+
+	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
+	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
+
+	descheduler, err := newDescheduler(rs, internalDeschedulerPolicy, "v1", eventRecorder, sharedInformerFactory)
+	if err != nil {
+		eventBroadcaster.Shutdown()
+		t.Fatalf("Unable to create a descheduler instance: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	return rs, descheduler, client, func() {
+		cancel()
+		eventBroadcaster.Shutdown()
+	}
+}
+
 func TestTaintsUpdated(t *testing.T) {
 	initPluginRegistry()
 
@@ -369,37 +400,16 @@ func TestPodEvictorReset(t *testing.T) {
 	p3.ObjectMeta.OwnerReferences = ownerRef1
 	p4.ObjectMeta.OwnerReferences = ownerRef1
 
-	client := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3, p4)
-	eventClient := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3, p4)
-
-	rs, err := options.NewDeschedulerServer()
-	if err != nil {
-		t.Fatalf("Unable to initialize server: %v", err)
-	}
-	rs.Client = client
-	rs.EventClient = eventClient
+	rs, descheduler, client, cancel := initDescheduler(t, ctx, removeDuplicatesPolicy(), node1, node2, p1, p2, p3, p4)
+	defer cancel()
 
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods))
 
-	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
-	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
-	defer eventBroadcaster.Shutdown()
-
-	descheduler, err := newDescheduler(rs, removeDuplicatesPolicy(), "v1", eventRecorder, sharedInformerFactory)
-	if err != nil {
-		t.Fatalf("Unable to create a descheduler instance: %v", err)
-	}
 	var fakeEvictedPods []string
 	descheduler.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
 		return podEvictionReactionTestingFnc(&fakeEvictedPods)
 	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	sharedInformerFactory.Start(ctx.Done())
-	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
 	nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, descheduler.nodeLister, "")
 	if err != nil {
