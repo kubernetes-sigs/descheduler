@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/conversion"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	utilpointer "k8s.io/utils/pointer"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -39,6 +40,22 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
+
+// scope contains information about an ongoing conversion.
+type scope struct {
+	converter *conversion.Converter
+	meta      *conversion.Meta
+}
+
+// Convert continues a conversion.
+func (s scope) Convert(src, dest interface{}) error {
+	return s.converter.Convert(src, dest, s.meta)
+}
+
+// Meta returns the meta object that was originally passed to Convert.
+func (s scope) Meta() *conversion.Meta {
+	return s.meta
+}
 
 func TestV1alpha1ToV1alpha2(t *testing.T) {
 	SetupPlugins()

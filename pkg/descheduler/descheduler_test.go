@@ -9,7 +9,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/conversion"
 	"k8s.io/apimachinery/pkg/runtime"
 	apiversion "k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
@@ -18,7 +17,6 @@ import (
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
@@ -36,20 +34,68 @@ func initPluginRegistry() {
 	pluginregistry.Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaints{}, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs, removepodsviolatingnodetaints.SetDefaults_RemovePodsViolatingNodeTaintsArgs, pluginregistry.PluginRegistry)
 }
 
-// scope contains information about an ongoing conversion.
-type scope struct {
-	converter *conversion.Converter
-	meta      *conversion.Meta
+func removePodsViolatingNodeTaintsPolicy() *api.DeschedulerPolicy {
+	return &api.DeschedulerPolicy{
+		Profiles: []api.DeschedulerProfile{
+			{
+				Name: "Profile",
+				PluginConfigs: []api.PluginConfig{
+					{
+						Name: "RemovePodsViolatingNodeTaints",
+						Args: &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{},
+					},
+					{
+						Name: "DefaultEvictor",
+						Args: &defaultevictor.DefaultEvictorArgs{},
+					},
+				},
+				Plugins: api.Plugins{
+					Filter: api.PluginSet{
+						Enabled: []string{
+							"DefaultEvictor",
+						},
+					},
+					Deschedule: api.PluginSet{
+						Enabled: []string{
+							"RemovePodsViolatingNodeTaints",
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
-// Convert continues a conversion.
-func (s scope) Convert(src, dest interface{}) error {
-	return s.converter.Convert(src, dest, s.meta)
-}
-
-// Meta returns the meta object that was originally passed to Convert.
-func (s scope) Meta() *conversion.Meta {
-	return s.meta
+func removeDuplicatesPolicy() *api.DeschedulerPolicy {
+	return &api.DeschedulerPolicy{
+		Profiles: []api.DeschedulerProfile{
+			{
+				Name: "Profile",
+				PluginConfigs: []api.PluginConfig{
+					{
+						Name: "RemoveDuplicates",
+						Args: &removeduplicates.RemoveDuplicatesArgs{},
+					},
+					{
+						Name: "DefaultEvictor",
+						Args: &defaultevictor.DefaultEvictorArgs{},
+					},
+				},
+				Plugins: api.Plugins{
+					Filter: api.PluginSet{
+						Enabled: []string{
+							"DefaultEvictor",
+						},
+					},
+					Balance: api.PluginSet{
+						Enabled: []string{
+							"RemoveDuplicates",
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 func TestTaintsUpdated(t *testing.T) {
@@ -66,13 +112,6 @@ func TestTaintsUpdated(t *testing.T) {
 
 	client := fakeclientset.NewSimpleClientset(n1, n2, p1)
 	eventClient := fakeclientset.NewSimpleClientset(n1, n2, p1)
-	dp := &v1alpha1.DeschedulerPolicy{
-		Strategies: v1alpha1.StrategyList{
-			"RemovePodsViolatingNodeTaints": v1alpha1.DeschedulerStrategy{
-				Enabled: true,
-			},
-		},
-	}
 
 	rs, err := options.NewDeschedulerServer()
 	if err != nil {
@@ -105,14 +144,7 @@ func TestTaintsUpdated(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods))
 
-	internalDeschedulerPolicy := &api.DeschedulerPolicy{}
-	scope := scope{}
-	err = v1alpha1.V1alpha1ToInternal(dp, pluginregistry.PluginRegistry, internalDeschedulerPolicy, scope)
-	if err != nil {
-		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
-	}
-
-	if err := RunDeschedulerStrategies(ctx, rs, internalDeschedulerPolicy, "v1"); err != nil {
+	if err := RunDeschedulerStrategies(ctx, rs, removePodsViolatingNodeTaintsPolicy(), "v1"); err != nil {
 		t.Fatalf("Unable to run descheduler strategies: %v", err)
 	}
 
@@ -142,13 +174,6 @@ func TestDuplicate(t *testing.T) {
 
 	client := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3)
 	eventClient := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3)
-	dp := &v1alpha1.DeschedulerPolicy{
-		Strategies: v1alpha1.StrategyList{
-			"RemoveDuplicates": v1alpha1.DeschedulerStrategy{
-				Enabled: true,
-			},
-		},
-	}
 
 	rs, err := options.NewDeschedulerServer()
 	if err != nil {
@@ -169,13 +194,7 @@ func TestDuplicate(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods))
 
-	internalDeschedulerPolicy := &api.DeschedulerPolicy{}
-	scope := scope{}
-	err = v1alpha1.V1alpha1ToInternal(dp, pluginregistry.PluginRegistry, internalDeschedulerPolicy, scope)
-	if err != nil {
-		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
-	}
-	if err := RunDeschedulerStrategies(ctx, rs, internalDeschedulerPolicy, "v1"); err != nil {
+	if err := RunDeschedulerStrategies(ctx, rs, removeDuplicatesPolicy(), "v1"); err != nil {
 		t.Fatalf("Unable to run descheduler strategies: %v", err)
 	}
 
@@ -354,20 +373,6 @@ func TestPodEvictorReset(t *testing.T) {
 
 	client := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3, p4)
 	eventClient := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3, p4)
-	dp := &v1alpha1.DeschedulerPolicy{
-		Strategies: v1alpha1.StrategyList{
-			"RemoveDuplicates": v1alpha1.DeschedulerStrategy{
-				Enabled: true,
-			},
-		},
-	}
-
-	internalDeschedulerPolicy := &api.DeschedulerPolicy{}
-	scope := scope{}
-	err := v1alpha1.V1alpha1ToInternal(dp, pluginregistry.PluginRegistry, internalDeschedulerPolicy, scope)
-	if err != nil {
-		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
-	}
 
 	rs, err := options.NewDeschedulerServer()
 	if err != nil {
@@ -383,7 +388,7 @@ func TestPodEvictorReset(t *testing.T) {
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
 	defer eventBroadcaster.Shutdown()
 
-	descheduler, err := newDescheduler(rs, internalDeschedulerPolicy, "v1", eventRecorder, sharedInformerFactory)
+	descheduler, err := newDescheduler(rs, removeDuplicatesPolicy(), "v1", eventRecorder, sharedInformerFactory)
 	if err != nil {
 		t.Fatalf("Unable to create a descheduler instance: %v", err)
 	}
