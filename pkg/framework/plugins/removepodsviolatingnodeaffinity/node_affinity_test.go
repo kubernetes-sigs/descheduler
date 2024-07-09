@@ -119,6 +119,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		expectedEvictedPodCount        uint
 		maxPodsToEvictPerNode          *uint
 		maxNoOfPodsToEvictPerNamespace *uint
+		maxNoOfPodsToEvictTotal        *uint
 		args                           RemovePodsViolatingNodeAffinityArgs
 		nodefit                        bool
 	}{
@@ -236,6 +237,17 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			pods:                           addPodsToNode(nodeWithoutLabels, nil, "requiredDuringSchedulingIgnoredDuringExecution"),
 			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
 			maxNoOfPodsToEvictPerNamespace: &uint1,
+		},
+		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictTotal set to 0, should not be evicted [required affinity]",
+			expectedEvictedPodCount: 0,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:                           addPodsToNode(nodeWithoutLabels, nil, "requiredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxNoOfPodsToEvictPerNamespace: &uint1,
+			maxNoOfPodsToEvictTotal:        &uint0,
 		},
 		{
 			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 1, should be evicted [preferred affinity]",
@@ -363,7 +375,8 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 				eventRecorder,
 				evictions.NewOptions().
 					WithMaxPodsToEvictPerNode(tc.maxPodsToEvictPerNode).
-					WithMaxPodsToEvictPerNamespace(tc.maxNoOfPodsToEvictPerNamespace),
+					WithMaxPodsToEvictPerNamespace(tc.maxNoOfPodsToEvictPerNamespace).
+					WithMaxPodsToEvictTotal(tc.maxNoOfPodsToEvictTotal),
 			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{

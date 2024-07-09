@@ -242,6 +242,8 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 			switch err.(type) {
 			case *evictions.EvictionNodeLimitError:
 				nodeLimitExceeded[pod.Spec.NodeName] = true
+			case *evictions.EvictionTotalLimitError:
+				return nil
 			default:
 				klog.Errorf("eviction failed: %v", err)
 			}
