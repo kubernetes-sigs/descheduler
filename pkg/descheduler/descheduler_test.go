@@ -9,7 +9,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/conversion"
 	"k8s.io/apimachinery/pkg/runtime"
 	apiversion "k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
@@ -18,7 +17,6 @@ import (
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
@@ -29,45 +27,120 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
-// scope contains information about an ongoing conversion.
-type scope struct {
-	converter *conversion.Converter
-	meta      *conversion.Meta
+func initPluginRegistry() {
+	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
+	pluginregistry.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicates{}, &removeduplicates.RemoveDuplicatesArgs{}, removeduplicates.ValidateRemoveDuplicatesArgs, removeduplicates.SetDefaults_RemoveDuplicatesArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaints{}, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs, removepodsviolatingnodetaints.SetDefaults_RemovePodsViolatingNodeTaintsArgs, pluginregistry.PluginRegistry)
 }
 
-// Convert continues a conversion.
-func (s scope) Convert(src, dest interface{}) error {
-	return s.converter.Convert(src, dest, s.meta)
+func removePodsViolatingNodeTaintsPolicy() *api.DeschedulerPolicy {
+	return &api.DeschedulerPolicy{
+		Profiles: []api.DeschedulerProfile{
+			{
+				Name: "Profile",
+				PluginConfigs: []api.PluginConfig{
+					{
+						Name: "RemovePodsViolatingNodeTaints",
+						Args: &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{},
+					},
+					{
+						Name: "DefaultEvictor",
+						Args: &defaultevictor.DefaultEvictorArgs{},
+					},
+				},
+				Plugins: api.Plugins{
+					Filter: api.PluginSet{
+						Enabled: []string{
+							"DefaultEvictor",
+						},
+					},
+					Deschedule: api.PluginSet{
+						Enabled: []string{
+							"RemovePodsViolatingNodeTaints",
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
-// Meta returns the meta object that was originally passed to Convert.
-func (s scope) Meta() *conversion.Meta {
-	return s.meta
+func removeDuplicatesPolicy() *api.DeschedulerPolicy {
+	return &api.DeschedulerPolicy{
+		Profiles: []api.DeschedulerProfile{
+			{
+				Name: "Profile",
+				PluginConfigs: []api.PluginConfig{
+					{
+						Name: "RemoveDuplicates",
+						Args: &removeduplicates.RemoveDuplicatesArgs{},
+					},
+					{
+						Name: "DefaultEvictor",
+						Args: &defaultevictor.DefaultEvictorArgs{},
+					},
+				},
+				Plugins: api.Plugins{
+					Filter: api.PluginSet{
+						Enabled: []string{
+							"DefaultEvictor",
+						},
+					},
+					Balance: api.PluginSet{
+						Enabled: []string{
+							"RemoveDuplicates",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func initDescheduler(t *testing.T, ctx context.Context, internalDeschedulerPolicy *api.DeschedulerPolicy, objects ...runtime.Object) (*options.DeschedulerServer, *descheduler, *fakeclientset.Clientset, func()) {
+	client := fakeclientset.NewSimpleClientset(objects...)
+	eventClient := fakeclientset.NewSimpleClientset(objects...)
+
+	rs, err := options.NewDeschedulerServer()
+	if err != nil {
+		t.Fatalf("Unable to initialize server: %v", err)
+	}
+	rs.Client = client
+	rs.EventClient = eventClient
+
+	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
+	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
+
+	descheduler, err := newDescheduler(rs, internalDeschedulerPolicy, "v1", eventRecorder, sharedInformerFactory)
+	if err != nil {
+		eventBroadcaster.Shutdown()
+		t.Fatalf("Unable to create a descheduler instance: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	return rs, descheduler, client, func() {
+		cancel()
+		eventBroadcaster.Shutdown()
+	}
 }
 
 func TestTaintsUpdated(t *testing.T) {
-	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
-	pluginregistry.Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaints{}, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs, removepodsviolatingnodetaints.SetDefaults_RemovePodsViolatingNodeTaintsArgs, pluginregistry.PluginRegistry)
-	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
+	initPluginRegistry()
 
 	ctx := context.Background()
 	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 
 	p1 := test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, nil)
-	p1.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
-		{},
-	}
+	p1.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 
 	client := fakeclientset.NewSimpleClientset(n1, n2, p1)
 	eventClient := fakeclientset.NewSimpleClientset(n1, n2, p1)
-	dp := &v1alpha1.DeschedulerPolicy{
-		Strategies: v1alpha1.StrategyList{
-			"RemovePodsViolatingNodeTaints": v1alpha1.DeschedulerStrategy{
-				Enabled: true,
-			},
-		},
-	}
 
 	rs, err := options.NewDeschedulerServer()
 	if err != nil {
@@ -100,14 +173,7 @@ func TestTaintsUpdated(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods))
 
-	internalDeschedulerPolicy := &api.DeschedulerPolicy{}
-	scope := scope{}
-	err = v1alpha1.V1alpha1ToInternal(dp, pluginregistry.PluginRegistry, internalDeschedulerPolicy, scope)
-	if err != nil {
-		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
-	}
-
-	if err := RunDeschedulerStrategies(ctx, rs, internalDeschedulerPolicy, "v1"); err != nil {
+	if err := RunDeschedulerStrategies(ctx, rs, removePodsViolatingNodeTaintsPolicy(), "v1"); err != nil {
 		t.Fatalf("Unable to run descheduler strategies: %v", err)
 	}
 
@@ -117,9 +183,7 @@ func TestTaintsUpdated(t *testing.T) {
 }
 
 func TestDuplicate(t *testing.T) {
-	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
-	pluginregistry.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicates{}, &removeduplicates.RemoveDuplicatesArgs{}, removeduplicates.ValidateRemoveDuplicatesArgs, removeduplicates.SetDefaults_RemoveDuplicatesArgs, pluginregistry.PluginRegistry)
-	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
+	initPluginRegistry()
 
 	ctx := context.Background()
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
@@ -139,13 +203,6 @@ func TestDuplicate(t *testing.T) {
 
 	client := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3)
 	eventClient := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3)
-	dp := &v1alpha1.DeschedulerPolicy{
-		Strategies: v1alpha1.StrategyList{
-			"RemoveDuplicates": v1alpha1.DeschedulerStrategy{
-				Enabled: true,
-			},
-		},
-	}
 
 	rs, err := options.NewDeschedulerServer()
 	if err != nil {
@@ -166,13 +223,7 @@ func TestDuplicate(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods))
 
-	internalDeschedulerPolicy := &api.DeschedulerPolicy{}
-	scope := scope{}
-	err = v1alpha1.V1alpha1ToInternal(dp, pluginregistry.PluginRegistry, internalDeschedulerPolicy, scope)
-	if err != nil {
-		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
-	}
-	if err := RunDeschedulerStrategies(ctx, rs, internalDeschedulerPolicy, "v1"); err != nil {
+	if err := RunDeschedulerStrategies(ctx, rs, removeDuplicatesPolicy(), "v1"); err != nil {
 		t.Fatalf("Unable to run descheduler strategies: %v", err)
 	}
 
@@ -327,12 +378,6 @@ func podEvictionReactionTestingFnc(evictedPods *[]string) func(action core.Actio
 	}
 }
 
-func initPluginRegistry() {
-	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
-	pluginregistry.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicates{}, &removeduplicates.RemoveDuplicatesArgs{}, removeduplicates.ValidateRemoveDuplicatesArgs, removeduplicates.SetDefaults_RemoveDuplicatesArgs, pluginregistry.PluginRegistry)
-	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
-}
-
 func TestPodEvictorReset(t *testing.T) {
 	initPluginRegistry()
 
@@ -355,51 +400,16 @@ func TestPodEvictorReset(t *testing.T) {
 	p3.ObjectMeta.OwnerReferences = ownerRef1
 	p4.ObjectMeta.OwnerReferences = ownerRef1
 
-	client := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3, p4)
-	eventClient := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3, p4)
-	dp := &v1alpha1.DeschedulerPolicy{
-		Strategies: v1alpha1.StrategyList{
-			"RemoveDuplicates": v1alpha1.DeschedulerStrategy{
-				Enabled: true,
-			},
-		},
-	}
-
-	internalDeschedulerPolicy := &api.DeschedulerPolicy{}
-	scope := scope{}
-	err := v1alpha1.V1alpha1ToInternal(dp, pluginregistry.PluginRegistry, internalDeschedulerPolicy, scope)
-	if err != nil {
-		t.Fatalf("Unable to convert v1alpha1 to v1alpha2: %v", err)
-	}
-
-	rs, err := options.NewDeschedulerServer()
-	if err != nil {
-		t.Fatalf("Unable to initialize server: %v", err)
-	}
-	rs.Client = client
-	rs.EventClient = eventClient
+	rs, descheduler, client, cancel := initDescheduler(t, ctx, removeDuplicatesPolicy(), node1, node2, p1, p2, p3, p4)
+	defer cancel()
 
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods))
 
-	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
-	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
-	defer eventBroadcaster.Shutdown()
-
-	descheduler, err := newDescheduler(rs, internalDeschedulerPolicy, "v1", eventRecorder, sharedInformerFactory)
-	if err != nil {
-		t.Fatalf("Unable to create a descheduler instance: %v", err)
-	}
 	var fakeEvictedPods []string
 	descheduler.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
 		return podEvictionReactionTestingFnc(&fakeEvictedPods)
 	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	sharedInformerFactory.Start(ctx.Done())
-	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
 	nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, descheduler.nodeLister, "")
 	if err != nil {
