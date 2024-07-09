@@ -35,7 +35,7 @@ var _ error = &EvictionNamespaceLimitError{}
 type EvictionTotalLimitError struct{}
 
 func (e EvictionTotalLimitError) Error() string {
-	return "maximum number of evicted pods total reached"
+	return "maximum number of evicted pods per a descheduling cycle reached"
 }
 
 func NewEvictionTotalLimitError() *EvictionTotalLimitError {
