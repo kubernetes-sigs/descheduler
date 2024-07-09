@@ -98,7 +98,7 @@ func removeDuplicatesPolicy() *api.DeschedulerPolicy {
 	}
 }
 
-func initDescheduler(t *testing.T, ctx context.Context, internalDeschedulerPolicy *api.DeschedulerPolicy, objects ...runtime.Object) (*options.DeschedulerServer, *descheduler, *fakeclientset.Clientset, func()) {
+func initDescheduler(t *testing.T, ctx context.Context, internalDeschedulerPolicy *api.DeschedulerPolicy, objects ...runtime.Object) (*options.DeschedulerServer, *descheduler, *fakeclientset.Clientset) {
 	client := fakeclientset.NewSimpleClientset(objects...)
 	eventClient := fakeclientset.NewSimpleClientset(objects...)
 
@@ -118,15 +118,10 @@ func initDescheduler(t *testing.T, ctx context.Context, internalDeschedulerPolic
 		t.Fatalf("Unable to create a descheduler instance: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-
 	sharedInformerFactory.Start(ctx.Done())
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-	return rs, descheduler, client, func() {
-		cancel()
-		eventBroadcaster.Shutdown()
-	}
+	return rs, descheduler, client
 }
 
 func TestTaintsUpdated(t *testing.T) {
@@ -400,7 +395,8 @@ func TestPodEvictorReset(t *testing.T) {
 	p3.ObjectMeta.OwnerReferences = ownerRef1
 	p4.ObjectMeta.OwnerReferences = ownerRef1
 
-	rs, descheduler, client, cancel := initDescheduler(t, ctx, removeDuplicatesPolicy(), node1, node2, p1, p2, p3, p4)
+	ctxCancel, cancel := context.WithCancel(ctx)
+	rs, descheduler, client := initDescheduler(t, ctxCancel, removeDuplicatesPolicy(), node1, node2, p1, p2, p3, p4)
 	defer cancel()
 
 	var evictedPods []string
