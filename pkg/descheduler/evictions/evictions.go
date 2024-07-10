@@ -19,6 +19,7 @@ package evictions
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -42,6 +43,7 @@ type (
 )
 
 type PodEvictor struct {
+	mu                         sync.Mutex
 	client                     clientset.Interface
 	policyGroupVersion         string
 	dryRun                     bool
@@ -80,21 +82,29 @@ func NewPodEvictor(
 
 // NodeEvicted gives a number of pods evicted for node
 func (pe *PodEvictor) NodeEvicted(node *v1.Node) uint {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
 	return pe.nodePodCount[node.Name]
 }
 
 // TotalEvicted gives a number of pods evicted through all nodes
 func (pe *PodEvictor) TotalEvicted() uint {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
 	return pe.totalPodCount
 }
 
 func (pe *PodEvictor) ResetCounters() {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
 	pe.nodePodCount = make(nodePodEvictedCount)
 	pe.namespacePodCount = make(namespacePodEvictCount)
 	pe.totalPodCount = 0
 }
 
 func (pe *PodEvictor) SetClient(client clientset.Interface) {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
 	pe.client = client
 }
 
@@ -111,6 +121,8 @@ type EvictOptions struct {
 // EvictPod evicts a pod while exercising eviction limits.
 // Returns true when the pod is evicted on the server side.
 func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptions) error {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
 	var span trace.Span
 	ctx, span = tracing.Tracer().Start(ctx, "EvictPod", trace.WithAttributes(attribute.String("podName", pod.Name), attribute.String("podNamespace", pod.Namespace), attribute.String("reason", opts.Reason), attribute.String("operation", tracing.EvictOperation)))
 	defer span.End()
