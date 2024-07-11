@@ -39,8 +39,7 @@ import (
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/events"
 	componentbaseconfig "k8s.io/component-base/config"
-	"k8s.io/utils/pointer"
-	utilpointer "k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
@@ -64,7 +63,7 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 	// Add "name": name to the labels, overwriting if it exists.
 	labels["name"] = name
 	if gracePeriod == nil {
-		gracePeriod = pointer.Int64(0)
+		gracePeriod = utilptr.To[int64](0)
 	}
 	return &v1.ReplicationController{
 		TypeMeta: metav1.TypeMeta{
@@ -76,7 +75,7 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 			Namespace: namespace,
 		},
 		Spec: v1.ReplicationControllerSpec{
-			Replicas: pointer.Int32(replicas),
+			Replicas: utilptr.To[int32](replicas),
 			Selector: map[string]string{
 				"name": name,
 			},
@@ -95,7 +94,7 @@ func DsByNameContainer(name, namespace string, labels map[string]string, gracePe
 	// Add "name": name to the labels, overwriting if it exists.
 	labels["name"] = name
 	if gracePeriod == nil {
-		gracePeriod = pointer.Int64(0)
+		gracePeriod = utilptr.To[int64](0)
 	}
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{
@@ -312,9 +311,9 @@ func TestLowNodeUtilization(t *testing.T) {
 			},
 			Spec: v1.PodSpec{
 				SecurityContext: &v1.PodSecurityContext{
-					RunAsNonRoot: utilpointer.Bool(true),
-					RunAsUser:    utilpointer.Int64(1000),
-					RunAsGroup:   utilpointer.Int64(1000),
+					RunAsNonRoot: utilptr.To(true),
+					RunAsUser:    utilptr.To[int64](1000),
+					RunAsGroup:   utilptr.To[int64](1000),
 					SeccompProfile: &v1.SeccompProfile{
 						Type: v1.SeccompProfileTypeRuntimeDefault,
 					},
@@ -1102,7 +1101,7 @@ func TestPodLifeTimeOldestEvicted(t *testing.T) {
 	oldestPod := podList.Items[0]
 
 	t.Log("Scale the rs to 5 replicas with the 4 new pods having a more recent creation timestamp")
-	rc.Spec.Replicas = pointer.Int32(5)
+	rc.Spec.Replicas = utilptr.To[int32](5)
 	rc, err = clientSet.CoreV1().ReplicationControllers(rc.Namespace).Update(ctx, rc, metav1.UpdateOptions{})
 	if err != nil {
 		t.Errorf("Error updating deployment %v", err)
@@ -1252,7 +1251,7 @@ func deleteDS(ctx context.Context, t *testing.T, clientSet clientset.Interface, 
 func deleteRC(ctx context.Context, t *testing.T, clientSet clientset.Interface, rc *v1.ReplicationController) {
 	// set number of replicas to 0
 	rcdeepcopy := rc.DeepCopy()
-	rcdeepcopy.Spec.Replicas = pointer.Int32(0)
+	rcdeepcopy.Spec.Replicas = utilptr.To[int32](0)
 	if _, err := clientSet.CoreV1().ReplicationControllers(rcdeepcopy.Namespace).Update(ctx, rcdeepcopy, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("Error updating replica controller %v", err)
 	}
@@ -1401,9 +1400,9 @@ func createBalancedPodForNodes(
 			},
 			Spec: v1.PodSpec{
 				SecurityContext: &v1.PodSecurityContext{
-					RunAsNonRoot: utilpointer.Bool(true),
-					RunAsUser:    utilpointer.Int64(1000),
-					RunAsGroup:   utilpointer.Int64(1000),
+					RunAsNonRoot: utilptr.To(true),
+					RunAsUser:    utilptr.To[int64](1000),
+					RunAsGroup:   utilptr.To[int64](1000),
 					SeccompProfile: &v1.SeccompProfile{
 						Type: v1.SeccompProfileTypeRuntimeDefault,
 					},

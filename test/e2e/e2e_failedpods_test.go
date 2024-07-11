@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
@@ -146,7 +146,7 @@ func initFailedJob(name, namespace string) *batchv1.Job {
 				Spec:       podSpec,
 				ObjectMeta: metav1.ObjectMeta{Labels: labelsSet},
 			},
-			BackoffLimit: pointer.Int32(0),
+			BackoffLimit: utilptr.To[int32](0),
 		},
 	}
 }
