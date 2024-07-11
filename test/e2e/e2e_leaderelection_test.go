@@ -30,9 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/utils/pointer"
-
-	utilpointer "k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
 )
@@ -155,7 +153,7 @@ func createDeployment(ctx context.Context, clientSet clientset.Interface, namesp
 			Labels:    map[string]string{"test": "leaderelection", "name": "test-leaderelection"},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: pointer.Int32(replicas),
+			Replicas: utilptr.To[int32](replicas),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"test": "leaderelection", "name": "test-leaderelection"},
 			},
@@ -165,9 +163,9 @@ func createDeployment(ctx context.Context, clientSet clientset.Interface, namesp
 				},
 				Spec: v1.PodSpec{
 					SecurityContext: &v1.PodSecurityContext{
-						RunAsNonRoot: utilpointer.Bool(true),
-						RunAsUser:    utilpointer.Int64(1000),
-						RunAsGroup:   utilpointer.Int64(1000),
+						RunAsNonRoot: utilptr.To(true),
+						RunAsUser:    utilptr.To[int64](1000),
+						RunAsGroup:   utilptr.To[int64](1000),
 						SeccompProfile: &v1.SeccompProfile{
 							Type: v1.SeccompProfileTypeRuntimeDefault,
 						},
@@ -178,7 +176,7 @@ func createDeployment(ctx context.Context, clientSet clientset.Interface, namesp
 						Image:           "registry.k8s.io/pause",
 						Ports:           []v1.ContainerPort{{ContainerPort: 80}},
 						SecurityContext: &v1.SecurityContext{
-							AllowPrivilegeEscalation: utilpointer.Bool(false),
+							AllowPrivilegeEscalation: utilptr.To(false),
 							Capabilities: &v1.Capabilities{
 								Drop: []v1.Capability{
 									"ALL",

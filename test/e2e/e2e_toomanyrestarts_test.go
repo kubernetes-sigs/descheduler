@@ -29,9 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/events"
-	"k8s.io/utils/pointer"
-
-	utilpointer "k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
@@ -66,7 +64,7 @@ func TestTooManyRestarts(t *testing.T) {
 			Labels:    map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: pointer.Int32(4),
+			Replicas: utilptr.To[int32](4),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"},
 			},
@@ -76,9 +74,9 @@ func TestTooManyRestarts(t *testing.T) {
 				},
 				Spec: v1.PodSpec{
 					SecurityContext: &v1.PodSecurityContext{
-						RunAsNonRoot: utilpointer.Bool(true),
-						RunAsUser:    utilpointer.Int64(1000),
-						RunAsGroup:   utilpointer.Int64(1000),
+						RunAsNonRoot: utilptr.To(true),
+						RunAsUser:    utilptr.To[int64](1000),
+						RunAsGroup:   utilptr.To[int64](1000),
 						SeccompProfile: &v1.SeccompProfile{
 							Type: v1.SeccompProfileTypeRuntimeDefault,
 						},
@@ -91,7 +89,7 @@ func TestTooManyRestarts(t *testing.T) {
 						Args:            []string{"-c", "sleep 1s && exit 1"},
 						Ports:           []v1.ContainerPort{{ContainerPort: 80}},
 						SecurityContext: &v1.SecurityContext{
-							AllowPrivilegeEscalation: utilpointer.Bool(false),
+							AllowPrivilegeEscalation: utilptr.To(false),
 							Capabilities: &v1.Capabilities{
 								Drop: []v1.Capability{
 									"ALL",

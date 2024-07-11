@@ -24,7 +24,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/conversion"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
-	utilpointer "k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
@@ -154,11 +154,11 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 		{
 			description: "convert global policy fields to defaultevictor",
 			policy: &v1alpha1.DeschedulerPolicy{
-				EvictFailedBarePods:     utilpointer.Bool(true),
-				EvictLocalStoragePods:   utilpointer.Bool(true),
-				EvictSystemCriticalPods: utilpointer.Bool(true),
-				EvictDaemonSetPods:      utilpointer.Bool(true),
-				IgnorePVCPods:           utilpointer.Bool(true),
+				EvictFailedBarePods:     utilptr.To(true),
+				EvictLocalStoragePods:   utilptr.To(true),
+				EvictSystemCriticalPods: utilptr.To(true),
+				EvictDaemonSetPods:      utilptr.To(true),
+				IgnorePVCPods:           utilptr.To(true),
 				Strategies: v1alpha1.StrategyList{
 					removeduplicates.PluginName: v1alpha1.DeschedulerStrategy{
 						Enabled: true,
@@ -484,7 +484,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 								Name: removepodsviolatingtopologyspreadconstraint.PluginName,
 								Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
 									Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
-									TopologyBalanceNodeFit: utilpointer.Bool(true),
+									TopologyBalanceNodeFit: utilptr.To(true),
 								},
 							},
 						},
@@ -550,7 +550,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 						Enabled: true,
 						Params: &v1alpha1.StrategyParameters{
 							FailedPods: &v1alpha1.FailedPods{
-								MinPodLifetimeSeconds:   utilpointer.Uint(3600),
+								MinPodLifetimeSeconds:   utilptr.To[uint](3600),
 								ExcludeOwnerKinds:       []string{"Job"},
 								Reasons:                 []string{"NodeAffinity"},
 								IncludingInitContainers: true,
@@ -684,7 +684,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 								Name: removefailedpods.PluginName,
 								Args: &removefailedpods.RemoveFailedPodsArgs{
 									ExcludeOwnerKinds:       []string{"Job"},
-									MinPodLifetimeSeconds:   utilpointer.Uint(3600),
+									MinPodLifetimeSeconds:   utilptr.To[uint](3600),
 									Reasons:                 []string{"NodeAffinity"},
 									IncludingInitContainers: true,
 								},
@@ -801,7 +801,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 								Name: removepodsviolatingtopologyspreadconstraint.PluginName,
 								Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
 									Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule, v1.ScheduleAnyway},
-									TopologyBalanceNodeFit: utilpointer.Bool(true),
+									TopologyBalanceNodeFit: utilptr.To(true),
 								},
 							},
 						},
@@ -837,7 +837,7 @@ func TestV1alpha1ToV1alpha2(t *testing.T) {
 				nodeutilization.LowNodeUtilizationPluginName: v1alpha1.DeschedulerStrategy{
 					Enabled: true,
 					Params: &v1alpha1.StrategyParameters{
-						ThresholdPriority:          utilpointer.Int32(100),
+						ThresholdPriority:          utilptr.To[int32](100),
 						ThresholdPriorityClassName: "name",
 						NodeResourceUtilizationThresholds: &v1alpha1.NodeResourceUtilizationThresholds{
 							Thresholds: v1alpha1.ResourceThresholds{
@@ -888,7 +888,7 @@ func TestDecodeVersionedPolicy(t *testing.T) {
 		Name: defaultevictor.PluginName,
 		Args: &defaultevictor.DefaultEvictorArgs{
 			PriorityThreshold: &api.PriorityThreshold{
-				Value: utilpointer.Int32(utils.SystemCriticalPriority),
+				Value: utilptr.To[int32](utils.SystemCriticalPriority),
 			},
 		},
 	}
@@ -925,7 +925,7 @@ strategies:
 									Namespaces: &api.Namespaces{
 										Include: []string{"testleaderelection-a"},
 									},
-									MaxPodLifeTimeSeconds: utilpointer.Uint(5),
+									MaxPodLifeTimeSeconds: utilptr.To[uint](5),
 								},
 							},
 						},
@@ -969,7 +969,7 @@ strategies:
 								Name: "DefaultEvictor",
 								Args: &defaultevictor.DefaultEvictorArgs{
 									PriorityThreshold: &api.PriorityThreshold{
-										Value: utilpointer.Int32(0),
+										Value: utilptr.To[int32](0),
 									},
 								},
 							},
@@ -979,7 +979,7 @@ strategies:
 									Namespaces: &api.Namespaces{
 										Include: []string{"testleaderelection-a"},
 									},
-									MaxPodLifeTimeSeconds: utilpointer.Uint(5),
+									MaxPodLifeTimeSeconds: utilptr.To[uint](5),
 								},
 							},
 						},
@@ -1052,7 +1052,7 @@ profiles:
 									EvictFailedBarePods:     true,
 									EvictLocalStoragePods:   true,
 									EvictDaemonSetPods:      true,
-									PriorityThreshold:       &api.PriorityThreshold{Value: utilpointer.Int32(2000000000)},
+									PriorityThreshold:       &api.PriorityThreshold{Value: utilptr.To[int32](2000000000)},
 									NodeFit:                 true,
 								},
 							},
@@ -1209,14 +1209,14 @@ profiles:
 									EvictFailedBarePods:     true,
 									EvictLocalStoragePods:   true,
 									EvictDaemonSetPods:      true,
-									PriorityThreshold:       &api.PriorityThreshold{Value: utilpointer.Int32(2000000000)},
+									PriorityThreshold:       &api.PriorityThreshold{Value: utilptr.To[int32](2000000000)},
 									NodeFit:                 true,
 								},
 							},
 							{
 								Name: removefailedpods.PluginName,
 								Args: &removefailedpods.RemoveFailedPodsArgs{
-									MinPodLifetimeSeconds: utilpointer.Uint(3600),
+									MinPodLifetimeSeconds: utilptr.To[uint](3600),
 								},
 							},
 						},
@@ -1267,14 +1267,14 @@ profiles:
 									EvictFailedBarePods:     true,
 									EvictLocalStoragePods:   true,
 									EvictDaemonSetPods:      true,
-									PriorityThreshold:       &api.PriorityThreshold{Value: utilpointer.Int32(2000000000)},
+									PriorityThreshold:       &api.PriorityThreshold{Value: utilptr.To[int32](2000000000)},
 									NodeFit:                 true,
 								},
 							},
 							{
 								Name: removefailedpods.PluginName,
 								Args: &removefailedpods.RemoveFailedPodsArgs{
-									MinPodLifetimeSeconds: utilpointer.Uint(3600),
+									MinPodLifetimeSeconds: utilptr.To[uint](3600),
 								},
 							},
 						},

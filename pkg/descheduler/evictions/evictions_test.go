@@ -27,7 +27,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/events"
-	utilpointer "k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
@@ -127,7 +127,7 @@ func TestNewPodEvictor(t *testing.T) {
 	podEvictor := NewPodEvictor(
 		fakeClient,
 		eventRecorder,
-		NewOptions().WithMaxPodsToEvictPerNode(utilpointer.Uint(1)),
+		NewOptions().WithMaxPodsToEvictPerNode(utilptr.To[uint](1)),
 	)
 
 	stubNode := &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node"}}

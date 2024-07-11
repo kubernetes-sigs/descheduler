@@ -31,7 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
-	utilpointer "k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 )
 
 func BuildTestDeployment(name, namespace string, replicas int32, labels map[string]string, apply func(deployment *appsv1.Deployment)) *appsv1.Deployment {
@@ -48,7 +48,7 @@ func BuildTestDeployment(name, namespace string, replicas int32, labels map[stri
 			Namespace: namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: utilpointer.Int32(replicas),
+			Replicas: utilptr.To[int32](replicas),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"name": name,
@@ -58,7 +58,7 @@ func BuildTestDeployment(name, namespace string, replicas int32, labels map[stri
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
 				},
-				Spec: MakePodSpec("", utilpointer.Int64(0)),
+				Spec: MakePodSpec("", utilptr.To[int64](0)),
 			},
 		},
 	}
@@ -174,9 +174,9 @@ func BuildTestNode(name string, millicpu, mem, pods int64, apply func(*v1.Node))
 func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 	return v1.PodSpec{
 		SecurityContext: &v1.PodSecurityContext{
-			RunAsNonRoot: utilpointer.Bool(true),
-			RunAsUser:    utilpointer.Int64(1000),
-			RunAsGroup:   utilpointer.Int64(1000),
+			RunAsNonRoot: utilptr.To(true),
+			RunAsUser:    utilptr.To[int64](1000),
+			RunAsGroup:   utilptr.To[int64](1000),
 			SeccompProfile: &v1.SeccompProfile{
 				Type: v1.SeccompProfileTypeRuntimeDefault,
 			},
@@ -197,7 +197,7 @@ func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 				},
 			},
 			SecurityContext: &v1.SecurityContext{
-				AllowPrivilegeEscalation: utilpointer.Bool(false),
+				AllowPrivilegeEscalation: utilptr.To(false),
 				Capabilities: &v1.Capabilities{
 					Drop: []v1.Capability{
 						"ALL",
@@ -274,7 +274,7 @@ func SetNodeExtendedResource(node *v1.Node, resourceName v1.ResourceName, reques
 func DeleteDeployment(ctx context.Context, t *testing.T, clientSet clientset.Interface, deployment *appsv1.Deployment) {
 	// set number of replicas to 0
 	deploymentCopy := deployment.DeepCopy()
-	deploymentCopy.Spec.Replicas = utilpointer.Int32(0)
+	deploymentCopy.Spec.Replicas = utilptr.To[int32](0)
 	if _, err := clientSet.AppsV1().Deployments(deploymentCopy.Namespace).Update(ctx, deploymentCopy, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("Error updating replica controller %v", err)
 	}

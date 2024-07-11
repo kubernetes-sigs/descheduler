@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/events"
-	utilpointer "k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -1205,7 +1205,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			}),
 			expectedEvictedCount: 1,
 			namespaces:           []string{"ns1"},
-			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{TopologyBalanceNodeFit: utilpointer.Bool(false)},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{TopologyBalanceNodeFit: utilptr.To(false)},
 			nodeFit:              true,
 		},
 		{

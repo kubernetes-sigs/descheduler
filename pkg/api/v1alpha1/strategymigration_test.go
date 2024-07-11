@@ -22,7 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	v1 "k8s.io/api/core/v1"
-	utilpointer "k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
@@ -51,7 +51,7 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingNodeTaints(t *testing.T) {
 					"dedicated=special-user",
 					"reserved",
 				},
-				ThresholdPriority: utilpointer.Int32(100),
+				ThresholdPriority: utilptr.To[int32](100),
 				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
@@ -116,12 +116,12 @@ func TestStrategyParamsToPluginArgsRemoveFailedPods(t *testing.T) {
 			description: "wire in all valid parameters",
 			params: &StrategyParameters{
 				FailedPods: &FailedPods{
-					MinPodLifetimeSeconds:   utilpointer.Uint(3600),
+					MinPodLifetimeSeconds:   utilptr.To[uint](3600),
 					ExcludeOwnerKinds:       []string{"Job"},
 					Reasons:                 []string{"NodeAffinity"},
 					IncludingInitContainers: true,
 				},
-				ThresholdPriority: utilpointer.Int32(100),
+				ThresholdPriority: utilptr.To[int32](100),
 				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
@@ -131,7 +131,7 @@ func TestStrategyParamsToPluginArgsRemoveFailedPods(t *testing.T) {
 				Name: removefailedpods.PluginName,
 				Args: &removefailedpods.RemoveFailedPodsArgs{
 					ExcludeOwnerKinds:       []string{"Job"},
-					MinPodLifetimeSeconds:   utilpointer.Uint(3600),
+					MinPodLifetimeSeconds:   utilptr.To[uint](3600),
 					Reasons:                 []string{"NodeAffinity"},
 					IncludingInitContainers: true,
 					Namespaces: &api.Namespaces{
@@ -189,7 +189,7 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingNodeAffinity(t *testing.T)
 			description: "wire in all valid parameters",
 			params: &StrategyParameters{
 				NodeAffinityType:  []string{"requiredDuringSchedulingIgnoredDuringExecution"},
-				ThresholdPriority: utilpointer.Int32(100),
+				ThresholdPriority: utilptr.To[int32](100),
 				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
@@ -260,7 +260,7 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingInterPodAntiAffinity(t *te
 		{
 			description: "wire in all valid parameters",
 			params: &StrategyParameters{
-				ThresholdPriority: utilpointer.Int32(100),
+				ThresholdPriority: utilptr.To[int32](100),
 				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
@@ -327,7 +327,7 @@ func TestStrategyParamsToPluginArgsRemovePodsHavingTooManyRestarts(t *testing.T)
 					PodRestartThreshold:     100,
 					IncludingInitContainers: true,
 				},
-				ThresholdPriority: utilpointer.Int32(100),
+				ThresholdPriority: utilptr.To[int32](100),
 				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
@@ -403,13 +403,13 @@ func TestStrategyParamsToPluginArgsPodLifeTime(t *testing.T) {
 			description: "wire in all valid parameters",
 			params: &StrategyParameters{
 				PodLifeTime: &PodLifeTime{
-					MaxPodLifeTimeSeconds: utilpointer.Uint(86400),
+					MaxPodLifeTimeSeconds: utilptr.To[uint](86400),
 					States: []string{
 						"Pending",
 						"PodInitializing",
 					},
 				},
-				ThresholdPriority: utilpointer.Int32(100),
+				ThresholdPriority: utilptr.To[int32](100),
 				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
@@ -418,7 +418,7 @@ func TestStrategyParamsToPluginArgsPodLifeTime(t *testing.T) {
 			result: &api.PluginConfig{
 				Name: podlifetime.PluginName,
 				Args: &podlifetime.PodLifeTimeArgs{
-					MaxPodLifeTimeSeconds: utilpointer.Uint(86400),
+					MaxPodLifeTimeSeconds: utilptr.To[uint](86400),
 					States: []string{
 						"Pending",
 						"PodInitializing",
@@ -433,7 +433,7 @@ func TestStrategyParamsToPluginArgsPodLifeTime(t *testing.T) {
 			description: "invalid params namespaces",
 			params: &StrategyParameters{
 				PodLifeTime: &PodLifeTime{
-					MaxPodLifeTimeSeconds: utilpointer.Uint(86400),
+					MaxPodLifeTimeSeconds: utilptr.To[uint](86400),
 				},
 				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
@@ -491,7 +491,7 @@ func TestStrategyParamsToPluginArgsRemoveDuplicates(t *testing.T) {
 				RemoveDuplicates: &RemoveDuplicates{
 					ExcludeOwnerKinds: []string{"ReplicaSet"},
 				},
-				ThresholdPriority: utilpointer.Int32(100),
+				ThresholdPriority: utilptr.To[int32](100),
 				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
@@ -511,7 +511,7 @@ func TestStrategyParamsToPluginArgsRemoveDuplicates(t *testing.T) {
 			description: "invalid params namespaces",
 			params: &StrategyParameters{
 				PodLifeTime: &PodLifeTime{
-					MaxPodLifeTimeSeconds: utilpointer.Uint(86400),
+					MaxPodLifeTimeSeconds: utilptr.To[uint](86400),
 				},
 				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
@@ -559,7 +559,7 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingTopologySpreadConstraint(t
 			description: "wire in all valid parameters",
 			params: &StrategyParameters{
 				IncludeSoftConstraints: true,
-				ThresholdPriority:      utilpointer.Int32(100),
+				ThresholdPriority:      utilptr.To[int32](100),
 				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
@@ -569,7 +569,7 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingTopologySpreadConstraint(t
 				Name: removepodsviolatingtopologyspreadconstraint.PluginName,
 				Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
 					Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule, v1.ScheduleAnyway},
-					TopologyBalanceNodeFit: utilpointer.Bool(true),
+					TopologyBalanceNodeFit: utilptr.To(true),
 					Namespaces: &api.Namespaces{
 						Exclude: []string{"test1"},
 					},
@@ -586,7 +586,7 @@ func TestStrategyParamsToPluginArgsRemovePodsViolatingTopologySpreadConstraint(t
 				Name: removepodsviolatingtopologyspreadconstraint.PluginName,
 				Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
 					Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
-					TopologyBalanceNodeFit: utilpointer.Bool(true),
+					TopologyBalanceNodeFit: utilptr.To(true),
 				},
 			},
 		},
@@ -646,7 +646,7 @@ func TestStrategyParamsToPluginArgsHighNodeUtilization(t *testing.T) {
 						"pods":   Percentage(20),
 					},
 				},
-				ThresholdPriority: utilpointer.Int32(100),
+				ThresholdPriority: utilptr.To[int32](100),
 				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},
@@ -759,7 +759,7 @@ func TestStrategyParamsToPluginArgsLowNodeUtilization(t *testing.T) {
 					},
 					UseDeviationThresholds: true,
 				},
-				ThresholdPriority: utilpointer.Int32(100),
+				ThresholdPriority: utilptr.To[int32](100),
 				Namespaces: &Namespaces{
 					Exclude: []string{"test1"},
 				},

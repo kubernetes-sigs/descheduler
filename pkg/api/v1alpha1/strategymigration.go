@@ -21,7 +21,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
-	utilpointer "k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
@@ -180,7 +180,7 @@ var StrategyParamsToPluginArgs = map[string]func(params *StrategyParameters) (*a
 			Namespaces:             v1alpha1NamespacesToInternal(params.Namespaces),
 			LabelSelector:          params.LabelSelector,
 			Constraints:            constraints,
-			TopologyBalanceNodeFit: utilpointer.Bool(true),
+			TopologyBalanceNodeFit: utilptr.To(true),
 		}
 		if err := removepodsviolatingtopologyspreadconstraint.ValidateRemovePodsViolatingTopologySpreadConstraintArgs(args); err != nil {
 			klog.ErrorS(err, "unable to validate plugin arguments", "pluginName", removepodsviolatingtopologyspreadconstraint.PluginName)

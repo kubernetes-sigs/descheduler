@@ -16,7 +16,7 @@ package removepodsviolatingtopologyspreadconstraint
 import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	utilpointer "k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 )
 
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
@@ -34,7 +34,7 @@ func SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(obj runtime.Obj
 		args.LabelSelector = nil
 	}
 	if args.TopologyBalanceNodeFit == nil {
-		args.TopologyBalanceNodeFit = utilpointer.Bool(true)
+		args.TopologyBalanceNodeFit = utilptr.To(true)
 	}
 	if len(args.Constraints) == 0 {
 		args.Constraints = append(args.Constraints, v1.DoNotSchedule)
