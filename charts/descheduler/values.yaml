@@ -39,6 +39,9 @@ podSecurityContext: {}
 nameOverride: ""
 fullnameOverride: ""
 
+# -- Override the deployment namespace; defaults to .Release.Namespace
+namespaceOverride: ""
+
 # labels that'll be applied to all resources
 commonLabels: {}
 
