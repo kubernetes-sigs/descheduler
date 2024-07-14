@@ -95,8 +95,10 @@ Leader Election
 {{- if .Values.leaderElection.resourceName }}
 - --leader-elect-resource-name={{ .Values.leaderElection.resourceName }}
 {{- end }}
-{{- if .Values.leaderElection.resourceNamescape }}
-- --leader-elect-resource-namespace={{ .Values.leaderElection.resourceNamescape }}
+{{/* resource namespace value starts with a typo so keeping resourceNamescape for backwards compatibility */}}
+{{- $resourceNamespace := default .Values.leaderElection.resourceNamespace .Values.leaderElection.resourceNamescape -}}
+{{- if $resourceNamespace -}}
+- --leader-elect-resource-namespace={{ $resourceNamespace }}
 {{- end -}}
 {{- end }}
 {{- end }}
