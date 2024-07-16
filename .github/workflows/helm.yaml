@@ -42,6 +42,14 @@ jobs:
         with:
           version: v3.7.0
 
+      - name: Install Helm Unit Test Plugin
+        run: |
+          helm plugin install https://github.com/helm-unittest/helm-unittest
+
+      - name: Run Helm Unit Tests
+        run: |
+          helm unittest charts/descheduler --strict -d
+
       - name: Run chart-testing (list-changed)
         id: list-changed
         run: |
