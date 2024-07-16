@@ -85,6 +85,24 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 				return true
 			}
 
+			// Init Container Status Reason
+			if podLifeTimeArgs.IncludingInitContainers {
+				for _, containerStatus := range pod.Status.InitContainerStatuses {
+					if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
+						return true
+					}
+				}
+			}
+
+			// Ephemeral Container Status Reason
+			if podLifeTimeArgs.IncludingEphemeralContainers {
+				for _, containerStatus := range pod.Status.EphemeralContainerStatuses {
+					if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
+						return true
+					}
+				}
+			}
+
 			// Container Status Reason
 			for _, containerStatus := range pod.Status.ContainerStatuses {
 				if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
