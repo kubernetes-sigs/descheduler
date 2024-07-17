@@ -673,12 +673,14 @@ Pods in any state (even `Running`) are considered for eviction.
 
 **Parameters:**
 
-|Name|Type|Notes|
-|---|---|---|
-|`maxPodLifeTimeSeconds`|int||
-|`states`|list(string)|Only supported in v0.25+|
-|`namespaces`|(see [namespace filtering](#namespace-filtering))||
-|`labelSelector`|(see [label filtering](#label-filtering))||
+| Name                           | Type                                              | Notes                    |
+|--------------------------------|---------------------------------------------------|--------------------------|
+| `maxPodLifeTimeSeconds`        | int                                               |                          |
+| `states`                       | list(string)                                      | Only supported in v0.25+ |
+| `includingInitContainers`      | bool                                              | Only supported in v0.31+ |
+| `includingEphemeralContainers` | bool                                              | Only supported in v0.31+ |
+| `namespaces`                   | (see [namespace filtering](#namespace-filtering)) |                          |
+| `labelSelector`                | (see [label filtering](#label-filtering))         |                          |
 
 **Example:**
 

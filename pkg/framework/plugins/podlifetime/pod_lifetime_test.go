@@ -413,6 +413,84 @@ func TestPodLifeTime(t *testing.T) {
 			},
 		},
 		{
+			description: "1 pod with init container status CreateContainerError should not be evicted without includingInitContainers",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"CreateContainerError"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 0,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.InitContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "CreateContainerError"},
+						},
+					},
+				}
+			},
+		},
+		{
+			description: "1 pod with init container status CreateContainerError should be evicted with includingInitContainers",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds:   &maxLifeTime,
+				States:                  []string{"CreateContainerError"},
+				IncludingInitContainers: true,
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.InitContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "CreateContainerError"},
+						},
+					},
+				}
+			},
+		},
+		{
+			description: "1 pod with ephemeral container status CreateContainerError should not be evicted without includingEphemeralContainers",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"CreateContainerError"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 0,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.InitContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "CreateContainerError"},
+						},
+					},
+				}
+			},
+		},
+		{
+			description: "1 pod with ephemeral container status CreateContainerError should be evicted with includingEphemeralContainers",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds:        &maxLifeTime,
+				States:                       []string{"CreateContainerError"},
+				IncludingEphemeralContainers: true,
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.EphemeralContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "CreateContainerError"},
+						},
+					},
+				}
+			},
+		},
+		{
 			description: "1 pod with container status CreateContainerError should be evicted",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
