@@ -50,13 +50,22 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
+
+func initPluginRegistry() {
+	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
+	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(podlifetime.PluginName, podlifetime.New, &podlifetime.PodLifeTime{}, &podlifetime.PodLifeTimeArgs{}, podlifetime.ValidatePodLifeTimeArgs, podlifetime.SetDefaults_PodLifeTimeArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(removepodshavingtoomanyrestarts.PluginName, removepodshavingtoomanyrestarts.New, &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestarts{}, &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs{}, removepodshavingtoomanyrestarts.ValidateRemovePodsHavingTooManyRestartsArgs, removepodshavingtoomanyrestarts.SetDefaults_RemovePodsHavingTooManyRestartsArgs, pluginregistry.PluginRegistry)
+}
 
 // RcByNameContainer returns a ReplicationController with specified name and container
 func RcByNameContainer(name, namespace string, replicas int32, labels map[string]string, gracePeriod *int64, priorityClassName string) *v1.ReplicationController {
@@ -1579,4 +1588,18 @@ func initPodEvictorOrFail(t *testing.T, clientSet clientset.Interface, getPodsAs
 		eventRecorder,
 		evictions.NewOptions().WithPolicyGroupVersion(evictionPolicyGroupVersion),
 	)
+}
+
+func getCurrentPodNames(t *testing.T, ctx context.Context, kubeClient clientset.Interface, namespace string) []string {
+	podList, err := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Logf("Unable to list pods: %v", err)
+		return nil
+	}
+
+	names := []string{}
+	for _, item := range podList.Items {
+		names = append(names, item.Name)
+	}
+	return names
 }
