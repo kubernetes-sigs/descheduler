@@ -4,6 +4,7 @@ go 1.22.4
 
 require (
 	github.com/client9/misspell v0.3.4
+	github.com/ghodss/yaml v1.0.0
 	github.com/google/go-cmp v0.6.0
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/pflag v1.0.5
