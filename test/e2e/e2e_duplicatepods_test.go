@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"sigs.k8s.io/descheduler/pkg/api"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
@@ -201,7 +202,11 @@ func TestRemoveDuplicates(t *testing.T) {
 				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
-			plugin, err := removeduplicates.New(&removeduplicates.RemoveDuplicatesArgs{},
+			plugin, err := removeduplicates.New(&removeduplicates.RemoveDuplicatesArgs{
+				Namespaces: &api.Namespaces{
+					Include: []string{testNamespace.Name},
+				},
+			},
 				handle,
 			)
 			if err != nil {
