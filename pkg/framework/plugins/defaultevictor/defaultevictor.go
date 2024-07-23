@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -185,6 +186,14 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		})
 	}
 
+	if defaultEvictorArgs.MinPodAge > 0 {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			if pod.Status.StartTime == nil || time.Since(pod.Status.StartTime.Time) < time.Duration(defaultEvictorArgs.MinPodAge)*time.Minute {
+				return fmt.Errorf("pod age is not older than MinPodAge: %d minutes", defaultEvictorArgs.MinPodAge)
+			}
+			return nil
+		})
+	}
 	return ev, nil
 }
 

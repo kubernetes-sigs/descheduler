@@ -16,7 +16,9 @@ package defaultevictor
 import (
 	"context"
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"testing"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -42,6 +44,7 @@ type testCase struct {
 	priorityThreshold       *int32
 	nodeFit                 bool
 	minReplicas             uint
+	minPodAge               uint
 	result                  bool
 }
 
@@ -701,6 +704,28 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			},
 			minReplicas: 2,
 			result:      true,
+		}, {
+			description: "minPodAge of 50, pod created 1 minute ago, no eviction",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					podStartTime := metav1.Now().Add(time.Minute * time.Duration(-1))
+					pod.Status.StartTime = &metav1.Time{Time: podStartTime}
+				}),
+			},
+			minPodAge: 50,
+			result:    false,
+		}, {
+			description: "minPodAge of 50, pod created 60 minutes ago, evicts",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					podStartTime := metav1.Now().Add(time.Minute * time.Duration(-60))
+					pod.Status.StartTime = &metav1.Time{Time: podStartTime}
+				}),
+			},
+			minPodAge: 50,
+			result:    true,
 		},
 	}
 
@@ -797,6 +822,7 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 		},
 		NodeFit:     test.nodeFit,
 		MinReplicas: test.minReplicas,
+		MinPodAge:   test.minPodAge,
 	}
 
 	evictorPlugin, err := New(

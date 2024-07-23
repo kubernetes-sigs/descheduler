@@ -55,6 +55,9 @@ type DeschedulerPolicy struct {
 
 	// MaxNoOfPodsToTotal restricts maximum of pods to be evicted total.
 	MaxNoOfPodsToEvictTotal *uint `json:"maxNoOfPodsToEvictTotal,omitempty"`
+
+	// MinPodAge prevents recently created pods (within the specified minutes) from being evicted.
+	MinPodAge *uint `json:"minPodAge,omitempty"`
 }
 
 type (
