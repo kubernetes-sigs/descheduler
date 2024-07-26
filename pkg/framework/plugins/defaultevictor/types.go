@@ -35,5 +35,5 @@ type DefaultEvictorArgs struct {
 	PriorityThreshold       *api.PriorityThreshold `json:"priorityThreshold"`
 	NodeFit                 bool                   `json:"nodeFit"`
 	MinReplicas             uint                   `json:"minReplicas"`
-	MinPodAge               uint                   `json:"minPodAge"`
+	MinPodAge               *metav1.Duration       `json:"minPodAge"`
 }

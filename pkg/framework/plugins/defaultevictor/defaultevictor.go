@@ -186,10 +186,10 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		})
 	}
 
-	if defaultEvictorArgs.MinPodAge > 0 {
+	if defaultEvictorArgs.MinPodAge != nil {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
-			if pod.Status.StartTime == nil || time.Since(pod.Status.StartTime.Time) < time.Duration(defaultEvictorArgs.MinPodAge)*time.Minute {
-				return fmt.Errorf("pod age is not older than MinPodAge: %d minutes", defaultEvictorArgs.MinPodAge)
+			if pod.Status.StartTime == nil || time.Since(pod.Status.StartTime.Time) < defaultEvictorArgs.MinPodAge.Duration {
+				return fmt.Errorf("pod age is not older than MinPodAge: %d seconds", uint(defaultEvictorArgs.MinPodAge.Duration.Seconds()))
 			}
 			return nil
 		})

@@ -44,7 +44,7 @@ type testCase struct {
 	priorityThreshold       *int32
 	nodeFit                 bool
 	minReplicas             uint
-	minPodAge               uint
+	minPodAge               *metav1.Duration
 	result                  bool
 }
 
@@ -328,6 +328,8 @@ func TestDefaultEvictorFilter(t *testing.T) {
 	n1 := test.BuildTestNode("node1", 1000, 2000, 13, nil)
 	lowPriority := int32(800)
 	highPriority := int32(900)
+
+	minPodAge := metav1.Duration{50 * time.Minute}
 
 	nodeTaintKey := "hardware"
 	nodeTaintValue := "gpu"
@@ -705,15 +707,15 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			minReplicas: 2,
 			result:      true,
 		}, {
-			description: "minPodAge of 50, pod created 1 minute ago, no eviction",
+			description: "minPodAge of 50, pod created 10 minutes ago, no eviction",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-					podStartTime := metav1.Now().Add(time.Minute * time.Duration(-1))
+					podStartTime := metav1.Now().Add(time.Minute * time.Duration(-10))
 					pod.Status.StartTime = &metav1.Time{Time: podStartTime}
 				}),
 			},
-			minPodAge: 50,
+			minPodAge: &minPodAge,
 			result:    false,
 		}, {
 			description: "minPodAge of 50, pod created 60 minutes ago, evicts",
@@ -724,8 +726,18 @@ func TestDefaultEvictorFilter(t *testing.T) {
 					pod.Status.StartTime = &metav1.Time{Time: podStartTime}
 				}),
 			},
-			minPodAge: 50,
+			minPodAge: &minPodAge,
 			result:    true,
+		}, {
+			description: "nil minPodAge, pod created 60 minutes ago, evicts",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					podStartTime := metav1.Now().Add(time.Minute * time.Duration(-60))
+					pod.Status.StartTime = &metav1.Time{Time: podStartTime}
+				}),
+			},
+			result: true,
 		},
 	}
 
