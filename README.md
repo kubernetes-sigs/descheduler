@@ -145,6 +145,7 @@ The Default Evictor Plugin is used by default for filtering pods before processi
 |`priorityThreshold`|`priorityThreshold`||(see [priority filtering](#priority-filtering))|
 |`nodeFit`|`bool`|`false`|(see [node fit filtering](#node-fit-filtering))|
 |`minReplicas`|`uint`|`0`| ignore eviction of pods where owner (e.g. `ReplicaSet`) replicas is below this threshold |
+|`minPodAge`|`metav1.Duration`|`0`| ignore eviction of pods with a creation time within this threshold |
 
 ### Example policy
 

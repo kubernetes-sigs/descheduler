@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,6 +65,7 @@ func HaveEvictAnnotation(pod *v1.Pod) bool {
 }
 
 // New builds plugin from its arguments while passing a handle
+// nolint: gocyclo
 func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	defaultEvictorArgs, ok := args.(*DefaultEvictorArgs)
 	if !ok {
@@ -185,6 +187,14 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		})
 	}
 
+	if defaultEvictorArgs.MinPodAge != nil {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			if pod.Status.StartTime == nil || time.Since(pod.Status.StartTime.Time) < defaultEvictorArgs.MinPodAge.Duration {
+				return fmt.Errorf("pod age is not older than MinPodAge: %s seconds", defaultEvictorArgs.MinPodAge.String())
+			}
+			return nil
+		})
+	}
 	return ev, nil
 }
 
