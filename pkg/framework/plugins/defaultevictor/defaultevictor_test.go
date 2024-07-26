@@ -16,9 +16,10 @@ package defaultevictor
 import (
 	"context"
 	"fmt"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"testing"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -329,7 +330,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 	lowPriority := int32(800)
 	highPriority := int32(900)
 
-	minPodAge := metav1.Duration{50 * time.Minute}
+	minPodAge := metav1.Duration{Duration: 50 * time.Minute}
 
 	nodeTaintKey := "hardware"
 	nodeTaintValue := "gpu"
