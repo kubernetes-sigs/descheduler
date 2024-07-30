@@ -300,44 +300,44 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 func TestValidateVersionCompatibility(t *testing.T) {
 	type testCase struct {
 		name               string
-		deschedulerVersion string
+		deschedulerVersion deschedulerversion.Info
 		serverVersion      string
 		expectError        bool
 	}
 	testCases := []testCase{
 		{
 			name:               "no error when descheduler minor equals to server minor",
-			deschedulerVersion: "v0.26",
+			deschedulerVersion: deschedulerversion.Info{Major: "0", Minor: "26"},
 			serverVersion:      "v1.26.1",
 			expectError:        false,
 		},
 		{
 			name:               "no error when descheduler minor is 3 behind server minor",
-			deschedulerVersion: "0.23",
+			deschedulerVersion: deschedulerversion.Info{Major: "0", Minor: "23"},
 			serverVersion:      "v1.26.1",
 			expectError:        false,
 		},
 		{
 			name:               "no error when descheduler minor is 3 ahead of server minor",
-			deschedulerVersion: "v0.26",
+			deschedulerVersion: deschedulerversion.Info{Major: "0", Minor: "26"},
 			serverVersion:      "v1.26.1",
 			expectError:        false,
 		},
 		{
 			name:               "error when descheduler minor is 4 behind server minor",
-			deschedulerVersion: "v0.22",
+			deschedulerVersion: deschedulerversion.Info{Major: "0", Minor: "22"},
 			serverVersion:      "v1.26.1",
 			expectError:        true,
 		},
 		{
 			name:               "error when descheduler minor is 4 ahead of server minor",
-			deschedulerVersion: "v0.27",
+			deschedulerVersion: deschedulerversion.Info{Major: "0", Minor: "27"},
 			serverVersion:      "v1.23.1",
 			expectError:        true,
 		},
 		{
 			name:               "no error when using managed provider version",
-			deschedulerVersion: "v0.25",
+			deschedulerVersion: deschedulerversion.Info{Major: "0", Minor: "25"},
 			serverVersion:      "v1.25.12-eks-2d98532",
 			expectError:        false,
 		},
@@ -347,8 +347,7 @@ func TestValidateVersionCompatibility(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeDiscovery.FakedServerVersion = &apiversion.Info{GitVersion: tc.serverVersion}
-			deschedulerVersion := deschedulerversion.Info{GitVersion: tc.deschedulerVersion}
-			err := validateVersionCompatibility(fakeDiscovery, deschedulerVersion)
+			err := validateVersionCompatibility(fakeDiscovery, tc.deschedulerVersion)
 
 			hasError := err != nil
 			if tc.expectError != hasError {
