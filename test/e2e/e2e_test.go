@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"math"
@@ -26,12 +27,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ghodss/yaml"
+
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -39,10 +43,13 @@ import (
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/events"
 	componentbaseconfig "k8s.io/component-base/config"
+	"k8s.io/klog/v2"
 	utilptr "k8s.io/utils/ptr"
+
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
+	deschedulerapiv1alpha2 "sigs.k8s.io/descheduler/pkg/api/v1alpha2"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -59,6 +66,205 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
+
+func isClientRateLimiterError(err error) bool {
+	return strings.Contains(err.Error(), "client rate limiter")
+}
+
+func deschedulerPolicyConfigMap(policy *deschedulerapiv1alpha2.DeschedulerPolicy) (*v1.ConfigMap, error) {
+	cm := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "descheduler-policy-configmap",
+			Namespace: "kube-system",
+		},
+	}
+	policy.APIVersion = "descheduler/v1alpha2"
+	policy.Kind = "DeschedulerPolicy"
+	policyBytes, err := yaml.Marshal(policy)
+	if err != nil {
+		return nil, err
+	}
+	cm.Data = map[string]string{"policy.yaml": string(policyBytes)}
+	return cm, nil
+}
+
+func deschedulerDeployment(testName string) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "descheduler",
+			Namespace: "kube-system",
+			Labels:    map[string]string{"app": "descheduler", "test": testName},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: utilptr.To[int32](1),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "descheduler", "test": testName},
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "descheduler", "test": testName},
+				},
+				Spec: v1.PodSpec{
+					PriorityClassName:  "system-cluster-critical",
+					ServiceAccountName: "descheduler-sa",
+					SecurityContext: &v1.PodSecurityContext{
+						RunAsNonRoot: utilptr.To(true),
+						RunAsUser:    utilptr.To[int64](1000),
+						RunAsGroup:   utilptr.To[int64](1000),
+						SeccompProfile: &v1.SeccompProfile{
+							Type: v1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
+					Containers: []v1.Container{
+						{
+							Name:            "descheduler",
+							Image:           os.Getenv("DESCHEDULER_IMAGE"),
+							ImagePullPolicy: "IfNotPresent",
+							Command:         []string{"/bin/descheduler"},
+							Args:            []string{"--policy-config-file", "/policy-dir/policy.yaml", "--descheduling-interval", "100m", "--v", "4"},
+							Ports:           []v1.ContainerPort{{ContainerPort: 10258, Protocol: "TCP"}},
+							LivenessProbe: &v1.Probe{
+								FailureThreshold: 3,
+								ProbeHandler: v1.ProbeHandler{
+									HTTPGet: &v1.HTTPGetAction{
+										Path:   "/healthz",
+										Port:   intstr.FromInt(10258),
+										Scheme: v1.URISchemeHTTPS,
+									},
+								},
+								InitialDelaySeconds: 3,
+								PeriodSeconds:       10,
+							},
+							Resources: v1.ResourceRequirements{
+								Requests: v1.ResourceList{
+									v1.ResourceCPU:    resource.MustParse("500m"),
+									v1.ResourceMemory: resource.MustParse("256Mi"),
+								},
+							},
+							SecurityContext: &v1.SecurityContext{
+								AllowPrivilegeEscalation: utilptr.To(false),
+								Capabilities: &v1.Capabilities{
+									Drop: []v1.Capability{
+										"ALL",
+									},
+								},
+								Privileged:             utilptr.To[bool](false),
+								ReadOnlyRootFilesystem: utilptr.To[bool](true),
+								RunAsNonRoot:           utilptr.To[bool](true),
+							},
+							VolumeMounts: []v1.VolumeMount{
+								{
+									MountPath: "/policy-dir",
+									Name:      "policy-volume",
+								},
+							},
+						},
+					},
+					Volumes: []v1.Volume{
+						{
+							Name: "policy-volume",
+							VolumeSource: v1.VolumeSource{
+								ConfigMap: &v1.ConfigMapVolumeSource{
+									LocalObjectReference: v1.LocalObjectReference{
+										Name: "descheduler-policy-configmap",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func printPodLogs(ctx context.Context, t *testing.T, kubeClient clientset.Interface, podName string) {
+	request := kubeClient.CoreV1().Pods("kube-system").GetLogs(podName, &v1.PodLogOptions{})
+	readCloser, err := request.Stream(context.TODO())
+	if err != nil {
+		t.Logf("Unable to request stream: %v\n", err)
+		return
+	}
+
+	defer readCloser.Close()
+	scanner := bufio.NewScanner(readCloser)
+	for scanner.Scan() {
+		fmt.Println(string(scanner.Bytes()))
+	}
+	if err := scanner.Err(); err != nil {
+		t.Logf("Unable to scan bytes: %v\n", err)
+	}
+}
+
+func waitForDeschedulerPodRunning(t *testing.T, ctx context.Context, kubeClient clientset.Interface, testName string) string {
+	deschedulerPodName := ""
+	if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+		podList, err := kubeClient.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: labels.SelectorFromSet(labels.Set(map[string]string{"app": "descheduler", "test": testName})).String(),
+		})
+		if err != nil {
+			t.Logf("Unable to list pods: %v", err)
+			if isClientRateLimiterError(err) {
+				return false, nil
+			}
+			return false, err
+		}
+
+		runningPods := []*v1.Pod{}
+		for _, item := range podList.Items {
+			if item.Status.Phase != v1.PodRunning {
+				continue
+			}
+			pod := item
+			runningPods = append(runningPods, &pod)
+		}
+
+		if len(runningPods) != 1 {
+			t.Logf("Expected a single running pod, got %v instead", len(runningPods))
+			return false, nil
+		}
+
+		deschedulerPodName = runningPods[0].Name
+		t.Logf("Found a descheduler pod running: %v", deschedulerPodName)
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for a running descheduler: %v", err)
+	}
+	return deschedulerPodName
+}
+
+func waitForDeschedulerPodAbsent(t *testing.T, ctx context.Context, kubeClient clientset.Interface, testName string) {
+	if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+		podList, err := kubeClient.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
+			LabelSelector: labels.SelectorFromSet(labels.Set(map[string]string{"app": "descheduler", "test": testName})).String(),
+		})
+		if err != nil {
+			t.Logf("Unable to list pods: %v", err)
+			if isClientRateLimiterError(err) {
+				return false, nil
+			}
+			return false, err
+		}
+
+		if len(podList.Items) > 0 {
+			t.Logf("Found a descheduler pod. Waiting until it gets deleted")
+			return false, nil
+		}
+
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for a descheduler to disapear: %v", err)
+	}
+}
+
+func TestMain(m *testing.M) {
+	if os.Getenv("DESCHEDULER_IMAGE") == "" {
+		klog.Errorf("DESCHEDULER_IMAGE env is not set")
+		os.Exit(1)
+	}
+
+	os.Exit(m.Run())
+}
 
 func initPluginRegistry() {
 	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()

@@ -18,7 +18,6 @@ package e2e
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -28,48 +27,57 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	componentbaseconfig "k8s.io/component-base/config"
 	utilptr "k8s.io/utils/ptr"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler"
+	apiv1alpha2 "sigs.k8s.io/descheduler/pkg/api/v1alpha2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
 )
 
-func tooManyRestartsPolicy(targetNamespace string, podRestartThresholds int32, includingInitContainers bool) *api.DeschedulerPolicy {
-	return &api.DeschedulerPolicy{
-		Profiles: []api.DeschedulerProfile{
+const deploymentReplicas = 4
+
+func tooManyRestartsPolicy(targetNamespace string, podRestartThresholds int32, includingInitContainers bool) *apiv1alpha2.DeschedulerPolicy {
+	return &apiv1alpha2.DeschedulerPolicy{
+		Profiles: []apiv1alpha2.DeschedulerProfile{
 			{
 				Name: "TooManyRestartsProfile",
-				PluginConfigs: []api.PluginConfig{
+				PluginConfigs: []apiv1alpha2.PluginConfig{
 					{
 						Name: removepodshavingtoomanyrestarts.PluginName,
-						Args: &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs{
-							PodRestartThreshold:     podRestartThresholds,
-							IncludingInitContainers: includingInitContainers,
-							Namespaces: &api.Namespaces{
-								Include: []string{targetNamespace},
+						Args: runtime.RawExtension{
+							Object: &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs{
+								PodRestartThreshold:     podRestartThresholds,
+								IncludingInitContainers: includingInitContainers,
+								Namespaces: &api.Namespaces{
+									Include: []string{targetNamespace},
+								},
 							},
 						},
 					},
 					{
 						Name: defaultevictor.PluginName,
-						Args: &defaultevictor.DefaultEvictorArgs{
-							EvictLocalStoragePods: true,
+						Args: runtime.RawExtension{
+							Object: &defaultevictor.DefaultEvictorArgs{
+								EvictLocalStoragePods: true,
+							},
 						},
 					},
 				},
-				Plugins: api.Plugins{
-					Filter: api.PluginSet{
+				Plugins: apiv1alpha2.Plugins{
+					Filter: apiv1alpha2.PluginSet{
 						Enabled: []string{
 							defaultevictor.PluginName,
 						},
 					},
-					Deschedule: api.PluginSet{
+					Deschedule: apiv1alpha2.PluginSet{
 						Enabled: []string{
 							removepodshavingtoomanyrestarts.PluginName,
 						},
@@ -103,7 +111,7 @@ func TestTooManyRestarts(t *testing.T) {
 			Labels:    map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: utilptr.To[int32](4),
+			Replicas: utilptr.To[int32](deploymentReplicas),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"},
 			},
@@ -154,18 +162,12 @@ func TestTooManyRestarts(t *testing.T) {
 	}
 	defer clientSet.AppsV1().Deployments(deploymentObj.Namespace).Delete(ctx, deploymentObj.Name, metav1.DeleteOptions{})
 
-	// Need to wait restartCount more than 4
-	result, err := waitPodRestartCount(ctx, clientSet, testNamespace.Name, t)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	if !result {
-		t.Fatal("Pod restart count not as expected")
-	}
+	// Wait for 3 restarts
+	waitPodRestartCount(ctx, clientSet, testNamespace.Name, t, 3)
 
 	tests := []struct {
 		name                    string
-		policy                  *api.DeschedulerPolicy
+		policy                  *apiv1alpha2.DeschedulerPolicy
 		expectedEvictedPodCount uint
 	}{
 		{
@@ -175,7 +177,7 @@ func TestTooManyRestarts(t *testing.T) {
 		},
 		{
 			name:                    "test-one-evictions",
-			policy:                  tooManyRestartsPolicy(testNamespace.Name, 4, true),
+			policy:                  tooManyRestartsPolicy(testNamespace.Name, 3, true),
 			expectedEvictedPodCount: 4,
 		},
 	}
@@ -188,59 +190,95 @@ func TestTooManyRestarts(t *testing.T) {
 			rs.Client = clientSet
 			rs.EventClient = clientSet
 
-			preRunNames := getCurrentPodNames(t, ctx, clientSet, testNamespace.Name)
-			// Run RemovePodsHavingTooManyRestarts strategy
-			t.Log("Running RemovePodsHavingTooManyRestarts strategy")
-			err = descheduler.RunDeschedulerStrategies(ctx, rs, tc.policy, "v1")
+			preRunNames := sets.NewString(getCurrentPodNames(t, ctx, clientSet, testNamespace.Name)...)
+			// Deploy the descheduler with the configured policy
+			deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(tc.policy)
 			if err != nil {
-				t.Fatalf("Failed running a descheduling cycle: %v", err)
+				t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
+			}
+			t.Logf("Creating %q policy CM with RemovePodsHavingTooManyRestarts configured...", deschedulerPolicyConfigMapObj.Name)
+			_, err = clientSet.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Create(ctx, deschedulerPolicyConfigMapObj, metav1.CreateOptions{})
+			if err != nil {
+				t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
 			}
 
-			t.Logf("Finished RemoveFailedPods strategy for %s", tc.name)
+			defer func() {
+				t.Logf("Deleting %q CM...", deschedulerPolicyConfigMapObj.Name)
+				err = clientSet.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Delete(ctx, deschedulerPolicyConfigMapObj.Name, metav1.DeleteOptions{})
+				if err != nil {
+					t.Fatalf("Unable to delete %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
+				}
+			}()
+
+			deschedulerDeploymentObj := deschedulerDeployment(testNamespace.Name)
+			t.Logf("Creating descheduler deployment %v", deschedulerDeploymentObj.Name)
+			_, err = clientSet.AppsV1().Deployments(deschedulerDeploymentObj.Namespace).Create(ctx, deschedulerDeploymentObj, metav1.CreateOptions{})
+			if err != nil {
+				t.Fatalf("Error creating %q deployment: %v", deschedulerDeploymentObj.Name, err)
+			}
+
+			deschedulerPodName := ""
+			defer func() {
+				if deschedulerPodName != "" {
+					printPodLogs(ctx, t, clientSet, deschedulerPodName)
+				}
+
+				t.Logf("Deleting %q deployment...", deschedulerDeploymentObj.Name)
+				err = clientSet.AppsV1().Deployments(deschedulerDeploymentObj.Namespace).Delete(ctx, deschedulerDeploymentObj.Name, metav1.DeleteOptions{})
+				if err != nil {
+					t.Fatalf("Unable to delete %q deployment: %v", deschedulerDeploymentObj.Name, err)
+				}
+				waitForDeschedulerPodAbsent(t, ctx, clientSet, testNamespace.Name)
+			}()
+
+			t.Logf("Waiting for the descheduler pod running")
+			deschedulerPodName = waitForDeschedulerPodRunning(t, ctx, clientSet, testNamespace.Name)
+
+			// Run RemovePodsHavingTooManyRestarts strategy
+			if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 20*time.Second, true, func(ctx context.Context) (bool, error) {
+				currentRunNames := sets.NewString(getCurrentPodNames(t, ctx, clientSet, testNamespace.Name)...)
+				actualEvictedPod := preRunNames.Difference(currentRunNames)
+				actualEvictedPodCount := uint(actualEvictedPod.Len())
+				t.Logf("preRunNames: %v, currentRunNames: %v, actualEvictedPodCount: %v\n", preRunNames.List(), currentRunNames.List(), actualEvictedPodCount)
+				if actualEvictedPodCount < tc.expectedEvictedPodCount {
+					t.Logf("Expecting %v number of pods evicted, got %v instead", tc.expectedEvictedPodCount, actualEvictedPodCount)
+					return false, nil
+				}
+
+				return true, nil
+			}); err != nil {
+				t.Errorf("Error waiting for descheduler running: %v", err)
+			}
 			waitForTerminatingPodsToDisappear(ctx, t, clientSet, testNamespace.Name)
-			afterRunNames := getCurrentPodNames(t, ctx, clientSet, testNamespace.Name)
-			namesInCommonCount := len(intersectStrings(preRunNames, afterRunNames))
-
-			t.Logf("preRunNames: %v, afterRunNames: %v, namesInCommonLen: %v\n", preRunNames, afterRunNames, namesInCommonCount)
-			actualEvictedPodCount := uint(len(afterRunNames) - namesInCommonCount)
-			if actualEvictedPodCount < tc.expectedEvictedPodCount {
-				t.Errorf("Test error for description: %s. Unexpected number of pods have been evicted, got %v, expected %v", tc.name, actualEvictedPodCount, tc.expectedEvictedPodCount)
-			}
 		})
 	}
 }
 
-func waitPodRestartCount(ctx context.Context, clientSet clientset.Interface, namespace string, t *testing.T) (bool, error) {
-	timeout := time.After(5 * time.Minute)
-	tick := time.Tick(5 * time.Second)
-	for {
-		select {
-		case <-timeout:
-			t.Log("Timeout, still restart count not as expected")
-			return false, fmt.Errorf("timeout Error")
-		case <-tick:
-			podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
-				LabelSelector: labels.SelectorFromSet(labels.Set(map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"})).String(),
-			})
-			if err != nil {
-				t.Fatalf("Unexpected err: %v", err)
-				return false, err
-			}
-			if len(podList.Items) < 4 {
-				t.Log("Waiting for 4 pods")
+func waitPodRestartCount(ctx context.Context, clientSet clientset.Interface, namespace string, t *testing.T, expectedNumberOfRestarts int) {
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
+		podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: labels.SelectorFromSet(labels.Set(map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"})).String(),
+		})
+		if err != nil {
+			t.Fatalf("Unexpected err: %v", err)
+			return false, err
+		}
+		if len(podList.Items) < expectedNumberOfRestarts {
+			t.Log("Waiting for 4 pods")
+			return false, nil
+		}
+		for i := 0; i < 4; i++ {
+			if len(podList.Items[i].Status.ContainerStatuses) < 1 {
+				t.Logf("Waiting for podList.Items[%v].Status.ContainerStatuses to be populated", i)
 				return false, nil
 			}
-			for i := 0; i < 4; i++ {
-				if len(podList.Items[0].Status.ContainerStatuses) < 1 {
-					t.Logf("Waiting for podList.Items[%v].Status.ContainerStatuses to be populated", i)
-					return false, nil
-				}
-			}
-
-			if podList.Items[0].Status.ContainerStatuses[0].RestartCount >= 4 && podList.Items[1].Status.ContainerStatuses[0].RestartCount >= 4 && podList.Items[2].Status.ContainerStatuses[0].RestartCount >= 4 && podList.Items[3].Status.ContainerStatuses[0].RestartCount >= 4 {
-				t.Log("Pod restartCount as expected")
-				return true, nil
+			if podList.Items[i].Status.ContainerStatuses[0].RestartCount < int32(expectedNumberOfRestarts) {
+				t.Logf("podList.Items[%v].Status.ContainerStatuses[0].RestartCount (%v) < %v", i, podList.Items[i].Status.ContainerStatuses[0].RestartCount, expectedNumberOfRestarts)
+				return false, nil
 			}
 		}
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for a workload running: %v", err)
 	}
 }
