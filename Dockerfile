@@ -23,6 +23,8 @@ FROM scratch
 
 MAINTAINER Kubernetes SIG Scheduling <kubernetes-sig-scheduling@googlegroups.com>
 
+LABEL org.opencontainers.image.source https://github.com/kubernetes-sigs/descheduler
+
 USER 1000
 
 COPY --from=0 /go/src/sigs.k8s.io/descheduler/_output/bin/descheduler /bin/descheduler
