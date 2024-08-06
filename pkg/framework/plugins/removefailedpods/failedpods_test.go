@@ -374,7 +374,13 @@ func TestRemoveFailedPods(t *testing.T) {
 
 			eventRecorder := &events.FakeRecorder{}
 
-			podEvictor := evictions.NewPodEvictor(fakeClient, eventRecorder, nil)
+			podEvictor := evictions.NewPodEvictor(
+				ctx,
+				fakeClient,
+				eventRecorder,
+				sharedInformerFactory.Core().V1().Pods().Informer(),
+				nil,
+			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
 				EvictLocalStoragePods:   false,

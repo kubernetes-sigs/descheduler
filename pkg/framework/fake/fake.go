@@ -49,3 +49,7 @@ func (hi *HandleImpl) PreEvictionFilter(pod *v1.Pod) bool {
 func (hi *HandleImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.EvictOptions) error {
 	return hi.PodEvictorImpl.EvictPod(ctx, pod, opts)
 }
+
+func (hi *HandleImpl) RequestEviction(ctx context.Context, pod *v1.Pod, opts evictions.EvictOptions) error {
+	return hi.PodEvictorImpl.EvictPod(ctx, pod, opts)
+}

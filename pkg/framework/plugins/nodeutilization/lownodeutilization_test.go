@@ -903,7 +903,13 @@ func TestLowNodeUtilization(t *testing.T) {
 
 			eventRecorder := &events.FakeRecorder{}
 
-			podEvictor := evictions.NewPodEvictor(fakeClient, eventRecorder, nil)
+			podEvictor := evictions.NewPodEvictor(
+				ctx,
+				fakeClient,
+				eventRecorder,
+				sharedInformerFactory.Core().V1().Pods().Informer(),
+				nil,
+			)
 
 			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{
 				EvictLocalStoragePods:   false,
@@ -1090,8 +1096,10 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 			eventRecorder := &events.FakeRecorder{}
 
 			podEvictor := evictions.NewPodEvictor(
+				ctx,
 				fakeClient,
 				eventRecorder,
+				sharedInformerFactory.Core().V1().Pods().Informer(),
 				evictions.NewOptions().WithMaxPodsToEvictPerNode(&item.evictionsExpected),
 			)
 

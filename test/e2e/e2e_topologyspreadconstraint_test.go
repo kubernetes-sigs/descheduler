@@ -21,7 +21,7 @@ const zoneTopologyKey string = "topology.kubernetes.io/zone"
 
 func TestTopologySpreadConstraint(t *testing.T) {
 	ctx := context.Background()
-	clientSet, _, _, getPodsAssignedToNode := initializeClient(ctx, t)
+	clientSet, sharedInformerFactory, _, getPodsAssignedToNode := initializeClient(ctx, t)
 
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -138,7 +138,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			defer test.DeleteDeployment(ctx, t, clientSet, violatorDeployment)
 			test.WaitForDeploymentPodsRunning(ctx, t, clientSet, violatorDeployment)
 
-			podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode)
+			podEvictor := initPodEvictorOrFail(ctx, t, clientSet, getPodsAssignedToNode, sharedInformerFactory)
 
 			// Run TopologySpreadConstraint strategy
 			t.Logf("Running RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)

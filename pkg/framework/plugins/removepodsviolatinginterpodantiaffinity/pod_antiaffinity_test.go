@@ -242,8 +242,10 @@ func TestPodAntiAffinity(t *testing.T) {
 			eventRecorder := &events.FakeRecorder{}
 
 			podEvictor := evictions.NewPodEvictor(
+				ctx,
 				fakeClient,
 				eventRecorder,
+				sharedInformerFactory.Core().V1().Pods().Informer(),
 				evictions.NewOptions().
 					WithMaxPodsToEvictPerNode(test.maxPodsToEvictPerNode).
 					WithMaxPodsToEvictPerNamespace(test.maxNoOfPodsToEvictPerNamespace).

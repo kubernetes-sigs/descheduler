@@ -171,7 +171,13 @@ func TestRemoveDuplicates(t *testing.T) {
 
 			eventRecorder := &events.FakeRecorder{}
 
-			podEvictor := evictions.NewPodEvictor(clientSet, eventRecorder, nil)
+			podEvictor := evictions.NewPodEvictor(
+				ctx,
+				clientSet,
+				eventRecorder,
+				sharedInformerFactory.Core().V1().Pods().Informer(),
+				nil,
+			)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
 				EvictLocalStoragePods:   true,

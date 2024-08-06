@@ -45,8 +45,13 @@ type Evictor interface {
 	Filter(*v1.Pod) bool
 	// PreEvictionFilter checks if pod can be evicted right before eviction
 	PreEvictionFilter(*v1.Pod) bool
-	// Evict evicts a pod (no pre-check performed)
+	// Evict evicts a pod (no pre-check performed).
+	// Deprecated: please use RequestEviction instead.
 	Evict(context.Context, *v1.Pod, evictions.EvictOptions) error
+	// RequestEviction requests a pod eviction (no pre-check performed).
+	// Depending on how the underlying mechanics get implemented
+	// the eviction can be immediate or delayed.
+	RequestEviction(context.Context, *v1.Pod, evictions.EvictOptions) error
 }
 
 // Status describes result of an extension point invocation

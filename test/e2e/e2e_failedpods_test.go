@@ -75,7 +75,7 @@ func TestFailedPods(t *testing.T) {
 			defer jobClient.Delete(ctx, job.Name, metav1.DeleteOptions{PropagationPolicy: &deletePropagationPolicy})
 			waitForJobPodPhase(ctx, t, clientSet, job, v1.PodFailed)
 
-			podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode)
+			podEvictor := initPodEvictorOrFail(ctx, t, clientSet, getPodsAssignedToNode, sharedInformerFactory)
 
 			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
 				EvictLocalStoragePods:   true,

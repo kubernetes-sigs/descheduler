@@ -1,6 +1,8 @@
 package evictions
 
 import (
+	"time"
+
 	policy "k8s.io/api/policy/v1"
 )
 
@@ -11,12 +13,17 @@ type Options struct {
 	maxPodsToEvictPerNamespace *uint
 	maxPodsToEvictTotal        *uint
 	metricsEnabled             bool
+
+	assumedRequestTimeout             uint
+	evictionRequestsCacheResyncPeriod time.Duration
 }
 
 // NewOptions returns an Options with default values.
 func NewOptions() *Options {
 	return &Options{
-		policyGroupVersion: policy.SchemeGroupVersion.String(),
+		policyGroupVersion:                policy.SchemeGroupVersion.String(),
+		assumedRequestTimeout:             AssumedEvictionRequestTimeoutSeconds,
+		evictionRequestsCacheResyncPeriod: EvictionRequestsCacheResyncPeriod,
 	}
 }
 
@@ -47,5 +54,15 @@ func (o *Options) WithMaxPodsToEvictTotal(maxPodsToEvictTotal *uint) *Options {
 
 func (o *Options) WithMetricsEnabled(metricsEnabled bool) *Options {
 	o.metricsEnabled = metricsEnabled
+	return o
+}
+
+func (o *Options) WithAssumedRequestTimeout(assumedRequestTimeout uint) *Options {
+	o.assumedRequestTimeout = assumedRequestTimeout
+	return o
+}
+
+func (o *Options) WithEvictionRequestsCacheResyncPeriod(evictionRequestsCacheResyncPeriod time.Duration) *Options {
+	o.evictionRequestsCacheResyncPeriod = evictionRequestsCacheResyncPeriod
 	return o
 }

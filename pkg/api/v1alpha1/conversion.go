@@ -68,6 +68,11 @@ func (ei *evictorImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.Ev
 	return ei.podEvictor.EvictPod(ctx, pod, opts)
 }
 
+// Evict evicts a pod (no pre-check performed)
+func (ei *evictorImpl) RequestEviction(ctx context.Context, pod *v1.Pod, opts evictions.EvictOptions) error {
+	return ei.podEvictor.EvictPod(ctx, pod, opts)
+}
+
 // handleImpl implements the framework handle which gets passed to plugins
 type handleImpl struct {
 	clientSet                 clientset.Interface

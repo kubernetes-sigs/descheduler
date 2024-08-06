@@ -312,7 +312,13 @@ func TestFindDuplicatePods(t *testing.T) {
 
 			eventRecorder := &events.FakeRecorder{}
 
-			podEvictor := evictions.NewPodEvictor(fakeClient, eventRecorder, nil)
+			podEvictor := evictions.NewPodEvictor(
+				ctx,
+				fakeClient,
+				eventRecorder,
+				sharedInformerFactory.Core().V1().Pods().Informer(),
+				nil,
+			)
 
 			nodeFit := testCase.nodefit
 
@@ -752,7 +758,13 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 
 			eventRecorder := &events.FakeRecorder{}
 
-			podEvictor := evictions.NewPodEvictor(fakeClient, eventRecorder, nil)
+			podEvictor := evictions.NewPodEvictor(
+				ctx,
+				fakeClient,
+				eventRecorder,
+				sharedInformerFactory.Core().V1().Pods().Informer(),
+				nil,
+			)
 
 			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{
 				EvictLocalStoragePods:   false,

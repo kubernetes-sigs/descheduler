@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/events"
@@ -34,7 +35,6 @@ import (
 )
 
 func TestEvictPod(t *testing.T) {
-	ctx := context.Background()
 	node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
 	pod1 := test.BuildTestPod("p1", 400, 0, "node1", nil)
 	tests := []struct {
@@ -61,14 +61,30 @@ func TestEvictPod(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		fakeClient := &fake.Clientset{}
-		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-			return true, &v1.PodList{Items: test.pods}, nil
+		t.Run(test.description, func(t *testing.T) {
+			ctx := context.Background()
+			fakeClient := &fake.Clientset{}
+			fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+				return true, &v1.PodList{Items: test.pods}, nil
+			})
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+			eventRecorder := &events.FakeRecorder{}
+			podEvictor := NewPodEvictor(
+				ctx,
+				fakeClient,
+				eventRecorder,
+				sharedInformerFactory.Core().V1().Pods().Informer(),
+				NewOptions(),
+			)
+
+			_, got := podEvictor.evictPod(ctx, test.pod)
+			if got != test.want {
+				t.Errorf("Test error for Desc: %s. Expected %v pod eviction to be %v, got %v", test.description, test.pod.Name, test.want, got)
+			}
 		})
-		got := evictPod(ctx, fakeClient, test.pod, "v1")
-		if got != test.want {
-			t.Errorf("Test error for Desc: %s. Expected %v pod eviction to be %v, got %v", test.description, test.pod.Name, test.want, got)
-		}
 	}
 }
 
@@ -118,15 +134,23 @@ func TestPodTypes(t *testing.T) {
 }
 
 func TestNewPodEvictor(t *testing.T) {
+	ctx := context.Background()
+
 	pod1 := test.BuildTestPod("pod", 400, 0, "node", nil)
 
 	fakeClient := fake.NewSimpleClientset(pod1)
 
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
 	eventRecorder := &events.FakeRecorder{}
 
 	podEvictor := NewPodEvictor(
+		ctx,
 		fakeClient,
 		eventRecorder,
+		sharedInformerFactory.Core().V1().Pods().Informer(),
 		NewOptions().WithMaxPodsToEvictPerNode(utilptr.To[uint](1)),
 	)
 
