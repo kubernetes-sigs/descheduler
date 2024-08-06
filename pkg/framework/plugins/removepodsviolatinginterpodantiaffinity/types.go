@@ -28,6 +28,6 @@ import (
 type RemovePodsViolatingInterPodAntiAffinityArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	Namespaces    *api.Namespaces       `json:"namespaces"`
-	LabelSelector *metav1.LabelSelector `json:"labelSelector"`
+	Namespaces    *api.Namespaces       `json:"namespaces,omitempty"`
+	LabelSelector *metav1.LabelSelector `json:"labelSelector,omitempty"`
 }

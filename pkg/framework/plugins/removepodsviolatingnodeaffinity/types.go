@@ -28,7 +28,7 @@ import (
 type RemovePodsViolatingNodeAffinityArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	Namespaces       *api.Namespaces       `json:"namespaces"`
-	LabelSelector    *metav1.LabelSelector `json:"labelSelector"`
-	NodeAffinityType []string              `json:"nodeAffinityType"`
+	Namespaces       *api.Namespaces       `json:"namespaces,omitempty"`
+	LabelSelector    *metav1.LabelSelector `json:"labelSelector,omitempty"`
+	NodeAffinityType []string              `json:"nodeAffinityType,omitempty"`
 }

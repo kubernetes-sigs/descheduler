@@ -24,15 +24,15 @@ import (
 type LowNodeUtilizationArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	UseDeviationThresholds bool                   `json:"useDeviationThresholds"`
+	UseDeviationThresholds bool                   `json:"useDeviationThresholds,omitempty"`
 	Thresholds             api.ResourceThresholds `json:"thresholds"`
 	TargetThresholds       api.ResourceThresholds `json:"targetThresholds"`
-	NumberOfNodes          int                    `json:"numberOfNodes"`
+	NumberOfNodes          int                    `json:"numberOfNodes,omitempty"`
 
 	// Naming this one differently since namespaces are still
 	// considered while considering resources used by pods
 	// but then filtered out before eviction
-	EvictableNamespaces *api.Namespaces `json:"evictableNamespaces"`
+	EvictableNamespaces *api.Namespaces `json:"evictableNamespaces,omitempty"`
 }
 
 // +k8s:deepcopy-gen=true
@@ -42,9 +42,9 @@ type HighNodeUtilizationArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
 	Thresholds    api.ResourceThresholds `json:"thresholds"`
-	NumberOfNodes int                    `json:"numberOfNodes"`
+	NumberOfNodes int                    `json:"numberOfNodes,omitempty"`
 	// Naming this one differently since namespaces are still
 	// considered while considering resources used by pods
 	// but then filtered out before eviction
-	EvictableNamespaces *api.Namespaces `json:"evictableNamespaces"`
+	EvictableNamespaces *api.Namespaces `json:"evictableNamespaces,omitempty"`
 }

@@ -28,9 +28,9 @@ import (
 type RemovePodsViolatingNodeTaintsArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	Namespaces              *api.Namespaces       `json:"namespaces"`
-	LabelSelector           *metav1.LabelSelector `json:"labelSelector"`
-	IncludePreferNoSchedule bool                  `json:"includePreferNoSchedule"`
-	ExcludedTaints          []string              `json:"excludedTaints"`
-	IncludedTaints          []string              `json:"includedTaints"`
+	Namespaces              *api.Namespaces       `json:"namespaces,omitempty"`
+	LabelSelector           *metav1.LabelSelector `json:"labelSelector,omitempty"`
+	IncludePreferNoSchedule bool                  `json:"includePreferNoSchedule,omitempty"`
+	ExcludedTaints          []string              `json:"excludedTaints,omitempty"`
+	IncludedTaints          []string              `json:"includedTaints,omitempty"`
 }

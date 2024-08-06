@@ -29,8 +29,8 @@ import (
 type RemovePodsViolatingTopologySpreadConstraintArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	Namespaces             *api.Namespaces                    `json:"namespaces"`
-	LabelSelector          *metav1.LabelSelector              `json:"labelSelector"`
-	Constraints            []v1.UnsatisfiableConstraintAction `json:"constraints"`
-	TopologyBalanceNodeFit *bool                              `json:"topologyBalanceNodeFit"`
+	Namespaces             *api.Namespaces                    `json:"namespaces,omitempty"`
+	LabelSelector          *metav1.LabelSelector              `json:"labelSelector,omitempty"`
+	Constraints            []v1.UnsatisfiableConstraintAction `json:"constraints,omitempty"`
+	TopologyBalanceNodeFit *bool                              `json:"topologyBalanceNodeFit,omitempty"`
 }
