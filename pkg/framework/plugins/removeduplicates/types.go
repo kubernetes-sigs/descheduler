@@ -24,6 +24,6 @@ import (
 type RemoveDuplicatesArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	Namespaces        *api.Namespaces `json:"namespaces"`
-	ExcludeOwnerKinds []string        `json:"excludeOwnerKinds"`
+	Namespaces        *api.Namespaces `json:"namespaces,omitempty"`
+	ExcludeOwnerKinds []string        `json:"excludeOwnerKinds,omitempty"`
 }

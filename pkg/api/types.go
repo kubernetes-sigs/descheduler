@@ -46,8 +46,8 @@ type DeschedulerPolicy struct {
 // Namespaces carries a list of included/excluded namespaces
 // for which a given strategy is applicable
 type Namespaces struct {
-	Include []string `json:"include"`
-	Exclude []string `json:"exclude"`
+	Include []string `json:"include,omitempty"`
+	Exclude []string `json:"exclude,omitempty"`
 }
 
 type (
