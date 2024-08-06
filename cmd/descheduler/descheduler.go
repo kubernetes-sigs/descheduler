@@ -19,6 +19,7 @@ package main
 import (
 	"os"
 
+	_ "go.uber.org/automaxprocs"
 	"k8s.io/component-base/cli"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app"
 )
