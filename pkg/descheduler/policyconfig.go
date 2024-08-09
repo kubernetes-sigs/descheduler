@@ -28,7 +28,6 @@ import (
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
@@ -54,7 +53,7 @@ func decode(policyConfigFile string, policy []byte, client clientset.Interface, 
 	internalPolicy := &api.DeschedulerPolicy{}
 	var err error
 
-	decoder := scheme.Codecs.UniversalDecoder(v1alpha1.SchemeGroupVersion, v1alpha2.SchemeGroupVersion, api.SchemeGroupVersion)
+	decoder := scheme.Codecs.UniversalDecoder(v1alpha2.SchemeGroupVersion, api.SchemeGroupVersion)
 	if err := runtime.DecodeInto(decoder, policy, internalPolicy); err != nil {
 		return nil, fmt.Errorf("failed decoding descheduler's policy config %q: %v", policyConfigFile, err)
 	}
