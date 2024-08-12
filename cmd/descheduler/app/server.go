@@ -23,16 +23,15 @@ import (
 	"os/signal"
 	"syscall"
 
-	"k8s.io/apiserver/pkg/server/healthz"
+	"github.com/spf13/cobra"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
 	"sigs.k8s.io/descheduler/pkg/tracing"
 
-	"github.com/spf13/cobra"
-
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/apiserver/pkg/server/mux"
 	"k8s.io/component-base/featuregate"
 	"k8s.io/component-base/logs"
