@@ -18,30 +18,34 @@ package e2e
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
-
-	"sigs.k8s.io/descheduler/pkg/api"
-	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
-	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
-	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/tools/events"
+	componentbaseconfig "k8s.io/component-base/config"
 	utilptr "k8s.io/utils/ptr"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+
+	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
+	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 func TestRemoveDuplicates(t *testing.T) {
 	ctx := context.Background()
 
-	clientSet, sharedInformerFactory, _, getPodsAssignedToNode := initializeClient(ctx, t)
+	clientSet, err := client.CreateClient(componentbaseconfig.ClientConnectionConfiguration{Kubeconfig: os.Getenv("KUBECONFIG")}, "")
+	if err != nil {
+		t.Errorf("Error during client creation with %v", err)
+	}
 
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -169,37 +173,18 @@ func TestRemoveDuplicates(t *testing.T) {
 				t.Fatalf("Error creating eviction policy group %v", err)
 			}
 
-			eventRecorder := &events.FakeRecorder{}
-
-			podEvictor := evictions.NewPodEvictor(clientSet, eventRecorder, nil)
-
-			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   true,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
-				NodeFit:                 false,
-				MinReplicas:             tc.minReplicas,
-			}
-
-			evictorFilter, err := defaultevictor.New(
-				defaultevictorArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 clientSet,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+				ctx,
+				clientSet,
+				nil,
+				defaultevictor.DefaultEvictorArgs{
+					EvictLocalStoragePods: true,
+					MinReplicas:           tc.minReplicas,
 				},
+				nil,
 			)
 			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
-			}
-
-			handle := &frameworkfake.HandleImpl{
-				ClientsetImpl:                 clientSet,
-				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
-				SharedInformerFactoryImpl:     sharedInformerFactory,
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
 			plugin, err := removeduplicates.New(&removeduplicates.RemoveDuplicatesArgs{

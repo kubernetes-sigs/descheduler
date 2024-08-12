@@ -25,16 +25,13 @@ import (
 	policy "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"k8s.io/client-go/tools/events"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
@@ -450,19 +447,15 @@ func TestHighNodeUtilization(t *testing.T) {
 			for _, pod := range testCase.pods {
 				objs = append(objs, pod)
 			}
-			fakeClient := fake.NewSimpleClientset(objs...)
-
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
-			if err != nil {
-				t.Errorf("Build get pods assigned to node function error: %v", err)
-			}
-
 			podsForEviction := make(map[string]struct{})
 			for _, pod := range testCase.evictedPods {
 				podsForEviction[pod] = struct{}{}
+			}
+			fakeClient := fake.NewSimpleClientset(objs...)
+
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{NodeFit: true}, nil)
+			if err != nil {
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
 			evictionFailed := false
@@ -479,41 +472,6 @@ func TestHighNodeUtilization(t *testing.T) {
 					}
 					return true, obj, nil
 				})
-			}
-
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-			eventRecorder := &events.FakeRecorder{}
-
-			podEvictor := evictions.NewPodEvictor(fakeClient, eventRecorder, nil)
-
-			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   false,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
-				NodeFit:                 true,
-			}
-
-			evictorFilter, err := defaultevictor.New(
-				defaultevictorArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-				},
-			)
-			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
-			}
-
-			handle := &frameworkfake.HandleImpl{
-				ClientsetImpl:                 fakeClient,
-				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
-				SharedInformerFactoryImpl:     sharedInformerFactory,
 			}
 
 			plugin, err := NewHighNodeUtilization(&HighNodeUtilizationArgs{
@@ -616,50 +574,16 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 			}
 
 			fakeClient := fake.NewSimpleClientset(objs...)
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
-			if err != nil {
-				t.Errorf("Build get pods assigned to node function error: %v", err)
-			}
-
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-			eventRecorder := &events.FakeRecorder{}
-
-			podEvictor := evictions.NewPodEvictor(
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+				ctx,
 				fakeClient,
-				eventRecorder,
 				evictions.NewOptions().WithMaxPodsToEvictPerNode(&item.evictionsExpected),
-			)
-
-			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   false,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
-			}
-
-			evictorFilter, err := defaultevictor.New(
-				defaultevictorArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-				},
+				defaultevictor.DefaultEvictorArgs{},
+				nil,
 			)
 			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
-			}
-
-			handle := &frameworkfake.HandleImpl{
-				ClientsetImpl:                 fakeClient,
-				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
-				SharedInformerFactoryImpl:     sharedInformerFactory,
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
 			plugin, err := NewHighNodeUtilization(&HighNodeUtilizationArgs{

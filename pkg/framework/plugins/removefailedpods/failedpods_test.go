@@ -23,15 +23,11 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/events"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -361,39 +357,9 @@ func TestRemoveFailedPods(t *testing.T) {
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{NodeFit: tc.nodeFit}, nil)
 			if err != nil {
-				t.Errorf("Build get pods assigned to node function error: %v", err)
-			}
-
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-			eventRecorder := &events.FakeRecorder{}
-
-			podEvictor := evictions.NewPodEvictor(fakeClient, eventRecorder, nil)
-
-			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   false,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
-				NodeFit:                 tc.nodeFit,
-			}
-
-			evictorFilter, err := defaultevictor.New(
-				defaultevictorArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-				},
-			)
-			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
 			plugin, err := New(&RemoveFailedPodsArgs{
@@ -405,13 +371,7 @@ func TestRemoveFailedPods(t *testing.T) {
 				LabelSelector:           tc.args.LabelSelector,
 				Namespaces:              tc.args.Namespaces,
 			},
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					PodEvictorImpl:                podEvictor,
-					EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				},
+				handle,
 			)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
