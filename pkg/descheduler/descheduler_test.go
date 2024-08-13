@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/informers"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -372,6 +373,16 @@ func podEvictionReactionTestingFnc(evictedPods *[]string) func(action core.Actio
 	}
 }
 
+func taintNodeNoSchedule(node *v1.Node) {
+	node.Spec.Taints = []v1.Taint{
+		{
+			Key:    "key",
+			Value:  "value",
+			Effect: v1.TaintEffectNoSchedule,
+		},
+	}
+}
+
 func TestPodEvictorReset(t *testing.T) {
 	initPluginRegistry()
 
@@ -447,5 +458,92 @@ func TestPodEvictorReset(t *testing.T) {
 	}
 	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 0 || len(fakeEvictedPods) != 4 {
 		t.Fatalf("Expected (2,0,4) pods evicted, got (%v, %v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
+	}
+}
+
+func TestDeschedulingLimits(t *testing.T) {
+	initPluginRegistry()
+
+	tests := []struct {
+		description string
+		policy      *api.DeschedulerPolicy
+		limit       uint
+	}{
+		{
+			description: "limits per node",
+			policy: func() *api.DeschedulerPolicy {
+				policy := removePodsViolatingNodeTaintsPolicy()
+				policy.MaxNoOfPodsToEvictPerNode = utilptr.To[uint](4)
+				return policy
+			}(),
+			limit: uint(4),
+		},
+		{
+			description: "limits per namespace",
+			policy: func() *api.DeschedulerPolicy {
+				policy := removePodsViolatingNodeTaintsPolicy()
+				policy.MaxNoOfPodsToEvictPerNamespace = utilptr.To[uint](4)
+				return policy
+			}(),
+			limit: uint(4),
+		},
+		{
+			description: "limits per cycle",
+			policy: func() *api.DeschedulerPolicy {
+				policy := removePodsViolatingNodeTaintsPolicy()
+				policy.MaxNoOfPodsToEvictTotal = utilptr.To[uint](4)
+				return policy
+			}(),
+			limit: uint(4),
+		},
+	}
+
+	ownerRef1 := test.GetReplicaSetOwnerRefList()
+	updatePod := func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			ctx := context.Background()
+			node1 := test.BuildTestNode("n1", 2000, 3000, 10, taintNodeNoSchedule)
+			node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
+			nodes := []*v1.Node{node1, node2}
+			ctxCancel, cancel := context.WithCancel(ctx)
+			_, descheduler, client := initDescheduler(t, ctxCancel, tc.policy, node1, node2)
+			defer cancel()
+
+			pods := []*v1.Pod{
+				test.BuildTestPod("p1", 100, 0, node1.Name, updatePod),
+				test.BuildTestPod("p2", 100, 0, node1.Name, updatePod),
+				test.BuildTestPod("p3", 100, 0, node1.Name, updatePod),
+				test.BuildTestPod("p4", 100, 0, node1.Name, updatePod),
+				test.BuildTestPod("p5", 100, 0, node1.Name, updatePod),
+			}
+
+			for j := 0; j < 5; j++ {
+				idx := j
+				if _, err := client.CoreV1().Pods(pods[idx].Namespace).Create(context.TODO(), pods[idx], metav1.CreateOptions{}); err != nil {
+					t.Fatalf("unable to create a pod: %v", err)
+				}
+				defer func() {
+					if err := client.CoreV1().Pods(pods[idx].Namespace).Delete(context.TODO(), pods[idx].Name, metav1.DeleteOptions{}); err != nil {
+						t.Fatalf("unable to delete a pod: %v", err)
+					}
+				}()
+			}
+			time.Sleep(100 * time.Millisecond)
+
+			err := descheduler.runDeschedulerLoop(ctx, nodes)
+			if err != nil {
+				t.Fatalf("Unable to run a descheduling loop: %v", err)
+			}
+			totalEs := descheduler.podEvictor.TotalEvicted()
+			if totalEs > tc.limit {
+				t.Fatalf("Expected %v evictions in total, got %v instead", tc.limit, totalEs)
+			}
+			t.Logf("Total evictions: %v", totalEs)
+		})
 	}
 }
