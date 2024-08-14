@@ -21,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/api/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/api/v1alpha2"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	componentconfigv1alpha1 "sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
@@ -57,10 +56,8 @@ func init() {
 
 	utilruntime.Must(componentconfig.AddToScheme(Scheme))
 	utilruntime.Must(componentconfigv1alpha1.AddToScheme(Scheme))
-	utilruntime.Must(v1alpha1.AddToScheme(Scheme))
 	utilruntime.Must(v1alpha2.AddToScheme(Scheme))
 	utilruntime.Must(Scheme.SetVersionPriority(
 		v1alpha2.SchemeGroupVersion,
-		v1alpha1.SchemeGroupVersion,
 	))
 }
