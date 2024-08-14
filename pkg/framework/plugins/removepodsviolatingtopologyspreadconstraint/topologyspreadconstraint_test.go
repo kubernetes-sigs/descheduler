@@ -12,17 +12,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"k8s.io/client-go/tools/events"
 	utilptr "k8s.io/utils/ptr"
 
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -1419,26 +1415,21 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			objs = append(objs, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns1"}})
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-
-			podsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+				ctx,
+				fakeClient,
+				nil,
+				defaultevictor.DefaultEvictorArgs{NodeFit: tc.nodeFit},
+				// workaround to ensure that pods are returned sorted so 'expectedEvictedPods' would work consistently
+				func(pods []*v1.Pod) {
+					sort.Slice(pods, func(i, j int) bool {
+						return pods[i].Name < pods[j].Name
+					})
+				},
+			)
 			if err != nil {
-				t.Errorf("Build get pods assigned to node function error: %v", err)
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
-
-			// workaround to ensure that pods are returned sorted so 'expectedEvictedPods' would work consistently
-			getPodsAssignedToNode := func(s string, filterFunc podutil.FilterFunc) ([]*v1.Pod, error) {
-				pods, err := podsAssignedToNode(s, filterFunc)
-				sort.Slice(pods, func(i, j int) bool {
-					return pods[i].Name < pods[j].Name
-				})
-
-				return pods, err
-			}
-
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
 			var evictedPods []string
 			fakeClient.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
@@ -1453,38 +1444,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				}
 				return false, nil, nil // fallback to the default reactor
 			})
-
-			eventRecorder := &events.FakeRecorder{}
-
-			podEvictor := evictions.NewPodEvictor(fakeClient, eventRecorder, nil)
-
-			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   false,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
-				NodeFit:                 tc.nodeFit,
-			}
-
-			evictorFilter, err := defaultevictor.New(
-				defaultevictorArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-				},
-			)
-			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
-			}
-
-			handle := &frameworkfake.HandleImpl{
-				ClientsetImpl:                 fakeClient,
-				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
-				SharedInformerFactoryImpl:     sharedInformerFactory,
-			}
 
 			SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(&tc.args)
 

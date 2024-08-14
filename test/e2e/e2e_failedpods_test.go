@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -12,10 +13,15 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	componentbaseconfig "k8s.io/component-base/config"
 	utilptr "k8s.io/utils/ptr"
-	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+
+	"sigs.k8s.io/descheduler/pkg/descheduler/client"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
+	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -24,7 +30,12 @@ var oneHourPodLifetimeSeconds uint = 3600
 
 func TestFailedPods(t *testing.T) {
 	ctx := context.Background()
-	clientSet, sharedInformerFactory, _, getPodsAssignedToNode := initializeClient(ctx, t)
+
+	clientSet, err := client.CreateClient(componentbaseconfig.ClientConnectionConfiguration{Kubeconfig: os.Getenv("KUBECONFIG")}, "")
+	if err != nil {
+		t.Errorf("Error during client creation with %v", err)
+	}
+
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Error listing node with %v", err)
@@ -75,25 +86,23 @@ func TestFailedPods(t *testing.T) {
 			defer jobClient.Delete(ctx, job.Name, metav1.DeleteOptions{PropagationPolicy: &deletePropagationPolicy})
 			waitForJobPodPhase(ctx, t, clientSet, job, v1.PodFailed)
 
-			podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode)
-
-			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   true,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
+			evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
+			if err != nil || len(evictionPolicyGroupVersion) == 0 {
+				t.Fatalf("Error detecting eviction policy group: %v", err)
 			}
 
-			evictorFilter, err := defaultevictor.New(
-				defaultevictorArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 clientSet,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+				ctx,
+				clientSet,
+				evictions.NewOptions().
+					WithPolicyGroupVersion(evictionPolicyGroupVersion),
+				defaultevictor.DefaultEvictorArgs{
+					EvictLocalStoragePods: true,
 				},
+				nil,
 			)
 			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
 			t.Logf("Running RemoveFailedPods strategy for %s", name)
@@ -106,13 +115,7 @@ func TestFailedPods(t *testing.T) {
 				LabelSelector:           tc.args.LabelSelector,
 				Namespaces:              tc.args.Namespaces,
 			},
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 clientSet,
-					PodEvictorImpl:                podEvictor,
-					EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				},
+				handle,
 			)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
