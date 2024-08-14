@@ -15,10 +15,10 @@ import (
 	"k8s.io/client-go/informers"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"k8s.io/klog/v2"
 	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
-	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
@@ -387,26 +387,22 @@ func TestPodEvictorReset(t *testing.T) {
 	initPluginRegistry()
 
 	ctx := context.Background()
-	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, taintNodeNoSchedule)
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
-
-	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
-	p1.Namespace = "dev"
-	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, nil)
-	p2.Namespace = "dev"
-	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, nil)
-	p3.Namespace = "dev"
-	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, nil)
-	p4.Namespace = "dev"
+	nodes := []*v1.Node{node1, node2}
 
 	ownerRef1 := test.GetReplicaSetOwnerRefList()
-	p1.ObjectMeta.OwnerReferences = ownerRef1
-	p2.ObjectMeta.OwnerReferences = ownerRef1
-	p3.ObjectMeta.OwnerReferences = ownerRef1
-	p4.ObjectMeta.OwnerReferences = ownerRef1
+	updatePod := func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	}
 
+	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, updatePod)
+	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, updatePod)
+
+	internalDeschedulerPolicy := removePodsViolatingNodeTaintsPolicy()
 	ctxCancel, cancel := context.WithCancel(ctx)
-	rs, descheduler, client := initDescheduler(t, ctxCancel, removeDuplicatesPolicy(), node1, node2, p1, p2, p3, p4)
+	rs, descheduler, client := initDescheduler(t, ctxCancel, internalDeschedulerPolicy, node1, node2, p1, p2)
 	defer cancel()
 
 	var evictedPods []string
@@ -417,14 +413,9 @@ func TestPodEvictorReset(t *testing.T) {
 		return podEvictionReactionTestingFnc(&fakeEvictedPods)
 	}
 
-	nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, descheduler.nodeLister, "")
-	if err != nil {
-		t.Fatalf("Unable to get ready nodes: %v", err)
-	}
-
 	// a single pod eviction expected
-	err = descheduler.runDeschedulerLoop(ctx, nodes)
-	if err != nil {
+	klog.Infof("2 pod eviction expected per a descheduling cycle, 2 real evictions in total")
+	if err := descheduler.runDeschedulerLoop(ctx, nodes); err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
 	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 2 || len(fakeEvictedPods) != 0 {
@@ -432,8 +423,8 @@ func TestPodEvictorReset(t *testing.T) {
 	}
 
 	// a single pod eviction expected
-	err = descheduler.runDeschedulerLoop(ctx, nodes)
-	if err != nil {
+	klog.Infof("2 pod eviction expected per a descheduling cycle, 4 real evictions in total")
+	if err := descheduler.runDeschedulerLoop(ctx, nodes); err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
 	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 4 || len(fakeEvictedPods) != 0 {
@@ -441,19 +432,20 @@ func TestPodEvictorReset(t *testing.T) {
 	}
 
 	// check the fake client syncing and the right pods evicted
+	klog.Infof("Enabling the dry run mode")
 	rs.DryRun = true
 	evictedPods = []string{}
-	// a single pod eviction expected
-	err = descheduler.runDeschedulerLoop(ctx, nodes)
-	if err != nil {
+
+	klog.Infof("2 pod eviction expected per a descheduling cycle, 2 fake evictions in total")
+	if err := descheduler.runDeschedulerLoop(ctx, nodes); err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
 	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 0 || len(fakeEvictedPods) != 2 {
 		t.Fatalf("Expected (2,0,2) pods evicted, got (%v, %v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
 	}
-	// a single pod eviction expected
-	err = descheduler.runDeschedulerLoop(ctx, nodes)
-	if err != nil {
+
+	klog.Infof("2 pod eviction expected per a descheduling cycle, 4 fake evictions in total")
+	if err := descheduler.runDeschedulerLoop(ctx, nodes); err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
 	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 0 || len(fakeEvictedPods) != 4 {
