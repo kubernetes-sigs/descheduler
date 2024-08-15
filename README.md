@@ -115,8 +115,6 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 
 ## Policy, Default Evictor and Strategy plugins
 
-**⚠️ v1alpha1 configuration is still supported, but deprecated (and soon will be removed). Please consider migrating to v1alpha2 (described bellow). For previous v1alpha1 documentation go to [docs/deprecated/v1alpha1.md](docs/deprecated/v1alpha1.md) ⚠️**
-
 The Descheduler Policy is configurable and includes default strategy plugins that can be enabled or disabled. It includes a common eviction configuration at the top level, as well as configuration from the Evictor plugin (Default Evictor, if not specified otherwise). Top-level configuration and Evictor plugin configuration are applied to all evictions.
 
 ### Top Level configuration
@@ -506,7 +504,7 @@ key=value matches an excludedTaints entry, the taint will be ignored.
 For example, excludedTaints entry "dedicated" would match all taints with key "dedicated", regardless of value.
 excludedTaints entry "dedicated=special-user" would match taints with key "dedicated" and value "special-user".
 
-If a list of includedTaints is provided, a taint will be considered if and only if it matches an included key **or** key=value from the list. Otherwise it will be ignored. Leaving includedTaints unset will include any taint by default. 
+If a list of includedTaints is provided, a taint will be considered if and only if it matches an included key **or** key=value from the list. Otherwise it will be ignored. Leaving includedTaints unset will include any taint by default.
 
 **Parameters:**
 
