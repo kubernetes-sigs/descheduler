@@ -35,13 +35,46 @@ import (
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 )
 
 // Should use something like "sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
-func leaderElectionPolicy(targetNamespace string) *api.DeschedulerPolicy {
+func PodLifeTimePolicy(targetNamespace string, maxPodLifeTimeSeconds *uint) *api.DeschedulerPolicy {
 	return &api.DeschedulerPolicy{
 		Profiles: []api.DeschedulerProfile{
-			{},
+			{
+				Name: "PodLifeTimeProfile",
+				PluginConfigs: []api.PluginConfig{
+					{
+						Name: podlifetime.PluginName,
+						Args: &podlifetime.PodLifeTimeArgs{
+							MaxPodLifeTimeSeconds: maxPodLifeTimeSeconds, // [TODO] The values to set
+							Namespaces: &api.Namespaces{
+								Include: []string{targetNamespace},
+							},
+						},
+					},
+					{
+						Name: defaultevictor.PluginName,
+						Args: &defaultevictor.DefaultEvictorArgs{
+							EvictLocalStoragePods: true, // [TODO] The values to set
+						},
+					},
+				},
+				Plugins: api.Plugins{
+					Filter: api.PluginSet{
+						Enabled: []string{
+							defaultevictor.PluginName,
+						},
+					},
+					Deschedule: api.PluginSet{
+						Enabled: []string{
+							podlifetime.PluginName,
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -124,10 +157,18 @@ func TestLeaderElection(t *testing.T) {
 	}
 	t.Logf("Removed kube-system/descheduler lease")
 
+	tc := struct {
+		name   string
+		policy *api.DeschedulerPolicy
+	}{
+		name:   "leaderelection",
+		policy: PodLifeTimePolicy(ns1, utilptr.To[uint](5)),
+	}
+
 	t.Log("starting deschedulers")
 
 	go func() {
-		err := descheduler.Run(ctx, s1)
+		err := descheduler.RunDeschedulerStrategies(ctx, s1, tc.policy, "v1")
 		if err != nil {
 			t.Errorf("unable to start descheduler: %v", err)
 			return
@@ -137,7 +178,7 @@ func TestLeaderElection(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	go func() {
-		err := descheduler.Run(ctx, s2)
+		err := descheduler.RunDeschedulerStrategies(ctx, s2, tc.policy, "v1")
 		if err != nil {
 			t.Errorf("unable to start descheduler: %v", err)
 			return
