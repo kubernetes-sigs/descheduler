@@ -33,8 +33,18 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
+	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
 )
+
+// Should use something like "sigs.k8s.io/descheduler/pkg/framework/plugins/removepodshavingtoomanyrestarts"
+func leaderElectionPolicy(targetNamespace string) *api.DeschedulerPolicy {
+	return &api.DeschedulerPolicy{
+		Profiles: []api.DeschedulerProfile{
+			{},
+		},
+	}
+}
 
 func TestLeaderElection(t *testing.T) {
 	descheduler.SetupPlugins()
