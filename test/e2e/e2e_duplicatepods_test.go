@@ -21,30 +21,68 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/wait"
 	componentbaseconfig "k8s.io/component-base/config"
 	utilptr "k8s.io/utils/ptr"
 
 	"sigs.k8s.io/descheduler/pkg/api"
+	apiv1alpha2 "sigs.k8s.io/descheduler/pkg/api/v1alpha2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
-	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
-	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
-	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
+
+func removeDuplicatesPolicy(removeDuplicatesArgs *removeduplicates.RemoveDuplicatesArgs, evictorArgs *defaultevictor.DefaultEvictorArgs) *apiv1alpha2.DeschedulerPolicy {
+	return &apiv1alpha2.DeschedulerPolicy{
+		Profiles: []apiv1alpha2.DeschedulerProfile{
+			{
+				Name: removeduplicates.PluginName + "Profile",
+				PluginConfigs: []apiv1alpha2.PluginConfig{
+					{
+						Name: removeduplicates.PluginName,
+						Args: runtime.RawExtension{
+							Object: removeDuplicatesArgs,
+						},
+					},
+					{
+						Name: defaultevictor.PluginName,
+						Args: runtime.RawExtension{
+							Object: evictorArgs,
+						},
+					},
+				},
+				Plugins: apiv1alpha2.Plugins{
+					Filter: apiv1alpha2.PluginSet{
+						Enabled: []string{
+							defaultevictor.PluginName,
+						},
+					},
+					Balance: apiv1alpha2.PluginSet{
+						Enabled: []string{
+							removeduplicates.PluginName,
+						},
+					},
+				},
+			},
+		},
+	}
+}
 
 func TestRemoveDuplicates(t *testing.T) {
 	ctx := context.Background()
 
 	clientSet, err := client.CreateClient(componentbaseconfig.ClientConnectionConfiguration{Kubeconfig: os.Getenv("KUBECONFIG")}, "")
 	if err != nil {
-		t.Errorf("Error during client creation with %v", err)
+		t.Errorf("Error during kubernetes client creation with %v", err)
 	}
 
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
@@ -62,26 +100,33 @@ func TestRemoveDuplicates(t *testing.T) {
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
 	t.Log("Creating duplicates pods")
-	deploymentObj := buildTestDeployment("duplicate-pod", testNamespace.Name, 0, map[string]string{"app": "test-duplicate", "name": "test-duplicatePods"}, nil)
+	testLabel := map[string]string{"app": "test-duplicate", "name": "test-duplicatePods"}
+	deploymentObj := buildTestDeployment("duplicate-pod", testNamespace.Name, 0, testLabel, nil)
 
 	tests := []struct {
-		description             string
+		name                    string
 		replicasNum             int
 		beforeFunc              func(deployment *appsv1.Deployment)
-		expectedEvictedPodCount uint
-		minReplicas             uint
+		expectedEvictedPodCount int
+		removeDuplicatesArgs    *removeduplicates.RemoveDuplicatesArgs
+		evictorArgs             *defaultevictor.DefaultEvictorArgs
 	}{
 		{
-			description: "Evict Pod even Pods schedule to specific node",
+			name:        "Evict Pod even Pods schedule to specific node",
 			replicasNum: 4,
 			beforeFunc: func(deployment *appsv1.Deployment) {
 				deployment.Spec.Replicas = utilptr.To[int32](4)
 				deployment.Spec.Template.Spec.NodeName = workerNodes[0].Name
 			},
 			expectedEvictedPodCount: 2,
+			removeDuplicatesArgs:    &removeduplicates.RemoveDuplicatesArgs{},
+			evictorArgs: &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods: true,
+				MinReplicas:           3,
+			},
 		},
 		{
-			description: "Evict Pod even Pods with local storage",
+			name:        "Evict Pod even Pods with local storage",
 			replicasNum: 5,
 			beforeFunc: func(deployment *appsv1.Deployment) {
 				deployment.Spec.Replicas = utilptr.To[int32](5)
@@ -97,19 +142,28 @@ func TestRemoveDuplicates(t *testing.T) {
 				}
 			},
 			expectedEvictedPodCount: 2,
+			removeDuplicatesArgs:    &removeduplicates.RemoveDuplicatesArgs{},
+			evictorArgs: &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods: true,
+				MinReplicas:           3,
+			},
 		},
 		{
-			description: "Ignores eviction with minReplicas of 4",
+			name:        "Ignores eviction with minReplicas of 4",
 			replicasNum: 3,
 			beforeFunc: func(deployment *appsv1.Deployment) {
 				deployment.Spec.Replicas = utilptr.To[int32](3)
 			},
 			expectedEvictedPodCount: 0,
-			minReplicas:             4,
+			removeDuplicatesArgs:    &removeduplicates.RemoveDuplicatesArgs{},
+			evictorArgs: &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods: true,
+				MinReplicas:           4,
+			},
 		},
 	}
 	for _, tc := range tests {
-		t.Run(tc.description, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Logf("Creating deployment %v in %v namespace", deploymentObj.Name, deploymentObj.Namespace)
 			tc.beforeFunc(deploymentObj)
 
@@ -117,53 +171,91 @@ func TestRemoveDuplicates(t *testing.T) {
 			if err != nil {
 				t.Logf("Error creating deployment: %v", err)
 				if err = clientSet.AppsV1().Deployments(deploymentObj.Namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
-					LabelSelector: labels.SelectorFromSet(labels.Set(map[string]string{"app": "test-duplicate", "name": "test-duplicatePods"})).String(),
+					LabelSelector: labels.SelectorFromSet(deploymentObj.Labels).String(),
 				}); err != nil {
 					t.Fatalf("Unable to delete deployment: %v", err)
 				}
 				return
 			}
-			defer clientSet.AppsV1().Deployments(deploymentObj.Namespace).Delete(ctx, deploymentObj.Name, metav1.DeleteOptions{})
-			waitForPodsRunning(ctx, t, clientSet, map[string]string{"app": "test-duplicate", "name": "test-duplicatePods"}, tc.replicasNum, testNamespace.Name)
+			defer func() {
+				clientSet.AppsV1().Deployments(deploymentObj.Namespace).Delete(ctx, deploymentObj.Name, metav1.DeleteOptions{})
+				waitForPodsToDisappear(ctx, t, clientSet, deploymentObj.Labels, deploymentObj.Namespace)
+			}()
+			waitForPodsRunning(ctx, t, clientSet, deploymentObj.Labels, tc.replicasNum, deploymentObj.Namespace)
 
-			// Run removeduplicates plugin
-			evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
-			if err != nil || len(evictionPolicyGroupVersion) == 0 {
-				t.Fatalf("Error creating eviction policy group %v", err)
+			preRunNames := sets.NewString(getCurrentPodNames(t, ctx, clientSet, testNamespace.Name)...)
+
+			// Deploy the descheduler with the configured policy
+			tc.removeDuplicatesArgs.Namespaces = &api.Namespaces{
+				Include: []string{testNamespace.Name},
 			}
-
-			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
-				ctx,
-				clientSet,
-				nil,
-				defaultevictor.DefaultEvictorArgs{
-					EvictLocalStoragePods: true,
-					MinReplicas:           tc.minReplicas,
-				},
-				nil,
-			)
+			tc.evictorArgs.MinPodAge = &metav1.Duration{Duration: 1 * time.Second}
+			deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(removeDuplicatesPolicy(tc.removeDuplicatesArgs, tc.evictorArgs))
 			if err != nil {
-				t.Fatalf("Unable to initialize a framework handle: %v", err)
+				t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
 			}
 
-			plugin, err := removeduplicates.New(&removeduplicates.RemoveDuplicatesArgs{
-				Namespaces: &api.Namespaces{
-					Include: []string{testNamespace.Name},
-				},
-			},
-				handle,
-			)
+			t.Logf("Creating %q policy CM with RemoveDuplicates configured...", deschedulerPolicyConfigMapObj.Name)
+			_, err = clientSet.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Create(ctx, deschedulerPolicyConfigMapObj, metav1.CreateOptions{})
 			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
+				t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
 			}
-			t.Log("Running removeduplicates plugin")
-			plugin.(frameworktypes.BalancePlugin).Balance(ctx, workerNodes)
 
-			waitForPodsToDisappear(ctx, t, clientSet, map[string]string{"app": "test-duplicate", "name": "test-duplicatePods"}, testNamespace.Name)
+			defer func() {
+				t.Logf("Deleting %q CM...", deschedulerPolicyConfigMapObj.Name)
+				err = clientSet.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Delete(ctx, deschedulerPolicyConfigMapObj.Name, metav1.DeleteOptions{})
+				if err != nil {
+					t.Fatalf("Unable to delete %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
+				}
+			}()
 
-			actualEvictedPodCount := podEvictor.TotalEvicted()
-			if actualEvictedPodCount != tc.expectedEvictedPodCount {
-				t.Errorf("Test error for description: %s. Unexpected number of pods have been evicted, got %v, expected %v", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)
+			deschedulerDeploymentObj := deschedulerDeployment(testNamespace.Name)
+			t.Logf("Creating descheduler deployment %v", deschedulerDeploymentObj.Name)
+			_, err = clientSet.AppsV1().Deployments(deschedulerDeploymentObj.Namespace).Create(ctx, deschedulerDeploymentObj, metav1.CreateOptions{})
+			if err != nil {
+				t.Fatalf("Error creating %q deployment: %v", deschedulerDeploymentObj.Name, err)
+			}
+
+			deschedulerPodName := ""
+			defer func() {
+				if deschedulerPodName != "" {
+					printPodLogs(ctx, t, clientSet, deschedulerPodName)
+				}
+
+				t.Logf("Deleting %q deployment...", deschedulerDeploymentObj.Name)
+				err = clientSet.AppsV1().Deployments(deschedulerDeploymentObj.Namespace).Delete(ctx, deschedulerDeploymentObj.Name, metav1.DeleteOptions{})
+				if err != nil {
+					t.Fatalf("Unable to delete %q deployment: %v", deschedulerDeploymentObj.Name, err)
+				}
+
+				waitForPodsToDisappear(ctx, t, clientSet, deschedulerDeploymentObj.Labels, deschedulerDeploymentObj.Namespace)
+			}()
+
+			t.Logf("Waiting for the descheduler pod running")
+			deschedulerPodName = waitForPodsRunning(ctx, t, clientSet, deschedulerDeploymentObj.Labels, 1, deschedulerDeploymentObj.Namespace)
+
+			// Run RemoveDuplicates strategy
+			var meetsExpectations bool
+			var actualEvictedPodCount int
+			if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+				currentRunNames := sets.NewString(getCurrentPodNames(t, ctx, clientSet, testNamespace.Name)...)
+				actualEvictedPod := preRunNames.Difference(currentRunNames)
+				actualEvictedPodCount = actualEvictedPod.Len()
+				t.Logf("preRunNames: %v, currentRunNames: %v, actualEvictedPodCount: %v\n", preRunNames.List(), currentRunNames.List(), actualEvictedPodCount)
+				if actualEvictedPodCount != tc.expectedEvictedPodCount {
+					t.Logf("Expecting %v number of pods evicted, got %v instead", tc.expectedEvictedPodCount, actualEvictedPodCount)
+					return false, nil
+				}
+				meetsExpectations = true
+				return true, nil
+			}); err != nil {
+				t.Errorf("Error waiting for descheduler running: %v", err)
+			}
+
+			if !meetsExpectations {
+				t.Errorf("Unexpected number of pods have been evicted, got %v, expected %v", actualEvictedPodCount, tc.expectedEvictedPodCount)
+			} else {
+				t.Logf("Total of %d Pods were evicted for %s", actualEvictedPodCount, tc.name)
 			}
 		})
 	}
