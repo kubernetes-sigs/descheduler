@@ -39,7 +39,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 )
 
-const deploymentReplicas = 5 // May not be the best value
+// const deploymentReplicas = 5 // May not be the best value
 
 func PodLifeTimePolicy(targetNamespace string, maxPodLifeTimeSeconds *uint) *apiv1alpha2.DeschedulerPolicy {
 	return &apiv1alpha2.DeschedulerPolicy{
@@ -138,8 +138,8 @@ func TestLeaderElection(t *testing.T) {
 
 	t.Log("starting deschedulers deployments with leader election enabled")
 
-	deschedulerDeploymentObj1 := createDeschedulerDeploymentWithPolicyConfigMap(t, ns1)
-	deschedulerDeploymentObj2 := createDeschedulerDeploymentWithPolicyConfigMap(t, ns2)
+	createDeschedulerDeploymentWithPolicyConfigMap(t, ns1)
+	createDeschedulerDeploymentWithPolicyConfigMap(t, ns2)
 
 	// wait for a while so all the pods are 5 seconds older
 	time.Sleep(7 * time.Second)
