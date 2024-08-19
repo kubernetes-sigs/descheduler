@@ -26,7 +26,8 @@ import (
 const zoneTopologyKey string = "topology.kubernetes.io/zone"
 
 func topologySpreadConstraintPolicy(constraintArgs *removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs,
-	evictorArgs *defaultevictor.DefaultEvictorArgs) *apiv1alpha2.DeschedulerPolicy {
+	evictorArgs *defaultevictor.DefaultEvictorArgs,
+) *apiv1alpha2.DeschedulerPolicy {
 	return &apiv1alpha2.DeschedulerPolicy{
 		Profiles: []apiv1alpha2.DeschedulerProfile{
 			{

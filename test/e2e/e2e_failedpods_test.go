@@ -25,8 +25,10 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 )
 
-var oneHourPodLifetimeSeconds uint = 3600
-var oneSecondPodLifetimeSeconds uint = 1
+var (
+	oneHourPodLifetimeSeconds   uint = 3600
+	oneSecondPodLifetimeSeconds uint = 1
+)
 
 func removeFailedPodsPolicy(removeFailedPodsArgs *removefailedpods.RemoveFailedPodsArgs, evictorArgs *defaultevictor.DefaultEvictorArgs) *apiv1alpha2.DeschedulerPolicy {
 	return &apiv1alpha2.DeschedulerPolicy{

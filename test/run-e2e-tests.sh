@@ -23,7 +23,7 @@ SKIP_INSTALL=${SKIP_INSTALL:-}
 KIND_E2E=${KIND_E2E:-}
 
 # Build a descheduler image
-IMAGE_TAG=v$(date +%Y%m%d)-$(git describe --tags)
+IMAGE_TAG=$(git describe --tags --match v0*)
 BASEDIR=$(dirname "$0")
 VERSION="${IMAGE_TAG}" make -C ${BASEDIR}/.. image
 
