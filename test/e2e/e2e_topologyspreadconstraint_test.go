@@ -6,29 +6,68 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	componentbaseconfig "k8s.io/component-base/config"
 
+	"sigs.k8s.io/descheduler/pkg/api"
+	apiv1alpha2 "sigs.k8s.io/descheduler/pkg/api/v1alpha2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
-	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
-	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 const zoneTopologyKey string = "topology.kubernetes.io/zone"
 
+func topologySpreadConstraintPolicy(constraintArgs *removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs,
+	evictorArgs *defaultevictor.DefaultEvictorArgs) *apiv1alpha2.DeschedulerPolicy {
+	return &apiv1alpha2.DeschedulerPolicy{
+		Profiles: []apiv1alpha2.DeschedulerProfile{
+			{
+				Name: removepodsviolatingtopologyspreadconstraint.PluginName + "Profile",
+				PluginConfigs: []apiv1alpha2.PluginConfig{
+					{
+						Name: removepodsviolatingtopologyspreadconstraint.PluginName,
+						Args: runtime.RawExtension{
+							Object: constraintArgs,
+						},
+					},
+					{
+						Name: defaultevictor.PluginName,
+						Args: runtime.RawExtension{
+							Object: evictorArgs,
+						},
+					},
+				},
+				Plugins: apiv1alpha2.Plugins{
+					Filter: apiv1alpha2.PluginSet{
+						Enabled: []string{
+							defaultevictor.PluginName,
+						},
+					},
+					Balance: apiv1alpha2.PluginSet{
+						Enabled: []string{
+							removepodsviolatingtopologyspreadconstraint.PluginName,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func TestTopologySpreadConstraint(t *testing.T) {
 	ctx := context.Background()
+
 	clientSet, err := client.CreateClient(componentbaseconfig.ClientConnectionConfiguration{Kubeconfig: os.Getenv("KUBECONFIG")}, "")
 	if err != nil {
-		t.Errorf("Error during client creation with %v", err)
+		t.Errorf("Error during kubernetes client creation with %v", err)
 	}
 
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
@@ -125,7 +164,9 @@ func TestTopologySpreadConstraint(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			t.Logf("Creating Deployment %s with %d replicas", name, tc.replicaCount)
-			deployment := buildTestDeployment(name, testNamespace.Name, int32(tc.replicaCount), tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels, func(d *appsv1.Deployment) {
+			deployLabels := tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels
+			deployLabels["name"] = name
+			deployment := buildTestDeployment(name, testNamespace.Name, int32(tc.replicaCount), deployLabels, func(d *appsv1.Deployment) {
 				d.Spec.Template.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{tc.topologySpreadConstraint}
 			})
 			if _, err := clientSet.AppsV1().Deployments(deployment.Namespace).Create(ctx, deployment, metav1.CreateOptions{}); err != nil {
@@ -140,7 +181,9 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			// Create a "Violator" Deployment that has the same label and is forced to be on the same node using a nodeSelector
 			violatorDeploymentName := name + "-violator"
 			violatorCount := tc.topologySpreadConstraint.MaxSkew + 1
-			violatorDeployment := buildTestDeployment(violatorDeploymentName, testNamespace.Name, violatorCount, tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels, func(d *appsv1.Deployment) {
+			violatorDeployLabels := tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels
+			violatorDeployLabels["name"] = violatorDeploymentName
+			violatorDeployment := buildTestDeployment(violatorDeploymentName, testNamespace.Name, violatorCount, violatorDeployLabels, func(d *appsv1.Deployment) {
 				d.Spec.Template.Spec.NodeSelector = map[string]string{zoneTopologyKey: workerNodes[0].Labels[zoneTopologyKey]}
 			})
 			if _, err := clientSet.AppsV1().Deployments(deployment.Namespace).Create(ctx, violatorDeployment, metav1.CreateOptions{}); err != nil {
@@ -152,76 +195,105 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			}()
 			waitForPodsRunning(ctx, t, clientSet, violatorDeployment.Labels, int(violatorCount), violatorDeployment.Namespace)
 
-			evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
-			if err != nil || len(evictionPolicyGroupVersion) == 0 {
-				t.Fatalf("Error detecting eviction policy group: %v", err)
-			}
-
-			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
-				ctx,
-				clientSet,
-				evictions.NewOptions().
-					WithPolicyGroupVersion(evictionPolicyGroupVersion),
-				defaultevictor.DefaultEvictorArgs{
-					EvictLocalStoragePods: true,
-				},
-				nil,
-			)
-			if err != nil {
-				t.Fatalf("Unable to initialize a framework handle: %v", err)
-			}
-
 			// Run TopologySpreadConstraint strategy
 			t.Logf("Running RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
 
-			plugin, err := removepodsviolatingtopologyspreadconstraint.New(&removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
+			evictorArgs := &defaultevictor.DefaultEvictorArgs{
+				EvictLocalStoragePods:   true,
+				EvictSystemCriticalPods: false,
+				IgnorePvcPods:           false,
+				EvictFailedBarePods:     false,
+			}
+			constraintArgs := &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
 				Constraints: []v1.UnsatisfiableConstraintAction{tc.topologySpreadConstraint.WhenUnsatisfiable},
-			},
-				handle,
-			)
+				Namespaces: &api.Namespaces{
+					Include: []string{testNamespace.Name},
+				},
+			}
+			deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(topologySpreadConstraintPolicy(constraintArgs, evictorArgs))
 			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
+				t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
 			}
 
-			plugin.(frameworktypes.BalancePlugin).Balance(ctx, workerNodes)
-			t.Logf("Finished RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
+			t.Logf("Creating %q policy CM with RemovePodsHavingTooManyRestarts configured...", deschedulerPolicyConfigMapObj.Name)
+			_, err = clientSet.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Create(ctx, deschedulerPolicyConfigMapObj, metav1.CreateOptions{})
+			if err != nil {
+				t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
+			}
 
-			if totalEvicted := podEvictor.TotalEvicted(); totalEvicted == tc.expectedEvictedCount {
-				t.Logf("Total of %d Pods were evicted for %s", totalEvicted, name)
+			defer func() {
+				t.Logf("Deleting %q CM...", deschedulerPolicyConfigMapObj.Name)
+				err = clientSet.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Delete(ctx, deschedulerPolicyConfigMapObj.Name, metav1.DeleteOptions{})
+				if err != nil {
+					t.Fatalf("Unable to delete %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
+				}
+			}()
+			deschedulerDeploymentObj := deschedulerDeployment(testNamespace.Name)
+			t.Logf("Creating descheduler deployment %v", deschedulerDeploymentObj.Name)
+			_, err = clientSet.AppsV1().Deployments(deschedulerDeploymentObj.Namespace).Create(ctx, deschedulerDeploymentObj, metav1.CreateOptions{})
+			if err != nil {
+				t.Fatalf("Error creating %q deployment: %v", deschedulerDeploymentObj.Name, err)
+			}
+
+			deschedulerPodName := ""
+			defer func() {
+				if deschedulerPodName != "" {
+					printPodLogs(ctx, t, clientSet, deschedulerPodName)
+				}
+
+				t.Logf("Deleting %q deployment...", deschedulerDeploymentObj.Name)
+				err = clientSet.AppsV1().Deployments(deschedulerDeploymentObj.Namespace).Delete(ctx, deschedulerDeploymentObj.Name, metav1.DeleteOptions{})
+				if err != nil {
+					t.Fatalf("Unable to delete %q deployment: %v", deschedulerDeploymentObj.Name, err)
+				}
+				waitForPodsToDisappear(ctx, t, clientSet, deschedulerDeploymentObj.Labels, deschedulerDeploymentObj.Namespace)
+			}()
+
+			t.Logf("Waiting for the descheduler pod running")
+			deschedulerPodName = waitForPodsRunning(ctx, t, clientSet, deschedulerDeploymentObj.Labels, 1, deschedulerDeploymentObj.Namespace)
+
+			// Run RemovePodsHavingTooManyRestarts strategy
+			var meetsExpectations bool
+			var skewVal int
+			if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+				listOptions := metav1.ListOptions{LabelSelector: labels.SelectorFromSet(tc.topologySpreadConstraint.LabelSelector.MatchLabels).String()}
+				pods, err := clientSet.CoreV1().Pods(testNamespace.Name).List(ctx, listOptions)
+				if err != nil {
+					t.Errorf("Error listing pods for %s: %v", name, err)
+				}
+
+				nodePodCountMap := make(map[string]int)
+				for _, pod := range pods.Items {
+					nodePodCountMap[pod.Spec.NodeName]++
+				}
+
+				if len(nodePodCountMap) != len(workerNodes) {
+					t.Errorf("%s Pods were scheduled on only '%d' nodes and were not properly distributed on the nodes", name, len(nodePodCountMap))
+					return false, nil
+				}
+
+				skewVal = getSkewValPodDistribution(nodePodCountMap)
+				if skewVal > int(tc.topologySpreadConstraint.MaxSkew) {
+					t.Errorf("Pod distribution for %s is still violating the max skew of %d as it is %d", name, tc.topologySpreadConstraint.MaxSkew, skewVal)
+					return false, nil
+				}
+
+				meetsExpectations = true
+				return true, nil
+			}); err != nil {
+				t.Errorf("Error waiting for descheduler running: %v", err)
+			}
+
+			if !meetsExpectations {
+				t.Errorf("Pod distribution for %s is still violating the max skew of %d as it is %d", name, tc.topologySpreadConstraint.MaxSkew, skewVal)
 			} else {
-				t.Fatalf("Expected %d evictions but got %d for %s TopologySpreadConstraint", tc.expectedEvictedCount, totalEvicted, name)
+				t.Logf("Pods for %s were distributed in line with max skew of %d", name, tc.topologySpreadConstraint.MaxSkew)
 			}
-
-			if tc.expectedEvictedCount == 0 {
-				return
-			}
-
-			listOptions := metav1.ListOptions{LabelSelector: labels.SelectorFromSet(tc.topologySpreadConstraint.LabelSelector.MatchLabels).String()}
-			pods, err := clientSet.CoreV1().Pods(testNamespace.Name).List(ctx, listOptions)
-			if err != nil {
-				t.Errorf("Error listing pods for %s: %v", name, err)
-			}
-
-			nodePodCountMap := make(map[string]int)
-			for _, pod := range pods.Items {
-				nodePodCountMap[pod.Spec.NodeName]++
-			}
-
-			if len(nodePodCountMap) != len(workerNodes) {
-				t.Errorf("%s Pods were scheduled on only '%d' nodes and were not properly distributed on the nodes", name, len(nodePodCountMap))
-			}
-
-			min, max := getMinAndMaxPodDistribution(nodePodCountMap)
-			if max-min > int(tc.topologySpreadConstraint.MaxSkew) {
-				t.Errorf("Pod distribution for %s is still violating the max skew of %d as it is %d", name, tc.topologySpreadConstraint.MaxSkew, max-min)
-			}
-
-			t.Logf("Pods for %s were distributed in line with max skew of %d", name, tc.topologySpreadConstraint.MaxSkew)
 		})
 	}
 }
 
-func getMinAndMaxPodDistribution(nodePodCountMap map[string]int) (int, int) {
+func getSkewValPodDistribution(nodePodCountMap map[string]int) int {
 	min := math.MaxInt32
 	max := math.MinInt32
 	for _, podCount := range nodePodCountMap {
@@ -233,7 +305,7 @@ func getMinAndMaxPodDistribution(nodePodCountMap map[string]int) (int, int) {
 		}
 	}
 
-	return min, max
+	return max - min
 }
 
 func nodeInclusionPolicyRef(policy v1.NodeInclusionPolicy) *v1.NodeInclusionPolicy {
