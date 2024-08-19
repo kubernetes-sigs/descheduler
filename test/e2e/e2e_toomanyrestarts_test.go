@@ -32,7 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	componentbaseconfig "k8s.io/component-base/config"
-	
+
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
 	apiv1alpha2 "sigs.k8s.io/descheduler/pkg/api/v1alpha2"
@@ -101,7 +101,6 @@ func TestTooManyRestarts(t *testing.T) {
 	if _, err := clientSet.CoreV1().Namespaces().Create(ctx, testNamespace, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Unable to create ns %v", testNamespace.Name)
 	}
-	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
 	deploymentObj := buildTestDeployment("restart-pod", testNamespace.Name, deploymentReplicas, map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"}, func(deployment *appsv1.Deployment) {
 		deployment.Spec.Template.Spec.Containers[0].Command = []string{"/bin/sh"}
@@ -119,7 +118,11 @@ func TestTooManyRestarts(t *testing.T) {
 		}
 		return
 	}
-	defer clientSet.AppsV1().Deployments(deploymentObj.Namespace).Delete(ctx, deploymentObj.Name, metav1.DeleteOptions{})
+	defer func() {
+		clientSet.AppsV1().Deployments(deploymentObj.Namespace).Delete(ctx, deploymentObj.Name, metav1.DeleteOptions{})
+		waitForPodsToDisappear(ctx, t, clientSet, deploymentObj.Labels, deploymentObj.Namespace)
+		clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
+	}()
 
 	// Wait for 3 restarts
 	waitPodRestartCount(ctx, clientSet, testNamespace.Name, t, 3)
@@ -187,11 +190,11 @@ func TestTooManyRestarts(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Unable to delete %q deployment: %v", deschedulerDeploymentObj.Name, err)
 				}
-				waitForDeschedulerPodAbsent(t, ctx, clientSet, testNamespace.Name)
+				waitForPodsToDisappear(ctx, t, clientSet, deschedulerDeploymentObj.Labels, deschedulerDeploymentObj.Namespace)
 			}()
 
 			t.Logf("Waiting for the descheduler pod running")
-			deschedulerPodName = waitForDeschedulerPodRunning(t, ctx, clientSet, testNamespace.Name)
+			deschedulerPodName = waitForPodsRunning(ctx, t, clientSet, deschedulerDeploymentObj.Labels, 1, deschedulerDeploymentObj.Namespace)
 
 			// Run RemovePodsHavingTooManyRestarts strategy
 			if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 20*time.Second, true, func(ctx context.Context) (bool, error) {
@@ -208,7 +211,6 @@ func TestTooManyRestarts(t *testing.T) {
 			}); err != nil {
 				t.Errorf("Error waiting for descheduler running: %v", err)
 			}
-			waitForTerminatingPodsToDisappear(ctx, t, clientSet, testNamespace.Name)
 		})
 	}
 }

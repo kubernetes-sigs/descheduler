@@ -194,67 +194,6 @@ func printPodLogs(ctx context.Context, t *testing.T, kubeClient clientset.Interf
 	}
 }
 
-func waitForDeschedulerPodRunning(t *testing.T, ctx context.Context, kubeClient clientset.Interface, testName string) string {
-	deschedulerPodName := ""
-	if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
-		podList, err := kubeClient.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
-			LabelSelector: labels.SelectorFromSet(labels.Set(map[string]string{"app": "descheduler", "test": testName})).String(),
-		})
-		if err != nil {
-			t.Logf("Unable to list pods: %v", err)
-			if isClientRateLimiterError(err) {
-				return false, nil
-			}
-			return false, err
-		}
-
-		runningPods := []*v1.Pod{}
-		for _, item := range podList.Items {
-			if item.Status.Phase != v1.PodRunning {
-				continue
-			}
-			pod := item
-			runningPods = append(runningPods, &pod)
-		}
-
-		if len(runningPods) != 1 {
-			t.Logf("Expected a single running pod, got %v instead", len(runningPods))
-			return false, nil
-		}
-
-		deschedulerPodName = runningPods[0].Name
-		t.Logf("Found a descheduler pod running: %v", deschedulerPodName)
-		return true, nil
-	}); err != nil {
-		t.Fatalf("Error waiting for a running descheduler: %v", err)
-	}
-	return deschedulerPodName
-}
-
-func waitForDeschedulerPodAbsent(t *testing.T, ctx context.Context, kubeClient clientset.Interface, testName string) {
-	if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
-		podList, err := kubeClient.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
-			LabelSelector: labels.SelectorFromSet(labels.Set(map[string]string{"app": "descheduler", "test": testName})).String(),
-		})
-		if err != nil {
-			t.Logf("Unable to list pods: %v", err)
-			if isClientRateLimiterError(err) {
-				return false, nil
-			}
-			return false, err
-		}
-
-		if len(podList.Items) > 0 {
-			t.Logf("Found a descheduler pod. Waiting until it gets deleted")
-			return false, nil
-		}
-
-		return true, nil
-	}); err != nil {
-		t.Fatalf("Error waiting for a descheduler to disapear: %v", err)
-	}
-}
-
 func TestMain(m *testing.M) {
 	if os.Getenv("DESCHEDULER_IMAGE") == "" {
 		klog.Errorf("DESCHEDULER_IMAGE env is not set")
@@ -680,7 +619,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	}
 	plugin.(frameworktypes.BalancePlugin).Balance(ctx, workerNodes)
 
-	waitForTerminatingPodsToDisappear(ctx, t, clientSet, rc.Namespace)
+	waitForPodsToDisappear(ctx, t, clientSet, rc.Spec.Template.Labels, rc.Namespace)
 
 	podFilter, err = podutil.NewOptions().WithFilter(handle.EvictorFilterImpl.Filter).BuildFilterFunc()
 	if err != nil {
@@ -1379,7 +1318,7 @@ func TestPodLifeTimeOldestEvicted(t *testing.T) {
 	t.Log("Finished PodLifetime plugin")
 
 	t.Logf("Wait for terminating pod to disappear")
-	waitForTerminatingPodsToDisappear(ctx, t, clientSet, rc.Namespace)
+	waitForPodsToDisappear(ctx, t, clientSet, rc.Spec.Template.Labels, rc.Namespace)
 
 	podList, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
 	if err != nil {
@@ -1450,24 +1389,6 @@ func waitForRCPodsRunning(ctx context.Context, t *testing.T, clientSet clientset
 		return true, nil
 	}); err != nil {
 		t.Fatalf("Error waiting for pods running: %v", err)
-	}
-}
-
-func waitForTerminatingPodsToDisappear(ctx context.Context, t *testing.T, clientSet clientset.Interface, namespace string) {
-	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
-		podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			return false, err
-		}
-		for _, pod := range podList.Items {
-			if pod.DeletionTimestamp != nil {
-				t.Logf("Pod %v still terminating", pod.Name)
-				return false, nil
-			}
-		}
-		return true, nil
-	}); err != nil {
-		t.Fatalf("Error waiting for terminating pods to disappear: %v", err)
 	}
 }
 
@@ -1775,6 +1696,10 @@ func waitForPodRunning(ctx context.Context, t *testing.T, clientSet clientset.In
 	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		podItem, err := clientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 		if err != nil {
+			t.Logf("Unable to list pods: %v", err)
+			if isClientRateLimiterError(err) {
+				return false, nil
+			}
 			return false, err
 		}
 
@@ -1789,27 +1714,65 @@ func waitForPodRunning(ctx context.Context, t *testing.T, clientSet clientset.In
 	}
 }
 
-func waitForPodsRunning(ctx context.Context, t *testing.T, clientSet clientset.Interface, labelMap map[string]string, desireRunningPodNum int, namespace string) {
-	if err := wait.PollUntilContextTimeout(ctx, 10*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+func waitForPodsRunning(ctx context.Context, t *testing.T, clientSet clientset.Interface, labelMap map[string]string, desireRunningPodNum int, namespace string) string {
+	runningPodName := ""
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
 		podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: labels.SelectorFromSet(labelMap).String(),
 		})
 		if err != nil {
-			return false, err
-		}
-		if len(podList.Items) != desireRunningPodNum {
-			t.Logf("Waiting for %v pods to be running, got %v instead", desireRunningPodNum, len(podList.Items))
-			return false, nil
-		}
-		for _, pod := range podList.Items {
-			if pod.Status.Phase != v1.PodRunning {
-				t.Logf("Pod %v not running yet, is %v instead", pod.Name, pod.Status.Phase)
+			t.Logf("Unable to list pods: %v", err)
+			if isClientRateLimiterError(err) {
 				return false, nil
 			}
+			return false, err
 		}
+
+		runningPods := []*v1.Pod{}
+		for _, item := range podList.Items {
+			if item.Status.Phase != v1.PodRunning {
+				continue
+			}
+			pod := item
+			runningPods = append(runningPods, &pod)
+		}
+
+		if len(runningPods) != desireRunningPodNum {
+			t.Logf("Waiting for %v pods to be running, got %v instead", desireRunningPodNum, len(runningPods))
+			return false, nil
+		}
+
+		if desireRunningPodNum == 1 {
+			runningPodName = runningPods[0].Name
+		}
+
 		return true, nil
 	}); err != nil {
 		t.Fatalf("Error waiting for pods running: %v", err)
+	}
+	return runningPodName
+}
+
+func waitForPodsToDisappear(ctx context.Context, t *testing.T, clientSet clientset.Interface, labelMap map[string]string, namespace string) {
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+		podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: labels.SelectorFromSet(labelMap).String(),
+		})
+		if err != nil {
+			t.Logf("Unable to list pods: %v", err)
+			if isClientRateLimiterError(err) {
+				return false, nil
+			}
+			return false, err
+		}
+
+		if len(podList.Items) > 0 {
+			t.Logf("Found a existing pod. Waiting until it gets deleted")
+			return false, nil
+		}
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for pods to disappear: %v", err)
 	}
 }
 

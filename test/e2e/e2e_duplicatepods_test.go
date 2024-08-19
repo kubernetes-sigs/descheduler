@@ -159,7 +159,8 @@ func TestRemoveDuplicates(t *testing.T) {
 			t.Log("Running removeduplicates plugin")
 			plugin.(frameworktypes.BalancePlugin).Balance(ctx, workerNodes)
 
-			waitForTerminatingPodsToDisappear(ctx, t, clientSet, testNamespace.Name)
+			waitForPodsToDisappear(ctx, t, clientSet, map[string]string{"app": "test-duplicate", "name": "test-duplicatePods"}, testNamespace.Name)
+
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test error for description: %s. Unexpected number of pods have been evicted, got %v, expected %v", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)

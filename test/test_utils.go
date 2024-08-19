@@ -241,30 +241,6 @@ func DeleteDeployment(ctx context.Context, t *testing.T, clientSet clientset.Int
 	}
 }
 
-func WaitForDeploymentPodsRunning(ctx context.Context, t *testing.T, clientSet clientset.Interface, deployment *appsv1.Deployment) {
-	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 30*time.Second, true, func(c context.Context) (bool, error) {
-		podList, err := clientSet.CoreV1().Pods(deployment.Namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: labels.SelectorFromSet(deployment.Spec.Template.ObjectMeta.Labels).String(),
-		})
-		if err != nil {
-			return false, err
-		}
-		if len(podList.Items) != int(*deployment.Spec.Replicas) {
-			t.Logf("Waiting for %v pods to be created, got %v instead", *deployment.Spec.Replicas, len(podList.Items))
-			return false, nil
-		}
-		for _, pod := range podList.Items {
-			if pod.Status.Phase != v1.PodRunning {
-				t.Logf("Pod %v not running yet, is %v instead", pod.Name, pod.Status.Phase)
-				return false, nil
-			}
-		}
-		return true, nil
-	}); err != nil {
-		t.Fatalf("Error waiting for pods running: %v", err)
-	}
-}
-
 func SetPodAntiAffinity(inputPod *v1.Pod, labelKey, labelValue string) {
 	inputPod.Spec.Affinity = &v1.Affinity{
 		PodAntiAffinity: &v1.PodAntiAffinity{

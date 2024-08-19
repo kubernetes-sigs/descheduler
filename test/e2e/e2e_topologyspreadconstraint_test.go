@@ -20,7 +20,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
 	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
-	"sigs.k8s.io/descheduler/test"
 )
 
 const zoneTopologyKey string = "topology.kubernetes.io/zone"
@@ -132,8 +131,11 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			if _, err := clientSet.AppsV1().Deployments(deployment.Namespace).Create(ctx, deployment, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Error creating Deployment %s %v", name, err)
 			}
-			defer test.DeleteDeployment(ctx, t, clientSet, deployment)
-			test.WaitForDeploymentPodsRunning(ctx, t, clientSet, deployment)
+			defer func() {
+				clientSet.AppsV1().Deployments(deployment.Namespace).Delete(ctx, deployment.Name, metav1.DeleteOptions{})
+				waitForPodsToDisappear(ctx, t, clientSet, deployment.Labels, deployment.Namespace)
+			}()
+			waitForPodsRunning(ctx, t, clientSet, deployment.Labels, tc.replicaCount, deployment.Namespace)
 
 			// Create a "Violator" Deployment that has the same label and is forced to be on the same node using a nodeSelector
 			violatorDeploymentName := name + "-violator"
@@ -144,8 +146,11 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			if _, err := clientSet.AppsV1().Deployments(deployment.Namespace).Create(ctx, violatorDeployment, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Error creating Deployment %s: %v", violatorDeploymentName, err)
 			}
-			defer test.DeleteDeployment(ctx, t, clientSet, violatorDeployment)
-			test.WaitForDeploymentPodsRunning(ctx, t, clientSet, violatorDeployment)
+			defer func() {
+				clientSet.AppsV1().Deployments(violatorDeployment.Namespace).Delete(ctx, violatorDeployment.Name, metav1.DeleteOptions{})
+				waitForPodsToDisappear(ctx, t, clientSet, violatorDeployment.Labels, violatorDeployment.Namespace)
+			}()
+			waitForPodsRunning(ctx, t, clientSet, violatorDeployment.Labels, int(violatorCount), violatorDeployment.Namespace)
 
 			evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
 			if err != nil || len(evictionPolicyGroupVersion) == 0 {
@@ -181,9 +186,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			plugin.(frameworktypes.BalancePlugin).Balance(ctx, workerNodes)
 			t.Logf("Finished RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
 
-			t.Logf("Wait for terminating pods of %s to disappear", name)
-			waitForTerminatingPodsToDisappear(ctx, t, clientSet, deployment.Namespace)
-
 			if totalEvicted := podEvictor.TotalEvicted(); totalEvicted == tc.expectedEvictedCount {
 				t.Logf("Total of %d Pods were evicted for %s", totalEvicted, name)
 			} else {
@@ -193,9 +195,6 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			if tc.expectedEvictedCount == 0 {
 				return
 			}
-
-			// Ensure recently evicted Pod are rescheduled and running before asserting for a balanced topology spread
-			test.WaitForDeploymentPodsRunning(ctx, t, clientSet, deployment)
 
 			listOptions := metav1.ListOptions{LabelSelector: labels.SelectorFromSet(tc.topologySpreadConstraint.LabelSelector.MatchLabels).String()}
 			pods, err := clientSet.CoreV1().Pods(testNamespace.Name).List(ctx, listOptions)
