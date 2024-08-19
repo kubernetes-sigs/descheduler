@@ -31,7 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
-	utilptr "k8s.io/utils/ptr"
+
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
 )
@@ -166,48 +166,7 @@ func TestLeaderElection(t *testing.T) {
 }
 
 func createDeployment(ctx context.Context, clientSet clientset.Interface, namespace string, replicas int32, t *testing.T) (*appsv1.Deployment, error) {
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "leaderelection",
-			Namespace: namespace,
-			Labels:    map[string]string{"test": "leaderelection", "name": "test-leaderelection"},
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: utilptr.To[int32](replicas),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"test": "leaderelection", "name": "test-leaderelection"},
-			},
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"test": "leaderelection", "name": "test-leaderelection"},
-				},
-				Spec: v1.PodSpec{
-					SecurityContext: &v1.PodSecurityContext{
-						RunAsNonRoot: utilptr.To(true),
-						RunAsUser:    utilptr.To[int64](1000),
-						RunAsGroup:   utilptr.To[int64](1000),
-						SeccompProfile: &v1.SeccompProfile{
-							Type: v1.SeccompProfileTypeRuntimeDefault,
-						},
-					},
-					Containers: []v1.Container{{
-						Name:            "pause",
-						ImagePullPolicy: "Always",
-						Image:           "registry.k8s.io/pause",
-						Ports:           []v1.ContainerPort{{ContainerPort: 80}},
-						SecurityContext: &v1.SecurityContext{
-							AllowPrivilegeEscalation: utilptr.To(false),
-							Capabilities: &v1.Capabilities{
-								Drop: []v1.Capability{
-									"ALL",
-								},
-							},
-						},
-					}},
-				},
-			},
-		},
-	}
+	deployment := buildTestDeployment("leaderelection", namespace, replicas, map[string]string{"test": "leaderelection", "name": "test-leaderelection"}, nil)
 
 	t.Logf("Creating deployment %v for namespace %s", deployment.Name, deployment.Namespace)
 	deployment, err := clientSet.AppsV1().Deployments(deployment.Namespace).Create(ctx, deployment, metav1.CreateOptions{})

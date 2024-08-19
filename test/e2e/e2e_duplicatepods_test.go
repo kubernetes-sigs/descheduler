@@ -62,48 +62,7 @@ func TestRemoveDuplicates(t *testing.T) {
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
 	t.Log("Creating duplicates pods")
-
-	deploymentObj := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "duplicate-pod",
-			Namespace: testNamespace.Name,
-			Labels:    map[string]string{"app": "test-duplicate", "name": "test-duplicatePods"},
-		},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": "test-duplicate", "name": "test-duplicatePods"},
-			},
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"app": "test-duplicate", "name": "test-duplicatePods"},
-				},
-				Spec: v1.PodSpec{
-					SecurityContext: &v1.PodSecurityContext{
-						RunAsNonRoot: utilptr.To(true),
-						RunAsUser:    utilptr.To[int64](1000),
-						RunAsGroup:   utilptr.To[int64](1000),
-						SeccompProfile: &v1.SeccompProfile{
-							Type: v1.SeccompProfileTypeRuntimeDefault,
-						},
-					},
-					Containers: []v1.Container{{
-						Name:            "pause",
-						ImagePullPolicy: "Always",
-						Image:           "registry.k8s.io/pause",
-						Ports:           []v1.ContainerPort{{ContainerPort: 80}},
-						SecurityContext: &v1.SecurityContext{
-							AllowPrivilegeEscalation: utilptr.To(false),
-							Capabilities: &v1.Capabilities{
-								Drop: []v1.Capability{
-									"ALL",
-								},
-							},
-						},
-					}},
-				},
-			},
-		},
-	}
+	deploymentObj := buildTestDeployment("duplicate-pod", testNamespace.Name, 0, map[string]string{"app": "test-duplicate", "name": "test-duplicatePods"}, nil)
 
 	tests := []struct {
 		description             string

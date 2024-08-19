@@ -63,7 +63,6 @@ import (
 	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
-	"sigs.k8s.io/descheduler/test"
 )
 
 func isClientRateLimiterError(err error) bool {
@@ -297,7 +296,7 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
 				},
-				Spec: test.MakePodSpec(priorityClassName, gracePeriod),
+				Spec: makePodSpec(priorityClassName, gracePeriod),
 			},
 		},
 	}
@@ -329,9 +328,80 @@ func DsByNameContainer(name, namespace string, labels map[string]string, gracePe
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
 				},
-				Spec: test.MakePodSpec("", gracePeriod),
+				Spec: makePodSpec("", gracePeriod),
 			},
 		},
+	}
+}
+
+func buildTestDeployment(name, namespace string, replicas int32, testLabel map[string]string, apply func(deployment *appsv1.Deployment)) *appsv1.Deployment {
+	deployment := &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Deployment",
+			APIVersion: "apps/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels:    testLabel,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: utilptr.To[int32](replicas),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: testLabel,
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: testLabel,
+				},
+				Spec: makePodSpec("", utilptr.To[int64](0)),
+			},
+		},
+	}
+
+	if apply != nil {
+		apply(deployment)
+	}
+
+	return deployment
+}
+
+func makePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
+	return v1.PodSpec{
+		SecurityContext: &v1.PodSecurityContext{
+			RunAsNonRoot: utilptr.To(true),
+			RunAsUser:    utilptr.To[int64](1000),
+			RunAsGroup:   utilptr.To[int64](1000),
+			SeccompProfile: &v1.SeccompProfile{
+				Type: v1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
+		Containers: []v1.Container{{
+			Name:            "pause",
+			ImagePullPolicy: "IfNotPresent",
+			Image:           "registry.k8s.io/pause",
+			Ports:           []v1.ContainerPort{{ContainerPort: 80}},
+			Resources: v1.ResourceRequirements{
+				Limits: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("100m"),
+					v1.ResourceMemory: resource.MustParse("200Mi"),
+				},
+				Requests: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("100m"),
+					v1.ResourceMemory: resource.MustParse("100Mi"),
+				},
+			},
+			SecurityContext: &v1.SecurityContext{
+				AllowPrivilegeEscalation: utilptr.To(false),
+				Capabilities: &v1.Capabilities{
+					Drop: []v1.Capability{
+						"ALL",
+					},
+				},
+			},
+		}},
+		PriorityClassName:             priorityClassName,
+		TerminationGracePeriodSeconds: gracePeriod,
 	}
 }
 
