@@ -619,7 +619,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	}
 	plugin.(frameworktypes.BalancePlugin).Balance(ctx, workerNodes)
 
-	waitForPodsToDisappear(ctx, t, clientSet, rc.Spec.Template.Labels, rc.Namespace)
+	waitForTerminatingPodsToDisappear(ctx, t, clientSet, rc.Namespace)
 
 	podFilter, err = podutil.NewOptions().WithFilter(handle.EvictorFilterImpl.Filter).BuildFilterFunc()
 	if err != nil {
@@ -1318,7 +1318,7 @@ func TestPodLifeTimeOldestEvicted(t *testing.T) {
 	t.Log("Finished PodLifetime plugin")
 
 	t.Logf("Wait for terminating pod to disappear")
-	waitForPodsToDisappear(ctx, t, clientSet, rc.Spec.Template.Labels, rc.Namespace)
+	waitForTerminatingPodsToDisappear(ctx, t, clientSet, rc.Namespace)
 
 	podList, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
 	if err != nil {
@@ -1389,6 +1389,24 @@ func waitForRCPodsRunning(ctx context.Context, t *testing.T, clientSet clientset
 		return true, nil
 	}); err != nil {
 		t.Fatalf("Error waiting for pods running: %v", err)
+	}
+}
+
+func waitForTerminatingPodsToDisappear(ctx context.Context, t *testing.T, clientSet clientset.Interface, namespace string) {
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
+		podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return false, err
+		}
+		for _, pod := range podList.Items {
+			if pod.DeletionTimestamp != nil {
+				t.Logf("Pod %v still terminating", pod.Name)
+				return false, nil
+			}
+		}
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for terminating pods to disappear: %v", err)
 	}
 }
 

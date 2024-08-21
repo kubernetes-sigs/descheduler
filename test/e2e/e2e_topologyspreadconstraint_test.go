@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	componentbaseconfig "k8s.io/component-base/config"
 
@@ -83,14 +84,16 @@ func TestTopologySpreadConstraint(t *testing.T) {
 	}
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
-	testCases := map[string]struct {
-		expectedEvictedCount     uint
+	testCases := []struct {
+		name                     string
+		expectedEvictedPodCount  int
 		replicaCount             int
 		topologySpreadConstraint v1.TopologySpreadConstraint
 	}{
-		"test-topology-spread-hard-constraint": {
-			expectedEvictedCount: 1,
-			replicaCount:         4,
+		{
+			name:                    "test-topology-spread-hard-constraint",
+			expectedEvictedPodCount: 1,
+			replicaCount:            4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -102,9 +105,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				WhenUnsatisfiable: v1.DoNotSchedule,
 			},
 		},
-		"test-topology-spread-soft-constraint": {
-			expectedEvictedCount: 1,
-			replicaCount:         4,
+		{
+			name:                    "test-topology-spread-soft-constraint",
+			expectedEvictedPodCount: 1,
+			replicaCount:            4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -116,9 +120,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				WhenUnsatisfiable: v1.ScheduleAnyway,
 			},
 		},
-		"test-node-taints-policy-honor": {
-			expectedEvictedCount: 1,
-			replicaCount:         4,
+		{
+			name:                    "test-node-taints-policy-honor",
+			expectedEvictedPodCount: 1,
+			replicaCount:            4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -131,9 +136,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				WhenUnsatisfiable: v1.DoNotSchedule,
 			},
 		},
-		"test-node-affinity-policy-ignore": {
-			expectedEvictedCount: 1,
-			replicaCount:         4,
+		{
+			name:                    "test-node-affinity-policy-ignore",
+			expectedEvictedPodCount: 1,
+			replicaCount:            4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -146,9 +152,10 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				WhenUnsatisfiable:  v1.DoNotSchedule,
 			},
 		},
-		"test-match-label-keys": {
-			expectedEvictedCount: 0,
-			replicaCount:         4,
+		{
+			name:                    "test-match-label-keys",
+			expectedEvictedPodCount: 0,
+			replicaCount:            4,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -162,16 +169,16 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			},
 		},
 	}
-	for name, tc := range testCases {
-		t.Run(name, func(t *testing.T) {
-			t.Logf("Creating Deployment %s with %d replicas", name, tc.replicaCount)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Logf("Creating Deployment %s with %d replicas", tc.name, tc.replicaCount)
 			deployLabels := tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels
-			deployLabels["name"] = name
-			deployment := buildTestDeployment(name, testNamespace.Name, int32(tc.replicaCount), deployLabels, func(d *appsv1.Deployment) {
+			deployLabels["name"] = tc.name
+			deployment := buildTestDeployment(tc.name, testNamespace.Name, int32(tc.replicaCount), deployLabels, func(d *appsv1.Deployment) {
 				d.Spec.Template.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{tc.topologySpreadConstraint}
 			})
 			if _, err := clientSet.AppsV1().Deployments(deployment.Namespace).Create(ctx, deployment, metav1.CreateOptions{}); err != nil {
-				t.Fatalf("Error creating Deployment %s %v", name, err)
+				t.Fatalf("Error creating Deployment %s %v", tc.name, err)
 			}
 			defer func() {
 				clientSet.AppsV1().Deployments(deployment.Namespace).Delete(ctx, deployment.Name, metav1.DeleteOptions{})
@@ -180,7 +187,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			waitForPodsRunning(ctx, t, clientSet, deployment.Labels, tc.replicaCount, deployment.Namespace)
 
 			// Create a "Violator" Deployment that has the same label and is forced to be on the same node using a nodeSelector
-			violatorDeploymentName := name + "-violator"
+			violatorDeploymentName := tc.name + "-violator"
 			violatorCount := tc.topologySpreadConstraint.MaxSkew + 1
 			violatorDeployLabels := tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels
 			violatorDeployLabels["name"] = violatorDeploymentName
@@ -197,7 +204,9 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			waitForPodsRunning(ctx, t, clientSet, violatorDeployment.Labels, int(violatorCount), violatorDeployment.Namespace)
 
 			// Run TopologySpreadConstraint strategy
-			t.Logf("Running RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
+			t.Logf("Running RemovePodsViolatingTopologySpreadConstraint strategy for %s", tc.name)
+
+			preRunNames := sets.NewString(getCurrentPodNames(t, ctx, clientSet, testNamespace.Name)...)
 
 			evictorArgs := &defaultevictor.DefaultEvictorArgs{
 				EvictLocalStoragePods:   true,
@@ -254,13 +263,42 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			deschedulerPodName = waitForPodsRunning(ctx, t, clientSet, deschedulerDeploymentObj.Labels, 1, deschedulerDeploymentObj.Namespace)
 
 			// Run RemovePodsHavingTooManyRestarts strategy
-			var meetsExpectations bool
+			var meetsEvictedExpectations bool
+			var actualEvictedPodCount int
+			t.Logf("Check whether the number of evicted pods meets the expectation")
+			if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+				currentRunNames := sets.NewString(getCurrentPodNames(t, ctx, clientSet, testNamespace.Name)...)
+				actualEvictedPod := preRunNames.Difference(currentRunNames)
+				actualEvictedPodCount = actualEvictedPod.Len()
+				t.Logf("preRunNames: %v, currentRunNames: %v, actualEvictedPodCount: %v\n", preRunNames.List(), currentRunNames.List(), actualEvictedPodCount)
+				if actualEvictedPodCount != tc.expectedEvictedPodCount {
+					t.Logf("Expecting %v number of pods evicted, got %v instead", tc.expectedEvictedPodCount, actualEvictedPodCount)
+					return false, nil
+				}
+				meetsEvictedExpectations = true
+				return true, nil
+			}); err != nil {
+				t.Errorf("Error waiting for descheduler running: %v", err)
+			}
+
+			if !meetsEvictedExpectations {
+				t.Errorf("Unexpected number of pods have been evicted, got %v, expected %v", actualEvictedPodCount, tc.expectedEvictedPodCount)
+			} else {
+				t.Logf("Total of %d Pods were evicted for %s", actualEvictedPodCount, tc.name)
+			}
+
+			if tc.expectedEvictedPodCount == 0 {
+				return
+			}
+
+			var meetsSkewExpectations bool
 			var skewVal int
+			t.Logf("Check whether the skew meets the expectation")
 			if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
 				listOptions := metav1.ListOptions{LabelSelector: labels.SelectorFromSet(tc.topologySpreadConstraint.LabelSelector.MatchLabels).String()}
 				pods, err := clientSet.CoreV1().Pods(testNamespace.Name).List(ctx, listOptions)
 				if err != nil {
-					t.Errorf("Error listing pods for %s: %v", name, err)
+					t.Errorf("Error listing pods for %s: %v", tc.name, err)
 				}
 
 				nodePodCountMap := make(map[string]int)
@@ -269,26 +307,26 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				}
 
 				if len(nodePodCountMap) != len(workerNodes) {
-					t.Errorf("%s Pods were scheduled on only '%d' nodes and were not properly distributed on the nodes", name, len(nodePodCountMap))
+					t.Errorf("%s Pods were scheduled on only '%d' nodes and were not properly distributed on the nodes", tc.name, len(nodePodCountMap))
 					return false, nil
 				}
 
 				skewVal = getSkewValPodDistribution(nodePodCountMap)
 				if skewVal > int(tc.topologySpreadConstraint.MaxSkew) {
-					t.Errorf("Pod distribution for %s is still violating the max skew of %d as it is %d", name, tc.topologySpreadConstraint.MaxSkew, skewVal)
+					t.Errorf("Pod distribution for %s is still violating the max skew of %d as it is %d", tc.name, tc.topologySpreadConstraint.MaxSkew, skewVal)
 					return false, nil
 				}
 
-				meetsExpectations = true
+				meetsSkewExpectations = true
 				return true, nil
 			}); err != nil {
 				t.Errorf("Error waiting for descheduler running: %v", err)
 			}
 
-			if !meetsExpectations {
-				t.Errorf("Pod distribution for %s is still violating the max skew of %d as it is %d", name, tc.topologySpreadConstraint.MaxSkew, skewVal)
+			if !meetsSkewExpectations {
+				t.Errorf("Pod distribution for %s is still violating the max skew of %d as it is %d", tc.name, tc.topologySpreadConstraint.MaxSkew, skewVal)
 			} else {
-				t.Logf("Pods for %s were distributed in line with max skew of %d", name, tc.topologySpreadConstraint.MaxSkew)
+				t.Logf("Pods for %s were distributed in line with max skew of %d", tc.name, tc.topologySpreadConstraint.MaxSkew)
 			}
 		})
 	}
