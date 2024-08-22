@@ -43,6 +43,9 @@ func SetDefaults_DefaultEvictorArgs(obj runtime.Object) {
 	if !args.EvictFailedBarePods {
 		args.EvictFailedBarePods = false
 	}
+	if args.NamespaceLabelSelector == nil {
+		args.NamespaceLabelSelector = nil
+	}
 	if args.LabelSelector == nil {
 		args.LabelSelector = nil
 	}

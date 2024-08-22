@@ -25,8 +25,10 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -230,6 +232,27 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 		}
 		return true
 	}
+
+	// check pod by namespace label filter
+	if d.args.NamespaceLabelSelector != nil {
+		indexName := "metadata.namespace"
+		indexer, err := getNamespacesListByLabelSelector(indexName, d.args.NamespaceLabelSelector, d.handle)
+		if err != nil {
+			klog.ErrorS(err, "unable to list namespaces", "pod", klog.KObj(pod))
+			return false
+		}
+		objs, err := indexer.ByIndex(indexName, pod.Namespace)
+		if err != nil {
+			klog.ErrorS(err, "unable to list namespaces for namespaceLabelSelector filter in the policy parameter", "pod", klog.KObj(pod))
+			return false
+		}
+		if len(objs) == 0 {
+			klog.InfoS("pod namespace do not match the namespaceLabelSelector filter in the policy parameter", "pod", klog.KObj(pod))
+			return false
+		}
+		return true
+	}
+
 	return true
 }
 
@@ -285,6 +308,42 @@ func getPodIndexerByOwnerRefs(indexName string, handle frameworktypes.Handle) (c
 			}
 
 			return podutil.OwnerRefUIDs(pod), nil
+		},
+	}); err != nil {
+		return nil, err
+	}
+
+	return indexer, nil
+}
+
+func getNamespacesListByLabelSelector(indexName string, labelSelector *metav1.LabelSelector, handle frameworktypes.Handle) (cache.Indexer, error) {
+	nsInformer := handle.SharedInformerFactory().Core().V1().Namespaces().Informer()
+	indexer := nsInformer.GetIndexer()
+
+	// do not reinitialize the indexer, if it's been defined already
+	for name := range indexer.GetIndexers() {
+		if name == indexName {
+			return indexer, nil
+		}
+	}
+
+	if err := nsInformer.AddIndexers(cache.Indexers{
+		indexName: func(obj interface{}) ([]string, error) {
+			ns, ok := obj.(*v1.Namespace)
+			if !ok {
+				return []string{}, errors.New("unexpected object")
+			}
+
+			selector, err := metav1.LabelSelectorAsSelector(labelSelector)
+			if err != nil {
+				return []string{}, errors.New("could not get selector from label selector")
+			}
+			if labelSelector != nil && !selector.Empty() {
+				if !selector.Matches(labels.Set(ns.Labels)) {
+					return []string{}, nil
+				}
+			}
+			return []string{ns.GetName()}, nil
 		},
 	}); err != nil {
 		return nil, err

@@ -15,6 +15,7 @@ package defaultevictor
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
@@ -31,6 +32,7 @@ type DefaultEvictorArgs struct {
 	EvictSystemCriticalPods bool                   `json:"evictSystemCriticalPods,omitempty"`
 	IgnorePvcPods           bool                   `json:"ignorePvcPods,omitempty"`
 	EvictFailedBarePods     bool                   `json:"evictFailedBarePods,omitempty"`
+	NamespaceLabelSelector  *metav1.LabelSelector  `json:"namespaceLabelSelector,omitempty"`
 	LabelSelector           *metav1.LabelSelector  `json:"labelSelector,omitempty"`
 	PriorityThreshold       *api.PriorityThreshold `json:"priorityThreshold,omitempty"`
 	NodeFit                 bool                   `json:"nodeFit,omitempty"`
