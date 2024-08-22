@@ -24,8 +24,11 @@ rules:
   verbs: ["get", "watch", "list"]
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
+  verbs: ["create"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
   resourceNames: ["descheduler"]
-  verbs: ["get", "patch", "delete","create", "update"]
+  verbs: ["get", "patch", "delete"]
 ---
 apiVersion: v1
 kind: ServiceAccount
