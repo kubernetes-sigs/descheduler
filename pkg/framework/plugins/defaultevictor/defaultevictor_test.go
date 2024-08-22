@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
@@ -44,9 +45,17 @@ type testCase struct {
 	evictSystemCriticalPods bool
 	priorityThreshold       *int32
 	nodeFit                 bool
+	useNamespaceSelector    bool
 	minReplicas             uint
 	minPodAge               *metav1.Duration
 	result                  bool
+}
+
+var namespace = "test"
+var namespaceSelector = &metav1.LabelSelector{
+	MatchLabels: map[string]string{
+		"kubernetes.io/metadata.name": namespace,
+	},
 }
 
 func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
@@ -304,6 +313,63 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			nodeFit:                 false,
 			result:                  true,
+		},
+		{
+			description: "Pod with namespace matched namespace selector, should be evicted",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.Namespace = namespace
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.NodeSelector = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+				}),
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode("node2", 1000, 2000, 13, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+				}),
+				test.BuildTestNode("node3", 1000, 2000, 13, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+				}),
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			nodeFit:                 true,
+			useNamespaceSelector:    true,
+			result:                  true,
+		},
+		{
+			description: "Pod wit namespace does not matched namespace selector, should not be evicted",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.NodeSelector = map[string]string{
+						nodeLabelKey: "fail",
+					}
+				}),
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode("node2", 1000, 2000, 13, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+				}),
+				test.BuildTestNode("node3", 1000, 2000, 13, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+				}),
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			nodeFit:                 true,
+			useNamespaceSelector:    true,
+			result:                  false,
 		},
 	}
 
@@ -836,6 +902,10 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 		NodeFit:     test.nodeFit,
 		MinReplicas: test.minReplicas,
 		MinPodAge:   test.minPodAge,
+	}
+
+	if test.useNamespaceSelector {
+		defaultEvictorArgs.NamespaceLabelSelector = namespaceSelector
 	}
 
 	evictorPlugin, err := New(
