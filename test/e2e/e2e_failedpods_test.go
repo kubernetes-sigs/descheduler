@@ -145,7 +145,7 @@ func TestFailedPods(t *testing.T) {
 				Include: []string{testNamespace.Name},
 			}
 
-			deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(removeFailedPodsPolicy(tc.removeFailedPodsArgs, evictorArgs))
+			deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(removeFailedPodsPolicy(tc.removeFailedPodsArgs, evictorArgs), nil)
 			if err != nil {
 				t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
 			}
@@ -164,7 +164,7 @@ func TestFailedPods(t *testing.T) {
 				}
 			}()
 
-			deschedulerDeploymentObj := deschedulerDeployment(testNamespace.Name)
+			deschedulerDeploymentObj := deschedulerDeployment(testNamespace.Name, nil)
 			t.Logf("Creating descheduler deployment %v", deschedulerDeploymentObj.Name)
 			_, err = clientSet.AppsV1().Deployments(deschedulerDeploymentObj.Namespace).Create(ctx, deschedulerDeploymentObj, metav1.CreateOptions{})
 			if err != nil {

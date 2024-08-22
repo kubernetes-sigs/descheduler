@@ -220,7 +220,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					Include: []string{testNamespace.Name},
 				},
 			}
-			deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(topologySpreadConstraintPolicy(constraintArgs, evictorArgs))
+			deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(topologySpreadConstraintPolicy(constraintArgs, evictorArgs), nil)
 			if err != nil {
 				t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
 			}
@@ -238,7 +238,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					t.Fatalf("Unable to delete %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
 				}
 			}()
-			deschedulerDeploymentObj := deschedulerDeployment(testNamespace.Name)
+			deschedulerDeploymentObj := deschedulerDeployment(testNamespace.Name, nil)
 			t.Logf("Creating descheduler deployment %v", deschedulerDeploymentObj.Name)
 			_, err = clientSet.AppsV1().Deployments(deschedulerDeploymentObj.Namespace).Create(ctx, deschedulerDeploymentObj, metav1.CreateOptions{})
 			if err != nil {

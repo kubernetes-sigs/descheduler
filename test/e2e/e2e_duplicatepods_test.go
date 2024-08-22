@@ -189,8 +189,7 @@ func TestRemoveDuplicates(t *testing.T) {
 			tc.removeDuplicatesArgs.Namespaces = &api.Namespaces{
 				Include: []string{testNamespace.Name},
 			}
-			tc.evictorArgs.MinPodAge = &metav1.Duration{Duration: 1 * time.Second}
-			deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(removeDuplicatesPolicy(tc.removeDuplicatesArgs, tc.evictorArgs))
+			deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(removeDuplicatesPolicy(tc.removeDuplicatesArgs, tc.evictorArgs), nil)
 			if err != nil {
 				t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
 			}
@@ -209,7 +208,7 @@ func TestRemoveDuplicates(t *testing.T) {
 				}
 			}()
 
-			deschedulerDeploymentObj := deschedulerDeployment(testNamespace.Name)
+			deschedulerDeploymentObj := deschedulerDeployment(testNamespace.Name, nil)
 			t.Logf("Creating descheduler deployment %v", deschedulerDeploymentObj.Name)
 			_, err = clientSet.AppsV1().Deployments(deschedulerDeploymentObj.Namespace).Create(ctx, deschedulerDeploymentObj, metav1.CreateOptions{})
 			if err != nil {

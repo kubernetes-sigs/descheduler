@@ -69,7 +69,7 @@ func isClientRateLimiterError(err error) bool {
 	return strings.Contains(err.Error(), "client rate limiter")
 }
 
-func deschedulerPolicyConfigMap(policy *deschedulerapiv1alpha2.DeschedulerPolicy) (*v1.ConfigMap, error) {
+func deschedulerPolicyConfigMap(policy *deschedulerapiv1alpha2.DeschedulerPolicy, apply func(cm *v1.ConfigMap)) (*v1.ConfigMap, error) {
 	cm := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "descheduler-policy-configmap",
@@ -83,11 +83,16 @@ func deschedulerPolicyConfigMap(policy *deschedulerapiv1alpha2.DeschedulerPolicy
 		return nil, err
 	}
 	cm.Data = map[string]string{"policy.yaml": string(policyBytes)}
+
+	if apply != nil {
+		apply(cm)
+	}
+
 	return cm, nil
 }
 
-func deschedulerDeployment(testName string) *appsv1.Deployment {
-	return &appsv1.Deployment{
+func deschedulerDeployment(testName string, apply func(deployment *appsv1.Deployment)) *appsv1.Deployment {
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "descheduler",
 			Namespace: "kube-system",
@@ -174,6 +179,12 @@ func deschedulerDeployment(testName string) *appsv1.Deployment {
 			},
 		},
 	}
+
+	if apply != nil {
+		apply(deployment)
+	}
+
+	return deployment
 }
 
 func printPodLogs(ctx context.Context, t *testing.T, kubeClient clientset.Interface, podName string) {

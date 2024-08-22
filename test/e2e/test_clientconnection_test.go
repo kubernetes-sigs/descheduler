@@ -24,7 +24,7 @@ func TestClientConnectionConfiguration(t *testing.T) {
 		t.Errorf("Error during kubernetes client creation with %v", err)
 	}
 
-	deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(&apiv1alpha2.DeschedulerPolicy{})
+	deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(&apiv1alpha2.DeschedulerPolicy{}, nil)
 	if err != nil {
 		t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
 	}
@@ -43,7 +43,7 @@ func TestClientConnectionConfiguration(t *testing.T) {
 		}
 	}()
 
-	deschedulerDeploymentObj := deschedulerDeployment(testName)
+	deschedulerDeploymentObj := deschedulerDeployment(testName, nil)
 	t.Logf("Creating descheduler deployment %v", deschedulerDeploymentObj.Name)
 	_, err = clientSet.AppsV1().Deployments(deschedulerDeploymentObj.Namespace).Create(ctx, deschedulerDeploymentObj, metav1.CreateOptions{})
 	if err != nil {

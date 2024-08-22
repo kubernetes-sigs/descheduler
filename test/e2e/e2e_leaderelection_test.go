@@ -209,10 +209,10 @@ func startDeschedulerServer(t *testing.T, ctx context.Context, clientSet clients
 		EvictSystemCriticalPods: false,
 		IgnorePvcPods:           false,
 		EvictFailedBarePods:     false,
-		MinPodAge:               &metav1.Duration{Duration: 1 * time.Second},
 	}
-	deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(podlifetimePolicy(podLifeTimeArgs, evictorArgs))
-	deschedulerPolicyConfigMapObj.Name = fmt.Sprintf("%s-%s", deschedulerPolicyConfigMapObj.Name, testName)
+	deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(podlifetimePolicy(podLifeTimeArgs, evictorArgs), func(cm *v1.ConfigMap) {
+		cm.Name = fmt.Sprintf("%s-%s", cm.Name, testName)
+	})
 	if err != nil {
 		t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
 	}
@@ -223,10 +223,24 @@ func startDeschedulerServer(t *testing.T, ctx context.Context, clientSet clients
 		t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
 	}
 
-	deschedulerDeploymentObj := deschedulerDeployment(testName)
-	deschedulerDeploymentObj.Name = fmt.Sprintf("%s-%s", deschedulerDeploymentObj.Name, testName)
-	args := deschedulerDeploymentObj.Spec.Template.Spec.Containers[0].Args
-	deschedulerDeploymentObj.Spec.Template.Spec.Containers[0].Args = append(args, "--leader-elect")
+	deschedulerDeploymentObj := deschedulerDeployment(testName, func(deployment *appsv1.Deployment) {
+		deployment.Name = fmt.Sprintf("%s-%s", deployment.Name, testName)
+		args := deployment.Spec.Template.Spec.Containers[0].Args
+		deployment.Spec.Template.Spec.Containers[0].Args = append(args, "--leader-elect")
+		deployment.Spec.Template.Spec.Volumes = []v1.Volume{
+			{
+				Name: "policy-volume",
+				VolumeSource: v1.VolumeSource{
+					ConfigMap: &v1.ConfigMapVolumeSource{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: deschedulerPolicyConfigMapObj.Name,
+						},
+					},
+				},
+			},
+		}
+	})
+
 	t.Logf("Creating descheduler deployment %v", deschedulerDeploymentObj.Name)
 	_, err = clientSet.AppsV1().Deployments(deschedulerDeploymentObj.Namespace).Create(ctx, deschedulerDeploymentObj, metav1.CreateOptions{})
 	if err != nil {
