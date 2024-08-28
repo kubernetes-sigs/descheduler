@@ -56,6 +56,7 @@ func NewDeschedulerServer() (*DeschedulerServer, error) {
 
 	secureServing := apiserveroptions.NewSecureServingOptions().WithLoopback()
 	secureServing.BindPort = DefaultDeschedulerPort
+	secureServing.DisableHTTP2Serving = true
 
 	return &DeschedulerServer{
 		DeschedulerConfiguration: *cfg,
@@ -101,7 +102,7 @@ func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&rs.Tracing.ServiceNamespace, "otel-trace-namespace", "", "OTEL Trace namespace to be used with the resources")
 	fs.Float64Var(&rs.Tracing.SampleRate, "otel-sample-rate", 1.0, "Sample rate to collect the Traces")
 	fs.BoolVar(&rs.Tracing.FallbackToNoOpProviderOnError, "otel-fallback-no-op-on-error", false, "Fallback to NoOp Tracer in case of error")
-	fs.BoolVar(&rs.EnableHTTP2, "enable-http2", false, "If http/2 should be enabled for the metrics and health check")
+	fs.BoolVar(&rs.EnableHTTP2, "enable-http2", false, "Deprecated: use disable-http2-serving instead. If http/2 should be enabled for the metrics and health check")
 
 	componentbaseoptions.BindLeaderElectionFlags(&rs.LeaderElection, fs)
 
