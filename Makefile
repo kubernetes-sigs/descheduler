@@ -26,10 +26,10 @@ ARCHS = amd64 arm arm64
 
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitbranch=${BRANCH} -X ${LDFLAG_LOCATION}.gitsha1=${SHA1}"
 
-GOLANGCI_VERSION := v1.59.1
+GOLANGCI_VERSION := v1.60.3
 HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint 2> /dev/null)
 
-GOFUMPT_VERSION := v0.4.0
+GOFUMPT_VERSION := v0.7.0
 HAS_GOFUMPT := $(shell command -v gofumpt 2> /dev/null)
 
 GO_VERSION := $(shell (command -v jq > /dev/null && (go mod edit -json | jq -r .Go)) || (sed -En 's/^go (.*)$$/\1/p' go.mod))
