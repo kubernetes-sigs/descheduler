@@ -305,7 +305,8 @@ func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node)
 		var span trace.Span
 		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("profile", d.profileName), attribute.String("operation", tracing.DescheduleOperation)))
 		defer span.End()
-		evicted := d.podEvictor.TotalEvicted()
+		evictedBeforeDeschedule := d.podEvictor.TotalEvicted()
+		evictionRequestsBeforeDeschedule := d.podEvictor.TotalEvictionRequests()
 		strategyStart := time.Now()
 		status := pl.Deschedule(ctx, nodes)
 		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": d.profileName}).Observe(time.Since(strategyStart).Seconds())
@@ -314,7 +315,7 @@ func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node)
 			span.AddEvent("Plugin Execution Failed", trace.WithAttributes(attribute.String("err", status.Err.Error())))
 			errs = append(errs, fmt.Errorf("plugin %q finished with error: %v", pl.Name(), status.Err))
 		}
-		klog.V(1).InfoS("Total number of pods evicted", "extension point", "Deschedule", "evictedPods", d.podEvictor.TotalEvicted()-evicted)
+		klog.V(1).InfoS("Total number of evictions/requests", "extension point", "Deschedule", "evictedPods", d.podEvictor.TotalEvicted()-evictedBeforeDeschedule, "evictionRequests", d.podEvictor.TotalEvictionRequests()-evictionRequestsBeforeDeschedule)
 	}
 
 	aggrErr := errors.NewAggregate(errs)
@@ -333,7 +334,8 @@ func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *f
 		var span trace.Span
 		ctx, span = tracing.Tracer().Start(ctx, pl.Name(), trace.WithAttributes(attribute.String("plugin", pl.Name()), attribute.String("profile", d.profileName), attribute.String("operation", tracing.BalanceOperation)))
 		defer span.End()
-		evicted := d.podEvictor.TotalEvicted()
+		evictedBeforeBalance := d.podEvictor.TotalEvicted()
+		evictionRequestsBeforeBalance := d.podEvictor.TotalEvictionRequests()
 		strategyStart := time.Now()
 		status := pl.Balance(ctx, nodes)
 		metrics.DeschedulerStrategyDuration.With(map[string]string{"strategy": pl.Name(), "profile": d.profileName}).Observe(time.Since(strategyStart).Seconds())
@@ -342,7 +344,7 @@ func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *f
 			span.AddEvent("Plugin Execution Failed", trace.WithAttributes(attribute.String("err", status.Err.Error())))
 			errs = append(errs, fmt.Errorf("plugin %q finished with error: %v", pl.Name(), status.Err))
 		}
-		klog.V(1).InfoS("Total number of pods evicted", "extension point", "Balance", "evictedPods", d.podEvictor.TotalEvicted()-evicted)
+		klog.V(1).InfoS("Total number of evictions/requests", "extension point", "Balance", "evictedPods", d.podEvictor.TotalEvicted()-evictedBeforeBalance, "evictionRequests", d.podEvictor.TotalEvictionRequests()-evictionRequestsBeforeBalance)
 	}
 
 	aggrErr := errors.NewAggregate(errs)

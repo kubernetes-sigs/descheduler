@@ -148,6 +148,7 @@ func TestTooManyRestarts(t *testing.T) {
 			}
 			rs.Client = clientSet
 			rs.EventClient = clientSet
+			rs.DefaultFeatureGates = initFeatureGates()
 
 			preRunNames := sets.NewString(getCurrentPodNames(ctx, clientSet, testNamespace.Name, t)...)
 			// Deploy the descheduler with the configured policy
