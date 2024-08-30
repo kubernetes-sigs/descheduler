@@ -42,6 +42,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	componentbaseconfig "k8s.io/component-base/config"
+	"k8s.io/component-base/featuregate"
 	"k8s.io/klog/v2"
 	utilptr "k8s.io/utils/ptr"
 
@@ -55,6 +56,7 @@ import (
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/features"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
@@ -68,6 +70,14 @@ import (
 
 func isClientRateLimiterError(err error) bool {
 	return strings.Contains(err.Error(), "client rate limiter")
+}
+
+func initFeatureGates() featuregate.FeatureGate {
+	featureGates := featuregate.NewFeatureGate()
+	featureGates.Add(map[featuregate.Feature]featuregate.FeatureSpec{
+		features.EvictionsInBackground: {Default: false, PreRelease: featuregate.Alpha},
+	})
+	return featureGates
 }
 
 func deschedulerPolicyConfigMap(policy *deschedulerapiv1alpha2.DeschedulerPolicy) (*v1.ConfigMap, error) {
@@ -1336,6 +1346,7 @@ func TestDeschedulingInterval(t *testing.T) {
 		t.Fatalf("Unable to initialize server: %v", err)
 	}
 	s.Client = clientSet
+	s.DefaultFeatureGates = initFeatureGates()
 
 	deschedulerPolicy := &deschedulerapi.DeschedulerPolicy{}
 
