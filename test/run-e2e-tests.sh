@@ -22,6 +22,14 @@ set -o nounset
 SKIP_INSTALL=${SKIP_INSTALL:-}
 KIND_E2E=${KIND_E2E:-}
 
+# Build a descheduler image
+IMAGE_TAG=$(git describe --tags --match v0*)
+BASEDIR=$(dirname "$0")
+VERSION="${IMAGE_TAG}" make -C ${BASEDIR}/.. image
+
+export DESCHEDULER_IMAGE="docker.io/library/descheduler:${IMAGE_TAG}"
+echo "DESCHEDULER_IMAGE: ${DESCHEDULER_IMAGE}"
+
 # This just runs e2e tests.
 if [ -n "$KIND_E2E" ]; then
     # If we did not set SKIP_INSTALL
@@ -36,10 +44,14 @@ if [ -n "$KIND_E2E" ]; then
     fi
     ${CONTAINER_ENGINE:-docker} pull registry.k8s.io/pause
     kind load docker-image registry.k8s.io/pause
+    kind load docker-image ${DESCHEDULER_IMAGE}
     kind get kubeconfig > /tmp/admin.conf
     export KUBECONFIG="/tmp/admin.conf"
     mkdir -p ~/gopath/src/sigs.k8s.io/
 fi
+
+# Deploy rbac, sa and binding for a descheduler running through a deployment
+kubectl apply -f kubernetes/base/rbac.yaml
 
 PRJ_PREFIX="sigs.k8s.io/descheduler"
 go test ${PRJ_PREFIX}/test/e2e/ -v

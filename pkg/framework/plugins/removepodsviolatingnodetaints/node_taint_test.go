@@ -22,17 +22,13 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/events"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
@@ -110,6 +106,12 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, nil)
 	p5 := test.BuildTestPod("p5", 100, 0, node1.Name, nil)
 	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, nil)
+	p7 := test.BuildTestPod("p7", 100, 0, node2.Name, nil)
+	p8 := test.BuildTestPod("p8", 100, 0, node2.Name, nil)
+	p9 := test.BuildTestPod("p9", 100, 0, node2.Name, nil)
+	p10 := test.BuildTestPod("p10", 100, 0, node2.Name, nil)
+	p11 := test.BuildTestPod("p11", 100, 0, node2.Name, nil)
+	p12 := test.BuildTestPod("p11", 100, 0, node2.Name, nil)
 
 	p1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -117,13 +119,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p4.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p5.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p7 := test.BuildTestPod("p7", 100, 0, node2.Name, nil)
-	p8 := test.BuildTestPod("p8", 100, 0, node2.Name, nil)
-	p9 := test.BuildTestPod("p9", 100, 0, node2.Name, nil)
-	p10 := test.BuildTestPod("p10", 100, 0, node2.Name, nil)
-	p11 := test.BuildTestPod("p11", 100, 0, node2.Name, nil)
+	p7.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	p8.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	p9.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	p10.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p11.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p12 := test.BuildTestPod("p11", 100, 0, node2.Name, nil)
 	p12.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
 	// The following 4 pods won't get evicted.
@@ -174,7 +174,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p15 = addTolerationToPod(p15, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
 	p15 = addTolerationToPod(p15, "testingTaint", "testing", 1, v1.TaintEffectNoSchedule)
 
-	var uint1 uint = 1
+	var uint1, uint2 uint = 1, 2
 
 	tests := []struct {
 		description                    string
@@ -184,6 +184,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		evictSystemCriticalPods        bool
 		maxPodsToEvictPerNode          *uint
 		maxNoOfPodsToEvictPerNamespace *uint
+		maxNoOfPodsToEvictTotal        *uint
 		expectedEvictedPodCount        uint
 		nodeFit                        bool
 		includePreferNoSchedule        bool
@@ -207,6 +208,16 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			expectedEvictedPodCount: 1, // p4 gets evicted
 		},
 		{
+			description:             "Only <maxNoOfPodsToEvictTotal> number of Pods not tolerating node taint should be evicted",
+			pods:                    []*v1.Pod{p1, p5, p6},
+			nodes:                   []*v1.Node{node1},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			maxPodsToEvictPerNode:   &uint2,
+			maxNoOfPodsToEvictTotal: &uint1,
+			expectedEvictedPodCount: 1, // p5 or p6 gets evicted
+		},
+		{
 			description:             "Only <maxPodsToEvictPerNode> number of Pods not tolerating node taint should be evicted",
 			pods:                    []*v1.Pod{p1, p5, p6},
 			nodes:                   []*v1.Node{node1},
@@ -214,6 +225,15 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			evictSystemCriticalPods: false,
 			maxPodsToEvictPerNode:   &uint1,
 			expectedEvictedPodCount: 1, // p5 or p6 gets evicted
+		},
+		{
+			description:                    "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
+			pods:                           []*v1.Pod{p1, p5, p6},
+			nodes:                          []*v1.Node{node1},
+			evictLocalStoragePods:          false,
+			evictSystemCriticalPods:        false,
+			maxNoOfPodsToEvictPerNamespace: &uint1,
+			expectedEvictedPodCount:        1, // p5 or p6 gets evicted
 		},
 		{
 			description:                    "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
@@ -387,56 +407,22 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
-			if err != nil {
-				t.Errorf("Build get pods assigned to node function error: %v", err)
-			}
-
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-			eventRecorder := &events.FakeRecorder{}
-
-			podEvictor := evictions.NewPodEvictor(
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+				ctx,
 				fakeClient,
-				policyv1.SchemeGroupVersion.String(),
-				false,
-				tc.maxPodsToEvictPerNode,
-				tc.maxNoOfPodsToEvictPerNamespace,
-				tc.nodes,
-				false,
-				eventRecorder,
-			)
-
-			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   tc.evictLocalStoragePods,
-				EvictSystemCriticalPods: tc.evictSystemCriticalPods,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
-				NodeFit:                 tc.nodeFit,
-			}
-
-			evictorFilter, err := defaultevictor.New(
-				defaultevictorArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
+				evictions.NewOptions().
+					WithMaxPodsToEvictPerNode(tc.maxPodsToEvictPerNode).
+					WithMaxPodsToEvictPerNamespace(tc.maxNoOfPodsToEvictPerNamespace).
+					WithMaxPodsToEvictTotal(tc.maxNoOfPodsToEvictTotal),
+				defaultevictor.DefaultEvictorArgs{
+					EvictLocalStoragePods:   tc.evictLocalStoragePods,
+					EvictSystemCriticalPods: tc.evictSystemCriticalPods,
+					NodeFit:                 tc.nodeFit,
 				},
+				nil,
 			)
 			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
-			}
-
-			handle := &frameworkfake.HandleImpl{
-				ClientsetImpl:                 fakeClient,
-				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
-				SharedInformerFactoryImpl:     sharedInformerFactory,
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
 			plugin, err := New(&RemovePodsViolatingNodeTaintsArgs{

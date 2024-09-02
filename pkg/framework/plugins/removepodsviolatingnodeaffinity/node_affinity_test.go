@@ -21,18 +21,14 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/events"
-	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -120,6 +116,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 		expectedEvictedPodCount        uint
 		maxPodsToEvictPerNode          *uint
 		maxNoOfPodsToEvictPerNamespace *uint
+		maxNoOfPodsToEvictTotal        *uint
 		args                           RemovePodsViolatingNodeAffinityArgs
 		nodefit                        bool
 	}{
@@ -239,6 +236,17 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			maxNoOfPodsToEvictPerNamespace: &uint1,
 		},
 		{
+			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictTotal set to 0, should not be evicted [required affinity]",
+			expectedEvictedPodCount: 0,
+			args: RemovePodsViolatingNodeAffinityArgs{
+				NodeAffinityType: []string{"requiredDuringSchedulingIgnoredDuringExecution"},
+			},
+			pods:                           addPodsToNode(nodeWithoutLabels, nil, "requiredDuringSchedulingIgnoredDuringExecution"),
+			nodes:                          []*v1.Node{nodeWithoutLabels, nodeWithLabels},
+			maxNoOfPodsToEvictPerNamespace: &uint1,
+			maxNoOfPodsToEvictTotal:        &uint0,
+		},
+		{
 			description:             "Pod is scheduled on node without matching labels, another schedulable node available, maxNoOfPodsToEvictPerNamespace set to 1, should be evicted [preferred affinity]",
 			expectedEvictedPodCount: 1,
 			args: RemovePodsViolatingNodeAffinityArgs{
@@ -346,56 +354,18 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
-			if err != nil {
-				t.Errorf("Build get pods assigned to node function error: %v", err)
-			}
-
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-			eventRecorder := &events.FakeRecorder{}
-
-			podEvictor := evictions.NewPodEvictor(
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+				ctx,
 				fakeClient,
-				policyv1.SchemeGroupVersion.String(),
-				false,
-				tc.maxPodsToEvictPerNode,
-				tc.maxNoOfPodsToEvictPerNamespace,
-				tc.nodes,
-				false,
-				eventRecorder,
-			)
-
-			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   false,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
-				NodeFit:                 tc.nodefit,
-			}
-
-			evictorFilter, err := defaultevictor.New(
-				defaultevictorArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-				},
+				evictions.NewOptions().
+					WithMaxPodsToEvictPerNode(tc.maxPodsToEvictPerNode).
+					WithMaxPodsToEvictPerNamespace(tc.maxNoOfPodsToEvictPerNamespace).
+					WithMaxPodsToEvictTotal(tc.maxNoOfPodsToEvictTotal),
+				defaultevictor.DefaultEvictorArgs{NodeFit: tc.nodefit},
+				nil,
 			)
 			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
-			}
-
-			handle := &frameworkfake.HandleImpl{
-				ClientsetImpl:                 fakeClient,
-				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				PodEvictorImpl:                podEvictor,
-				SharedInformerFactoryImpl:     sharedInformerFactory,
-				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
 			plugin, err := New(

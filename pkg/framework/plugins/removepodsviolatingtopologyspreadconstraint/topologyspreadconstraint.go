@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
-	utilpointer "k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 
 	v1helper "k8s.io/component-helpers/scheduling/corev1"
 	"k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
@@ -235,10 +235,18 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 		}
 
 		if d.handle.Evictor().PreEvictionFilter(pod) {
-			d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
-		}
-		if d.handle.Evictor().NodeLimitExceeded(nodeMap[pod.Spec.NodeName]) {
-			nodeLimitExceeded[pod.Spec.NodeName] = true
+			err := d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
+			if err == nil {
+				continue
+			}
+			switch err.(type) {
+			case *evictions.EvictionNodeLimitError:
+				nodeLimitExceeded[pod.Spec.NodeName] = true
+			case *evictions.EvictionTotalLimitError:
+				return nil
+			default:
+				klog.Errorf("eviction failed: %v", err)
+			}
 		}
 	}
 
@@ -305,7 +313,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(
 	isEvictable := d.handle.Evictor().Filter
 	sortedDomains := sortDomains(constraintTopologies, isEvictable)
 	getPodsAssignedToNode := d.handle.GetPodsAssignedToNodeFunc()
-	topologyBalanceNodeFit := utilpointer.BoolDeref(d.args.TopologyBalanceNodeFit, true)
+	topologyBalanceNodeFit := utilptr.Deref(d.args.TopologyBalanceNodeFit, true)
 
 	eligibleNodes := filterEligibleNodes(nodes, tsc)
 	nodesBelowIdealAvg := filterNodesBelowIdealAvg(eligibleNodes, sortedDomains, tsc.TopologyKey, idealAvg)

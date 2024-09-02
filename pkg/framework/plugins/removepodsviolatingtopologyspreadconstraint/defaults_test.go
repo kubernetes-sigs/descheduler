@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	utilpointer "k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
@@ -48,7 +48,7 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 				Namespaces:             nil,
 				LabelSelector:          nil,
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
-				TopologyBalanceNodeFit: utilpointer.Bool(true),
+				TopologyBalanceNodeFit: utilptr.To(true),
 			},
 		},
 		{
@@ -62,7 +62,7 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 				Namespaces:             &api.Namespaces{},
 				LabelSelector:          &metav1.LabelSelector{},
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule, v1.ScheduleAnyway},
-				TopologyBalanceNodeFit: utilpointer.Bool(true),
+				TopologyBalanceNodeFit: utilptr.To(true),
 			},
 		},
 		{
@@ -70,16 +70,16 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 			in:   &RemovePodsViolatingTopologySpreadConstraintArgs{},
 			want: &RemovePodsViolatingTopologySpreadConstraintArgs{
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
-				TopologyBalanceNodeFit: utilpointer.Bool(true),
+				TopologyBalanceNodeFit: utilptr.To(true),
 			},
 		},
 		{
 			name: "RemovePodsViolatingTopologySpreadConstraintArgs with TopologyBalanceNodeFit=false",
 			in: &RemovePodsViolatingTopologySpreadConstraintArgs{
-				TopologyBalanceNodeFit: utilpointer.Bool(false),
+				TopologyBalanceNodeFit: utilptr.To(false),
 			},
 			want: &RemovePodsViolatingTopologySpreadConstraintArgs{
-				TopologyBalanceNodeFit: utilpointer.Bool(false),
+				TopologyBalanceNodeFit: utilptr.To(false),
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
 			},
 		},
@@ -90,7 +90,7 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 			},
 			want: &RemovePodsViolatingTopologySpreadConstraintArgs{
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
-				TopologyBalanceNodeFit: utilpointer.Bool(true),
+				TopologyBalanceNodeFit: utilptr.To(true),
 			},
 		},
 	}

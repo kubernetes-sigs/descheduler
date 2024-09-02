@@ -22,9 +22,12 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/events"
+	utilptr "k8s.io/utils/ptr"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
@@ -111,5 +114,54 @@ func TestPodTypes(t *testing.T) {
 	ownerRefList = podutil.OwnerRef(p1)
 	if utils.IsDaemonsetPod(ownerRefList) || utils.IsPodWithLocalStorage(p1) || utils.IsCriticalPriorityPod(p1) || utils.IsMirrorPod(p1) || utils.IsStaticPod(p1) {
 		t.Errorf("Expected p1 to be a normal pod.")
+	}
+}
+
+func TestNewPodEvictor(t *testing.T) {
+	pod1 := test.BuildTestPod("pod", 400, 0, "node", nil)
+
+	fakeClient := fake.NewSimpleClientset(pod1)
+
+	eventRecorder := &events.FakeRecorder{}
+
+	podEvictor := NewPodEvictor(
+		fakeClient,
+		eventRecorder,
+		NewOptions().WithMaxPodsToEvictPerNode(utilptr.To[uint](1)),
+	)
+
+	stubNode := &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node"}}
+
+	// 0 evictions expected
+	if evictions := podEvictor.NodeEvicted(stubNode); evictions != 0 {
+		t.Errorf("Expected 0 node evictions, got %q instead", evictions)
+	}
+	// 0 evictions expected
+	if evictions := podEvictor.TotalEvicted(); evictions != 0 {
+		t.Errorf("Expected 0 total evictions, got %q instead", evictions)
+	}
+
+	if err := podEvictor.EvictPod(context.TODO(), pod1, EvictOptions{}); err != nil {
+		t.Errorf("Expected a pod eviction, got an eviction error instead: %v", err)
+	}
+
+	// 1 node eviction expected
+	if evictions := podEvictor.NodeEvicted(stubNode); evictions != 1 {
+		t.Errorf("Expected 1 node eviction, got %q instead", evictions)
+	}
+	// 1 total eviction expected
+	if evictions := podEvictor.TotalEvicted(); evictions != 1 {
+		t.Errorf("Expected 1 total evictions, got %q instead", evictions)
+	}
+
+	err := podEvictor.EvictPod(context.TODO(), pod1, EvictOptions{})
+	if err == nil {
+		t.Errorf("Expected a pod eviction error, got nil instead")
+	}
+	switch err.(type) {
+	case *EvictionNodeLimitError:
+		// all good
+	default:
+		t.Errorf("Expected a pod eviction EvictionNodeLimitError error, got a different error instead: %v", err)
 	}
 }

@@ -19,6 +19,7 @@ package evictions
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -42,69 +43,69 @@ type (
 )
 
 type PodEvictor struct {
+	mu                         sync.Mutex
 	client                     clientset.Interface
-	nodes                      []*v1.Node
 	policyGroupVersion         string
 	dryRun                     bool
 	maxPodsToEvictPerNode      *uint
 	maxPodsToEvictPerNamespace *uint
-	nodepodCount               nodePodEvictedCount
+	maxPodsToEvictTotal        *uint
+	nodePodCount               nodePodEvictedCount
 	namespacePodCount          namespacePodEvictCount
+	totalPodCount              uint
 	metricsEnabled             bool
 	eventRecorder              events.EventRecorder
 }
 
 func NewPodEvictor(
 	client clientset.Interface,
-	policyGroupVersion string,
-	dryRun bool,
-	maxPodsToEvictPerNode *uint,
-	maxPodsToEvictPerNamespace *uint,
-	nodes []*v1.Node,
-	metricsEnabled bool,
 	eventRecorder events.EventRecorder,
+	options *Options,
 ) *PodEvictor {
-	nodePodCount := make(nodePodEvictedCount)
-	namespacePodCount := make(namespacePodEvictCount)
-	for _, node := range nodes {
-		// Initialize podsEvicted till now with 0.
-		nodePodCount[node.Name] = 0
+	if options == nil {
+		options = NewOptions()
 	}
 
 	return &PodEvictor{
 		client:                     client,
-		nodes:                      nodes,
-		policyGroupVersion:         policyGroupVersion,
-		dryRun:                     dryRun,
-		maxPodsToEvictPerNode:      maxPodsToEvictPerNode,
-		maxPodsToEvictPerNamespace: maxPodsToEvictPerNamespace,
-		nodepodCount:               nodePodCount,
-		namespacePodCount:          namespacePodCount,
-		metricsEnabled:             metricsEnabled,
 		eventRecorder:              eventRecorder,
+		policyGroupVersion:         options.policyGroupVersion,
+		dryRun:                     options.dryRun,
+		maxPodsToEvictPerNode:      options.maxPodsToEvictPerNode,
+		maxPodsToEvictPerNamespace: options.maxPodsToEvictPerNamespace,
+		maxPodsToEvictTotal:        options.maxPodsToEvictTotal,
+		metricsEnabled:             options.metricsEnabled,
+		nodePodCount:               make(nodePodEvictedCount),
+		namespacePodCount:          make(namespacePodEvictCount),
 	}
 }
 
 // NodeEvicted gives a number of pods evicted for node
 func (pe *PodEvictor) NodeEvicted(node *v1.Node) uint {
-	return pe.nodepodCount[node.Name]
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
+	return pe.nodePodCount[node.Name]
 }
 
 // TotalEvicted gives a number of pods evicted through all nodes
 func (pe *PodEvictor) TotalEvicted() uint {
-	var total uint
-	for _, count := range pe.nodepodCount {
-		total += count
-	}
-	return total
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
+	return pe.totalPodCount
 }
 
-// NodeLimitExceeded checks if the number of evictions for a node was exceeded
-func (pe *PodEvictor) NodeLimitExceeded(node *v1.Node) bool {
-	if pe.maxPodsToEvictPerNode != nil {
-		return pe.nodepodCount[node.Name] == *pe.maxPodsToEvictPerNode
-	}
-	return false
+func (pe *PodEvictor) ResetCounters() {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
+	pe.nodePodCount = make(nodePodEvictedCount)
+	pe.namespacePodCount = make(namespacePodEvictCount)
+	pe.totalPodCount = 0
+}
+
+func (pe *PodEvictor) SetClient(client clientset.Interface) {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
+	pe.client = client
 }
 
 // EvictOptions provides a handle for passing additional info to EvictPod
@@ -119,29 +120,43 @@ type EvictOptions struct {
 
 // EvictPod evicts a pod while exercising eviction limits.
 // Returns true when the pod is evicted on the server side.
-func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptions) bool {
+func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptions) error {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
 	var span trace.Span
 	ctx, span = tracing.Tracer().Start(ctx, "EvictPod", trace.WithAttributes(attribute.String("podName", pod.Name), attribute.String("podNamespace", pod.Namespace), attribute.String("reason", opts.Reason), attribute.String("operation", tracing.EvictOperation)))
 	defer span.End()
 
+	if pe.maxPodsToEvictTotal != nil && pe.totalPodCount+1 > *pe.maxPodsToEvictTotal {
+		err := NewEvictionTotalLimitError()
+		if pe.metricsEnabled {
+			metrics.PodsEvicted.With(map[string]string{"result": err.Error(), "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
+		}
+		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
+		klog.ErrorS(err, "Error evicting pod", "limit", *pe.maxPodsToEvictTotal)
+		return err
+	}
+
 	if pod.Spec.NodeName != "" {
-		if pe.maxPodsToEvictPerNode != nil && pe.nodepodCount[pod.Spec.NodeName]+1 > *pe.maxPodsToEvictPerNode {
+		if pe.maxPodsToEvictPerNode != nil && pe.nodePodCount[pod.Spec.NodeName]+1 > *pe.maxPodsToEvictPerNode {
+			err := NewEvictionNodeLimitError(pod.Spec.NodeName)
 			if pe.metricsEnabled {
-				metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per node reached", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
+				metrics.PodsEvicted.With(map[string]string{"result": err.Error(), "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
 			}
-			span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", "Maximum number of evicted pods per node reached")))
-			klog.ErrorS(fmt.Errorf("maximum number of evicted pods per node reached"), "Error evicting pod", "limit", *pe.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
-			return false
+			span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
+			klog.ErrorS(err, "Error evicting pod", "limit", *pe.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
+			return err
 		}
 	}
 
 	if pe.maxPodsToEvictPerNamespace != nil && pe.namespacePodCount[pod.Namespace]+1 > *pe.maxPodsToEvictPerNamespace {
+		err := NewEvictionNamespaceLimitError(pod.Namespace)
 		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": "maximum number of pods per namespace reached", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
+			metrics.PodsEvicted.With(map[string]string{"result": err.Error(), "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
 		}
-		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", "Maximum number of evicted pods per namespace reached")))
-		klog.ErrorS(fmt.Errorf("maximum number of evicted pods per namespace reached"), "Error evicting pod", "limit", *pe.maxPodsToEvictPerNamespace, "namespace", pod.Namespace)
-		return false
+		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
+		klog.ErrorS(err, "Error evicting pod", "limit", *pe.maxPodsToEvictPerNamespace, "namespace", pod.Namespace)
+		return err
 	}
 
 	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion)
@@ -152,13 +167,14 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		if pe.metricsEnabled {
 			metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
 		}
-		return false
+		return err
 	}
 
 	if pod.Spec.NodeName != "" {
-		pe.nodepodCount[pod.Spec.NodeName]++
+		pe.nodePodCount[pod.Spec.NodeName]++
 	}
 	pe.namespacePodCount[pod.Namespace]++
+	pe.totalPodCount++
 
 	if pe.metricsEnabled {
 		metrics.PodsEvicted.With(map[string]string{"result": "success", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
@@ -177,7 +193,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		}
 		pe.eventRecorder.Eventf(pod, nil, v1.EventTypeNormal, reason, "Descheduled", "pod evicted from %v node by sigs.k8s.io/descheduler", pod.Spec.NodeName)
 	}
-	return true
+	return nil
 }
 
 func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string) error {

@@ -22,17 +22,13 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/events"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -312,8 +308,8 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			pods := append(
 				initPods(node1),
-				test.BuildTestPod("CPU-consumer-1", 150, 100, node4.Name, nil),
-				test.BuildTestPod("CPU-consumer-2", 150, 100, node5.Name, nil),
+				test.BuildTestPod("CPU-consumer-1", 150, 100, node4.Name, test.SetNormalOwnerRef),
+				test.BuildTestPod("CPU-consumer-2", 150, 100, node5.Name, test.SetNormalOwnerRef),
 			)
 			if tc.applyFunc != nil {
 				tc.applyFunc(pods)
@@ -331,59 +327,22 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
-			if err != nil {
-				t.Errorf("Build get pods assigned to node function error: %v", err)
-			}
-
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-			eventRecorder := &events.FakeRecorder{}
-
-			podEvictor := evictions.NewPodEvictor(
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+				ctx,
 				fakeClient,
-				policyv1.SchemeGroupVersion.String(),
-				false,
-				tc.maxPodsToEvictPerNode,
-				tc.maxNoOfPodsToEvictPerNamespace,
-				tc.nodes,
-				false,
-				eventRecorder,
-			)
-
-			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   false,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
-				NodeFit:                 tc.nodeFit,
-			}
-
-			evictorFilter, err := defaultevictor.New(
-				defaultevictorArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-				},
+				evictions.NewOptions().
+					WithMaxPodsToEvictPerNode(tc.maxPodsToEvictPerNode).
+					WithMaxPodsToEvictPerNamespace(tc.maxNoOfPodsToEvictPerNamespace),
+				defaultevictor.DefaultEvictorArgs{NodeFit: tc.nodeFit},
+				nil,
 			)
 			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
 			plugin, err := New(
 				&tc.args,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					PodEvictorImpl:                podEvictor,
-					EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				})
+				handle)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}

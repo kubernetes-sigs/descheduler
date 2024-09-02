@@ -15,7 +15,11 @@ package defaultevictor
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -31,6 +35,20 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+type testCase struct {
+	description             string
+	pods                    []*v1.Pod
+	nodes                   []*v1.Node
+	evictFailedBarePods     bool
+	evictLocalStoragePods   bool
+	evictSystemCriticalPods bool
+	priorityThreshold       *int32
+	nodeFit                 bool
+	minReplicas             uint
+	minPodAge               *metav1.Duration
+	result                  bool
+}
+
 func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 	n1 := test.BuildTestNode("node1", 1000, 2000, 13, nil)
 
@@ -39,17 +57,6 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 
 	nodeLabelKey := "datacenter"
 	nodeLabelValue := "east"
-	type testCase struct {
-		description             string
-		pods                    []*v1.Pod
-		nodes                   []*v1.Node
-		evictFailedBarePods     bool
-		evictLocalStoragePods   bool
-		evictSystemCriticalPods bool
-		priorityThreshold       *int32
-		nodeFit                 bool
-		result                  bool
-	}
 
 	testCases := []testCase{
 		{
@@ -305,45 +312,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			var objs []runtime.Object
-			for _, node := range test.nodes {
-				objs = append(objs, node)
-			}
-			for _, pod := range test.pods {
-				objs = append(objs, pod)
-			}
-
-			fakeClient := fake.NewSimpleClientset(objs...)
-
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
-			if err != nil {
-				t.Errorf("Build get pods assigned to node function error: %v", err)
-			}
-
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-			defaultEvictorArgs := &DefaultEvictorArgs{
-				EvictLocalStoragePods:   test.evictLocalStoragePods,
-				EvictSystemCriticalPods: test.evictSystemCriticalPods,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     test.evictFailedBarePods,
-				PriorityThreshold: &api.PriorityThreshold{
-					Value: test.priorityThreshold,
-				},
-				NodeFit: test.nodeFit,
-			}
-
-			evictorPlugin, err := New(
-				defaultEvictorArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-				})
+			evictorPlugin, err := initializePlugin(ctx, test)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
@@ -361,23 +330,12 @@ func TestDefaultEvictorFilter(t *testing.T) {
 	lowPriority := int32(800)
 	highPriority := int32(900)
 
+	minPodAge := metav1.Duration{Duration: 50 * time.Minute}
+
 	nodeTaintKey := "hardware"
 	nodeTaintValue := "gpu"
 
 	ownerRefUUID := uuid.NewUUID()
-
-	type testCase struct {
-		description             string
-		pods                    []*v1.Pod
-		nodes                   []*v1.Node
-		evictFailedBarePods     bool
-		evictLocalStoragePods   bool
-		evictSystemCriticalPods bool
-		priorityThreshold       *int32
-		nodeFit                 bool
-		minReplicas             uint
-		result                  bool
-	}
 
 	testCases := []testCase{
 		{
@@ -749,6 +707,38 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			},
 			minReplicas: 2,
 			result:      true,
+		}, {
+			description: "minPodAge of 50, pod created 10 minutes ago, no eviction",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					podStartTime := metav1.Now().Add(time.Minute * time.Duration(-10))
+					pod.Status.StartTime = &metav1.Time{Time: podStartTime}
+				}),
+			},
+			minPodAge: &minPodAge,
+			result:    false,
+		}, {
+			description: "minPodAge of 50, pod created 60 minutes ago, evicts",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					podStartTime := metav1.Now().Add(time.Minute * time.Duration(-60))
+					pod.Status.StartTime = &metav1.Time{Time: podStartTime}
+				}),
+			},
+			minPodAge: &minPodAge,
+			result:    true,
+		}, {
+			description: "nil minPodAge, pod created 60 minutes ago, evicts",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					podStartTime := metav1.Now().Add(time.Minute * time.Duration(-60))
+					pod.Status.StartTime = &metav1.Time{Time: podStartTime}
+				}),
+			},
+			result: true,
 		},
 	}
 
@@ -757,46 +747,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			var objs []runtime.Object
-			for _, node := range test.nodes {
-				objs = append(objs, node)
-			}
-			for _, pod := range test.pods {
-				objs = append(objs, pod)
-			}
-
-			fakeClient := fake.NewSimpleClientset(objs...)
-
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
-			if err != nil {
-				t.Errorf("Build get pods assigned to node function error: %v", err)
-			}
-
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-			defaultEvictorArgs := &DefaultEvictorArgs{
-				EvictLocalStoragePods:   test.evictLocalStoragePods,
-				EvictSystemCriticalPods: test.evictSystemCriticalPods,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     test.evictFailedBarePods,
-				PriorityThreshold: &api.PriorityThreshold{
-					Value: test.priorityThreshold,
-				},
-				NodeFit:     test.nodeFit,
-				MinReplicas: test.minReplicas,
-			}
-
-			evictorPlugin, err := New(
-				defaultEvictorArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-				})
+			evictorPlugin, err := initializePlugin(ctx, test)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
@@ -807,4 +758,96 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReinitialization(t *testing.T) {
+	n1 := test.BuildTestNode("node1", 1000, 2000, 13, nil)
+	ownerRefUUID := uuid.NewUUID()
+
+	testCases := []testCase{
+		{
+			description: "minReplicas of 2, multiple owners, eviction",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = append(test.GetNormalPodOwnerRefList(), test.GetNormalPodOwnerRefList()...)
+					pod.ObjectMeta.OwnerReferences[0].UID = ownerRefUUID
+				}),
+				test.BuildTestPod("p2", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+				}),
+			},
+			minReplicas: 2,
+			result:      true,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.description, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			evictorPlugin, err := initializePlugin(ctx, test)
+			if err != nil {
+				t.Fatalf("Unable to initialize the plugin: %v", err)
+			}
+
+			defaultEvictor, ok := evictorPlugin.(*DefaultEvictor)
+			if !ok {
+				t.Fatalf("Unable to initialize as a DefaultEvictor plugin")
+			}
+			_, err = New(defaultEvictor.args, defaultEvictor.handle)
+			if err != nil {
+				t.Fatalf("Unable to reinitialize the plugin: %v", err)
+			}
+		})
+	}
+}
+
+func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin, error) {
+	var objs []runtime.Object
+	for _, node := range test.nodes {
+		objs = append(objs, node)
+	}
+	for _, pod := range test.pods {
+		objs = append(objs, pod)
+	}
+
+	fakeClient := fake.NewSimpleClientset(objs...)
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
+
+	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+	if err != nil {
+		return nil, fmt.Errorf("build get pods assigned to node function error: %v", err)
+	}
+
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	defaultEvictorArgs := &DefaultEvictorArgs{
+		EvictLocalStoragePods:   test.evictLocalStoragePods,
+		EvictSystemCriticalPods: test.evictSystemCriticalPods,
+		IgnorePvcPods:           false,
+		EvictFailedBarePods:     test.evictFailedBarePods,
+		PriorityThreshold: &api.PriorityThreshold{
+			Value: test.priorityThreshold,
+		},
+		NodeFit:     test.nodeFit,
+		MinReplicas: test.minReplicas,
+		MinPodAge:   test.minPodAge,
+	}
+
+	evictorPlugin, err := New(
+		defaultEvictorArgs,
+		&frameworkfake.HandleImpl{
+			ClientsetImpl:                 fakeClient,
+			GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
+			SharedInformerFactoryImpl:     sharedInformerFactory,
+		})
+	if err != nil {
+		return nil, fmt.Errorf("unable to initialize the plugin: %v", err)
+	}
+
+	return evictorPlugin, nil
 }

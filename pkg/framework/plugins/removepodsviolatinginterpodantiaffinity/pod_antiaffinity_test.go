@@ -21,18 +21,14 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/events"
-	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -122,6 +118,7 @@ func TestPodAntiAffinity(t *testing.T) {
 		description                    string
 		maxPodsToEvictPerNode          *uint
 		maxNoOfPodsToEvictPerNamespace *uint
+		maxNoOfPodsToEvictTotal        *uint
 		pods                           []*v1.Pod
 		expectedEvictedPodCount        uint
 		nodeFit                        bool
@@ -146,6 +143,14 @@ func TestPodAntiAffinity(t *testing.T) {
 			pods:                           []*v1.Pod{p1, p2, p3, p4},
 			nodes:                          []*v1.Node{node1},
 			expectedEvictedPodCount:        3,
+		},
+		{
+			description:                    "Maximum pods to evict (maxNoOfPodsToEvictTotal)",
+			maxNoOfPodsToEvictPerNamespace: &uint3,
+			maxNoOfPodsToEvictTotal:        &uint1,
+			pods:                           []*v1.Pod{p1, p2, p3, p4},
+			nodes:                          []*v1.Node{node1},
+			expectedEvictedPodCount:        1,
 		},
 		{
 			description:             "Evict only 1 pod after sorting",
@@ -220,57 +225,20 @@ func TestPodAntiAffinity(t *testing.T) {
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
-			if err != nil {
-				t.Errorf("Build get pods assigned to node function error: %v", err)
-			}
-
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-			eventRecorder := &events.FakeRecorder{}
-
-			podEvictor := evictions.NewPodEvictor(
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+				ctx,
 				fakeClient,
-				policyv1.SchemeGroupVersion.String(),
-				false,
-				test.maxPodsToEvictPerNode,
-				test.maxNoOfPodsToEvictPerNamespace,
-				test.nodes,
-				false,
-				eventRecorder,
-			)
-
-			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   false,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
-				NodeFit:                 test.nodeFit,
-			}
-
-			evictorFilter, err := defaultevictor.New(
-				defaultevictorArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-				},
+				evictions.NewOptions().
+					WithMaxPodsToEvictPerNode(test.maxPodsToEvictPerNode).
+					WithMaxPodsToEvictPerNamespace(test.maxNoOfPodsToEvictPerNamespace).
+					WithMaxPodsToEvictTotal(test.maxNoOfPodsToEvictTotal),
+				defaultevictor.DefaultEvictorArgs{NodeFit: test.nodeFit},
+				nil,
 			)
 			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
-			handle := &frameworkfake.HandleImpl{
-				ClientsetImpl:                 fakeClient,
-				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				PodEvictorImpl:                podEvictor,
-				SharedInformerFactoryImpl:     sharedInformerFactory,
-				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
-			}
 			plugin, err := New(
 				&RemovePodsViolatingInterPodAntiAffinityArgs{},
 				handle,

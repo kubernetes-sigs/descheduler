@@ -1,9 +1,10 @@
 module sigs.k8s.io/descheduler
 
-go 1.22.1
+go 1.22.5
 
 require (
 	github.com/client9/misspell v0.3.4
+	github.com/ghodss/yaml v1.0.0
 	github.com/google/go-cmp v0.6.0
 	github.com/openshift/build-machinery-go v0.0.0-20231128094528-1e9b1b0595c8
 	github.com/spf13/cobra v1.8.0
@@ -22,7 +23,7 @@ require (
 	k8s.io/component-base v0.30.0
 	k8s.io/component-helpers v0.30.0
 	k8s.io/klog/v2 v2.120.1
-	k8s.io/utils v0.0.0-20240310230437-4693a0247e57
+	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8
 	sigs.k8s.io/controller-tools v0.15.0
 	sigs.k8s.io/mdtoc v1.1.0
 )

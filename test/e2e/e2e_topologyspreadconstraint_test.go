@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"math"
+	"os"
 	"strings"
 	"testing"
 
@@ -10,9 +11,14 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
+	componentbaseconfig "k8s.io/component-base/config"
+
+	"sigs.k8s.io/descheduler/pkg/descheduler/client"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
+	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -21,13 +27,16 @@ const zoneTopologyKey string = "topology.kubernetes.io/zone"
 
 func TestTopologySpreadConstraint(t *testing.T) {
 	ctx := context.Background()
-	clientSet, _, _, getPodsAssignedToNode, stopCh := initializeClient(t)
-	defer close(stopCh)
+	clientSet, err := client.CreateClient(componentbaseconfig.ClientConnectionConfiguration{Kubeconfig: os.Getenv("KUBECONFIG")}, "")
+	if err != nil {
+		t.Errorf("Error during client creation with %v", err)
+	}
+
 	nodeList, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Error listing node with %v", err)
 	}
-	nodes, workerNodes := splitNodesAndWorkerNodes(nodeList.Items)
+	_, workerNodes := splitNodesAndWorkerNodes(nodeList.Items)
 	t.Log("Creating testing namespace")
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
 	if _, err := clientSet.CoreV1().Namespaces().Create(ctx, testNamespace, metav1.CreateOptions{}); err != nil {
@@ -138,38 +147,32 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			defer test.DeleteDeployment(ctx, t, clientSet, violatorDeployment)
 			test.WaitForDeploymentPodsRunning(ctx, t, clientSet, violatorDeployment)
 
-			podEvictor := initPodEvictorOrFail(t, clientSet, getPodsAssignedToNode, nodes)
+			evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
+			if err != nil || len(evictionPolicyGroupVersion) == 0 {
+				t.Fatalf("Error detecting eviction policy group: %v", err)
+			}
+
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+				ctx,
+				clientSet,
+				evictions.NewOptions().
+					WithPolicyGroupVersion(evictionPolicyGroupVersion),
+				defaultevictor.DefaultEvictorArgs{
+					EvictLocalStoragePods: true,
+				},
+				nil,
+			)
+			if err != nil {
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
+			}
 
 			// Run TopologySpreadConstraint strategy
 			t.Logf("Running RemovePodsViolatingTopologySpreadConstraint strategy for %s", name)
 
-			defaultevictorArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   true,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
-			}
-
-			filter, err := defaultevictor.New(
-				defaultevictorArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 clientSet,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				},
-			)
-			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
-			}
-
 			plugin, err := removepodsviolatingtopologyspreadconstraint.New(&removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
 				Constraints: []v1.UnsatisfiableConstraintAction{tc.topologySpreadConstraint.WhenUnsatisfiable},
 			},
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 clientSet,
-					PodEvictorImpl:                podEvictor,
-					EvictorFilterImpl:             filter.(frameworktypes.EvictorPlugin),
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				},
+				handle,
 			)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)

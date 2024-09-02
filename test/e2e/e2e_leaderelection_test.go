@@ -27,12 +27,11 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/utils/pointer"
-
-	utilpointer "k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
 )
@@ -41,8 +40,7 @@ func TestLeaderElection(t *testing.T) {
 	descheduler.SetupPlugins()
 	ctx := context.Background()
 
-	clientSet, _, _, _, stopCh := initializeClient(t)
-	defer close(stopCh)
+	clientSet, _, _, _ := initializeClient(ctx, t)
 
 	ns1 := "e2e-" + strings.ToLower(t.Name()+"-a")
 	ns2 := "e2e-" + strings.ToLower(t.Name()+"-b")
@@ -88,6 +86,9 @@ func TestLeaderElection(t *testing.T) {
 	s1.Client = clientSet
 	s1.DeschedulingInterval = 5 * time.Second
 	s1.LeaderElection.LeaderElect = true
+	s1.LeaderElection.RetryPeriod = metav1.Duration{
+		Duration: time.Second,
+	}
 	s1.ClientConnection.Kubeconfig = os.Getenv("KUBECONFIG")
 	s1.PolicyConfigFile = "./policy_leaderelection_a.yaml"
 
@@ -98,8 +99,20 @@ func TestLeaderElection(t *testing.T) {
 	s2.Client = clientSet
 	s2.DeschedulingInterval = 5 * time.Second
 	s2.LeaderElection.LeaderElect = true
+	s2.LeaderElection.RetryPeriod = metav1.Duration{
+		Duration: time.Second,
+	}
 	s2.ClientConnection.Kubeconfig = os.Getenv("KUBECONFIG")
 	s2.PolicyConfigFile = "./policy_leaderelection_b.yaml"
+
+	// Delete the descheduler lease
+	err = clientSet.CoordinationV1().Leases("kube-system").Delete(ctx, "descheduler", metav1.DeleteOptions{})
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			t.Fatalf("Unable to remove kube-system/descheduler lease: %v", err)
+		}
+	}
+	t.Logf("Removed kube-system/descheduler lease")
 
 	t.Log("starting deschedulers")
 
@@ -144,7 +157,11 @@ func TestLeaderElection(t *testing.T) {
 			t.Logf("Only the pods in %s namespace are evicted. Pods before: %s, Pods after %s", ns2, podListBOrg, podListB)
 		}
 	} else {
-		t.Fatalf("Pods are evicted in both namespaces. For %s namespace Pods before: %s, Pods after %s. And, for %s namespace Pods before: %s, Pods after: %s", ns1, podListAOrg, podListA, ns2, podListBOrg, podListB)
+		if left && right {
+			t.Fatalf("No pods evicted. Probably none of the deschedulers were running.")
+		} else {
+			t.Fatalf("Pods are evicted in both namespaces.\n\tFor %s namespace\n\tPods before: %s,\n\tPods after %s.\n\tAnd, for %s namespace\n\tPods before: %s,\n\tPods after: %s", ns1, podListAOrg, podListA, ns2, podListBOrg, podListB)
+		}
 	}
 }
 
@@ -156,7 +173,7 @@ func createDeployment(ctx context.Context, clientSet clientset.Interface, namesp
 			Labels:    map[string]string{"test": "leaderelection", "name": "test-leaderelection"},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: pointer.Int32(replicas),
+			Replicas: utilptr.To[int32](replicas),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"test": "leaderelection", "name": "test-leaderelection"},
 			},
@@ -166,9 +183,9 @@ func createDeployment(ctx context.Context, clientSet clientset.Interface, namesp
 				},
 				Spec: v1.PodSpec{
 					SecurityContext: &v1.PodSecurityContext{
-						RunAsNonRoot: utilpointer.Bool(true),
-						RunAsUser:    utilpointer.Int64(1000),
-						RunAsGroup:   utilpointer.Int64(1000),
+						RunAsNonRoot: utilptr.To(true),
+						RunAsUser:    utilptr.To[int64](1000),
+						RunAsGroup:   utilptr.To[int64](1000),
 						SeccompProfile: &v1.SeccompProfile{
 							Type: v1.SeccompProfileTypeRuntimeDefault,
 						},
@@ -179,7 +196,7 @@ func createDeployment(ctx context.Context, clientSet clientset.Interface, namesp
 						Image:           "registry.k8s.io/pause",
 						Ports:           []v1.ContainerPort{{ContainerPort: 80}},
 						SecurityContext: &v1.SecurityContext{
-							AllowPrivilegeEscalation: utilpointer.Bool(false),
+							AllowPrivilegeEscalation: utilptr.To(false),
 							Capabilities: &v1.Capabilities{
 								Drop: []v1.Capability{
 									"ALL",

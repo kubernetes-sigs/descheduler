@@ -99,9 +99,6 @@ func (o *Options) BuildFilterFunc() (FilterFunc, error) {
 		}
 	}
 	return func(pod *v1.Pod) bool {
-		if o.filter != nil && !o.filter(pod) {
-			return false
-		}
 		if len(o.includedNamespaces) > 0 && !o.includedNamespaces.Has(pod.Namespace) {
 			return false
 		}
@@ -109,6 +106,9 @@ func (o *Options) BuildFilterFunc() (FilterFunc, error) {
 			return false
 		}
 		if s != nil && !s.Matches(labels.Set(pod.GetLabels())) {
+			return false
+		}
+		if o.filter != nil && !o.filter(pod) {
 			return false
 		}
 		return true

@@ -22,18 +22,14 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/events"
 	utilptr "k8s.io/utils/ptr"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -157,6 +153,7 @@ func TestPodLifeTime(t *testing.T) {
 		ignorePvcPods              bool
 		maxPodsToEvictPerNode      *uint
 		maxPodsToEvictPerNamespace *uint
+		maxPodsToEvictTotal        *uint
 		applyPodsFunc              func(pods []*v1.Pod)
 	}{
 		{
@@ -316,6 +313,17 @@ func TestPodLifeTime(t *testing.T) {
 			expectedEvictedPodCount:    1,
 		},
 		{
+			description: "1 Oldest pod should be evicted when maxPodsToEvictTotal is set to 1",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+			},
+			pods:                       []*v1.Pod{p1, p2, p9},
+			nodes:                      []*v1.Node{node1},
+			maxPodsToEvictPerNamespace: utilptr.To[uint](2),
+			maxPodsToEvictTotal:        utilptr.To[uint](1),
+			expectedEvictedPodCount:    1,
+		},
+		{
 			description: "1 Oldest pod should be evicted when maxPodsToEvictPerNode is set to 1",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
@@ -396,6 +404,84 @@ func TestPodLifeTime(t *testing.T) {
 					{
 						State: v1.ContainerState{
 							Waiting: &v1.ContainerStateWaiting{Reason: "ErrImagePull"},
+						},
+					},
+				}
+			},
+		},
+		{
+			description: "1 pod with init container status CreateContainerError should not be evicted without includingInitContainers",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"CreateContainerError"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 0,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.InitContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "CreateContainerError"},
+						},
+					},
+				}
+			},
+		},
+		{
+			description: "1 pod with init container status CreateContainerError should be evicted with includingInitContainers",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds:   &maxLifeTime,
+				States:                  []string{"CreateContainerError"},
+				IncludingInitContainers: true,
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.InitContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "CreateContainerError"},
+						},
+					},
+				}
+			},
+		},
+		{
+			description: "1 pod with ephemeral container status CreateContainerError should not be evicted without includingEphemeralContainers",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"CreateContainerError"},
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 0,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.InitContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "CreateContainerError"},
+						},
+					},
+				}
+			},
+		},
+		{
+			description: "1 pod with ephemeral container status CreateContainerError should be evicted with includingEphemeralContainers",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds:        &maxLifeTime,
+				States:                       []string{"CreateContainerError"},
+				IncludingEphemeralContainers: true,
+			},
+			pods:                    []*v1.Pod{p9},
+			nodes:                   []*v1.Node{node1},
+			expectedEvictedPodCount: 1,
+			applyPodsFunc: func(pods []*v1.Pod) {
+				pods[0].Status.EphemeralContainerStatuses = []v1.ContainerStatus{
+					{
+						State: v1.ContainerState{
+							Waiting: &v1.ContainerStateWaiting{Reason: "CreateContainerError"},
 						},
 					},
 				}
@@ -543,55 +629,21 @@ func TestPodLifeTime(t *testing.T) {
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
-			if err != nil {
-				t.Errorf("Build get pods assigned to node function error: %v", err)
-			}
-
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-			eventRecorder := &events.FakeRecorder{}
-
-			podEvictor := evictions.NewPodEvictor(
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+				ctx,
 				fakeClient,
-				policyv1.SchemeGroupVersion.String(),
-				false,
-				tc.maxPodsToEvictPerNode,
-				tc.maxPodsToEvictPerNamespace,
-				tc.nodes,
-				false,
-				eventRecorder,
-			)
-
-			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   false,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           tc.ignorePvcPods,
-				EvictFailedBarePods:     false,
-			}
-
-			evictorFilter, err := defaultevictor.New(
-				defaultEvictorFilterArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-				},
+				evictions.NewOptions().
+					WithMaxPodsToEvictPerNode(tc.maxPodsToEvictPerNode).
+					WithMaxPodsToEvictPerNamespace(tc.maxPodsToEvictPerNamespace).
+					WithMaxPodsToEvictTotal(tc.maxPodsToEvictTotal),
+				defaultevictor.DefaultEvictorArgs{IgnorePvcPods: tc.ignorePvcPods},
+				nil,
 			)
 			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
-			plugin, err := New(tc.args, &frameworkfake.HandleImpl{
-				ClientsetImpl:                 fakeClient,
-				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
-				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-			})
+			plugin, err := New(tc.args, handle)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}

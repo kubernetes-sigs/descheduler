@@ -115,8 +115,6 @@ See the [user guide](docs/user-guide.md) in the `/docs` directory.
 
 ## Policy, Default Evictor and Strategy plugins
 
-**⚠️ v1alpha1 configuration is still supported, but deprecated (and soon will be removed). Please consider migrating to v1alpha2 (described bellow). For previous v1alpha1 documentation go to [docs/deprecated/v1alpha1.md](docs/deprecated/v1alpha1.md) ⚠️**
-
 The Descheduler Policy is configurable and includes default strategy plugins that can be enabled or disabled. It includes a common eviction configuration at the top level, as well as configuration from the Evictor plugin (Default Evictor, if not specified otherwise). Top-level configuration and Evictor plugin configuration are applied to all evictions.
 
 ### Top Level configuration
@@ -128,6 +126,7 @@ These are top level keys in the Descheduler Policy that you can use to configure
 | `nodeSelector` |`string`| `nil` | limiting the nodes which are processed. Only used when `nodeFit`=`true` and only by the PreEvictionFilter Extension Point |
 | `maxNoOfPodsToEvictPerNode` |`int`| `nil` | maximum number of pods evicted from each node (summed through all strategies) |
 | `maxNoOfPodsToEvictPerNamespace` |`int`| `nil` | maximum number of pods evicted from each namespace (summed through all strategies) |
+| `maxNoOfPodsToEvictTotal` |`int`| `nil` | maximum number of pods evicted per rescheduling cycle (summed through all strategies) |
 
 ### Evictor Plugin configuration (Default Evictor)
 
@@ -144,6 +143,7 @@ The Default Evictor Plugin is used by default for filtering pods before processi
 |`priorityThreshold`|`priorityThreshold`||(see [priority filtering](#priority-filtering))|
 |`nodeFit`|`bool`|`false`|(see [node fit filtering](#node-fit-filtering))|
 |`minReplicas`|`uint`|`0`| ignore eviction of pods where owner (e.g. `ReplicaSet`) replicas is below this threshold |
+|`minPodAge`|`metav1.Duration`|`0`| ignore eviction of pods with a creation time within this threshold |
 
 ### Example policy
 
@@ -159,6 +159,7 @@ kind: "DeschedulerPolicy"
 nodeSelector: "node=node1" # you don't need to set this, if not set all will be processed
 maxNoOfPodsToEvictPerNode: 5000 # you don't need to set this, unlimited if not set
 maxNoOfPodsToEvictPerNamespace: 5000 # you don't need to set this, unlimited if not set
+maxNoOfPodsToEvictTotal: 5000 # you don't need to set this, unlimited if not set
 profiles:
   - name: ProfileName
     pluginConfig:
@@ -503,7 +504,7 @@ key=value matches an excludedTaints entry, the taint will be ignored.
 For example, excludedTaints entry "dedicated" would match all taints with key "dedicated", regardless of value.
 excludedTaints entry "dedicated=special-user" would match taints with key "dedicated" and value "special-user".
 
-If a list of includedTaints is provided, a taint will be considered if and only if it matches an included key **or** key=value from the list. Otherwise it will be ignored. Leaving includedTaints unset will include any taint by default. 
+If a list of includedTaints is provided, a taint will be considered if and only if it matches an included key **or** key=value from the list. Otherwise it will be ignored. Leaving includedTaints unset will include any taint by default.
 
 **Parameters:**
 
@@ -671,12 +672,14 @@ Pods in any state (even `Running`) are considered for eviction.
 
 **Parameters:**
 
-|Name|Type|Notes|
-|---|---|---|
-|`maxPodLifeTimeSeconds`|int||
-|`states`|list(string)|Only supported in v0.25+|
-|`namespaces`|(see [namespace filtering](#namespace-filtering))||
-|`labelSelector`|(see [label filtering](#label-filtering))||
+| Name                           | Type                                              | Notes                    |
+|--------------------------------|---------------------------------------------------|--------------------------|
+| `maxPodLifeTimeSeconds`        | int                                               |                          |
+| `states`                       | list(string)                                      | Only supported in v0.25+ |
+| `includingInitContainers`      | bool                                              | Only supported in v0.31+ |
+| `includingEphemeralContainers` | bool                                              | Only supported in v0.31+ |
+| `namespaces`                   | (see [namespace filtering](#namespace-filtering)) |                          |
+| `labelSelector`                | (see [label filtering](#label-filtering))         |                          |
 
 **Example:**
 

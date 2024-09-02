@@ -210,9 +210,17 @@ func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) *frame
 				// It's assumed all duplicated pods are in the same priority class
 				// TODO(jchaloup): check if the pod has a different node to lend to
 				for _, pod := range pods[upperAvg-1:] {
-					r.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
-					if r.handle.Evictor().NodeLimitExceeded(nodeMap[nodeName]) {
+					err := r.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
+					if err == nil {
+						continue
+					}
+					switch err.(type) {
+					case *evictions.EvictionNodeLimitError:
 						continue loop
+					case *evictions.EvictionTotalLimitError:
+						return nil
+					default:
+						klog.Errorf("eviction failed: %v", err)
 					}
 				}
 			}

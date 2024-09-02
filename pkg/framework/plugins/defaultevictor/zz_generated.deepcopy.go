@@ -41,6 +41,11 @@ func (in *DefaultEvictorArgs) DeepCopyInto(out *DefaultEvictorArgs) {
 		*out = new(api.PriorityThreshold)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.MinPodAge != nil {
+		in, out := &in.MinPodAge, &out.MinPodAge
+		*out = new(v1.Duration)
+		**out = **in
+	}
 	return
 }
 

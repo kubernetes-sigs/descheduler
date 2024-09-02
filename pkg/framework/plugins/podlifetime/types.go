@@ -25,8 +25,10 @@ import (
 type PodLifeTimeArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	Namespaces            *api.Namespaces       `json:"namespaces"`
-	LabelSelector         *metav1.LabelSelector `json:"labelSelector"`
-	MaxPodLifeTimeSeconds *uint                 `json:"maxPodLifeTimeSeconds"`
-	States                []string              `json:"states"`
+	Namespaces                   *api.Namespaces       `json:"namespaces"`
+	LabelSelector                *metav1.LabelSelector `json:"labelSelector"`
+	MaxPodLifeTimeSeconds        *uint                 `json:"maxPodLifeTimeSeconds"`
+	States                       []string              `json:"states"`
+	IncludingInitContainers      bool                  `json:"includingInitContainers"`
+	IncludingEphemeralContainers bool                  `json:"includingEphemeralContainers"`
 }

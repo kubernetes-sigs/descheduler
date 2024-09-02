@@ -13,18 +13,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/client-go/informers"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	fakeplugin "sigs.k8s.io/descheduler/pkg/framework/fake/plugin"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
-	"sigs.k8s.io/descheduler/pkg/utils"
 	testutils "sigs.k8s.io/descheduler/test"
 )
 
@@ -185,10 +183,11 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 			if test.extensionPoint == frameworktypes.DescheduleExtensionPoint {
 				fakePlugin.AddReactor(string(frameworktypes.DescheduleExtensionPoint), func(action fakeplugin.Action) (handled, filter bool, err error) {
 					if dAction, ok := action.(fakeplugin.DescheduleAction); ok {
-						if dAction.Handle().Evictor().Evict(ctx, p1, evictions.EvictOptions{StrategyName: fakePlugin.PluginName}) {
+						err := dAction.Handle().Evictor().Evict(ctx, p1, evictions.EvictOptions{StrategyName: fakePlugin.PluginName})
+						if err == nil {
 							return true, false, nil
 						}
-						return true, false, fmt.Errorf("pod not evicted")
+						return true, false, fmt.Errorf("pod not evicted: %v", err)
 					}
 					return false, false, nil
 				})
@@ -196,10 +195,11 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 			if test.extensionPoint == frameworktypes.BalanceExtensionPoint {
 				fakePlugin.AddReactor(string(frameworktypes.BalanceExtensionPoint), func(action fakeplugin.Action) (handled, filter bool, err error) {
 					if dAction, ok := action.(fakeplugin.BalanceAction); ok {
-						if dAction.Handle().Evictor().Evict(ctx, p1, evictions.EvictOptions{StrategyName: fakePlugin.PluginName}) {
+						err := dAction.Handle().Evictor().Evict(ctx, p1, evictions.EvictOptions{StrategyName: fakePlugin.PluginName})
+						if err == nil {
 							return true, false, nil
 						}
-						return true, false, fmt.Errorf("pod not evicted")
+						return true, false, fmt.Errorf("pod not evicted: %v", err)
 					}
 					return false, false, nil
 				})
@@ -230,29 +230,24 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 			var evictedPods []string
 			client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-			sharedInformerFactory := informers.NewSharedInformerFactory(client, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+				ctx,
+				client,
+				nil,
+				defaultevictor.DefaultEvictorArgs{},
+				nil,
+			)
 			if err != nil {
-				t.Fatalf("build get pods assigned to node function error: %v", err)
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
-
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-			eventClient := fakeclientset.NewSimpleClientset(n1, n2, p1)
-			eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
-			defer eventBroadcaster.Shutdown()
-
-			podEvictor := evictions.NewPodEvictor(client, "policy/v1", false, nil, nil, nodes, true, eventRecorder)
 
 			prfl, err := NewProfile(
 				test.config,
 				pluginregistry.PluginRegistry,
 				WithClientSet(client),
-				WithSharedInformerFactory(sharedInformerFactory),
+				WithSharedInformerFactory(handle.SharedInformerFactoryImpl),
 				WithPodEvictor(podEvictor),
-				WithGetPodsAssignedToNodeFnc(getPodsAssignedToNode),
+				WithGetPodsAssignedToNodeFnc(handle.GetPodsAssignedToNodeFuncImpl),
 			)
 			if err != nil {
 				t.Fatalf("unable to create %q profile: %v", test.config.Name, err)
@@ -306,7 +301,6 @@ func TestProfileExtensionPoints(t *testing.T) {
 
 	n1 := testutils.BuildTestNode("n1", 2000, 3000, 10, nil)
 	n2 := testutils.BuildTestNode("n2", 2000, 3000, 10, nil)
-	nodes := []*v1.Node{n1, n2}
 
 	p1 := testutils.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, nil)
 	p1.ObjectMeta.OwnerReferences = []metav1.OwnerReference{{}}
@@ -379,21 +373,16 @@ func TestProfileExtensionPoints(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	sharedInformerFactory := informers.NewSharedInformerFactory(client, 0)
-	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+	handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+		ctx,
+		client,
+		nil,
+		defaultevictor.DefaultEvictorArgs{},
+		nil,
+	)
 	if err != nil {
-		t.Fatalf("build get pods assigned to node function error: %v", err)
+		t.Fatalf("Unable to initialize a framework handle: %v", err)
 	}
-
-	sharedInformerFactory.Start(ctx.Done())
-	sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-	eventClient := fakeclientset.NewSimpleClientset(n1, n2, p1)
-	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
-	defer eventBroadcaster.Shutdown()
-
-	podEvictor := evictions.NewPodEvictor(client, "policy/v1", false, nil, nil, nodes, true, eventRecorder)
 
 	prfl, err := NewProfile(
 		api.DeschedulerProfile{
@@ -434,9 +423,9 @@ func TestProfileExtensionPoints(t *testing.T) {
 		},
 		pluginregistry.PluginRegistry,
 		WithClientSet(client),
-		WithSharedInformerFactory(sharedInformerFactory),
+		WithSharedInformerFactory(handle.SharedInformerFactoryImpl),
 		WithPodEvictor(podEvictor),
-		WithGetPodsAssignedToNodeFnc(getPodsAssignedToNode),
+		WithGetPodsAssignedToNodeFnc(handle.GetPodsAssignedToNodeFuncImpl),
 	)
 	if err != nil {
 		t.Fatalf("unable to create profile: %v", err)
@@ -591,21 +580,16 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	sharedInformerFactory := informers.NewSharedInformerFactory(client, 0)
-	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+	handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+		ctx,
+		client,
+		nil,
+		defaultevictor.DefaultEvictorArgs{},
+		nil,
+	)
 	if err != nil {
-		t.Fatalf("build get pods assigned to node function error: %v", err)
+		t.Fatalf("Unable to initialize a framework handle: %v", err)
 	}
-
-	sharedInformerFactory.Start(ctx.Done())
-	sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-	eventClient := fakeclientset.NewSimpleClientset(n1, n2, p1)
-	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
-	defer eventBroadcaster.Shutdown()
-
-	podEvictor := evictions.NewPodEvictor(client, "policy/v1", false, nil, nil, nodes, true, eventRecorder)
 
 	prfl, err := NewProfile(
 		api.DeschedulerProfile{
@@ -661,9 +645,9 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 		},
 		pluginregistry.PluginRegistry,
 		WithClientSet(client),
-		WithSharedInformerFactory(sharedInformerFactory),
+		WithSharedInformerFactory(handle.SharedInformerFactoryImpl),
 		WithPodEvictor(podEvictor),
-		WithGetPodsAssignedToNodeFnc(getPodsAssignedToNode),
+		WithGetPodsAssignedToNodeFnc(handle.GetPodsAssignedToNodeFuncImpl),
 	)
 	if err != nil {
 		t.Fatalf("unable to create profile: %v", err)
