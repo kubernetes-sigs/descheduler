@@ -25,15 +25,15 @@ import (
 type DefaultEvictorArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	NodeSelector            string                 `json:"nodeSelector"`
-	EvictLocalStoragePods   bool                   `json:"evictLocalStoragePods"`
-	EvictDaemonSetPods      bool                   `json:"evictDaemonSetPods"`
-	EvictSystemCriticalPods bool                   `json:"evictSystemCriticalPods"`
-	IgnorePvcPods           bool                   `json:"ignorePvcPods"`
-	EvictFailedBarePods     bool                   `json:"evictFailedBarePods"`
-	LabelSelector           *metav1.LabelSelector  `json:"labelSelector"`
-	PriorityThreshold       *api.PriorityThreshold `json:"priorityThreshold"`
-	NodeFit                 bool                   `json:"nodeFit"`
-	MinReplicas             uint                   `json:"minReplicas"`
-	MinPodAge               *metav1.Duration       `json:"minPodAge"`
+	NodeSelector            string                 `json:"nodeSelector,omitempty"`
+	EvictLocalStoragePods   bool                   `json:"evictLocalStoragePods,omitempty"`
+	EvictDaemonSetPods      bool                   `json:"evictDaemonSetPods,omitempty"`
+	EvictSystemCriticalPods bool                   `json:"evictSystemCriticalPods,omitempty"`
+	IgnorePvcPods           bool                   `json:"ignorePvcPods,omitempty"`
+	EvictFailedBarePods     bool                   `json:"evictFailedBarePods,omitempty"`
+	LabelSelector           *metav1.LabelSelector  `json:"labelSelector,omitempty"`
+	PriorityThreshold       *api.PriorityThreshold `json:"priorityThreshold,omitempty"`
+	NodeFit                 bool                   `json:"nodeFit,omitempty"`
+	MinReplicas             uint                   `json:"minReplicas,omitempty"`
+	MinPodAge               *metav1.Duration       `json:"minPodAge,omitempty"`
 }
