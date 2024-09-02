@@ -85,6 +85,7 @@ func TestLeaderElection(t *testing.T) {
 	}
 	s1.Client = clientSet
 	s1.DeschedulingInterval = 5 * time.Second
+	s1.DefaultFeatureGates = initFeatureGates()
 	s1.LeaderElection.LeaderElect = true
 	s1.LeaderElection.RetryPeriod = metav1.Duration{
 		Duration: time.Second,
@@ -98,6 +99,7 @@ func TestLeaderElection(t *testing.T) {
 	}
 	s2.Client = clientSet
 	s2.DeschedulingInterval = 5 * time.Second
+	s2.DefaultFeatureGates = initFeatureGates()
 	s2.LeaderElection.LeaderElect = true
 	s2.LeaderElection.RetryPeriod = metav1.Duration{
 		Duration: time.Second,
