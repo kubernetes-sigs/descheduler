@@ -59,13 +59,9 @@ func (ei *evictorImpl) PreEvictionFilter(pod *v1.Pod) bool {
 }
 
 // Evict evicts a pod (no pre-check performed)
-func (ei *evictorImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.EvictOptions) bool {
+func (ei *evictorImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.EvictOptions) error {
 	opts.ProfileName = ei.profileName
 	return ei.podEvictor.EvictPod(ctx, pod, opts)
-}
-
-func (ei *evictorImpl) NodeLimitExceeded(node *v1.Node) bool {
-	return ei.podEvictor.NodeLimitExceeded(node)
 }
 
 // handleImpl implements the framework handle which gets passed to plugins

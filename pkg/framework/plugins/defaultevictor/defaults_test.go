@@ -19,7 +19,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
@@ -55,7 +55,7 @@ func TestSetDefaults_DefaultEvictorArgs(t *testing.T) {
 				EvictFailedBarePods:     true,
 				LabelSelector:           nil,
 				PriorityThreshold: &api.PriorityThreshold{
-					Value: pointer.Int32(800),
+					Value: utilptr.To[int32](800),
 				},
 				NodeFit: true,
 			},
@@ -68,7 +68,7 @@ func TestSetDefaults_DefaultEvictorArgs(t *testing.T) {
 				EvictFailedBarePods:     true,
 				LabelSelector:           nil,
 				PriorityThreshold: &api.PriorityThreshold{
-					Value: pointer.Int32(800),
+					Value: utilptr.To[int32](800),
 				},
 				NodeFit: true,
 			},

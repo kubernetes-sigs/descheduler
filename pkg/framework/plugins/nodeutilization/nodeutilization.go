@@ -274,8 +274,14 @@ func evictPodsFromSourceNodes(
 		klog.V(1).InfoS("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
-		evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction)
-
+		err := evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction)
+		if err != nil {
+			switch err.(type) {
+			case *evictions.EvictionTotalLimitError:
+				return
+			default:
+			}
+		}
 	}
 }
 
@@ -289,7 +295,7 @@ func evictPods(
 	podEvictor frameworktypes.Evictor,
 	evictOptions evictions.EvictOptions,
 	continueEviction continueEvictionCond,
-) {
+) error {
 	var excludedNamespaces sets.Set[string]
 	if evictableNamespaces != nil {
 		excludedNamespaces = sets.New(evictableNamespaces.Exclude...)
@@ -311,45 +317,52 @@ func evictPods(
 				continue
 			}
 
-			if preEvictionFilterWithOptions(pod) {
-				if podEvictor.Evict(ctx, pod, evictOptions) {
-					klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
+			if !preEvictionFilterWithOptions(pod) {
+				continue
+			}
+			err = podEvictor.Evict(ctx, pod, evictOptions)
+			if err == nil {
+				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
 
-					for name := range totalAvailableUsage {
-						if name == v1.ResourcePods {
-							nodeInfo.usage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
-							totalAvailableUsage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
-						} else {
-							quantity := utils.GetResourceRequestQuantity(pod, name)
-							nodeInfo.usage[name].Sub(quantity)
-							totalAvailableUsage[name].Sub(quantity)
-						}
-					}
-
-					keysAndValues := []interface{}{
-						"node", nodeInfo.node.Name,
-						"CPU", nodeInfo.usage[v1.ResourceCPU].MilliValue(),
-						"Mem", nodeInfo.usage[v1.ResourceMemory].Value(),
-						"Pods", nodeInfo.usage[v1.ResourcePods].Value(),
-					}
-					for name := range totalAvailableUsage {
-						if !nodeutil.IsBasicResource(name) {
-							keysAndValues = append(keysAndValues, string(name), totalAvailableUsage[name].Value())
-						}
-					}
-
-					klog.V(3).InfoS("Updated node usage", keysAndValues...)
-					// check if pods can be still evicted
-					if !continueEviction(nodeInfo, totalAvailableUsage) {
-						break
+				for name := range totalAvailableUsage {
+					if name == v1.ResourcePods {
+						nodeInfo.usage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
+						totalAvailableUsage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
+					} else {
+						quantity := utils.GetResourceRequestQuantity(pod, name)
+						nodeInfo.usage[name].Sub(quantity)
+						totalAvailableUsage[name].Sub(quantity)
 					}
 				}
+
+				keysAndValues := []interface{}{
+					"node", nodeInfo.node.Name,
+					"CPU", nodeInfo.usage[v1.ResourceCPU].MilliValue(),
+					"Mem", nodeInfo.usage[v1.ResourceMemory].Value(),
+					"Pods", nodeInfo.usage[v1.ResourcePods].Value(),
+				}
+				for name := range totalAvailableUsage {
+					if !nodeutil.IsBasicResource(name) {
+						keysAndValues = append(keysAndValues, string(name), totalAvailableUsage[name].Value())
+					}
+				}
+
+				klog.V(3).InfoS("Updated node usage", keysAndValues...)
+				// check if pods can be still evicted
+				if !continueEviction(nodeInfo, totalAvailableUsage) {
+					break
+				}
+				continue
 			}
-			if podEvictor.NodeLimitExceeded(nodeInfo.node) {
-				return
+			switch err.(type) {
+			case *evictions.EvictionNodeLimitError, *evictions.EvictionTotalLimitError:
+				return err
+			default:
+				klog.Errorf("eviction failed: %v", err)
 			}
 		}
 	}
+	return nil
 }
 
 // sortNodesByUsage sorts nodes based on usage according to the given plugin.

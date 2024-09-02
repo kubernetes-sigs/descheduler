@@ -46,10 +46,6 @@ func (hi *HandleImpl) PreEvictionFilter(pod *v1.Pod) bool {
 	return hi.EvictorFilterImpl.PreEvictionFilter(pod)
 }
 
-func (hi *HandleImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.EvictOptions) bool {
+func (hi *HandleImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.EvictOptions) error {
 	return hi.PodEvictorImpl.EvictPod(ctx, pod, opts)
-}
-
-func (hi *HandleImpl) NodeLimitExceeded(node *v1.Node) bool {
-	return hi.PodEvictorImpl.NodeLimitExceeded(node)
 }

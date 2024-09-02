@@ -85,6 +85,24 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 				return true
 			}
 
+			// Init Container Status Reason
+			if podLifeTimeArgs.IncludingInitContainers {
+				for _, containerStatus := range pod.Status.InitContainerStatuses {
+					if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
+						return true
+					}
+				}
+			}
+
+			// Ephemeral Container Status Reason
+			if podLifeTimeArgs.IncludingEphemeralContainers {
+				for _, containerStatus := range pod.Status.EphemeralContainerStatuses {
+					if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
+						return true
+					}
+				}
+			}
+
 			// Container Status Reason
 			for _, containerStatus := range pod.Status.ContainerStatuses {
 				if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
@@ -131,9 +149,19 @@ func (d *PodLifeTime) Deschedule(ctx context.Context, nodes []*v1.Node) *framewo
 	// in the event that PDB or settings such maxNoOfPodsToEvictPer* prevent too much eviction
 	podutil.SortPodsBasedOnAge(podsToEvict)
 
+loop:
 	for _, pod := range podsToEvict {
-		if !d.handle.Evictor().NodeLimitExceeded(nodeMap[pod.Spec.NodeName]) {
-			d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
+		err := d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
+		if err == nil {
+			continue
+		}
+		switch err.(type) {
+		case *evictions.EvictionNodeLimitError:
+			continue loop
+		case *evictions.EvictionTotalLimitError:
+			return nil
+		default:
+			klog.Errorf("eviction failed: %v", err)
 		}
 	}
 

@@ -1,0 +1,17 @@
+suite: Test Descheduler CronJob
+
+templates:
+  - "*.yaml"
+
+release:
+  name: descheduler
+
+set:
+  kind: CronJob
+
+tests:
+  - it: creates CronJob when kind is set
+    template: templates/cronjob.yaml
+    asserts:
+      - isKind:
+          of: CronJob

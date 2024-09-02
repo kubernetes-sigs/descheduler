@@ -19,6 +19,7 @@ package node
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -230,7 +231,7 @@ func TestPodFitsAnyOtherNode(t *testing.T) {
 	nodeTaintValue := "gpu"
 
 	// Staging node has no scheduling restrictions, but the pod always starts here and PodFitsAnyOtherNode() doesn't take into account the node the pod is running on.
-	nodeNames := []string{"node1", "node2", "stagingNode"}
+	nodeNames := []string{"node1", "node2", "stagingNode", "node4"}
 
 	tests := []struct {
 		description string
@@ -716,6 +717,151 @@ func TestPodFitsAnyOtherNode(t *testing.T) {
 			},
 			success: false,
 		},
+		{
+			description: "There are four nodes. One node has a taint, and the other three nodes do not meet the resource requirements, should fail",
+			pod: test.BuildTestPod("p1", 1000, 2*1000*1000*1000, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+				pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+			}),
+			nodes: []*v1.Node{
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    nodeTaintKey,
+							Value:  nodeTaintValue,
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+				test.BuildTestNode(nodeNames[1], 3000, 8*1000*1000*1000, 12, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(200*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 3000, 8*1000*1000*1000, 12, nil),
+				test.BuildTestNode(nodeNames[3], 0, 0, 0, nil),
+			},
+			podsOnNodes: []*v1.Pod{
+				test.BuildTestPod("3-core-pod", 2000, 4*1000*1000*1000, nodeNames[1], func(pod *v1.Pod) {
+					pod.ObjectMeta = metav1.ObjectMeta{
+						Namespace: "test",
+						Labels: map[string]string{
+							"test": "true",
+						},
+					}
+					pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+					pod.Spec.Overhead = createResourceList(1000, 1000*1000*1000, 1000*1000*1000)
+				}),
+			},
+			success: false,
+		},
+		{
+			description: "There are four nodes. First node has a taint, second node has no label, third node do not meet the resource requirements, just fourth node meets the requirements, should success",
+			pod: test.BuildTestPod("p1", 1000, 2*1000*1000*1000, nodeNames[2], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+				pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+			}),
+			nodes: []*v1.Node{
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    nodeTaintKey,
+							Value:  nodeTaintValue,
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+				test.BuildTestNode(nodeNames[1], 8000, 8*1000*1000*1000, 12, func(node *v1.Node) {
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(200*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 1000, 8*1000*1000*1000, 12, nil),
+				test.BuildTestNode(nodeNames[3], 8000, 8*1000*1000*1000, 12, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+				}),
+			},
+			podsOnNodes: []*v1.Pod{
+				test.BuildTestPod("3-core-pod", 2000, 4*1000*1000*1000, nodeNames[1], func(pod *v1.Pod) {
+					pod.ObjectMeta = metav1.ObjectMeta{
+						Namespace: "test",
+						Labels: map[string]string{
+							"test": "true",
+						},
+					}
+					pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+					pod.Spec.Overhead = createResourceList(1000, 1000*1000*1000, 1000*1000*1000)
+				}),
+			},
+			success: true,
+		},
+		{
+			description: "There are four nodes. First node has a taint, second node has no label, third node do not meet the resource requirements, fourth node is the one where the pod is located, should fail",
+			pod: test.BuildTestPod("p1", 1000, 2*1000*1000*1000, nodeNames[3], func(pod *v1.Pod) {
+				pod.Spec.NodeSelector = map[string]string{
+					nodeLabelKey: nodeLabelValue,
+				}
+				pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+			}),
+			nodes: []*v1.Node{
+				test.BuildTestNode(nodeNames[0], 64000, 128*1000*1000*1000, 200, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    nodeTaintKey,
+							Value:  nodeTaintValue,
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+				test.BuildTestNode(nodeNames[1], 8000, 8*1000*1000*1000, 12, func(node *v1.Node) {
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(200*1000*1000*1000, resource.DecimalSI)
+				}),
+				test.BuildTestNode(nodeNames[2], 1000, 8*1000*1000*1000, 12, nil),
+				test.BuildTestNode(nodeNames[3], 8000, 8*1000*1000*1000, 12, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+
+					node.Status.Allocatable[v1.ResourceEphemeralStorage] = *resource.NewQuantity(1000*1000*1000*1000, resource.DecimalSI)
+				}),
+			},
+			podsOnNodes: []*v1.Pod{
+				test.BuildTestPod("3-core-pod", 2000, 4*1000*1000*1000, nodeNames[1], func(pod *v1.Pod) {
+					pod.ObjectMeta = metav1.ObjectMeta{
+						Namespace: "test",
+						Labels: map[string]string{
+							"test": "true",
+						},
+					}
+					pod.Spec.Containers[0].Resources.Requests[v1.ResourceEphemeralStorage] = *resource.NewQuantity(10*1000*1000*1000, resource.DecimalSI)
+					pod.Spec.Overhead = createResourceList(1000, 1000*1000*1000, 1000*1000*1000)
+				}),
+			},
+			success: false,
+		},
 	}
 
 	for _, tc := range tests {
@@ -750,6 +896,51 @@ func TestPodFitsAnyOtherNode(t *testing.T) {
 				t.Errorf("Test %#v failed", tc.description)
 			}
 		})
+	}
+}
+
+func TestPodFitsNodes(t *testing.T) {
+	nodeNames := []string{"node1", "node2", "node3", "node4"}
+	pod := test.BuildTestPod("p1", 950, 2*1000*1000*1000, nodeNames[0], nil)
+	nodes := []*v1.Node{
+		test.BuildTestNode(nodeNames[0], 1000, 8*1000*1000*1000, 12, nil),
+		test.BuildTestNode(nodeNames[1], 200, 8*1000*1000*1000, 12, nil),
+		test.BuildTestNode(nodeNames[2], 300, 8*1000*1000*1000, 12, nil),
+		test.BuildTestNode(nodeNames[3], 400, 8*1000*1000*1000, 12, nil),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var objs []runtime.Object
+	for _, node := range nodes {
+		objs = append(objs, node)
+	}
+	objs = append(objs, pod)
+
+	fakeClient := fake.NewSimpleClientset(objs...)
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
+
+	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+	if err != nil {
+		t.Errorf("Build get pods assigned to node function error: %v", err)
+	}
+
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	var nodesTraversed sync.Map
+	podFitsNodes(getPodsAssignedToNode, pod, nodes, func(pod *v1.Pod, node *v1.Node) bool {
+		nodesTraversed.Store(node.Name, node)
+		return true
+	})
+
+	for _, node := range nodes {
+		if _, exists := nodesTraversed.Load(node.Name); !exists {
+			t.Errorf("Node %v was not proccesed", node.Name)
+		}
 	}
 }
 
@@ -852,9 +1043,9 @@ func TestNodeFit(t *testing.T) {
 
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-			errs := NodeFit(getPodsAssignedToNode, tc.pod, tc.node)
-			if (len(errs) == 0 && tc.err != nil) || (len(errs) > 0 && errs[0].Error() != tc.err.Error()) {
-				t.Errorf("Test %#v failed, got %v, expect %v", tc.description, errs, tc.err)
+			err = NodeFit(getPodsAssignedToNode, tc.pod, tc.node)
+			if (err == nil && tc.err != nil) || (err != nil && err.Error() != tc.err.Error()) {
+				t.Errorf("Test %#v failed, got %v, expect %v", tc.description, err, tc.err)
 			}
 		})
 	}

@@ -134,11 +134,20 @@ func (d *RemovePodsViolatingNodeAffinity) processNodes(ctx context.Context, node
 			}
 		}
 
+	loop:
 		for _, pod := range pods {
 			klog.V(1).InfoS("Evicting pod", "pod", klog.KObj(pod))
-			d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
-			if d.handle.Evictor().NodeLimitExceeded(node) {
-				break
+			err := d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
+			if err == nil {
+				continue
+			}
+			switch err.(type) {
+			case *evictions.EvictionNodeLimitError:
+				break loop
+			case *evictions.EvictionTotalLimitError:
+				return nil
+			default:
+				klog.Errorf("eviction failed: %v", err)
 			}
 		}
 	}

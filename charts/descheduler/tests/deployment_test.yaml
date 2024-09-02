@@ -1,0 +1,49 @@
+suite: Test Descheduler Deployment
+
+templates:
+  - "*.yaml"
+
+release:
+  name: descheduler
+
+set:
+  kind: Deployment
+
+tests:
+  - it: creates Deployment when kind is set
+    template: templates/deployment.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+  
+  - it: enables leader-election
+    set:
+      leaderElection:
+        enabled: true
+    template: templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect=true
+
+  - it: support leader-election resourceNamespace
+    set:
+      leaderElection:
+        enabled: true
+        resourceNamespace: test
+    template: templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect-resource-namespace=test
+
+  - it: support legacy leader-election resourceNamescape
+    set:
+      leaderElection:
+        enabled: true
+        resourceNamescape: typo
+    template: templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect-resource-namespace=typo

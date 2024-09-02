@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
@@ -48,7 +48,7 @@ func TestSetDefaults_RemoveFailedPodsArgs(t *testing.T) {
 				Namespaces:              &api.Namespaces{},
 				LabelSelector:           &metav1.LabelSelector{},
 				ExcludeOwnerKinds:       []string{"ReplicaSet"},
-				MinPodLifetimeSeconds:   pointer.Uint(0),
+				MinPodLifetimeSeconds:   utilptr.To[uint](0),
 				Reasons:                 []string{"reason"},
 				IncludingInitContainers: true,
 			},
@@ -56,7 +56,7 @@ func TestSetDefaults_RemoveFailedPodsArgs(t *testing.T) {
 				Namespaces:              &api.Namespaces{},
 				LabelSelector:           &metav1.LabelSelector{},
 				ExcludeOwnerKinds:       []string{"ReplicaSet"},
-				MinPodLifetimeSeconds:   pointer.Uint(0),
+				MinPodLifetimeSeconds:   utilptr.To[uint](0),
 				Reasons:                 []string{"reason"},
 				IncludingInitContainers: true,
 			},

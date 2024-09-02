@@ -22,21 +22,18 @@ import (
 	"testing"
 
 	"sigs.k8s.io/descheduler/pkg/api"
-	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"k8s.io/client-go/tools/events"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -175,18 +172,23 @@ func TestLowNodeUtilization(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "namespace1"
 				}),
 				test.BuildTestPod("p2", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "namespace1"
 				}),
 				test.BuildTestPod("p3", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "namespace1"
 				}),
 				test.BuildTestPod("p4", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "namespace1"
 				}),
 				test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "namespace1"
 				}),
 				// These won't be evicted.
@@ -242,12 +244,15 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
 				test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
 				test.BuildTestPod("p3", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					// TODO(zhifei92): add ownerRef for pod
 					pod.Namespace = "namespace3"
 				}),
 				test.BuildTestPod("p4", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					// TODO(zhifei92): add ownerRef for pod
 					pod.Namespace = "namespace4"
 				}),
 				test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					// TODO(zhifei92): add ownerRef for pod
 					pod.Namespace = "namespace5"
 				}),
 				// These won't be evicted.
@@ -271,6 +276,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				}),
 				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
+					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
@@ -326,6 +332,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				}),
 				test.BuildTestPod("p8", 400, 300, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
+					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
@@ -396,6 +403,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				}),
 				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
+					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
@@ -419,7 +427,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
 				test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
 			},
-			// All pods are assumed to be burstable (test.BuildTestNode always sets both cpu/memory resource requests to some value)
+			// All pods are assumed to be burstable (tc.BuildTestNode always sets both cpu/memory resource requests to some value)
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					test.SetRSOwnerRef(pod)
@@ -463,6 +471,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				}),
 				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
+					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
@@ -538,6 +547,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				}),
 				test.BuildTestPod("p8", 0, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
+					test.SetNormalOwnerRef(pod)
 					test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
 					pod.Namespace = "kube-system"
 					priority := utils.SystemCriticalPriority
@@ -620,6 +630,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				}),
 				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
+					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
@@ -684,6 +695,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				}),
 				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
+					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
@@ -776,6 +788,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				}),
 				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
+					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
@@ -827,6 +840,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				}),
 				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
+					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
@@ -838,35 +852,27 @@ func TestLowNodeUtilization(t *testing.T) {
 		},
 	}
 
-	for _, test := range testCases {
-		t.Run(test.name, func(t *testing.T) {
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
 			var objs []runtime.Object
-			for _, node := range test.nodes {
+			for _, node := range tc.nodes {
 				objs = append(objs, node)
 			}
-			for _, pod := range test.pods {
+			for _, pod := range tc.pods {
 				objs = append(objs, pod)
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
-			if err != nil {
-				t.Errorf("Build get pods assigned to node function error: %v", err)
-			}
-
 			podsForEviction := make(map[string]struct{})
-			for _, pod := range test.evictedPods {
+			for _, pod := range tc.evictedPods {
 				podsForEviction[pod] = struct{}{}
 			}
 
 			evictionFailed := false
-			if len(test.evictedPods) > 0 {
+			if len(tc.evictedPods) > 0 {
 				fakeClient.Fake.AddReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
 					getAction := action.(core.CreateAction)
 					obj := getAction.GetObject()
@@ -881,65 +887,26 @@ func TestLowNodeUtilization(t *testing.T) {
 				})
 			}
 
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-			eventRecorder := &events.FakeRecorder{}
-
-			podEvictor := evictions.NewPodEvictor(
-				fakeClient,
-				policy.SchemeGroupVersion.String(),
-				false,
-				nil,
-				nil,
-				test.nodes,
-				false,
-				eventRecorder,
-			)
-
-			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   false,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
-				NodeFit:                 true,
-			}
-
-			evictorFilter, err := defaultevictor.New(
-				defaultEvictorFilterArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-				},
-			)
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{NodeFit: true}, nil)
 			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
-			}
-
-			handle := &frameworkfake.HandleImpl{
-				ClientsetImpl:                 fakeClient,
-				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
-				SharedInformerFactoryImpl:     sharedInformerFactory,
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
 			plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
-				Thresholds:             test.thresholds,
-				TargetThresholds:       test.targetThresholds,
-				UseDeviationThresholds: test.useDeviationThresholds,
-				EvictableNamespaces:    test.evictableNamespaces,
+				Thresholds:             tc.thresholds,
+				TargetThresholds:       tc.targetThresholds,
+				UseDeviationThresholds: tc.useDeviationThresholds,
+				EvictableNamespaces:    tc.evictableNamespaces,
 			},
 				handle)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
-			plugin.(frameworktypes.BalancePlugin).Balance(ctx, test.nodes)
+			plugin.(frameworktypes.BalancePlugin).Balance(ctx, tc.nodes)
 
 			podsEvicted := podEvictor.TotalEvicted()
-			if test.expectedPodsEvicted != podsEvicted {
-				t.Errorf("Expected %v pods to be evicted but %v got evicted", test.expectedPodsEvicted, podsEvicted)
+			if tc.expectedPodsEvicted != podsEvicted {
+				t.Errorf("Expected %v pods to be evicted but %v got evicted", tc.expectedPodsEvicted, podsEvicted)
 			}
 			if evictionFailed {
 				t.Errorf("Pod evictions failed unexpectedly")
@@ -971,11 +938,14 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 		},
 	}
 
+	var uint0, uint1 uint = 0, 1
 	tests := []struct {
-		name              string
-		nodes             []*v1.Node
-		pods              []*v1.Pod
-		evictionsExpected uint
+		name                  string
+		nodes                 []*v1.Node
+		pods                  []*v1.Pod
+		maxPodsToEvictPerNode *uint
+		maxPodsToEvictTotal   *uint
+		evictionsExpected     uint
 	}{
 		{
 			name:  "No taints",
@@ -1031,6 +1001,26 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 			},
 			evictionsExpected: 1,
 		},
+		{
+			name:  "Pod which tolerates node taint, set maxPodsToEvictTotal(0), should not be expelled",
+			nodes: []*v1.Node{n1, n3withTaints},
+			pods: []*v1.Pod{
+				// Node 1 pods
+				test.BuildTestPod(fmt.Sprintf("pod_1_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_2_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_3_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_4_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_5_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_6_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				test.BuildTestPod(fmt.Sprintf("pod_7_%s", n1.Name), 200, 0, n1.Name, test.SetRSOwnerRef),
+				podThatToleratesTaint,
+				// Node 3 pods
+				test.BuildTestPod(fmt.Sprintf("pod_9_%s", n3withTaints.Name), 200, 0, n3withTaints.Name, test.SetRSOwnerRef),
+			},
+			maxPodsToEvictPerNode: &uint1,
+			maxPodsToEvictTotal:   &uint0,
+			evictionsExpected:     0,
+		},
 	}
 
 	for _, item := range tests {
@@ -1045,56 +1035,16 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 			}
 
 			fakeClient := fake.NewSimpleClientset(objs...)
-			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
-			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
-			if err != nil {
-				t.Errorf("Build get pods assigned to node function error: %v", err)
-			}
-
-			sharedInformerFactory.Start(ctx.Done())
-			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-			eventRecorder := &events.FakeRecorder{}
-
-			podEvictor := evictions.NewPodEvictor(
+			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+				ctx,
 				fakeClient,
-				policy.SchemeGroupVersion.String(),
-				false,
-				&item.evictionsExpected,
+				evictions.NewOptions().WithMaxPodsToEvictPerNode(&item.evictionsExpected),
+				defaultevictor.DefaultEvictorArgs{NodeFit: true},
 				nil,
-				item.nodes,
-				false,
-				eventRecorder,
-			)
-
-			defaultEvictorFilterArgs := &defaultevictor.DefaultEvictorArgs{
-				EvictLocalStoragePods:   false,
-				EvictSystemCriticalPods: false,
-				IgnorePvcPods:           false,
-				EvictFailedBarePods:     false,
-				NodeFit:                 true,
-			}
-
-			evictorFilter, err := defaultevictor.New(
-				defaultEvictorFilterArgs,
-				&frameworkfake.HandleImpl{
-					ClientsetImpl:                 fakeClient,
-					GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-					SharedInformerFactoryImpl:     sharedInformerFactory,
-				},
 			)
 			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
-			}
-
-			handle := &frameworkfake.HandleImpl{
-				ClientsetImpl:                 fakeClient,
-				GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
-				PodEvictorImpl:                podEvictor,
-				EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
-				SharedInformerFactoryImpl:     sharedInformerFactory,
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
 			plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{

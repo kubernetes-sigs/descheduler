@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/utils/pointer"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
@@ -47,7 +47,7 @@ func TestSetDefaults_PodLifeTimeArgs(t *testing.T) {
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{"foo": "bar"},
 				},
-				MaxPodLifeTimeSeconds: pointer.Uint(600),
+				MaxPodLifeTimeSeconds: utilptr.To[uint](600),
 				States:                []string{"Pending"},
 			},
 			want: &PodLifeTimeArgs{
@@ -55,7 +55,7 @@ func TestSetDefaults_PodLifeTimeArgs(t *testing.T) {
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{"foo": "bar"},
 				},
-				MaxPodLifeTimeSeconds: pointer.Uint(600),
+				MaxPodLifeTimeSeconds: utilptr.To[uint](600),
 				States:                []string{"Pending"},
 			},
 		},
