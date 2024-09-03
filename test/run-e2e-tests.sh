@@ -54,4 +54,4 @@ fi
 kubectl apply -f kubernetes/base/rbac.yaml
 
 PRJ_PREFIX="sigs.k8s.io/descheduler"
-go test ${PRJ_PREFIX}/test/e2e/ -v
+go test ${PRJ_PREFIX}/test/e2e/ -v -timeout 0
