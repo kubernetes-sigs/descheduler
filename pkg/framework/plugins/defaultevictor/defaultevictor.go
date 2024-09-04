@@ -230,12 +230,11 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 			klog.InfoS("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable", "pod", klog.KObj(pod))
 			return false
 		}
-		return true
 	}
 
 	// check pod by namespace label filter
 	if d.args.NamespaceLabelSelector != nil {
-		indexName := "metadata.namespace"
+		indexName := "namespaceWithLabelSelector"
 		indexer, err := getNamespacesListByLabelSelector(indexName, d.args.NamespaceLabelSelector, d.handle)
 		if err != nil {
 			klog.ErrorS(err, "unable to list namespaces", "pod", klog.KObj(pod))
@@ -250,7 +249,6 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 			klog.InfoS("pod namespace do not match the namespaceLabelSelector filter in the policy parameter", "pod", klog.KObj(pod))
 			return false
 		}
-		return true
 	}
 
 	return true
