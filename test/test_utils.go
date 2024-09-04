@@ -70,6 +70,22 @@ func BuildTestDeployment(name, namespace string, replicas int32, labels map[stri
 	return deployment
 }
 
+// BuildTestNamespace creates a test namespace with given parameters.
+func BuildTestNamespace(name string) *v1.Namespace {
+	namespace := &v1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Namespace",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			UID:    uuid.NewUUID(),
+			Labels: map[string]string{"kubernetes.io/metadata.name": name},
+		},
+	}
+	return namespace
+}
+
 // BuildTestPod creates a test pod with given parameters.
 func BuildTestPod(name string, cpu, memory int64, nodeName string, apply func(*v1.Pod)) *v1.Pod {
 	pod := &v1.Pod{
