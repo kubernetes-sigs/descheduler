@@ -236,7 +236,7 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 
 	// check pod by namespace label filter
 	if d.args.NamespaceLabelSelector != nil {
-		ns, err := getNamespaces(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Namespaces().Lister(), metav1.FormatLabelSelector(d.args.NamespaceLabelSelector))
+		ns, err := getNamespacesListByLabelSelector(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Namespaces().Lister(), metav1.FormatLabelSelector(d.args.NamespaceLabelSelector))
 		if err != nil {
 			klog.ErrorS(err, "unable to list namespaces", "pod", klog.KObj(pod))
 		}
@@ -310,7 +310,7 @@ func getPodIndexerByOwnerRefs(indexName string, handle frameworktypes.Handle) (c
 	return indexer, nil
 }
 
-func getNamespaces(ctx context.Context, client clientset.Interface, nsLister listersv1.NamespaceLister, labelSelector string) (map[string]struct{}, error) {
+func getNamespacesListByLabelSelector(ctx context.Context, client clientset.Interface, nsLister listersv1.NamespaceLister, labelSelector string) (map[string]struct{}, error) {
 	ret := make(map[string]struct{})
 	namespaceSelector, err := labels.Parse(labelSelector)
 	if err != nil {
