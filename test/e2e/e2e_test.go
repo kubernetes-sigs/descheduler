@@ -63,14 +63,13 @@ import (
 	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
-	"sigs.k8s.io/descheduler/test"
 )
 
 func isClientRateLimiterError(err error) bool {
 	return strings.Contains(err.Error(), "client rate limiter")
 }
 
-func deschedulerPolicyConfigMap(policy *deschedulerapiv1alpha2.DeschedulerPolicy) (*v1.ConfigMap, error) {
+func deschedulerPolicyConfigMap(policy *deschedulerapiv1alpha2.DeschedulerPolicy, apply func(cm *v1.ConfigMap)) (*v1.ConfigMap, error) {
 	cm := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "descheduler-policy-configmap",
@@ -84,11 +83,16 @@ func deschedulerPolicyConfigMap(policy *deschedulerapiv1alpha2.DeschedulerPolicy
 		return nil, err
 	}
 	cm.Data = map[string]string{"policy.yaml": string(policyBytes)}
+
+	if apply != nil {
+		apply(cm)
+	}
+
 	return cm, nil
 }
 
-func deschedulerDeployment(testName string) *appsv1.Deployment {
-	return &appsv1.Deployment{
+func deschedulerDeployment(testName string, apply func(deployment *appsv1.Deployment)) *appsv1.Deployment {
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "descheduler",
 			Namespace: "kube-system",
@@ -175,6 +179,12 @@ func deschedulerDeployment(testName string) *appsv1.Deployment {
 			},
 		},
 	}
+
+	if apply != nil {
+		apply(deployment)
+	}
+
+	return deployment
 }
 
 func printPodLogs(ctx context.Context, t *testing.T, kubeClient clientset.Interface, podName string) {
@@ -192,67 +202,6 @@ func printPodLogs(ctx context.Context, t *testing.T, kubeClient clientset.Interf
 	}
 	if err := scanner.Err(); err != nil {
 		t.Logf("Unable to scan bytes: %v\n", err)
-	}
-}
-
-func waitForDeschedulerPodRunning(t *testing.T, ctx context.Context, kubeClient clientset.Interface, testName string) string {
-	deschedulerPodName := ""
-	if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
-		podList, err := kubeClient.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
-			LabelSelector: labels.SelectorFromSet(labels.Set(map[string]string{"app": "descheduler", "test": testName})).String(),
-		})
-		if err != nil {
-			t.Logf("Unable to list pods: %v", err)
-			if isClientRateLimiterError(err) {
-				return false, nil
-			}
-			return false, err
-		}
-
-		runningPods := []*v1.Pod{}
-		for _, item := range podList.Items {
-			if item.Status.Phase != v1.PodRunning {
-				continue
-			}
-			pod := item
-			runningPods = append(runningPods, &pod)
-		}
-
-		if len(runningPods) != 1 {
-			t.Logf("Expected a single running pod, got %v instead", len(runningPods))
-			return false, nil
-		}
-
-		deschedulerPodName = runningPods[0].Name
-		t.Logf("Found a descheduler pod running: %v", deschedulerPodName)
-		return true, nil
-	}); err != nil {
-		t.Fatalf("Error waiting for a running descheduler: %v", err)
-	}
-	return deschedulerPodName
-}
-
-func waitForDeschedulerPodAbsent(t *testing.T, ctx context.Context, kubeClient clientset.Interface, testName string) {
-	if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
-		podList, err := kubeClient.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
-			LabelSelector: labels.SelectorFromSet(labels.Set(map[string]string{"app": "descheduler", "test": testName})).String(),
-		})
-		if err != nil {
-			t.Logf("Unable to list pods: %v", err)
-			if isClientRateLimiterError(err) {
-				return false, nil
-			}
-			return false, err
-		}
-
-		if len(podList.Items) > 0 {
-			t.Logf("Found a descheduler pod. Waiting until it gets deleted")
-			return false, nil
-		}
-
-		return true, nil
-	}); err != nil {
-		t.Fatalf("Error waiting for a descheduler to disapear: %v", err)
 	}
 }
 
@@ -297,7 +246,7 @@ func RcByNameContainer(name, namespace string, replicas int32, labels map[string
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
 				},
-				Spec: test.MakePodSpec(priorityClassName, gracePeriod),
+				Spec: makePodSpec(priorityClassName, gracePeriod),
 			},
 		},
 	}
@@ -329,9 +278,80 @@ func DsByNameContainer(name, namespace string, labels map[string]string, gracePe
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
 				},
-				Spec: test.MakePodSpec("", gracePeriod),
+				Spec: makePodSpec("", gracePeriod),
 			},
 		},
+	}
+}
+
+func buildTestDeployment(name, namespace string, replicas int32, testLabel map[string]string, apply func(deployment *appsv1.Deployment)) *appsv1.Deployment {
+	deployment := &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Deployment",
+			APIVersion: "apps/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels:    testLabel,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: utilptr.To[int32](replicas),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: testLabel,
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: testLabel,
+				},
+				Spec: makePodSpec("", utilptr.To[int64](0)),
+			},
+		},
+	}
+
+	if apply != nil {
+		apply(deployment)
+	}
+
+	return deployment
+}
+
+func makePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
+	return v1.PodSpec{
+		SecurityContext: &v1.PodSecurityContext{
+			RunAsNonRoot: utilptr.To(true),
+			RunAsUser:    utilptr.To[int64](1000),
+			RunAsGroup:   utilptr.To[int64](1000),
+			SeccompProfile: &v1.SeccompProfile{
+				Type: v1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
+		Containers: []v1.Container{{
+			Name:            "pause",
+			ImagePullPolicy: "IfNotPresent",
+			Image:           "registry.k8s.io/pause",
+			Ports:           []v1.ContainerPort{{ContainerPort: 80}},
+			Resources: v1.ResourceRequirements{
+				Limits: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("100m"),
+					v1.ResourceMemory: resource.MustParse("200Mi"),
+				},
+				Requests: v1.ResourceList{
+					v1.ResourceCPU:    resource.MustParse("100m"),
+					v1.ResourceMemory: resource.MustParse("100Mi"),
+				},
+			},
+			SecurityContext: &v1.SecurityContext{
+				AllowPrivilegeEscalation: utilptr.To(false),
+				Capabilities: &v1.Capabilities{
+					Drop: []v1.Capability{
+						"ALL",
+					},
+				},
+			},
+		}},
+		PriorityClassName:             priorityClassName,
+		TerminationGracePeriodSeconds: gracePeriod,
 	}
 }
 
@@ -1705,6 +1725,10 @@ func waitForPodRunning(ctx context.Context, t *testing.T, clientSet clientset.In
 	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
 		podItem, err := clientSet.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 		if err != nil {
+			t.Logf("Unable to list pods: %v", err)
+			if isClientRateLimiterError(err) {
+				return false, nil
+			}
 			return false, err
 		}
 
@@ -1719,27 +1743,65 @@ func waitForPodRunning(ctx context.Context, t *testing.T, clientSet clientset.In
 	}
 }
 
-func waitForPodsRunning(ctx context.Context, t *testing.T, clientSet clientset.Interface, labelMap map[string]string, desireRunningPodNum int, namespace string) {
-	if err := wait.PollUntilContextTimeout(ctx, 10*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+func waitForPodsRunning(ctx context.Context, t *testing.T, clientSet clientset.Interface, labelMap map[string]string, desireRunningPodNum int, namespace string) string {
+	runningPodName := ""
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
 		podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: labels.SelectorFromSet(labelMap).String(),
 		})
 		if err != nil {
-			return false, err
-		}
-		if len(podList.Items) != desireRunningPodNum {
-			t.Logf("Waiting for %v pods to be running, got %v instead", desireRunningPodNum, len(podList.Items))
-			return false, nil
-		}
-		for _, pod := range podList.Items {
-			if pod.Status.Phase != v1.PodRunning {
-				t.Logf("Pod %v not running yet, is %v instead", pod.Name, pod.Status.Phase)
+			t.Logf("Unable to list pods: %v", err)
+			if isClientRateLimiterError(err) {
 				return false, nil
 			}
+			return false, err
 		}
+
+		runningPods := []*v1.Pod{}
+		for _, item := range podList.Items {
+			if item.Status.Phase != v1.PodRunning {
+				continue
+			}
+			pod := item
+			runningPods = append(runningPods, &pod)
+		}
+
+		if len(runningPods) != desireRunningPodNum {
+			t.Logf("Waiting for %v pods to be running, got %v instead", desireRunningPodNum, len(runningPods))
+			return false, nil
+		}
+
+		if desireRunningPodNum == 1 {
+			runningPodName = runningPods[0].Name
+		}
+
 		return true, nil
 	}); err != nil {
 		t.Fatalf("Error waiting for pods running: %v", err)
+	}
+	return runningPodName
+}
+
+func waitForPodsToDisappear(ctx context.Context, t *testing.T, clientSet clientset.Interface, labelMap map[string]string, namespace string) {
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+		podList, err := clientSet.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: labels.SelectorFromSet(labelMap).String(),
+		})
+		if err != nil {
+			t.Logf("Unable to list pods: %v", err)
+			if isClientRateLimiterError(err) {
+				return false, nil
+			}
+			return false, err
+		}
+
+		if len(podList.Items) > 0 {
+			t.Logf("Found a existing pod. Waiting until it gets deleted")
+			return false, nil
+		}
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for pods to disappear: %v", err)
 	}
 }
 
