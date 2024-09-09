@@ -25,8 +25,12 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	clientset "k8s.io/client-go/kubernetes"
+	listersv1 "k8s.io/client-go/listers/core/v1"
+
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -214,8 +218,21 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 			klog.InfoS("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable", "pod", klog.KObj(pod))
 			return false
 		}
-		return true
 	}
+
+	// check pod by namespace label filter
+	if d.args.NamespaceLabelSelector != nil {
+		ns, err := getNamespacesListByLabelSelector(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Namespaces().Lister(), metav1.FormatLabelSelector(d.args.NamespaceLabelSelector))
+		if err != nil {
+			klog.ErrorS(err, "unable to list namespaces", "pod", klog.KObj(pod))
+		}
+
+		if _, ok := ns[pod.Namespace]; !ok {
+			klog.InfoS("pod namespace do not match the namespaceLabelSelector filter in the policy parameter", "pod", klog.KObj(pod))
+			return false
+		}
+	}
+
 	return true
 }
 
@@ -277,4 +294,42 @@ func getPodIndexerByOwnerRefs(indexName string, handle frameworktypes.Handle) (c
 	}
 
 	return indexer, nil
+}
+
+func getNamespacesListByLabelSelector(ctx context.Context, client clientset.Interface, nsLister listersv1.NamespaceLister, labelSelector string) (map[string]struct{}, error) {
+	ret := make(map[string]struct{})
+	namespaceSelector, err := labels.Parse(labelSelector)
+	if err != nil {
+		return ret, err
+	}
+
+	var ns []*v1.Namespace
+	// err is defined above
+	if ns, err = nsLister.List(namespaceSelector); err != nil {
+		return ret, err
+	}
+
+	if len(ns) == 0 {
+		klog.V(2).InfoS("Namespace lister returned empty list, now fetch directly")
+
+		nItems, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
+		if err != nil {
+			return ret, err
+		}
+
+		if nItems == nil || len(nItems.Items) == 0 {
+			return ret, nil
+		}
+
+		for i := range nItems.Items {
+			namespace := nItems.Items[i]
+			ns = append(ns, &namespace)
+		}
+	}
+
+	for _, n := range ns {
+		ret[n.Name] = struct{}{}
+	}
+
+	return ret, nil
 }
