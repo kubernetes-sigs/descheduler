@@ -5,6 +5,9 @@ on:
     branches:
       - release-*
 
+permissions:
+  contents: write # allow actions to update gh-pages branch
+
 jobs:
   release:
     runs-on: ubuntu-latest
