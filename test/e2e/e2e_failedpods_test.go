@@ -23,7 +23,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removefailedpods"
 	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
-	"sigs.k8s.io/descheduler/test"
 )
 
 var oneHourPodLifetimeSeconds uint = 3600
@@ -134,7 +133,7 @@ func TestFailedPods(t *testing.T) {
 }
 
 func initFailedJob(name, namespace string) *batchv1.Job {
-	podSpec := test.MakePodSpec("", nil)
+	podSpec := makePodSpec("", nil)
 	podSpec.Containers[0].Command = []string{"/bin/false"}
 	podSpec.RestartPolicy = v1.RestartPolicyNever
 	labelsSet := labels.Set{"test": name, "name": name}
