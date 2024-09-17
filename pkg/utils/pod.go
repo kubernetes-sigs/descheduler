@@ -3,6 +3,8 @@ package utils
 import (
 	"fmt"
 
+	policyv1 "k8s.io/client-go/listers/policy/v1"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -113,6 +115,18 @@ func IsPodWithPVC(pod *v1.Pod) bool {
 		}
 	}
 	return false
+}
+
+// IsPodCoveredByOnePDB returns true if the pod is covered by one PodDisruptionBudget.
+func IsPodCoveredByOnePDB(pod *v1.Pod, lister policyv1.PodDisruptionBudgetLister) (bool, error) {
+	budgets, err := lister.GetPodPodDisruptionBudgets(pod)
+	if err != nil {
+		return false, err
+	}
+
+	// If the pod is covered by more than one PDB, then evictions api will return
+	// an error when attempting to evict.
+	return len(budgets) == 1, nil
 }
 
 // GetPodSource returns the source of the pod based on the annotation.

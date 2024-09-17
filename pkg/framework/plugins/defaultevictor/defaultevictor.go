@@ -195,6 +195,20 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 			return nil
 		})
 	}
+
+	if defaultEvictorArgs.IgnoreNonPDBPods {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			hasOnePdb, err := utils.IsPodCoveredByOnePDB(pod, handle.SharedInformerFactory().Policy().V1().PodDisruptionBudgets().Lister())
+			if err != nil {
+				return fmt.Errorf("unable to check if pod is covered by a PDB: %w", err)
+			}
+			if !hasOnePdb {
+				return fmt.Errorf("pod is not covered by exactly one PodDisruptionBudget")
+			}
+			return nil
+		})
+	}
+
 	return ev, nil
 }
 
