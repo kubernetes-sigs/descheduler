@@ -20,7 +20,6 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
 	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
-	"sigs.k8s.io/descheduler/test"
 )
 
 const zoneTopologyKey string = "topology.kubernetes.io/zone"
@@ -126,26 +125,36 @@ func TestTopologySpreadConstraint(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			t.Logf("Creating Deployment %s with %d replicas", name, tc.replicaCount)
-			deployment := test.BuildTestDeployment(name, testNamespace.Name, int32(tc.replicaCount), tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels, func(d *appsv1.Deployment) {
+			deployLabels := tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels
+			deployLabels["name"] = name
+			deployment := buildTestDeployment(name, testNamespace.Name, int32(tc.replicaCount), deployLabels, func(d *appsv1.Deployment) {
 				d.Spec.Template.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{tc.topologySpreadConstraint}
 			})
 			if _, err := clientSet.AppsV1().Deployments(deployment.Namespace).Create(ctx, deployment, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Error creating Deployment %s %v", name, err)
 			}
-			defer test.DeleteDeployment(ctx, t, clientSet, deployment)
-			test.WaitForDeploymentPodsRunning(ctx, t, clientSet, deployment)
+			defer func() {
+				clientSet.AppsV1().Deployments(deployment.Namespace).Delete(ctx, deployment.Name, metav1.DeleteOptions{})
+				waitForPodsToDisappear(ctx, t, clientSet, deployment.Labels, deployment.Namespace)
+			}()
+			waitForPodsRunning(ctx, t, clientSet, deployment.Labels, tc.replicaCount, deployment.Namespace)
 
 			// Create a "Violator" Deployment that has the same label and is forced to be on the same node using a nodeSelector
 			violatorDeploymentName := name + "-violator"
 			violatorCount := tc.topologySpreadConstraint.MaxSkew + 1
-			violatorDeployment := test.BuildTestDeployment(violatorDeploymentName, testNamespace.Name, violatorCount, tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels, func(d *appsv1.Deployment) {
+			violatorDeployLabels := tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels
+			violatorDeployLabels["name"] = violatorDeploymentName
+			violatorDeployment := buildTestDeployment(violatorDeploymentName, testNamespace.Name, violatorCount, violatorDeployLabels, func(d *appsv1.Deployment) {
 				d.Spec.Template.Spec.NodeSelector = map[string]string{zoneTopologyKey: workerNodes[0].Labels[zoneTopologyKey]}
 			})
 			if _, err := clientSet.AppsV1().Deployments(deployment.Namespace).Create(ctx, violatorDeployment, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Error creating Deployment %s: %v", violatorDeploymentName, err)
 			}
-			defer test.DeleteDeployment(ctx, t, clientSet, violatorDeployment)
-			test.WaitForDeploymentPodsRunning(ctx, t, clientSet, violatorDeployment)
+			defer func() {
+				clientSet.AppsV1().Deployments(violatorDeployment.Namespace).Delete(ctx, violatorDeployment.Name, metav1.DeleteOptions{})
+				waitForPodsToDisappear(ctx, t, clientSet, violatorDeployment.Labels, violatorDeployment.Namespace)
+			}()
+			waitForPodsRunning(ctx, t, clientSet, violatorDeployment.Labels, int(violatorCount), violatorDeployment.Namespace)
 
 			evictionPolicyGroupVersion, err := eutils.SupportEviction(clientSet)
 			if err != nil || len(evictionPolicyGroupVersion) == 0 {
@@ -195,7 +204,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			}
 
 			// Ensure recently evicted Pod are rescheduled and running before asserting for a balanced topology spread
-			test.WaitForDeploymentPodsRunning(ctx, t, clientSet, deployment)
+			waitForPodsRunning(ctx, t, clientSet, deployment.Labels, tc.replicaCount, deployment.Namespace)
 
 			listOptions := metav1.ListOptions{LabelSelector: labels.SelectorFromSet(tc.topologySpreadConstraint.LabelSelector.MatchLabels).String()}
 			pods, err := clientSet.CoreV1().Pods(testNamespace.Name).List(ctx, listOptions)

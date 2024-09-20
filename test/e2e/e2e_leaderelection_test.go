@@ -63,21 +63,27 @@ func TestLeaderElection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create deployment 1: %v", err)
 	}
-	defer clientSet.AppsV1().Deployments(deployment1.Namespace).Delete(ctx, deployment1.Name, metav1.DeleteOptions{})
+	defer func() {
+		clientSet.AppsV1().Deployments(deployment1.Namespace).Delete(ctx, deployment1.Name, metav1.DeleteOptions{})
+		waitForPodsToDisappear(ctx, t, clientSet, deployment1.Labels, deployment1.Namespace)
+	}()
 
 	deployment2, err := createDeployment(ctx, clientSet, ns2, 5, t)
 	if err != nil {
 		t.Fatalf("create deployment 2: %v", err)
 	}
-	defer clientSet.AppsV1().Deployments(deployment2.Namespace).Delete(ctx, deployment2.Name, metav1.DeleteOptions{})
+	defer func() {
+		clientSet.AppsV1().Deployments(deployment2.Namespace).Delete(ctx, deployment2.Name, metav1.DeleteOptions{})
+		waitForPodsToDisappear(ctx, t, clientSet, deployment2.Labels, deployment2.Namespace)
+	}()
 
 	waitForPodsRunning(ctx, t, clientSet, map[string]string{"test": "leaderelection", "name": "test-leaderelection"}, 5, ns1)
 
-	podListAOrg := getPodNameList(ctx, clientSet, ns1, t)
+	podListAOrg := getCurrentPodNames(ctx, clientSet, ns1, t)
 
 	waitForPodsRunning(ctx, t, clientSet, map[string]string{"test": "leaderelection", "name": "test-leaderelection"}, 5, ns2)
 
-	podListBOrg := getPodNameList(ctx, clientSet, ns2, t)
+	podListBOrg := getCurrentPodNames(ctx, clientSet, ns2, t)
 
 	s1, err := options.NewDeschedulerServer()
 	if err != nil {
@@ -141,9 +147,9 @@ func TestLeaderElection(t *testing.T) {
 	time.Sleep(7 * time.Second)
 
 	// validate only pods from e2e-testleaderelection-a namespace are evicted.
-	podListA := getPodNameList(ctx, clientSet, ns1, t)
+	podListA := getCurrentPodNames(ctx, clientSet, ns1, t)
 
-	podListB := getPodNameList(ctx, clientSet, ns2, t)
+	podListB := getCurrentPodNames(ctx, clientSet, ns2, t)
 
 	left := reflect.DeepEqual(podListAOrg, podListA)
 	right := reflect.DeepEqual(podListBOrg, podListB)
@@ -221,17 +227,4 @@ func createDeployment(ctx context.Context, clientSet clientset.Interface, namesp
 		return nil, fmt.Errorf("create deployment %v", err)
 	}
 	return deployment, nil
-}
-
-func getPodNameList(ctx context.Context, clientSet clientset.Interface, namespace string, t *testing.T) []string {
-	podList, err := clientSet.CoreV1().Pods(namespace).List(
-		ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(labels.Set(map[string]string{"test": "leaderelection", "name": "test-leaderelection"})).String()})
-	if err != nil {
-		t.Fatalf("Unable to list pods from ns: %s: %v", namespace, err)
-	}
-	podNames := make([]string, len(podList.Items))
-	for i, pod := range podList.Items {
-		podNames[i] = pod.Name
-	}
-	return podNames
 }

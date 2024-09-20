@@ -190,7 +190,7 @@ func TestTooManyRestarts(t *testing.T) {
 			rs.Client = clientSet
 			rs.EventClient = clientSet
 
-			preRunNames := sets.NewString(getCurrentPodNames(t, ctx, clientSet, testNamespace.Name)...)
+			preRunNames := sets.NewString(getCurrentPodNames(ctx, clientSet, testNamespace.Name, t)...)
 			// Deploy the descheduler with the configured policy
 			deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(tc.policy)
 			if err != nil {
@@ -228,15 +228,18 @@ func TestTooManyRestarts(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Unable to delete %q deployment: %v", deschedulerDeploymentObj.Name, err)
 				}
-				waitForDeschedulerPodAbsent(t, ctx, clientSet, testNamespace.Name)
+				waitForPodsToDisappear(ctx, t, clientSet, deschedulerDeploymentObj.Labels, deschedulerDeploymentObj.Namespace)
 			}()
 
 			t.Logf("Waiting for the descheduler pod running")
-			deschedulerPodName = waitForDeschedulerPodRunning(t, ctx, clientSet, testNamespace.Name)
+			deschedulerPods := waitForPodsRunning(ctx, t, clientSet, deschedulerDeploymentObj.Labels, 1, deschedulerDeploymentObj.Namespace)
+			if len(deschedulerPods) != 0 {
+				deschedulerPodName = deschedulerPods[0].Name
+			}
 
 			// Run RemovePodsHavingTooManyRestarts strategy
 			if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 20*time.Second, true, func(ctx context.Context) (bool, error) {
-				currentRunNames := sets.NewString(getCurrentPodNames(t, ctx, clientSet, testNamespace.Name)...)
+				currentRunNames := sets.NewString(getCurrentPodNames(ctx, clientSet, testNamespace.Name, t)...)
 				actualEvictedPod := preRunNames.Difference(currentRunNames)
 				actualEvictedPodCount := uint(actualEvictedPod.Len())
 				t.Logf("preRunNames: %v, currentRunNames: %v, actualEvictedPodCount: %v\n", preRunNames.List(), currentRunNames.List(), actualEvictedPodCount)
