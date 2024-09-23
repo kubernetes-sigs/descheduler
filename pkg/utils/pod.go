@@ -117,16 +117,10 @@ func IsPodWithPVC(pod *v1.Pod) bool {
 	return false
 }
 
-// IsPodCoveredByOnePDB returns true if the pod is covered by one PodDisruptionBudget.
-func IsPodCoveredByOnePDB(pod *v1.Pod, lister policyv1.PodDisruptionBudgetLister) (bool, error) {
+// IsPodCoveredByPDB returns true if the pod is covered by at least one PodDisruptionBudget.
+func IsPodCoveredByPDB(pod *v1.Pod, lister policyv1.PodDisruptionBudgetLister) (bool, error) {
 	budgets, err := lister.GetPodPodDisruptionBudgets(pod)
-	if err != nil {
-		return false, err
-	}
-
-	// If the pod is covered by more than one PDB, then evictions api will return
-	// an error when attempting to evict.
-	return len(budgets) == 1, nil
+	return len(budgets) > 0, err
 }
 
 // GetPodSource returns the source of the pod based on the annotation.

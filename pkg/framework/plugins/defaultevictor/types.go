@@ -36,5 +36,5 @@ type DefaultEvictorArgs struct {
 	NodeFit                 bool                   `json:"nodeFit,omitempty"`
 	MinReplicas             uint                   `json:"minReplicas,omitempty"`
 	MinPodAge               *metav1.Duration       `json:"minPodAge,omitempty"`
-	IgnoreNonPDBPods        bool                   `json:"ignoreNonPDBPods,omitempty"`
+	IgnorePodsWithoutPDB    bool                   `json:"ignorePodsWithoutPDB,omitempty"`
 }

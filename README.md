@@ -129,19 +129,19 @@ These are top level keys in the Descheduler Policy that you can use to configure
 
 The Default Evictor Plugin is used by default for filtering pods before processing them in an strategy plugin, or for applying a PreEvictionFilter of pods before eviction. You can also create your own Evictor Plugin or use the Default one provided by Descheduler.  Other uses for the Evictor plugin can be to sort, filter, validate or group pods by different criteria, and that's why this is handled by a plugin and not configured in the top level config.
 
-| Name |type| Default Value | Description |
-|------|----|---------------|-------------|
-| `nodeSelector` |`string`| `nil` | limiting the nodes which are processed |
-| `evictLocalStoragePods` |`bool`| `false` | allows eviction of pods with local storage |
+| Name                      |type| Default Value | Description                                                                                                                 |
+|---------------------------|----|---------------|-----------------------------------------------------------------------------------------------------------------------------|
+| `nodeSelector`            |`string`| `nil` | limiting the nodes which are processed                                                                                      |
+| `evictLocalStoragePods`   |`bool`| `false` | allows eviction of pods with local storage                                                                                  |
 | `evictSystemCriticalPods` |`bool`| `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
-| `ignorePvcPods` |`bool`| `false` | set whether PVC pods should be evicted or ignored |
-| `evictFailedBarePods` |`bool`| `false` | allow eviction of pods without owner references and in failed phase |
-|`labelSelector`|`metav1.LabelSelector`||(see [label filtering](#label-filtering))|
-|`priorityThreshold`|`priorityThreshold`||(see [priority filtering](#priority-filtering))|
-|`nodeFit`|`bool`|`false`|(see [node fit filtering](#node-fit-filtering))|
-|`minReplicas`|`uint`|`0`| ignore eviction of pods where owner (e.g. `ReplicaSet`) replicas is below this threshold |
-|`minPodAge`|`metav1.Duration`|`0`| ignore eviction of pods with a creation time within this threshold |
-|'ignoreNonPDBPods` |`bool`|`false`| set whether pods that are not part of a PodDisruptionBudget should be evicted or ignored |
+| `ignorePvcPods`           |`bool`| `false` | set whether PVC pods should be evicted or ignored                                                                           |
+| `evictFailedBarePods`     |`bool`| `false` | allow eviction of pods without owner references and in failed phase                                                         |
+| `labelSelector`           |`metav1.LabelSelector`|| (see [label filtering](#label-filtering))                                                                                   |
+| `priorityThreshold`       |`priorityThreshold`|| (see [priority filtering](#priority-filtering))                                                                             |
+| `nodeFit`                 |`bool`|`false`| (see [node fit filtering](#node-fit-filtering))                                                                             |
+| `minReplicas`             |`uint`|`0`| ignore eviction of pods where owner (e.g. `ReplicaSet`) replicas is below this threshold                                    |
+| `minPodAge`               |`metav1.Duration`|`0`| ignore eviction of pods with a creation time within this threshold                                                          |
+| 'ignorePodsWithoutPDB`    |`bool`|`false`| set whether pods without PodDisruptionBudget should be evicted or ignored                                                   |
 
 ### Example policy
 
