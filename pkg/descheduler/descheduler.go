@@ -70,7 +70,7 @@ type profileRunner struct {
 
 type descheduler struct {
 	rs                     *options.DeschedulerServer
-	ir                     InformerResources
+	ir                     *informerResources
 	getPodsAssignedToNode  podutil.GetPodsAssignedToNodeFunc
 	sharedInformerFactory  informers.SharedInformerFactory
 	deschedulerPolicy      *api.DeschedulerPolicy
@@ -79,17 +79,12 @@ type descheduler struct {
 	podEvictionReactionFnc func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error)
 }
 
-type InformerResources interface {
-	Uses(resources ...schema.GroupVersionResource) error
-	SyncTo(fakeClient *fakeclientset.Clientset, newFactory informers.SharedInformerFactory) error
-}
-
 type informerResources struct {
 	sharedInformerFactory informers.SharedInformerFactory
 	resourceToInformer    map[schema.GroupVersionResource]informers.GenericInformer
 }
 
-func NewInformerResources(sharedInformerFactory informers.SharedInformerFactory) InformerResources {
+func newInformerResources(sharedInformerFactory informers.SharedInformerFactory) *informerResources {
 	return &informerResources{
 		sharedInformerFactory: sharedInformerFactory,
 		resourceToInformer:    make(map[schema.GroupVersionResource]informers.GenericInformer),
@@ -108,18 +103,17 @@ func (ir *informerResources) Uses(resources ...schema.GroupVersionResource) erro
 	return nil
 }
 
-// Makes sure the same create shared informers for resources needed and copy over the resources that the original
-// informers list
-func (ir *informerResources) SyncTo(fakeClient *fakeclientset.Clientset, newFactory informers.SharedInformerFactory) error {
+// CopyTo Copy informer subscriptions to the new factory and objects to the fake client so that the backing caches are populated for when listers are used.
+func (ir *informerResources) CopyTo(fakeClient *fakeclientset.Clientset, newFactory informers.SharedInformerFactory) error {
 	for resource, informer := range ir.resourceToInformer {
 		_, err := newFactory.ForResource(resource)
 		if err != nil {
-			return fmt.Errorf("error getting resource %s: %v", resource, err)
+			return fmt.Errorf("error getting resource %s: %w", resource, err)
 		}
 
 		objects, err := informer.Lister().List(labels.Everything())
 		if err != nil {
-			return fmt.Errorf("error listing %s: %v", informer, err)
+			return fmt.Errorf("error listing %s: %w", informer, err)
 		}
 
 		for _, object := range objects {
@@ -132,12 +126,13 @@ func (ir *informerResources) SyncTo(fakeClient *fakeclientset.Clientset, newFact
 func newDescheduler(rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory informers.SharedInformerFactory) (*descheduler, error) {
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
-	ir := NewInformerResources(sharedInformerFactory)
+	ir := newInformerResources(sharedInformerFactory)
 	ir.Uses(v1.SchemeGroupVersion.WithResource("pods"),
 		v1.SchemeGroupVersion.WithResource("nodes"),
-		// TODO: move these to default evictor plugin
-		v1.SchemeGroupVersion.WithResource("namespaces"),
-		schedulingv1.SchemeGroupVersion.WithResource("priorityclasses"))
+		// Future work could be to let each plugin declare what type of resources it needs; that way dry runs would stay
+		// consistent with the real runs without having to keep the list here in sync.
+		v1.SchemeGroupVersion.WithResource("namespaces"),                // Used by the defaultevictor plugin
+		schedulingv1.SchemeGroupVersion.WithResource("priorityclasses")) // Used by the defaultevictor plugin
 
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
@@ -194,7 +189,7 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 		fakeClient.PrependReactor("create", "pods", d.podEvictionReactionFnc(fakeClient))
 		fakeSharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 
-		err := d.ir.SyncTo(fakeClient, fakeSharedInformerFactory)
+		err := d.ir.CopyTo(fakeClient, fakeSharedInformerFactory)
 		if err != nil {
 			return err
 		}
