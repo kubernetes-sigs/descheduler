@@ -23,6 +23,9 @@ import (
 	"testing"
 	"time"
 
+	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -65,6 +68,25 @@ func BuildTestPod(name string, cpu, memory int64, nodeName string, apply func(*v
 		apply(pod)
 	}
 	return pod
+}
+
+func BuildTestPDB(name, appLabel string) *policyv1.PodDisruptionBudget {
+	maxUnavailable := intstr.FromInt32(1)
+	pdb := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      name,
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": appLabel,
+				},
+			},
+			MaxUnavailable: &maxUnavailable,
+		},
+	}
+	return pdb
 }
 
 // GetMirrorPodAnnotation returns the annotation needed for mirror pod.

@@ -200,7 +200,6 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			hasPdb, err := utils.IsPodCoveredByPDB(pod, handle.SharedInformerFactory().Policy().V1().PodDisruptionBudgets().Lister())
 			if err != nil || !hasPdb {
-
 				return fmt.Errorf("no PodDisruptionBudget found for pod")
 			}
 			return nil
