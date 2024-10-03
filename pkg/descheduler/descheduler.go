@@ -19,11 +19,12 @@ package descheduler
 import (
 	"context"
 	"fmt"
-	schedulingv1 "k8s.io/api/scheduling/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"math"
 	"strconv"
 	"time"
+
+	schedulingv1 "k8s.io/api/scheduling/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
