@@ -188,20 +188,19 @@ func TestTopologySpreadConstraint(t *testing.T) {
 
 			// Create a "Violator" Deployment that has the same label and is forced to be on the same node using a nodeSelector
 			violatorDeploymentName := tc.name + "-violator"
-			violatorCount := tc.topologySpreadConstraint.MaxSkew + 1
 			violatorDeployLabels := tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels
 			violatorDeployLabels["name"] = violatorDeploymentName
-			violatorDeployment := buildTestDeployment(violatorDeploymentName, testNamespace.Name, violatorCount, violatorDeployLabels, func(d *appsv1.Deployment) {
+			violatorDeployment := buildTestDeployment(violatorDeploymentName, testNamespace.Name, tc.topologySpreadConstraint.MaxSkew+1, violatorDeployLabels, func(d *appsv1.Deployment) {
 				d.Spec.Template.Spec.NodeSelector = map[string]string{zoneTopologyKey: workerNodes[0].Labels[zoneTopologyKey]}
 			})
-			if _, err := clientSet.AppsV1().Deployments(deployment.Namespace).Create(ctx, violatorDeployment, metav1.CreateOptions{}); err != nil {
-				t.Fatalf("Error creating Deployment %s: %v", violatorDeploymentName, err)
+			if _, err := clientSet.AppsV1().Deployments(violatorDeployment.Namespace).Create(ctx, violatorDeployment, metav1.CreateOptions{}); err != nil {
+				t.Fatalf("Error creating Deployment %s: %v", violatorDeployment.Name, err)
 			}
 			defer func() {
 				clientSet.AppsV1().Deployments(violatorDeployment.Namespace).Delete(ctx, violatorDeployment.Name, metav1.DeleteOptions{})
 				waitForPodsToDisappear(ctx, t, clientSet, violatorDeployment.Labels, violatorDeployment.Namespace)
 			}()
-			waitForPodsRunning(ctx, t, clientSet, violatorDeployment.Labels, int(violatorCount), violatorDeployment.Namespace)
+			waitForPodsRunning(ctx, t, clientSet, violatorDeployment.Labels, int(*violatorDeployment.Spec.Replicas), violatorDeployment.Namespace)
 
 			// Run TopologySpreadConstraint strategy
 			t.Logf("Running RemovePodsViolatingTopologySpreadConstraint strategy for %s", tc.name)

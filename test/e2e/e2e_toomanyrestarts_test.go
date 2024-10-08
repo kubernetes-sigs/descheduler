@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	componentbaseconfig "k8s.io/component-base/config"
-	utilptr "k8s.io/utils/ptr"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -104,50 +103,10 @@ func TestTooManyRestarts(t *testing.T) {
 	}
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
-	deploymentObj := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "restart-pod",
-			Namespace: testNamespace.Name,
-			Labels:    map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"},
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: utilptr.To[int32](deploymentReplicas),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"},
-			},
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"},
-				},
-				Spec: v1.PodSpec{
-					SecurityContext: &v1.PodSecurityContext{
-						RunAsNonRoot: utilptr.To(true),
-						RunAsUser:    utilptr.To[int64](1000),
-						RunAsGroup:   utilptr.To[int64](1000),
-						SeccompProfile: &v1.SeccompProfile{
-							Type: v1.SeccompProfileTypeRuntimeDefault,
-						},
-					},
-					Containers: []v1.Container{{
-						Name:            "pause",
-						ImagePullPolicy: "Always",
-						Image:           "registry.k8s.io/pause",
-						Command:         []string{"/bin/sh"},
-						Args:            []string{"-c", "sleep 1s && exit 1"},
-						Ports:           []v1.ContainerPort{{ContainerPort: 80}},
-						SecurityContext: &v1.SecurityContext{
-							AllowPrivilegeEscalation: utilptr.To(false),
-							Capabilities: &v1.Capabilities{
-								Drop: []v1.Capability{
-									"ALL",
-								},
-							},
-						},
-					}},
-				},
-			},
-		},
-	}
+	deploymentObj := buildTestDeployment("restart-pod", testNamespace.Name, deploymentReplicas, map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"}, func(deployment *appsv1.Deployment) {
+		deployment.Spec.Template.Spec.Containers[0].Command = []string{"/bin/sh"}
+		deployment.Spec.Template.Spec.Containers[0].Args = []string{"-c", "sleep 1s && exit 1"}
+	})
 
 	t.Logf("Creating deployment %v", deploymentObj.Name)
 	_, err = clientSet.AppsV1().Deployments(deploymentObj.Namespace).Create(ctx, deploymentObj, metav1.CreateOptions{})
