@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -75,34 +76,7 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 	thresholds := l.args.Thresholds
 	targetThresholds := l.args.TargetThresholds
 
-	// check if Pods/CPU/Mem are set, if not, set them to 100
-	if _, ok := thresholds[v1.ResourcePods]; !ok {
-		if useDeviationThresholds {
-			thresholds[v1.ResourcePods] = MinResourcePercentage
-			targetThresholds[v1.ResourcePods] = MinResourcePercentage
-		} else {
-			thresholds[v1.ResourcePods] = MaxResourcePercentage
-			targetThresholds[v1.ResourcePods] = MaxResourcePercentage
-		}
-	}
-	if _, ok := thresholds[v1.ResourceCPU]; !ok {
-		if useDeviationThresholds {
-			thresholds[v1.ResourceCPU] = MinResourcePercentage
-			targetThresholds[v1.ResourceCPU] = MinResourcePercentage
-		} else {
-			thresholds[v1.ResourceCPU] = MaxResourcePercentage
-			targetThresholds[v1.ResourceCPU] = MaxResourcePercentage
-		}
-	}
-	if _, ok := thresholds[v1.ResourceMemory]; !ok {
-		if useDeviationThresholds {
-			thresholds[v1.ResourceMemory] = MinResourcePercentage
-			targetThresholds[v1.ResourceMemory] = MinResourcePercentage
-		} else {
-			thresholds[v1.ResourceMemory] = MaxResourcePercentage
-			targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
-		}
-	}
+	setDefaultForLNUThresholds(thresholds, targetThresholds, useDeviationThresholds)
 	resourceNames := getResourceNames(thresholds)
 
 	lowNodes, sourceNodes := classifyNodes(
@@ -198,4 +172,35 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 		continueEvictionCond)
 
 	return nil
+}
+
+func setDefaultForLNUThresholds(thresholds, targetThresholds api.ResourceThresholds, useDeviationThresholds bool) {
+	// check if Pods/CPU/Mem are set, if not, set them to 100
+	if _, ok := thresholds[v1.ResourcePods]; !ok {
+		if useDeviationThresholds {
+			thresholds[v1.ResourcePods] = MinResourcePercentage
+			targetThresholds[v1.ResourcePods] = MinResourcePercentage
+		} else {
+			thresholds[v1.ResourcePods] = MaxResourcePercentage
+			targetThresholds[v1.ResourcePods] = MaxResourcePercentage
+		}
+	}
+	if _, ok := thresholds[v1.ResourceCPU]; !ok {
+		if useDeviationThresholds {
+			thresholds[v1.ResourceCPU] = MinResourcePercentage
+			targetThresholds[v1.ResourceCPU] = MinResourcePercentage
+		} else {
+			thresholds[v1.ResourceCPU] = MaxResourcePercentage
+			targetThresholds[v1.ResourceCPU] = MaxResourcePercentage
+		}
+	}
+	if _, ok := thresholds[v1.ResourceMemory]; !ok {
+		if useDeviationThresholds {
+			thresholds[v1.ResourceMemory] = MinResourcePercentage
+			targetThresholds[v1.ResourceMemory] = MinResourcePercentage
+		} else {
+			thresholds[v1.ResourceMemory] = MaxResourcePercentage
+			targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
+		}
+	}
 }
