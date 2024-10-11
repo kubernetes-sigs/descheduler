@@ -37,9 +37,12 @@ const LowNodeUtilizationPluginName = "LowNodeUtilization"
 // to calculate nodes' utilization and not the actual resource usage.
 
 type LowNodeUtilization struct {
-	handle    frameworktypes.Handle
-	args      *LowNodeUtilizationArgs
-	podFilter func(pod *v1.Pod) bool
+	handle                   frameworktypes.Handle
+	args                     *LowNodeUtilizationArgs
+	podFilter                func(pod *v1.Pod) bool
+	underutilizationCriteria []interface{}
+	overutilizationCriteria  []interface{}
+	resourceNames            []v1.ResourceName
 }
 
 var _ frameworktypes.BalancePlugin = &LowNodeUtilization{}
@@ -51,6 +54,30 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 		return nil, fmt.Errorf("want args to be of type LowNodeUtilizationArgs, got %T", args)
 	}
 
+	setDefaultForLNUThresholds(lowNodeUtilizationArgsArgs.Thresholds, lowNodeUtilizationArgsArgs.TargetThresholds, lowNodeUtilizationArgsArgs.UseDeviationThresholds)
+
+	underutilizationCriteria := []interface{}{
+		"CPU", lowNodeUtilizationArgsArgs.Thresholds[v1.ResourceCPU],
+		"Mem", lowNodeUtilizationArgsArgs.Thresholds[v1.ResourceMemory],
+		"Pods", lowNodeUtilizationArgsArgs.Thresholds[v1.ResourcePods],
+	}
+	for name := range lowNodeUtilizationArgsArgs.Thresholds {
+		if !nodeutil.IsBasicResource(name) {
+			underutilizationCriteria = append(underutilizationCriteria, string(name), int64(lowNodeUtilizationArgsArgs.Thresholds[name]))
+		}
+	}
+
+	overutilizationCriteria := []interface{}{
+		"CPU", lowNodeUtilizationArgsArgs.TargetThresholds[v1.ResourceCPU],
+		"Mem", lowNodeUtilizationArgsArgs.TargetThresholds[v1.ResourceMemory],
+		"Pods", lowNodeUtilizationArgsArgs.TargetThresholds[v1.ResourcePods],
+	}
+	for name := range lowNodeUtilizationArgsArgs.TargetThresholds {
+		if !nodeutil.IsBasicResource(name) {
+			overutilizationCriteria = append(overutilizationCriteria, string(name), int64(lowNodeUtilizationArgsArgs.TargetThresholds[name]))
+		}
+	}
+
 	podFilter, err := podutil.NewOptions().
 		WithFilter(handle.Evictor().Filter).
 		BuildFilterFunc()
@@ -59,9 +86,12 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 	}
 
 	return &LowNodeUtilization{
-		handle:    handle,
-		args:      lowNodeUtilizationArgsArgs,
-		podFilter: podFilter,
+		handle:                   handle,
+		args:                     lowNodeUtilizationArgsArgs,
+		underutilizationCriteria: underutilizationCriteria,
+		overutilizationCriteria:  overutilizationCriteria,
+		resourceNames:            getResourceNames(lowNodeUtilizationArgsArgs.Thresholds),
+		podFilter:                podFilter,
 	}, nil
 }
 
@@ -72,16 +102,9 @@ func (l *LowNodeUtilization) Name() string {
 
 // Balance extension point implementation for the plugin
 func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
-	useDeviationThresholds := l.args.UseDeviationThresholds
-	thresholds := l.args.Thresholds
-	targetThresholds := l.args.TargetThresholds
-
-	setDefaultForLNUThresholds(thresholds, targetThresholds, useDeviationThresholds)
-	resourceNames := getResourceNames(thresholds)
-
 	lowNodes, sourceNodes := classifyNodes(
-		getNodeUsage(nodes, resourceNames, l.handle.GetPodsAssignedToNodeFunc()),
-		getNodeThresholds(nodes, thresholds, targetThresholds, resourceNames, l.handle.GetPodsAssignedToNodeFunc(), useDeviationThresholds),
+		getNodeUsage(nodes, l.resourceNames, l.handle.GetPodsAssignedToNodeFunc()),
+		getNodeThresholds(nodes, l.args.Thresholds, l.args.TargetThresholds, l.resourceNames, l.handle.GetPodsAssignedToNodeFunc(), l.args.UseDeviationThresholds),
 		// The node has to be schedulable (to be able to move workload there)
 		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			if nodeutil.IsNodeUnschedulable(node) {
@@ -96,31 +119,11 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 	)
 
 	// log message for nodes with low utilization
-	underutilizationCriteria := []interface{}{
-		"CPU", thresholds[v1.ResourceCPU],
-		"Mem", thresholds[v1.ResourceMemory],
-		"Pods", thresholds[v1.ResourcePods],
-	}
-	for name := range thresholds {
-		if !nodeutil.IsBasicResource(name) {
-			underutilizationCriteria = append(underutilizationCriteria, string(name), int64(thresholds[name]))
-		}
-	}
-	klog.V(1).InfoS("Criteria for a node under utilization", underutilizationCriteria...)
+	klog.V(1).InfoS("Criteria for a node under utilization", l.underutilizationCriteria...)
 	klog.V(1).InfoS("Number of underutilized nodes", "totalNumber", len(lowNodes))
 
 	// log message for over utilized nodes
-	overutilizationCriteria := []interface{}{
-		"CPU", targetThresholds[v1.ResourceCPU],
-		"Mem", targetThresholds[v1.ResourceMemory],
-		"Pods", targetThresholds[v1.ResourcePods],
-	}
-	for name := range targetThresholds {
-		if !nodeutil.IsBasicResource(name) {
-			overutilizationCriteria = append(overutilizationCriteria, string(name), int64(targetThresholds[name]))
-		}
-	}
-	klog.V(1).InfoS("Criteria for a node above target utilization", overutilizationCriteria...)
+	klog.V(1).InfoS("Criteria for a node above target utilization", l.overutilizationCriteria...)
 	klog.V(1).InfoS("Number of overutilized nodes", "totalNumber", len(sourceNodes))
 
 	if len(lowNodes) == 0 {
@@ -168,7 +171,7 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 		l.handle.Evictor(),
 		evictions.EvictOptions{StrategyName: LowNodeUtilizationPluginName},
 		l.podFilter,
-		resourceNames,
+		l.resourceNames,
 		continueEvictionCond)
 
 	return nil
