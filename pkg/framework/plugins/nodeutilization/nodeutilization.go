@@ -116,9 +116,17 @@ func (s *usageSnapshot) capture(nodes []*v1.Node) error {
 			continue
 		}
 
+		nodeUsage, err := nodeutil.NodeUtilization(pods, s.resourceNames, func(pod *v1.Pod) (v1.ResourceList, error) {
+			req, _ := utils.PodRequestsAndLimits(pod)
+			return req, nil
+		})
+		if err != nil {
+			return err
+		}
+
 		// store the snapshot of pods from the same (or the closest) node utilization computation
 		s._pods[node.Name] = pods
-		s._nodeUtilization[node.Name] = nodeutil.NodeUtilization(pods, s.resourceNames)
+		s._nodeUtilization[node.Name] = nodeUsage
 	}
 
 	return nil
