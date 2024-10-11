@@ -43,6 +43,7 @@ type LowNodeUtilization struct {
 	underutilizationCriteria []interface{}
 	overutilizationCriteria  []interface{}
 	resourceNames            []v1.ResourceName
+	usageSnapshot            *usageSnapshot
 }
 
 var _ frameworktypes.BalancePlugin = &LowNodeUtilization{}
@@ -85,13 +86,16 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
 	}
 
+	resourceNames := getResourceNames(lowNodeUtilizationArgsArgs.Thresholds)
+
 	return &LowNodeUtilization{
 		handle:                   handle,
 		args:                     lowNodeUtilizationArgsArgs,
 		underutilizationCriteria: underutilizationCriteria,
 		overutilizationCriteria:  overutilizationCriteria,
-		resourceNames:            getResourceNames(lowNodeUtilizationArgsArgs.Thresholds),
+		resourceNames:            resourceNames,
 		podFilter:                podFilter,
+		usageSnapshot:            newRequestedUsageSnapshot(resourceNames, handle.GetPodsAssignedToNodeFunc()),
 	}, nil
 }
 
@@ -102,9 +106,15 @@ func (l *LowNodeUtilization) Name() string {
 
 // Balance extension point implementation for the plugin
 func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	if err := l.usageSnapshot.capture(nodes); err != nil {
+		return &frameworktypes.Status{
+			Err: fmt.Errorf("error getting node usage: %v", err),
+		}
+	}
+
 	lowNodes, sourceNodes := classifyNodes(
-		getNodeUsage(nodes, l.resourceNames, l.handle.GetPodsAssignedToNodeFunc()),
-		getNodeThresholds(nodes, l.args.Thresholds, l.args.TargetThresholds, l.resourceNames, l.handle.GetPodsAssignedToNodeFunc(), l.args.UseDeviationThresholds),
+		getNodeUsage(nodes, l.usageSnapshot),
+		getNodeThresholds(nodes, l.args.Thresholds, l.args.TargetThresholds, l.resourceNames, l.args.UseDeviationThresholds, l.usageSnapshot),
 		// The node has to be schedulable (to be able to move workload there)
 		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			if nodeutil.IsNodeUnschedulable(node) {

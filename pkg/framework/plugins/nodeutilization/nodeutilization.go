@@ -74,18 +74,68 @@ func normalizePercentage(percent api.Percentage) api.Percentage {
 	return percent
 }
 
+type usageSnapshot struct {
+	resourceNames         []v1.ResourceName
+	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc
+
+	_nodes           []*v1.Node
+	_pods            map[string][]*v1.Pod
+	_nodeUtilization map[string]map[v1.ResourceName]*resource.Quantity
+}
+
+func newRequestedUsageSnapshot(
+	resourceNames []v1.ResourceName,
+	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
+) *usageSnapshot {
+	return &usageSnapshot{
+		resourceNames:         resourceNames,
+		getPodsAssignedToNode: getPodsAssignedToNode,
+	}
+}
+
+func (s *usageSnapshot) nodeUtilization(node string) map[v1.ResourceName]*resource.Quantity {
+	return s._nodeUtilization[node]
+}
+
+func (s *usageSnapshot) nodes() []*v1.Node {
+	return s._nodes
+}
+
+func (s *usageSnapshot) pods(node string) []*v1.Pod {
+	return s._pods[node]
+}
+
+func (s *usageSnapshot) capture(nodes []*v1.Node) error {
+	s._nodeUtilization = make(map[string]map[v1.ResourceName]*resource.Quantity)
+	s._pods = make(map[string][]*v1.Pod)
+
+	for _, node := range nodes {
+		pods, err := podutil.ListPodsOnANode(node.Name, s.getPodsAssignedToNode, nil)
+		if err != nil {
+			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
+			continue
+		}
+
+		// store the snapshot of pods from the same (or the closest) node utilization computation
+		s._pods[node.Name] = pods
+		s._nodeUtilization[node.Name] = nodeutil.NodeUtilization(pods, s.resourceNames)
+	}
+
+	return nil
+}
+
 func getNodeThresholds(
 	nodes []*v1.Node,
 	lowThreshold, highThreshold api.ResourceThresholds,
 	resourceNames []v1.ResourceName,
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 	useDeviationThresholds bool,
+	usageSnapshot *usageSnapshot,
 ) map[string]NodeThresholds {
 	nodeThresholdsMap := map[string]NodeThresholds{}
 
 	averageResourceUsagePercent := api.ResourceThresholds{}
 	if useDeviationThresholds {
-		averageResourceUsagePercent = averageNodeBasicresources(nodes, getPodsAssignedToNode, resourceNames)
+		averageResourceUsagePercent = averageNodeBasicresources(nodes, usageSnapshot)
 	}
 
 	for _, node := range nodes {
@@ -121,22 +171,15 @@ func getNodeThresholds(
 
 func getNodeUsage(
 	nodes []*v1.Node,
-	resourceNames []v1.ResourceName,
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
+	usageSnapshot *usageSnapshot,
 ) []NodeUsage {
 	var nodeUsageList []NodeUsage
 
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, nil)
-		if err != nil {
-			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
-			continue
-		}
-
 		nodeUsageList = append(nodeUsageList, NodeUsage{
 			node:    node,
-			usage:   nodeutil.NodeUtilization(pods, resourceNames),
-			allPods: pods,
+			usage:   usageSnapshot.nodeUtilization(node.Name),
+			allPods: usageSnapshot.pods(node.Name),
 		})
 	}
 
@@ -437,17 +480,12 @@ func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*
 	return nonRemovablePods, removablePods
 }
 
-func averageNodeBasicresources(nodes []*v1.Node, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, resourceNames []v1.ResourceName) api.ResourceThresholds {
+func averageNodeBasicresources(nodes []*v1.Node, usageSnapshot *usageSnapshot) api.ResourceThresholds {
 	total := api.ResourceThresholds{}
 	average := api.ResourceThresholds{}
 	numberOfNodes := len(nodes)
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, nil)
-		if err != nil {
-			numberOfNodes--
-			continue
-		}
-		usage := nodeutil.NodeUtilization(pods, resourceNames)
+		usage := usageSnapshot.nodeUtilization(node.Name)
 		nodeCapacity := node.Status.Capacity
 		if len(node.Status.Allocatable) > 0 {
 			nodeCapacity = node.Status.Allocatable
