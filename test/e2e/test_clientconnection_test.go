@@ -31,6 +31,7 @@ func TestClientConnectionConfiguration(t *testing.T) {
 		t.Fatalf("Unable to initialize server: %v", err)
 	}
 	s.Client = clientSet
+	s.DefaultFeatureGates = initFeatureGates()
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(s.Client)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		t.Errorf("Error when checking support for eviction: %v", err)

@@ -18,17 +18,22 @@ limitations under the License.
 package options
 
 import (
+	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiserveroptions "k8s.io/apiserver/pkg/server/options"
 	clientset "k8s.io/client-go/kubernetes"
+	cliflag "k8s.io/component-base/cli/flag"
 	componentbaseconfig "k8s.io/component-base/config"
 	componentbaseoptions "k8s.io/component-base/config/options"
+	"k8s.io/component-base/featuregate"
+
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
 	deschedulerscheme "sigs.k8s.io/descheduler/pkg/descheduler/scheme"
+	"sigs.k8s.io/descheduler/pkg/features"
 	"sigs.k8s.io/descheduler/pkg/tracing"
 )
 
@@ -45,6 +50,10 @@ type DeschedulerServer struct {
 	SecureServing  *apiserveroptions.SecureServingOptionsWithLoopback
 	DisableMetrics bool
 	EnableHTTP2    bool
+	// FeatureGates enabled by the user
+	FeatureGates map[string]bool
+	// DefaultFeatureGates for internal accessing so unit tests can enable/disable specific features
+	DefaultFeatureGates featuregate.FeatureGate
 }
 
 // NewDeschedulerServer creates a new DeschedulerServer with default parameters
@@ -102,6 +111,8 @@ func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	fs.Float64Var(&rs.Tracing.SampleRate, "otel-sample-rate", 1.0, "Sample rate to collect the Traces")
 	fs.BoolVar(&rs.Tracing.FallbackToNoOpProviderOnError, "otel-fallback-no-op-on-error", false, "Fallback to NoOp Tracer in case of error")
 	fs.BoolVar(&rs.EnableHTTP2, "enable-http2", false, "If http/2 should be enabled for the metrics and health check")
+	fs.Var(cliflag.NewMapStringBool(&rs.FeatureGates), "feature-gates", "A set of key=value pairs that describe feature gates for alpha/experimental features. "+
+		"Options are:\n"+strings.Join(features.DefaultMutableFeatureGate.KnownFeatures(), "\n"))
 
 	componentbaseoptions.BindLeaderElectionFlags(&rs.LeaderElection, fs)
 

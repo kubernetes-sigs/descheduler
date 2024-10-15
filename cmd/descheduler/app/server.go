@@ -27,6 +27,7 @@ import (
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
+	"sigs.k8s.io/descheduler/pkg/features"
 	"sigs.k8s.io/descheduler/pkg/tracing"
 
 	"github.com/spf13/cobra"
@@ -115,7 +116,13 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 }
 
 func Run(ctx context.Context, rs *options.DeschedulerServer) error {
-	err := tracing.NewTracerProvider(ctx, rs.Tracing.CollectorEndpoint, rs.Tracing.TransportCert, rs.Tracing.ServiceName, rs.Tracing.ServiceNamespace, rs.Tracing.SampleRate, rs.Tracing.FallbackToNoOpProviderOnError)
+	err := features.DefaultMutableFeatureGate.SetFromMap(rs.FeatureGates)
+	if err != nil {
+		return err
+	}
+	rs.DefaultFeatureGates = features.DefaultMutableFeatureGate
+
+	err = tracing.NewTracerProvider(ctx, rs.Tracing.CollectorEndpoint, rs.Tracing.TransportCert, rs.Tracing.ServiceName, rs.Tracing.ServiceNamespace, rs.Tracing.SampleRate, rs.Tracing.FallbackToNoOpProviderOnError)
 	if err != nil {
 		klog.ErrorS(err, "failed to create tracer provider")
 	}
