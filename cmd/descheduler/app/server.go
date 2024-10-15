@@ -75,7 +75,9 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 				return err
 			}
 
-			secureServing.DisableHTTP2 = !s.EnableHTTP2
+			if cmd.Flag("enable-http2").Changed {
+				secureServing.DisableHTTP2 = !s.EnableHTTP2
+			}
 
 			ctx, done := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 
