@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"time"
 
+	policyv1 "k8s.io/api/policy/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -132,8 +133,11 @@ func newDescheduler(rs *options.DeschedulerServer, deschedulerPolicy *api.Desche
 		v1.SchemeGroupVersion.WithResource("nodes"),
 		// Future work could be to let each plugin declare what type of resources it needs; that way dry runs would stay
 		// consistent with the real runs without having to keep the list here in sync.
-		v1.SchemeGroupVersion.WithResource("namespaces"),                // Used by the defaultevictor plugin
-		schedulingv1.SchemeGroupVersion.WithResource("priorityclasses")) // Used by the defaultevictor plugin
+		v1.SchemeGroupVersion.WithResource("namespaces"),                 // Used by the defaultevictor plugin
+		schedulingv1.SchemeGroupVersion.WithResource("priorityclasses"),  // Used by the defaultevictor plugin
+		policyv1.SchemeGroupVersion.WithResource("poddisruptionbudgets"), // Used by the defaultevictor plugin
+
+	) // Used by the defaultevictor plugin
 
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
