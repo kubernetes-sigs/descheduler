@@ -74,63 +74,7 @@ func normalizePercentage(percent api.Percentage) api.Percentage {
 	return percent
 }
 
-type requestedUsageClient struct {
-	resourceNames         []v1.ResourceName
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc
 
-	_nodes           []*v1.Node
-	_pods            map[string][]*v1.Pod
-	_nodeUtilization map[string]map[v1.ResourceName]*resource.Quantity
-}
-
-func newRequestedUsageSnapshot(
-	resourceNames []v1.ResourceName,
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
-) *requestedUsageClient {
-	return &requestedUsageClient{
-		resourceNames:         resourceNames,
-		getPodsAssignedToNode: getPodsAssignedToNode,
-	}
-}
-
-func (s *requestedUsageClient) nodeUtilization(node string) map[v1.ResourceName]*resource.Quantity {
-	return s._nodeUtilization[node]
-}
-
-func (s *requestedUsageClient) nodes() []*v1.Node {
-	return s._nodes
-}
-
-func (s *requestedUsageClient) pods(node string) []*v1.Pod {
-	return s._pods[node]
-}
-
-func (s *requestedUsageClient) capture(nodes []*v1.Node) error {
-	s._nodeUtilization = make(map[string]map[v1.ResourceName]*resource.Quantity)
-	s._pods = make(map[string][]*v1.Pod)
-
-	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(node.Name, s.getPodsAssignedToNode, nil)
-		if err != nil {
-			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
-			continue
-		}
-
-		nodeUsage, err := nodeutil.NodeUtilization(pods, s.resourceNames, func(pod *v1.Pod) (v1.ResourceList, error) {
-			req, _ := utils.PodRequestsAndLimits(pod)
-			return req, nil
-		})
-		if err != nil {
-			return err
-		}
-
-		// store the snapshot of pods from the same (or the closest) node utilization computation
-		s._pods[node.Name] = pods
-		s._nodeUtilization[node.Name] = nodeUsage
-	}
-
-	return nil
-}
 
 func getNodeThresholds(
 	nodes []*v1.Node,
