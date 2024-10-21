@@ -74,7 +74,7 @@ func normalizePercentage(percent api.Percentage) api.Percentage {
 	return percent
 }
 
-type usageSnapshot struct {
+type requestedUsageClient struct {
 	resourceNames         []v1.ResourceName
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc
 
@@ -86,26 +86,26 @@ type usageSnapshot struct {
 func newRequestedUsageSnapshot(
 	resourceNames []v1.ResourceName,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
-) *usageSnapshot {
-	return &usageSnapshot{
+) *requestedUsageClient {
+	return &requestedUsageClient{
 		resourceNames:         resourceNames,
 		getPodsAssignedToNode: getPodsAssignedToNode,
 	}
 }
 
-func (s *usageSnapshot) nodeUtilization(node string) map[v1.ResourceName]*resource.Quantity {
+func (s *requestedUsageClient) nodeUtilization(node string) map[v1.ResourceName]*resource.Quantity {
 	return s._nodeUtilization[node]
 }
 
-func (s *usageSnapshot) nodes() []*v1.Node {
+func (s *requestedUsageClient) nodes() []*v1.Node {
 	return s._nodes
 }
 
-func (s *usageSnapshot) pods(node string) []*v1.Pod {
+func (s *requestedUsageClient) pods(node string) []*v1.Pod {
 	return s._pods[node]
 }
 
-func (s *usageSnapshot) capture(nodes []*v1.Node) error {
+func (s *requestedUsageClient) capture(nodes []*v1.Node) error {
 	s._nodeUtilization = make(map[string]map[v1.ResourceName]*resource.Quantity)
 	s._pods = make(map[string][]*v1.Pod)
 
@@ -137,13 +137,13 @@ func getNodeThresholds(
 	lowThreshold, highThreshold api.ResourceThresholds,
 	resourceNames []v1.ResourceName,
 	useDeviationThresholds bool,
-	usageSnapshot *usageSnapshot,
+	usageClient *requestedUsageClient,
 ) map[string]NodeThresholds {
 	nodeThresholdsMap := map[string]NodeThresholds{}
 
 	averageResourceUsagePercent := api.ResourceThresholds{}
 	if useDeviationThresholds {
-		averageResourceUsagePercent = averageNodeBasicresources(nodes, usageSnapshot)
+		averageResourceUsagePercent = averageNodeBasicresources(nodes, usageClient)
 	}
 
 	for _, node := range nodes {
@@ -179,15 +179,15 @@ func getNodeThresholds(
 
 func getNodeUsage(
 	nodes []*v1.Node,
-	usageSnapshot *usageSnapshot,
+	usageClient *requestedUsageClient,
 ) []NodeUsage {
 	var nodeUsageList []NodeUsage
 
 	for _, node := range nodes {
 		nodeUsageList = append(nodeUsageList, NodeUsage{
 			node:    node,
-			usage:   usageSnapshot.nodeUtilization(node.Name),
-			allPods: usageSnapshot.pods(node.Name),
+			usage:   usageClient.nodeUtilization(node.Name),
+			allPods: usageClient.pods(node.Name),
 		})
 	}
 
@@ -488,12 +488,12 @@ func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*
 	return nonRemovablePods, removablePods
 }
 
-func averageNodeBasicresources(nodes []*v1.Node, usageSnapshot *usageSnapshot) api.ResourceThresholds {
+func averageNodeBasicresources(nodes []*v1.Node, usageClient *requestedUsageClient) api.ResourceThresholds {
 	total := api.ResourceThresholds{}
 	average := api.ResourceThresholds{}
 	numberOfNodes := len(nodes)
 	for _, node := range nodes {
-		usage := usageSnapshot.nodeUtilization(node.Name)
+		usage := usageClient.nodeUtilization(node.Name)
 		nodeCapacity := node.Status.Capacity
 		if len(node.Status.Allocatable) > 0 {
 			nodeCapacity = node.Status.Allocatable
