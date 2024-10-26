@@ -5,12 +5,13 @@ import (
 )
 
 type Options struct {
-	policyGroupVersion         string
-	dryRun                     bool
-	maxPodsToEvictPerNode      *uint
-	maxPodsToEvictPerNamespace *uint
-	maxPodsToEvictTotal        *uint
-	metricsEnabled             bool
+	policyGroupVersion               string
+	dryRun                           bool
+	maxPodsToEvictPerNode            *uint
+	maxPodsToEvictPerNamespace       *uint
+	maxPodsToEvictTotal              *uint
+	evictionFailureEventNotification bool
+	metricsEnabled                   bool
 }
 
 // NewOptions returns an Options with default values.
@@ -47,5 +48,12 @@ func (o *Options) WithMaxPodsToEvictTotal(maxPodsToEvictTotal *uint) *Options {
 
 func (o *Options) WithMetricsEnabled(metricsEnabled bool) *Options {
 	o.metricsEnabled = metricsEnabled
+	return o
+}
+
+func (o *Options) WithEvictionFailureEventNotification(evictionFailureEventNotification *bool) *Options {
+	if evictionFailureEventNotification != nil {
+		o.evictionFailureEventNotification = *evictionFailureEventNotification
+	}
 	return o
 }

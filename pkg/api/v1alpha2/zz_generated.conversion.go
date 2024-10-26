@@ -115,6 +115,7 @@ func autoConvert_v1alpha2_DeschedulerPolicy_To_api_DeschedulerPolicy(in *Desched
 	out.MaxNoOfPodsToEvictPerNode = (*uint)(unsafe.Pointer(in.MaxNoOfPodsToEvictPerNode))
 	out.MaxNoOfPodsToEvictPerNamespace = (*uint)(unsafe.Pointer(in.MaxNoOfPodsToEvictPerNamespace))
 	out.MaxNoOfPodsToEvictTotal = (*uint)(unsafe.Pointer(in.MaxNoOfPodsToEvictTotal))
+	out.EvictionFailureEventNotification = (*bool)(unsafe.Pointer(in.EvictionFailureEventNotification))
 	if err := Convert_v1alpha2_MetricsCollector_To_api_MetricsCollector(&in.MetricsCollector, &out.MetricsCollector, s); err != nil {
 		return err
 	}
@@ -137,6 +138,7 @@ func autoConvert_api_DeschedulerPolicy_To_v1alpha2_DeschedulerPolicy(in *api.Des
 	out.MaxNoOfPodsToEvictPerNode = (*uint)(unsafe.Pointer(in.MaxNoOfPodsToEvictPerNode))
 	out.MaxNoOfPodsToEvictPerNamespace = (*uint)(unsafe.Pointer(in.MaxNoOfPodsToEvictPerNamespace))
 	out.MaxNoOfPodsToEvictTotal = (*uint)(unsafe.Pointer(in.MaxNoOfPodsToEvictTotal))
+	out.EvictionFailureEventNotification = (*bool)(unsafe.Pointer(in.EvictionFailureEventNotification))
 	if err := Convert_api_MetricsCollector_To_v1alpha2_MetricsCollector(&in.MetricsCollector, &out.MetricsCollector, s); err != nil {
 		return err
 	}
