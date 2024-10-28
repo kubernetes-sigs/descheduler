@@ -236,7 +236,7 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 	}
 
 	// check pod by namespace label filter
-	indexName := "metadata.namespace"
+	indexName := "namespaceWithLabelSelector"
 	indexer, err := getNamespacesListByLabelSelector(indexName, d.args.NamespaceLabelSelector, d.handle)
 	if err != nil {
 		klog.ErrorS(err, "unable to list namespaces", "pod", klog.KObj(pod))

@@ -41,6 +41,7 @@ type testCase struct {
 	description             string
 	pods                    []*v1.Pod
 	nodes                   []*v1.Node
+	namespaces              []*v1.Namespace
 	pdbs                    []*policyv1.PodDisruptionBudget
 	evictFailedBarePods     bool
 	evictLocalStoragePods   bool
@@ -340,6 +341,10 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 					}
 				}),
 			},
+			namespaces: []*v1.Namespace{
+				test.BuildTestNamespace("default"),
+				test.BuildTestNamespace(namespace),
+			},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
 			nodeFit:                 true,
@@ -367,6 +372,10 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 						nodeLabelKey: nodeLabelValue,
 					}
 				}),
+			},
+			namespaces: []*v1.Namespace{
+				test.BuildTestNamespace("default"),
+				test.BuildTestNamespace(namespace),
 			},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
@@ -901,14 +910,20 @@ func TestReinitialization(t *testing.T) {
 
 func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin, error) {
 	var objs []runtime.Object
+
 	for _, node := range test.nodes {
 		objs = append(objs, node)
 	}
+
 	for _, pod := range test.pods {
 		objs = append(objs, pod)
 	}
 	for _, pdb := range test.pdbs {
 		objs = append(objs, pdb)
+	}
+
+	for _, namespace := range test.namespaces {
+		objs = append(objs, namespace)
 	}
 
 	fakeClient := fake.NewSimpleClientset(objs...)
