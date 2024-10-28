@@ -25,9 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	clientset "k8s.io/client-go/kubernetes"
-	listersv1 "k8s.io/client-go/listers/core/v1"
-
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 
@@ -234,19 +231,26 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 		}
 	}
 
-	// check pod by namespace label filter
-	if d.args.NamespaceLabelSelector != nil {
-		ns, err := getNamespacesListByLabelSelector(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Namespaces().Lister(), metav1.FormatLabelSelector(d.args.NamespaceLabelSelector))
-		if err != nil {
-			klog.ErrorS(err, "unable to list namespaces", "pod", klog.KObj(pod))
-		}
-
-		if _, ok := ns[pod.Namespace]; !ok {
-			klog.InfoS("pod namespace do not match the namespaceLabelSelector filter in the policy parameter", "pod", klog.KObj(pod))
-			return false
-		}
+	if d.args.NamespaceLabelSelector == nil {
+		return true
 	}
 
+	// check pod by namespace label filter
+	indexName := "metadata.namespace"
+	indexer, err := getNamespacesListByLabelSelector(indexName, d.args.NamespaceLabelSelector, d.handle)
+	if err != nil {
+		klog.ErrorS(err, "unable to list namespaces", "pod", klog.KObj(pod))
+		return false
+	}
+	objs, err := indexer.ByIndex(indexName, pod.Namespace)
+	if err != nil {
+		klog.ErrorS(err, "unable to list namespaces for namespaceLabelSelector filter in the policy parameter", "pod", klog.KObj(pod))
+		return false
+	}
+	if len(objs) == 0 {
+		klog.InfoS("pod namespace do not match the namespaceLabelSelector filter in the policy parameter", "pod", klog.KObj(pod))
+		return false
+	}
 	return true
 }
 
@@ -310,40 +314,38 @@ func getPodIndexerByOwnerRefs(indexName string, handle frameworktypes.Handle) (c
 	return indexer, nil
 }
 
-func getNamespacesListByLabelSelector(ctx context.Context, client clientset.Interface, nsLister listersv1.NamespaceLister, labelSelector string) (map[string]struct{}, error) {
-	ret := make(map[string]struct{})
-	namespaceSelector, err := labels.Parse(labelSelector)
-	if err != nil {
-		return ret, err
-	}
+func getNamespacesListByLabelSelector(indexName string, labelSelector *metav1.LabelSelector, handle frameworktypes.Handle) (cache.Indexer, error) {
+	nsInformer := handle.SharedInformerFactory().Core().V1().Namespaces().Informer()
+	indexer := nsInformer.GetIndexer()
 
-	var ns []*v1.Namespace
-	// err is defined above
-	if ns, err = nsLister.List(namespaceSelector); err != nil {
-		return ret, err
-	}
-
-	if len(ns) == 0 {
-		klog.V(2).InfoS("Namespace lister returned empty list, now fetch directly")
-
-		nItems, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
-		if err != nil {
-			return ret, err
-		}
-
-		if nItems == nil || len(nItems.Items) == 0 {
-			return ret, nil
-		}
-
-		for i := range nItems.Items {
-			namespace := nItems.Items[i]
-			ns = append(ns, &namespace)
+	// do not reinitialize the indexer, if it's been defined already
+	for name := range indexer.GetIndexers() {
+		if name == indexName {
+			return indexer, nil
 		}
 	}
 
-	for _, n := range ns {
-		ret[n.Name] = struct{}{}
+	if err := nsInformer.AddIndexers(cache.Indexers{
+		indexName: func(obj interface{}) ([]string, error) {
+			ns, ok := obj.(*v1.Namespace)
+			if !ok {
+				return []string{}, errors.New("unexpected object")
+			}
+
+			selector, err := metav1.LabelSelectorAsSelector(labelSelector)
+			if err != nil {
+				return []string{}, errors.New("could not get selector from label selector")
+			}
+			if labelSelector != nil && !selector.Empty() {
+				if !selector.Matches(labels.Set(ns.Labels)) {
+					return []string{}, nil
+				}
+			}
+			return []string{ns.GetName()}, nil
+		},
+	}); err != nil {
+		return nil, err
 	}
 
-	return ret, nil
+	return indexer, nil
 }
