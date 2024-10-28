@@ -352,7 +352,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			result:                  true,
 		},
 		{
-			description: "Pod wit namespace does not matched namespace selector, should not be evicted",
+			description: "Pod with namespace does not matched namespace selector, should not be evicted",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
