@@ -43,7 +43,7 @@ import (
 
 const deploymentReplicas = 4
 
-func tooManyRestartsPolicy(targetNamespace string, podRestartThresholds int32, includingInitContainers bool) *apiv1alpha2.DeschedulerPolicy {
+func tooManyRestartsPolicy(targetNamespace string, podRestartThresholds int32, includingInitContainers bool, gracePeriodSeconds int64) *apiv1alpha2.DeschedulerPolicy {
 	return &apiv1alpha2.DeschedulerPolicy{
 		Profiles: []apiv1alpha2.DeschedulerProfile{
 			{
@@ -84,6 +84,7 @@ func tooManyRestartsPolicy(targetNamespace string, podRestartThresholds int32, i
 				},
 			},
 		},
+		GracePeriodSeconds: &gracePeriodSeconds,
 	}
 }
 
@@ -127,16 +128,23 @@ func TestTooManyRestarts(t *testing.T) {
 	tests := []struct {
 		name                    string
 		policy                  *apiv1alpha2.DeschedulerPolicy
+		enableGracePeriod       bool
 		expectedEvictedPodCount uint
 	}{
 		{
 			name:                    "test-no-evictions",
-			policy:                  tooManyRestartsPolicy(testNamespace.Name, 10000, true),
+			policy:                  tooManyRestartsPolicy(testNamespace.Name, 10000, true, 0),
 			expectedEvictedPodCount: 0,
 		},
 		{
 			name:                    "test-one-evictions",
-			policy:                  tooManyRestartsPolicy(testNamespace.Name, 3, true),
+			policy:                  tooManyRestartsPolicy(testNamespace.Name, 3, true, 0),
+			expectedEvictedPodCount: 4,
+		},
+		{
+			name:                    "test-one-evictions-use-gracePeriodSeconds",
+			policy:                  tooManyRestartsPolicy(testNamespace.Name, 3, true, 60),
+			enableGracePeriod:       true,
 			expectedEvictedPodCount: 4,
 		},
 	}
@@ -197,8 +205,32 @@ func TestTooManyRestarts(t *testing.T) {
 				deschedulerPodName = deschedulerPods[0].Name
 			}
 
+			// Check if grace period is enabled and wait accordingly
+			if tc.enableGracePeriod {
+				// Ensure no pods are evicted during the grace period
+				// Wait for 55 seconds to ensure that the pods are not evicted during the grace period
+				// We do not want to use an extreme waiting time, such as 59 seconds,
+				// because the grace period is set to 60 seconds.
+				// In order to avoid unnecessary flake failures,
+				// we only need to make sure that the pod is not evicted within a certain range.
+				t.Logf("Waiting for grace period of %d seconds", 55)
+				if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, time.Duration(55)*time.Second, true, func(ctx context.Context) (bool, error) {
+					currentRunNames := sets.NewString(getCurrentPodNames(ctx, clientSet, testNamespace.Name, t)...)
+					actualEvictedPod := preRunNames.Difference(currentRunNames)
+					actualEvictedPodCount := uint(actualEvictedPod.Len())
+					t.Logf("preRunNames: %v, currentRunNames: %v, actualEvictedPodCount: %v\n", preRunNames.List(), currentRunNames.List(), actualEvictedPodCount)
+					if actualEvictedPodCount > 0 {
+						t.Fatalf("Pods were evicted during grace period; expected 0, got %v", actualEvictedPodCount)
+						return false, nil
+					}
+					return true, nil
+				}); err != nil {
+					t.Fatalf("Error waiting during grace period: %v", err)
+				}
+			}
+
 			// Run RemovePodsHavingTooManyRestarts strategy
-			if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 20*time.Second, true, func(ctx context.Context) (bool, error) {
+			if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 50*time.Second, true, func(ctx context.Context) (bool, error) {
 				currentRunNames := sets.NewString(getCurrentPodNames(ctx, clientSet, testNamespace.Name, t)...)
 				actualEvictedPod := preRunNames.Difference(currentRunNames)
 				actualEvictedPodCount := uint(actualEvictedPod.Len())
@@ -210,7 +242,7 @@ func TestTooManyRestarts(t *testing.T) {
 
 				return true, nil
 			}); err != nil {
-				t.Errorf("Error waiting for descheduler running: %v", err)
+				t.Fatalf("Error waiting for descheduler running: %v", err)
 			}
 			waitForTerminatingPodsToDisappear(ctx, t, clientSet, testNamespace.Name)
 		})
