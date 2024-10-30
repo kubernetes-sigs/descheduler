@@ -50,6 +50,7 @@ type PodEvictor struct {
 	maxPodsToEvictPerNode      *uint
 	maxPodsToEvictPerNamespace *uint
 	maxPodsToEvictTotal        *uint
+	gracePeriodSeconds         *int64
 	nodePodCount               nodePodEvictedCount
 	namespacePodCount          namespacePodEvictCount
 	totalPodCount              uint
@@ -74,6 +75,7 @@ func NewPodEvictor(
 		maxPodsToEvictPerNode:      options.maxPodsToEvictPerNode,
 		maxPodsToEvictPerNamespace: options.maxPodsToEvictPerNamespace,
 		maxPodsToEvictTotal:        options.maxPodsToEvictTotal,
+		gracePeriodSeconds:         options.gracePeriodSeconds,
 		metricsEnabled:             options.metricsEnabled,
 		nodePodCount:               make(nodePodEvictedCount),
 		namespacePodCount:          make(namespacePodEvictCount),
@@ -159,7 +161,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		return err
 	}
 
-	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion)
+	err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, pe.gracePeriodSeconds)
 	if err != nil {
 		// err is used only for logging purposes
 		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
@@ -196,9 +198,10 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 	return nil
 }
 
-func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string) error {
-	deleteOptions := &metav1.DeleteOptions{}
-	// GracePeriodSeconds ?
+func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, policyGroupVersion string, gracePeriodSeconds *int64) error {
+	deleteOptions := &metav1.DeleteOptions{
+		GracePeriodSeconds: gracePeriodSeconds,
+	}
 	eviction := &policy.Eviction{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: policyGroupVersion,
