@@ -922,8 +922,8 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 		objs = append(objs, pdb)
 	}
 
-	for _, namespace := range test.namespaces {
-		objs = append(objs, namespace)
+	for _, ns := range test.namespaces {
+		objs = append(objs, ns)
 	}
 
 	fakeClient := fake.NewSimpleClientset(objs...)
@@ -931,7 +931,7 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 	_ = sharedInformerFactory.Policy().V1().PodDisruptionBudgets().Lister()
-
+	_ = sharedInformerFactory.Core().V1().Namespaces().Lister()
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
 		return nil, fmt.Errorf("build get pods assigned to node function error: %v", err)
