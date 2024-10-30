@@ -12,6 +12,7 @@ type Options struct {
 	maxPodsToEvictTotal              *uint
 	evictionFailureEventNotification bool
 	metricsEnabled                   bool
+	gracePeriodSeconds               *int64
 }
 
 // NewOptions returns an Options with default values.
@@ -43,6 +44,11 @@ func (o *Options) WithMaxPodsToEvictPerNamespace(maxPodsToEvictPerNamespace *uin
 
 func (o *Options) WithMaxPodsToEvictTotal(maxPodsToEvictTotal *uint) *Options {
 	o.maxPodsToEvictTotal = maxPodsToEvictTotal
+	return o
+}
+
+func (o *Options) WithGracePeriodSeconds(gracePeriodSeconds *int64) *Options {
+	o.gracePeriodSeconds = gracePeriodSeconds
 	return o
 }
 
