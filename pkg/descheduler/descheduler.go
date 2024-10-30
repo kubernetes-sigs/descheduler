@@ -157,6 +157,7 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 			WithMaxPodsToEvictPerNamespace(deschedulerPolicy.MaxNoOfPodsToEvictPerNamespace).
 			WithMaxPodsToEvictTotal(deschedulerPolicy.MaxNoOfPodsToEvictTotal).
 			WithEvictionFailureEventNotification(deschedulerPolicy.EvictionFailureEventNotification).
+			WithGracePeriodSeconds(deschedulerPolicy.GracePeriodSeconds).
 			WithDryRun(rs.DryRun).
 			WithMetricsEnabled(!rs.DisableMetrics),
 	)
