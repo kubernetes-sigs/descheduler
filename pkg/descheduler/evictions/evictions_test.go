@@ -114,7 +114,7 @@ func TestEvictPod(t *testing.T) {
 				t.Fatalf("Unexpected error when creating a pod evictor: %v", err)
 			}
 
-			_, got := podEvictor.evictPod(ctx, test.evictedPod)
+			_, got := podEvictor.evictPod(ctx, test.evictedPod, "v1", utilptr.To[int64](0))
 			if got != test.wantErr {
 				t.Errorf("Test error for Desc: %s. Expected %v pod eviction to be %v, got %v", test.description, test.evictedPod.Name, test.wantErr, got)
 			}
