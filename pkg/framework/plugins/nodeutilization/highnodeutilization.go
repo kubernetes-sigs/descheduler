@@ -44,7 +44,7 @@ type HighNodeUtilization struct {
 	underutilizationCriteria []interface{}
 	resourceNames            []v1.ResourceName
 	targetThresholds         api.ResourceThresholds
-	usageSnapshot            *usageSnapshot
+	usageSnapshot            usageClient
 }
 
 var _ frameworktypes.BalancePlugin = &HighNodeUtilization{}

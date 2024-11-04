@@ -74,14 +74,12 @@ func normalizePercentage(percent api.Percentage) api.Percentage {
 	return percent
 }
 
-
-
 func getNodeThresholds(
 	nodes []*v1.Node,
 	lowThreshold, highThreshold api.ResourceThresholds,
 	resourceNames []v1.ResourceName,
 	useDeviationThresholds bool,
-	usageClient *requestedUsageClient,
+	usageClient usageClient,
 ) map[string]NodeThresholds {
 	nodeThresholdsMap := map[string]NodeThresholds{}
 
@@ -123,7 +121,7 @@ func getNodeThresholds(
 
 func getNodeUsage(
 	nodes []*v1.Node,
-	usageClient *requestedUsageClient,
+	usageClient usageClient,
 ) []NodeUsage {
 	var nodeUsageList []NodeUsage
 
@@ -432,7 +430,7 @@ func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*
 	return nonRemovablePods, removablePods
 }
 
-func averageNodeBasicresources(nodes []*v1.Node, usageClient *requestedUsageClient) api.ResourceThresholds {
+func averageNodeBasicresources(nodes []*v1.Node, usageClient usageClient) api.ResourceThresholds {
 	total := api.ResourceThresholds{}
 	average := api.ResourceThresholds{}
 	numberOfNodes := len(nodes)

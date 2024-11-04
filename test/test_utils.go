@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	utilptr "k8s.io/utils/ptr"
 )
 
@@ -133,6 +134,19 @@ func BuildTestNode(name string, millicpu, mem, pods int64, apply func(*v1.Node))
 		apply(node)
 	}
 	return node
+}
+
+func BuildNodeMetrics(name string, millicpu, mem int64) *v1beta1.NodeMetrics {
+	return &v1beta1.NodeMetrics{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Window: metav1.Duration{Duration: 20010000000},
+		Usage: v1.ResourceList{
+			v1.ResourceCPU:    *resource.NewMilliQuantity(millicpu, resource.DecimalSI),
+			v1.ResourceMemory: *resource.NewQuantity(mem, resource.BinarySI),
+		},
+	}
 }
 
 // MakeBestEffortPod makes the given pod a BestEffort pod

@@ -43,7 +43,7 @@ type LowNodeUtilization struct {
 	underutilizationCriteria []interface{}
 	overutilizationCriteria  []interface{}
 	resourceNames            []v1.ResourceName
-	usageSnapshot            *usageSnapshot
+	usageSnapshot            usageClient
 }
 
 var _ frameworktypes.BalancePlugin = &LowNodeUtilization{}
