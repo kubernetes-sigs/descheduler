@@ -134,6 +134,7 @@ type handleImplOpts struct {
 	sharedInformerFactory     informers.SharedInformerFactory
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	podEvictor                *evictions.PodEvictor
+	metricsCollector          *metricscollector.MetricsCollector
 }
 
 // WithClientSet sets clientSet for the scheduling frameworkImpl.
@@ -158,6 +159,12 @@ func WithPodEvictor(podEvictor *evictions.PodEvictor) Option {
 func WithGetPodsAssignedToNodeFnc(getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc) Option {
 	return func(o *handleImplOpts) {
 		o.getPodsAssignedToNodeFunc = getPodsAssignedToNodeFunc
+	}
+}
+
+func WithMetricsCollector(metricsCollector *metricscollector.MetricsCollector) Option {
+	return func(o *handleImplOpts) {
+		o.metricsCollector = metricsCollector
 	}
 }
 
@@ -259,6 +266,7 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 			profileName: config.Name,
 			podEvictor:  hOpts.podEvictor,
 		},
+		metricsCollector: hOpts.metricsCollector,
 	}
 
 	pluginNames := append(config.Plugins.Deschedule.Enabled, config.Plugins.Balance.Enabled...)

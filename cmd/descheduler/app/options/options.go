@@ -26,6 +26,8 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	componentbaseconfig "k8s.io/component-base/config"
 	componentbaseoptions "k8s.io/component-base/config/options"
+	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
 	deschedulerscheme "sigs.k8s.io/descheduler/pkg/descheduler/scheme"
@@ -42,6 +44,7 @@ type DeschedulerServer struct {
 
 	Client         clientset.Interface
 	EventClient    clientset.Interface
+	MetricsClient  metricsclient.Interface
 	SecureServing  *apiserveroptions.SecureServingOptionsWithLoopback
 	DisableMetrics bool
 	EnableHTTP2    bool

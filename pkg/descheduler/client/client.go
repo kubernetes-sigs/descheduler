@@ -21,6 +21,7 @@ import (
 
 	clientset "k8s.io/client-go/kubernetes"
 	componentbaseconfig "k8s.io/component-base/config"
+	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	// Ensure to load all auth plugins.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -28,7 +29,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func CreateClient(clientConnection componentbaseconfig.ClientConnectionConfiguration, userAgt string) (clientset.Interface, error) {
+func createConfig(clientConnection componentbaseconfig.ClientConnectionConfiguration, userAgt string) (*rest.Config, error) {
 	var cfg *rest.Config
 	if len(clientConnection.Kubeconfig) != 0 {
 		master, err := GetMasterFromKubeconfig(clientConnection.Kubeconfig)
@@ -56,7 +57,26 @@ func CreateClient(clientConnection componentbaseconfig.ClientConnectionConfigura
 		cfg = rest.AddUserAgent(cfg, userAgt)
 	}
 
+	return cfg, nil
+}
+
+func CreateClient(clientConnection componentbaseconfig.ClientConnectionConfiguration, userAgt string) (clientset.Interface, error) {
+	cfg, err := createConfig(clientConnection, userAgt)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create config: %v", err)
+	}
+
 	return clientset.NewForConfig(cfg)
+}
+
+func CreateMetricsClient(clientConnection componentbaseconfig.ClientConnectionConfiguration, userAgt string) (metricsclient.Interface, error) {
+	cfg, err := createConfig(clientConnection, userAgt)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create config: %v", err)
+	}
+
+	// Create the metrics clientset to access the metrics.k8s.io API
+	return metricsclient.NewForConfig(cfg)
 }
 
 func GetMasterFromKubeconfig(filename string) (string, error) {

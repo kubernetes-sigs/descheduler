@@ -41,6 +41,9 @@ type DeschedulerPolicy struct {
 
 	// MaxNoOfPodsToTotal restricts maximum of pods to be evicted total.
 	MaxNoOfPodsToEvictTotal *uint
+
+	// MetricsCollector configures collection of metrics about actual resource utilization
+	MetricsCollector MetricsCollector
 }
 
 // Namespaces carries a list of included/excluded namespaces
@@ -83,4 +86,11 @@ type Plugins struct {
 type PluginSet struct {
 	Enabled  []string
 	Disabled []string
+}
+
+// MetricsCollector configures collection of metrics about actual resource utilization
+type MetricsCollector struct {
+	// Enabled metrics collection from kubernetes metrics.
+	// Later, the collection can be extended to other providers.
+	Enabled bool
 }
