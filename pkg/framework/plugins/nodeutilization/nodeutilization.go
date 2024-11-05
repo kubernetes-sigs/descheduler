@@ -18,7 +18,6 @@ package nodeutilization
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"sort"
 
@@ -238,6 +237,10 @@ func evictPodsFromSourceNodes(
 				totalAvailableUsage[name] = resource.NewQuantity(0, resource.DecimalSI)
 			}
 			totalAvailableUsage[name].Add(*node.thresholds.highResourceThreshold[name])
+			if _, exists := node.usage[name]; !exists {
+				klog.Errorf("unable to find %q resource in node's %q usage, terminating eviction", name, node.node.Name)
+				return
+			}
 			totalAvailableUsage[name].Sub(*node.usage[name])
 		}
 	}
@@ -299,7 +302,6 @@ func evictPods(
 
 	if continueEviction(nodeInfo, totalAvailableUsage) {
 		for _, pod := range inputPods {
-			fmt.Printf("pods: %v\n", pod.Name)
 			if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
 				klog.V(3).InfoS("Skipping eviction for pod, doesn't tolerate node taint", "pod", klog.KObj(pod))
 				continue
@@ -319,7 +321,7 @@ func evictPods(
 			}
 			podUsage, err := usageSnapshot.podUsage(pod)
 			if err != nil {
-				klog.ErrorS(err, "unable to get pod usage for %v/%v: %v", pod.Namespace, pod.Name, err)
+				klog.Errorf("unable to get pod usage for %v/%v: %v", pod.Namespace, pod.Name, err)
 				continue
 			}
 			err = podEvictor.Evict(ctx, pod, evictOptions)

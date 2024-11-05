@@ -160,7 +160,9 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		evictions.EvictOptions{StrategyName: HighNodeUtilizationPluginName},
 		h.podFilter,
 		h.resourceNames,
-		continueEvictionCond)
+		continueEvictionCond,
+		h.usageSnapshot,
+	)
 
 	return nil
 }

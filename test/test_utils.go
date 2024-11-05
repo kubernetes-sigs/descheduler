@@ -68,6 +68,26 @@ func BuildTestPod(name string, cpu, memory int64, nodeName string, apply func(*v
 	return pod
 }
 
+// BuildPodMetrics creates a test podmetrics with given parameters.
+func BuildPodMetrics(name string, millicpu, mem int64) *v1beta1.PodMetrics {
+	return &v1beta1.PodMetrics{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+		},
+		Window: metav1.Duration{Duration: 20010000000},
+		Containers: []v1beta1.ContainerMetrics{
+			{
+				Name: "container-1",
+				Usage: v1.ResourceList{
+					v1.ResourceCPU:    *resource.NewMilliQuantity(millicpu, resource.DecimalSI),
+					v1.ResourceMemory: *resource.NewQuantity(mem, resource.BinarySI),
+				},
+			},
+		},
+	}
+}
+
 // GetMirrorPodAnnotation returns the annotation needed for mirror pod.
 func GetMirrorPodAnnotation() map[string]string {
 	return map[string]string{

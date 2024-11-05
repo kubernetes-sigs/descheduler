@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -88,6 +89,13 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 
 	resourceNames := getResourceNames(lowNodeUtilizationArgsArgs.Thresholds)
 
+	var usageSnapshot usageClient
+	if lowNodeUtilizationArgsArgs.MetricsUtilization.MetricsServer {
+		usageSnapshot = newActualUsageSnapshot(resourceNames, handle.GetPodsAssignedToNodeFunc(), handle.MetricsCollector())
+	} else {
+		usageSnapshot = newRequestedUsageSnapshot(resourceNames, handle.GetPodsAssignedToNodeFunc())
+	}
+
 	return &LowNodeUtilization{
 		handle:                   handle,
 		args:                     lowNodeUtilizationArgsArgs,
@@ -95,7 +103,7 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 		overutilizationCriteria:  overutilizationCriteria,
 		resourceNames:            resourceNames,
 		podFilter:                podFilter,
-		usageSnapshot:            newRequestedUsageSnapshot(resourceNames, handle.GetPodsAssignedToNodeFunc()),
+		usageSnapshot:            usageSnapshot,
 	}, nil
 }
 
@@ -182,7 +190,9 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 		evictions.EvictOptions{StrategyName: LowNodeUtilizationPluginName},
 		l.podFilter,
 		l.resourceNames,
-		continueEvictionCond)
+		continueEvictionCond,
+		l.usageSnapshot,
+	)
 
 	return nil
 }

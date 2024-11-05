@@ -115,8 +115,8 @@ func (mc *MetricsCollector) Collect(ctx context.Context) error {
 		}
 
 		// Display CPU and memory usage
-		fmt.Printf("%s: %vm, %vMi\n", node.Name, metrics.Usage.Cpu().MilliValue(), metrics.Usage.Memory().Value()/(1024*1024))
-		fmt.Printf("%s: %vm, %vMi\n", node.Name, mc.nodes[node.Name][v1.ResourceCPU].MilliValue(), mc.nodes[node.Name][v1.ResourceMemory].Value()/(1024*1024))
+		// fmt.Printf("%s: %vm, %vMi\n", node.Name, metrics.Usage.Cpu().MilliValue(), metrics.Usage.Memory().Value()/(1024*1024))
+		// fmt.Printf("%s: %vm, %vMi\n", node.Name, mc.nodes[node.Name][v1.ResourceCPU].MilliValue(), mc.nodes[node.Name][v1.ResourceMemory].Value()/(1024*1024))
 	}
 
 	fmt.Printf("--\n")
