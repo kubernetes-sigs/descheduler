@@ -116,7 +116,6 @@ func TestActualUsageClient(t *testing.T) {
 		resourceNames,
 		podsAssignedToNode,
 		collector,
-		metricsClientset,
 	)
 
 	updateMetricsAndCheckNodeUtilization(t, ctx,

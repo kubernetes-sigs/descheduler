@@ -79,6 +79,10 @@ func (mc *MetricsCollector) NodeUsage(node *v1.Node) (map[v1.ResourceName]*resou
 	}, nil
 }
 
+func (mc *MetricsCollector) MetricsClient() metricsclient.Interface {
+	return mc.metricsClientset
+}
+
 func (mc *MetricsCollector) Collect(ctx context.Context) error {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()

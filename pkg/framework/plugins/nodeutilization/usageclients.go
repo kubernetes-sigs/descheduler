@@ -17,10 +17,14 @@ limitations under the License.
 package nodeutilization
 
 import (
+	"context"
+	"fmt"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
-	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/descheduler/metricscollector"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -32,6 +36,7 @@ type usageClient interface {
 	nodes() []*v1.Node
 	pods(node string) []*v1.Pod
 	capture(nodes []*v1.Node) error
+	podUsage(pod *v1.Pod) (map[v1.ResourceName]*resource.Quantity, error)
 }
 
 type requestedUsageClient struct {
@@ -67,10 +72,18 @@ func (s *requestedUsageClient) pods(node string) []*v1.Pod {
 	return s._pods[node]
 }
 
+func (s *requestedUsageClient) podUsage(pod *v1.Pod) (map[v1.ResourceName]*resource.Quantity, error) {
+	usage := make(map[v1.ResourceName]*resource.Quantity)
+	for _, resourceName := range s.resourceNames {
+		usage[resourceName] = utilptr.To[resource.Quantity](utils.GetResourceRequestQuantity(pod, resourceName).DeepCopy())
+	}
+	return usage, nil
+}
+
 func (s *requestedUsageClient) capture(nodes []*v1.Node) error {
 	s._nodeUtilization = make(map[string]map[v1.ResourceName]*resource.Quantity)
 	s._pods = make(map[string][]*v1.Pod)
-  capturedNodes := []*v1.Node{}
+	capturedNodes := []*v1.Node{}
 
 	for _, node := range nodes {
 		pods, err := podutil.ListPodsOnANode(node.Name, s.getPodsAssignedToNode, nil)
@@ -90,10 +103,10 @@ func (s *requestedUsageClient) capture(nodes []*v1.Node) error {
 		// store the snapshot of pods from the same (or the closest) node utilization computation
 		s._pods[node.Name] = pods
 		s._nodeUtilization[node.Name] = nodeUsage
-    capturedNodes = append(capturedNodes, node)
+		capturedNodes = append(capturedNodes, node)
 	}
 
-  s._nodes = capturedNodes
+	s._nodes = capturedNodes
 
 	return nil
 }
@@ -102,7 +115,6 @@ type actualUsageClient struct {
 	resourceNames         []v1.ResourceName
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc
 	metricsCollector      *metricscollector.MetricsCollector
-	metricsClientset      metricsclient.Interface
 
 	_nodes           []*v1.Node
 	_pods            map[string][]*v1.Pod
@@ -115,13 +127,11 @@ func newActualUsageSnapshot(
 	resourceNames []v1.ResourceName,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 	metricsCollector *metricscollector.MetricsCollector,
-	metricsClientset metricsclient.Interface,
 ) *actualUsageClient {
 	return &actualUsageClient{
 		resourceNames:         resourceNames,
 		getPodsAssignedToNode: getPodsAssignedToNode,
 		metricsCollector:      metricsCollector,
-		metricsClientset:      metricsClientset,
 	}
 }
 
@@ -137,10 +147,35 @@ func (client *actualUsageClient) pods(node string) []*v1.Pod {
 	return client._pods[node]
 }
 
+func (client *actualUsageClient) podUsage(pod *v1.Pod) (map[v1.ResourceName]*resource.Quantity, error) {
+	// It's not efficient to keep track of all pods in a cluster when only their fractions is evicted.
+	// Thus, take the current pod metrics without computing any softening (like e.g. EWMA).
+	podMetrics, err := client.metricsCollector.MetricsClient().MetricsV1beta1().PodMetricses(pod.Namespace).Get(context.TODO(), pod.Name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to get podmetrics for %q/%q: %v", pod.Namespace, pod.Name, err)
+	}
+
+	totalUsage := make(map[v1.ResourceName]*resource.Quantity)
+	for _, container := range podMetrics.Containers {
+		for _, resourceName := range client.resourceNames {
+			if _, exists := container.Usage[resourceName]; !exists {
+				continue
+			}
+			if totalUsage[resourceName] == nil {
+				totalUsage[resourceName] = utilptr.To[resource.Quantity](container.Usage[resourceName].DeepCopy())
+			} else {
+				totalUsage[resourceName].Add(container.Usage[resourceName])
+			}
+		}
+	}
+
+	return totalUsage, nil
+}
+
 func (client *actualUsageClient) capture(nodes []*v1.Node) error {
 	client._nodeUtilization = make(map[string]map[v1.ResourceName]*resource.Quantity)
 	client._pods = make(map[string][]*v1.Pod)
-  capturedNodes := []*v1.Node{}
+	capturedNodes := []*v1.Node{}
 
 	for _, node := range nodes {
 		pods, err := podutil.ListPodsOnANode(node.Name, client.getPodsAssignedToNode, nil)
@@ -149,18 +184,19 @@ func (client *actualUsageClient) capture(nodes []*v1.Node) error {
 			continue
 		}
 
-    nodeUsage, err := client.metricsCollector.NodeUsage(node)
+		nodeUsage, err := client.metricsCollector.NodeUsage(node)
 		if err != nil {
 			return err
 		}
+		nodeUsage[v1.ResourcePods] = resource.NewQuantity(int64(len(pods)), resource.DecimalSI)
 
 		// store the snapshot of pods from the same (or the closest) node utilization computation
 		client._pods[node.Name] = pods
 		client._nodeUtilization[node.Name] = nodeUsage
-    capturedNodes = append(capturedNodes, node)
+		capturedNodes = append(capturedNodes, node)
 	}
 
-  client._nodes = capturedNodes
+	client._nodes = capturedNodes
 
 	return nil
 }

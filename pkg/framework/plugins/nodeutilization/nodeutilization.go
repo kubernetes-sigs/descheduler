@@ -18,6 +18,7 @@ package nodeutilization
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 
@@ -219,6 +220,7 @@ func evictPodsFromSourceNodes(
 	podFilter func(pod *v1.Pod) bool,
 	resourceNames []v1.ResourceName,
 	continueEviction continueEvictionCond,
+	usageSnapshot usageClient,
 ) {
 	// upper bound on total number of pods/cpu/memory and optional extended resources to be moved
 	totalAvailableUsage := map[v1.ResourceName]*resource.Quantity{
@@ -267,7 +269,7 @@ func evictPodsFromSourceNodes(
 		klog.V(1).InfoS("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
-		err := evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction)
+		err := evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction, usageSnapshot)
 		if err != nil {
 			switch err.(type) {
 			case *evictions.EvictionTotalLimitError:
@@ -288,6 +290,7 @@ func evictPods(
 	podEvictor frameworktypes.Evictor,
 	evictOptions evictions.EvictOptions,
 	continueEviction continueEvictionCond,
+	usageSnapshot usageClient,
 ) error {
 	var excludedNamespaces sets.Set[string]
 	if evictableNamespaces != nil {
@@ -296,6 +299,7 @@ func evictPods(
 
 	if continueEviction(nodeInfo, totalAvailableUsage) {
 		for _, pod := range inputPods {
+			fmt.Printf("pods: %v\n", pod.Name)
 			if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
 				klog.V(3).InfoS("Skipping eviction for pod, doesn't tolerate node taint", "pod", klog.KObj(pod))
 				continue
@@ -313,18 +317,21 @@ func evictPods(
 			if !preEvictionFilterWithOptions(pod) {
 				continue
 			}
+			podUsage, err := usageSnapshot.podUsage(pod)
+			if err != nil {
+				klog.ErrorS(err, "unable to get pod usage for %v/%v: %v", pod.Namespace, pod.Name, err)
+				continue
+			}
 			err = podEvictor.Evict(ctx, pod, evictOptions)
 			if err == nil {
 				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
-
 				for name := range totalAvailableUsage {
 					if name == v1.ResourcePods {
 						nodeInfo.usage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
 						totalAvailableUsage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
 					} else {
-						quantity := utils.GetResourceRequestQuantity(pod, name)
-						nodeInfo.usage[name].Sub(quantity)
-						totalAvailableUsage[name].Sub(quantity)
+						nodeInfo.usage[name].Sub(*podUsage[name])
+						totalAvailableUsage[name].Sub(*podUsage[name])
 					}
 				}
 
