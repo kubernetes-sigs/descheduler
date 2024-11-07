@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/prometheus/common/model"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -59,7 +61,7 @@ func updateMetricsAndCheckNodeUtilization(
 	}
 	err = usageClient.sync(nodes)
 	if err != nil {
-		t.Fatalf("failed to capture a snapshot: %v", err)
+		t.Fatalf("failed to sync a snapshot: %v", err)
 	}
 	nodeUtilization := usageClient.nodeUtilization(nodeName)
 	t.Logf("current node cpu usage: %v\n", nodeUtilization[v1.ResourceCPU].MilliValue())
@@ -134,4 +136,71 @@ func TestActualUsageClient(t *testing.T) {
 		900, 1269,
 		metricsClientset, collector, usageClient, nodes, n2.Name, n2metrics,
 	)
+}
+
+func sample(metricName, nodeName string, value float64) model.Sample {
+	return model.Sample{
+		Metric: model.Metric{
+			"__name__": model.LabelValue(metricName),
+			"instance": model.LabelValue(nodeName),
+		},
+		Value:     model.SampleValue(value),
+		Timestamp: 1728991761711,
+	}
+}
+
+func TestPrometheusUsageClient(t *testing.T) {
+	n1 := test.BuildTestNode("ip-10-0-17-165.ec2.internal", 2000, 3000, 10, nil)
+	n2 := test.BuildTestNode("ip-10-0-51-101.ec2.internal", 2000, 3000, 10, nil)
+	n3 := test.BuildTestNode("ip-10-0-94-25.ec2.internal", 2000, 3000, 10, nil)
+
+	nodes := []*v1.Node{n1, n2, n3}
+
+	p1 := test.BuildTestPod("p1", 400, 0, n1.Name, nil)
+	p21 := test.BuildTestPod("p21", 400, 0, n2.Name, nil)
+	p22 := test.BuildTestPod("p22", 400, 0, n2.Name, nil)
+	p3 := test.BuildTestPod("p3", 400, 0, n3.Name, nil)
+
+	pClient := &fakePromClient{
+		result: []model.Sample{
+			sample("instance:node_cpu:rate:sum", "ip-10-0-51-101.ec2.internal", 0.20381818181818104),
+			sample("instance:node_cpu:rate:sum", "ip-10-0-17-165.ec2.internal", 0.4245454545454522),
+			sample("instance:node_cpu:rate:sum", "ip-10-0-94-25.ec2.internal", 0.5695757575757561),
+		},
+	}
+
+	clientset := fakeclientset.NewSimpleClientset(n1, n2, n3, p1, p21, p22, p3)
+
+	ctx := context.TODO()
+	sharedInformerFactory := informers.NewSharedInformerFactory(clientset, 0)
+	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
+	podsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+	if err != nil {
+		t.Fatalf("Build get pods assigned to node function error: %v", err)
+	}
+
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	prometheusUsageClient := newPrometheusUsageClient(podsAssignedToNode, pClient, "instance:node_cpu:rate:sum")
+	err = prometheusUsageClient.sync(nodes)
+	if err != nil {
+		t.Fatalf("unable to sync prometheus metrics: %v", err)
+	}
+
+	for _, node := range nodes {
+		nodeUtil := prometheusUsageClient.nodeUtilization(node.Name)
+		fmt.Printf("nodeUtil[%v]: %v\n", node.Name, nodeUtil)
+	}
+
+	nodeThresholds := NodeThresholds{
+		lowResourceThreshold: map[v1.ResourceName]*resource.Quantity{
+			ResourceMetrics: resource.NewQuantity(int64(30), resource.DecimalSI),
+		},
+		highResourceThreshold: map[v1.ResourceName]*resource.Quantity{
+			ResourceMetrics: resource.NewQuantity(int64(50), resource.DecimalSI),
+		},
+	}
+
+	fmt.Printf("nodeThresholds: %#v\n", nodeThresholds)
 }
