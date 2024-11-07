@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -88,6 +89,16 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 
 	resourceNames := getResourceNames(lowNodeUtilizationArgsArgs.Thresholds)
 
+	var usageClient usageClient
+	if lowNodeUtilizationArgsArgs.MetricsUtilization.MetricsServer {
+		if handle.MetricsCollector() == nil {
+			return nil, fmt.Errorf("metrics client not initialized")
+		}
+		usageClient = newActualUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc(), handle.MetricsCollector())
+	} else {
+		usageClient = newRequestedUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc())
+	}
+
 	return &LowNodeUtilization{
 		handle:                   handle,
 		args:                     lowNodeUtilizationArgsArgs,
@@ -95,7 +106,7 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 		overutilizationCriteria:  overutilizationCriteria,
 		resourceNames:            resourceNames,
 		podFilter:                podFilter,
-		usageClient:              newRequestedUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc()),
+		usageClient:              usageClient,
 	}, nil
 }
 

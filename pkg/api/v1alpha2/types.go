@@ -40,6 +40,9 @@ type DeschedulerPolicy struct {
 
 	// MaxNoOfPodsToTotal restricts maximum of pods to be evicted total.
 	MaxNoOfPodsToEvictTotal *uint `json:"maxNoOfPodsToEvictTotal,omitempty"`
+
+	// MetricsCollector configures collection of metrics for actual resource utilization
+	MetricsCollector MetricsCollector `json:"metricsCollector,omitempty"`
 }
 
 type DeschedulerProfile struct {
@@ -65,4 +68,11 @@ type PluginConfig struct {
 type PluginSet struct {
 	Enabled  []string `json:"enabled"`
 	Disabled []string `json:"disabled"`
+}
+
+// MetricsCollector configures collection of metrics about actual resource utilization
+type MetricsCollector struct {
+	// Enabled metrics collection from kubernetes metrics.
+	// Later, the collection can be extended to other providers.
+	Enabled bool `json:"enabled,omitempty"`
 }
