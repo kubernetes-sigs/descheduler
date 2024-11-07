@@ -17,12 +17,16 @@ limitations under the License.
 package nodeutilization
 
 import (
+	"context"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 	utilptr "k8s.io/utils/ptr"
+
+	"sigs.k8s.io/descheduler/pkg/descheduler/metricscollector"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -96,6 +100,98 @@ func (s *requestedUsageClient) sync(nodes []*v1.Node) error {
 		// store the snapshot of pods from the same (or the closest) node utilization computation
 		s._pods[node.Name] = pods
 		s._nodeUtilization[node.Name] = nodeUsage
+	}
+
+	return nil
+}
+
+type actualUsageClient struct {
+	resourceNames         []v1.ResourceName
+	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc
+	metricsCollector      *metricscollector.MetricsCollector
+
+	_pods            map[string][]*v1.Pod
+	_nodeUtilization map[string]map[v1.ResourceName]*resource.Quantity
+}
+
+var _ usageClient = &actualUsageClient{}
+
+func newActualUsageClient(
+	resourceNames []v1.ResourceName,
+	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
+	metricsCollector *metricscollector.MetricsCollector,
+) *actualUsageClient {
+	return &actualUsageClient{
+		resourceNames:         resourceNames,
+		getPodsAssignedToNode: getPodsAssignedToNode,
+		metricsCollector:      metricsCollector,
+	}
+}
+
+func (client *actualUsageClient) nodeUtilization(node string) map[v1.ResourceName]*resource.Quantity {
+	return client._nodeUtilization[node]
+}
+
+func (client *actualUsageClient) pods(node string) []*v1.Pod {
+	return client._pods[node]
+}
+
+func (client *actualUsageClient) podUsage(pod *v1.Pod) (map[v1.ResourceName]*resource.Quantity, error) {
+	// It's not efficient to keep track of all pods in a cluster when only their fractions is evicted.
+	// Thus, take the current pod metrics without computing any softening (like e.g. EWMA).
+	podMetrics, err := client.metricsCollector.MetricsClient().MetricsV1beta1().PodMetricses(pod.Namespace).Get(context.TODO(), pod.Name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to get podmetrics for %q/%q: %v", pod.Namespace, pod.Name, err)
+	}
+
+	totalUsage := make(map[v1.ResourceName]*resource.Quantity)
+	for _, container := range podMetrics.Containers {
+		for _, resourceName := range client.resourceNames {
+			if _, exists := container.Usage[resourceName]; !exists {
+				continue
+			}
+			if totalUsage[resourceName] == nil {
+				totalUsage[resourceName] = utilptr.To[resource.Quantity](container.Usage[resourceName].DeepCopy())
+			} else {
+				totalUsage[resourceName].Add(container.Usage[resourceName])
+			}
+		}
+	}
+
+	return totalUsage, nil
+}
+
+func (client *actualUsageClient) sync(nodes []*v1.Node) error {
+	client._nodeUtilization = make(map[string]map[v1.ResourceName]*resource.Quantity)
+	client._pods = make(map[string][]*v1.Pod)
+
+	nodesUsage, err := client.metricsCollector.AllNodesUsage()
+	if err != nil {
+		return err
+	}
+
+	for _, node := range nodes {
+		pods, err := podutil.ListPodsOnANode(node.Name, client.getPodsAssignedToNode, nil)
+		if err != nil {
+			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
+			return fmt.Errorf("error accessing %q node's pods: %v", node.Name, err)
+		}
+
+		nodeUsage, ok := nodesUsage[node.Name]
+		if !ok {
+			return fmt.Errorf("unable to find node %q in the collected metrics", node.Name)
+		}
+		nodeUsage[v1.ResourcePods] = resource.NewQuantity(int64(len(pods)), resource.DecimalSI)
+
+		for _, resourceName := range client.resourceNames {
+			if _, exists := nodeUsage[resourceName]; !exists {
+				return fmt.Errorf("unable to find %q resource for collected %q node metric", resourceName, node.Name)
+			}
+		}
+
+		// store the snapshot of pods from the same (or the closest) node utilization computation
+		client._pods[node.Name] = pods
+		client._nodeUtilization[node.Name] = nodeUsage
 	}
 
 	return nil

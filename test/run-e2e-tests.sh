@@ -99,5 +99,10 @@ if [ -z "${SKIP_KUBEVIRT_INSTALL}" ]; then
   kubectl -n kubevirt patch kubevirt kubevirt --type=merge --patch '{"spec":{"configuration":{"developerConfiguration":{"useEmulation":true}}}}'
 fi
 
+METRICS_SERVER_VERSION="v0.5.0"
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/${METRICS_SERVER_VERSION}/components.yaml
+kubectl patch -n kube-system deployment metrics-server --type=json \
+  -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+
 PRJ_PREFIX="sigs.k8s.io/descheduler"
 go test ${PRJ_PREFIX}/test/e2e/ -v -timeout 0
