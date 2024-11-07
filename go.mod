@@ -22,6 +22,7 @@ require (
 	k8s.io/component-base v0.31.2
 	k8s.io/component-helpers v0.31.0
 	k8s.io/klog/v2 v2.130.1
+	k8s.io/metrics v0.31.2
 	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8
 	kubevirt.io/api v1.3.0
 	kubevirt.io/client-go v1.3.0
