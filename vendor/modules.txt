@@ -1305,6 +1305,18 @@ k8s.io/kube-openapi/pkg/validation/errors
 k8s.io/kube-openapi/pkg/validation/spec
 k8s.io/kube-openapi/pkg/validation/strfmt
 k8s.io/kube-openapi/pkg/validation/strfmt/bson
+# k8s.io/metrics v0.31.2
+## explicit; go 1.22.0
+k8s.io/metrics/pkg/apis/metrics
+k8s.io/metrics/pkg/apis/metrics/v1alpha1
+k8s.io/metrics/pkg/apis/metrics/v1beta1
+k8s.io/metrics/pkg/client/clientset/versioned
+k8s.io/metrics/pkg/client/clientset/versioned/fake
+k8s.io/metrics/pkg/client/clientset/versioned/scheme
+k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1alpha1
+k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1alpha1/fake
+k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1
+k8s.io/metrics/pkg/client/clientset/versioned/typed/metrics/v1beta1/fake
 # k8s.io/utils v0.0.0-20240711033017-18e509b52bc8
 ## explicit; go 1.18
 k8s.io/utils/buffer
