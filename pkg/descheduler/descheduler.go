@@ -23,44 +23,42 @@ import (
 	"strconv"
 	"time"
 
-	policyv1 "k8s.io/api/policy/v1"
-	schedulingv1 "k8s.io/api/scheduling/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	v1 "k8s.io/api/core/v1"
+	policy "k8s.io/api/policy/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	schedulingv1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	utilversion "k8s.io/apimachinery/pkg/util/version"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
+	fakeclientset "k8s.io/client-go/kubernetes/fake"
+	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/events"
 	componentbaseconfig "k8s.io/component-base/config"
 	"k8s.io/klog/v2"
 
-	v1 "k8s.io/api/core/v1"
-	policy "k8s.io/api/policy/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
-	utilversion "k8s.io/apimachinery/pkg/util/version"
-	"k8s.io/apimachinery/pkg/util/wait"
-	clientset "k8s.io/client-go/kubernetes"
-	fakeclientset "k8s.io/client-go/kubernetes/fake"
-	core "k8s.io/client-go/testing"
-
-	"sigs.k8s.io/descheduler/pkg/descheduler/client"
-	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
-	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
-	"sigs.k8s.io/descheduler/pkg/tracing"
-	"sigs.k8s.io/descheduler/pkg/utils"
-	"sigs.k8s.io/descheduler/pkg/version"
-
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/metrics"
 	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
+	"sigs.k8s.io/descheduler/pkg/descheduler/metricscollector"
+	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	frameworkprofile "sigs.k8s.io/descheduler/pkg/framework/profile"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
+	"sigs.k8s.io/descheduler/pkg/tracing"
+	"sigs.k8s.io/descheduler/pkg/utils"
+	"sigs.k8s.io/descheduler/pkg/version"
 )
 
 type eprunner func(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status
@@ -79,6 +77,7 @@ type descheduler struct {
 	eventRecorder          events.EventRecorder
 	podEvictor             *evictions.PodEvictor
 	podEvictionReactionFnc func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error)
+	metricsCollector       *metricscollector.MetricsCollector
 }
 
 type informerResources struct {
@@ -163,6 +162,11 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 		return nil, err
 	}
 
+	var metricsCollector *metricscollector.MetricsCollector
+	if deschedulerPolicy.MetricsCollector.Enabled {
+		metricsCollector = metricscollector.NewMetricsCollector(rs.Client, rs.MetricsClient)
+	}
+
 	return &descheduler{
 		rs:                     rs,
 		ir:                     ir,
@@ -172,6 +176,7 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 		eventRecorder:          eventRecorder,
 		podEvictor:             podEvictor,
 		podEvictionReactionFnc: podEvictionReactionFnc,
+		metricsCollector:       metricsCollector,
 	}, nil
 }
 
@@ -251,6 +256,7 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 			frameworkprofile.WithSharedInformerFactory(d.sharedInformerFactory),
 			frameworkprofile.WithPodEvictor(d.podEvictor),
 			frameworkprofile.WithGetPodsAssignedToNodeFnc(d.getPodsAssignedToNode),
+			frameworkprofile.WithMetricsCollector(d.metricsCollector),
 		)
 		if err != nil {
 			klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)
@@ -313,6 +319,14 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(rs.Client)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		return err
+	}
+
+	if deschedulerPolicy.MetricsCollector.Enabled {
+		metricsClient, err := client.CreateMetricsClient(clientConnection, "descheduler")
+		if err != nil {
+			return err
+		}
+		rs.MetricsClient = metricsClient
 	}
 
 	runFn := func() error {
@@ -422,6 +436,17 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	sharedInformerFactory.Start(ctx.Done())
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 	descheduler.podEvictor.WaitForEventHandlersSync(ctx)
+
+	if deschedulerPolicy.MetricsCollector.Enabled {
+		go func() {
+			klog.V(2).Infof("Starting metrics collector")
+			descheduler.metricsCollector.Run(ctx)
+			klog.V(2).Infof("Stopped metrics collector")
+		}()
+		wait.PollUntilWithContext(ctx, time.Second, func(context.Context) (done bool, err error) {
+			return descheduler.metricsCollector.HasSynced(), nil
+		})
+	}
 
 	wait.NonSlidingUntil(func() {
 		// A next context is created here intentionally to avoid nesting the spans via context.

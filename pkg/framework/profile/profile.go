@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/descheduler/pkg/descheduler/metricscollector"
 
 	"k8s.io/klog/v2"
 )
@@ -67,6 +68,7 @@ func (ei *evictorImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.Ev
 // handleImpl implements the framework handle which gets passed to plugins
 type handleImpl struct {
 	clientSet                 clientset.Interface
+	metricsCollector          *metricscollector.MetricsCollector
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	sharedInformerFactory     informers.SharedInformerFactory
 	evictor                   *evictorImpl
@@ -77,6 +79,10 @@ var _ frameworktypes.Handle = &handleImpl{}
 // ClientSet retrieves kube client set
 func (hi *handleImpl) ClientSet() clientset.Interface {
 	return hi.clientSet
+}
+
+func (hi *handleImpl) MetricsCollector() *metricscollector.MetricsCollector {
+	return hi.metricsCollector
 }
 
 // GetPodsAssignedToNodeFunc retrieves GetPodsAssignedToNodeFunc implementation
@@ -128,6 +134,7 @@ type handleImplOpts struct {
 	sharedInformerFactory     informers.SharedInformerFactory
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	podEvictor                *evictions.PodEvictor
+	metricsCollector          *metricscollector.MetricsCollector
 }
 
 // WithClientSet sets clientSet for the scheduling frameworkImpl.
@@ -152,6 +159,12 @@ func WithPodEvictor(podEvictor *evictions.PodEvictor) Option {
 func WithGetPodsAssignedToNodeFnc(getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc) Option {
 	return func(o *handleImplOpts) {
 		o.getPodsAssignedToNodeFunc = getPodsAssignedToNodeFunc
+	}
+}
+
+func WithMetricsCollector(metricsCollector *metricscollector.MetricsCollector) Option {
+	return func(o *handleImplOpts) {
+		o.metricsCollector = metricsCollector
 	}
 }
 
@@ -253,6 +266,7 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 			profileName: config.Name,
 			podEvictor:  hOpts.podEvictor,
 		},
+		metricsCollector: hOpts.metricsCollector,
 	}
 
 	pluginNames := append(config.Plugins.Deschedule.Enabled, config.Plugins.Balance.Enabled...)

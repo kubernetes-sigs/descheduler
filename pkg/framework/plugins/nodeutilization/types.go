@@ -28,6 +28,7 @@ type LowNodeUtilizationArgs struct {
 	Thresholds             api.ResourceThresholds `json:"thresholds"`
 	TargetThresholds       api.ResourceThresholds `json:"targetThresholds"`
 	NumberOfNodes          int                    `json:"numberOfNodes,omitempty"`
+	MetricsUtilization     MetricsUtilization     `json:"metricsUtilization,omitempty"`
 
 	// Naming this one differently since namespaces are still
 	// considered while considering resources used by pods
@@ -41,10 +42,19 @@ type LowNodeUtilizationArgs struct {
 type HighNodeUtilizationArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	Thresholds    api.ResourceThresholds `json:"thresholds"`
-	NumberOfNodes int                    `json:"numberOfNodes,omitempty"`
+	Thresholds         api.ResourceThresholds `json:"thresholds"`
+	NumberOfNodes      int                    `json:"numberOfNodes,omitempty"`
+	MetricsUtilization MetricsUtilization     `json:"metricsUtilization,omitempty"`
+
 	// Naming this one differently since namespaces are still
 	// considered while considering resources used by pods
 	// but then filtered out before eviction
 	EvictableNamespaces *api.Namespaces `json:"evictableNamespaces,omitempty"`
+}
+
+// MetricsUtilization allow to consume actual resource utilization from metrics
+type MetricsUtilization struct {
+	// metricsServer enables metrics from a kubernetes metrics server.
+	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
+	MetricsServer bool `json:"metricsServer,omitempty"`
 }

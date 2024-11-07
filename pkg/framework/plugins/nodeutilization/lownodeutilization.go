@@ -88,6 +88,13 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 
 	resourceNames := getResourceNames(lowNodeUtilizationArgsArgs.Thresholds)
 
+	var usageClient usageClient
+	if lowNodeUtilizationArgsArgs.MetricsUtilization.MetricsServer {
+		usageClient = newActualUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc(), handle.MetricsCollector())
+	} else {
+		usageClient = newRequestedUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc())
+	}
+
 	return &LowNodeUtilization{
 		handle:                   handle,
 		args:                     lowNodeUtilizationArgsArgs,
@@ -95,7 +102,7 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 		overutilizationCriteria:  overutilizationCriteria,
 		resourceNames:            resourceNames,
 		podFilter:                podFilter,
-		usageClient:              newRequestedUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc()),
+		usageClient:              usageClient,
 	}, nil
 }
 

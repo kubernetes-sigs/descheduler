@@ -33,6 +33,7 @@ import (
 	componentbaseoptions "k8s.io/component-base/config/options"
 	"k8s.io/component-base/featuregate"
 	"k8s.io/klog/v2"
+	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
@@ -51,6 +52,7 @@ type DeschedulerServer struct {
 
 	Client            clientset.Interface
 	EventClient       clientset.Interface
+	MetricsClient     metricsclient.Interface
 	SecureServing     *apiserveroptions.SecureServingOptionsWithLoopback
 	SecureServingInfo *apiserver.SecureServingInfo
 	DisableMetrics    bool
