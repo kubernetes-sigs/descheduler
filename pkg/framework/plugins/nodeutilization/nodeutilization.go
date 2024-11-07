@@ -57,6 +57,7 @@ import (
 // - thresholds: map[string][]api.ReferencedResourceList
 // - pod list: map[string][]*v1.Pod
 // Once the nodes are classified produce the original []NodeInfo so the code is not that much changed (postponing further refactoring once it is needed)
+const MetricResource = v1.ResourceName("MetricResource")
 
 // NodeUsage stores a node's info, pods on it, thresholds and its resource usage
 type NodeUsage struct {
@@ -94,20 +95,30 @@ func normalizePercentage(percent api.Percentage) api.Percentage {
 	return percent
 }
 
+func nodeCapacity(node *v1.Node, nodeUsage api.ReferencedResourceList) v1.ResourceList {
+	capacity := node.Status.Capacity
+	if len(node.Status.Allocatable) > 0 {
+		capacity = node.Status.Allocatable
+	}
+	// the usage captures the metrics resource
+	if _, ok := nodeUsage[MetricResource]; ok {
+		// Make ResourceMetrics 100% => 100 points
+		capacity[MetricResource] = *resource.NewQuantity(int64(100), resource.DecimalSI)
+	}
+	return capacity
+}
+
 func getNodeThresholdsFromAverageNodeUsage(
 	nodes []*v1.Node,
 	usageClient usageClient,
 	lowSpan, highSpan api.ResourceThresholds,
-) map[string][]api.ResourceThresholds {
+) (map[string][]api.ResourceThresholds, api.ResourceThresholds) {
 	total := api.ResourceThresholds{}
 	average := api.ResourceThresholds{}
 	numberOfNodes := len(nodes)
 	for _, node := range nodes {
 		usage := usageClient.nodeUtilization(node.Name)
-		nodeCapacity := node.Status.Capacity
-		if len(node.Status.Allocatable) > 0 {
-			nodeCapacity = node.Status.Allocatable
-		}
+		nodeCapacity := nodeCapacity(node, usage)
 		for resource, value := range usage {
 			nodeCapacityValue := nodeCapacity[resource]
 			if resource == v1.ResourceCPU {
@@ -138,7 +149,7 @@ func getNodeThresholdsFromAverageNodeUsage(
 			highThreshold,
 		}
 	}
-	return nodeThresholds
+	return nodeThresholds, average
 }
 
 func getStaticNodeThresholds(
@@ -216,10 +227,7 @@ func roundTo2Decimals(percentage float64) float64 {
 }
 
 func resourceUsagePercentages(nodeUsage api.ReferencedResourceList, node *v1.Node, round bool) api.ResourceThresholds {
-	nodeCapacity := node.Status.Capacity
-	if len(node.Status.Allocatable) > 0 {
-		nodeCapacity = node.Status.Allocatable
-	}
+	nodeCapacity := nodeCapacity(node, nodeUsage)
 
 	resourceUsagePercentage := api.ResourceThresholds{}
 	for resourceName, resourceUsage := range nodeUsage {
@@ -395,16 +403,29 @@ func evictPods(
 			if !preEvictionFilterWithOptions(pod) {
 				continue
 			}
+
+			// In case podUsage does not support resource counting (e.g. provided metric
+			// does not quantify pod resource utilization).
+			unconstrainedResourceEviction := false
 			podUsage, err := usageClient.podUsage(pod)
 			if err != nil {
-				klog.Errorf("unable to get pod usage for %v/%v: %v", pod.Namespace, pod.Name, err)
-				continue
+				if _, ok := err.(*notSupportedError); !ok {
+					klog.Errorf("unable to get pod usage for %v/%v: %v", pod.Namespace, pod.Name, err)
+					continue
+				}
+				unconstrainedResourceEviction = true
 			}
 			err = podEvictor.Evict(ctx, pod, evictOptions)
 			if err == nil {
+				if maxNoOfPodsToEvictPerNode == nil && unconstrainedResourceEviction {
+					klog.V(3).InfoS("Currently, only a single pod eviction is allowed")
+					break
+				}
 				evictionCounter++
 				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
-
+				if unconstrainedResourceEviction {
+					continue
+				}
 				for name := range totalAvailableUsage {
 					if name == v1.ResourcePods {
 						nodeInfo.usage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))

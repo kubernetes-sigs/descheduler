@@ -115,6 +115,9 @@ const (
 	// KubernetesMetrics enables metrics from a Kubernetes metrics server.
 	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
 	KubernetesMetrics MetricsSource = "KubernetesMetrics"
+
+	// KubernetesMetrics enables metrics from a Prometheus metrics server.
+	PrometheusMetrics MetricsSource = "Prometheus"
 )
 
 // MetricsCollector configures collection of metrics about actual resource utilization
@@ -128,7 +131,32 @@ type MetricsCollector struct {
 type MetricsProvider struct {
 	// Source enables metrics from Kubernetes metrics server.
 	Source MetricsSource
+
+	// Prometheus enables metrics collection through Prometheus
+	Prometheus *Prometheus
 }
 
 // ReferencedResourceList is an adaption of v1.ResourceList with resources as references
 type ReferencedResourceList = map[v1.ResourceName]*resource.Quantity
+
+type Prometheus struct {
+	URL string
+	// authToken used for authentication with the prometheus server.
+	// If not set the in cluster authentication token for the descheduler service
+	// account is read from the container's file system.
+	AuthToken *AuthToken
+}
+
+type AuthToken struct {
+	// secretReference references an authentication token.
+	// secrets are expected to be created under the descheduler's namespace.
+	SecretReference *SecretReference
+}
+
+// SecretReference holds a reference to a Secret
+type SecretReference struct {
+	// namespace is the namespace of the secret.
+	Namespace string
+	// name is the name of the secret.
+	Name string
+}

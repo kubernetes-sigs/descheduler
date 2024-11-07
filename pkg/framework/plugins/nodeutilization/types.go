@@ -55,13 +55,24 @@ type HighNodeUtilizationArgs struct {
 }
 
 // MetricsUtilization allow to consume actual resource utilization from metrics
+// +k8s:deepcopy-gen=true
 type MetricsUtilization struct {
 	// metricsServer enables metrics from a kubernetes metrics server.
 	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
-	// Deprecated. Use MetricsSource instead.
+	// Deprecated. Use Source instead.
 	MetricsServer bool `json:"metricsServer,omitempty"`
 
 	// source enables the plugin to consume metrics from a metrics source.
 	// Currently only KubernetesMetrics available.
 	Source api.MetricsSource `json:"source,omitempty"`
+
+	// prometheus enables metrics collection through a prometheus query.
+	Prometheus *Prometheus `json:"prometheus,omitempty"`
+}
+
+type Prometheus struct {
+	// query returning a vector of samples, each sample labeled with `instance`
+	// corresponding to a node name with each sample value as a real number
+	// in <0; 1> interval.
+	Query string `json:"query,omitempty"`
 }

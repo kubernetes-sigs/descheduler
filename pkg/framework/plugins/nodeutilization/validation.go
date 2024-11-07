@@ -44,6 +44,17 @@ func ValidateLowNodeUtilizationArgs(obj runtime.Object) error {
 	if err != nil {
 		return err
 	}
+	if args.MetricsUtilization != nil {
+		if args.MetricsUtilization.Source == api.KubernetesMetrics && args.MetricsUtilization.MetricsServer {
+			return fmt.Errorf("it is not allowed to set both %q source and metricsServer", api.KubernetesMetrics)
+		}
+		if args.MetricsUtilization.Source == api.KubernetesMetrics && args.MetricsUtilization.Prometheus != nil {
+			return fmt.Errorf("prometheus configuration is not allowed to set when source is set to %q", api.KubernetesMetrics)
+		}
+		if args.MetricsUtilization.Source == api.PrometheusMetrics && (args.MetricsUtilization.Prometheus == nil || args.MetricsUtilization.Prometheus.Query == "") {
+			return fmt.Errorf("prometheus query is required when metrics source is set to %q", api.PrometheusMetrics)
+		}
+	}
 	return nil
 }
 
