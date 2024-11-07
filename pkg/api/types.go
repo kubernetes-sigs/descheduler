@@ -54,6 +54,9 @@ type DeschedulerPolicy struct {
 	// specified type will be used.
 	// Defaults to a per object value if not specified. zero means delete immediately.
 	GracePeriodSeconds *int64
+
+	// Prometheus enables metrics collection through Prometheus
+	Prometheus Prometheus
 }
 
 // Namespaces carries a list of included/excluded namespaces
@@ -103,4 +106,26 @@ type MetricsCollector struct {
 	// Enabled metrics collection from kubernetes metrics.
 	// Later, the collection can be extended to other providers.
 	Enabled bool
+}
+
+type Prometheus struct {
+	URL                string
+	AuthToken          AuthToken
+	InsecureSkipVerify bool
+}
+
+type AuthToken struct {
+	// raw for a raw authentication token
+	Raw string
+	// secretReference references an authentication token.
+	// secrets are expected to be created under the descheduler's namespace.
+	SecretReference SecretReference
+}
+
+// SecretReference holds a reference to a Secret
+type SecretReference struct {
+	// namespace is the namespace of the secret.
+	Namespace string
+	// name is the name of the secret.
+	Name string
 }

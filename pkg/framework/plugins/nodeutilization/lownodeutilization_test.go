@@ -40,6 +40,8 @@ import (
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
+
+	"github.com/prometheus/common/model"
 )
 
 func TestLowNodeUtilization(t *testing.T) {
@@ -1368,5 +1370,163 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, podEvictor.TotalEvicted())
 			}
 		})
+	}
+}
+
+func withLocalStorage(pod *v1.Pod) {
+	// A pod with local storage.
+	test.SetNormalOwnerRef(pod)
+	pod.Spec.Volumes = []v1.Volume{
+		{
+			Name: "sample",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+				EmptyDir: &v1.EmptyDirVolumeSource{
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+				},
+			},
+		},
+	}
+	// A Mirror Pod.
+	pod.Annotations = test.GetMirrorPodAnnotation()
+}
+
+func withCriticalPod(pod *v1.Pod) {
+	// A Critical Pod.
+	test.SetNormalOwnerRef(pod)
+	pod.Namespace = "kube-system"
+	priority := utils.SystemCriticalPriority
+	pod.Spec.Priority = &priority
+}
+
+func TestLowNodeUtilizationWithPrometheusMetrics(t *testing.T) {
+	n1NodeName := "n1"
+	n2NodeName := "n2"
+	n3NodeName := "n3"
+
+	testCases := []struct {
+		name                         string
+		useDeviationThresholds       bool
+		thresholds, targetThresholds api.ResourceThresholds
+		query                        string
+		samples                      model.Vector
+		nodes                        []*v1.Node
+		pods                         []*v1.Pod
+		expectedPodsEvicted          uint
+		evictedPods                  []string
+		evictableNamespaces          *api.Namespaces
+	}{
+		{
+			name: "with instance:node_cpu:rate:sum query",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceName("MetricResource"): 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceName("MetricResource"): 50,
+			},
+			query: "instance:node_cpu:rate:sum",
+			samples: model.Vector{
+				sample("instance:node_cpu:rate:sum", n1NodeName, 0.5695757575757561),
+				sample("instance:node_cpu:rate:sum", n2NodeName, 0.4245454545454522),
+				sample("instance:node_cpu:rate:sum", n3NodeName, 0.20381818181818104),
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, nil),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p5", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				// These won't be evicted.
+				test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
+				test.BuildTestPod("p7", 400, 0, n1NodeName, withLocalStorage),
+				test.BuildTestPod("p8", 400, 0, n1NodeName, withCriticalPod),
+				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
+			},
+			expectedPodsEvicted: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		testFnc := func(metricsEnabled bool, expectedPodsEvicted uint) func(t *testing.T) {
+			return func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+
+				var objs []runtime.Object
+				for _, node := range tc.nodes {
+					objs = append(objs, node)
+				}
+				for _, pod := range tc.pods {
+					objs = append(objs, pod)
+				}
+
+				fakeClient := fake.NewSimpleClientset(objs...)
+
+				podsForEviction := make(map[string]struct{})
+				for _, pod := range tc.evictedPods {
+					podsForEviction[pod] = struct{}{}
+				}
+
+				evictionFailed := false
+				if len(tc.evictedPods) > 0 {
+					fakeClient.Fake.AddReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+						getAction := action.(core.CreateAction)
+						obj := getAction.GetObject()
+						if eviction, ok := obj.(*policy.Eviction); ok {
+							if _, exists := podsForEviction[eviction.Name]; exists {
+								return true, obj, nil
+							}
+							evictionFailed = true
+							return true, nil, fmt.Errorf("pod %q was unexpectedly evicted", eviction.Name)
+						}
+						return true, obj, nil
+					})
+				}
+
+				handle, podEvictor, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{NodeFit: true}, nil)
+				if err != nil {
+					t.Fatalf("Unable to initialize a framework handle: %v", err)
+				}
+
+				handle.PrometheusClientImpl = &fakePromClient{
+					result:   tc.samples,
+					dataType: model.ValVector,
+				}
+				plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
+					Thresholds:             tc.thresholds,
+					TargetThresholds:       tc.targetThresholds,
+					UseDeviationThresholds: tc.useDeviationThresholds,
+					EvictableNamespaces:    tc.evictableNamespaces,
+					MetricsUtilization: MetricsUtilization{
+						Prometheus: Prometheus{
+							Query: tc.query,
+						},
+					},
+				},
+					handle)
+				if err != nil {
+					t.Fatalf("Unable to initialize the plugin: %v", err)
+				}
+
+				status := plugin.(frameworktypes.BalancePlugin).Balance(ctx, tc.nodes)
+				if status != nil {
+					t.Fatalf("Balance.err: %v", status.Err)
+				}
+
+				podsEvicted := podEvictor.TotalEvicted()
+				if expectedPodsEvicted != podsEvicted {
+					t.Errorf("Expected %v pods to be evicted but %v got evicted", expectedPodsEvicted, podsEvicted)
+				}
+				if evictionFailed {
+					t.Errorf("Pod evictions failed unexpectedly")
+				}
+			}
+		}
+		t.Run(tc.name, testFnc(false, tc.expectedPodsEvicted))
 	}
 }
