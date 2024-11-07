@@ -124,6 +124,8 @@ These are top level keys in the Descheduler Policy that you can use to configure
 | `maxNoOfPodsToEvictPerNode` |`int`| `nil` | maximum number of pods evicted from each node (summed through all strategies) |
 | `maxNoOfPodsToEvictPerNamespace` |`int`| `nil` | maximum number of pods evicted from each namespace (summed through all strategies) |
 | `maxNoOfPodsToEvictTotal` |`int`| `nil` | maximum number of pods evicted per rescheduling cycle (summed through all strategies) |
+| `metricsCollector` |`object`| `nil` | configures collection of metrics for actual resource utilization |
+| `metricsCollector.enabled` |`bool`| `false` | enables kubernetes [metrics server](https://kubernetes-sigs.github.io/metrics-server/) collection |
 
 ### Evictor Plugin configuration (Default Evictor)
 
@@ -158,6 +160,8 @@ nodeSelector: "node=node1" # you don't need to set this, if not set all will be 
 maxNoOfPodsToEvictPerNode: 5000 # you don't need to set this, unlimited if not set
 maxNoOfPodsToEvictPerNamespace: 5000 # you don't need to set this, unlimited if not set
 maxNoOfPodsToEvictTotal: 5000 # you don't need to set this, unlimited if not set
+metricsCollector:
+  enabled: true # you don't need to set this, metrics are not collected if not set
 profiles:
   - name: ProfileName
     pluginConfig:
@@ -277,11 +281,13 @@ If that parameter is set to `true`, the thresholds are considered as percentage 
 `thresholds` will be deducted from the mean among all nodes and `targetThresholds` will be added to the mean.
 A resource consumption above (resp. below) this window is considered as overutilization (resp. underutilization).
 
-**NOTE:** Node resource consumption is determined by the requests and limits of pods, not actual usage.
+**NOTE:** By default node resource consumption is determined by the requests and limits of pods, not actual usage.
 This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same
 design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands
 like `kubectl top`) may differ from the calculated consumption, due to these components reporting
-actual usage metrics. Implementing metrics-based descheduling is currently TODO for the project.
+actual usage metrics. Metrics-based descheduling can be enabled by setting `metricsUtilization.metricsServer` field.
+In order to have the plugin consume the metrics the metric collector needs to be configured as well.
+See `metricsCollector` field at [Top Level configuration](#top-level-configuration) for available options.
 
 **Parameters:**
 
@@ -292,6 +298,9 @@ actual usage metrics. Implementing metrics-based descheduling is currently TODO 
 |`targetThresholds`|map(string:int)|
 |`numberOfNodes`|int|
 |`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
+|`metricsUtilization`|object|
+|`metricsUtilization.metricsServer`|bool|
+
 
 **Example:**
 
@@ -311,6 +320,8 @@ profiles:
           "cpu" : 50
           "memory": 50
           "pods": 50
+        metricsUtilization:
+          metricsServer: true
     plugins:
       balance:
         enabled:
