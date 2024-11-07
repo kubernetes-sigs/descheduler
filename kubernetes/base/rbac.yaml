@@ -36,6 +36,15 @@ rules:
   resources: ["nodes", "pods"]
   verbs: ["get", "list"]
 ---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: descheduler-role
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -50,6 +59,19 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: descheduler-cluster-role
+subjects:
+  - name: descheduler-sa
+    kind: ServiceAccount
+    namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: descheduler-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: descheduler-role
 subjects:
   - name: descheduler-sa
     kind: ServiceAccount

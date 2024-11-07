@@ -23,6 +23,8 @@ import (
 	"strconv"
 	"time"
 
+	promapi "github.com/prometheus/client_golang/api"
+
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	v1 "k8s.io/api/core/v1"
@@ -30,6 +32,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -61,6 +64,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/version"
 )
 
+const PrometheusAuthTokenSecretKey = "PrometheusAuthToken"
+
 type eprunner func(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status
 
 type profileRunner struct {
@@ -78,6 +83,7 @@ type descheduler struct {
 	podEvictor             *evictions.PodEvictor
 	podEvictionReactionFnc func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error)
 	metricsCollector       *metricscollector.MetricsCollector
+	prometheusClient       promapi.Client
 }
 
 type informerResources struct {
@@ -177,6 +183,7 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 		podEvictor:             podEvictor,
 		podEvictionReactionFnc: podEvictionReactionFnc,
 		metricsCollector:       metricsCollector,
+		prometheusClient:       rs.PrometheusClient,
 	}, nil
 }
 
@@ -257,6 +264,7 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 			frameworkprofile.WithPodEvictor(d.podEvictor),
 			frameworkprofile.WithGetPodsAssignedToNodeFnc(d.getPodsAssignedToNode),
 			frameworkprofile.WithMetricsCollector(d.metricsCollector),
+			frameworkprofile.WithPrometheusClient(d.prometheusClient),
 		)
 		if err != nil {
 			klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)
@@ -424,6 +432,32 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	}
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
 	defer eventBroadcaster.Shutdown()
+
+	if deschedulerPolicy.Prometheus.URL != "" {
+		klog.V(2).Infof("Creating Prometheus client")
+		promConfig := deschedulerPolicy.Prometheus
+
+		var authToken string
+		// Raw auth token takes precedence
+		if len(promConfig.AuthToken.Raw) > 0 {
+			authToken = promConfig.AuthToken.Raw
+		} else if promConfig.AuthToken.SecretReference.Name != "" {
+			secretObj, err := rs.Client.CoreV1().Secrets(promConfig.AuthToken.SecretReference.Namespace).Get(context.TODO(), promConfig.AuthToken.SecretReference.Name, metav1.GetOptions{})
+			if err != nil {
+				return fmt.Errorf("unable to get secret with prometheus authentication token: %v", err)
+			}
+			authToken = string(secretObj.Data[PrometheusAuthTokenSecretKey])
+			if authToken == "" {
+				return fmt.Errorf("prometheus authentication token secret missing %q data or empty", PrometheusAuthTokenSecretKey)
+			}
+		}
+
+		prometheusClient, err := client.CreatePrometheusClient(deschedulerPolicy.Prometheus.URL, authToken, deschedulerPolicy.Prometheus.InsecureSkipVerify)
+		if err != nil {
+			return fmt.Errorf("unable to create a prometheus client: %v", err)
+		}
+		rs.PrometheusClient = prometheusClient
+	}
 
 	descheduler, err := newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, sharedInformerFactory)
 	if err != nil {

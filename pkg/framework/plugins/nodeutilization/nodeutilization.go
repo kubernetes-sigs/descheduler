@@ -34,6 +34,8 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+const ResourceMetrics = v1.ResourceName("MetricResource")
+
 // NodeUsage stores a node's info, pods on it, thresholds and its resource usage
 type NodeUsage struct {
 	node    *v1.Node
@@ -92,6 +94,8 @@ func getNodeThresholds(
 		if len(node.Status.Allocatable) > 0 {
 			nodeCapacity = node.Status.Allocatable
 		}
+		// Make ResourceMetrics 100% => 1000 points
+		nodeCapacity[ResourceMetrics] = *resource.NewQuantity(int64(1000), resource.DecimalSI)
 
 		nodeThresholdsMap[node.Name] = NodeThresholds{
 			lowResourceThreshold:  map[v1.ResourceName]*resource.Quantity{},
@@ -327,15 +331,27 @@ func evictPods(
 			if !preEvictionFilterWithOptions(pod) {
 				continue
 			}
+
+			// In case podUsage does not support resource counting (e.g. provided metric
+			// does not quantify pod resource utilization) allow to evict only a single
+			// pod. It is recommended to run the descheduling cycle more often
+			// so the plugin can perform more evictions towards the re-distribution.
+			singleEviction := false
 			podUsage, err := usageClient.podUsage(pod)
 			if err != nil {
-				klog.Errorf("unable to get pod usage for %v/%v: %v", pod.Namespace, pod.Name, err)
-				continue
+				if _, ok := err.(*notSupportedError); !ok {
+					klog.Errorf("unable to get pod usage for %v/%v: %v", pod.Namespace, pod.Name, err)
+					continue
+				}
+				singleEviction = true
 			}
 			err = podEvictor.Evict(ctx, pod, evictOptions)
 			if err == nil {
 				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
-
+				if singleEviction {
+					klog.V(3).InfoS("Currently, only a single pod eviction is allowed")
+					break
+				}
 				for name := range totalAvailableUsage {
 					if name == v1.ResourcePods {
 						nodeInfo.usage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))

@@ -57,4 +57,11 @@ type MetricsUtilization struct {
 	// metricsServer enables metrics from a kubernetes metrics server.
 	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
 	MetricsServer bool `json:"metricsServer,omitempty"`
+
+	// prometheus enables metrics collection through a prometheus query.
+	Prometheus Prometheus `json:"prometheus,omitempty"`
+}
+
+type Prometheus struct {
+	Query string `json:"query,omitempty"`
 }

@@ -126,6 +126,14 @@ These are top level keys in the Descheduler Policy that you can use to configure
 | `maxNoOfPodsToEvictTotal` |`int`| `nil` | maximum number of pods evicted per rescheduling cycle (summed through all strategies) |
 | `metricsCollector` |`object`| `nil` | configures collection of metrics for actual resource utilization |
 | `metricsCollector.enabled` |`bool`| `false` | enables kubernetes [metrics server](https://kubernetes-sigs.github.io/metrics-server/) collection |
+| `prometheus` |`object`| `nil` | configures collection of Prometheus metrics for actual resource utilization |
+| `prometheus.url` |`string`| `nil` | points to a Prometheus server url |
+| `prometheus.insecureSkipVerify` |`bool`| `nil` | disables server certificate chain and host name verification |
+| `prometheus.authToken` |`object`| `nil` | sets Prometheus server authentication token |
+| `prometheus.authToken.raw` |`string`| `nil` | set the authentication token as a raw string (takes precedence over secretReference) |
+| `prometheus.authToken.secretReference` |`object`| `nil` | read the authentication token from a kubernetes secret |
+| `prometheus.authToken.secretReference.namespace` |`string`| `nil` | authentication token kubernetes secret namespace |
+| `prometheus.authToken.secretReference.name` |`string`| `nil` | authentication token kubernetes secret name |
 
 ### Evictor Plugin configuration (Default Evictor)
 
@@ -162,6 +170,13 @@ maxNoOfPodsToEvictPerNamespace: 5000 # you don't need to set this, unlimited if 
 maxNoOfPodsToEvictTotal: 5000 # you don't need to set this, unlimited if not set
 metricsCollector:
   enabled: true # you don't need to set this, metrics are not collected if not set
+prometheus: # you don't need to set this, prometheus client will not get created if not set
+  url: http://prometheus-kube-prometheus-prometheus.prom.svc.cluster.local
+  insecureSkipVerify: true
+  authToken:
+    secretReference:
+      namespace: "kube-system"
+      name: "authtoken"
 profiles:
   - name: ProfileName
     pluginConfig:
@@ -287,6 +302,11 @@ design for scheduling pods onto nodes. This means that resource usage as reporte
 like `kubectl top`) may differ from the calculated consumption, due to these components reporting
 actual usage metrics. Metrics-based descheduling can be enabled by setting `metricsUtilization.metricsServer` field.
 In order to have the plugin consume the metrics the metric collector needs to be configured as well.
+Alternatively, it is possible to create a prometheus client and configure a prometheus query to consume
+metrics outside of the kubernetes metrics server. The query is expected to return a vector of values for
+each node. The values are expected to be any real number within <0; 1> interval. During eviction only
+a single pod is evicted at most from each overutilized node. There's currently no support for evicting
+more. Kubernetes metric server takes precendence over Prometheus.
 See `metricsCollector` field at [Top Level configuration](#top-level-configuration) for available options.
 
 **Parameters:**
@@ -300,6 +320,7 @@ See `metricsCollector` field at [Top Level configuration](#top-level-configurati
 |`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
 |`metricsUtilization`|object|
 |`metricsUtilization.metricsServer`|bool|
+|`metricsUtilization.prometheus.query`|string|
 
 
 **Example:**
@@ -322,6 +343,8 @@ profiles:
           "pods": 50
         metricsUtilization:
           metricsServer: true
+					# prometheus:
+          #   query: instance:node_cpu:rate:sum
     plugins:
       balance:
         enabled:

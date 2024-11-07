@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -55,7 +56,18 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 		return nil, fmt.Errorf("want args to be of type LowNodeUtilizationArgs, got %T", args)
 	}
 
-	setDefaultForLNUThresholds(lowNodeUtilizationArgsArgs.Thresholds, lowNodeUtilizationArgsArgs.TargetThresholds, lowNodeUtilizationArgsArgs.UseDeviationThresholds)
+	if lowNodeUtilizationArgsArgs.MetricsUtilization.Prometheus.Query != "" {
+		uResourceNames := getResourceNames(lowNodeUtilizationArgsArgs.Thresholds)
+		oResourceNames := getResourceNames(lowNodeUtilizationArgsArgs.TargetThresholds)
+		if len(uResourceNames) != 1 || uResourceNames[0] != ResourceMetrics {
+			return nil, fmt.Errorf("thresholds are expected to specify a single instance of %q resource, got %v instead", ResourceMetrics, uResourceNames)
+		}
+		if len(oResourceNames) != 1 || oResourceNames[0] != ResourceMetrics {
+			return nil, fmt.Errorf("targetThresholds are expected to specify a single instance of %q resource, got %v instead", ResourceMetrics, oResourceNames)
+		}
+	} else {
+		setDefaultForLNUThresholds(lowNodeUtilizationArgsArgs.Thresholds, lowNodeUtilizationArgsArgs.TargetThresholds, lowNodeUtilizationArgsArgs.UseDeviationThresholds)
+	}
 
 	underutilizationCriteria := []interface{}{
 		"CPU", lowNodeUtilizationArgsArgs.Thresholds[v1.ResourceCPU],
@@ -91,6 +103,13 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 	var usageClient usageClient
 	if lowNodeUtilizationArgsArgs.MetricsUtilization.MetricsServer {
 		usageClient = newActualUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc(), handle.MetricsCollector())
+	} else if lowNodeUtilizationArgsArgs.MetricsUtilization.Prometheus.Query != "" {
+		if handle.PrometheusClient() == nil {
+			return nil, fmt.Errorf("prometheus client not initialized")
+		}
+		usageClient = newPrometheusUsageClient(handle.GetPodsAssignedToNodeFunc(), handle.PrometheusClient(), lowNodeUtilizationArgsArgs.MetricsUtilization.Prometheus.Query)
+		// reset all resource names to just ResourceMetrics
+		resourceNames = []v1.ResourceName{ResourceMetrics}
 	} else {
 		usageClient = newRequestedUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc())
 	}

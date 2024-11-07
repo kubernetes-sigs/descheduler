@@ -43,6 +43,9 @@ type DeschedulerPolicy struct {
 
 	// MetricsCollector configures collection of metrics for actual resource utilization
 	MetricsCollector MetricsCollector `json:"metricsCollector,omitempty"`
+
+	// Prometheus enables metrics collection through Prometheus
+	Prometheus Prometheus `json:"prometheus,omitempty"`
 }
 
 type DeschedulerProfile struct {
@@ -75,4 +78,27 @@ type MetricsCollector struct {
 	// Enabled metrics collection from kubernetes metrics.
 	// Later, the collection can be extended to other providers.
 	Enabled bool `json:"enabled"`
+}
+
+type Prometheus struct {
+	URL                string    `json:"url,omitempty"`
+	AuthToken          AuthToken `json:"authToken,omitempty"`
+	InsecureSkipVerify bool      `json:"insecureSkipVerify,omitempty"`
+}
+
+type AuthToken struct {
+	// raw for a raw authentication token
+	Raw string `json:"raw,omitempty"`
+	// secretReference references an authentication token.
+	// secrets are expected to be created under the descheduler's namespace.
+	SecretReference SecretReference `json:"secretReference,omitempty"`
+}
+
+// SecretReference holds a reference to a Secret
+type SecretReference struct {
+	// namespace is the namespace of the secret.
+	Namespace string `json:"namespace,omitempty"`
+	// name is the name of the secret.
+	// Required
+	Name string `json:"name,omitempty"`
 }

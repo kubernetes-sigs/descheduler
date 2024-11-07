@@ -21,7 +21,9 @@ import (
 	"strings"
 	"time"
 
+	promapi "github.com/prometheus/client_golang/api"
 	"github.com/spf13/pflag"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiserver "k8s.io/apiserver/pkg/server"
 	apiserveroptions "k8s.io/apiserver/pkg/server/options"
@@ -53,6 +55,7 @@ type DeschedulerServer struct {
 	Client            clientset.Interface
 	EventClient       clientset.Interface
 	MetricsClient     metricsclient.Interface
+	PrometheusClient  promapi.Client
 	SecureServing     *apiserveroptions.SecureServingOptionsWithLoopback
 	SecureServingInfo *apiserver.SecureServingInfo
 	DisableMetrics    bool
