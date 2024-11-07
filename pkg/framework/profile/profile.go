@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"time"
 
+	promapi "github.com/prometheus/client_golang/api"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
@@ -68,6 +69,7 @@ func (ei *evictorImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.Ev
 // handleImpl implements the framework handle which gets passed to plugins
 type handleImpl struct {
 	clientSet                 clientset.Interface
+	prometheusClient          promapi.Client
 	metricsCollector          *metricscollector.MetricsCollector
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	sharedInformerFactory     informers.SharedInformerFactory
@@ -79,6 +81,10 @@ var _ frameworktypes.Handle = &handleImpl{}
 // ClientSet retrieves kube client set
 func (hi *handleImpl) ClientSet() clientset.Interface {
 	return hi.clientSet
+}
+
+func (hi *handleImpl) PrometheusClient() promapi.Client {
+	return hi.prometheusClient
 }
 
 func (hi *handleImpl) MetricsCollector() *metricscollector.MetricsCollector {
@@ -131,6 +137,7 @@ type Option func(*handleImplOpts)
 
 type handleImplOpts struct {
 	clientSet                 clientset.Interface
+	prometheusClient          promapi.Client
 	sharedInformerFactory     informers.SharedInformerFactory
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	podEvictor                *evictions.PodEvictor
@@ -141,6 +148,13 @@ type handleImplOpts struct {
 func WithClientSet(clientSet clientset.Interface) Option {
 	return func(o *handleImplOpts) {
 		o.clientSet = clientSet
+	}
+}
+
+// WithPrometheusClient sets Prometheus client for the scheduling frameworkImpl.
+func WithPrometheusClient(prometheusClient promapi.Client) Option {
+	return func(o *handleImplOpts) {
+		o.prometheusClient = prometheusClient
 	}
 }
 
@@ -267,6 +281,7 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 			podEvictor:  hOpts.podEvictor,
 		},
 		metricsCollector: hOpts.metricsCollector,
+		prometheusClient: hOpts.prometheusClient,
 	}
 
 	pluginNames := append(config.Plugins.Deschedule.Enabled, config.Plugins.Balance.Enabled...)
