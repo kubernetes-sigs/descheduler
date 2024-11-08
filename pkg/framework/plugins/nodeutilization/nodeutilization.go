@@ -368,8 +368,22 @@ func evictPods(
 // sortNodesByUsage sorts nodes based on usage according to the given plugin.
 func sortNodesByUsage(nodes []NodeInfo, ascending bool) {
 	sort.Slice(nodes, func(i, j int) bool {
-		ti := nodes[i].usage[v1.ResourceMemory].Value() + nodes[i].usage[v1.ResourceCPU].MilliValue() + nodes[i].usage[v1.ResourcePods].Value()
-		tj := nodes[j].usage[v1.ResourceMemory].Value() + nodes[j].usage[v1.ResourceCPU].MilliValue() + nodes[j].usage[v1.ResourcePods].Value()
+		ti := resource.NewQuantity(0, resource.DecimalSI).Value()
+		tj := resource.NewQuantity(0, resource.DecimalSI).Value()
+		for resourceName := range nodes[i].usage {
+			if resourceName == v1.ResourceCPU {
+				ti += nodes[i].usage[resourceName].MilliValue()
+			} else {
+				ti += nodes[i].usage[resourceName].Value()
+			}
+		}
+		for resourceName := range nodes[j].usage {
+			if resourceName == v1.ResourceCPU {
+				tj += nodes[j].usage[resourceName].MilliValue()
+			} else {
+				tj += nodes[j].usage[resourceName].Value()
+			}
+		}
 
 		// extended resources
 		for name := range nodes[i].usage {
