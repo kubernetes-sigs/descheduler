@@ -33,9 +33,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/watch"
-	apiserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/server/mux"
-	restclient "k8s.io/client-go/rest"
 	"k8s.io/component-base/featuregate"
 	"k8s.io/component-base/logs"
 	logsapi "k8s.io/component-base/logs/api/v1"
@@ -67,15 +65,10 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// loopbackClientConfig is a config for a privileged loopback connection
-			var loopbackClientConfig *restclient.Config
-			var secureServing *apiserver.SecureServingInfo
-			if err := s.SecureServing.ApplyTo(&secureServing, &loopbackClientConfig); err != nil {
-				klog.ErrorS(err, "failed to apply secure server configuration")
+			if err = s.Apply(); err != nil {
+				klog.ErrorS(err, "failed to apply")
 				return err
 			}
-
-			secureServing.DisableHTTP2 = !s.EnableHTTP2
 
 			ctx, done := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 
@@ -86,7 +79,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 
 			healthz.InstallHandler(pathRecorderMux, healthz.NamedCheck("Descheduler", healthz.PingHealthz.Check))
 
-			stoppedCh, _, err := secureServing.Serve(pathRecorderMux, 0, ctx.Done())
+			stoppedCh, _, err := s.SecureServingInfo.Serve(pathRecorderMux, 0, ctx.Done())
 			if err != nil {
 				klog.Fatalf("failed to start secure server: %v", err)
 				return err
