@@ -240,10 +240,9 @@ func evictPodsFromSourceNodes(
 	continueEviction continueEvictionCond,
 ) {
 	// upper bound on total number of pods/cpu/memory and optional extended resources to be moved
-	totalAvailableUsage := map[v1.ResourceName]*resource.Quantity{
-		v1.ResourcePods:   {},
-		v1.ResourceCPU:    {},
-		v1.ResourceMemory: {},
+	totalAvailableUsage := map[v1.ResourceName]*resource.Quantity{}
+	for _, resourceName := range resourceNames {
+		totalAvailableUsage[resourceName] = &resource.Quantity{}
 	}
 
 	taintsOfDestinationNodes := make(map[string][]v1.Taint, len(destinationNodes))
@@ -260,10 +259,15 @@ func evictPodsFromSourceNodes(
 	}
 
 	// log message in one line
-	keysAndValues := []interface{}{
-		"CPU", totalAvailableUsage[v1.ResourceCPU].MilliValue(),
-		"Mem", totalAvailableUsage[v1.ResourceMemory].Value(),
-		"Pods", totalAvailableUsage[v1.ResourcePods].Value(),
+	keysAndValues := []interface{}{}
+	if quantity, exists := totalAvailableUsage[v1.ResourceCPU]; exists {
+		keysAndValues = append(keysAndValues, "CPU", quantity.MilliValue())
+	}
+	if quantity, exists := totalAvailableUsage[v1.ResourceMemory]; exists {
+		keysAndValues = append(keysAndValues, "Mem", quantity.Value())
+	}
+	if quantity, exists := totalAvailableUsage[v1.ResourcePods]; exists {
+		keysAndValues = append(keysAndValues, "Pods", quantity.Value())
 	}
 	for name := range totalAvailableUsage {
 		if !node.IsBasicResource(name) {
@@ -349,9 +353,15 @@ func evictPods(
 
 				keysAndValues := []interface{}{
 					"node", nodeInfo.node.Name,
-					"CPU", nodeInfo.usage[v1.ResourceCPU].MilliValue(),
-					"Mem", nodeInfo.usage[v1.ResourceMemory].Value(),
-					"Pods", nodeInfo.usage[v1.ResourcePods].Value(),
+				}
+				if quantity, exists := nodeInfo.usage[v1.ResourceCPU]; exists {
+					keysAndValues = append(keysAndValues, "CPU", quantity.MilliValue())
+				}
+				if quantity, exists := nodeInfo.usage[v1.ResourceMemory]; exists {
+					keysAndValues = append(keysAndValues, "Mem", quantity.Value())
+				}
+				if quantity, exists := nodeInfo.usage[v1.ResourcePods]; exists {
+					keysAndValues = append(keysAndValues, "Pods", quantity.Value())
 				}
 				for name := range totalAvailableUsage {
 					if !nodeutil.IsBasicResource(name) {
