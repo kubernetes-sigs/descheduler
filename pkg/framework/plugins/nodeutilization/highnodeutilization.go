@@ -94,9 +94,22 @@ func (h *HighNodeUtilization) Name() string {
 
 // Balance extension point implementation for the plugin
 func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	nodeUsage, err := getNodeUsage(nodes, h.resourceNames, h.handle.GetPodsAssignedToNodeFunc())
+	if err != nil {
+		return &frameworktypes.Status{
+			Err: fmt.Errorf("error getting node usage: %v", err),
+		}
+	}
+	thresholds, err := getNodeThresholds(nodes, h.args.Thresholds, h.targetThresholds, h.resourceNames, h.handle.GetPodsAssignedToNodeFunc(), false)
+	if err != nil {
+		return &frameworktypes.Status{
+			Err: fmt.Errorf("error getting node thresholds: %v", err),
+		}
+	}
+
 	sourceNodes, highNodes := classifyNodes(
-		getNodeUsage(nodes, h.resourceNames, h.handle.GetPodsAssignedToNodeFunc()),
-		getNodeThresholds(nodes, h.args.Thresholds, h.targetThresholds, h.resourceNames, h.handle.GetPodsAssignedToNodeFunc(), false),
+		nodeUsage,
+		thresholds,
 		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			return isNodeWithLowUtilization(usage, threshold.lowResourceThreshold)
 		},
