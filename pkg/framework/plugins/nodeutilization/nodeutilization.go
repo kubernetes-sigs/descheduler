@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	"sigs.k8s.io/descheduler/pkg/descheduler/node"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -78,18 +77,14 @@ func getNodeThresholds(
 	nodes []*v1.Node,
 	lowThreshold, highThreshold api.ResourceThresholds,
 	resourceNames []v1.ResourceName,
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 	useDeviationThresholds bool,
-) (map[string]NodeThresholds, error) {
+	usageClient usageClient,
+) map[string]NodeThresholds {
 	nodeThresholdsMap := map[string]NodeThresholds{}
 
 	averageResourceUsagePercent := api.ResourceThresholds{}
 	if useDeviationThresholds {
-		usage, err := averageNodeBasicresources(nodes, getPodsAssignedToNode, resourceNames)
-		if err != nil {
-			return nil, err
-		}
-		averageResourceUsagePercent = usage
+		averageResourceUsagePercent = averageNodeBasicresources(nodes, usageClient)
 	}
 
 	for _, node := range nodes {
@@ -120,39 +115,24 @@ func getNodeThresholds(
 		}
 
 	}
-	return nodeThresholdsMap, nil
+	return nodeThresholdsMap
 }
 
 func getNodeUsage(
 	nodes []*v1.Node,
-	resourceNames []v1.ResourceName,
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
-) ([]NodeUsage, error) {
+	usageClient usageClient,
+) []NodeUsage {
 	var nodeUsageList []NodeUsage
 
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, nil)
-		if err != nil {
-			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
-			continue
-		}
-
-		nodeUsage, err := nodeutil.NodeUtilization(pods, resourceNames, func(pod *v1.Pod) (v1.ResourceList, error) {
-			req, _ := utils.PodRequestsAndLimits(pod)
-			return req, nil
-		})
-		if err != nil {
-			return nil, err
-		}
-
 		nodeUsageList = append(nodeUsageList, NodeUsage{
 			node:    node,
-			usage:   nodeUsage,
-			allPods: pods,
+			usage:   usageClient.nodeUtilization(node.Name),
+			allPods: usageClient.pods(node.Name),
 		})
 	}
 
-	return nodeUsageList, nil
+	return nodeUsageList
 }
 
 func resourceThreshold(nodeCapacity v1.ResourceList, resourceName v1.ResourceName, threshold api.Percentage) *resource.Quantity {
@@ -239,7 +219,7 @@ func usageToKeysAndValues(usage map[v1.ResourceName]*resource.Quantity) []interf
 		keysAndValues = append(keysAndValues, "Pods", quantity.Value())
 	}
 	for name := range usage {
-		if !node.IsBasicResource(name) {
+		if !nodeutil.IsBasicResource(name) {
 			keysAndValues = append(keysAndValues, string(name), usage[name].Value())
 		}
 	}
@@ -258,6 +238,7 @@ func evictPodsFromSourceNodes(
 	podFilter func(pod *v1.Pod) bool,
 	resourceNames []v1.ResourceName,
 	continueEviction continueEvictionCond,
+	usageClient usageClient,
 ) {
 	// upper bound on total number of pods/cpu/memory and optional extended resources to be moved
 	totalAvailableUsage := map[v1.ResourceName]*resource.Quantity{}
@@ -270,6 +251,10 @@ func evictPodsFromSourceNodes(
 		taintsOfDestinationNodes[node.node.Name] = node.node.Spec.Taints
 
 		for _, name := range resourceNames {
+			if _, exists := node.usage[name]; !exists {
+				klog.Errorf("unable to find %q resource in node's %q usage, terminating eviction", name, node.node.Name)
+				return
+			}
 			if _, ok := totalAvailableUsage[name]; !ok {
 				totalAvailableUsage[name] = resource.NewQuantity(0, resource.DecimalSI)
 			}
@@ -295,7 +280,7 @@ func evictPodsFromSourceNodes(
 		klog.V(1).InfoS("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
-		err := evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction)
+		err := evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction, usageClient)
 		if err != nil {
 			switch err.(type) {
 			case *evictions.EvictionTotalLimitError:
@@ -316,6 +301,7 @@ func evictPods(
 	podEvictor frameworktypes.Evictor,
 	evictOptions evictions.EvictOptions,
 	continueEviction continueEvictionCond,
+	usageClient usageClient,
 ) error {
 	var excludedNamespaces sets.Set[string]
 	if evictableNamespaces != nil {
@@ -341,6 +327,11 @@ func evictPods(
 			if !preEvictionFilterWithOptions(pod) {
 				continue
 			}
+			podUsage, err := usageClient.podUsage(pod)
+			if err != nil {
+				klog.Errorf("unable to get pod usage for %v/%v: %v", pod.Namespace, pod.Name, err)
+				continue
+			}
 			err = podEvictor.Evict(ctx, pod, evictOptions)
 			if err == nil {
 				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
@@ -350,9 +341,8 @@ func evictPods(
 						nodeInfo.usage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
 						totalAvailableUsage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
 					} else {
-						quantity := utils.GetResourceRequestQuantity(pod, name)
-						nodeInfo.usage[name].Sub(quantity)
-						totalAvailableUsage[name].Sub(quantity)
+						nodeInfo.usage[name].Sub(*podUsage[name])
+						totalAvailableUsage[name].Sub(*podUsage[name])
 					}
 				}
 
@@ -456,24 +446,12 @@ func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*
 	return nonRemovablePods, removablePods
 }
 
-func averageNodeBasicresources(nodes []*v1.Node, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, resourceNames []v1.ResourceName) (api.ResourceThresholds, error) {
+func averageNodeBasicresources(nodes []*v1.Node, usageClient usageClient) api.ResourceThresholds {
 	total := api.ResourceThresholds{}
 	average := api.ResourceThresholds{}
 	numberOfNodes := len(nodes)
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, nil)
-		if err != nil {
-			numberOfNodes--
-			continue
-		}
-		usage, err := nodeutil.NodeUtilization(pods, resourceNames, func(pod *v1.Pod) (v1.ResourceList, error) {
-			req, _ := utils.PodRequestsAndLimits(pod)
-			return req, nil
-		})
-		if err != nil {
-			return nil, err
-		}
-
+		usage := usageClient.nodeUtilization(node.Name)
 		nodeCapacity := node.Status.Capacity
 		if len(node.Status.Allocatable) > 0 {
 			nodeCapacity = node.Status.Allocatable
@@ -490,5 +468,5 @@ func averageNodeBasicresources(nodes []*v1.Node, getPodsAssignedToNode podutil.G
 	for resource, value := range total {
 		average[resource] = value / api.Percentage(numberOfNodes)
 	}
-	return average, nil
+	return average
 }
