@@ -80,12 +80,16 @@ func getNodeThresholds(
 	resourceNames []v1.ResourceName,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 	useDeviationThresholds bool,
-) map[string]NodeThresholds {
+) (map[string]NodeThresholds, error) {
 	nodeThresholdsMap := map[string]NodeThresholds{}
 
 	averageResourceUsagePercent := api.ResourceThresholds{}
 	if useDeviationThresholds {
-		averageResourceUsagePercent = averageNodeBasicresources(nodes, getPodsAssignedToNode, resourceNames)
+		usage, err := averageNodeBasicresources(nodes, getPodsAssignedToNode, resourceNames)
+		if err != nil {
+			return nil, err
+		}
+		averageResourceUsagePercent = usage
 	}
 
 	for _, node := range nodes {
@@ -116,14 +120,14 @@ func getNodeThresholds(
 		}
 
 	}
-	return nodeThresholdsMap
+	return nodeThresholdsMap, nil
 }
 
 func getNodeUsage(
 	nodes []*v1.Node,
 	resourceNames []v1.ResourceName,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
-) []NodeUsage {
+) ([]NodeUsage, error) {
 	var nodeUsageList []NodeUsage
 
 	for _, node := range nodes {
@@ -133,14 +137,22 @@ func getNodeUsage(
 			continue
 		}
 
+		nodeUsage, err := nodeutil.NodeUtilization(pods, resourceNames, func(pod *v1.Pod) (v1.ResourceList, error) {
+			req, _ := utils.PodRequestsAndLimits(pod)
+			return req, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+
 		nodeUsageList = append(nodeUsageList, NodeUsage{
 			node:    node,
-			usage:   nodeutil.NodeUtilization(pods, resourceNames),
+			usage:   nodeUsage,
 			allPods: pods,
 		})
 	}
 
-	return nodeUsageList
+	return nodeUsageList, nil
 }
 
 func resourceThreshold(nodeCapacity v1.ResourceList, resourceName v1.ResourceName, threshold api.Percentage) *resource.Quantity {
@@ -443,7 +455,7 @@ func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*
 	return nonRemovablePods, removablePods
 }
 
-func averageNodeBasicresources(nodes []*v1.Node, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, resourceNames []v1.ResourceName) api.ResourceThresholds {
+func averageNodeBasicresources(nodes []*v1.Node, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, resourceNames []v1.ResourceName) (api.ResourceThresholds, error) {
 	total := api.ResourceThresholds{}
 	average := api.ResourceThresholds{}
 	numberOfNodes := len(nodes)
@@ -453,7 +465,14 @@ func averageNodeBasicresources(nodes []*v1.Node, getPodsAssignedToNode podutil.G
 			numberOfNodes--
 			continue
 		}
-		usage := nodeutil.NodeUtilization(pods, resourceNames)
+		usage, err := nodeutil.NodeUtilization(pods, resourceNames, func(pod *v1.Pod) (v1.ResourceList, error) {
+			req, _ := utils.PodRequestsAndLimits(pod)
+			return req, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+
 		nodeCapacity := node.Status.Capacity
 		if len(node.Status.Allocatable) > 0 {
 			nodeCapacity = node.Status.Allocatable
@@ -470,5 +489,5 @@ func averageNodeBasicresources(nodes []*v1.Node, getPodsAssignedToNode podutil.G
 	for resource, value := range total {
 		average[resource] = value / api.Percentage(numberOfNodes)
 	}
-	return average
+	return average, nil
 }

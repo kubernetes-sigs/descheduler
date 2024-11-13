@@ -102,9 +102,22 @@ func (l *LowNodeUtilization) Name() string {
 
 // Balance extension point implementation for the plugin
 func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	nodeUsage, err := getNodeUsage(nodes, l.resourceNames, l.handle.GetPodsAssignedToNodeFunc())
+	if err != nil {
+		return &frameworktypes.Status{
+			Err: fmt.Errorf("error getting node usage: %v", err),
+		}
+	}
+	thresholds, err := getNodeThresholds(nodes, l.args.Thresholds, l.args.TargetThresholds, l.resourceNames, l.handle.GetPodsAssignedToNodeFunc(), l.args.UseDeviationThresholds)
+	if err != nil {
+		return &frameworktypes.Status{
+			Err: fmt.Errorf("error getting node thresholds: %v", err),
+		}
+	}
+
 	lowNodes, sourceNodes := classifyNodes(
-		getNodeUsage(nodes, l.resourceNames, l.handle.GetPodsAssignedToNodeFunc()),
-		getNodeThresholds(nodes, l.args.Thresholds, l.args.TargetThresholds, l.resourceNames, l.handle.GetPodsAssignedToNodeFunc(), l.args.UseDeviationThresholds),
+		nodeUsage,
+		thresholds,
 		// The node has to be schedulable (to be able to move workload there)
 		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			if nodeutil.IsNodeUnschedulable(node) {
