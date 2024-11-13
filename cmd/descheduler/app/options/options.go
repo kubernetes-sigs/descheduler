@@ -22,10 +22,14 @@ import (
 
 	"github.com/spf13/pflag"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apiserver "k8s.io/apiserver/pkg/server"
 	apiserveroptions "k8s.io/apiserver/pkg/server/options"
 	clientset "k8s.io/client-go/kubernetes"
+	restclient "k8s.io/client-go/rest"
 	componentbaseconfig "k8s.io/component-base/config"
 	componentbaseoptions "k8s.io/component-base/config/options"
+	"k8s.io/klog/v2"
+
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
 	deschedulerscheme "sigs.k8s.io/descheduler/pkg/descheduler/scheme"
@@ -40,11 +44,12 @@ const (
 type DeschedulerServer struct {
 	componentconfig.DeschedulerConfiguration
 
-	Client         clientset.Interface
-	EventClient    clientset.Interface
-	SecureServing  *apiserveroptions.SecureServingOptionsWithLoopback
-	DisableMetrics bool
-	EnableHTTP2    bool
+	Client            clientset.Interface
+	EventClient       clientset.Interface
+	SecureServing     *apiserveroptions.SecureServingOptionsWithLoopback
+	SecureServingInfo *apiserver.SecureServingInfo
+	DisableMetrics    bool
+	EnableHTTP2       bool
 }
 
 // NewDeschedulerServer creates a new DeschedulerServer with default parameters
@@ -106,4 +111,19 @@ func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	componentbaseoptions.BindLeaderElectionFlags(&rs.LeaderElection, fs)
 
 	rs.SecureServing.AddFlags(fs)
+}
+
+func (rs *DeschedulerServer) Apply() error {
+	// loopbackClientConfig is a config for a privileged loopback connection
+	var loopbackClientConfig *restclient.Config
+	var secureServing *apiserver.SecureServingInfo
+	if err := rs.SecureServing.ApplyTo(&secureServing, &loopbackClientConfig); err != nil {
+		klog.ErrorS(err, "failed to apply secure server configuration")
+		return err
+	}
+
+	secureServing.DisableHTTP2 = !rs.EnableHTTP2
+	rs.SecureServingInfo = secureServing
+
+	return nil
 }
