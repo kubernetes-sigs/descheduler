@@ -385,14 +385,6 @@ func sortNodesByUsage(nodes []NodeInfo, ascending bool) {
 			}
 		}
 
-		// extended resources
-		for name := range nodes[i].usage {
-			if !nodeutil.IsBasicResource(name) {
-				ti = ti + nodes[i].usage[name].Value()
-				tj = tj + nodes[j].usage[name].Value()
-			}
-		}
-
 		// Return ascending order for HighNodeUtilization plugin
 		if ascending {
 			return ti < tj
