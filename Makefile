@@ -26,7 +26,7 @@ ARCHS = amd64 arm arm64
 
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitbranch=${BRANCH} -X ${LDFLAG_LOCATION}.gitsha1=${SHA1}"
 
-GOLANGCI_VERSION := v1.58.1
+GOLANGCI_VERSION := v1.62.0
 HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint 2> /dev/null)
 
 GOFUMPT_VERSION := v0.4.0
@@ -134,7 +134,7 @@ gen:
 	./hack/update-docs.sh
 
 gen-docker:
-	$(CONTAINER_ENGINE) run --entrypoint make -it -v $(CURRENT_DIR):/go/src/sigs.k8s.io/descheduler -w /go/src/sigs.k8s.io/descheduler golang:1.22.3 gen
+	$(CONTAINER_ENGINE) run --entrypoint make -it -v $(CURRENT_DIR):/go/src/sigs.k8s.io/descheduler -w /go/src/sigs.k8s.io/descheduler golang:1.22.7 gen
 
 verify-gen:
 	./hack/verify-conversions.sh

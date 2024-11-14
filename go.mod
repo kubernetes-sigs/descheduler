@@ -1,6 +1,6 @@
 module sigs.k8s.io/descheduler
 
-go 1.22.3
+go 1.22.7
 
 require (
 	github.com/client9/misspell v0.3.4
