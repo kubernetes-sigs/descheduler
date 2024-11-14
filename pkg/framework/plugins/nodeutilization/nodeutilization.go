@@ -226,6 +226,26 @@ func classifyNodes(
 	return lowNodes, highNodes
 }
 
+func usageToKeysAndValues(usage map[v1.ResourceName]*resource.Quantity) []interface{} {
+	// log message in one line
+	keysAndValues := []interface{}{}
+	if quantity, exists := usage[v1.ResourceCPU]; exists {
+		keysAndValues = append(keysAndValues, "CPU", quantity.MilliValue())
+	}
+	if quantity, exists := usage[v1.ResourceMemory]; exists {
+		keysAndValues = append(keysAndValues, "Mem", quantity.Value())
+	}
+	if quantity, exists := usage[v1.ResourcePods]; exists {
+		keysAndValues = append(keysAndValues, "Pods", quantity.Value())
+	}
+	for name := range usage {
+		if !node.IsBasicResource(name) {
+			keysAndValues = append(keysAndValues, string(name), usage[name].Value())
+		}
+	}
+	return keysAndValues
+}
+
 // evictPodsFromSourceNodes evicts pods based on priority, if all the pods on the node have priority, if not
 // evicts them based on QoS as fallback option.
 // TODO: @ravig Break this function into smaller functions.
@@ -259,22 +279,7 @@ func evictPodsFromSourceNodes(
 	}
 
 	// log message in one line
-	keysAndValues := []interface{}{}
-	if quantity, exists := totalAvailableUsage[v1.ResourceCPU]; exists {
-		keysAndValues = append(keysAndValues, "CPU", quantity.MilliValue())
-	}
-	if quantity, exists := totalAvailableUsage[v1.ResourceMemory]; exists {
-		keysAndValues = append(keysAndValues, "Mem", quantity.Value())
-	}
-	if quantity, exists := totalAvailableUsage[v1.ResourcePods]; exists {
-		keysAndValues = append(keysAndValues, "Pods", quantity.Value())
-	}
-	for name := range totalAvailableUsage {
-		if !node.IsBasicResource(name) {
-			keysAndValues = append(keysAndValues, string(name), totalAvailableUsage[name].Value())
-		}
-	}
-	klog.V(1).InfoS("Total capacity to be moved", keysAndValues...)
+	klog.V(1).InfoS("Total capacity to be moved", usageToKeysAndValues(totalAvailableUsage)...)
 
 	for _, node := range sourceNodes {
 		klog.V(3).InfoS("Evicting pods from node", "node", klog.KObj(node.node), "usage", node.usage)
@@ -354,21 +359,7 @@ func evictPods(
 				keysAndValues := []interface{}{
 					"node", nodeInfo.node.Name,
 				}
-				if quantity, exists := nodeInfo.usage[v1.ResourceCPU]; exists {
-					keysAndValues = append(keysAndValues, "CPU", quantity.MilliValue())
-				}
-				if quantity, exists := nodeInfo.usage[v1.ResourceMemory]; exists {
-					keysAndValues = append(keysAndValues, "Mem", quantity.Value())
-				}
-				if quantity, exists := nodeInfo.usage[v1.ResourcePods]; exists {
-					keysAndValues = append(keysAndValues, "Pods", quantity.Value())
-				}
-				for name := range totalAvailableUsage {
-					if !nodeutil.IsBasicResource(name) {
-						keysAndValues = append(keysAndValues, string(name), totalAvailableUsage[name].Value())
-					}
-				}
-
+				keysAndValues = append(keysAndValues, usageToKeysAndValues(nodeInfo.usage)...)
 				klog.V(3).InfoS("Updated node usage", keysAndValues...)
 				// check if pods can be still evicted
 				if !continueEviction(nodeInfo, totalAvailableUsage) {
