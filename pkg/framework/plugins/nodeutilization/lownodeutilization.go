@@ -43,6 +43,7 @@ type LowNodeUtilization struct {
 	underutilizationCriteria []interface{}
 	overutilizationCriteria  []interface{}
 	resourceNames            []v1.ResourceName
+	usageClient              usageClient
 }
 
 var _ frameworktypes.BalancePlugin = &LowNodeUtilization{}
@@ -85,13 +86,16 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
 	}
 
+	resourceNames := getResourceNames(lowNodeUtilizationArgsArgs.Thresholds)
+
 	return &LowNodeUtilization{
 		handle:                   handle,
 		args:                     lowNodeUtilizationArgsArgs,
 		underutilizationCriteria: underutilizationCriteria,
 		overutilizationCriteria:  overutilizationCriteria,
-		resourceNames:            getResourceNames(lowNodeUtilizationArgsArgs.Thresholds),
+		resourceNames:            resourceNames,
 		podFilter:                podFilter,
+		usageClient:              newRequestedUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc()),
 	}, nil
 }
 
@@ -102,22 +106,15 @@ func (l *LowNodeUtilization) Name() string {
 
 // Balance extension point implementation for the plugin
 func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
-	nodeUsage, err := getNodeUsage(nodes, l.resourceNames, l.handle.GetPodsAssignedToNodeFunc())
-	if err != nil {
+	if err := l.usageClient.sync(nodes); err != nil {
 		return &frameworktypes.Status{
 			Err: fmt.Errorf("error getting node usage: %v", err),
 		}
 	}
-	thresholds, err := getNodeThresholds(nodes, l.args.Thresholds, l.args.TargetThresholds, l.resourceNames, l.handle.GetPodsAssignedToNodeFunc(), l.args.UseDeviationThresholds)
-	if err != nil {
-		return &frameworktypes.Status{
-			Err: fmt.Errorf("error getting node thresholds: %v", err),
-		}
-	}
 
 	lowNodes, sourceNodes := classifyNodes(
-		nodeUsage,
-		thresholds,
+		getNodeUsage(nodes, l.usageClient),
+		getNodeThresholds(nodes, l.args.Thresholds, l.args.TargetThresholds, l.resourceNames, l.args.UseDeviationThresholds, l.usageClient),
 		// The node has to be schedulable (to be able to move workload there)
 		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			if nodeutil.IsNodeUnschedulable(node) {
@@ -185,7 +182,9 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 		evictions.EvictOptions{StrategyName: LowNodeUtilizationPluginName},
 		l.podFilter,
 		l.resourceNames,
-		continueEvictionCond)
+		continueEvictionCond,
+		l.usageClient,
+	)
 
 	return nil
 }
