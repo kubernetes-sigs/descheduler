@@ -56,6 +56,11 @@ func (in *DeschedulerPolicy) DeepCopyInto(out *DeschedulerPolicy) {
 		*out = new(uint)
 		**out = **in
 	}
+	if in.GracePeriodSeconds != nil {
+		in, out := &in.GracePeriodSeconds, &out.GracePeriodSeconds
+		*out = new(int64)
+		**out = **in
+	}
 	return
 }
 
