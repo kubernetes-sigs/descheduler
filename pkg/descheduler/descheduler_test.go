@@ -3,14 +3,11 @@ package descheduler
 import (
 	"context"
 	"fmt"
-	"math/rand"
-	"net/http"
 	"testing"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	apiversion "k8s.io/apimachinery/pkg/version"
@@ -18,13 +15,10 @@ import (
 	"k8s.io/client-go/informers"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
-	"k8s.io/component-base/featuregate"
 	"k8s.io/klog/v2"
 	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/api"
-	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	"sigs.k8s.io/descheduler/pkg/features"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
@@ -33,26 +27,6 @@ import (
 	deschedulerversion "sigs.k8s.io/descheduler/pkg/version"
 	"sigs.k8s.io/descheduler/test"
 )
-
-var (
-	podEvictionError     = fmt.Errorf("PodEvictionError")
-	tooManyRequestsError = &apierrors.StatusError{
-		ErrStatus: metav1.Status{
-			Status:  metav1.StatusFailure,
-			Code:    http.StatusTooManyRequests,
-			Reason:  metav1.StatusReasonTooManyRequests,
-			Message: "admission webhook \"virt-launcher-eviction-interceptor.kubevirt.io\" denied the request: Eviction triggered evacuation of VMI",
-		},
-	}
-)
-
-func initFeatureGates() featuregate.FeatureGate {
-	featureGates := featuregate.NewFeatureGate()
-	featureGates.Add(map[featuregate.Feature]featuregate.FeatureSpec{
-		features.EvictionsInBackground: {Default: false, PreRelease: featuregate.Alpha},
-	})
-	return featureGates
-}
 
 func initPluginRegistry() {
 	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
@@ -125,7 +99,7 @@ func removeDuplicatesPolicy() *api.DeschedulerPolicy {
 	}
 }
 
-func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate.FeatureGate, internalDeschedulerPolicy *api.DeschedulerPolicy, objects ...runtime.Object) (*options.DeschedulerServer, *descheduler, *fakeclientset.Clientset) {
+func initDescheduler(t *testing.T, ctx context.Context, internalDeschedulerPolicy *api.DeschedulerPolicy, objects ...runtime.Object) (*options.DeschedulerServer, *descheduler, *fakeclientset.Clientset) {
 	client := fakeclientset.NewSimpleClientset(objects...)
 	eventClient := fakeclientset.NewSimpleClientset(objects...)
 
@@ -135,12 +109,11 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 	}
 	rs.Client = client
 	rs.EventClient = eventClient
-	rs.DefaultFeatureGates = featureGates
 
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
 
-	descheduler, err := newDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", eventRecorder, sharedInformerFactory)
+	descheduler, err := newDescheduler(rs, internalDeschedulerPolicy, "v1", eventRecorder, sharedInformerFactory)
 	if err != nil {
 		eventBroadcaster.Shutdown()
 		t.Fatalf("Unable to create a descheduler instance: %v", err)
@@ -171,7 +144,6 @@ func TestTaintsUpdated(t *testing.T) {
 	}
 	rs.Client = client
 	rs.EventClient = eventClient
-	rs.DefaultFeatureGates = initFeatureGates()
 
 	pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -195,7 +167,7 @@ func TestTaintsUpdated(t *testing.T) {
 	}
 
 	var evictedPods []string
-	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, nil, nil))
+	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods))
 
 	if err := RunDeschedulerStrategies(ctx, rs, removePodsViolatingNodeTaintsPolicy(), "v1"); err != nil {
 		t.Fatalf("Unable to run descheduler strategies: %v", err)
@@ -234,7 +206,6 @@ func TestDuplicate(t *testing.T) {
 	}
 	rs.Client = client
 	rs.EventClient = eventClient
-	rs.DefaultFeatureGates = initFeatureGates()
 
 	pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -246,7 +217,7 @@ func TestDuplicate(t *testing.T) {
 	}
 
 	var evictedPods []string
-	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, nil, nil))
+	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods))
 
 	if err := RunDeschedulerStrategies(ctx, rs, removeDuplicatesPolicy(), "v1"); err != nil {
 		t.Fatalf("Unable to run descheduler strategies: %v", err)
@@ -274,7 +245,6 @@ func TestRootCancel(t *testing.T) {
 	rs.Client = client
 	rs.EventClient = eventClient
 	rs.DeschedulingInterval = 100 * time.Millisecond
-	rs.DefaultFeatureGates = initFeatureGates()
 	errChan := make(chan error, 1)
 	defer close(errChan)
 
@@ -310,7 +280,6 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 	rs.Client = client
 	rs.EventClient = eventClient
 	rs.DeschedulingInterval = 0
-	rs.DefaultFeatureGates = initFeatureGates()
 	errChan := make(chan error, 1)
 	defer close(errChan)
 
@@ -389,7 +358,7 @@ func TestValidateVersionCompatibility(t *testing.T) {
 	}
 }
 
-func podEvictionReactionTestingFnc(evictedPods *[]string, isEvictionsInBackground func(podName string) bool, evictionErr error) func(action core.Action) (bool, runtime.Object, error) {
+func podEvictionReactionTestingFnc(evictedPods *[]string) func(action core.Action) (bool, runtime.Object, error) {
 	return func(action core.Action) (bool, runtime.Object, error) {
 		if action.GetSubresource() == "eviction" {
 			createAct, matched := action.(core.CreateActionImpl)
@@ -397,14 +366,7 @@ func podEvictionReactionTestingFnc(evictedPods *[]string, isEvictionsInBackgroun
 				return false, nil, fmt.Errorf("unable to convert action to core.CreateActionImpl")
 			}
 			if eviction, matched := createAct.Object.(*policy.Eviction); matched {
-				if isEvictionsInBackground != nil && isEvictionsInBackground(eviction.GetName()) {
-					return true, nil, tooManyRequestsError
-				}
-				if evictionErr != nil {
-					return true, nil, evictionErr
-				}
 				*evictedPods = append(*evictedPods, eviction.GetName())
-				return true, nil, nil
 			}
 		}
 		return false, nil, nil // fallback to the default reactor
@@ -440,15 +402,15 @@ func TestPodEvictorReset(t *testing.T) {
 
 	internalDeschedulerPolicy := removePodsViolatingNodeTaintsPolicy()
 	ctxCancel, cancel := context.WithCancel(ctx)
-	rs, descheduler, client := initDescheduler(t, ctxCancel, initFeatureGates(), internalDeschedulerPolicy, node1, node2, p1, p2)
+	rs, descheduler, client := initDescheduler(t, ctxCancel, internalDeschedulerPolicy, node1, node2, p1, p2)
 	defer cancel()
 
 	var evictedPods []string
-	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, nil, nil))
+	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods))
 
 	var fakeEvictedPods []string
 	descheduler.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
-		return podEvictionReactionTestingFnc(&fakeEvictedPods, nil, nil)
+		return podEvictionReactionTestingFnc(&fakeEvictedPods)
 	}
 
 	// a single pod eviction expected
@@ -489,138 +451,6 @@ func TestPodEvictorReset(t *testing.T) {
 	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 0 || len(fakeEvictedPods) != 4 {
 		t.Fatalf("Expected (2,0,4) pods evicted, got (%v, %v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
 	}
-}
-
-func checkTotals(t *testing.T, ctx context.Context, descheduler *descheduler, totalEvictionRequests, totalEvicted uint) {
-	if total := descheduler.podEvictor.TotalEvictionRequests(); total != totalEvictionRequests {
-		t.Fatalf("Expected %v total eviction requests, got %v instead", totalEvictionRequests, total)
-	}
-	if total := descheduler.podEvictor.TotalEvicted(); total != totalEvicted {
-		t.Fatalf("Expected %v total evictions, got %v instead", totalEvicted, total)
-	}
-	t.Logf("Total evictions: %v, total eviction requests: %v, total evictions and eviction requests: %v", totalEvicted, totalEvictionRequests, totalEvicted+totalEvictionRequests)
-}
-
-func runDeschedulingCycleAndCheckTotals(t *testing.T, ctx context.Context, nodes []*v1.Node, descheduler *descheduler, totalEvictionRequests, totalEvicted uint) {
-	err := descheduler.runDeschedulerLoop(ctx, nodes)
-	if err != nil {
-		t.Fatalf("Unable to run a descheduling loop: %v", err)
-	}
-	checkTotals(t, ctx, descheduler, totalEvictionRequests, totalEvicted)
-}
-
-func TestEvictionRequestsCache(t *testing.T) {
-	initPluginRegistry()
-
-	ctx := context.Background()
-	node1 := test.BuildTestNode("n1", 2000, 3000, 10, taintNodeNoSchedule)
-	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
-	nodes := []*v1.Node{node1, node2}
-
-	ownerRef1 := test.GetReplicaSetOwnerRefList()
-	updatePod := func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
-		pod.Status.Phase = v1.PodRunning
-	}
-	updatePodWithEvictionInBackground := func(pod *v1.Pod) {
-		updatePod(pod)
-		pod.Annotations = map[string]string{
-			evictions.EvictionRequestAnnotationKey: "",
-		}
-	}
-
-	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, updatePodWithEvictionInBackground)
-	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, updatePodWithEvictionInBackground)
-	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, updatePod)
-	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, updatePod)
-	p5 := test.BuildTestPod("p5", 100, 0, node1.Name, updatePod)
-
-	internalDeschedulerPolicy := removePodsViolatingNodeTaintsPolicy()
-	ctxCancel, cancel := context.WithCancel(ctx)
-	featureGates := featuregate.NewFeatureGate()
-	featureGates.Add(map[featuregate.Feature]featuregate.FeatureSpec{
-		features.EvictionsInBackground: {Default: true, PreRelease: featuregate.Alpha},
-	})
-	_, descheduler, client := initDescheduler(t, ctxCancel, featureGates, internalDeschedulerPolicy, node1, node2, p1, p2, p3, p4)
-	defer cancel()
-
-	var fakeEvictedPods []string
-	descheduler.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
-		return podEvictionReactionTestingFnc(&fakeEvictedPods, nil, podEvictionError)
-	}
-
-	var evictedPods []string
-	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, func(name string) bool { return name == "p1" || name == "p2" }, nil))
-
-	klog.Infof("2 evictions in background expected, 2 normal evictions")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 2, 2)
-
-	klog.Infof("Repeat the same as previously to confirm no more evictions in background are requested")
-	// No evicted pod is actually deleted on purpose so the test can run the descheduling cycle repeatedly
-	// without recreating the pods.
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 2, 2)
-
-	klog.Infof("Scenario: Eviction in background got initiated")
-	p2.Annotations[evictions.EvictionInProgressAnnotationKey] = ""
-	if _, err := client.CoreV1().Pods(p2.Namespace).Update(context.TODO(), p2, metav1.UpdateOptions{}); err != nil {
-		t.Fatalf("unable to update a pod: %v", err)
-	}
-	time.Sleep(100 * time.Millisecond)
-
-	klog.Infof("Repeat the same as previously to confirm no more evictions in background are requested")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 2, 2)
-
-	klog.Infof("Scenario: Another eviction in background got initiated")
-	p1.Annotations[evictions.EvictionInProgressAnnotationKey] = ""
-	if _, err := client.CoreV1().Pods(p1.Namespace).Update(context.TODO(), p1, metav1.UpdateOptions{}); err != nil {
-		t.Fatalf("unable to update a pod: %v", err)
-	}
-	time.Sleep(100 * time.Millisecond)
-
-	klog.Infof("Repeat the same as previously to confirm no more evictions in background are requested")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 2, 2)
-
-	klog.Infof("Scenario: Eviction in background completed")
-	if err := client.CoreV1().Pods(p1.Namespace).Delete(context.TODO(), p1.Name, metav1.DeleteOptions{}); err != nil {
-		t.Fatalf("unable to delete a pod: %v", err)
-	}
-	time.Sleep(100 * time.Millisecond)
-
-	klog.Infof("Check the number of evictions in background decreased")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 1, 2)
-
-	klog.Infof("Scenario: A new pod without eviction in background added")
-	if _, err := client.CoreV1().Pods(p5.Namespace).Create(context.TODO(), p5, metav1.CreateOptions{}); err != nil {
-		t.Fatalf("unable to create a pod: %v", err)
-	}
-	time.Sleep(100 * time.Millisecond)
-
-	klog.Infof("Check the number of evictions increased after running a descheduling cycle")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 1, 3)
-
-	klog.Infof("Scenario: Eviction in background canceled => eviction in progress annotation removed")
-	delete(p2.Annotations, evictions.EvictionInProgressAnnotationKey)
-	if _, err := client.CoreV1().Pods(p2.Namespace).Update(context.TODO(), p2, metav1.UpdateOptions{}); err != nil {
-		t.Fatalf("unable to update a pod: %v", err)
-	}
-	time.Sleep(100 * time.Millisecond)
-
-	klog.Infof("Check the number of evictions in background decreased")
-	checkTotals(t, ctx, descheduler, 0, 3)
-
-	klog.Infof("Scenario: Re-run the descheduling cycle to re-request eviction in background")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 1, 3)
-
-	klog.Infof("Scenario: Eviction in background completed with a pod in completed state")
-	p2.Status.Phase = v1.PodSucceeded
-	if _, err := client.CoreV1().Pods(p2.Namespace).Update(context.TODO(), p2, metav1.UpdateOptions{}); err != nil {
-		t.Fatalf("unable to delete a pod: %v", err)
-	}
-	time.Sleep(100 * time.Millisecond)
-
-	klog.Infof("Check the number of evictions in background decreased")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 0, 3)
 }
 
 func TestDeschedulingLimits(t *testing.T) {
@@ -666,13 +496,6 @@ func TestDeschedulingLimits(t *testing.T) {
 		pod.ObjectMeta.OwnerReferences = ownerRef1
 	}
 
-	updatePodWithEvictionInBackground := func(pod *v1.Pod) {
-		updatePod(pod)
-		pod.Annotations = map[string]string{
-			evictions.EvictionRequestAnnotationKey: "",
-		}
-	}
-
 	for _, tc := range tests {
 		t.Run(tc.description, func(t *testing.T) {
 			ctx := context.Background()
@@ -680,59 +503,39 @@ func TestDeschedulingLimits(t *testing.T) {
 			node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 			nodes := []*v1.Node{node1, node2}
 			ctxCancel, cancel := context.WithCancel(ctx)
-			featureGates := featuregate.NewFeatureGate()
-			featureGates.Add(map[featuregate.Feature]featuregate.FeatureSpec{
-				features.EvictionsInBackground: {Default: true, PreRelease: featuregate.Alpha},
-			})
-			_, descheduler, client := initDescheduler(t, ctxCancel, featureGates, tc.policy, node1, node2)
+			_, descheduler, client := initDescheduler(t, ctxCancel, tc.policy, node1, node2)
 			defer cancel()
 
-			var fakeEvictedPods []string
-			descheduler.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
-				return podEvictionReactionTestingFnc(&fakeEvictedPods, nil, podEvictionError)
-			}
-
-			var evictedPods []string
-			client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, func(name string) bool { return name == "p1" || name == "p2" }, nil))
-
-			rand.Seed(time.Now().UnixNano())
 			pods := []*v1.Pod{
-				test.BuildTestPod("p1", 100, 0, node1.Name, updatePodWithEvictionInBackground),
-				test.BuildTestPod("p2", 100, 0, node1.Name, updatePodWithEvictionInBackground),
+				test.BuildTestPod("p1", 100, 0, node1.Name, updatePod),
+				test.BuildTestPod("p2", 100, 0, node1.Name, updatePod),
 				test.BuildTestPod("p3", 100, 0, node1.Name, updatePod),
 				test.BuildTestPod("p4", 100, 0, node1.Name, updatePod),
 				test.BuildTestPod("p5", 100, 0, node1.Name, updatePod),
 			}
 
-			for i := 0; i < 10; i++ {
-				rand.Shuffle(len(pods), func(i, j int) { pods[i], pods[j] = pods[j], pods[i] })
-				func() {
-					for j := 0; j < 5; j++ {
-						idx := j
-						if _, err := client.CoreV1().Pods(pods[idx].Namespace).Create(context.TODO(), pods[idx], metav1.CreateOptions{}); err != nil {
-							t.Fatalf("unable to create a pod: %v", err)
-						}
-						defer func() {
-							if err := client.CoreV1().Pods(pods[idx].Namespace).Delete(context.TODO(), pods[idx].Name, metav1.DeleteOptions{}); err != nil {
-								t.Fatalf("unable to delete a pod: %v", err)
-							}
-						}()
+			for j := 0; j < 5; j++ {
+				idx := j
+				if _, err := client.CoreV1().Pods(pods[idx].Namespace).Create(context.TODO(), pods[idx], metav1.CreateOptions{}); err != nil {
+					t.Fatalf("unable to create a pod: %v", err)
+				}
+				defer func() {
+					if err := client.CoreV1().Pods(pods[idx].Namespace).Delete(context.TODO(), pods[idx].Name, metav1.DeleteOptions{}); err != nil {
+						t.Fatalf("unable to delete a pod: %v", err)
 					}
-					time.Sleep(100 * time.Millisecond)
-
-					klog.Infof("2 evictions in background expected, 2 normal evictions")
-					err := descheduler.runDeschedulerLoop(ctx, nodes)
-					if err != nil {
-						t.Fatalf("Unable to run a descheduling loop: %v", err)
-					}
-					totalERs := descheduler.podEvictor.TotalEvictionRequests()
-					totalEs := descheduler.podEvictor.TotalEvicted()
-					if totalERs+totalEs > tc.limit {
-						t.Fatalf("Expected %v evictions and eviction requests in total, got %v instead", tc.limit, totalERs+totalEs)
-					}
-					t.Logf("Total evictions and eviction requests: %v (er=%v, e=%v)", totalERs+totalEs, totalERs, totalEs)
 				}()
 			}
+			time.Sleep(100 * time.Millisecond)
+
+			err := descheduler.runDeschedulerLoop(ctx, nodes)
+			if err != nil {
+				t.Fatalf("Unable to run a descheduling loop: %v", err)
+			}
+			totalEs := descheduler.podEvictor.TotalEvicted()
+			if totalEs > tc.limit {
+				t.Fatalf("Expected %v evictions in total, got %v instead", tc.limit, totalEs)
+			}
+			t.Logf("Total evictions: %v", totalEs)
 		})
 	}
 }

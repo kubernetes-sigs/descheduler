@@ -7,12 +7,10 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/events"
-	"k8s.io/component-base/featuregate"
 
 	clientset "k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
-	"sigs.k8s.io/descheduler/pkg/features"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -46,11 +44,7 @@ func InitFrameworkHandle(
 	sharedInformerFactory.Start(ctx.Done())
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 	eventRecorder := &events.FakeRecorder{}
-	featureGates := featuregate.NewFeatureGate()
-	featureGates.Add(map[featuregate.Feature]featuregate.FeatureSpec{
-		features.EvictionsInBackground: {Default: false, PreRelease: featuregate.Alpha},
-	})
-	podEvictor := evictions.NewPodEvictor(ctx, client, eventRecorder, podInformer, featureGates, evictionOptions)
+	podEvictor := evictions.NewPodEvictor(client, eventRecorder, evictionOptions)
 	evictorFilter, err := defaultevictor.New(
 		&defaultEvictorArgs,
 		&frameworkfake.HandleImpl{

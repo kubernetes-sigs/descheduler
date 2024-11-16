@@ -218,7 +218,12 @@ func fitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nod
 		resourceNames = append(resourceNames, name)
 	}
 
-	availableResources, err := nodeAvailableResources(nodeIndexer, node, resourceNames)
+	availableResources, err := nodeAvailableResources(nodeIndexer, node, resourceNames,
+		func(pod *v1.Pod) (v1.ResourceList, error) {
+			req, _ := utils.PodRequestsAndLimits(pod)
+			return req, nil
+		},
+	)
 	if err != nil {
 		return false, err
 	}
@@ -239,12 +244,15 @@ func fitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nod
 }
 
 // nodeAvailableResources returns resources mapped to the quanitity available on the node.
-func nodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node *v1.Node, resourceNames []v1.ResourceName) (map[v1.ResourceName]*resource.Quantity, error) {
+func nodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node *v1.Node, resourceNames []v1.ResourceName, podUtilization podutil.PodUtilizationFnc) (map[v1.ResourceName]*resource.Quantity, error) {
 	podsOnNode, err := podutil.ListPodsOnANode(node.Name, nodeIndexer, nil)
 	if err != nil {
 		return nil, err
 	}
-	nodeUtilization := NodeUtilization(podsOnNode, resourceNames)
+	nodeUtilization, err := NodeUtilization(podsOnNode, resourceNames, podUtilization)
+	if err != nil {
+		return nil, err
+	}
 	remainingResources := map[v1.ResourceName]*resource.Quantity{
 		v1.ResourceCPU:    resource.NewMilliQuantity(node.Status.Allocatable.Cpu().MilliValue()-nodeUtilization[v1.ResourceCPU].MilliValue(), resource.DecimalSI),
 		v1.ResourceMemory: resource.NewQuantity(node.Status.Allocatable.Memory().Value()-nodeUtilization[v1.ResourceMemory].Value(), resource.BinarySI),
@@ -265,31 +273,34 @@ func nodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node 
 }
 
 // NodeUtilization returns the resources requested by the given pods. Only resources supplied in the resourceNames parameter are calculated.
-func NodeUtilization(pods []*v1.Pod, resourceNames []v1.ResourceName) map[v1.ResourceName]*resource.Quantity {
-	totalReqs := map[v1.ResourceName]*resource.Quantity{
+func NodeUtilization(pods []*v1.Pod, resourceNames []v1.ResourceName, podUtilization podutil.PodUtilizationFnc) (map[v1.ResourceName]*resource.Quantity, error) {
+	totalUtilization := map[v1.ResourceName]*resource.Quantity{
 		v1.ResourceCPU:    resource.NewMilliQuantity(0, resource.DecimalSI),
 		v1.ResourceMemory: resource.NewQuantity(0, resource.BinarySI),
 		v1.ResourcePods:   resource.NewQuantity(int64(len(pods)), resource.DecimalSI),
 	}
 	for _, name := range resourceNames {
 		if !IsBasicResource(name) {
-			totalReqs[name] = resource.NewQuantity(0, resource.DecimalSI)
+			totalUtilization[name] = resource.NewQuantity(0, resource.DecimalSI)
 		}
 	}
 
 	for _, pod := range pods {
-		req, _ := utils.PodRequestsAndLimits(pod)
+		podUtil, err := podUtilization(pod)
+		if err != nil {
+			return nil, err
+		}
 		for _, name := range resourceNames {
-			quantity, ok := req[name]
+			quantity, ok := podUtil[name]
 			if ok && name != v1.ResourcePods {
 				// As Quantity.Add says: Add adds the provided y quantity to the current value. If the current value is zero,
 				// the format of the quantity will be updated to the format of y.
-				totalReqs[name].Add(quantity)
+				totalUtilization[name].Add(quantity)
 			}
 		}
 	}
 
-	return totalReqs
+	return totalUtilization, nil
 }
 
 // IsBasicResource checks if resource is basic native.

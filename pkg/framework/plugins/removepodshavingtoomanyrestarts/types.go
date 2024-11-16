@@ -25,9 +25,9 @@ import (
 type RemovePodsHavingTooManyRestartsArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	Namespaces              *api.Namespaces       `json:"namespaces"`
-	LabelSelector           *metav1.LabelSelector `json:"labelSelector"`
-	PodRestartThreshold     int32                 `json:"podRestartThreshold"`
-	IncludingInitContainers bool                  `json:"includingInitContainers"`
-	States                  []string              `json:"states"`
+	Namespaces              *api.Namespaces       `json:"namespaces,omitempty"`
+	LabelSelector           *metav1.LabelSelector `json:"labelSelector,omitempty"`
+	PodRestartThreshold     int32                 `json:"podRestartThreshold,omitempty"`
+	IncludingInitContainers bool                  `json:"includingInitContainers,omitempty"`
+	States                  []string              `json:"states,omitempty"`
 }

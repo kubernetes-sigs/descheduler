@@ -25,82 +25,34 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+func BuildTestNodeInfo(name string, apply func(*NodeInfo)) *NodeInfo {
+	nodeInfo := &NodeInfo{
+		NodeUsage: NodeUsage{
+			node: &v1.Node{
+				Status: v1.NodeStatus{
+					Capacity: v1.ResourceList{
+						v1.ResourceCPU:    *resource.NewMilliQuantity(2000, resource.DecimalSI),
+						v1.ResourceMemory: *resource.NewQuantity(3977868*1024, resource.BinarySI),
+						v1.ResourcePods:   *resource.NewQuantity(29, resource.BinarySI),
+					},
+					Allocatable: v1.ResourceList{
+						v1.ResourceCPU:    *resource.NewMilliQuantity(1930, resource.DecimalSI),
+						v1.ResourceMemory: *resource.NewQuantity(3287692*1024, resource.BinarySI),
+						v1.ResourcePods:   *resource.NewQuantity(29, resource.BinarySI),
+					},
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: name},
+			},
+		},
+	}
+	apply(nodeInfo)
+	return nodeInfo
+}
+
 var (
 	lowPriority      = int32(0)
 	highPriority     = int32(10000)
 	extendedResource = v1.ResourceName("example.com/foo")
-	testNode1        = NodeInfo{
-		NodeUsage: NodeUsage{
-			node: &v1.Node{
-				Status: v1.NodeStatus{
-					Capacity: v1.ResourceList{
-						v1.ResourceCPU:    *resource.NewMilliQuantity(2000, resource.DecimalSI),
-						v1.ResourceMemory: *resource.NewQuantity(3977868*1024, resource.BinarySI),
-						v1.ResourcePods:   *resource.NewQuantity(29, resource.BinarySI),
-					},
-					Allocatable: v1.ResourceList{
-						v1.ResourceCPU:    *resource.NewMilliQuantity(1930, resource.DecimalSI),
-						v1.ResourceMemory: *resource.NewQuantity(3287692*1024, resource.BinarySI),
-						v1.ResourcePods:   *resource.NewQuantity(29, resource.BinarySI),
-					},
-				},
-				ObjectMeta: metav1.ObjectMeta{Name: "node1"},
-			},
-			usage: map[v1.ResourceName]*resource.Quantity{
-				v1.ResourceCPU:    resource.NewMilliQuantity(1730, resource.DecimalSI),
-				v1.ResourceMemory: resource.NewQuantity(3038982964, resource.BinarySI),
-				v1.ResourcePods:   resource.NewQuantity(25, resource.BinarySI),
-			},
-		},
-	}
-	testNode2 = NodeInfo{
-		NodeUsage: NodeUsage{
-			node: &v1.Node{
-				Status: v1.NodeStatus{
-					Capacity: v1.ResourceList{
-						v1.ResourceCPU:    *resource.NewMilliQuantity(2000, resource.DecimalSI),
-						v1.ResourceMemory: *resource.NewQuantity(3977868*1024, resource.BinarySI),
-						v1.ResourcePods:   *resource.NewQuantity(29, resource.BinarySI),
-					},
-					Allocatable: v1.ResourceList{
-						v1.ResourceCPU:    *resource.NewMilliQuantity(1930, resource.DecimalSI),
-						v1.ResourceMemory: *resource.NewQuantity(3287692*1024, resource.BinarySI),
-						v1.ResourcePods:   *resource.NewQuantity(29, resource.BinarySI),
-					},
-				},
-				ObjectMeta: metav1.ObjectMeta{Name: "node2"},
-			},
-			usage: map[v1.ResourceName]*resource.Quantity{
-				v1.ResourceCPU:    resource.NewMilliQuantity(1220, resource.DecimalSI),
-				v1.ResourceMemory: resource.NewQuantity(3038982964, resource.BinarySI),
-				v1.ResourcePods:   resource.NewQuantity(11, resource.BinarySI),
-			},
-		},
-	}
-	testNode3 = NodeInfo{
-		NodeUsage: NodeUsage{
-			node: &v1.Node{
-				Status: v1.NodeStatus{
-					Capacity: v1.ResourceList{
-						v1.ResourceCPU:    *resource.NewMilliQuantity(2000, resource.DecimalSI),
-						v1.ResourceMemory: *resource.NewQuantity(3977868*1024, resource.BinarySI),
-						v1.ResourcePods:   *resource.NewQuantity(29, resource.BinarySI),
-					},
-					Allocatable: v1.ResourceList{
-						v1.ResourceCPU:    *resource.NewMilliQuantity(1930, resource.DecimalSI),
-						v1.ResourceMemory: *resource.NewQuantity(3287692*1024, resource.BinarySI),
-						v1.ResourcePods:   *resource.NewQuantity(29, resource.BinarySI),
-					},
-				},
-				ObjectMeta: metav1.ObjectMeta{Name: "node3"},
-			},
-			usage: map[v1.ResourceName]*resource.Quantity{
-				v1.ResourceCPU:    resource.NewMilliQuantity(1530, resource.DecimalSI),
-				v1.ResourceMemory: resource.NewQuantity(5038982964, resource.BinarySI),
-				v1.ResourcePods:   resource.NewQuantity(20, resource.BinarySI),
-			},
-		},
-	}
 )
 
 func TestResourceUsagePercentages(t *testing.T) {
@@ -141,26 +93,81 @@ func TestResourceUsagePercentages(t *testing.T) {
 	t.Logf("resourceUsagePercentage: %#v\n", resourceUsagePercentage)
 }
 
-func TestSortNodesByUsageDescendingOrder(t *testing.T) {
-	nodeList := []NodeInfo{testNode1, testNode2, testNode3}
-	expectedNodeList := []NodeInfo{testNode3, testNode1, testNode2} // testNode3 has the highest usage
-	sortNodesByUsage(nodeList, false)                               // ascending=false, sort nodes in descending order
-
-	for i := 0; i < len(expectedNodeList); i++ {
-		if nodeList[i].NodeUsage.node.Name != expectedNodeList[i].NodeUsage.node.Name {
-			t.Errorf("Expected %v, got %v", expectedNodeList[i].NodeUsage.node.Name, nodeList[i].NodeUsage.node.Name)
-		}
+func TestSortNodesByUsage(t *testing.T) {
+	tests := []struct {
+		name                  string
+		nodeInfoList          []NodeInfo
+		expectedNodeInfoNames []string
+	}{
+		{
+			name: "cpu memory pods",
+			nodeInfoList: []NodeInfo{
+				*BuildTestNodeInfo("node1", func(nodeInfo *NodeInfo) {
+					nodeInfo.usage = map[v1.ResourceName]*resource.Quantity{
+						v1.ResourceCPU:    resource.NewMilliQuantity(1730, resource.DecimalSI),
+						v1.ResourceMemory: resource.NewQuantity(3038982964, resource.BinarySI),
+						v1.ResourcePods:   resource.NewQuantity(25, resource.BinarySI),
+					}
+				}),
+				*BuildTestNodeInfo("node2", func(nodeInfo *NodeInfo) {
+					nodeInfo.usage = map[v1.ResourceName]*resource.Quantity{
+						v1.ResourceCPU:    resource.NewMilliQuantity(1220, resource.DecimalSI),
+						v1.ResourceMemory: resource.NewQuantity(3038982964, resource.BinarySI),
+						v1.ResourcePods:   resource.NewQuantity(11, resource.BinarySI),
+					}
+				}),
+				*BuildTestNodeInfo("node3", func(nodeInfo *NodeInfo) {
+					nodeInfo.usage = map[v1.ResourceName]*resource.Quantity{
+						v1.ResourceCPU:    resource.NewMilliQuantity(1530, resource.DecimalSI),
+						v1.ResourceMemory: resource.NewQuantity(5038982964, resource.BinarySI),
+						v1.ResourcePods:   resource.NewQuantity(20, resource.BinarySI),
+					}
+				}),
+			},
+			expectedNodeInfoNames: []string{"node3", "node1", "node2"},
+		},
+		{
+			name: "memory",
+			nodeInfoList: []NodeInfo{
+				*BuildTestNodeInfo("node1", func(nodeInfo *NodeInfo) {
+					nodeInfo.usage = map[v1.ResourceName]*resource.Quantity{
+						v1.ResourceMemory: resource.NewQuantity(3038982964, resource.BinarySI),
+					}
+				}),
+				*BuildTestNodeInfo("node2", func(nodeInfo *NodeInfo) {
+					nodeInfo.usage = map[v1.ResourceName]*resource.Quantity{
+						v1.ResourceMemory: resource.NewQuantity(2038982964, resource.BinarySI),
+					}
+				}),
+				*BuildTestNodeInfo("node3", func(nodeInfo *NodeInfo) {
+					nodeInfo.usage = map[v1.ResourceName]*resource.Quantity{
+						v1.ResourceMemory: resource.NewQuantity(5038982964, resource.BinarySI),
+					}
+				}),
+			},
+			expectedNodeInfoNames: []string{"node3", "node1", "node2"},
+		},
 	}
-}
 
-func TestSortNodesByUsageAscendingOrder(t *testing.T) {
-	nodeList := []NodeInfo{testNode1, testNode2, testNode3}
-	expectedNodeList := []NodeInfo{testNode2, testNode1, testNode3}
-	sortNodesByUsage(nodeList, true) // ascending=true, sort nodes in ascending order
+	for _, tc := range tests {
+		t.Run(tc.name+" descending", func(t *testing.T) {
+			sortNodesByUsage(tc.nodeInfoList, false) // ascending=false, sort nodes in descending order
 
-	for i := 0; i < len(expectedNodeList); i++ {
-		if nodeList[i].NodeUsage.node.Name != expectedNodeList[i].NodeUsage.node.Name {
-			t.Errorf("Expected %v, got %v", expectedNodeList[i].NodeUsage.node.Name, nodeList[i].NodeUsage.node.Name)
-		}
+			for i := 0; i < len(tc.nodeInfoList); i++ {
+				if tc.nodeInfoList[i].NodeUsage.node.Name != tc.expectedNodeInfoNames[i] {
+					t.Errorf("Expected %v, got %v", tc.expectedNodeInfoNames[i], tc.nodeInfoList[i].NodeUsage.node.Name)
+				}
+			}
+		})
+		t.Run(tc.name+" ascending", func(t *testing.T) {
+			sortNodesByUsage(tc.nodeInfoList, true) // ascending=true, sort nodes in ascending order
+
+			size := len(tc.nodeInfoList)
+			for i := 0; i < size; i++ {
+				if tc.nodeInfoList[i].NodeUsage.node.Name != tc.expectedNodeInfoNames[size-i-1] {
+					t.Errorf("Expected %v, got %v", tc.expectedNodeInfoNames[size-i-1], tc.nodeInfoList[i].NodeUsage.node.Name)
+				}
+			}
+		})
 	}
 }

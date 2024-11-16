@@ -39,6 +39,9 @@ type FilterFunc func(*v1.Pod) bool
 // as input and returns the pods that assigned to the node.
 type GetPodsAssignedToNodeFunc func(string, FilterFunc) ([]*v1.Pod, error)
 
+// PodUtilizationFnc is a function for getting pod's utilization. E.g. requested resources of utilization from metrics.
+type PodUtilizationFnc func(pod *v1.Pod) (v1.ResourceList, error)
+
 // WrapFilterFuncs wraps a set of FilterFunc in one.
 func WrapFilterFuncs(filters ...FilterFunc) FilterFunc {
 	return func(pod *v1.Pod) bool {

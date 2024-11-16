@@ -23,6 +23,9 @@ import (
 	"testing"
 	"time"
 
+	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -33,42 +36,6 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	utilptr "k8s.io/utils/ptr"
 )
-
-func BuildTestDeployment(name, namespace string, replicas int32, labels map[string]string, apply func(deployment *appsv1.Deployment)) *appsv1.Deployment {
-	// Add "name": name to the labels, overwriting if it exists.
-	labels["name"] = name
-
-	deployment := &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Deployment",
-			APIVersion: "apps/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: utilptr.To[int32](replicas),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"name": name,
-				},
-			},
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: MakePodSpec("", utilptr.To[int64](0)),
-			},
-		},
-	}
-
-	if apply != nil {
-		apply(deployment)
-	}
-
-	return deployment
-}
 
 // BuildTestPod creates a test pod with given parameters.
 func BuildTestPod(name string, cpu, memory int64, nodeName string, apply func(*v1.Pod)) *v1.Pod {
@@ -101,6 +68,25 @@ func BuildTestPod(name string, cpu, memory int64, nodeName string, apply func(*v
 		apply(pod)
 	}
 	return pod
+}
+
+func BuildTestPDB(name, appLabel string) *policyv1.PodDisruptionBudget {
+	maxUnavailable := intstr.FromInt32(1)
+	pdb := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      name,
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": appLabel,
+				},
+			},
+			MaxUnavailable: &maxUnavailable,
+		},
+	}
+	return pdb
 }
 
 // GetMirrorPodAnnotation returns the annotation needed for mirror pod.
@@ -169,45 +155,6 @@ func BuildTestNode(name string, millicpu, mem, pods int64, apply func(*v1.Node))
 		apply(node)
 	}
 	return node
-}
-
-func MakePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
-	return v1.PodSpec{
-		SecurityContext: &v1.PodSecurityContext{
-			RunAsNonRoot: utilptr.To(true),
-			RunAsUser:    utilptr.To[int64](1000),
-			RunAsGroup:   utilptr.To[int64](1000),
-			SeccompProfile: &v1.SeccompProfile{
-				Type: v1.SeccompProfileTypeRuntimeDefault,
-			},
-		},
-		Containers: []v1.Container{{
-			Name:            "pause",
-			ImagePullPolicy: "Never",
-			Image:           "registry.k8s.io/pause",
-			Ports:           []v1.ContainerPort{{ContainerPort: 80}},
-			Resources: v1.ResourceRequirements{
-				Limits: v1.ResourceList{
-					v1.ResourceCPU:    resource.MustParse("100m"),
-					v1.ResourceMemory: resource.MustParse("200Mi"),
-				},
-				Requests: v1.ResourceList{
-					v1.ResourceCPU:    resource.MustParse("100m"),
-					v1.ResourceMemory: resource.MustParse("100Mi"),
-				},
-			},
-			SecurityContext: &v1.SecurityContext{
-				AllowPrivilegeEscalation: utilptr.To(false),
-				Capabilities: &v1.Capabilities{
-					Drop: []v1.Capability{
-						"ALL",
-					},
-				},
-			},
-		}},
-		PriorityClassName:             priorityClassName,
-		TerminationGracePeriodSeconds: gracePeriod,
-	}
 }
 
 // MakeBestEffortPod makes the given pod a BestEffort pod
@@ -313,30 +260,6 @@ func DeleteDeployment(ctx context.Context, t *testing.T, clientSet clientset.Int
 		return false, nil
 	}); err != nil {
 		t.Fatalf("Error deleting Deployment %v", err)
-	}
-}
-
-func WaitForDeploymentPodsRunning(ctx context.Context, t *testing.T, clientSet clientset.Interface, deployment *appsv1.Deployment) {
-	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 30*time.Second, true, func(c context.Context) (bool, error) {
-		podList, err := clientSet.CoreV1().Pods(deployment.Namespace).List(ctx, metav1.ListOptions{
-			LabelSelector: labels.SelectorFromSet(deployment.Spec.Template.ObjectMeta.Labels).String(),
-		})
-		if err != nil {
-			return false, err
-		}
-		if len(podList.Items) != int(*deployment.Spec.Replicas) {
-			t.Logf("Waiting for %v pods to be created, got %v instead", *deployment.Spec.Replicas, len(podList.Items))
-			return false, nil
-		}
-		for _, pod := range podList.Items {
-			if pod.Status.Phase != v1.PodRunning {
-				t.Logf("Pod %v not running yet, is %v instead", pod.Name, pod.Status.Phase)
-				return false, nil
-			}
-		}
-		return true, nil
-	}); err != nil {
-		t.Fatalf("Error waiting for pods running: %v", err)
 	}
 }
 

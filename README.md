@@ -33,18 +33,15 @@ but relies on the default scheduler for that.
 ## ⚠️  Documentation Versions by Release
 
 If you are using a published release of Descheduler (such as
-`registry.k8s.io/descheduler/descheduler:v0.26.1`), follow the documentation in
+`registry.k8s.io/descheduler/descheduler:v0.31.0`), follow the documentation in
 that version's release branch, as listed below:
 
 |Descheduler Version|Docs link|
 |---|---|
+|v0.31.x|[`release-1.31`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.31/README.md)|
 |v0.30.x|[`release-1.30`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.30/README.md)|
 |v0.29.x|[`release-1.29`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.29/README.md)|
 |v0.28.x|[`release-1.28`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.28/README.md)|
-|v0.27.x|[`release-1.27`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.27/README.md)|
-|v0.26.x|[`release-1.26`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.26/README.md)|
-|v0.25.x|[`release-1.25`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.25/README.md)|
-|v0.24.x|[`release-1.24`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.24/README.md)|
 
 The
 [`master`](https://github.com/kubernetes-sigs/descheduler/blob/master/README.md)
@@ -96,17 +93,17 @@ See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/ku
 
 Run As A Job
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=v0.26.1' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=release-1.31' | kubectl apply -f -
 ```
 
 Run As A CronJob
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=v0.26.1' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=release-1.31' | kubectl apply -f -
 ```
 
 Run As A Deployment
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=v0.26.1' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=release-1.31' | kubectl apply -f -
 ```
 
 ## User Guide
@@ -132,18 +129,19 @@ These are top level keys in the Descheduler Policy that you can use to configure
 
 The Default Evictor Plugin is used by default for filtering pods before processing them in an strategy plugin, or for applying a PreEvictionFilter of pods before eviction. You can also create your own Evictor Plugin or use the Default one provided by Descheduler.  Other uses for the Evictor plugin can be to sort, filter, validate or group pods by different criteria, and that's why this is handled by a plugin and not configured in the top level config.
 
-| Name |type| Default Value | Description |
-|------|----|---------------|-------------|
-| `nodeSelector` |`string`| `nil` | limiting the nodes which are processed |
-| `evictLocalStoragePods` |`bool`| `false` | allows eviction of pods with local storage |
+| Name                      |type| Default Value | Description                                                                                                                 |
+|---------------------------|----|---------------|-----------------------------------------------------------------------------------------------------------------------------|
+| `nodeSelector`            |`string`| `nil` | limiting the nodes which are processed                                                                                      |
+| `evictLocalStoragePods`   |`bool`| `false` | allows eviction of pods with local storage                                                                                  |
 | `evictSystemCriticalPods` |`bool`| `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
-| `ignorePvcPods` |`bool`| `false` | set whether PVC pods should be evicted or ignored |
-| `evictFailedBarePods` |`bool`| `false` | allow eviction of pods without owner references and in failed phase |
-|`labelSelector`|`metav1.LabelSelector`||(see [label filtering](#label-filtering))|
-|`priorityThreshold`|`priorityThreshold`||(see [priority filtering](#priority-filtering))|
-|`nodeFit`|`bool`|`false`|(see [node fit filtering](#node-fit-filtering))|
-|`minReplicas`|`uint`|`0`| ignore eviction of pods where owner (e.g. `ReplicaSet`) replicas is below this threshold |
-|`minPodAge`|`metav1.Duration`|`0`| ignore eviction of pods with a creation time within this threshold |
+| `ignorePvcPods`           |`bool`| `false` | set whether PVC pods should be evicted or ignored                                                                           |
+| `evictFailedBarePods`     |`bool`| `false` | allow eviction of pods without owner references and in failed phase                                                         |
+| `labelSelector`           |`metav1.LabelSelector`|| (see [label filtering](#label-filtering))                                                                                   |
+| `priorityThreshold`       |`priorityThreshold`|| (see [priority filtering](#priority-filtering))                                                                             |
+| `nodeFit`                 |`bool`|`false`| (see [node fit filtering](#node-fit-filtering))                                                                             |
+| `minReplicas`             |`uint`|`0`| ignore eviction of pods where owner (e.g. `ReplicaSet`) replicas is below this threshold                                    |
+| `minPodAge`               |`metav1.Duration`|`0`| ignore eviction of pods with a creation time within this threshold                                                          |
+| `ignorePodsWithoutPDB`    |`bool`|`false`| set whether pods without PodDisruptionBudget should be evicted or ignored                                                   |
 
 ### Example policy
 
@@ -861,7 +859,7 @@ does not exist, descheduler won't create it and will throw an error.
 
 ### Label filtering
 
-The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.26/#labelselector-v1-meta)
+The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#labelselector-v1-meta)
 to filter pods by their labels:
 
 * `PodLifeTime`

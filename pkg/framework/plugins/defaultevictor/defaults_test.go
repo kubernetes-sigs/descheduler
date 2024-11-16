@@ -42,6 +42,7 @@ func TestSetDefaults_DefaultEvictorArgs(t *testing.T) {
 				LabelSelector:           nil,
 				PriorityThreshold:       nil,
 				NodeFit:                 false,
+				IgnorePodsWithoutPDB:    false,
 			},
 		},
 		{
@@ -57,7 +58,8 @@ func TestSetDefaults_DefaultEvictorArgs(t *testing.T) {
 				PriorityThreshold: &api.PriorityThreshold{
 					Value: utilptr.To[int32](800),
 				},
-				NodeFit: true,
+				NodeFit:              true,
+				IgnorePodsWithoutPDB: true,
 			},
 			want: &DefaultEvictorArgs{
 				NodeSelector:            "NodeSelector",
@@ -70,7 +72,8 @@ func TestSetDefaults_DefaultEvictorArgs(t *testing.T) {
 				PriorityThreshold: &api.PriorityThreshold{
 					Value: utilptr.To[int32](800),
 				},
-				NodeFit: true,
+				NodeFit:              true,
+				IgnorePodsWithoutPDB: true,
 			},
 		},
 	}
