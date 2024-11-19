@@ -23,20 +23,16 @@ import (
 	"os/signal"
 	"syscall"
 
-	"k8s.io/apiserver/pkg/server/healthz"
+	"github.com/spf13/cobra"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
-	"sigs.k8s.io/descheduler/pkg/features"
 	"sigs.k8s.io/descheduler/pkg/tracing"
-
-	"github.com/spf13/cobra"
 
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/watch"
-	apiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/apiserver/pkg/server/mux"
-	restclient "k8s.io/client-go/rest"
 	"k8s.io/component-base/featuregate"
 	"k8s.io/component-base/logs"
 	logsapi "k8s.io/component-base/logs/api/v1"
@@ -68,39 +64,15 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// loopbackClientConfig is a config for a privileged loopback connection
-			var loopbackClientConfig *restclient.Config
-			var secureServing *apiserver.SecureServingInfo
-			if err := s.SecureServing.ApplyTo(&secureServing, &loopbackClientConfig); err != nil {
-				klog.ErrorS(err, "failed to apply secure server configuration")
+			if err = s.Apply(); err != nil {
+				klog.ErrorS(err, "failed to apply")
 				return err
 			}
 
-			secureServing.DisableHTTP2 = !s.EnableHTTP2
-
-			ctx, done := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
-
-			pathRecorderMux := mux.NewPathRecorderMux("descheduler")
-			if !s.DisableMetrics {
-				pathRecorderMux.Handle("/metrics", legacyregistry.HandlerWithReset())
-			}
-
-			healthz.InstallHandler(pathRecorderMux, healthz.NamedCheck("Descheduler", healthz.PingHealthz.Check))
-
-			stoppedCh, _, err := secureServing.Serve(pathRecorderMux, 0, ctx.Done())
-			if err != nil {
-				klog.Fatalf("failed to start secure server: %v", err)
+			if err = Run(cmd.Context(), s); err != nil {
+				klog.ErrorS(err, "failed to run descheduler server")
 				return err
 			}
-
-			if err = Run(ctx, s); err != nil {
-				klog.ErrorS(err, "descheduler server")
-				return err
-			}
-
-			done()
-			// wait for metrics server to close
-			<-stoppedCh
 
 			return nil
 		},
@@ -115,12 +87,21 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 	return cmd
 }
 
-func Run(ctx context.Context, rs *options.DeschedulerServer) error {
-	err := features.DefaultMutableFeatureGate.SetFromMap(rs.FeatureGates)
+func Run(rootCtx context.Context, rs *options.DeschedulerServer) error {
+	ctx, done := signal.NotifyContext(rootCtx, syscall.SIGINT, syscall.SIGTERM)
+
+	pathRecorderMux := mux.NewPathRecorderMux("descheduler")
+	if !rs.DisableMetrics {
+		pathRecorderMux.Handle("/metrics", legacyregistry.HandlerWithReset())
+	}
+
+	healthz.InstallHandler(pathRecorderMux, healthz.NamedCheck("Descheduler", healthz.PingHealthz.Check))
+
+	stoppedCh, _, err := rs.SecureServingInfo.Serve(pathRecorderMux, 0, ctx.Done())
 	if err != nil {
+		klog.Fatalf("failed to start secure server: %v", err)
 		return err
 	}
-	rs.DefaultFeatureGates = features.DefaultMutableFeatureGate
 
 	err = tracing.NewTracerProvider(ctx, rs.Tracing.CollectorEndpoint, rs.Tracing.TransportCert, rs.Tracing.ServiceName, rs.Tracing.ServiceNamespace, rs.Tracing.SampleRate, rs.Tracing.FallbackToNoOpProviderOnError)
 	if err != nil {
@@ -131,5 +112,14 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	// increase the fake watch channel so the dry-run mode can be run
 	// over a cluster with thousands of pods
 	watch.DefaultChanSize = 100000
-	return descheduler.Run(ctx, rs)
+	err = descheduler.Run(ctx, rs)
+	if err != nil {
+		return err
+	}
+
+	done()
+	// wait for metrics server to close
+	<-stoppedCh
+
+	return nil
 }

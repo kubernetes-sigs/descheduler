@@ -50,7 +50,10 @@ func InitFrameworkHandle(
 	featureGates.Add(map[featuregate.Feature]featuregate.FeatureSpec{
 		features.EvictionsInBackground: {Default: false, PreRelease: featuregate.Alpha},
 	})
-	podEvictor := evictions.NewPodEvictor(ctx, client, eventRecorder, podInformer, featureGates, evictionOptions)
+	podEvictor, err := evictions.NewPodEvictor(ctx, client, eventRecorder, podInformer, featureGates, evictionOptions)
+	if err != nil {
+		return nil, nil, fmt.Errorf("Unable to initialize pod evictor: %v", err)
+	}
 	evictorFilter, err := defaultevictor.New(
 		&defaultEvictorArgs,
 		&frameworkfake.HandleImpl{

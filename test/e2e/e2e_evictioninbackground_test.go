@@ -351,7 +351,11 @@ func createAndWaitForDeschedulerRunning(t *testing.T, ctx context.Context, kubeC
 	}
 
 	klog.Infof("Waiting for the descheduler pod running")
-	return waitForDeschedulerPodRunning(t, ctx, kubeClient, deschedulerDeploymentObj.Namespace)
+	deschedulerPods := waitForPodsRunning(ctx, t, kubeClient, deschedulerDeploymentObj.Labels, 1, deschedulerDeploymentObj.Namespace)
+	if len(deschedulerPods) == 0 {
+		t.Fatalf("Error waiting for %q deployment: no running pod found", deschedulerDeploymentObj.Name)
+	}
+	return deschedulerPods[0].Name
 }
 
 func updateDeschedulerPolicy(t *testing.T, ctx context.Context, kubeClient clientset.Interface, policy *apiv1alpha2.DeschedulerPolicy) {
@@ -488,7 +492,7 @@ func TestLiveMigrationInBackground(t *testing.T) {
 			}
 			t.Fatalf("Unable to delete %q deployment: %v", deschedulerDeploymentObj.Name, err)
 		}
-		waitForDeschedulerPodAbsent(t, ctx, kubeClient, deschedulerDeploymentObj.Namespace)
+		waitForPodsToDisappear(ctx, t, kubeClient, deschedulerDeploymentObj.Labels, deschedulerDeploymentObj.Namespace)
 	}()
 
 	deschedulerPodName = createAndWaitForDeschedulerRunning(t, ctx, kubeClient, deschedulerDeploymentObj)

@@ -38,9 +38,13 @@ const HighNodeUtilizationPluginName = "HighNodeUtilization"
 // Note that CPU/Memory requests are used to calculate nodes' utilization and not the actual resource usage.
 
 type HighNodeUtilization struct {
-	handle    frameworktypes.Handle
-	args      *HighNodeUtilizationArgs
-	podFilter func(pod *v1.Pod) bool
+	handle                   frameworktypes.Handle
+	args                     *HighNodeUtilizationArgs
+	podFilter                func(pod *v1.Pod) bool
+	underutilizationCriteria []interface{}
+	resourceNames            []v1.ResourceName
+	targetThresholds         api.ResourceThresholds
+	usageClient              usageClient
 }
 
 var _ frameworktypes.BalancePlugin = &HighNodeUtilization{}
@@ -52,6 +56,21 @@ func NewHighNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (
 		return nil, fmt.Errorf("want args to be of type HighNodeUtilizationArgs, got %T", args)
 	}
 
+	targetThresholds := make(api.ResourceThresholds)
+	setDefaultForThresholds(highNodeUtilizatioArgs.Thresholds, targetThresholds)
+	resourceNames := getResourceNames(targetThresholds)
+
+	underutilizationCriteria := []interface{}{
+		"CPU", highNodeUtilizatioArgs.Thresholds[v1.ResourceCPU],
+		"Mem", highNodeUtilizatioArgs.Thresholds[v1.ResourceMemory],
+		"Pods", highNodeUtilizatioArgs.Thresholds[v1.ResourcePods],
+	}
+	for name := range highNodeUtilizatioArgs.Thresholds {
+		if !nodeutil.IsBasicResource(name) {
+			underutilizationCriteria = append(underutilizationCriteria, string(name), int64(highNodeUtilizatioArgs.Thresholds[name]))
+		}
+	}
+
 	podFilter, err := podutil.NewOptions().
 		WithFilter(handle.Evictor().Filter).
 		BuildFilterFunc()
@@ -60,9 +79,13 @@ func NewHighNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (
 	}
 
 	return &HighNodeUtilization{
-		handle:    handle,
-		args:      highNodeUtilizatioArgs,
-		podFilter: podFilter,
+		handle:                   handle,
+		args:                     highNodeUtilizatioArgs,
+		resourceNames:            resourceNames,
+		targetThresholds:         targetThresholds,
+		underutilizationCriteria: underutilizationCriteria,
+		podFilter:                podFilter,
+		usageClient:              newRequestedUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc()),
 	}, nil
 }
 
@@ -73,15 +96,15 @@ func (h *HighNodeUtilization) Name() string {
 
 // Balance extension point implementation for the plugin
 func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
-	thresholds := h.args.Thresholds
-	targetThresholds := make(api.ResourceThresholds)
-
-	setDefaultForThresholds(thresholds, targetThresholds)
-	resourceNames := getResourceNames(targetThresholds)
+	if err := h.usageClient.sync(nodes); err != nil {
+		return &frameworktypes.Status{
+			Err: fmt.Errorf("error getting node usage: %v", err),
+		}
+	}
 
 	sourceNodes, highNodes := classifyNodes(
-		getNodeUsage(nodes, resourceNames, h.handle.GetPodsAssignedToNodeFunc()),
-		getNodeThresholds(nodes, thresholds, targetThresholds, resourceNames, h.handle.GetPodsAssignedToNodeFunc(), false),
+		getNodeUsage(nodes, h.usageClient),
+		getNodeThresholds(nodes, h.args.Thresholds, h.targetThresholds, h.resourceNames, false, h.usageClient),
 		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			return isNodeWithLowUtilization(usage, threshold.lowResourceThreshold)
 		},
@@ -94,18 +117,7 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		})
 
 	// log message in one line
-	keysAndValues := []interface{}{
-		"CPU", thresholds[v1.ResourceCPU],
-		"Mem", thresholds[v1.ResourceMemory],
-		"Pods", thresholds[v1.ResourcePods],
-	}
-	for name := range thresholds {
-		if !nodeutil.IsBasicResource(name) {
-			keysAndValues = append(keysAndValues, string(name), int64(thresholds[name]))
-		}
-	}
-
-	klog.V(1).InfoS("Criteria for a node below target utilization", keysAndValues...)
+	klog.V(1).InfoS("Criteria for a node below target utilization", h.underutilizationCriteria...)
 	klog.V(1).InfoS("Number of underutilized nodes", "totalNumber", len(sourceNodes))
 
 	if len(sourceNodes) == 0 {
@@ -147,8 +159,10 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		h.handle.Evictor(),
 		evictions.EvictOptions{StrategyName: HighNodeUtilizationPluginName},
 		h.podFilter,
-		resourceNames,
-		continueEvictionCond)
+		h.resourceNames,
+		continueEvictionCond,
+		h.usageClient,
+	)
 
 	return nil
 }

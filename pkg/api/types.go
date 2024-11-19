@@ -41,13 +41,19 @@ type DeschedulerPolicy struct {
 
 	// MaxNoOfPodsToTotal restricts maximum of pods to be evicted total.
 	MaxNoOfPodsToEvictTotal *uint
+
+	// MetricsCollector configures collection of metrics about actual resource utilization
+	MetricsCollector MetricsCollector
+
+	// Prometheus enables metrics collection through Prometheus
+	Prometheus Prometheus
 }
 
 // Namespaces carries a list of included/excluded namespaces
 // for which a given strategy is applicable
 type Namespaces struct {
-	Include []string `json:"include"`
-	Exclude []string `json:"exclude"`
+	Include []string `json:"include,omitempty"`
+	Exclude []string `json:"exclude,omitempty"`
 }
 
 type (
@@ -83,4 +89,33 @@ type Plugins struct {
 type PluginSet struct {
 	Enabled  []string
 	Disabled []string
+}
+
+// MetricsCollector configures collection of metrics about actual resource utilization
+type MetricsCollector struct {
+	// Enabled metrics collection from kubernetes metrics.
+	// Later, the collection can be extended to other providers.
+	Enabled bool
+}
+
+type Prometheus struct {
+	URL                string
+	AuthToken          AuthToken
+	InsecureSkipVerify bool
+}
+
+type AuthToken struct {
+	// raw for a raw authentication token
+	Raw string
+	// secretReference references an authentication token.
+	// secrets are expected to be created under the descheduler's namespace.
+	SecretReference SecretReference
+}
+
+// SecretReference holds a reference to a Secret
+type SecretReference struct {
+	// namespace is the namespace of the secret.
+	Namespace string
+	// name is the name of the secret.
+	Name string
 }

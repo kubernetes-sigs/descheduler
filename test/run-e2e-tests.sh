@@ -29,7 +29,7 @@ SKIP_KUBEVIRT_INSTALL=${SKIP_KUBEVIRT_INSTALL:-}
 KUBEVIRT_VERSION=${KUBEVIRT_VERSION:-v1.3.0-rc.1}
 
 # Build a descheduler image
-IMAGE_TAG=$(git describe --tags --match v0*)
+IMAGE_TAG=v$(date +%Y%m%d)-$(git describe --tags)
 BASEDIR=$(dirname "$0")
 VERSION="${IMAGE_TAG}" make -C ${BASEDIR}/.. image
 
@@ -38,7 +38,7 @@ echo "DESCHEDULER_IMAGE: ${DESCHEDULER_IMAGE}"
 
 # This just runs e2e tests.
 if [ -n "$KIND_E2E" ]; then
-    K8S_VERSION=${KUBERNETES_VERSION:-v1.30.0}
+    K8S_VERSION=${KUBERNETES_VERSION:-v1.31.0}
     if [ -z "${SKIP_KUBECTL_INSTALL}" ]; then
         curl -Lo kubectl https://dl.k8s.io/release/${K8S_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/
     fi
@@ -99,5 +99,10 @@ if [ -z "${SKIP_KUBEVIRT_INSTALL}" ]; then
   kubectl -n kubevirt patch kubevirt kubevirt --type=merge --patch '{"spec":{"configuration":{"developerConfiguration":{"useEmulation":true}}}}'
 fi
 
+METRICS_SERVER_VERSION="v0.5.0"
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/${METRICS_SERVER_VERSION}/components.yaml
+kubectl patch -n kube-system deployment metrics-server --type=json \
+  -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+
 PRJ_PREFIX="sigs.k8s.io/descheduler"
-go test -timeout=30m ${PRJ_PREFIX}/test/e2e/ -v
+go test ${PRJ_PREFIX}/test/e2e/ -v -timeout 0
