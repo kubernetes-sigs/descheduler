@@ -24,6 +24,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	"sigs.k8s.io/descheduler/pkg/descheduler/metricscollector"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 )
 
@@ -36,6 +37,7 @@ type Handle interface {
 	Evictor() Evictor
 	GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc
 	SharedInformerFactory() informers.SharedInformerFactory
+	MetricsCollector() *metricscollector.MetricsCollector
 }
 
 // Evictor defines an interface for filtering and evicting pods

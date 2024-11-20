@@ -23,17 +23,17 @@ import (
 	"testing"
 	"time"
 
-	policyv1 "k8s.io/api/policy/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	utilptr "k8s.io/utils/ptr"
 )
 
@@ -87,6 +87,26 @@ func BuildTestPDB(name, appLabel string) *policyv1.PodDisruptionBudget {
 		},
 	}
 	return pdb
+}
+
+// BuildPodMetrics creates a test podmetrics with given parameters.
+func BuildPodMetrics(name string, millicpu, mem int64) *v1beta1.PodMetrics {
+	return &v1beta1.PodMetrics{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+		},
+		Window: metav1.Duration{Duration: 20010000000},
+		Containers: []v1beta1.ContainerMetrics{
+			{
+				Name: "container-1",
+				Usage: v1.ResourceList{
+					v1.ResourceCPU:    *resource.NewMilliQuantity(millicpu, resource.DecimalSI),
+					v1.ResourceMemory: *resource.NewQuantity(mem, resource.BinarySI),
+				},
+			},
+		},
+	}
 }
 
 // GetMirrorPodAnnotation returns the annotation needed for mirror pod.
@@ -155,6 +175,19 @@ func BuildTestNode(name string, millicpu, mem, pods int64, apply func(*v1.Node))
 		apply(node)
 	}
 	return node
+}
+
+func BuildNodeMetrics(name string, millicpu, mem int64) *v1beta1.NodeMetrics {
+	return &v1beta1.NodeMetrics{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Window: metav1.Duration{Duration: 20010000000},
+		Usage: v1.ResourceList{
+			v1.ResourceCPU:    *resource.NewMilliQuantity(millicpu, resource.DecimalSI),
+			v1.ResourceMemory: *resource.NewQuantity(mem, resource.BinarySI),
+		},
+	}
 }
 
 // MakeBestEffortPod makes the given pod a BestEffort pod
