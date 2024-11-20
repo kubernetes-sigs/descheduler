@@ -14,6 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+source "$(dirname "${BASH_SOURCE}")/lib/init.sh"
+
+function cleanup() {
+    return_code=$?
+    os::util::describe_return_code "${return_code}"
+    exit "${return_code}"
+
 
 set -o errexit
 set -o nounset
@@ -40,11 +47,12 @@ find_files() {
       \) -prune \
     \) -name '*.go'
 }
+trap "cleanup" EXIT
 
-GOFMT="gofmt -s"
-bad_files=$(find_files | xargs $GOFMT -l)
+bad_files=$(os::util::list_go_src_files | xargs gofmt -s -l)
 if [[ -n "${bad_files}" ]]; then
-  echo "!!! '$GOFMT' needs to be run on the following files: "
-  echo "${bad_files}"
-  exit 1
+	os::log::warning "!!! gofmt needs to be run on the listed files"
+	echo "${bad_files}"
+	os::log::fatal "Try running 'gofmt -s -d [path]'
+Or autocorrect with 'hack/verify-gofmt.sh | xargs -n 1 gofmt -s -w'"
 fi
