@@ -28,12 +28,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
-	"sigs.k8s.io/descheduler/pkg/descheduler/node"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
+
+const ResourceMetrics = v1.ResourceName("MetricResource")
 
 // NodeUsage stores a node's info, pods on it, thresholds and its resource usage
 type NodeUsage struct {
@@ -78,20 +79,24 @@ func getNodeThresholds(
 	nodes []*v1.Node,
 	lowThreshold, highThreshold api.ResourceThresholds,
 	resourceNames []v1.ResourceName,
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 	useDeviationThresholds bool,
+	usageClient usageClient,
 ) map[string]NodeThresholds {
 	nodeThresholdsMap := map[string]NodeThresholds{}
 
 	averageResourceUsagePercent := api.ResourceThresholds{}
 	if useDeviationThresholds {
-		averageResourceUsagePercent = averageNodeBasicresources(nodes, getPodsAssignedToNode, resourceNames)
+		averageResourceUsagePercent = averageNodeBasicresources(nodes, usageClient)
 	}
 
 	for _, node := range nodes {
 		nodeCapacity := node.Status.Capacity
 		if len(node.Status.Allocatable) > 0 {
 			nodeCapacity = node.Status.Allocatable
+		}
+		if len(resourceNames) == 1 && resourceNames[0] == ResourceMetrics {
+			// Make ResourceMetrics 100% => 100 points
+			nodeCapacity[ResourceMetrics] = *resource.NewQuantity(int64(100), resource.DecimalSI)
 		}
 
 		nodeThresholdsMap[node.Name] = NodeThresholds{
@@ -121,22 +126,15 @@ func getNodeThresholds(
 
 func getNodeUsage(
 	nodes []*v1.Node,
-	resourceNames []v1.ResourceName,
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
+	usageClient usageClient,
 ) []NodeUsage {
 	var nodeUsageList []NodeUsage
 
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, nil)
-		if err != nil {
-			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
-			continue
-		}
-
 		nodeUsageList = append(nodeUsageList, NodeUsage{
 			node:    node,
-			usage:   nodeutil.NodeUtilization(pods, resourceNames),
-			allPods: pods,
+			usage:   usageClient.nodeUtilization(node.Name),
+			allPods: usageClient.pods(node.Name),
 		})
 	}
 
@@ -214,6 +212,26 @@ func classifyNodes(
 	return lowNodes, highNodes
 }
 
+func usageToKeysAndValues(usage map[v1.ResourceName]*resource.Quantity) []interface{} {
+	// log message in one line
+	keysAndValues := []interface{}{}
+	if quantity, exists := usage[v1.ResourceCPU]; exists {
+		keysAndValues = append(keysAndValues, "CPU", quantity.MilliValue())
+	}
+	if quantity, exists := usage[v1.ResourceMemory]; exists {
+		keysAndValues = append(keysAndValues, "Mem", quantity.Value())
+	}
+	if quantity, exists := usage[v1.ResourcePods]; exists {
+		keysAndValues = append(keysAndValues, "Pods", quantity.Value())
+	}
+	for name := range usage {
+		if !nodeutil.IsBasicResource(name) {
+			keysAndValues = append(keysAndValues, string(name), usage[name].Value())
+		}
+	}
+	return keysAndValues
+}
+
 // evictPodsFromSourceNodes evicts pods based on priority, if all the pods on the node have priority, if not
 // evicts them based on QoS as fallback option.
 // TODO: @ravig Break this function into smaller functions.
@@ -226,12 +244,12 @@ func evictPodsFromSourceNodes(
 	podFilter func(pod *v1.Pod) bool,
 	resourceNames []v1.ResourceName,
 	continueEviction continueEvictionCond,
+	usageClient usageClient,
 ) {
 	// upper bound on total number of pods/cpu/memory and optional extended resources to be moved
-	totalAvailableUsage := map[v1.ResourceName]*resource.Quantity{
-		v1.ResourcePods:   {},
-		v1.ResourceCPU:    {},
-		v1.ResourceMemory: {},
+	totalAvailableUsage := map[v1.ResourceName]*resource.Quantity{}
+	for _, resourceName := range resourceNames {
+		totalAvailableUsage[resourceName] = &resource.Quantity{}
 	}
 
 	taintsOfDestinationNodes := make(map[string][]v1.Taint, len(destinationNodes))
@@ -239,6 +257,10 @@ func evictPodsFromSourceNodes(
 		taintsOfDestinationNodes[node.node.Name] = node.node.Spec.Taints
 
 		for _, name := range resourceNames {
+			if _, exists := node.usage[name]; !exists {
+				klog.Errorf("unable to find %q resource in node's %q usage, terminating eviction", name, node.node.Name)
+				return
+			}
 			if _, ok := totalAvailableUsage[name]; !ok {
 				totalAvailableUsage[name] = resource.NewQuantity(0, resource.DecimalSI)
 			}
@@ -248,17 +270,7 @@ func evictPodsFromSourceNodes(
 	}
 
 	// log message in one line
-	keysAndValues := []interface{}{
-		"CPU", totalAvailableUsage[v1.ResourceCPU].MilliValue(),
-		"Mem", totalAvailableUsage[v1.ResourceMemory].Value(),
-		"Pods", totalAvailableUsage[v1.ResourcePods].Value(),
-	}
-	for name := range totalAvailableUsage {
-		if !node.IsBasicResource(name) {
-			keysAndValues = append(keysAndValues, string(name), totalAvailableUsage[name].Value())
-		}
-	}
-	klog.V(1).InfoS("Total capacity to be moved", keysAndValues...)
+	klog.V(1).InfoS("Total capacity to be moved", usageToKeysAndValues(totalAvailableUsage)...)
 
 	for _, node := range sourceNodes {
 		klog.V(3).InfoS("Evicting pods from node", "node", klog.KObj(node.node), "usage", node.usage)
@@ -274,7 +286,7 @@ func evictPodsFromSourceNodes(
 		klog.V(1).InfoS("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
-		err := evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction)
+		err := evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction, usageClient)
 		if err != nil {
 			switch err.(type) {
 			case *evictions.EvictionTotalLimitError:
@@ -295,6 +307,7 @@ func evictPods(
 	podEvictor frameworktypes.Evictor,
 	evictOptions evictions.EvictOptions,
 	continueEviction continueEvictionCond,
+	usageClient usageClient,
 ) error {
 	var excludedNamespaces sets.Set[string]
 	if evictableNamespaces != nil {
@@ -320,33 +333,41 @@ func evictPods(
 			if !preEvictionFilterWithOptions(pod) {
 				continue
 			}
+
+			// In case podUsage does not support resource counting (e.g. provided metric
+			// does not quantify pod resource utilization) allow to evict only a single
+			// pod. It is recommended to run the descheduling cycle more often
+			// so the plugin can perform more evictions towards the re-distribution.
+			singleEviction := false
+			podUsage, err := usageClient.podUsage(pod)
+			if err != nil {
+				if _, ok := err.(*notSupportedError); !ok {
+					klog.Errorf("unable to get pod usage for %v/%v: %v", pod.Namespace, pod.Name, err)
+					continue
+				}
+				singleEviction = true
+			}
 			err = podEvictor.Evict(ctx, pod, evictOptions)
 			if err == nil {
 				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
-
+				if singleEviction {
+					klog.V(3).InfoS("Currently, only a single pod eviction is allowed")
+					break
+				}
 				for name := range totalAvailableUsage {
 					if name == v1.ResourcePods {
 						nodeInfo.usage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
 						totalAvailableUsage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
 					} else {
-						quantity := utils.GetResourceRequestQuantity(pod, name)
-						nodeInfo.usage[name].Sub(quantity)
-						totalAvailableUsage[name].Sub(quantity)
+						nodeInfo.usage[name].Sub(*podUsage[name])
+						totalAvailableUsage[name].Sub(*podUsage[name])
 					}
 				}
 
 				keysAndValues := []interface{}{
 					"node", nodeInfo.node.Name,
-					"CPU", nodeInfo.usage[v1.ResourceCPU].MilliValue(),
-					"Mem", nodeInfo.usage[v1.ResourceMemory].Value(),
-					"Pods", nodeInfo.usage[v1.ResourcePods].Value(),
 				}
-				for name := range totalAvailableUsage {
-					if !nodeutil.IsBasicResource(name) {
-						keysAndValues = append(keysAndValues, string(name), totalAvailableUsage[name].Value())
-					}
-				}
-
+				keysAndValues = append(keysAndValues, usageToKeysAndValues(nodeInfo.usage)...)
 				klog.V(3).InfoS("Updated node usage", keysAndValues...)
 				// check if pods can be still evicted
 				if !continueEviction(nodeInfo, totalAvailableUsage) {
@@ -368,14 +389,20 @@ func evictPods(
 // sortNodesByUsage sorts nodes based on usage according to the given plugin.
 func sortNodesByUsage(nodes []NodeInfo, ascending bool) {
 	sort.Slice(nodes, func(i, j int) bool {
-		ti := nodes[i].usage[v1.ResourceMemory].Value() + nodes[i].usage[v1.ResourceCPU].MilliValue() + nodes[i].usage[v1.ResourcePods].Value()
-		tj := nodes[j].usage[v1.ResourceMemory].Value() + nodes[j].usage[v1.ResourceCPU].MilliValue() + nodes[j].usage[v1.ResourcePods].Value()
-
-		// extended resources
-		for name := range nodes[i].usage {
-			if !nodeutil.IsBasicResource(name) {
-				ti = ti + nodes[i].usage[name].Value()
-				tj = tj + nodes[j].usage[name].Value()
+		ti := resource.NewQuantity(0, resource.DecimalSI).Value()
+		tj := resource.NewQuantity(0, resource.DecimalSI).Value()
+		for resourceName := range nodes[i].usage {
+			if resourceName == v1.ResourceCPU {
+				ti += nodes[i].usage[resourceName].MilliValue()
+			} else {
+				ti += nodes[i].usage[resourceName].Value()
+			}
+		}
+		for resourceName := range nodes[j].usage {
+			if resourceName == v1.ResourceCPU {
+				tj += nodes[j].usage[resourceName].MilliValue()
+			} else {
+				tj += nodes[j].usage[resourceName].Value()
 			}
 		}
 
@@ -437,17 +464,12 @@ func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*
 	return nonRemovablePods, removablePods
 }
 
-func averageNodeBasicresources(nodes []*v1.Node, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, resourceNames []v1.ResourceName) api.ResourceThresholds {
+func averageNodeBasicresources(nodes []*v1.Node, usageClient usageClient) api.ResourceThresholds {
 	total := api.ResourceThresholds{}
 	average := api.ResourceThresholds{}
 	numberOfNodes := len(nodes)
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(node.Name, getPodsAssignedToNode, nil)
-		if err != nil {
-			numberOfNodes--
-			continue
-		}
-		usage := nodeutil.NodeUtilization(pods, resourceNames)
+		usage := usageClient.nodeUtilization(node.Name)
 		nodeCapacity := node.Status.Capacity
 		if len(node.Status.Allocatable) > 0 {
 			nodeCapacity = node.Status.Allocatable

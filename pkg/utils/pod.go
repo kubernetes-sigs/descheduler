@@ -3,6 +3,11 @@ package utils
 import (
 	"fmt"
 
+	policy "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/labels"
+
+	policyv1 "k8s.io/client-go/listers/policy/v1"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -113,6 +118,38 @@ func IsPodWithPVC(pod *v1.Pod) bool {
 		}
 	}
 	return false
+}
+
+// IsPodCoveredByPDB returns true if the pod is covered by at least one PodDisruptionBudget.
+func IsPodCoveredByPDB(pod *v1.Pod, lister policyv1.PodDisruptionBudgetLister) (bool, error) {
+	// We can't use the GetPodPodDisruptionBudgets expansion method here because it treats no pdb as an error,
+	// but we want to return false.
+
+	list, err := lister.PodDisruptionBudgets(pod.Namespace).List(labels.Everything())
+	if err != nil {
+		return false, err
+	}
+
+	if len(list) == 0 {
+		return false, nil
+	}
+
+	podLabels := labels.Set(pod.Labels)
+	var pdbList []*policy.PodDisruptionBudget
+	for _, pdb := range list {
+		selector, err := metav1.LabelSelectorAsSelector(pdb.Spec.Selector)
+		if err != nil {
+			// This object has an invalid selector, it will never match the pod
+			continue
+		}
+
+		if !selector.Matches(podLabels) {
+			continue
+		}
+		pdbList = append(pdbList, pdb)
+	}
+
+	return len(pdbList) > 0, nil
 }
 
 // GetPodSource returns the source of the pod based on the annotation.

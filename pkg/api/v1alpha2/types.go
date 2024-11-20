@@ -40,6 +40,12 @@ type DeschedulerPolicy struct {
 
 	// MaxNoOfPodsToTotal restricts maximum of pods to be evicted total.
 	MaxNoOfPodsToEvictTotal *uint `json:"maxNoOfPodsToEvictTotal,omitempty"`
+
+	// MetricsCollector configures collection of metrics for actual resource utilization
+	MetricsCollector MetricsCollector `json:"metricsCollector,omitempty"`
+
+	// Prometheus enables metrics collection through Prometheus
+	Prometheus Prometheus `json:"prometheus,omitempty"`
 }
 
 type DeschedulerProfile struct {
@@ -65,4 +71,33 @@ type PluginConfig struct {
 type PluginSet struct {
 	Enabled  []string `json:"enabled"`
 	Disabled []string `json:"disabled"`
+}
+
+// MetricsCollector configures collection of metrics about actual resource utilization
+type MetricsCollector struct {
+	// Enabled metrics collection from kubernetes metrics.
+	// Later, the collection can be extended to other providers.
+	Enabled bool `json:"enabled,omitempty"`
+}
+
+type Prometheus struct {
+	URL                string    `json:"url,omitempty"`
+	AuthToken          AuthToken `json:"authToken,omitempty"`
+	InsecureSkipVerify bool      `json:"insecureSkipVerify,omitempty"`
+}
+
+type AuthToken struct {
+	// raw for a raw authentication token
+	Raw string `json:"raw,omitempty"`
+	// secretReference references an authentication token.
+	// secrets are expected to be created under the descheduler's namespace.
+	SecretReference SecretReference `json:"secretReference,omitempty"`
+}
+
+// SecretReference holds a reference to a Secret
+type SecretReference struct {
+	// namespace is the namespace of the secret.
+	Namespace string `json:"namespace,omitempty"`
+	// name is the name of the secret.
+	Name string `json:"name,omitempty"`
 }

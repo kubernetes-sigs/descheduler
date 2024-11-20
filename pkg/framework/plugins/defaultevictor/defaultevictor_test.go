@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/uuid"
@@ -39,6 +40,7 @@ type testCase struct {
 	description             string
 	pods                    []*v1.Pod
 	nodes                   []*v1.Node
+	pdbs                    []*policyv1.PodDisruptionBudget
 	evictFailedBarePods     bool
 	evictLocalStoragePods   bool
 	evictSystemCriticalPods bool
@@ -47,6 +49,7 @@ type testCase struct {
 	minReplicas             uint
 	minPodAge               *metav1.Duration
 	result                  bool
+	ignorePodsWithoutPDB    bool
 }
 
 func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
@@ -739,6 +742,33 @@ func TestDefaultEvictorFilter(t *testing.T) {
 				}),
 			},
 			result: true,
+		}, {
+			description: "ignorePodsWithoutPDB, pod with no PDBs, no eviction",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Labels = map[string]string{
+						"app": "foo",
+					}
+				}),
+			},
+			ignorePodsWithoutPDB: true,
+			result:               false,
+		}, {
+			description: "ignorePodsWithoutPDB, pod with PDBs, evicts",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Labels = map[string]string{
+						"app": "foo",
+					}
+				}),
+			},
+			pdbs: []*policyv1.PodDisruptionBudget{
+				test.BuildTestPDB("pdb1", "foo"),
+			},
+			ignorePodsWithoutPDB: true,
+			result:               true,
 		},
 	}
 
@@ -811,11 +841,15 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 	for _, pod := range test.pods {
 		objs = append(objs, pod)
 	}
+	for _, pdb := range test.pdbs {
+		objs = append(objs, pdb)
+	}
 
 	fakeClient := fake.NewSimpleClientset(objs...)
 
 	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
+	_ = sharedInformerFactory.Policy().V1().PodDisruptionBudgets().Lister()
 
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
@@ -833,9 +867,10 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 		PriorityThreshold: &api.PriorityThreshold{
 			Value: test.priorityThreshold,
 		},
-		NodeFit:     test.nodeFit,
-		MinReplicas: test.minReplicas,
-		MinPodAge:   test.minPodAge,
+		NodeFit:              test.nodeFit,
+		MinReplicas:          test.minReplicas,
+		MinPodAge:            test.minPodAge,
+		IgnorePodsWithoutPDB: test.ignorePodsWithoutPDB,
 	}
 
 	evictorPlugin, err := New(

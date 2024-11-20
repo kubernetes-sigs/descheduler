@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	componentbaseconfig "k8s.io/component-base/config"
+
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler"

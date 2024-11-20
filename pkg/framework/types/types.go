@@ -24,7 +24,10 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	"sigs.k8s.io/descheduler/pkg/descheduler/metricscollector"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+
+	promapi "github.com/prometheus/client_golang/api"
 )
 
 // Handle provides handles used by plugins to retrieve a kubernetes client set,
@@ -33,9 +36,11 @@ import (
 type Handle interface {
 	// ClientSet returns a kubernetes clientSet.
 	ClientSet() clientset.Interface
+	PrometheusClient() promapi.Client
 	Evictor() Evictor
 	GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc
 	SharedInformerFactory() informers.SharedInformerFactory
+	MetricsCollector() *metricscollector.MetricsCollector
 }
 
 // Evictor defines an interface for filtering and evicting pods

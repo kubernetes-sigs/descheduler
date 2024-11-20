@@ -89,7 +89,7 @@ func TestEvictPod(t *testing.T) {
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
 			eventRecorder := &events.FakeRecorder{}
-			podEvictor := NewPodEvictor(
+			podEvictor, err := NewPodEvictor(
 				ctx,
 				fakeClient,
 				eventRecorder,
@@ -97,6 +97,9 @@ func TestEvictPod(t *testing.T) {
 				initFeatureGates(),
 				NewOptions(),
 			)
+			if err != nil {
+				t.Fatalf("Unexpected error when creating a pod evictor: %v", err)
+			}
 
 			_, got := podEvictor.evictPod(ctx, test.pod)
 			if got != test.want {
@@ -164,7 +167,7 @@ func TestNewPodEvictor(t *testing.T) {
 
 	eventRecorder := &events.FakeRecorder{}
 
-	podEvictor := NewPodEvictor(
+	podEvictor, err := NewPodEvictor(
 		ctx,
 		fakeClient,
 		eventRecorder,
@@ -172,6 +175,9 @@ func TestNewPodEvictor(t *testing.T) {
 		initFeatureGates(),
 		NewOptions().WithMaxPodsToEvictPerNode(utilptr.To[uint](1)),
 	)
+	if err != nil {
+		t.Fatalf("Unexpected error when creating a pod evictor: %v", err)
+	}
 
 	stubNode := &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node"}}
 
@@ -197,7 +203,7 @@ func TestNewPodEvictor(t *testing.T) {
 		t.Errorf("Expected 1 total evictions, got %q instead", evictions)
 	}
 
-	err := podEvictor.EvictPod(context.TODO(), pod1, EvictOptions{})
+	err = podEvictor.EvictPod(context.TODO(), pod1, EvictOptions{})
 	if err == nil {
 		t.Errorf("Expected a pod eviction error, got nil instead")
 	}
@@ -234,7 +240,7 @@ func TestEvictionRequestsCacheCleanup(t *testing.T) {
 	sharedInformerFactory := informers.NewSharedInformerFactory(client, 0)
 	_, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
 
-	podEvictor := NewPodEvictor(
+	podEvictor, err := NewPodEvictor(
 		ctx,
 		client,
 		eventRecorder,
@@ -242,6 +248,9 @@ func TestEvictionRequestsCacheCleanup(t *testing.T) {
 		initFeatureGates(),
 		nil,
 	)
+	if err != nil {
+		t.Fatalf("Unexpected error when creating a pod evictor: %v", err)
+	}
 
 	client.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
 		if action.GetSubresource() == "eviction" {
@@ -285,7 +294,7 @@ func TestEvictionRequestsCacheCleanup(t *testing.T) {
 	time.Sleep(2 * time.Second)
 	klog.Infof("Checking the assumed requests timed out and were deleted")
 	// Set the timeout to 1s so the cleaning can be tested
-	podEvictor.erCache.assumedRequestTimeout = 1
+	podEvictor.erCache.assumedRequestTimeoutSeconds = 1
 	podEvictor.erCache.cleanCache(ctx)
 	if totalERs := podEvictor.TotalEvictionRequests(); totalERs > 0 {
 		t.Fatalf("Expected 0 eviction requests, got %v instead", totalERs)

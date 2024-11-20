@@ -8,8 +8,11 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
+	"sigs.k8s.io/descheduler/pkg/descheduler/metricscollector"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
+
+	promapi "github.com/prometheus/client_golang/api"
 )
 
 type HandleImpl struct {
@@ -18,12 +21,22 @@ type HandleImpl struct {
 	SharedInformerFactoryImpl     informers.SharedInformerFactory
 	EvictorFilterImpl             frameworktypes.EvictorPlugin
 	PodEvictorImpl                *evictions.PodEvictor
+	MetricsCollectorImpl          *metricscollector.MetricsCollector
+	PrometheusClientImpl          promapi.Client
 }
 
 var _ frameworktypes.Handle = &HandleImpl{}
 
 func (hi *HandleImpl) ClientSet() clientset.Interface {
 	return hi.ClientsetImpl
+}
+
+func (hi *HandleImpl) PrometheusClient() promapi.Client {
+	return hi.PrometheusClientImpl
+}
+
+func (hi *HandleImpl) MetricsCollector() *metricscollector.MetricsCollector {
+	return hi.MetricsCollectorImpl
 }
 
 func (hi *HandleImpl) GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc {
