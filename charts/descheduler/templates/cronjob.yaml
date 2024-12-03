@@ -89,6 +89,8 @@ spec:
                 {{- end }}
               livenessProbe:
                 {{- toYaml .Values.livenessProbe | nindent 16 }}
+              ports:
+                {{- toYaml .Values.ports | nindent 16 }}
               resources:
                 {{- toYaml .Values.resources | nindent 16 }}
               {{- if .Values.securityContext }}

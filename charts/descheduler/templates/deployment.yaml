@@ -61,8 +61,7 @@ spec:
             {{- end }}
             {{- include "descheduler.leaderElection" . | nindent 12 }}
           ports:
-            - containerPort: 10258
-              protocol: TCP
+            {{- toYaml .Values.ports | nindent 12 }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           resources:
