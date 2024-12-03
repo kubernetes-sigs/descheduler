@@ -75,7 +75,7 @@ spec:
       type: string
     - default: "false"
       description: Skip checks against built image
-      name: skip-checksBuild a source image.
+      name: skip-checks
       type: string
     - default: "true"
       description: Execute the build with network isolation
