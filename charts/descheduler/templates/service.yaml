@@ -1,5 +1,5 @@
 {{- if eq .Values.kind "Deployment" }}
-{{- if eq .Values.service.enabled true }}
+{{- if or .Values.service.enabled .Values.serviceMonitor.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
