@@ -56,7 +56,18 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 		return nil, fmt.Errorf("want args to be of type LowNodeUtilizationArgs, got %T", args)
 	}
 
-	setDefaultForLNUThresholds(lowNodeUtilizationArgsArgs.Thresholds, lowNodeUtilizationArgsArgs.TargetThresholds, lowNodeUtilizationArgsArgs.UseDeviationThresholds)
+	if lowNodeUtilizationArgsArgs.MetricsUtilization.Prometheus.Query != "" {
+		uResourceNames := getResourceNames(lowNodeUtilizationArgsArgs.Thresholds)
+		oResourceNames := getResourceNames(lowNodeUtilizationArgsArgs.TargetThresholds)
+		if len(uResourceNames) != 1 || uResourceNames[0] != ResourceMetrics {
+			return nil, fmt.Errorf("thresholds are expected to specify a single instance of %q resource, got %v instead", ResourceMetrics, uResourceNames)
+		}
+		if len(oResourceNames) != 1 || oResourceNames[0] != ResourceMetrics {
+			return nil, fmt.Errorf("targetThresholds are expected to specify a single instance of %q resource, got %v instead", ResourceMetrics, oResourceNames)
+		}
+	} else {
+		setDefaultForLNUThresholds(lowNodeUtilizationArgsArgs.Thresholds, lowNodeUtilizationArgsArgs.TargetThresholds, lowNodeUtilizationArgsArgs.UseDeviationThresholds)
+	}
 
 	underutilizationCriteria := []interface{}{
 		"CPU", lowNodeUtilizationArgsArgs.Thresholds[v1.ResourceCPU],
@@ -95,6 +106,11 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 			return nil, fmt.Errorf("metrics client not initialized")
 		}
 		usageClient = newActualUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc(), handle.MetricsCollector())
+	} else if lowNodeUtilizationArgsArgs.MetricsUtilization.Prometheus.Query != "" {
+		if handle.PrometheusClient() == nil {
+			return nil, fmt.Errorf("prometheus client not initialized")
+		}
+		usageClient = newPrometheusUsageClient(handle.GetPodsAssignedToNodeFunc(), handle.PrometheusClient(), lowNodeUtilizationArgsArgs.MetricsUtilization.Prometheus.Query)
 	} else {
 		usageClient = newRequestedUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc())
 	}

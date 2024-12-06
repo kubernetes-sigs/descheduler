@@ -23,6 +23,8 @@ import (
 	"strconv"
 	"time"
 
+	promapi "github.com/prometheus/client_golang/api"
+
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
@@ -34,14 +36,19 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	utilversion "k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
+	corev1listers "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/rest"
 	core "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/events"
+	"k8s.io/client-go/util/workqueue"
 	componentbaseconfig "k8s.io/component-base/config"
 	"k8s.io/klog/v2"
 
@@ -62,6 +69,11 @@ import (
 	"sigs.k8s.io/descheduler/pkg/version"
 )
 
+const (
+	prometheusAuthTokenSecretKey = "prometheusAuthToken"
+	workQueueKey                 = "key"
+)
+
 type eprunner func(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status
 
 type profileRunner struct {
@@ -70,15 +82,19 @@ type profileRunner struct {
 }
 
 type descheduler struct {
-	rs                     *options.DeschedulerServer
-	ir                     *informerResources
-	getPodsAssignedToNode  podutil.GetPodsAssignedToNodeFunc
-	sharedInformerFactory  informers.SharedInformerFactory
-	deschedulerPolicy      *api.DeschedulerPolicy
-	eventRecorder          events.EventRecorder
-	podEvictor             *evictions.PodEvictor
-	podEvictionReactionFnc func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error)
-	metricsCollector       *metricscollector.MetricsCollector
+	rs                      *options.DeschedulerServer
+	ir                      *informerResources
+	getPodsAssignedToNode   podutil.GetPodsAssignedToNodeFunc
+	sharedInformerFactory   informers.SharedInformerFactory
+	namespacedSecretsLister corev1listers.SecretNamespaceLister
+	deschedulerPolicy       *api.DeschedulerPolicy
+	eventRecorder           events.EventRecorder
+	podEvictor              *evictions.PodEvictor
+	podEvictionReactionFnc  func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error)
+	metricsCollector        *metricscollector.MetricsCollector
+	prometheusClient        promapi.Client
+	queue                   workqueue.RateLimitingInterface
+	currentAuthToken        string
 }
 
 type informerResources struct {
@@ -125,8 +141,7 @@ func (ir *informerResources) CopyTo(fakeClient *fakeclientset.Clientset, newFact
 	return nil
 }
 
-func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory informers.SharedInformerFactory,
-) (*descheduler, error) {
+func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory, namespacedSharedInformerFactory informers.SharedInformerFactory) (*descheduler, error) {
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
 	ir := newInformerResources(sharedInformerFactory)
@@ -163,7 +178,19 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 		return nil, err
 	}
 
-	var metricsCollector *metricscollector.MetricsCollector
+	desch := &descheduler{
+		rs:                     rs,
+		ir:                     ir,
+		getPodsAssignedToNode:  getPodsAssignedToNode,
+		sharedInformerFactory:  sharedInformerFactory,
+		deschedulerPolicy:      deschedulerPolicy,
+		eventRecorder:          eventRecorder,
+		podEvictor:             podEvictor,
+		podEvictionReactionFnc: podEvictionReactionFnc,
+		prometheusClient:       rs.PrometheusClient,
+		queue:                  workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), ""),
+	}
+
 	if deschedulerPolicy.MetricsCollector.Enabled {
 		nodeSelector := labels.Everything()
 		if deschedulerPolicy.NodeSelector != nil {
@@ -173,20 +200,100 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 			}
 			nodeSelector = sel
 		}
-		metricsCollector = metricscollector.NewMetricsCollector(sharedInformerFactory.Core().V1().Nodes().Lister(), rs.MetricsClient, nodeSelector)
+		desch.metricsCollector = metricscollector.NewMetricsCollector(sharedInformerFactory.Core().V1().Nodes().Lister(), rs.MetricsClient, nodeSelector)
 	}
 
-	return &descheduler{
-		rs:                     rs,
-		ir:                     ir,
-		getPodsAssignedToNode:  getPodsAssignedToNode,
-		sharedInformerFactory:  sharedInformerFactory,
-		deschedulerPolicy:      deschedulerPolicy,
-		eventRecorder:          eventRecorder,
-		podEvictor:             podEvictor,
-		podEvictionReactionFnc: podEvictionReactionFnc,
-		metricsCollector:       metricsCollector,
-	}, nil
+	if namespacedSharedInformerFactory != nil {
+		namespacedSharedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(desch.eventHandler())
+		desch.namespacedSecretsLister = namespacedSharedInformerFactory.Core().V1().Secrets().Lister().Secrets(deschedulerPolicy.Prometheus.AuthToken.SecretReference.Namespace)
+	}
+
+	return desch, nil
+}
+
+func (d *descheduler) reconcileInClusterSAToken() error {
+	// Read the sa token and assume it has the sufficient permissions to authenticate
+	cfg, err := rest.InClusterConfig()
+	if err == nil {
+		if d.currentAuthToken != cfg.BearerToken {
+			klog.V(2).Infof("Creating Prometheus client (with SA token)")
+			prometheusClient, err := client.CreatePrometheusClient(d.deschedulerPolicy.Prometheus.URL, cfg.BearerToken, d.deschedulerPolicy.Prometheus.InsecureSkipVerify)
+			if err != nil {
+				return fmt.Errorf("unable to create a prometheus client: %v", err)
+			}
+			d.prometheusClient = prometheusClient
+			d.currentAuthToken = cfg.BearerToken
+		}
+		return nil
+	}
+	if err == rest.ErrNotInCluster {
+		return nil
+	}
+	return fmt.Errorf("unexpected error when reading in cluster config: %v", err)
+}
+
+func (d *descheduler) run(workers int, ctx context.Context) {
+	defer utilruntime.HandleCrash()
+	defer d.queue.ShutDown()
+
+	klog.Infof("Starting authentication secret reconciler")
+	defer klog.Infof("Shutting down authentication secret reconciler")
+
+	go wait.UntilWithContext(ctx, d.runWorker, time.Second)
+
+	<-ctx.Done()
+}
+
+func (d *descheduler) runWorker(ctx context.Context) {
+	for d.processNextWorkItem(ctx) {
+	}
+}
+
+func (d *descheduler) processNextWorkItem(ctx context.Context) bool {
+	dsKey, quit := d.queue.Get()
+	if quit {
+		return false
+	}
+	defer d.queue.Done(dsKey)
+
+	err := d.sync()
+	if err == nil {
+		d.queue.Forget(dsKey)
+		return true
+	}
+
+	utilruntime.HandleError(fmt.Errorf("%v failed with : %v", dsKey, err))
+	d.queue.AddRateLimited(dsKey)
+
+	return true
+}
+
+func (d *descheduler) sync() error {
+	ns := d.deschedulerPolicy.Prometheus.AuthToken.SecretReference.Namespace
+	name := d.deschedulerPolicy.Prometheus.AuthToken.SecretReference.Name
+	secretObj, err := d.namespacedSecretsLister.Get(name)
+	if err != nil {
+		return fmt.Errorf("unable to get %v/%v secret", ns, name)
+	}
+	authToken := string(secretObj.Data[prometheusAuthTokenSecretKey])
+	if authToken == "" {
+		return fmt.Errorf("prometheus authentication token secret missing %q data or empty", prometheusAuthTokenSecretKey)
+	}
+	klog.V(2).Infof("authentication secret token updated, recreating prometheus client")
+	prometheusClient, err := client.CreatePrometheusClient(d.deschedulerPolicy.Prometheus.URL, authToken, d.deschedulerPolicy.Prometheus.InsecureSkipVerify)
+	if err != nil {
+		return fmt.Errorf("unable to create a prometheus client: %v", err)
+	}
+	d.prometheusClient = prometheusClient
+	return nil
+}
+
+func (d *descheduler) eventHandler() cache.ResourceEventHandler {
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { d.queue.Add(workQueueKey) },
+		UpdateFunc: func(old, new interface{}) { d.queue.Add(workQueueKey) },
+		DeleteFunc: func(obj interface{}) { d.queue.Add(workQueueKey) },
+	}
 }
 
 func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) error {
@@ -266,6 +373,7 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 			frameworkprofile.WithPodEvictor(d.podEvictor),
 			frameworkprofile.WithGetPodsAssignedToNodeFnc(d.getPodsAssignedToNode),
 			frameworkprofile.WithMetricsCollector(d.metricsCollector),
+			frameworkprofile.WithPrometheusClient(d.prometheusClient),
 		)
 		if err != nil {
 			klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)
@@ -434,7 +542,28 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, eventClient)
 	defer eventBroadcaster.Shutdown()
 
-	descheduler, err := newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, sharedInformerFactory)
+	var namespacedSharedInformerFactory informers.SharedInformerFactory
+	reconcileInClusterSAToken := false
+	if deschedulerPolicy.Prometheus.URL != "" {
+		promConfig := deschedulerPolicy.Prometheus
+		// Raw auth token takes precedence
+		if len(promConfig.AuthToken.Raw) > 0 {
+			klog.V(2).Infof("Creating Prometheus client (with raw token)")
+			prometheusClient, err := client.CreatePrometheusClient(deschedulerPolicy.Prometheus.URL, promConfig.AuthToken.Raw, deschedulerPolicy.Prometheus.InsecureSkipVerify)
+			if err != nil {
+				return fmt.Errorf("unable to create a prometheus client: %v", err)
+			}
+			rs.PrometheusClient = prometheusClient
+		} else if promConfig.AuthToken.SecretReference.Name != "" {
+			// Will get reconciled
+			namespacedSharedInformerFactory = informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields), informers.WithNamespace(deschedulerPolicy.Prometheus.AuthToken.SecretReference.Namespace))
+		} else {
+			// Use the sa token and assume it has the sufficient permissions to authenticate
+			reconcileInClusterSAToken = true
+		}
+	}
+
+	descheduler, err := newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, sharedInformerFactory, namespacedSharedInformerFactory)
 	if err != nil {
 		span.AddEvent("Failed to create new descheduler", trace.WithAttributes(attribute.String("err", err.Error())))
 		return err
@@ -460,7 +589,21 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		}
 	}
 
+	if namespacedSharedInformerFactory != nil {
+		namespacedSharedInformerFactory.Start(ctx.Done())
+		namespacedSharedInformerFactory.WaitForCacheSync(ctx.Done())
+		go descheduler.run(1, ctx)
+	}
+
 	wait.NonSlidingUntil(func() {
+		if reconcileInClusterSAToken {
+			// Read the sa token and assume it has the sufficient permissions to authenticate
+			if err := descheduler.reconcileInClusterSAToken(); err != nil {
+				klog.ErrorS(err, "unable to reconcile an in cluster SA token")
+				return
+			}
+		}
+
 		// A next context is created here intentionally to avoid nesting the spans via context.
 		sCtx, sSpan := tracing.Tracer().Start(ctx, "NonSlidingUntil")
 		defer sSpan.End()
