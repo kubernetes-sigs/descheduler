@@ -18,9 +18,13 @@ resources:
   requests:
     cpu: 500m
     memory: 256Mi
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+ports:
+  - containerPort: 10258
+    protocol: TCP
 
 securityContext:
   allowPrivilegeEscalation: false
