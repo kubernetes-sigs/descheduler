@@ -19,6 +19,7 @@ package evictions
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
@@ -41,6 +43,11 @@ import (
 	"sigs.k8s.io/descheduler/pkg/features"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
+)
+
+const (
+	notFoundText    = "pod not found when evicting \"%s\": pods \"%s\" not found"
+	tooManyRequests = "error when evicting pod (ignoring) \"%s\": Too many requests: too many requests"
 )
 
 func initFeatureGates() featuregate.FeatureGate {
@@ -57,32 +64,38 @@ func TestEvictPod(t *testing.T) {
 	tests := []struct {
 		description string
 		node        *v1.Node
-		pod         *v1.Pod
-		pods        []v1.Pod
-		want        error
+		evictedPod  *v1.Pod
+		pods        []runtime.Object
+		wantErr     error
 	}{
 		{
 			description: "test pod eviction - pod present",
 			node:        node1,
-			pod:         pod1,
-			pods:        []v1.Pod{*pod1},
-			want:        nil,
+			evictedPod:  pod1,
+			pods:        []runtime.Object{pod1},
 		},
 		{
-			description: "test pod eviction - pod absent",
+			description: "test pod eviction - pod absent (not found error)",
 			node:        node1,
-			pod:         pod1,
-			pods:        []v1.Pod{*test.BuildTestPod("p2", 400, 0, "node1", nil), *test.BuildTestPod("p3", 450, 0, "node1", nil)},
-			want:        nil,
+			evictedPod:  pod1,
+			pods:        []runtime.Object{test.BuildTestPod("p2", 400, 0, "node1", nil), test.BuildTestPod("p3", 450, 0, "node1", nil)},
+			wantErr:     fmt.Errorf(notFoundText, pod1.Name, pod1.Name),
+		},
+		{
+			description: "test pod eviction - pod absent (too many requests error)",
+			node:        node1,
+			evictedPod:  pod1,
+			pods:        []runtime.Object{test.BuildTestPod("p2", 400, 0, "node1", nil), test.BuildTestPod("p3", 450, 0, "node1", nil)},
+			wantErr:     fmt.Errorf(tooManyRequests, pod1.Name),
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
 			ctx := context.Background()
-			fakeClient := &fake.Clientset{}
-			fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
-				return true, &v1.PodList{Items: test.pods}, nil
+			fakeClient := fake.NewClientset(test.pods...)
+			fakeClient.PrependReactor("create", "pods/eviction", func(action core.Action) (handled bool, ret runtime.Object, err error) {
+				return true, nil, test.wantErr
 			})
 			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 			sharedInformerFactory.Start(ctx.Done())
@@ -101,9 +114,9 @@ func TestEvictPod(t *testing.T) {
 				t.Fatalf("Unexpected error when creating a pod evictor: %v", err)
 			}
 
-			_, got := podEvictor.evictPod(ctx, test.pod)
-			if got != test.want {
-				t.Errorf("Test error for Desc: %s. Expected %v pod eviction to be %v, got %v", test.description, test.pod.Name, test.want, got)
+			_, got := podEvictor.evictPod(ctx, test.evictedPod)
+			if got != test.wantErr {
+				t.Errorf("Test error for Desc: %s. Expected %v pod eviction to be %v, got %v", test.description, test.evictedPod.Name, test.wantErr, got)
 			}
 		})
 	}
@@ -158,60 +171,205 @@ func TestNewPodEvictor(t *testing.T) {
 	ctx := context.Background()
 
 	pod1 := test.BuildTestPod("pod", 400, 0, "node", nil)
-
-	fakeClient := fake.NewSimpleClientset(pod1)
-
-	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
-	sharedInformerFactory.Start(ctx.Done())
-	sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-	eventRecorder := &events.FakeRecorder{}
-
-	podEvictor, err := NewPodEvictor(
-		ctx,
-		fakeClient,
-		eventRecorder,
-		sharedInformerFactory.Core().V1().Pods().Informer(),
-		initFeatureGates(),
-		NewOptions().WithMaxPodsToEvictPerNode(utilptr.To[uint](1)),
-	)
-	if err != nil {
-		t.Fatalf("Unexpected error when creating a pod evictor: %v", err)
+	type podEvictorTest struct {
+		description                      string
+		pod                              *v1.Pod
+		dryRun                           bool
+		evictionFailureEventNotification *bool
+		maxPodsToEvictTotal              *uint
+		maxPodsToEvictPerNode            *uint
+		maxPodsToEvictPerNamespace       *uint
+		expectedNodeEvictions            uint
+		expectedTotalEvictions           uint
+		expectedError                    error
+		// expectedEvent is a slice of strings representing expected events.
+		// Each string in the slice should follow the format: "EventType Reason Message".
+		// - "Warning Failed processing failed"
+		events []string
 	}
+	tests := []podEvictorTest{
+		{
+			description:                      "one eviction expected with eviction failure event notification",
+			pod:                              pod1,
+			evictionFailureEventNotification: utilptr.To[bool](true),
+			maxPodsToEvictTotal:              utilptr.To[uint](1),
+			maxPodsToEvictPerNode:            utilptr.To[uint](1),
+			maxPodsToEvictPerNamespace:       utilptr.To[uint](1),
+			expectedNodeEvictions:            1,
+			expectedTotalEvictions:           1,
+			expectedError:                    nil,
+			events:                           []string{"Normal NotSet pod eviction from node node by sigs.k8s.io/descheduler"},
+		},
+		{
+			description:                      "eviction limit exceeded on total with eviction failure event notification",
+			pod:                              pod1,
+			evictionFailureEventNotification: utilptr.To[bool](true),
+			maxPodsToEvictTotal:              utilptr.To[uint](0),
+			maxPodsToEvictPerNode:            utilptr.To[uint](1),
+			maxPodsToEvictPerNamespace:       utilptr.To[uint](1),
+			expectedNodeEvictions:            0,
+			expectedTotalEvictions:           0,
+			expectedError:                    NewEvictionTotalLimitError(),
+			events:                           []string{"Warning EvictionFailed pod eviction from node node by sigs.k8s.io/descheduler failed: total eviction limit exceeded (0)"},
+		},
+		{
+			description:                      "eviction limit exceeded on node with eviction failure event notification",
+			pod:                              pod1,
+			evictionFailureEventNotification: utilptr.To[bool](true),
+			maxPodsToEvictTotal:              utilptr.To[uint](1),
+			maxPodsToEvictPerNode:            utilptr.To[uint](0),
+			maxPodsToEvictPerNamespace:       utilptr.To[uint](1),
+			expectedNodeEvictions:            0,
+			expectedTotalEvictions:           0,
+			expectedError:                    NewEvictionNodeLimitError("node"),
+			events:                           []string{"Warning EvictionFailed pod eviction from node node by sigs.k8s.io/descheduler failed: node eviction limit exceeded (0)"},
+		},
+		{
+			description:                      "eviction limit exceeded on node with eviction failure event notification",
+			pod:                              pod1,
+			evictionFailureEventNotification: utilptr.To[bool](true),
+			maxPodsToEvictTotal:              utilptr.To[uint](1),
+			maxPodsToEvictPerNode:            utilptr.To[uint](1),
+			maxPodsToEvictPerNamespace:       utilptr.To[uint](0),
+			expectedNodeEvictions:            0,
+			expectedTotalEvictions:           0,
+			expectedError:                    NewEvictionNamespaceLimitError("default"),
+			events:                           []string{"Warning EvictionFailed pod eviction from node node by sigs.k8s.io/descheduler failed: namespace eviction limit exceeded (0)"},
+		},
+		{
+			description:                      "eviction error with eviction failure event notification",
+			pod:                              pod1,
+			evictionFailureEventNotification: utilptr.To[bool](true),
+			maxPodsToEvictTotal:              utilptr.To[uint](1),
+			maxPodsToEvictPerNode:            utilptr.To[uint](1),
+			maxPodsToEvictPerNamespace:       utilptr.To[uint](1),
+			expectedNodeEvictions:            0,
+			expectedTotalEvictions:           0,
+			expectedError:                    fmt.Errorf("eviction error"),
+			events:                           []string{"Warning EvictionFailed pod eviction from node node by sigs.k8s.io/descheduler failed: eviction error"},
+		},
+		{
+			description:                      "eviction with dryRun with eviction failure event notification",
+			pod:                              pod1,
+			dryRun:                           true,
+			evictionFailureEventNotification: utilptr.To[bool](true),
+			maxPodsToEvictTotal:              utilptr.To[uint](1),
+			maxPodsToEvictPerNode:            utilptr.To[uint](1),
+			maxPodsToEvictPerNamespace:       utilptr.To[uint](1),
+			expectedNodeEvictions:            1,
+			expectedTotalEvictions:           1,
+			expectedError:                    nil,
+		},
+		{
+			description:                "one eviction expected without eviction failure event notification",
+			pod:                        pod1,
+			maxPodsToEvictTotal:        utilptr.To[uint](1),
+			maxPodsToEvictPerNode:      utilptr.To[uint](1),
+			maxPodsToEvictPerNamespace: utilptr.To[uint](1),
+			expectedNodeEvictions:      1,
+			expectedTotalEvictions:     1,
+			expectedError:              nil,
+			events:                     []string{"Normal NotSet pod eviction from node node by sigs.k8s.io/descheduler"},
+		},
+		{
+			description:                "eviction limit exceeded on total without eviction failure event notification",
+			pod:                        pod1,
+			maxPodsToEvictTotal:        utilptr.To[uint](0),
+			maxPodsToEvictPerNode:      utilptr.To[uint](1),
+			maxPodsToEvictPerNamespace: utilptr.To[uint](1),
+			expectedNodeEvictions:      0,
+			expectedTotalEvictions:     0,
+			expectedError:              NewEvictionTotalLimitError(),
+		},
+		{
+			description:                "eviction limit exceeded on node without eviction failure event notification",
+			pod:                        pod1,
+			maxPodsToEvictTotal:        utilptr.To[uint](1),
+			maxPodsToEvictPerNode:      utilptr.To[uint](0),
+			maxPodsToEvictPerNamespace: utilptr.To[uint](1),
+			expectedNodeEvictions:      0,
+			expectedTotalEvictions:     0,
+			expectedError:              NewEvictionNodeLimitError("node"),
+		},
+		{
+			description:                "eviction limit exceeded on node without eviction failure event notification",
+			pod:                        pod1,
+			maxPodsToEvictTotal:        utilptr.To[uint](1),
+			maxPodsToEvictPerNode:      utilptr.To[uint](1),
+			maxPodsToEvictPerNamespace: utilptr.To[uint](0),
+			expectedNodeEvictions:      0,
+			expectedTotalEvictions:     0,
+			expectedError:              NewEvictionNamespaceLimitError("default"),
+		},
+		{
+			description:                "eviction error without eviction failure event notification",
+			pod:                        pod1,
+			maxPodsToEvictTotal:        utilptr.To[uint](1),
+			maxPodsToEvictPerNode:      utilptr.To[uint](1),
+			maxPodsToEvictPerNamespace: utilptr.To[uint](1),
+			expectedNodeEvictions:      0,
+			expectedTotalEvictions:     0,
+			expectedError:              fmt.Errorf("eviction error"),
+		},
+		{
+			description:                "eviction without dryRun with eviction failure event notification",
+			pod:                        pod1,
+			dryRun:                     true,
+			maxPodsToEvictTotal:        utilptr.To[uint](1),
+			maxPodsToEvictPerNode:      utilptr.To[uint](1),
+			maxPodsToEvictPerNamespace: utilptr.To[uint](1),
+			expectedNodeEvictions:      1,
+			expectedTotalEvictions:     1,
+			expectedError:              nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.description, func(t *testing.T) {
+			fakeClient := fake.NewSimpleClientset(pod1)
+			fakeClient.PrependReactor("create", "pods/eviction", func(action core.Action) (handled bool, ret runtime.Object, err error) {
+				return true, nil, test.expectedError
+			})
 
-	stubNode := &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node"}}
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-	// 0 evictions expected
-	if evictions := podEvictor.NodeEvicted(stubNode); evictions != 0 {
-		t.Errorf("Expected 0 node evictions, got %q instead", evictions)
-	}
-	// 0 evictions expected
-	if evictions := podEvictor.TotalEvicted(); evictions != 0 {
-		t.Errorf("Expected 0 total evictions, got %q instead", evictions)
-	}
+			eventRecorder := events.NewFakeRecorder(100)
 
-	if err := podEvictor.EvictPod(context.TODO(), pod1, EvictOptions{}); err != nil {
-		t.Errorf("Expected a pod eviction, got an eviction error instead: %v", err)
-	}
+			podEvictor, err := NewPodEvictor(
+				ctx,
+				fakeClient,
+				eventRecorder,
+				sharedInformerFactory.Core().V1().Pods().Informer(),
+				initFeatureGates(),
+				NewOptions().
+					WithDryRun(test.dryRun).
+					WithMaxPodsToEvictTotal(test.maxPodsToEvictTotal).
+					WithMaxPodsToEvictPerNode(test.maxPodsToEvictPerNode).
+					WithEvictionFailureEventNotification(test.evictionFailureEventNotification).
+					WithMaxPodsToEvictPerNamespace(test.maxPodsToEvictPerNamespace),
+			)
+			if err != nil {
+				t.Fatalf("Unexpected error when creating a pod evictor: %v", err)
+			}
 
-	// 1 node eviction expected
-	if evictions := podEvictor.NodeEvicted(stubNode); evictions != 1 {
-		t.Errorf("Expected 1 node eviction, got %q instead", evictions)
-	}
-	// 1 total eviction expected
-	if evictions := podEvictor.TotalEvicted(); evictions != 1 {
-		t.Errorf("Expected 1 total evictions, got %q instead", evictions)
-	}
+			stubNode := &v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node"}}
 
-	err = podEvictor.EvictPod(context.TODO(), pod1, EvictOptions{})
-	if err == nil {
-		t.Errorf("Expected a pod eviction error, got nil instead")
-	}
-	switch err.(type) {
-	case *EvictionNodeLimitError:
-		// all good
-	default:
-		t.Errorf("Expected a pod eviction EvictionNodeLimitError error, got a different error instead: %v", err)
+			if actualErr := podEvictor.EvictPod(ctx, test.pod, EvictOptions{}); actualErr != nil && actualErr.Error() != test.expectedError.Error() {
+				t.Errorf("Expected error: %v, got: %v", test.expectedError, actualErr)
+			}
+
+			if evictions := podEvictor.NodeEvicted(stubNode); evictions != test.expectedNodeEvictions {
+				t.Errorf("Expected %d node evictions, got %d instead", test.expectedNodeEvictions, evictions)
+			}
+
+			if evictions := podEvictor.TotalEvicted(); evictions != test.expectedTotalEvictions {
+				t.Errorf("Expected %d total evictions, got %d instead", test.expectedTotalEvictions, evictions)
+			}
+
+			// Assert that the events are correct.
+			assertEqualEvents(t, test.events, eventRecorder.Events)
+		})
 	}
 }
 
@@ -298,5 +456,29 @@ func TestEvictionRequestsCacheCleanup(t *testing.T) {
 	podEvictor.erCache.cleanCache(ctx)
 	if totalERs := podEvictor.TotalEvictionRequests(); totalERs > 0 {
 		t.Fatalf("Expected 0 eviction requests, got %v instead", totalERs)
+	}
+}
+
+func assertEqualEvents(t *testing.T, expected []string, actual <-chan string) {
+	t.Logf("Assert for events: %v", expected)
+	c := time.After(wait.ForeverTestTimeout)
+	for _, e := range expected {
+		select {
+		case a := <-actual:
+			if !reflect.DeepEqual(a, e) {
+				t.Errorf("Expected event %q, got %q instead", e, a)
+			}
+		case <-c:
+			t.Errorf("Expected event %q, got nothing", e)
+			// continue iterating to print all expected events
+		}
+	}
+	for {
+		select {
+		case a := <-actual:
+			t.Errorf("Unexpected event: %q", a)
+		default:
+			return // No more events, as expected.
+		}
 	}
 }

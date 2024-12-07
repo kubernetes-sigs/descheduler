@@ -56,6 +56,11 @@ func (in *DeschedulerPolicy) DeepCopyInto(out *DeschedulerPolicy) {
 		*out = new(uint)
 		**out = **in
 	}
+	if in.EvictionFailureEventNotification != nil {
+		in, out := &in.EvictionFailureEventNotification, &out.EvictionFailureEventNotification
+		*out = new(bool)
+		**out = **in
+	}
 	out.MetricsCollector = in.MetricsCollector
 	return
 }
