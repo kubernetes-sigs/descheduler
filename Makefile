@@ -148,7 +148,7 @@ lint:
 ifndef HAS_GOLANGCI
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./_output/bin ${GOLANGCI_VERSION}
 endif
-	./_output/bin/golangci-lint run
+	./_output/bin/golangci-lint run -v
 
 fmt:
 ifndef HAS_GOFUMPT
