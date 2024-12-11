@@ -15,10 +15,10 @@ spec:
   {{- if .Values.startingDeadlineSeconds }}
   startingDeadlineSeconds: {{ .Values.startingDeadlineSeconds }}
   {{- end }}
-  {{- if .Values.successfulJobsHistoryLimit }}
+  {{- if ne .Values.successfulJobsHistoryLimit nil }}
   successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit }}
   {{- end }}
-  {{- if .Values.failedJobsHistoryLimit }}
+  {{- if ne .Values.failedJobsHistoryLimit nil }}
   failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
   {{- end }}
   {{- if .Values.timeZone }}
