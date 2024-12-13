@@ -9,6 +9,7 @@ linters:
     - gosimple
     - gocyclo
     - misspell
+    - govet
 
 linters-settings:
   gofumpt:
