@@ -59,7 +59,9 @@ spec:
             - {{ printf "--%s" $key }}
             {{- end }}
             {{- end }}
+            {{- if .Values.leaderElection }}
             {{- include "descheduler.leaderElection" . | nindent 12 }}
+            {{- end }}
           ports:
             {{- toYaml .Values.ports | nindent 12 }}
           livenessProbe:
