@@ -42,6 +42,10 @@ type DeschedulerPolicy struct {
 	// MaxNoOfPodsToTotal restricts maximum of pods to be evicted total.
 	MaxNoOfPodsToEvictTotal *uint
 
+	// EvictionFailureEventNotification should be set to true to enable eviction failure event notification.
+	// Default is false.
+	EvictionFailureEventNotification *bool
+
 	// MetricsCollector configures collection of metrics about actual resource utilization
 	MetricsCollector MetricsCollector
 }

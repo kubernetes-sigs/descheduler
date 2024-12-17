@@ -206,20 +206,21 @@ type (
 )
 
 type PodEvictor struct {
-	mu                         sync.RWMutex
-	client                     clientset.Interface
-	policyGroupVersion         string
-	dryRun                     bool
-	maxPodsToEvictPerNode      *uint
-	maxPodsToEvictPerNamespace *uint
-	maxPodsToEvictTotal        *uint
-	nodePodCount               nodePodEvictedCount
-	namespacePodCount          namespacePodEvictCount
-	totalPodCount              uint
-	metricsEnabled             bool
-	eventRecorder              events.EventRecorder
-	erCache                    *evictionRequestsCache
-	featureGates               featuregate.FeatureGate
+	mu                               sync.RWMutex
+	client                           clientset.Interface
+	policyGroupVersion               string
+	dryRun                           bool
+	evictionFailureEventNotification bool
+	maxPodsToEvictPerNode            *uint
+	maxPodsToEvictPerNamespace       *uint
+	maxPodsToEvictTotal              *uint
+	nodePodCount                     nodePodEvictedCount
+	namespacePodCount                namespacePodEvictCount
+	totalPodCount                    uint
+	metricsEnabled                   bool
+	eventRecorder                    events.EventRecorder
+	erCache                          *evictionRequestsCache
+	featureGates                     featuregate.FeatureGate
 
 	// registeredHandlers contains the registrations of all handlers. It's used to check if all handlers have finished syncing before the scheduling cycles start.
 	registeredHandlers []cache.ResourceEventHandlerRegistration
@@ -238,17 +239,18 @@ func NewPodEvictor(
 	}
 
 	podEvictor := &PodEvictor{
-		client:                     client,
-		eventRecorder:              eventRecorder,
-		policyGroupVersion:         options.policyGroupVersion,
-		dryRun:                     options.dryRun,
-		maxPodsToEvictPerNode:      options.maxPodsToEvictPerNode,
-		maxPodsToEvictPerNamespace: options.maxPodsToEvictPerNamespace,
-		maxPodsToEvictTotal:        options.maxPodsToEvictTotal,
-		metricsEnabled:             options.metricsEnabled,
-		nodePodCount:               make(nodePodEvictedCount),
-		namespacePodCount:          make(namespacePodEvictCount),
-		featureGates:               featureGates,
+		client:                           client,
+		eventRecorder:                    eventRecorder,
+		policyGroupVersion:               options.policyGroupVersion,
+		dryRun:                           options.dryRun,
+		evictionFailureEventNotification: options.evictionFailureEventNotification,
+		maxPodsToEvictPerNode:            options.maxPodsToEvictPerNode,
+		maxPodsToEvictPerNamespace:       options.maxPodsToEvictPerNamespace,
+		maxPodsToEvictTotal:              options.maxPodsToEvictTotal,
+		metricsEnabled:                   options.metricsEnabled,
+		nodePodCount:                     make(nodePodEvictedCount),
+		namespacePodCount:                make(namespacePodEvictCount),
+		featureGates:                     featureGates,
 	}
 
 	if featureGates.Enabled(features.EvictionsInBackground) {
@@ -481,6 +483,9 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		}
 		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
 		klog.ErrorS(err, "Error evicting pod", "limit", *pe.maxPodsToEvictTotal)
+		if pe.evictionFailureEventNotification {
+			pe.eventRecorder.Eventf(pod, nil, v1.EventTypeWarning, "EvictionFailed", "Descheduled", "pod eviction from %v node by sigs.k8s.io/descheduler failed: total eviction limit exceeded (%v)", pod.Spec.NodeName, *pe.maxPodsToEvictTotal)
+		}
 		return err
 	}
 
@@ -492,6 +497,9 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 			}
 			span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
 			klog.ErrorS(err, "Error evicting pod", "limit", *pe.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
+			if pe.evictionFailureEventNotification {
+				pe.eventRecorder.Eventf(pod, nil, v1.EventTypeWarning, "EvictionFailed", "Descheduled", "pod eviction from %v node by sigs.k8s.io/descheduler failed: node eviction limit exceeded (%v)", pod.Spec.NodeName, *pe.maxPodsToEvictPerNode)
+			}
 			return err
 		}
 	}
@@ -503,6 +511,9 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		}
 		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
 		klog.ErrorS(err, "Error evicting pod", "limit", *pe.maxPodsToEvictPerNamespace, "namespace", pod.Namespace, "pod", klog.KObj(pod))
+		if pe.evictionFailureEventNotification {
+			pe.eventRecorder.Eventf(pod, nil, v1.EventTypeWarning, "EvictionFailed", "Descheduled", "pod eviction from %v node by sigs.k8s.io/descheduler failed: namespace eviction limit exceeded (%v)", pod.Spec.NodeName, *pe.maxPodsToEvictPerNamespace)
+		}
 		return err
 	}
 
@@ -513,6 +524,9 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", opts.Reason)
 		if pe.metricsEnabled {
 			metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
+		}
+		if pe.evictionFailureEventNotification {
+			pe.eventRecorder.Eventf(pod, nil, v1.EventTypeWarning, "EvictionFailed", "Descheduled", "pod eviction from %v node by sigs.k8s.io/descheduler failed: %v", pod.Spec.NodeName, err.Error())
 		}
 		return err
 	}
@@ -542,7 +556,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 				reason = "NotSet"
 			}
 		}
-		pe.eventRecorder.Eventf(pod, nil, v1.EventTypeNormal, reason, "Descheduled", "pod evicted from %v node by sigs.k8s.io/descheduler", pod.Spec.NodeName)
+		pe.eventRecorder.Eventf(pod, nil, v1.EventTypeNormal, reason, "Descheduled", "pod eviction from %v node by sigs.k8s.io/descheduler", pod.Spec.NodeName)
 	}
 	return nil
 }
