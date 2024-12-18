@@ -43,7 +43,7 @@ type DeschedulerPolicy struct {
 
 	// EvictionFailureEventNotification should be set to true to enable eviction failure event notification.
 	// Default is false.
-	EvictionFailureEventNotification *bool
+	EvictionFailureEventNotification *bool `json:"evictionFailureEventNotification,omitempty"`
 
 	// MetricsCollector configures collection of metrics for actual resource utilization
 	MetricsCollector MetricsCollector `json:"metricsCollector,omitempty"`
