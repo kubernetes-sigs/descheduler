@@ -118,14 +118,15 @@ The Descheduler Policy is configurable and includes default strategy plugins tha
 
 These are top level keys in the Descheduler Policy that you can use to configure all evictions.
 
-| Name |type| Default Value | Description |
-|------|----|---------------|-------------|
-| `nodeSelector` |`string`| `nil` | limiting the nodes which are processed. Only used when `nodeFit`=`true` and only by the PreEvictionFilter Extension Point |
-| `maxNoOfPodsToEvictPerNode` |`int`| `nil` | maximum number of pods evicted from each node (summed through all strategies) |
-| `maxNoOfPodsToEvictPerNamespace` |`int`| `nil` | maximum number of pods evicted from each namespace (summed through all strategies) |
-| `maxNoOfPodsToEvictTotal` |`int`| `nil` | maximum number of pods evicted per rescheduling cycle (summed through all strategies) |
-| `metricsCollector` |`object`| `nil` | configures collection of metrics for actual resource utilization |
-| `metricsCollector.enabled` |`bool`| `false` | enables kubernetes [metrics server](https://kubernetes-sigs.github.io/metrics-server/) collection |
+| Name                               | type   | Default Value | Description                                                                                                                |
+|------------------------------------|--------|---------------|----------------------------------------------------------------------------------------------------------------------------|
+| `nodeSelector`                     | `string` | `nil`           | Limiting the nodes which are processed. Only used when `nodeFit`=`true` and only by the PreEvictionFilter Extension Point. |
+| `maxNoOfPodsToEvictPerNode`        | `int`    | `nil`           | Maximum number of pods evicted from each node (summed through all strategies).                                             |
+| `maxNoOfPodsToEvictPerNamespace`   | `int`    | `nil`           | Maximum number of pods evicted from each namespace (summed through all strategies).                                        |
+| `maxNoOfPodsToEvictTotal`          | `int`    | `nil`           | Maximum number of pods evicted per rescheduling cycle (summed through all strategies).                                     |
+| `metricsCollector`                 | `object` | `nil`           | Configures collection of metrics for actual resource utilization.                                                          |
+| `metricsCollector.enabled`         | `bool`   | `false`         | Enables Kubernetes [Metrics Server](https://kubernetes-sigs.github.io/metrics-server/) collection.                         |
+| `evictionFailureEventNotification` | `bool`   | `false`         | Enables eviction failure event notification.                                                                               |
 
 ### Evictor Plugin configuration (Default Evictor)
 
