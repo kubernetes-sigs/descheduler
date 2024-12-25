@@ -38,6 +38,7 @@ import (
 
 	"sigs.k8s.io/descheduler/metrics"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
+	"sigs.k8s.io/descheduler/pkg/descheduler/node"
 	"sigs.k8s.io/descheduler/pkg/features"
 	"sigs.k8s.io/descheduler/pkg/tracing"
 )
@@ -546,6 +547,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 	}
 
 	if pe.dryRun {
+		pe.simulateSchedulingInDryRun(pod)
 		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", opts.StrategyName, "node", pod.Spec.NodeName, "profile", opts.ProfileName)
 	} else {
 		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", opts.StrategyName, "node", pod.Spec.NodeName, "profile", opts.ProfileName)
@@ -559,6 +561,20 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		pe.eventRecorder.Eventf(pod, nil, v1.EventTypeNormal, reason, "Descheduled", "pod eviction from %v node by sigs.k8s.io/descheduler", pod.Spec.NodeName)
 	}
 	return nil
+}
+
+func (pe *PodEvictor) simulateSchedulingInDryRun(pod *v1.Pod) {
+	simlatePod := pod.DeepCopy()
+	if nodeName, ok := simlatePod.Annotations[node.FitNodeToPodAnnotationKey]; ok {
+		simlatePod.Spec.NodeName = nodeName
+		simlatePod.Name = pod.Name + "-simulate-scheduler"
+		simlatePod.Namespace = "simulate"
+		if _, err := pe.client.CoreV1().Pods(simlatePod.Namespace).Create(context.TODO(), simlatePod, metav1.CreateOptions{}); err != nil {
+			klog.ErrorS(err, "failed to simulating scheduler pod in dry-run mode", "pod", klog.KObj(pod))
+		} else {
+			klog.V(5).InfoS("Simulate scheduling in dry-run mode.", "pod", klog.KObj(pod), "node", nodeName)
+		}
+	}
 }
 
 // return (ignore, err)
