@@ -564,6 +564,10 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 }
 
 func (pe *PodEvictor) simulateSchedulingInDryRun(pod *v1.Pod) {
+	if !pe.dryRun {
+		return
+	}
+
 	simlatePod := pod.DeepCopy()
 	if nodeName, ok := simlatePod.Annotations[node.FitNodeToPodAnnotationKey]; ok {
 		simlatePod.Spec.NodeName = nodeName
