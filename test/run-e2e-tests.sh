@@ -38,7 +38,7 @@ echo "DESCHEDULER_IMAGE: ${DESCHEDULER_IMAGE}"
 
 # This just runs e2e tests.
 if [ -n "$KIND_E2E" ]; then
-    K8S_VERSION=${KUBERNETES_VERSION:-v1.31.0}
+    K8S_VERSION=${KUBERNETES_VERSION:-v1.32.0}
     if [ -z "${SKIP_KUBECTL_INSTALL}" ]; then
         curl -Lo kubectl https://dl.k8s.io/release/${K8S_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/
     fi
