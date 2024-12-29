@@ -7,7 +7,7 @@ jobs:
   deploy:
     strategy:
       matrix:
-        k8s-version: ["v1.31.0"]
+        k8s-version: ["v1.32.0"]
         descheduler-version: ["v0.31.0"]
         descheduler-api: ["v1alpha2"]
         manifest: ["deployment"]
@@ -16,7 +16,7 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v4
       - name: Create kind cluster
-        uses: helm/kind-action@v1.10.0
+        uses: helm/kind-action@v1.12.0
         with:
           node_image: kindest/node:${{ matrix.k8s-version }}
           kubectl_version: ${{ matrix.k8s-version }}
