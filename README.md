@@ -38,10 +38,10 @@ that version's release branch, as listed below:
 
 |Descheduler Version|Docs link|
 |---|---|
+|v0.32.x|[`release-1.32`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.32/README.md)|
 |v0.31.x|[`release-1.31`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.31/README.md)|
 |v0.30.x|[`release-1.30`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.30/README.md)|
 |v0.29.x|[`release-1.29`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.29/README.md)|
-|v0.28.x|[`release-1.28`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.28/README.md)|
 
 The
 [`master`](https://github.com/kubernetes-sigs/descheduler/blob/master/README.md)
@@ -93,17 +93,17 @@ See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/ku
 
 Run As A Job
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=release-1.31' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=release-1.32' | kubectl apply -f -
 ```
 
 Run As A CronJob
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=release-1.31' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=release-1.32' | kubectl apply -f -
 ```
 
 Run As A Deployment
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=release-1.31' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=release-1.32' | kubectl apply -f -
 ```
 
 ## User Guide
@@ -870,7 +870,7 @@ does not exist, descheduler won't create it and will throw an error.
 
 ### Label filtering
 
-The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#labelselector-v1-meta)
+The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#labelselector-v1-meta)
 to filter pods by their labels:
 
 * `PodLifeTime`
