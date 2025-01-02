@@ -25,16 +25,17 @@ import (
 type DefaultEvictorArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	NodeSelector            string                 `json:"nodeSelector,omitempty"`
-	EvictLocalStoragePods   bool                   `json:"evictLocalStoragePods,omitempty"`
-	EvictDaemonSetPods      bool                   `json:"evictDaemonSetPods,omitempty"`
-	EvictSystemCriticalPods bool                   `json:"evictSystemCriticalPods,omitempty"`
-	IgnorePvcPods           bool                   `json:"ignorePvcPods,omitempty"`
-	EvictFailedBarePods     bool                   `json:"evictFailedBarePods,omitempty"`
-	LabelSelector           *metav1.LabelSelector  `json:"labelSelector,omitempty"`
-	PriorityThreshold       *api.PriorityThreshold `json:"priorityThreshold,omitempty"`
-	NodeFit                 bool                   `json:"nodeFit,omitempty"`
-	MinReplicas             uint                   `json:"minReplicas,omitempty"`
-	MinPodAge               *metav1.Duration       `json:"minPodAge,omitempty"`
-	IgnorePodsWithoutPDB    bool                   `json:"ignorePodsWithoutPDB,omitempty"`
+	NodeSelector                 string                 `json:"nodeSelector,omitempty"`
+	EvictLocalStoragePods        bool                   `json:"evictLocalStoragePods,omitempty"`
+	EvictDaemonSetPods           bool                   `json:"evictDaemonSetPods,omitempty"`
+	EvictSystemCriticalPods      bool                   `json:"evictSystemCriticalPods,omitempty"`
+	IgnorePvcPods                bool                   `json:"ignorePvcPods,omitempty"`
+	EvictFailedBarePods          bool                   `json:"evictFailedBarePods,omitempty"`
+	LabelSelector                *metav1.LabelSelector  `json:"labelSelector,omitempty"`
+	PriorityThreshold            *api.PriorityThreshold `json:"priorityThreshold,omitempty"`
+	NodeFit                      bool                   `json:"nodeFit,omitempty"`
+	MinReplicas                  uint                   `json:"minReplicas,omitempty"`
+	MinPodAge                    *metav1.Duration       `json:"minPodAge,omitempty"`
+	IgnorePodsWithoutPDB         bool                   `json:"ignorePodsWithoutPDB,omitempty"`
+	IgnorePodsWithResourceClaims bool                   `json:"ignorePodsWithResourceClaims,omitempty"`
 }
