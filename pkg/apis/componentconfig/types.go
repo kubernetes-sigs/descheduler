@@ -57,6 +57,9 @@ type DeschedulerConfiguration struct {
 	// IgnorePVCPods sets whether PVC pods should be allowed to be evicted
 	IgnorePVCPods bool
 
+	// IgnorePodsWithResourceClaims sets whether pods using resource claims should be allowed to be evicted
+	IgnorePodsWithResourceClaims bool
+
 	// Tracing specifies the options for tracing.
 	Tracing TracingConfiguration
 
