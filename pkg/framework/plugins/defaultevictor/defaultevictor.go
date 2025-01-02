@@ -124,6 +124,7 @@ func applyEffectivePodProtections(d *DefaultEvictor, podProtections []PodProtect
 	applyDaemonSetPodsProtection(d, protectionMap)
 	applyPvcPodsProtection(d, protectionMap)
 	applyPodsWithoutPDBProtection(d, protectionMap, handle)
+	applyPodsWithResourceClaimsProtection(d, protectionMap)
 
 	return nil
 }
@@ -166,6 +167,11 @@ func applyPvcPodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]b
 func applyPodsWithoutPDBProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool, handle frameworktypes.Handle) {
 	isProtectionEnabled := protectionMap[PodsWithoutPDB]
 	d.constraints = append(d.constraints, evictionConstraintsForIgnorePodsWithoutPDB(isProtectionEnabled, handle)...)
+}
+
+func applyPodsWithResourceClaimsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
+	isProtectionEnabled := protectionMap[PodsWithResourceClaims]
+	d.constraints = append(d.constraints, evictionConstraintsForResourceClaimsPods(isProtectionEnabled)...)
 }
 
 // getEffectivePodProtections determines which policies are currently active.
