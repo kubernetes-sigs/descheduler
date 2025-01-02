@@ -182,10 +182,11 @@ The Default Evictor Plugin is used by default for filtering pods before processi
 
 > Setting a value in `extraEnabled` **enables an additional protection rule**. This means the specified type of Pods will be **protected** from eviction.
 
-| Value              | Meaning                                                                |
-|--------------------|------------------------------------------------------------------------|
-| `"PodsWithPVC"`    | Prevents eviction of Pods using Persistent Volume Claims (PVCs). |
-| `"PodsWithoutPDB"` | Prevents eviction of Pods without a PodDisruptionBudget (PDB). |
+| Value                      | Meaning                                                          |
+|----------------------------|------------------------------------------------------------------|
+| `"PodsWithPVC"`            | Prevents eviction of Pods using Persistent Volume Claims (PVCs). |
+| `"PodsWithoutPDB"`         | Prevents eviction of Pods without a PodDisruptionBudget (PDB).   |
+| `"PodsWithResourceClaims"` | Prevents eviction of Pods using ResourceClaims.                  |
 
 ### Example policy
 

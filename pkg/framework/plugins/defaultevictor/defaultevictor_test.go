@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/api"
 	evictionutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -860,6 +861,24 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			},
 			result: false,
 		},
+		{
+			description: "Pod with ResourceClaims is not evicted because 'PodsWithResourceClaims' is in extraPodProtections",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p20", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.ResourceClaims = []v1.PodResourceClaim{
+						{
+							Name:              "test-claim",
+							ResourceClaimName: ptr.To("test-resource-claim"),
+						},
+					}
+				}),
+			},
+			podProtections: PodProtections{
+				ExtraEnabled: []PodProtection{PodsWithResourceClaims},
+			},
+			result: false,
+		},
 	}
 
 	for _, test := range testCases {
@@ -1048,6 +1067,26 @@ func TestGetEffectivePodProtections_TableDriven(t *testing.T) {
 				},
 			},
 			wantResult: []PodProtection{PodsWithLocalStorage, SystemCriticalPods, PodsWithPVC},
+		},
+		{
+			name: "NewConfig_EnableOneExtra(PodsWithResourceClaims)_ReturnsDefaultPlusOne",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					DefaultDisabled: []PodProtection{},
+					ExtraEnabled:    []PodProtection{PodsWithResourceClaims},
+				},
+			},
+			wantResult: append(defaultSet, PodsWithResourceClaims),
+		},
+		{
+			name: "NewConfig_DisableAndEnable_ReturnsModifiedSet",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					DefaultDisabled: []PodProtection{FailedBarePods, DaemonSetPods},
+					ExtraEnabled:    []PodProtection{PodsWithPVC, PodsWithResourceClaims},
+				},
+			},
+			wantResult: []PodProtection{PodsWithLocalStorage, SystemCriticalPods, PodsWithPVC, PodsWithResourceClaims},
 		},
 	}
 

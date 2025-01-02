@@ -750,7 +750,7 @@ profiles:
           - "DefaultEvictor"
 `),
 			result: nil,
-			err:    fmt.Errorf("in profile ProfileName: invalid pod protection policy in ExtraEnabled: \"InvalidProtection\". Valid options are: [PodsWithPVC PodsWithoutPDB]"),
+			err:    fmt.Errorf("in profile ProfileName: invalid pod protection policy in ExtraEnabled: \"InvalidProtection\". Valid options are: [PodsWithPVC PodsWithoutPDB PodsWithResourceClaims]"),
 		},
 		{
 			description: "test error when Disables an extra protection",
@@ -802,7 +802,7 @@ profiles:
           - "DefaultEvictor"
 `),
 			result: nil,
-			err:    fmt.Errorf("in profile ProfileName: invalid pod protection policy in ExtraEnabled: \"DaemonSetPods\". Valid options are: [PodsWithPVC PodsWithoutPDB]"),
+			err:    fmt.Errorf("in profile ProfileName: invalid pod protection policy in ExtraEnabled: \"DaemonSetPods\". Valid options are: [PodsWithPVC PodsWithoutPDB PodsWithResourceClaims]"),
 		},
 	}
 
