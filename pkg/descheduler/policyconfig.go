@@ -101,11 +101,12 @@ func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interfac
 	newPluginConfig := api.PluginConfig{
 		Name: defaultevictor.PluginName,
 		Args: &defaultevictor.DefaultEvictorArgs{
-			EvictLocalStoragePods:   false,
-			EvictSystemCriticalPods: false,
-			IgnorePvcPods:           false,
-			EvictFailedBarePods:     false,
-			IgnorePodsWithoutPDB:    false,
+			EvictLocalStoragePods:        false,
+			EvictSystemCriticalPods:      false,
+			IgnorePvcPods:                false,
+			EvictFailedBarePods:          false,
+			IgnorePodsWithoutPDB:         false,
+			IgnorePodsWithResourceClaims: false,
 		},
 	}
 
