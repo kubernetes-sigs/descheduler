@@ -214,6 +214,7 @@ type PodEvictor struct {
 	maxPodsToEvictPerNode            *uint
 	maxPodsToEvictPerNamespace       *uint
 	maxPodsToEvictTotal              *uint
+	gracePeriodSeconds               *int64
 	nodePodCount                     nodePodEvictedCount
 	namespacePodCount                namespacePodEvictCount
 	totalPodCount                    uint
@@ -247,6 +248,7 @@ func NewPodEvictor(
 		maxPodsToEvictPerNode:            options.maxPodsToEvictPerNode,
 		maxPodsToEvictPerNamespace:       options.maxPodsToEvictPerNamespace,
 		maxPodsToEvictTotal:              options.maxPodsToEvictTotal,
+		gracePeriodSeconds:               options.gracePeriodSeconds,
 		metricsEnabled:                   options.metricsEnabled,
 		nodePodCount:                     make(nodePodEvictedCount),
 		namespacePodCount:                make(namespacePodEvictCount),
@@ -563,7 +565,9 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 
 // return (ignore, err)
 func (pe *PodEvictor) evictPod(ctx context.Context, pod *v1.Pod) (bool, error) {
-	deleteOptions := &metav1.DeleteOptions{}
+	deleteOptions := &metav1.DeleteOptions{
+		GracePeriodSeconds: pe.gracePeriodSeconds,
+	}
 	// GracePeriodSeconds ?
 	eviction := &policy.Eviction{
 		TypeMeta: metav1.TypeMeta{

@@ -118,15 +118,16 @@ The Descheduler Policy is configurable and includes default strategy plugins tha
 
 These are top level keys in the Descheduler Policy that you can use to configure all evictions.
 
-| Name                               | type   | Default Value | Description                                                                                                                |
-|------------------------------------|--------|---------------|----------------------------------------------------------------------------------------------------------------------------|
-| `nodeSelector`                     | `string` | `nil`           | Limiting the nodes which are processed. Only used when `nodeFit`=`true` and only by the PreEvictionFilter Extension Point. |
-| `maxNoOfPodsToEvictPerNode`        | `int`    | `nil`           | Maximum number of pods evicted from each node (summed through all strategies).                                             |
-| `maxNoOfPodsToEvictPerNamespace`   | `int`    | `nil`           | Maximum number of pods evicted from each namespace (summed through all strategies).                                        |
-| `maxNoOfPodsToEvictTotal`          | `int`    | `nil`           | Maximum number of pods evicted per rescheduling cycle (summed through all strategies).                                     |
-| `metricsCollector`                 | `object` | `nil`           | Configures collection of metrics for actual resource utilization.                                                          |
-| `metricsCollector.enabled`         | `bool`   | `false`         | Enables Kubernetes [Metrics Server](https://kubernetes-sigs.github.io/metrics-server/) collection.                         |
-| `evictionFailureEventNotification` | `bool`   | `false`         | Enables eviction failure event notification.                                                                               |
+| Name                               | type     | Default Value | Description                                                                                                                |
+|------------------------------------|----------|---------------|----------------------------------------------------------------------------------------------------------------------------|
+| `nodeSelector`                     | `string` | `nil`         | Limiting the nodes which are processed. Only used when `nodeFit`=`true` and only by the PreEvictionFilter Extension Point. |
+| `maxNoOfPodsToEvictPerNode`        | `int`    | `nil`         | Maximum number of pods evicted from each node (summed through all strategies).                                             |
+| `maxNoOfPodsToEvictPerNamespace`   | `int`    | `nil`         | Maximum number of pods evicted from each namespace (summed through all strategies).                                        |
+| `maxNoOfPodsToEvictTotal`          | `int`    | `nil`         | Maximum number of pods evicted per rescheduling cycle (summed through all strategies).                                     |
+| `metricsCollector`                 | `object` | `nil`         | Configures collection of metrics for actual resource utilization.                                                          |
+| `metricsCollector.enabled`         | `bool`   | `false`       | Enables Kubernetes [Metrics Server](https://kubernetes-sigs.github.io/metrics-server/) collection.                         |
+| `evictionFailureEventNotification` | `bool`   | `false`       | Enables eviction failure event notification.                                                                               |
+| `gracePeriodSeconds`               | `int`    | `0`           | The duration in seconds before the object should be deleted. The value zero indicates delete immediately.                  |
 
 ### Evictor Plugin configuration (Default Evictor)
 
@@ -161,6 +162,7 @@ nodeSelector: "node=node1" # you don't need to set this, if not set all will be 
 maxNoOfPodsToEvictPerNode: 5000 # you don't need to set this, unlimited if not set
 maxNoOfPodsToEvictPerNamespace: 5000 # you don't need to set this, unlimited if not set
 maxNoOfPodsToEvictTotal: 5000 # you don't need to set this, unlimited if not set
+gracePeriodSeconds: 60 # you don't need to set this, 0 if not set
 metricsCollector:
   enabled: true # you don't need to set this, metrics are not collected if not set
 profiles:

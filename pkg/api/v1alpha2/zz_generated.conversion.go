@@ -119,6 +119,7 @@ func autoConvert_v1alpha2_DeschedulerPolicy_To_api_DeschedulerPolicy(in *Desched
 	if err := Convert_v1alpha2_MetricsCollector_To_api_MetricsCollector(&in.MetricsCollector, &out.MetricsCollector, s); err != nil {
 		return err
 	}
+	out.GracePeriodSeconds = (*int64)(unsafe.Pointer(in.GracePeriodSeconds))
 	return nil
 }
 
@@ -142,6 +143,7 @@ func autoConvert_api_DeschedulerPolicy_To_v1alpha2_DeschedulerPolicy(in *api.Des
 	if err := Convert_api_MetricsCollector_To_v1alpha2_MetricsCollector(&in.MetricsCollector, &out.MetricsCollector, s); err != nil {
 		return err
 	}
+	out.GracePeriodSeconds = (*int64)(unsafe.Pointer(in.GracePeriodSeconds))
 	return nil
 }
 
