@@ -44,6 +44,7 @@ type testCase struct {
 	evictFailedBarePods     bool
 	evictLocalStoragePods   bool
 	evictSystemCriticalPods bool
+	ignorePvcPods           bool
 	priorityThreshold       *int32
 	nodeFit                 bool
 	minReplicas             uint
@@ -769,6 +770,38 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			},
 			ignorePodsWithoutPDB: true,
 			result:               true,
+		}, {
+			description: "ignorePvcPods is set, pod with PVC, not evicts",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p15", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "pvc", VolumeSource: v1.VolumeSource{
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
+							},
+						},
+					}
+				}),
+			},
+			ignorePvcPods: true,
+			result:        false,
+		}, {
+			description: "ignorePvcPods is not set, pod with PVC, evicts",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p15", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "pvc", VolumeSource: v1.VolumeSource{
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
+							},
+						},
+					}
+				}),
+			},
+			ignorePvcPods: false,
+			result:        true,
 		},
 	}
 
@@ -862,7 +895,7 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 	defaultEvictorArgs := &DefaultEvictorArgs{
 		EvictLocalStoragePods:   test.evictLocalStoragePods,
 		EvictSystemCriticalPods: test.evictSystemCriticalPods,
-		IgnorePvcPods:           false,
+		IgnorePvcPods:           test.ignorePvcPods,
 		EvictFailedBarePods:     test.evictFailedBarePods,
 		PriorityThreshold: &api.PriorityThreshold{
 			Value: test.priorityThreshold,
