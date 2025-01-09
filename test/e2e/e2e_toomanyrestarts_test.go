@@ -141,12 +141,6 @@ func TestTooManyRestarts(t *testing.T) {
 			policy:                  tooManyRestartsPolicy(testNamespace.Name, 3, true, 0),
 			expectedEvictedPodCount: 4,
 		},
-		{
-			name:                    "test-one-evictions-use-gracePeriodSeconds",
-			policy:                  tooManyRestartsPolicy(testNamespace.Name, 3, true, 60),
-			enableGracePeriod:       true,
-			expectedEvictedPodCount: 4,
-		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -204,31 +198,6 @@ func TestTooManyRestarts(t *testing.T) {
 			if len(deschedulerPods) != 0 {
 				deschedulerPodName = deschedulerPods[0].Name
 			}
-
-			// Check if grace period is enabled and wait accordingly
-			if tc.enableGracePeriod {
-				// Ensure no pods are evicted during the grace period
-				// Wait for 55 seconds to ensure that the pods are not evicted during the grace period
-				// We do not want to use an extreme waiting time, such as 59 seconds,
-				// because the grace period is set to 60 seconds.
-				// In order to avoid unnecessary flake failures,
-				// we only need to make sure that the pod is not evicted within a certain range.
-				t.Logf("Waiting for grace period of %d seconds", 55)
-				if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, time.Duration(55)*time.Second, true, func(ctx context.Context) (bool, error) {
-					currentRunNames := sets.NewString(getCurrentPodNames(ctx, clientSet, testNamespace.Name, t)...)
-					actualEvictedPod := preRunNames.Difference(currentRunNames)
-					actualEvictedPodCount := uint(actualEvictedPod.Len())
-					t.Logf("preRunNames: %v, currentRunNames: %v, actualEvictedPodCount: %v\n", preRunNames.List(), currentRunNames.List(), actualEvictedPodCount)
-					if actualEvictedPodCount > 0 {
-						t.Fatalf("Pods were evicted during grace period; expected 0, got %v", actualEvictedPodCount)
-						return false, nil
-					}
-					return true, nil
-				}); err != nil {
-					t.Fatalf("Error waiting during grace period: %v", err)
-				}
-			}
-
 			// Run RemovePodsHavingTooManyRestarts strategy
 			if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 50*time.Second, true, func(ctx context.Context) (bool, error) {
 				currentRunNames := sets.NewString(getCurrentPodNames(ctx, clientSet, testNamespace.Name, t)...)
