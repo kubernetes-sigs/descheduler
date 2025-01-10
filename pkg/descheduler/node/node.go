@@ -34,7 +34,10 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
-const workersCount = 100
+const (
+	workersCount              = 100
+	FitNodeToPodAnnotationKey = "descheduler.alpha.kubernetes.io/fit-node-name"
+)
 
 // ReadyNodes returns ready nodes irrespective of whether they are
 // schedulable or not.
@@ -161,6 +164,7 @@ func podFitsNodes(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, no
 		if err == nil {
 			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			atomic.AddInt32(&filteredLen, 1)
+			addFitNodeNameToPod(pod, node)
 			cancel()
 		} else {
 			klog.V(4).InfoS("Pod does not fit on node", "pod", klog.KObj(pod), "node", klog.KObj(node), "err", err.Error())
@@ -171,6 +175,14 @@ func podFitsNodes(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, no
 	workqueue.ParallelizeUntil(ctx, workersCount, len(nodes), checkNode)
 
 	return filteredLen > 0
+}
+
+func addFitNodeNameToPod(pod *v1.Pod, node *v1.Node) {
+	if pod.Annotations != nil {
+		pod.Annotations[FitNodeToPodAnnotationKey] = node.Name
+	} else {
+		pod.Annotations = map[string]string{FitNodeToPodAnnotationKey: node.Name}
+	}
 }
 
 // PodFitsAnyOtherNode checks if the given pod will fit any of the given nodes, besides the node
