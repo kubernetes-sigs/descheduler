@@ -11,7 +11,7 @@ WARNING: You enabled DryRun mode, you can't use Leader Election.
 {{- end}}
 {{- end}}
 {{- if .Values.deschedulerPolicy }}
-A default DeschedulerPolicy has been applied for you. You can view the policy with:
+A DeschedulerPolicy has been applied for you. You can view the policy with:
 
 kubectl get configmap -n {{ include "descheduler.namespace" . }} {{ template "descheduler.fullname" . }} -o yaml
 
