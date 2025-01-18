@@ -1,9 +1,12 @@
 package removepodsviolatinginterpodantiaffinity
 
 import (
+	"context"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
@@ -58,7 +61,7 @@ func TestValidateRemovePodsViolatingInterPodAntiAffinityArgs(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			err := ValidateRemovePodsViolatingInterPodAntiAffinityArgs(tc.args)
+			err := ValidateRemovePodsViolatingInterPodAntiAffinityArgs(klog.FromContext(context.Background()), tc.args)
 			hasError := err != nil
 			if tc.expectError != hasError {
 				t.Error("unexpected arg validation behavior")

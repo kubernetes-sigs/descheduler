@@ -39,6 +39,7 @@ const workersCount = 100
 // ReadyNodes returns ready nodes irrespective of whether they are
 // schedulable or not.
 func ReadyNodes(ctx context.Context, client clientset.Interface, nodeLister listersv1.NodeLister, nodeSelector string) ([]*v1.Node, error) {
+	logger := klog.FromContext(ctx)
 	ns, err := labels.Parse(nodeSelector)
 	if err != nil {
 		return []*v1.Node{}, err
@@ -51,7 +52,7 @@ func ReadyNodes(ctx context.Context, client clientset.Interface, nodeLister list
 	}
 
 	if len(nodes) == 0 {
-		klog.V(2).InfoS("Node lister returned empty list, now fetch directly")
+		logger.V(2).Info("Node lister returned empty list, now fetch directly")
 
 		nItems, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: nodeSelector})
 		if err != nil {
@@ -70,7 +71,7 @@ func ReadyNodes(ctx context.Context, client clientset.Interface, nodeLister list
 
 	readyNodes := make([]*v1.Node, 0, len(nodes))
 	for _, node := range nodes {
-		if IsReady(node) {
+		if IsReady(ctx, node) {
 			readyNodes = append(readyNodes, node)
 		}
 	}
@@ -78,7 +79,8 @@ func ReadyNodes(ctx context.Context, client clientset.Interface, nodeLister list
 }
 
 // IsReady checks if the descheduler could run against given node.
-func IsReady(node *v1.Node) bool {
+func IsReady(ctx context.Context, node *v1.Node) bool {
+	logger := klog.FromContext(ctx)
 	for i := range node.Status.Conditions {
 		cond := &node.Status.Conditions[i]
 		// We consider the node for scheduling only when its:
@@ -86,19 +88,19 @@ func IsReady(node *v1.Node) bool {
 		// - NodeOutOfDisk condition status is ConditionFalse,
 		// - NodeNetworkUnavailable condition status is ConditionFalse.
 		if cond.Type == v1.NodeReady && cond.Status != v1.ConditionTrue {
-			klog.V(1).InfoS("Ignoring node", "node", klog.KObj(node), "condition", cond.Type, "status", cond.Status)
+			logger.V(1).Info("Ignoring node", "node", klog.KObj(node), "condition", cond.Type, "status", cond.Status)
 			return false
 		} /*else if cond.Type == v1.NodeOutOfDisk && cond.Status != v1.ConditionFalse {
-			klog.V(4).InfoS("Ignoring node with condition status", "node", klog.KObj(node.Name), "condition", cond.Type, "status", cond.Status)
+			logger.V(4).Info("Ignoring node with condition status", "node", klog.KObj(node.Name), "condition", cond.Type, "status", cond.Status)
 			return false
 		} else if cond.Type == v1.NodeNetworkUnavailable && cond.Status != v1.ConditionFalse {
-			klog.V(4).InfoS("Ignoring node with condition status", "node", klog.KObj(node.Name), "condition", cond.Type, "status", cond.Status)
+			logger.V(4).Info("Ignoring node with condition status", "node", klog.KObj(node.Name), "condition", cond.Type, "status", cond.Status)
 			return false
 		}*/
 	}
 	// Ignore nodes that are marked unschedulable
 	/*if node.Spec.Unschedulable {
-		klog.V(4).InfoS("Ignoring node since it is unschedulable", "node", klog.KObj(node.Name))
+		logger.V(4).Info("Ignoring node since it is unschedulable", "node", klog.KObj(node.Name))
 		return false
 	}*/
 	return true
@@ -109,9 +111,9 @@ func IsReady(node *v1.Node) bool {
 // This function currently considers a subset of the Kubernetes Scheduler's predicates when
 // deciding if a pod would fit on a node, but more predicates may be added in the future.
 // There should be no methods to modify nodes or pods in this method.
-func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) error {
+func NodeFit(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) error {
 	// Check node selector and required affinity
-	if ok, err := utils.PodMatchNodeSelector(pod, node); err != nil {
+	if ok, err := utils.PodMatchNodeSelector(ctx, pod, node); err != nil {
 		return err
 	} else if !ok {
 		return errors.New("pod node selector does not match the node label")
@@ -127,7 +129,7 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 
 	// Check if the pod can fit on a node based off it's requests
 	if pod.Spec.NodeName == "" || pod.Spec.NodeName != node.Name {
-		if ok, reqError := fitsRequest(nodeIndexer, pod, node); !ok {
+		if ok, reqError := fitsRequest(ctx, nodeIndexer, pod, node); !ok {
 			return reqError
 		}
 	}
@@ -138,7 +140,7 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 	}
 
 	// Check if pod matches inter-pod anti-affinity rule of pod on node
-	if match, err := podMatchesInterPodAntiAffinity(nodeIndexer, pod, node); err != nil {
+	if match, err := podMatchesInterPodAntiAffinity(ctx, nodeIndexer, pod, node); err != nil {
 		return err
 	} else if match {
 		return errors.New("pod matches inter-pod anti-affinity rule of other pod on node")
@@ -147,9 +149,11 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 	return nil
 }
 
-func podFitsNodes(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node, excludeFilter func(pod *v1.Pod, node *v1.Node) bool) bool {
-	ctx, cancel := context.WithCancel(context.Background())
+func podFitsNodes(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node, excludeFilter func(pod *v1.Pod, node *v1.Node) bool) bool {
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	logger := klog.FromContext(ctx)
 
 	var filteredLen int32
 	checkNode := func(i int) {
@@ -157,13 +161,13 @@ func podFitsNodes(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, no
 		if excludeFilter != nil && excludeFilter(pod, node) {
 			return
 		}
-		err := NodeFit(nodeIndexer, pod, node)
+		err := NodeFit(ctx, nodeIndexer, pod, node)
 		if err == nil {
-			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
+			logger.V(4).Info("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			atomic.AddInt32(&filteredLen, 1)
 			cancel()
 		} else {
-			klog.V(4).InfoS("Pod does not fit on node", "pod", klog.KObj(pod), "node", klog.KObj(node), "err", err.Error())
+			logger.V(4).Info("Pod does not fit on node", "pod", klog.KObj(pod), "node", klog.KObj(node), "err", err.Error())
 		}
 	}
 
@@ -175,28 +179,29 @@ func podFitsNodes(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, no
 
 // PodFitsAnyOtherNode checks if the given pod will fit any of the given nodes, besides the node
 // the pod is already running on. The predicates used to determine if the pod will fit can be found in the NodeFit function.
-func PodFitsAnyOtherNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node) bool {
-	return podFitsNodes(nodeIndexer, pod, nodes, func(pod *v1.Pod, node *v1.Node) bool {
+func PodFitsAnyOtherNode(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node) bool {
+	return podFitsNodes(ctx, nodeIndexer, pod, nodes, func(pod *v1.Pod, node *v1.Node) bool {
 		return pod.Spec.NodeName == node.Name
 	})
 }
 
 // PodFitsAnyNode checks if the given pod will fit any of the given nodes. The predicates used
 // to determine if the pod will fit can be found in the NodeFit function.
-func PodFitsAnyNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node) bool {
-	return podFitsNodes(nodeIndexer, pod, nodes, nil)
+func PodFitsAnyNode(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node) bool {
+	return podFitsNodes(ctx, nodeIndexer, pod, nodes, nil)
 }
 
 // PodFitsCurrentNode checks if the given pod will fit onto the given node. The predicates used
 // to determine if the pod will fit can be found in the NodeFit function.
-func PodFitsCurrentNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) bool {
-	err := NodeFit(nodeIndexer, pod, node)
+func PodFitsCurrentNode(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) bool {
+	logger := klog.FromContext(ctx)
+	err := NodeFit(ctx, nodeIndexer, pod, node)
 	if err == nil {
-		klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
+		logger.V(4).Info("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 		return true
 	}
 
-	klog.V(4).InfoS("Pod does not fit on current node",
+	logger.V(4).Info("Pod does not fit on current node",
 		"pod", klog.KObj(pod), "node", klog.KObj(node), "error", err)
 
 	return false
@@ -210,7 +215,7 @@ func IsNodeUnschedulable(node *v1.Node) bool {
 
 // fitsRequest determines if a pod can fit on a node based on its resource requests. It returns true if
 // the pod will fit.
-func fitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, error) {
+func fitsRequest(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, error) {
 	// Get pod requests
 	podRequests, _ := utils.PodRequestsAndLimits(pod)
 	resourceNames := make([]v1.ResourceName, 0, len(podRequests))
@@ -218,7 +223,7 @@ func fitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nod
 		resourceNames = append(resourceNames, name)
 	}
 
-	availableResources, err := nodeAvailableResources(nodeIndexer, node, resourceNames,
+	availableResources, err := nodeAvailableResources(ctx, nodeIndexer, node, resourceNames,
 		func(pod *v1.Pod) (v1.ResourceList, error) {
 			req, _ := utils.PodRequestsAndLimits(pod)
 			return req, nil
@@ -244,8 +249,8 @@ func fitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nod
 }
 
 // nodeAvailableResources returns resources mapped to the quanitity available on the node.
-func nodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node *v1.Node, resourceNames []v1.ResourceName, podUtilization podutil.PodUtilizationFnc) (map[v1.ResourceName]*resource.Quantity, error) {
-	podsOnNode, err := podutil.ListPodsOnANode(node.Name, nodeIndexer, nil)
+func nodeAvailableResources(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, node *v1.Node, resourceNames []v1.ResourceName, podUtilization podutil.PodUtilizationFnc) (map[v1.ResourceName]*resource.Quantity, error) {
+	podsOnNode, err := podutil.ListPodsOnANode(ctx, node.Name, nodeIndexer, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -316,8 +321,8 @@ func IsBasicResource(name v1.ResourceName) bool {
 // GetNodeWeightGivenPodPreferredAffinity returns the weight
 // that the pod gives to a node by analyzing the soft node affinity of that pod
 // (nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution)
-func GetNodeWeightGivenPodPreferredAffinity(pod *v1.Pod, node *v1.Node) int32 {
-	totalWeight, err := utils.GetNodeWeightGivenPodPreferredAffinity(pod, node)
+func GetNodeWeightGivenPodPreferredAffinity(ctx context.Context, pod *v1.Pod, node *v1.Node) int32 {
+	totalWeight, err := utils.GetNodeWeightGivenPodPreferredAffinity(ctx, pod, node)
 	if err != nil {
 		return 0
 	}
@@ -327,10 +332,10 @@ func GetNodeWeightGivenPodPreferredAffinity(pod *v1.Pod, node *v1.Node) int32 {
 // GetBestNodeWeightGivenPodPreferredAffinity returns the best weight
 // (maximum one) that the pod gives to the best node by analyzing the soft node affinity
 // of that pod (nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution)
-func GetBestNodeWeightGivenPodPreferredAffinity(pod *v1.Pod, nodes []*v1.Node) int32 {
+func GetBestNodeWeightGivenPodPreferredAffinity(ctx context.Context, pod *v1.Pod, nodes []*v1.Node) int32 {
 	var bestWeight int32 = 0
 	for _, node := range nodes {
-		weight := GetNodeWeightGivenPodPreferredAffinity(pod, node)
+		weight := GetNodeWeightGivenPodPreferredAffinity(ctx, pod, node)
 		if weight > bestWeight {
 			bestWeight = weight
 		}
@@ -339,8 +344,8 @@ func GetBestNodeWeightGivenPodPreferredAffinity(pod *v1.Pod, nodes []*v1.Node) i
 }
 
 // PodMatchNodeSelector checks if a pod node selector matches the node label.
-func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) bool {
-	matches, err := utils.PodMatchNodeSelector(pod, node)
+func PodMatchNodeSelector(ctx context.Context, pod *v1.Pod, node *v1.Node) bool {
+	matches, err := utils.PodMatchNodeSelector(ctx, pod, node)
 	if err != nil {
 		return false
 	}
@@ -350,12 +355,13 @@ func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) bool {
 // podMatchesInterPodAntiAffinity checks if the pod matches the anti-affinity rule
 // of another pod that is already on the given node.
 // If a match is found, it returns true.
-func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, error) {
+func podMatchesInterPodAntiAffinity(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, error) {
+	logger := klog.FromContext(ctx)
 	if pod.Spec.Affinity == nil || pod.Spec.Affinity.PodAntiAffinity == nil {
 		return false, nil
 	}
 
-	podsOnNode, err := podutil.ListPodsOnANode(node.Name, nodeIndexer, nil)
+	podsOnNode, err := podutil.ListPodsOnANode(ctx, node.Name, nodeIndexer, nil)
 	if err != nil {
 		return false, fmt.Errorf("error listing all pods: %v", err)
 	}
@@ -365,19 +371,19 @@ func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFun
 		namespaces := utils.GetNamespacesFromPodAffinityTerm(pod, &term)
 		selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
 		if err != nil {
-			klog.ErrorS(err, "Unable to convert LabelSelector into Selector")
+			logger.Error(err, "Unable to convert LabelSelector into Selector")
 			return false, err
 		}
 
 		for namespace := range namespaces {
 			for _, assignedPod := range assignedPodsInNamespace[namespace] {
 				if assignedPod.Name == pod.Name || !utils.PodMatchesTermsNamespaceAndSelector(assignedPod, namespaces, selector) {
-					klog.V(4).InfoS("Pod doesn't match inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(pod), "assignedPod", klog.KObj(assignedPod))
+					logger.V(4).Info("Pod doesn't match inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(pod), "assignedPod", klog.KObj(assignedPod))
 					continue
 				}
 
 				if _, ok := node.Labels[term.TopologyKey]; ok {
-					klog.V(1).InfoS("Pod matches inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(pod), "assignedPod", klog.KObj(assignedPod))
+					logger.V(1).Info("Pod matches inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(pod), "assignedPod", klog.KObj(assignedPod))
 					return true, nil
 				}
 			}

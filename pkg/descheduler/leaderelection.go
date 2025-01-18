@@ -31,12 +31,13 @@ import (
 
 // NewLeaderElection starts the leader election code loop
 func NewLeaderElection(
+	ctx context.Context,
 	run func() error,
 	client clientset.Interface,
 	LeaderElectionConfig *componentbaseconfig.LeaderElectionConfiguration,
-	ctx context.Context,
 ) error {
 	var id string
+	logger := klog.FromContext(ctx)
 
 	if hostname, err := os.Hostname(); err != nil {
 		// on errors, make sure we're unique
@@ -46,7 +47,7 @@ func NewLeaderElection(
 		id = hostname + "_" + string(uuid.NewUUID())
 	}
 
-	klog.V(3).Infof("Assigned unique lease holder id: %s", id)
+	logger.V(3).Info("Assigned unique lease holder id", "id", id)
 
 	if len(LeaderElectionConfig.ResourceNamespace) == 0 {
 		return fmt.Errorf("namespace may not be empty")
@@ -78,21 +79,21 @@ func NewLeaderElection(
 		RetryPeriod:     LeaderElectionConfig.RetryPeriod.Duration,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(ctx context.Context) {
-				klog.V(1).InfoS("Started leading")
+				logger.V(1).Info("Started leading")
 				err := run()
 				if err != nil {
-					klog.Error(err)
+					logger.Error(err, "Leader run function failed")
 				}
 			},
 			OnStoppedLeading: func() {
-				klog.V(1).InfoS("Leader lost")
+				logger.V(1).Info("Leader lost")
 			},
 			OnNewLeader: func(identity string) {
 				// Just got the lock
 				if identity == id {
 					return
 				}
-				klog.V(1).Infof("New leader elected: %v", identity)
+				logger.V(1).Info("New leader elected", "identity", identity)
 			},
 		},
 	})

@@ -362,7 +362,7 @@ func TestRemoveFailedPods(t *testing.T) {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
-			plugin, err := New(&RemoveFailedPodsArgs{
+			plugin, err := New(ctx, &RemoveFailedPodsArgs{
 				Reasons:                 tc.args.Reasons,
 				ExitCodes:               tc.args.ExitCodes,
 				MinPodLifetimeSeconds:   tc.args.MinPodLifetimeSeconds,

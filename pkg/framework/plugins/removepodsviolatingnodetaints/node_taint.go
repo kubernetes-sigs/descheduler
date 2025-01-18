@@ -44,7 +44,7 @@ type RemovePodsViolatingNodeTaints struct {
 var _ frameworktypes.DeschedulePlugin = &RemovePodsViolatingNodeTaints{}
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+func New(_ context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	nodeTaintsArgs, ok := args.(*RemovePodsViolatingNodeTaintsArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingNodeTaintsArgs, got %T", args)
@@ -104,9 +104,10 @@ func (d *RemovePodsViolatingNodeTaints) Name() string {
 
 // Deschedule extension point implementation for the plugin
 func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	logger := klog.FromContext(ctx)
 	for _, node := range nodes {
-		klog.V(1).InfoS("Processing node", "node", klog.KObj(node))
-		pods, err := podutil.ListAllPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
+		logger.V(1).Info("Processing node", "node", klog.KObj(node))
+		pods, err := podutil.ListAllPodsOnANode(ctx, node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			// no pods evicted as error encountered retrieving evictable Pods
 			return &frameworktypes.Status{
@@ -121,7 +122,7 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 				node.Spec.Taints,
 				d.taintFilterFnc,
 			) {
-				klog.V(2).InfoS("Not all taints with NoSchedule effect are tolerated after update for pod on node", "pod", klog.KObj(pods[i]), "node", klog.KObj(node))
+				logger.V(2).Info("Not all taints with NoSchedule effect are tolerated after update for pod on node", "pod", klog.KObj(pods[i]), "node", klog.KObj(node))
 				err := d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
 				if err == nil {
 					continue
@@ -132,7 +133,7 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 				case *evictions.EvictionTotalLimitError:
 					return nil
 				default:
-					klog.Errorf("eviction failed: %v", err)
+					logger.Error(err, "Eviction failed", "pod", klog.KObj(pods[i]))
 				}
 			}
 		}

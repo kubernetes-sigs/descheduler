@@ -474,7 +474,7 @@ func TestHighNodeUtilization(t *testing.T) {
 				})
 			}
 
-			plugin, err := NewHighNodeUtilization(&HighNodeUtilizationArgs{
+			plugin, err := NewHighNodeUtilization(ctx, &HighNodeUtilizationArgs{
 				Thresholds: testCase.thresholds,
 			},
 				handle)
@@ -586,7 +586,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
-			plugin, err := NewHighNodeUtilization(&HighNodeUtilizationArgs{
+			plugin, err := NewHighNodeUtilization(ctx, &HighNodeUtilizationArgs{
 				Thresholds: api.ResourceThresholds{
 					v1.ResourceCPU: 40,
 				},

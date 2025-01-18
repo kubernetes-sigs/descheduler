@@ -1448,6 +1448,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(&tc.args)
 
 			plugin, err := New(
+				ctx,
 				&tc.args,
 				handle,
 			)

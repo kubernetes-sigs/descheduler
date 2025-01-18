@@ -44,7 +44,7 @@ type PodLifeTime struct {
 }
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+func New(_ context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	podLifeTimeArgs, ok := args.(*PodLifeTimeArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type PodLifeTimeArgs, got %T", args)
@@ -67,14 +67,14 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
 	}
 
-	podFilter = podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
+	podFilter = podutil.WrapFilterFuncs(podFilter, func(_ context.Context, pod *v1.Pod) bool {
 		podAgeSeconds := int(metav1.Now().Sub(pod.GetCreationTimestamp().Local()).Seconds())
 		return podAgeSeconds > int(*podLifeTimeArgs.MaxPodLifeTimeSeconds)
 	})
 
 	if len(podLifeTimeArgs.States) > 0 {
 		states := sets.New(podLifeTimeArgs.States...)
-		podFilter = podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
+		podFilter = podutil.WrapFilterFuncs(podFilter, func(_ context.Context, pod *v1.Pod) bool {
 			// Pod Status Phase
 			if states.Has(string(pod.Status.Phase)) {
 				return true
@@ -128,12 +128,13 @@ func (d *PodLifeTime) Name() string {
 
 // Deschedule extension point implementation for the plugin
 func (d *PodLifeTime) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	logger := klog.FromContext(ctx)
 	podsToEvict := make([]*v1.Pod, 0)
 	nodeMap := make(map[string]*v1.Node, len(nodes))
 
 	for _, node := range nodes {
-		klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
-		pods, err := podutil.ListAllPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
+		logger.V(2).Info("Processing node", "node", klog.KObj(node))
+		pods, err := podutil.ListAllPodsOnANode(ctx, node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			// no pods evicted as error encountered retrieving evictable Pods
 			return &frameworktypes.Status{
@@ -161,7 +162,7 @@ loop:
 		case *evictions.EvictionTotalLimitError:
 			return nil
 		default:
-			klog.Errorf("eviction failed: %v", err)
+			logger.Error(err, "unable to evict pod", "pod", klog.KObj(pod))
 		}
 	}
 

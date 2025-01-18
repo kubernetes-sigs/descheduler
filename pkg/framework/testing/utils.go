@@ -32,10 +32,10 @@ func InitFrameworkHandle(
 		return nil, nil, fmt.Errorf("Build get pods assigned to node function error: %v", err)
 	}
 
-	var getPodsAssignedToNode func(s string, filterFunc podutil.FilterFunc) ([]*v1.Pod, error)
+	var getPodsAssignedToNode func(ctx context.Context, s string, filterFunc podutil.FilterFunc) ([]*v1.Pod, error)
 	if getPodsAssignedToNodeSorter != nil {
-		getPodsAssignedToNode = func(s string, filterFunc podutil.FilterFunc) ([]*v1.Pod, error) {
-			pods, err := podsAssignedToNode(s, filterFunc)
+		getPodsAssignedToNode = func(ctx context.Context, s string, filterFunc podutil.FilterFunc) ([]*v1.Pod, error) {
+			pods, err := podsAssignedToNode(ctx, s, filterFunc)
 			getPodsAssignedToNodeSorter(pods)
 			return pods, err
 		}
@@ -55,6 +55,7 @@ func InitFrameworkHandle(
 		return nil, nil, fmt.Errorf("Unable to initialize pod evictor: %v", err)
 	}
 	evictorFilter, err := defaultevictor.New(
+		ctx,
 		&defaultEvictorArgs,
 		&frameworkfake.HandleImpl{
 			ClientsetImpl:                 client,

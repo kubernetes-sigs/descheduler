@@ -36,10 +36,10 @@ type usageClient interface {
 	// Both low/high node utilization plugins are expected to invoke sync right
 	// after Balance method is invoked. There's no cache invalidation so each
 	// Balance is expected to get the latest data by invoking sync.
-	sync(nodes []*v1.Node) error
+	sync(ctx context.Context, nodes []*v1.Node) error
 	nodeUtilization(node string) map[v1.ResourceName]*resource.Quantity
 	pods(node string) []*v1.Pod
-	podUsage(pod *v1.Pod) (map[v1.ResourceName]*resource.Quantity, error)
+	podUsage(ctx context.Context, pod *v1.Pod) (map[v1.ResourceName]*resource.Quantity, error)
 }
 
 type requestedUsageClient struct {
@@ -70,7 +70,7 @@ func (s *requestedUsageClient) pods(node string) []*v1.Pod {
 	return s._pods[node]
 }
 
-func (s *requestedUsageClient) podUsage(pod *v1.Pod) (map[v1.ResourceName]*resource.Quantity, error) {
+func (s *requestedUsageClient) podUsage(_ context.Context, pod *v1.Pod) (map[v1.ResourceName]*resource.Quantity, error) {
 	usage := make(map[v1.ResourceName]*resource.Quantity)
 	for _, resourceName := range s.resourceNames {
 		usage[resourceName] = utilptr.To[resource.Quantity](utils.GetResourceRequestQuantity(pod, resourceName).DeepCopy())
@@ -78,14 +78,15 @@ func (s *requestedUsageClient) podUsage(pod *v1.Pod) (map[v1.ResourceName]*resou
 	return usage, nil
 }
 
-func (s *requestedUsageClient) sync(nodes []*v1.Node) error {
+func (s *requestedUsageClient) sync(ctx context.Context, nodes []*v1.Node) error {
+	logger := klog.FromContext(ctx)
 	s._nodeUtilization = make(map[string]map[v1.ResourceName]*resource.Quantity)
 	s._pods = make(map[string][]*v1.Pod)
 
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(node.Name, s.getPodsAssignedToNode, nil)
+		pods, err := podutil.ListPodsOnANode(ctx, node.Name, s.getPodsAssignedToNode, nil)
 		if err != nil {
-			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
+			logger.V(2).Info("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
 			return fmt.Errorf("error accessing %q node's pods: %v", node.Name, err)
 		}
 
@@ -136,10 +137,10 @@ func (client *actualUsageClient) pods(node string) []*v1.Pod {
 	return client._pods[node]
 }
 
-func (client *actualUsageClient) podUsage(pod *v1.Pod) (map[v1.ResourceName]*resource.Quantity, error) {
+func (client *actualUsageClient) podUsage(ctx context.Context, pod *v1.Pod) (map[v1.ResourceName]*resource.Quantity, error) {
 	// It's not efficient to keep track of all pods in a cluster when only their fractions is evicted.
 	// Thus, take the current pod metrics without computing any softening (like e.g. EWMA).
-	podMetrics, err := client.metricsCollector.MetricsClient().MetricsV1beta1().PodMetricses(pod.Namespace).Get(context.TODO(), pod.Name, metav1.GetOptions{})
+	podMetrics, err := client.metricsCollector.MetricsClient().MetricsV1beta1().PodMetricses(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("unable to get podmetrics for %q/%q: %v", pod.Namespace, pod.Name, err)
 	}
@@ -164,7 +165,8 @@ func (client *actualUsageClient) podUsage(pod *v1.Pod) (map[v1.ResourceName]*res
 	return totalUsage, nil
 }
 
-func (client *actualUsageClient) sync(nodes []*v1.Node) error {
+func (client *actualUsageClient) sync(ctx context.Context, nodes []*v1.Node) error {
+	logger := klog.FromContext(ctx)
 	client._nodeUtilization = make(map[string]map[v1.ResourceName]*resource.Quantity)
 	client._pods = make(map[string][]*v1.Pod)
 
@@ -174,9 +176,9 @@ func (client *actualUsageClient) sync(nodes []*v1.Node) error {
 	}
 
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(node.Name, client.getPodsAssignedToNode, nil)
+		pods, err := podutil.ListPodsOnANode(ctx, node.Name, client.getPodsAssignedToNode, nil)
 		if err != nil {
-			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
+			logger.V(2).Info("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
 			return fmt.Errorf("error accessing %q node's pods: %v", node.Name, err)
 		}
 

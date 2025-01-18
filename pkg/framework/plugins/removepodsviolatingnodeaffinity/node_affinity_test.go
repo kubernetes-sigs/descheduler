@@ -369,6 +369,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			}
 
 			plugin, err := New(
+				ctx,
 				&RemovePodsViolatingNodeAffinityArgs{
 					NodeAffinityType: tc.args.NodeAffinityType,
 				},

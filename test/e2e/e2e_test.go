@@ -205,18 +205,18 @@ func printPodLogs(ctx context.Context, t *testing.T, kubeClient clientset.Interf
 
 func TestMain(m *testing.M) {
 	if os.Getenv("DESCHEDULER_IMAGE") == "" {
-		klog.Errorf("DESCHEDULER_IMAGE env is not set")
+		klog.FromContext(context.TODO()).Error(nil, "DESCHEDULER_IMAGE env is not set")
 		os.Exit(1)
 	}
 
 	os.Exit(m.Run())
 }
 
-func initPluginRegistry() {
+func initPluginRegistry(ctx context.Context) {
 	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
-	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
-	pluginregistry.Register(podlifetime.PluginName, podlifetime.New, &podlifetime.PodLifeTime{}, &podlifetime.PodLifeTimeArgs{}, podlifetime.ValidatePodLifeTimeArgs, podlifetime.SetDefaults_PodLifeTimeArgs, pluginregistry.PluginRegistry)
-	pluginregistry.Register(removepodshavingtoomanyrestarts.PluginName, removepodshavingtoomanyrestarts.New, &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestarts{}, &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs{}, removepodshavingtoomanyrestarts.ValidateRemovePodsHavingTooManyRestartsArgs, removepodshavingtoomanyrestarts.SetDefaults_RemovePodsHavingTooManyRestartsArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(ctx, defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(ctx, podlifetime.PluginName, podlifetime.New, &podlifetime.PodLifeTime{}, &podlifetime.PodLifeTimeArgs{}, podlifetime.ValidatePodLifeTimeArgs, podlifetime.SetDefaults_PodLifeTimeArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(ctx, removepodshavingtoomanyrestarts.PluginName, removepodshavingtoomanyrestarts.New, &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestarts{}, &removepodshavingtoomanyrestarts.RemovePodsHavingTooManyRestartsArgs{}, removepodshavingtoomanyrestarts.ValidateRemovePodsHavingTooManyRestartsArgs, removepodshavingtoomanyrestarts.SetDefaults_RemovePodsHavingTooManyRestartsArgs, pluginregistry.PluginRegistry)
 }
 
 // RcByNameContainer returns a ReplicationController with specified name and container
@@ -451,7 +451,7 @@ func runPodLifetimePlugin(
 
 	maxPodLifeTimeSeconds := uint(1)
 
-	plugin, err := podlifetime.New(&podlifetime.PodLifeTimeArgs{
+	plugin, err := podlifetime.New(ctx, &podlifetime.PodLifeTimeArgs{
 		MaxPodLifeTimeSeconds: &maxPodLifeTimeSeconds,
 		LabelSelector:         labelSelector,
 		Namespaces:            namespaces,
@@ -608,14 +608,14 @@ func TestLowNodeUtilization(t *testing.T) {
 		t.Errorf("Error initializing pod filter function, %v", err)
 	}
 
-	podsOnMosttUtilizedNode, err := podutil.ListPodsOnANode(workerNodes[0].Name, getPodsAssignedToNode, podFilter)
+	podsOnMosttUtilizedNode, err := podutil.ListPodsOnANode(ctx, workerNodes[0].Name, getPodsAssignedToNode, podFilter)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}
 	podsBefore := len(podsOnMosttUtilizedNode)
 
 	t.Log("Running LowNodeUtilization plugin")
-	plugin, err := nodeutilization.NewLowNodeUtilization(&nodeutilization.LowNodeUtilizationArgs{
+	plugin, err := nodeutilization.NewLowNodeUtilization(ctx, &nodeutilization.LowNodeUtilizationArgs{
 		Thresholds: api.ResourceThresholds{
 			v1.ResourceCPU: 70,
 		},
@@ -635,7 +635,7 @@ func TestLowNodeUtilization(t *testing.T) {
 		t.Errorf("Error initializing pod filter function, %v", err)
 	}
 
-	podsOnMosttUtilizedNode, err = podutil.ListPodsOnANode(workerNodes[0].Name, getPodsAssignedToNode, podFilter)
+	podsOnMosttUtilizedNode, err = podutil.ListPodsOnANode(ctx, workerNodes[0].Name, getPodsAssignedToNode, podFilter)
 	if err != nil {
 		t.Errorf("Error listing pods on a node %v", err)
 	}

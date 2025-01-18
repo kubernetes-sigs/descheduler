@@ -92,12 +92,13 @@ func (mc *MetricsCollector) AllNodesUsage() (map[string]map[v1.ResourceName]*res
 	return allNodesUsage, nil
 }
 
-func (mc *MetricsCollector) NodeUsage(node *v1.Node) (map[v1.ResourceName]*resource.Quantity, error) {
+func (mc *MetricsCollector) NodeUsage(ctx context.Context, node *v1.Node) (map[v1.ResourceName]*resource.Quantity, error) {
+	logger := klog.FromContext(ctx)
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
 	if _, exists := mc.nodes[node.Name]; !exists {
-		klog.V(4).InfoS("unable to find node in the collected metrics", "node", klog.KObj(node))
+		logger.V(4).Info("unable to find node in the collected metrics", "node", klog.KObj(node))
 		return nil, fmt.Errorf("unable to find node %q in the collected metrics", node.Name)
 	}
 	return map[v1.ResourceName]*resource.Quantity{
@@ -115,6 +116,7 @@ func (mc *MetricsCollector) MetricsClient() metricsclient.Interface {
 }
 
 func (mc *MetricsCollector) Collect(ctx context.Context) error {
+	logger := klog.FromContext(ctx)
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 	nodes, err := mc.nodeLister.List(mc.nodeSelector)
@@ -125,7 +127,7 @@ func (mc *MetricsCollector) Collect(ctx context.Context) error {
 	for _, node := range nodes {
 		metrics, err := mc.metricsClientset.MetricsV1beta1().NodeMetricses().Get(ctx, node.Name, metav1.GetOptions{})
 		if err != nil {
-			klog.ErrorS(err, "Error fetching metrics", "node", node.Name)
+			logger.Error(err, "Error fetching metrics", "node", node.Name)
 			// No entry -> duplicate the previous value -> do nothing as beta*PV + (1-beta)*PV = PV
 			continue
 		}

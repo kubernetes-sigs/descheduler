@@ -40,7 +40,7 @@ const HighNodeUtilizationPluginName = "HighNodeUtilization"
 type HighNodeUtilization struct {
 	handle                   frameworktypes.Handle
 	args                     *HighNodeUtilizationArgs
-	podFilter                func(pod *v1.Pod) bool
+	podFilter                func(ctx context.Context, pod *v1.Pod) bool
 	underutilizationCriteria []interface{}
 	resourceNames            []v1.ResourceName
 	targetThresholds         api.ResourceThresholds
@@ -50,7 +50,7 @@ type HighNodeUtilization struct {
 var _ frameworktypes.BalancePlugin = &HighNodeUtilization{}
 
 // NewHighNodeUtilization builds plugin from its arguments while passing a handle
-func NewHighNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+func NewHighNodeUtilization(_ context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	highNodeUtilizatioArgs, ok := args.(*HighNodeUtilizationArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type HighNodeUtilizationArgs, got %T", args)
@@ -96,13 +96,15 @@ func (h *HighNodeUtilization) Name() string {
 
 // Balance extension point implementation for the plugin
 func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
-	if err := h.usageClient.sync(nodes); err != nil {
+	logger := klog.FromContext(ctx)
+	if err := h.usageClient.sync(ctx, nodes); err != nil {
 		return &frameworktypes.Status{
 			Err: fmt.Errorf("error getting node usage: %v", err),
 		}
 	}
 
 	sourceNodes, highNodes := classifyNodes(
+		ctx,
 		getNodeUsage(nodes, h.usageClient),
 		getNodeThresholds(nodes, h.args.Thresholds, h.targetThresholds, h.resourceNames, false, h.usageClient),
 		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
@@ -110,30 +112,30 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		},
 		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			if nodeutil.IsNodeUnschedulable(node) {
-				klog.V(2).InfoS("Node is unschedulable", "node", klog.KObj(node))
+				logger.V(2).Info("Node is unschedulable", "node", klog.KObj(node))
 				return false
 			}
 			return !isNodeWithLowUtilization(usage, threshold.lowResourceThreshold)
 		})
 
 	// log message in one line
-	klog.V(1).InfoS("Criteria for a node below target utilization", h.underutilizationCriteria...)
-	klog.V(1).InfoS("Number of underutilized nodes", "totalNumber", len(sourceNodes))
+	logger.V(1).Info("Criteria for a node below target utilization", h.underutilizationCriteria...)
+	logger.V(1).Info("Number of underutilized nodes", "totalNumber", len(sourceNodes))
 
 	if len(sourceNodes) == 0 {
-		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
+		logger.V(1).Info("No node is underutilized, nothing to do here, you might tune your thresholds further")
 		return nil
 	}
 	if len(sourceNodes) <= h.args.NumberOfNodes {
-		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(sourceNodes), "numberOfNodes", h.args.NumberOfNodes)
+		logger.V(1).Info("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(sourceNodes), "numberOfNodes", h.args.NumberOfNodes)
 		return nil
 	}
 	if len(sourceNodes) == len(nodes) {
-		klog.V(1).InfoS("All nodes are underutilized, nothing to do here")
+		logger.V(1).Info("All nodes are underutilized, nothing to do here")
 		return nil
 	}
 	if len(highNodes) == 0 {
-		klog.V(1).InfoS("No node is available to schedule the pods, nothing to do here")
+		logger.V(1).Info("No node is available to schedule the pods, nothing to do here")
 		return nil
 	}
 

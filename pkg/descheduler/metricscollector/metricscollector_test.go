@@ -65,7 +65,7 @@ func TestMetricsCollector(t *testing.T) {
 	t.Logf("Set initial node cpu usage to 1400")
 	collector := NewMetricsCollector(nodeLister, metricsClientset, labels.Everything())
 	collector.Collect(context.TODO())
-	nodesUsage, _ := collector.NodeUsage(n2)
+	nodesUsage, _ := collector.NodeUsage(ctx, n2)
 	checkCpuNodeUsage(t, nodesUsage, 1400)
 	allnodesUsage, _ := collector.AllNodesUsage()
 	checkCpuNodeUsage(t, allnodesUsage[n2.Name], 1400)
@@ -74,7 +74,7 @@ func TestMetricsCollector(t *testing.T) {
 	n2metrics.Usage[v1.ResourceCPU] = *resource.NewMilliQuantity(500, resource.DecimalSI)
 	metricsClientset.Tracker().Update(gvr, n2metrics, "")
 	collector.Collect(context.TODO())
-	nodesUsage, _ = collector.NodeUsage(n2)
+	nodesUsage, _ = collector.NodeUsage(ctx, n2)
 	checkCpuNodeUsage(t, nodesUsage, 1310)
 	allnodesUsage, _ = collector.AllNodesUsage()
 	checkCpuNodeUsage(t, allnodesUsage[n2.Name], 1310)
@@ -83,7 +83,7 @@ func TestMetricsCollector(t *testing.T) {
 	n2metrics.Usage[v1.ResourceCPU] = *resource.NewMilliQuantity(900, resource.DecimalSI)
 	metricsClientset.Tracker().Update(gvr, n2metrics, "")
 	collector.Collect(context.TODO())
-	nodesUsage, _ = collector.NodeUsage(n2)
+	nodesUsage, _ = collector.NodeUsage(ctx, n2)
 	checkCpuNodeUsage(t, nodesUsage, 1269)
 	allnodesUsage, _ = collector.AllNodesUsage()
 	checkCpuNodeUsage(t, allnodesUsage[n2.Name], 1269)
@@ -115,7 +115,7 @@ func TestMetricsCollectorConvergence(t *testing.T) {
 	t.Logf("Set initial node cpu usage to 1400")
 	collector := NewMetricsCollector(nodeLister, metricsClientset, labels.Everything())
 	collector.Collect(context.TODO())
-	nodesUsage, _ := collector.NodeUsage(n2)
+	nodesUsage, _ := collector.NodeUsage(ctx, n2)
 	checkCpuNodeUsage(t, nodesUsage, 1400)
 	allnodesUsage, _ := collector.AllNodesUsage()
 	checkCpuNodeUsage(t, allnodesUsage[n2.Name], 1400)
@@ -127,7 +127,7 @@ func TestMetricsCollectorConvergence(t *testing.T) {
 	converged := false
 	for i := 0; i < 300; i++ {
 		collector.Collect(context.TODO())
-		nodesUsage, _ = collector.NodeUsage(n2)
+		nodesUsage, _ = collector.NodeUsage(ctx, n2)
 		if math.Abs(float64(900-nodesUsage[v1.ResourceCPU].MilliValue())) < 6 && math.Abs(float64(1614978816-nodesUsage[v1.ResourceMemory].Value())) < 6 {
 			t.Logf("Node cpu/memory usage converged to 900+-5/1614978816+-5")
 			converged = true

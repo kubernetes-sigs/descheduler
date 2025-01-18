@@ -1189,7 +1189,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				}
 				handle.MetricsCollectorImpl = collector
 
-				plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
+				plugin, err := NewLowNodeUtilization(ctx, &LowNodeUtilizationArgs{
 					Thresholds:             tc.thresholds,
 					TargetThresholds:       tc.targetThresholds,
 					UseDeviationThresholds: tc.useDeviationThresholds,
@@ -1350,7 +1350,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
-			plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
+			plugin, err := NewLowNodeUtilization(ctx, &LowNodeUtilizationArgs{
 				Thresholds: api.ResourceThresholds{
 					v1.ResourcePods: 20,
 				},

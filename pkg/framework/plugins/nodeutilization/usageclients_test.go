@@ -58,7 +58,7 @@ func updateMetricsAndCheckNodeUtilization(
 	if err != nil {
 		t.Fatalf("failed to capture metrics: %v", err)
 	}
-	err = usageClient.sync(nodes)
+	err = usageClient.sync(ctx, nodes)
 	if err != nil {
 		t.Fatalf("failed to capture a snapshot: %v", err)
 	}

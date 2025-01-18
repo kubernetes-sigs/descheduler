@@ -42,20 +42,20 @@ func TestReadyNodes(t *testing.T) {
 	node4.Spec.Unschedulable = true
 	node5 := test.BuildTestNode("node6", 1000, 2000, 9, nil)
 	node5.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeReady, Status: v1.ConditionFalse}}
-
-	if !IsReady(node1) {
+	ctx := context.TODO()
+	if !IsReady(ctx, node1) {
 		t.Errorf("Expected %v to be ready", node2.Name)
 	}
-	if !IsReady(node2) {
+	if !IsReady(ctx, node2) {
 		t.Errorf("Expected %v to be ready", node3.Name)
 	}
-	if !IsReady(node3) {
+	if !IsReady(ctx, node3) {
 		t.Errorf("Expected %v to be ready", node4.Name)
 	}
-	if !IsReady(node4) {
+	if !IsReady(ctx, node4) {
 		t.Errorf("Expected %v to be ready", node5.Name)
 	}
-	if IsReady(node5) {
+	if IsReady(ctx, node5) {
 		t.Errorf("Expected %v to be not ready", node5.Name)
 	}
 }
@@ -216,7 +216,7 @@ func TestPodFitsCurrentNode(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			actual := PodFitsCurrentNode(getPodsAssignedToNode, tc.pod, tc.node)
+			actual := PodFitsCurrentNode(ctx, getPodsAssignedToNode, tc.pod, tc.node)
 			if actual != tc.success {
 				t.Errorf("Test %#v failed", tc.description)
 			}
@@ -891,7 +891,7 @@ func TestPodFitsAnyOtherNode(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			actual := PodFitsAnyOtherNode(getPodsAssignedToNode, tc.pod, tc.nodes)
+			actual := PodFitsAnyOtherNode(ctx, getPodsAssignedToNode, tc.pod, tc.nodes)
 			if actual != tc.success {
 				t.Errorf("Test %#v failed", tc.description)
 			}
@@ -932,7 +932,7 @@ func TestPodFitsNodes(t *testing.T) {
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
 	var nodesTraversed sync.Map
-	podFitsNodes(getPodsAssignedToNode, pod, nodes, func(pod *v1.Pod, node *v1.Node) bool {
+	podFitsNodes(ctx, getPodsAssignedToNode, pod, nodes, func(pod *v1.Pod, node *v1.Node) bool {
 		nodesTraversed.Store(node.Name, node)
 		return true
 	})
@@ -1043,7 +1043,7 @@ func TestNodeFit(t *testing.T) {
 
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-			err = NodeFit(getPodsAssignedToNode, tc.pod, tc.node)
+			err = NodeFit(ctx, getPodsAssignedToNode, tc.pod, tc.node)
 			if (err == nil && tc.err != nil) || (err != nil && err.Error() != tc.err.Error()) {
 				t.Errorf("Test %#v failed, got %v, expect %v", tc.description, err, tc.err)
 			}
@@ -1115,7 +1115,7 @@ func TestBestPodNodeAffinityWeight(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.description, func(t *testing.T) {
-			bestWeight := GetBestNodeWeightGivenPodPreferredAffinity(tc.pod, tc.nodes)
+			bestWeight := GetBestNodeWeightGivenPodPreferredAffinity(context.TODO(), tc.pod, tc.nodes)
 			if bestWeight != tc.expectedWeight {
 				t.Errorf("Test %#v failed", tc.description)
 			}

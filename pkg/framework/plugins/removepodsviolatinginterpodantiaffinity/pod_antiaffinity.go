@@ -43,7 +43,7 @@ type RemovePodsViolatingInterPodAntiAffinity struct {
 var _ frameworktypes.DeschedulePlugin = &RemovePodsViolatingInterPodAntiAffinity{}
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+func New(_ context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	interPodAntiAffinityArgs, ok := args.(*RemovePodsViolatingInterPodAntiAffinityArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingInterPodAntiAffinityArgs, got %T", args)
@@ -77,7 +77,7 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Name() string {
 }
 
 func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
-	pods, err := podutil.ListPodsOnNodes(nodes, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
+	pods, err := podutil.ListPodsOnNodes(ctx, nodes, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 	if err != nil {
 		return &frameworktypes.Status{
 			Err: fmt.Errorf("error listing all pods: %v", err),
@@ -87,17 +87,18 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context
 	podsInANamespace := podutil.GroupByNamespace(pods)
 	podsOnANode := podutil.GroupByNodeName(pods)
 	nodeMap := utils.CreateNodeMap(nodes)
+	logger := klog.FromContext(ctx)
 
 loop:
 	for _, node := range nodes {
-		klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
+		logger.V(2).Info("Processing node", "node", klog.KObj(node))
 		pods := podsOnANode[node.Name]
 		// sort the evict-able Pods based on priority, if there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(pods)
 		totalPods := len(pods)
 		for i := 0; i < totalPods; i++ {
-			if utils.CheckPodsWithAntiAffinityExist(pods[i], podsInANamespace, nodeMap) {
-				if d.handle.Evictor().Filter(pods[i]) && d.handle.Evictor().PreEvictionFilter(pods[i]) {
+			if utils.CheckPodsWithAntiAffinityExist(logger, pods[i], podsInANamespace, nodeMap) {
+				if d.handle.Evictor().Filter(ctx, pods[i]) && d.handle.Evictor().PreEvictionFilter(ctx, pods[i]) {
 					err := d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
 					if err == nil {
 						// Since the current pod is evicted all other pods which have anti-affinity with this
@@ -115,7 +116,7 @@ loop:
 					case *evictions.EvictionTotalLimitError:
 						return nil
 					default:
-						klog.Errorf("eviction failed: %v", err)
+						logger.Error(err, "unable to evict pod", "pod", klog.KObj(pods[i]))
 					}
 				}
 			}

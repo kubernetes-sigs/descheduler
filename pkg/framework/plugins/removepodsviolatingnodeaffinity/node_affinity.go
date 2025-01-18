@@ -41,7 +41,7 @@ type RemovePodsViolatingNodeAffinity struct {
 var _ frameworktypes.DeschedulePlugin = &RemovePodsViolatingNodeAffinity{}
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+func New(_ context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	nodeAffinityArgs, ok := args.(*RemovePodsViolatingNodeAffinityArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingNodeAffinityArgs, got %T", args)
@@ -77,8 +77,9 @@ func (d *RemovePodsViolatingNodeAffinity) Name() string {
 }
 
 func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	logger := klog.FromContext(ctx)
 	for _, nodeAffinity := range d.args.NodeAffinityType {
-		klog.V(2).InfoS("Executing for nodeAffinityType", "nodeAffinity", nodeAffinity)
+		logger.V(2).Info("Executing for nodeAffinityType", "nodeAffinity", nodeAffinity)
 		var err *frameworktypes.Status = nil
 
 		// The pods that we'll evict must be evictable. For example, the current number of replicas
@@ -88,25 +89,25 @@ func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes 
 		switch nodeAffinity {
 		case "requiredDuringSchedulingIgnoredDuringExecution":
 			// In this specific case, the pod must also violate the nodeSelector to be evicted
-			filterFunc := func(pod *v1.Pod, node *v1.Node, nodes []*v1.Node) bool {
+			filterFunc := func(ctx context.Context, pod *v1.Pod, node *v1.Node, nodes []*v1.Node) bool {
 				return utils.PodHasNodeAffinity(pod, utils.RequiredDuringSchedulingIgnoredDuringExecution) &&
-					d.handle.Evictor().Filter(pod) &&
-					nodeutil.PodFitsAnyNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) &&
-					!nodeutil.PodMatchNodeSelector(pod, node)
+					d.handle.Evictor().Filter(ctx, pod) &&
+					nodeutil.PodFitsAnyNode(ctx, d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) &&
+					!nodeutil.PodMatchNodeSelector(ctx, pod, node)
 			}
 			err = d.processNodes(ctx, nodes, filterFunc)
 		case "preferredDuringSchedulingIgnoredDuringExecution":
 			// In this specific case, the pod must have a better fit on another node than
 			// in the current one based on the preferred node affinity
-			filterFunc := func(pod *v1.Pod, node *v1.Node, nodes []*v1.Node) bool {
+			filterFunc := func(ctx context.Context, pod *v1.Pod, node *v1.Node, nodes []*v1.Node) bool {
 				return utils.PodHasNodeAffinity(pod, utils.PreferredDuringSchedulingIgnoredDuringExecution) &&
-					d.handle.Evictor().Filter(pod) &&
-					nodeutil.PodFitsAnyNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) &&
-					(nodeutil.GetBestNodeWeightGivenPodPreferredAffinity(pod, nodes) > nodeutil.GetNodeWeightGivenPodPreferredAffinity(pod, node))
+					d.handle.Evictor().Filter(ctx, pod) &&
+					nodeutil.PodFitsAnyNode(ctx, d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) &&
+					(nodeutil.GetBestNodeWeightGivenPodPreferredAffinity(ctx, pod, nodes) > nodeutil.GetNodeWeightGivenPodPreferredAffinity(ctx, pod, node))
 			}
 			err = d.processNodes(ctx, nodes, filterFunc)
 		default:
-			klog.ErrorS(nil, "Invalid nodeAffinityType", "nodeAffinity", nodeAffinity)
+			logger.Error(nil, "Invalid nodeAffinityType", "nodeAffinity", nodeAffinity)
 		}
 
 		if err != nil {
@@ -116,16 +117,18 @@ func (d *RemovePodsViolatingNodeAffinity) Deschedule(ctx context.Context, nodes 
 	return nil
 }
 
-func (d *RemovePodsViolatingNodeAffinity) processNodes(ctx context.Context, nodes []*v1.Node, filterFunc func(*v1.Pod, *v1.Node, []*v1.Node) bool) *frameworktypes.Status {
+func (d *RemovePodsViolatingNodeAffinity) processNodes(ctx context.Context, nodes []*v1.Node, filterFunc func(context.Context, *v1.Pod, *v1.Node, []*v1.Node) bool) *frameworktypes.Status {
+	logger := klog.FromContext(ctx)
 	for _, node := range nodes {
-		klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
+		logger.V(2).Info("Processing node", "node", klog.KObj(node))
 
 		// Potentially evictable pods
 		pods, err := podutil.ListPodsOnANode(
+			ctx,
 			node.Name,
 			d.handle.GetPodsAssignedToNodeFunc(),
-			podutil.WrapFilterFuncs(d.podFilter, func(pod *v1.Pod) bool {
-				return filterFunc(pod, node, nodes)
+			podutil.WrapFilterFuncs(d.podFilter, func(ctx context.Context, pod *v1.Pod) bool {
+				return filterFunc(ctx, pod, node, nodes)
 			}),
 		)
 		if err != nil {
@@ -136,7 +139,7 @@ func (d *RemovePodsViolatingNodeAffinity) processNodes(ctx context.Context, node
 
 	loop:
 		for _, pod := range pods {
-			klog.V(1).InfoS("Evicting pod", "pod", klog.KObj(pod))
+			logger.V(1).Info("Evicting pod", "pod", klog.KObj(pod))
 			err := d.handle.Evictor().Evict(ctx, pod, evictions.EvictOptions{StrategyName: PluginName})
 			if err == nil {
 				continue
@@ -147,7 +150,7 @@ func (d *RemovePodsViolatingNodeAffinity) processNodes(ctx context.Context, node
 			case *evictions.EvictionTotalLimitError:
 				return nil
 			default:
-				klog.Errorf("eviction failed: %v", err)
+				logger.Error(err, "Eviction failed", "pod", klog.KObj(pod))
 			}
 		}
 	}

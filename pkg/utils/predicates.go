@@ -17,6 +17,7 @@ limitations under the License.
 package utils
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"sort"
@@ -57,7 +58,7 @@ func PodMatchesTermsNamespaceAndSelector(pod *v1.Pod, namespaces sets.Set[string
 }
 
 // PodMatchNodeSelector checks if a pod node selector matches the node label.
-func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) (bool, error) {
+func PodMatchNodeSelector(ctx context.Context, pod *v1.Pod, node *v1.Node) (bool, error) {
 	if node == nil {
 		return false, fmt.Errorf("node not found")
 	}
@@ -259,10 +260,12 @@ func TolerationsEqual(t1, t2 []v1.Toleration) bool {
 	return true
 }
 
+// GetNodeWeightGivenPodPreferredAffinity
 // Returns the weight that the pod gives to a node by analyzing the
 // soft node affinity of that pod
 // (nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution)
-func GetNodeWeightGivenPodPreferredAffinity(pod *v1.Pod, node *v1.Node) (int32, error) {
+func GetNodeWeightGivenPodPreferredAffinity(ctx context.Context, pod *v1.Pod, node *v1.Node) (int32, error) {
+	logger := klog.FromContext(ctx)
 	if !PodHasNodeAffinity(pod, PreferredDuringSchedulingIgnoredDuringExecution) {
 		return 0, nil
 	}
@@ -274,7 +277,7 @@ func GetNodeWeightGivenPodPreferredAffinity(pod *v1.Pod, node *v1.Node) (int32, 
 		preferredNodeSelector := &v1.NodeSelector{NodeSelectorTerms: []v1.NodeSelectorTerm{prefSchedulTerm.Preference}}
 		match, err := corev1.MatchNodeSelectorTerms(node, preferredNodeSelector)
 		if err != nil {
-			klog.ErrorS(err, "error parsing node selector", "selector", preferredNodeSelector)
+			logger.Error(err, "error parsing node selector", "selector", preferredNodeSelector)
 		}
 		if match {
 			sumWeights += prefSchedulTerm.Weight
@@ -292,10 +295,10 @@ func CreateNodeMap(nodes []*v1.Node) map[string]*v1.Node {
 }
 
 // CheckPodsWithAntiAffinityExist checks if there are other pods on the node that the current candidate pod cannot tolerate.
-func CheckPodsWithAntiAffinityExist(candidatePod *v1.Pod, assignedPods map[string][]*v1.Pod, nodeMap map[string]*v1.Node) bool {
+func CheckPodsWithAntiAffinityExist(logger klog.Logger, candidatePod *v1.Pod, assignedPods map[string][]*v1.Pod, nodeMap map[string]*v1.Node) bool {
 	nodeHavingCandidatePod, ok := nodeMap[candidatePod.Spec.NodeName]
 	if !ok {
-		klog.Warningf("CandidatePod %s does not exist in nodeMap", klog.KObj(candidatePod))
+		logger.Info("CandidatePod %s does not exist in nodeMap", "pod", klog.KObj(candidatePod))
 		return false
 	}
 
@@ -308,14 +311,14 @@ func CheckPodsWithAntiAffinityExist(candidatePod *v1.Pod, assignedPods map[strin
 		namespaces := GetNamespacesFromPodAffinityTerm(candidatePod, &term)
 		selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
 		if err != nil {
-			klog.ErrorS(err, "Unable to convert LabelSelector into Selector")
+			logger.Error(err, "Unable to convert LabelSelector into Selector")
 			return false
 		}
 
 		for namespace := range namespaces {
 			for _, assignedPod := range assignedPods[namespace] {
 				if assignedPod.Name == candidatePod.Name || !PodMatchesTermsNamespaceAndSelector(assignedPod, namespaces, selector) {
-					klog.V(4).InfoS("CandidatePod doesn't matches inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(candidatePod), "assignedPod", klog.KObj(assignedPod))
+					logger.V(4).Info("CandidatePod doesn't matches inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(candidatePod), "assignedPod", klog.KObj(assignedPod))
 					continue
 				}
 
@@ -325,7 +328,7 @@ func CheckPodsWithAntiAffinityExist(candidatePod *v1.Pod, assignedPods map[strin
 				}
 
 				if hasSameLabelValue(nodeHavingCandidatePod, nodeHavingAssignedPod, term.TopologyKey) {
-					klog.V(1).InfoS("CandidatePod matches inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(candidatePod), "assignedPod", klog.KObj(assignedPod))
+					logger.V(1).Info("CandidatePod matches inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(candidatePod), "assignedPod", klog.KObj(assignedPod))
 					return true
 				}
 			}

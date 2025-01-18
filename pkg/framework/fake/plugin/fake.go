@@ -20,6 +20,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog/v2"
+
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
@@ -32,7 +34,7 @@ type FakePluginArgs struct {
 	metav1.TypeMeta `json:",inline"`
 }
 
-func ValidateFakePluginArgs(obj runtime.Object) error {
+func ValidateFakePluginArgs(_ klog.Logger, obj runtime.Object) error {
 	return nil
 }
 
@@ -60,7 +62,7 @@ type FakePlugin struct {
 }
 
 func NewPluginFncFromFake(fp *FakePlugin) pluginregistry.PluginBuilder {
-	return func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+	return func(_ context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 		fakePluginArgs, ok := args.(*FakePluginArgs)
 		if !ok {
 			return nil, fmt.Errorf("want args to be of type FakePluginArgs, got %T", args)
@@ -96,11 +98,11 @@ func (d *FakePlugin) Name() string {
 	return d.PluginName
 }
 
-func (d *FakePlugin) PreEvictionFilter(pod *v1.Pod) bool {
+func (d *FakePlugin) PreEvictionFilter(ctx context.Context, pod *v1.Pod) bool {
 	return true
 }
 
-func (d *FakePlugin) Filter(pod *v1.Pod) bool {
+func (d *FakePlugin) Filter(ctx context.Context, pod *v1.Pod) bool {
 	return true
 }
 
@@ -165,7 +167,7 @@ type FakeDeschedulePlugin struct {
 }
 
 func NewFakeDeschedulePluginFncFromFake(fp *FakeDeschedulePlugin) pluginregistry.PluginBuilder {
-	return func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+	return func(_ context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 		fakePluginArgs, ok := args.(*FakeDeschedulePluginArgs)
 		if !ok {
 			return nil, fmt.Errorf("want args to be of type FakeDeschedulePluginArgs, got %T", args)
@@ -252,7 +254,7 @@ type FakeBalancePlugin struct {
 }
 
 func NewFakeBalancePluginFncFromFake(fp *FakeBalancePlugin) pluginregistry.PluginBuilder {
-	return func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+	return func(_ context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 		fakePluginArgs, ok := args.(*FakeBalancePluginArgs)
 		if !ok {
 			return nil, fmt.Errorf("want args to be of type FakeBalancePluginArgs, got %T", args)
@@ -339,7 +341,7 @@ type FakeFilterPlugin struct {
 }
 
 func NewFakeFilterPluginFncFromFake(fp *FakeFilterPlugin) pluginregistry.PluginBuilder {
-	return func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+	return func(_ context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 		fakePluginArgs, ok := args.(*FakeFilterPluginArgs)
 		if !ok {
 			return nil, fmt.Errorf("want args to be of type FakeFilterPluginArgs, got %T", args)
@@ -375,7 +377,7 @@ func (d *FakeFilterPlugin) Name() string {
 	return d.PluginName
 }
 
-func (d *FakeFilterPlugin) Filter(pod *v1.Pod) bool {
+func (d *FakeFilterPlugin) Filter(ctx context.Context, pod *v1.Pod) bool {
 	return d.handleBoolAction(&FilterActionImpl{
 		ActionImpl: ActionImpl{
 			handle:         d.handle,
@@ -384,7 +386,7 @@ func (d *FakeFilterPlugin) Filter(pod *v1.Pod) bool {
 	})
 }
 
-func (d *FakeFilterPlugin) PreEvictionFilter(pod *v1.Pod) bool {
+func (d *FakeFilterPlugin) PreEvictionFilter(ctx context.Context, pod *v1.Pod) bool {
 	return d.handleBoolAction(&PreEvictionFilterActionImpl{
 		ActionImpl: ActionImpl{
 			handle:         d.handle,

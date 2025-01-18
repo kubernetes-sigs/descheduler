@@ -17,9 +17,11 @@ limitations under the License.
 package podlifetime
 
 import (
+	"context"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/klog/v2"
 )
 
 func TestValidateRemovePodLifeTimeArgs(t *testing.T) {
@@ -62,7 +64,7 @@ func TestValidateRemovePodLifeTimeArgs(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			err := ValidatePodLifeTimeArgs(tc.args)
+			err := ValidatePodLifeTimeArgs(klog.FromContext(context.Background()), tc.args)
 
 			hasError := err != nil
 			if tc.expectError != hasError {

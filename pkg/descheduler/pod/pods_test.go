@@ -109,7 +109,7 @@ func TestListPodsOnANode(t *testing.T) {
 				t.Errorf("Build filter function error: %v", err)
 			}
 
-			pods, _ := ListPodsOnANode(testCase.node.Name, getPodsAssignedToNode, filter)
+			pods, _ := ListPodsOnANode(ctx, testCase.node.Name, getPodsAssignedToNode, filter)
 			if len(pods) != testCase.expectedPodCount {
 				t.Errorf("Expected %v pods on node %v, got %+v", testCase.expectedPodCount, testCase.node.Name, len(pods))
 			}

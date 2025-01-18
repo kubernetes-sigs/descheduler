@@ -20,10 +20,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/klog/v2"
 )
 
 // ValidateRemovePodsHavingTooManyRestartsArgs validates RemovePodsHavingTooManyRestarts arguments
-func ValidateRemovePodsHavingTooManyRestartsArgs(obj runtime.Object) error {
+func ValidateRemovePodsHavingTooManyRestartsArgs(_ klog.Logger, obj runtime.Object) error {
 	args := obj.(*RemovePodsHavingTooManyRestartsArgs)
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {

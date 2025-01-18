@@ -18,6 +18,7 @@ package nodeutilization
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 
@@ -181,25 +182,26 @@ func resourceUsagePercentages(nodeUsage NodeUsage) map[v1.ResourceName]float64 {
 // classifyNodes classifies the nodes into low-utilization or high-utilization nodes. If a node lies between
 // low and high thresholds, it is simply ignored.
 func classifyNodes(
+	ctx context.Context,
 	nodeUsages []NodeUsage,
 	nodeThresholds map[string]NodeThresholds,
 	lowThresholdFilter, highThresholdFilter func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool,
 ) ([]NodeInfo, []NodeInfo) {
 	lowNodes, highNodes := []NodeInfo{}, []NodeInfo{}
-
+	logger := klog.FromContext(ctx)
 	for _, nodeUsage := range nodeUsages {
 		nodeInfo := NodeInfo{
 			NodeUsage:  nodeUsage,
 			thresholds: nodeThresholds[nodeUsage.node.Name],
 		}
 		if lowThresholdFilter(nodeUsage.node, nodeUsage, nodeThresholds[nodeUsage.node.Name]) {
-			klog.InfoS("Node is underutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
+			logger.Info("Node is underutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
 			lowNodes = append(lowNodes, nodeInfo)
 		} else if highThresholdFilter(nodeUsage.node, nodeUsage, nodeThresholds[nodeUsage.node.Name]) {
-			klog.InfoS("Node is overutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
+			logger.Info("Node is overutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
 			highNodes = append(highNodes, nodeInfo)
 		} else {
-			klog.InfoS("Node is appropriately utilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
+			logger.Info("Node is appropriately utilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
 		}
 	}
 
@@ -235,11 +237,12 @@ func evictPodsFromSourceNodes(
 	sourceNodes, destinationNodes []NodeInfo,
 	podEvictor frameworktypes.Evictor,
 	evictOptions evictions.EvictOptions,
-	podFilter func(pod *v1.Pod) bool,
+	podFilter func(ctx context.Context, pod *v1.Pod) bool,
 	resourceNames []v1.ResourceName,
 	continueEviction continueEvictionCond,
 	usageClient usageClient,
 ) {
+	logger := klog.FromContext(ctx)
 	// upper bound on total number of pods/cpu/memory and optional extended resources to be moved
 	totalAvailableUsage := map[v1.ResourceName]*resource.Quantity{}
 	for _, resourceName := range resourceNames {
@@ -252,7 +255,7 @@ func evictPodsFromSourceNodes(
 
 		for _, name := range resourceNames {
 			if _, exists := node.usage[name]; !exists {
-				klog.Errorf("unable to find %q resource in node's %q usage, terminating eviction", name, node.node.Name)
+				logger.Error(nil, fmt.Sprintf("unable to find %q resource in node's %q usage, terminating eviction", name, node.node.Name))
 				return
 			}
 			if _, ok := totalAvailableUsage[name]; !ok {
@@ -264,20 +267,20 @@ func evictPodsFromSourceNodes(
 	}
 
 	// log message in one line
-	klog.V(1).InfoS("Total capacity to be moved", usageToKeysAndValues(totalAvailableUsage)...)
+	logger.V(1).Info("Total capacity to be moved", usageToKeysAndValues(totalAvailableUsage)...)
 
 	for _, node := range sourceNodes {
-		klog.V(3).InfoS("Evicting pods from node", "node", klog.KObj(node.node), "usage", node.usage)
+		logger.V(3).Info("Evicting pods from node", "node", klog.KObj(node.node), "usage", node.usage)
 
-		nonRemovablePods, removablePods := classifyPods(node.allPods, podFilter)
-		klog.V(2).InfoS("Pods on node", "node", klog.KObj(node.node), "allPods", len(node.allPods), "nonRemovablePods", len(nonRemovablePods), "removablePods", len(removablePods))
+		nonRemovablePods, removablePods := classifyPods(ctx, node.allPods, podFilter)
+		logger.V(2).Info("Pods on node", "node", klog.KObj(node.node), "allPods", len(node.allPods), "nonRemovablePods", len(nonRemovablePods), "removablePods", len(removablePods))
 
 		if len(removablePods) == 0 {
-			klog.V(1).InfoS("No removable pods on node, try next node", "node", klog.KObj(node.node))
+			logger.V(1).Info("No removable pods on node, try next node", "node", klog.KObj(node.node))
 			continue
 		}
 
-		klog.V(1).InfoS("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
+		logger.V(1).Info("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
 		err := evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction, usageClient)
@@ -303,6 +306,7 @@ func evictPods(
 	continueEviction continueEvictionCond,
 	usageClient usageClient,
 ) error {
+	logger := klog.FromContext(ctx)
 	var excludedNamespaces sets.Set[string]
 	if evictableNamespaces != nil {
 		excludedNamespaces = sets.New(evictableNamespaces.Exclude...)
@@ -310,8 +314,8 @@ func evictPods(
 
 	if continueEviction(nodeInfo, totalAvailableUsage) {
 		for _, pod := range inputPods {
-			if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
-				klog.V(3).InfoS("Skipping eviction for pod, doesn't tolerate node taint", "pod", klog.KObj(pod))
+			if !utils.PodToleratesTaints(ctx, pod, taintsOfLowNodes) {
+				logger.V(3).Info("Skipping eviction for pod, doesn't tolerate node taint", "pod", klog.KObj(pod))
 				continue
 			}
 
@@ -320,21 +324,21 @@ func evictPods(
 				WithoutNamespaces(excludedNamespaces).
 				BuildFilterFunc()
 			if err != nil {
-				klog.ErrorS(err, "could not build preEvictionFilter with namespace exclusion")
+				logger.Error(err, "could not build preEvictionFilter with namespace exclusion")
 				continue
 			}
 
-			if !preEvictionFilterWithOptions(pod) {
+			if !preEvictionFilterWithOptions(ctx, pod) {
 				continue
 			}
-			podUsage, err := usageClient.podUsage(pod)
+			podUsage, err := usageClient.podUsage(ctx, pod)
 			if err != nil {
-				klog.Errorf("unable to get pod usage for %v/%v: %v", pod.Namespace, pod.Name, err)
+				logger.Error(err, fmt.Sprintf("unable to get pod usage for %v/%v", pod.Namespace, pod.Name))
 				continue
 			}
 			err = podEvictor.Evict(ctx, pod, evictOptions)
 			if err == nil {
-				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
+				logger.V(3).Info("Evicted pods", "pod", klog.KObj(pod))
 
 				for name := range totalAvailableUsage {
 					if name == v1.ResourcePods {
@@ -350,7 +354,7 @@ func evictPods(
 					"node", nodeInfo.node.Name,
 				}
 				keysAndValues = append(keysAndValues, usageToKeysAndValues(nodeInfo.usage)...)
-				klog.V(3).InfoS("Updated node usage", keysAndValues...)
+				logger.V(3).Info("Updated node usage", keysAndValues...)
 				// check if pods can be still evicted
 				if !continueEviction(nodeInfo, totalAvailableUsage) {
 					break
@@ -361,7 +365,7 @@ func evictPods(
 			case *evictions.EvictionNodeLimitError, *evictions.EvictionTotalLimitError:
 				return err
 			default:
-				klog.Errorf("eviction failed: %v", err)
+				logger.Error(err, "unable to evict pod", "pod", klog.KObj(pod))
 			}
 		}
 	}
@@ -432,11 +436,11 @@ func getResourceNames(thresholds api.ResourceThresholds) []v1.ResourceName {
 	return resourceNames
 }
 
-func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*v1.Pod) {
+func classifyPods(ctx context.Context, pods []*v1.Pod, filter func(ctx context.Context, pod *v1.Pod) bool) ([]*v1.Pod, []*v1.Pod) {
 	var nonRemovablePods, removablePods []*v1.Pod
 
 	for _, pod := range pods {
-		if !filter(pod) {
+		if !filter(ctx, pod) {
 			nonRemovablePods = append(nonRemovablePods, pod)
 		} else {
 			removablePods = append(removablePods, pod)

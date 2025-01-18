@@ -18,10 +18,11 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog/v2"
 )
 
 // ValidateRemovePodsViolatingInterPodAntiAffinityArgs validates ValidateRemovePodsViolatingInterPodAntiAffinity arguments
-func ValidateRemovePodsViolatingInterPodAntiAffinityArgs(obj runtime.Object) error {
+func ValidateRemovePodsViolatingInterPodAntiAffinityArgs(_ klog.Logger, obj runtime.Object) error {
 	args := obj.(*RemovePodsViolatingInterPodAntiAffinityArgs)
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {

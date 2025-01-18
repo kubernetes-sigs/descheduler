@@ -40,7 +40,7 @@ const LowNodeUtilizationPluginName = "LowNodeUtilization"
 type LowNodeUtilization struct {
 	handle                   frameworktypes.Handle
 	args                     *LowNodeUtilizationArgs
-	podFilter                func(pod *v1.Pod) bool
+	podFilter                func(ctx context.Context, pod *v1.Pod) bool
 	underutilizationCriteria []interface{}
 	overutilizationCriteria  []interface{}
 	resourceNames            []v1.ResourceName
@@ -50,7 +50,7 @@ type LowNodeUtilization struct {
 var _ frameworktypes.BalancePlugin = &LowNodeUtilization{}
 
 // NewLowNodeUtilization builds plugin from its arguments while passing a handle
-func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+func NewLowNodeUtilization(ctx context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	lowNodeUtilizationArgsArgs, ok := args.(*LowNodeUtilizationArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type LowNodeUtilizationArgs, got %T", args)
@@ -117,19 +117,21 @@ func (l *LowNodeUtilization) Name() string {
 
 // Balance extension point implementation for the plugin
 func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
-	if err := l.usageClient.sync(nodes); err != nil {
+	logger := klog.FromContext(ctx)
+	if err := l.usageClient.sync(ctx, nodes); err != nil {
 		return &frameworktypes.Status{
 			Err: fmt.Errorf("error getting node usage: %v", err),
 		}
 	}
 
 	lowNodes, sourceNodes := classifyNodes(
+		ctx,
 		getNodeUsage(nodes, l.usageClient),
 		getNodeThresholds(nodes, l.args.Thresholds, l.args.TargetThresholds, l.resourceNames, l.args.UseDeviationThresholds, l.usageClient),
 		// The node has to be schedulable (to be able to move workload there)
 		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
 			if nodeutil.IsNodeUnschedulable(node) {
-				klog.V(2).InfoS("Node is unschedulable, thus not considered as underutilized", "node", klog.KObj(node))
+				logger.V(2).Info("Node is unschedulable, thus not considered as underutilized", "node", klog.KObj(node))
 				return false
 			}
 			return isNodeWithLowUtilization(usage, threshold.lowResourceThreshold)
@@ -140,30 +142,30 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 	)
 
 	// log message for nodes with low utilization
-	klog.V(1).InfoS("Criteria for a node under utilization", l.underutilizationCriteria...)
-	klog.V(1).InfoS("Number of underutilized nodes", "totalNumber", len(lowNodes))
+	logger.V(1).Info("Criteria for a node under utilization", l.underutilizationCriteria...)
+	logger.V(1).Info("Number of underutilized nodes", "totalNumber", len(lowNodes))
 
 	// log message for over utilized nodes
-	klog.V(1).InfoS("Criteria for a node above target utilization", l.overutilizationCriteria...)
-	klog.V(1).InfoS("Number of overutilized nodes", "totalNumber", len(sourceNodes))
+	logger.V(1).Info("Criteria for a node above target utilization", l.overutilizationCriteria...)
+	logger.V(1).Info("Number of overutilized nodes", "totalNumber", len(sourceNodes))
 
 	if len(lowNodes) == 0 {
-		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
+		logger.V(1).Info("No node is underutilized, nothing to do here, you might tune your thresholds further")
 		return nil
 	}
 
 	if len(lowNodes) <= l.args.NumberOfNodes {
-		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(lowNodes), "numberOfNodes", l.args.NumberOfNodes)
+		logger.V(1).Info("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(lowNodes), "numberOfNodes", l.args.NumberOfNodes)
 		return nil
 	}
 
 	if len(lowNodes) == len(nodes) {
-		klog.V(1).InfoS("All nodes are underutilized, nothing to do here")
+		logger.V(1).Info("All nodes are underutilized, nothing to do here")
 		return nil
 	}
 
 	if len(sourceNodes) == 0 {
-		klog.V(1).InfoS("All nodes are under target utilization, nothing to do here")
+		logger.V(1).Info("All nodes are under target utilization, nothing to do here")
 		return nil
 	}
 

@@ -44,7 +44,7 @@ type RemoveFailedPods struct {
 var _ frameworktypes.DeschedulePlugin = &RemoveFailedPods{}
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+func New(_ context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	failedPodsArgs, ok := args.(*RemoveFailedPodsArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemoveFailedPodsArgs, got %T", args)
@@ -67,11 +67,11 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
 	}
 
-	podFilter = podutil.WrapFilterFuncs(func(pod *v1.Pod) bool { return pod.Status.Phase == v1.PodFailed }, podFilter)
+	podFilter = podutil.WrapFilterFuncs(func(_ context.Context, pod *v1.Pod) bool { return pod.Status.Phase == v1.PodFailed }, podFilter)
 
-	podFilter = podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
+	podFilter = podutil.WrapFilterFuncs(podFilter, func(ctx context.Context, pod *v1.Pod) bool {
 		if err := validateCanEvict(pod, failedPodsArgs); err != nil {
-			klog.V(4).InfoS(fmt.Sprintf("ignoring pod for eviction due to: %s", err.Error()), "pod", klog.KObj(pod))
+			klog.FromContext(ctx).V(4).Info(fmt.Sprintf("ignoring pod for eviction due to: %s", err.Error()), "pod", klog.KObj(pod))
 			return false
 		}
 
@@ -92,9 +92,10 @@ func (d *RemoveFailedPods) Name() string {
 
 // Deschedule extension point implementation for the plugin
 func (d *RemoveFailedPods) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	logger := klog.FromContext(ctx)
 	for _, node := range nodes {
-		klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
-		pods, err := podutil.ListAllPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
+		logger.V(2).Info("Processing node", "node", klog.KObj(node))
+		pods, err := podutil.ListAllPodsOnANode(ctx, node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			// no pods evicted as error encountered retrieving evictable Pods
 			return &frameworktypes.Status{
@@ -114,7 +115,7 @@ func (d *RemoveFailedPods) Deschedule(ctx context.Context, nodes []*v1.Node) *fr
 			case *evictions.EvictionTotalLimitError:
 				return nil
 			default:
-				klog.Errorf("eviction failed: %v", err)
+				logger.Error(err, "unable to evict pod", "pod", klog.KObj(pods[i]))
 			}
 		}
 	}

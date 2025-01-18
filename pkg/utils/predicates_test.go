@@ -1,11 +1,13 @@
 package utils
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/test"
 )
 
@@ -1032,7 +1034,7 @@ func TestPodNodeAffinityWeight(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			pod := v1.Pod{}
 			pod.Spec.Affinity = test.affinity
-			totalWeight, err := GetNodeWeightGivenPodPreferredAffinity(&pod, &defaultNode)
+			totalWeight, err := GetNodeWeightGivenPodPreferredAffinity(context.TODO(), &pod, &defaultNode)
 			if err != nil {
 				t.Error("Found non nil error")
 			}
@@ -1104,7 +1106,8 @@ func TestCheckPodsWithAntiAffinityExist(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if match := CheckPodsWithAntiAffinityExist(test.pod, test.podsInNamespace, test.nodeMap); match != test.expMatch {
+			logger := klog.FromContext(context.TODO())
+			if match := CheckPodsWithAntiAffinityExist(logger, test.pod, test.podsInNamespace, test.nodeMap); match != test.expMatch {
 				t.Errorf("exp %v got %v", test.expMatch, match)
 			}
 		})
