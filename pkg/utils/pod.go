@@ -14,21 +14,6 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// GetResourceRequest finds and returns the request value for a specific resource.
-func GetResourceRequest(pod *v1.Pod, resource v1.ResourceName) int64 {
-	if resource == v1.ResourcePods {
-		return 1
-	}
-
-	requestQuantity := GetResourceRequestQuantity(pod, resource)
-
-	if resource == v1.ResourceCPU {
-		return requestQuantity.MilliValue()
-	}
-
-	return requestQuantity.Value()
-}
-
 // GetResourceRequestQuantity finds and returns the request quantity for a specific resource.
 func GetResourceRequestQuantity(pod *v1.Pod, resourceName v1.ResourceName) resource.Quantity {
 	requestQuantity := resource.Quantity{}
