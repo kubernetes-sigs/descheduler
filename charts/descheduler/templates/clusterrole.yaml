@@ -29,8 +29,8 @@ rules:
   verbs: ["get", "watch", "list"]
 - apiGroups: ["policy"]
   resources: ["poddisruptionbudgets"]
-{{- if .Values.deschedulerPolicy.metricsCollector.enabled }}
   verbs: ["get", "list", "watch"]
+{{- if .Values.deschedulerPolicy.metricsCollector.enabled }}
 - apiGroups: ["metrics.k8s.io"]
   resources: ["pods"]
   verbs: ["get", "list", "watch"]
