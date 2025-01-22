@@ -121,7 +121,7 @@ func NewTracerProvider(ctx context.Context, endpoint, caCert, name, namespace st
 		klog.V(5).InfoS("no name provided, using default service name for tracing", "name", DefaultServiceName)
 		name = DefaultServiceName
 	}
-	resourceOpts := []sdkresource.Option{sdkresource.WithAttributes(semconv.ServiceNameKey.String(name)), sdkresource.WithSchemaURL(semconv.SchemaURL), sdkresource.WithProcess()}
+	resourceOpts := defaultResourceOpts(name)
 	if namespace != "" {
 		resourceOpts = append(resourceOpts, sdkresource.WithAttributes(semconv.ServiceNamespaceKey.String(namespace)))
 	}
@@ -139,6 +139,10 @@ func NewTracerProvider(ctx context.Context, endpoint, caCert, name, namespace st
 	)
 	klog.V(2).Info("Successfully setup trace provider")
 	return
+}
+
+func defaultResourceOpts(name string) []sdkresource.Option {
+	return []sdkresource.Option{sdkresource.WithAttributes(semconv.ServiceNameKey.String(name)), sdkresource.WithSchemaURL(semconv.SchemaURL), sdkresource.WithProcess()}
 }
 
 // Shutdown shuts down the global trace exporter.
