@@ -309,6 +309,8 @@ func evictPods(
 	}
 
 	if continueEviction(nodeInfo, totalAvailableUsage) {
+		// TODO: Should a node be tainted here to prevent pods being
+		// rescheduled onto the node we're evicting them from?
 		for _, pod := range inputPods {
 			if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
 				klog.V(3).InfoS("Skipping eviction for pod, doesn't tolerate node taint", "pod", klog.KObj(pod))
