@@ -81,6 +81,32 @@ func TestHighNodeUtilization(t *testing.T) {
 			expectedPodsEvicted: 0,
 		},
 		{
+			name: "all nodes below threshold usage",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  80,
+				v1.ResourcePods: 80,
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, nil),
+			},
+			pods: []*v1.Pod{
+				// These won't be evicted.
+				test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				// These won't be evicted.
+				test.BuildTestPod("p4", 400, 0, n2NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p5", 400, 0, n2NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p6", 400, 0, n2NodeName, test.SetRSOwnerRef),
+				// These will be evicted.
+				test.BuildTestPod("p7", 400, 0, n3NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p8", 400, 0, n3NodeName, test.SetRSOwnerRef),
+			},
+			expectedPodsEvicted: 2,
+		},
+		{
 			name: "no evictable pods",
 			thresholds: api.ResourceThresholds{
 				v1.ResourceCPU:  40,
