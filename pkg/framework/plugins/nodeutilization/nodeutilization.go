@@ -308,64 +308,61 @@ func evictPods(
 		excludedNamespaces = sets.New(evictableNamespaces.Exclude...)
 	}
 
-	if continueEviction(nodeInfo, totalAvailableUsage) {
+	for _, pod := range inputPods {
+		if !continueEviction(nodeInfo, totalAvailableUsage) {
+			return nil
+		}
 		// TODO: Should a node be tainted here to prevent pods being
 		// rescheduled onto the node we're evicting them from?
-		for _, pod := range inputPods {
-			if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
-				klog.V(3).InfoS("Skipping eviction for pod, doesn't tolerate node taint", "pod", klog.KObj(pod))
-				continue
-			}
+		if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
+			klog.V(3).InfoS("Skipping eviction for pod, doesn't tolerate node taint", "pod", klog.KObj(pod))
+			continue
+		}
 
-			preEvictionFilterWithOptions, err := podutil.NewOptions().
-				WithFilter(podEvictor.PreEvictionFilter).
-				WithoutNamespaces(excludedNamespaces).
-				BuildFilterFunc()
-			if err != nil {
-				klog.ErrorS(err, "could not build preEvictionFilter with namespace exclusion")
-				continue
-			}
+		preEvictionFilterWithOptions, err := podutil.NewOptions().
+			WithFilter(podEvictor.PreEvictionFilter).
+			WithoutNamespaces(excludedNamespaces).
+			BuildFilterFunc()
+		if err != nil {
+			klog.ErrorS(err, "could not build preEvictionFilter with namespace exclusion")
+			continue
+		}
 
-			if !preEvictionFilterWithOptions(pod) {
-				continue
-			}
-			podUsage, err := usageClient.podUsage(pod)
-			if err != nil {
-				klog.Errorf("unable to get pod usage for %v/%v: %v", pod.Namespace, pod.Name, err)
-				continue
-			}
-			err = podEvictor.Evict(ctx, pod, evictOptions)
-			if err == nil {
-				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
-
-				for name := range totalAvailableUsage {
-					if name == v1.ResourcePods {
-						nodeInfo.usage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
-						totalAvailableUsage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
-					} else {
-						nodeInfo.usage[name].Sub(*podUsage[name])
-						totalAvailableUsage[name].Sub(*podUsage[name])
-					}
-				}
-
-				keysAndValues := []interface{}{
-					"node", nodeInfo.node.Name,
-				}
-				keysAndValues = append(keysAndValues, usageToKeysAndValues(nodeInfo.usage)...)
-				klog.V(3).InfoS("Updated node usage", keysAndValues...)
-				// check if pods can be still evicted
-				if !continueEviction(nodeInfo, totalAvailableUsage) {
-					break
-				}
-				continue
-			}
+		if !preEvictionFilterWithOptions(pod) {
+			continue
+		}
+		podUsage, err := usageClient.podUsage(pod)
+		if err != nil {
+			klog.Errorf("unable to get pod usage for %v/%v: %v", pod.Namespace, pod.Name, err)
+			continue
+		}
+		err = podEvictor.Evict(ctx, pod, evictOptions)
+		if err != nil {
 			switch err.(type) {
 			case *evictions.EvictionNodeLimitError, *evictions.EvictionTotalLimitError:
 				return err
 			default:
 				klog.Errorf("eviction failed: %v", err)
+				continue
 			}
 		}
+		klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
+
+		for name := range totalAvailableUsage {
+			if name == v1.ResourcePods {
+				nodeInfo.usage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
+				totalAvailableUsage[name].Sub(*resource.NewQuantity(1, resource.DecimalSI))
+			} else {
+				nodeInfo.usage[name].Sub(*podUsage[name])
+				totalAvailableUsage[name].Sub(*podUsage[name])
+			}
+		}
+
+		keysAndValues := []interface{}{
+			"node", nodeInfo.node.Name,
+		}
+		keysAndValues = append(keysAndValues, usageToKeysAndValues(nodeInfo.usage)...)
+		klog.V(3).InfoS("Updated node usage", keysAndValues...)
 	}
 	return nil
 }
