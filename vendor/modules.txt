@@ -1293,6 +1293,11 @@ k8s.io/kube-openapi/pkg/validation/errors
 k8s.io/kube-openapi/pkg/validation/spec
 k8s.io/kube-openapi/pkg/validation/strfmt
 k8s.io/kube-openapi/pkg/validation/strfmt/bson
+# k8s.io/kubernetes v1.32.1
+## explicit; go 1.23.0
+k8s.io/kubernetes/pkg/apis/core
+k8s.io/kubernetes/pkg/apis/core/helper
+k8s.io/kubernetes/pkg/util/taints
 # k8s.io/metrics v0.32.0
 ## explicit; go 1.23.0
 k8s.io/metrics/pkg/apis/metrics

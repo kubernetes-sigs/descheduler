@@ -1415,7 +1415,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			objs = append(objs, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns1"}})
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+			handle, podEvictor, _, err := frameworktesting.InitFrameworkHandle(
 				ctx,
 				fakeClient,
 				nil,

@@ -18,6 +18,7 @@ package nodeutilization
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 
@@ -239,6 +240,7 @@ func evictPodsFromSourceNodes(
 	resourceNames []v1.ResourceName,
 	continueEviction continueEvictionCond,
 	usageClient usageClient,
+	nodeTainer frameworktypes.Tainter,
 ) {
 	// upper bound on total number of pods/cpu/memory and optional extended resources to be moved
 	totalAvailableUsage := map[v1.ResourceName]*resource.Quantity{}
@@ -280,7 +282,7 @@ func evictPodsFromSourceNodes(
 		klog.V(1).InfoS("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
-		err := evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction, usageClient)
+		err := evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction, usageClient, nodeTainer)
 		if err != nil {
 			switch err.(type) {
 			case *evictions.EvictionTotalLimitError:
@@ -302,18 +304,27 @@ func evictPods(
 	evictOptions evictions.EvictOptions,
 	continueEviction continueEvictionCond,
 	usageClient usageClient,
+	tainter frameworktypes.Tainter,
 ) error {
 	var excludedNamespaces sets.Set[string]
 	if evictableNamespaces != nil {
 		excludedNamespaces = sets.New(evictableNamespaces.Exclude...)
 	}
 
+	nodeTainted := false
 	for _, pod := range inputPods {
 		if !continueEviction(nodeInfo, totalAvailableUsage) {
 			return nil
 		}
-		// TODO: Should a node be tainted here to prevent pods being
-		// rescheduled onto the node we're evicting them from?
+		if !nodeTainted {
+			klog.InfoS("tainting node", "node", klog.KObj(nodeInfo.node))
+			err := tainter.Taint(ctx, nodeInfo.node)
+			if err != nil {
+				klog.ErrorS(err, "unable to taint node", "node", klog.KObj(nodeInfo.node))
+				return fmt.Errorf("taint node: %w", err)
+			}
+			nodeTainted = true
+		}
 		if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
 			klog.V(3).InfoS("Skipping eviction for pod, doesn't tolerate node taint", "pod", klog.KObj(pod))
 			continue

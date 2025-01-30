@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/descheduler/metricscollector"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/descheduler/taints"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/tracing"
@@ -65,6 +66,19 @@ func (ei *evictorImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.Ev
 	return ei.podEvictor.EvictPod(ctx, pod, opts)
 }
 
+// tainterImpl implements the Tainter interface so plugins
+// can evict a pod without importing a specific pod evictor
+type tainterImpl struct {
+	tainter *taints.Tainter
+}
+
+var _ frameworktypes.Tainter = &tainterImpl{}
+
+// Filter checks if a pod can be evicted
+func (ti *tainterImpl) Taint(ctx context.Context, n *v1.Node) error {
+	return ti.tainter.Taint(ctx, n)
+}
+
 // handleImpl implements the framework handle which gets passed to plugins
 type handleImpl struct {
 	clientSet                 clientset.Interface
@@ -72,6 +86,7 @@ type handleImpl struct {
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	sharedInformerFactory     informers.SharedInformerFactory
 	evictor                   *evictorImpl
+	tainter                   *tainterImpl
 }
 
 var _ frameworktypes.Handle = &handleImpl{}
@@ -98,6 +113,11 @@ func (hi *handleImpl) SharedInformerFactory() informers.SharedInformerFactory {
 // Evictor retrieves evictor so plugins can filter and evict pods
 func (hi *handleImpl) Evictor() frameworktypes.Evictor {
 	return hi.evictor
+}
+
+// Tainter retrieves tainter so plugins can taint nodes
+func (hi *handleImpl) Tainter() frameworktypes.Tainter {
+	return hi.tainter
 }
 
 type filterPlugin interface {
@@ -134,6 +154,7 @@ type handleImplOpts struct {
 	sharedInformerFactory     informers.SharedInformerFactory
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	podEvictor                *evictions.PodEvictor
+	tainter                   *taints.Tainter
 	metricsCollector          *metricscollector.MetricsCollector
 }
 
@@ -153,6 +174,12 @@ func WithSharedInformerFactory(sharedInformerFactory informers.SharedInformerFac
 func WithPodEvictor(podEvictor *evictions.PodEvictor) Option {
 	return func(o *handleImplOpts) {
 		o.podEvictor = podEvictor
+	}
+}
+
+func WithTainter(tainter *taints.Tainter) Option {
+	return func(o *handleImplOpts) {
+		o.tainter = tainter
 	}
 }
 
@@ -235,6 +262,10 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 		return nil, fmt.Errorf("podEvictor missing")
 	}
 
+	if hOpts.tainter == nil {
+		return nil, fmt.Errorf("tainter missing")
+	}
+
 	pi := &profileImpl{
 		profileName:              config.Name,
 		podEvictor:               hOpts.podEvictor,
@@ -265,6 +296,9 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 		evictor: &evictorImpl{
 			profileName: config.Name,
 			podEvictor:  hOpts.podEvictor,
+		},
+		tainter: &tainterImpl{
+			tainter: hOpts.tainter,
 		},
 		metricsCollector: hOpts.metricsCollector,
 	}

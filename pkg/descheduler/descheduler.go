@@ -54,6 +54,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/metricscollector"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/descheduler/taints"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	frameworkprofile "sigs.k8s.io/descheduler/pkg/framework/profile"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -77,6 +78,7 @@ type descheduler struct {
 	deschedulerPolicy      *api.DeschedulerPolicy
 	eventRecorder          events.EventRecorder
 	podEvictor             *evictions.PodEvictor
+	tainter                *taints.Tainter
 	podEvictionReactionFnc func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error)
 	metricsCollector       *metricscollector.MetricsCollector
 }
@@ -165,6 +167,8 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 		return nil, err
 	}
 
+	tainter := taints.NewTainter(rs.Client)
+
 	var metricsCollector *metricscollector.MetricsCollector
 	if deschedulerPolicy.MetricsCollector.Enabled {
 		nodeSelector := labels.Everything()
@@ -186,6 +190,7 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 		deschedulerPolicy:      deschedulerPolicy,
 		eventRecorder:          eventRecorder,
 		podEvictor:             podEvictor,
+		tainter:                tainter,
 		podEvictionReactionFnc: podEvictionReactionFnc,
 		metricsCollector:       metricsCollector,
 	}, nil
@@ -266,6 +271,7 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 			frameworkprofile.WithClientSet(client),
 			frameworkprofile.WithSharedInformerFactory(d.sharedInformerFactory),
 			frameworkprofile.WithPodEvictor(d.podEvictor),
+			frameworkprofile.WithTainter(d.tainter),
 			frameworkprofile.WithGetPodsAssignedToNodeFnc(d.getPodsAssignedToNode),
 			frameworkprofile.WithMetricsCollector(d.metricsCollector),
 		)

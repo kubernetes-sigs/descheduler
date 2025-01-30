@@ -161,6 +161,7 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		h.resourceNames,
 		continueEvictionCond,
 		h.usageClient,
+		h.handle.Tainter(),
 	)
 
 	return nil

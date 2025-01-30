@@ -357,7 +357,7 @@ func TestRemoveFailedPods(t *testing.T) {
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{NodeFit: tc.nodeFit}, nil)
+			handle, podEvictor, _, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{NodeFit: tc.nodeFit}, nil)
 			if err != nil {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}

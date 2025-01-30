@@ -407,7 +407,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+			handle, podEvictor, _, err := frameworktesting.InitFrameworkHandle(
 				ctx,
 				fakeClient,
 				evictions.NewOptions().

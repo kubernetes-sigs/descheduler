@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/descheduler/metricscollector"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/descheduler/taints"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
@@ -19,6 +20,7 @@ type HandleImpl struct {
 	SharedInformerFactoryImpl     informers.SharedInformerFactory
 	EvictorFilterImpl             frameworktypes.EvictorPlugin
 	PodEvictorImpl                *evictions.PodEvictor
+	TainterImpl                   *taints.Tainter
 	MetricsCollectorImpl          *metricscollector.MetricsCollector
 }
 
@@ -42,6 +44,10 @@ func (hi *HandleImpl) SharedInformerFactory() informers.SharedInformerFactory {
 
 func (hi *HandleImpl) Evictor() frameworktypes.Evictor {
 	return hi
+}
+
+func (hi *HandleImpl) Tainter() frameworktypes.Tainter {
+	return hi.TainterImpl
 }
 
 func (hi *HandleImpl) Filter(pod *v1.Pod) bool {
