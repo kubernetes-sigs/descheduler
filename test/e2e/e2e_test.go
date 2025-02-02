@@ -1822,6 +1822,7 @@ func getCurrentPodNames(ctx context.Context, clientSet clientset.Interface, name
 
 	names := []string{}
 	for _, item := range podList.Items {
+		fmt.Printf("pod: %v, status: %v, second: %v\n", item.Name, item.Status.Phase, item.DeletionGracePeriodSeconds)
 		names = append(names, item.Name)
 	}
 	return names
