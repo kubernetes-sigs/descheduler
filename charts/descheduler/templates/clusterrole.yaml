@@ -36,4 +36,9 @@ rules:
   resourceNames: ["{{ .Values.leaderElection.resourceName | default "descheduler" }}"]
   verbs: ["get", "patch", "delete"]
 {{- end }}
+{{- if and .Values.deschedulerPolicy .Values.deschedulerPolicy.metricsCollector .Values.deschedulerPolicy.metricsCollector.enabled }}
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+{{- end }}
 {{- end -}}
