@@ -83,6 +83,7 @@ func (in *LowNodeUtilizationArgs) DeepCopyInto(out *LowNodeUtilizationArgs) {
 		}
 	}
 	out.MetricsUtilization = in.MetricsUtilization
+	out.SoftTainter = in.SoftTainter
 	if in.EvictableNamespaces != nil {
 		in, out := &in.EvictableNamespaces, &out.EvictableNamespaces
 		*out = new(api.Namespaces)

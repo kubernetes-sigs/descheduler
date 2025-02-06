@@ -54,3 +54,88 @@ subjects:
   - name: descheduler-sa
     kind: ServiceAccount
     namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: descheduler-cluster-role-node-update
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - patch
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: descheduler-cluster-role-binding-node-update
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: descheduler-cluster-role-node-update
+subjects:
+  - kind: ServiceAccount
+    name: descheduler-sa
+    namespace: kube-system
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: "descheduler-sa-update-nodes"
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    matchPolicy: Equivalent
+    namespaceSelector: {}
+    objectSelector: {}
+    resourceRules:
+      - apiGroups:   [""]
+        apiVersions: ["*"]
+        operations:  ["UPDATE"]
+        resources:   ["nodes"]
+        scope: "*"
+  matchConditions:
+    - name: 'descheduler-sa'
+      expression: "request.userInfo.username=='system:serviceaccount:kube-system:descheduler-sa'"
+  variables:
+    - name: "oldNonDeschedulerTaints"
+      expression: "has(oldObject.spec.taints) ? oldObject.spec.taints.filter(t, !t.key.contains('descheduler.kubernetes.io')) : []"
+    - name: "oldTaints"
+      expression: "has(oldObject.spec.taints) ? oldObject.spec.taints : []"
+    - name: "newNonDeschedulerTaints"
+      expression: "has(object.spec.taints) ? object.spec.taints.filter(t, !t.key.contains('descheduler.kubernetes.io')) : []"
+    - name: "newTaints"
+      expression: "has(object.spec.taints) ? object.spec.taints : []"
+    - name: "newDeschedulerTaints"
+      expression: "has(object.spec.taints) ? object.spec.taints.filter(t, t.key.contains('descheduler.kubernetes.io')) : []"
+  validations:
+    - expression: |
+        oldObject.metadata.filter(k, k != "resourceVersion" && k != "generation" && k != "managedFields").all(k, k in object.metadata) &&
+        object.metadata.filter(k, k != "resourceVersion" && k != "generation" && k != "managedFields").all(k, k in oldObject.metadata && oldObject.metadata[k] == object.metadata[k])
+      messageExpression: "'User ' + string(request.userInfo.username) + ' is only allowed to update taints'"
+      reason: Forbidden
+    - expression: |
+        oldObject.spec.filter(k, k != "taints").all(k, k in object.spec) &&
+        object.spec.filter(k, k != "taints").all(k, k in oldObject.spec && oldObject.spec[k] == object.spec[k])
+      messageExpression: "'User ' + string(request.userInfo.username) + ' is only allowed to update taints'"
+      reason: Forbidden
+    - expression: "size(variables.newNonDeschedulerTaints) == size(variables.oldNonDeschedulerTaints)"
+      messageExpression: "'User ' + string(request.userInfo.username) + ' is not allowed to create/delete non descheduler taints'"
+      reason: Forbidden
+    - expression: "variables.newNonDeschedulerTaints.all(nt, size(variables.oldNonDeschedulerTaints.filter(ot, nt.key==ot.key)) > 0 ? variables.oldNonDeschedulerTaints.filter(ot, nt.key==ot.key)[0].value == nt.value && variables.oldNonDeschedulerTaints.filter(ot, nt.key==ot.key)[0].effect == nt.effect : true)"
+      messageExpression: "'User ' + string(request.userInfo.username) + ' is not allowed to update non descheduler taints'"
+      reason: Forbidden
+    - expression: "variables.newDeschedulerTaints.all(t, t.effect == 'PreferNoSchedule')"
+      messageExpression: "'User ' + string(request.userInfo.username) + ' is only allowed to set taints with PreferNoSchedule effect'"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: "descheduler-sa-update-nodes"
+spec:
+  policyName: "descheduler-sa-update-nodes"
+  validationActions: [Deny]

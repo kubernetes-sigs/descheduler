@@ -17,8 +17,11 @@ limitations under the License.
 package nodeutilization
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -1125,7 +1128,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		testFnc := func(metricsEnabled bool, expectedPodsEvicted uint) func(t *testing.T) {
+		testFnc := func(metricsEnabled, softTainterEnabled bool, expectedPodsEvicted uint) func(t *testing.T) {
 			return func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
@@ -1197,6 +1200,9 @@ func TestLowNodeUtilization(t *testing.T) {
 					MetricsUtilization: MetricsUtilization{
 						MetricsServer: metricsEnabled,
 					},
+					SoftTainter: SoftTainter{
+						ApplySoftTaints: softTainterEnabled,
+					},
 				},
 					handle)
 				if err != nil {
@@ -1213,8 +1219,10 @@ func TestLowNodeUtilization(t *testing.T) {
 				}
 			}
 		}
-		t.Run(tc.name, testFnc(false, tc.expectedPodsEvicted))
-		t.Run(tc.name+" with metrics enabled", testFnc(true, tc.expectedPodsWithMetricsEvicted))
+		t.Run(tc.name, testFnc(false, false, tc.expectedPodsEvicted))
+		t.Run(tc.name+" with metrics enabled", testFnc(true, false, tc.expectedPodsWithMetricsEvicted))
+		t.Run(tc.name+" with softTainter enabled", testFnc(false, true, tc.expectedPodsEvicted))
+		t.Run(tc.name+" with metrics and softTainter enabled", testFnc(true, true, tc.expectedPodsWithMetricsEvicted))
 	}
 }
 
@@ -1368,5 +1376,219 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, podEvictor.TotalEvicted())
 			}
 		})
+	}
+}
+
+func TestLowNodeUtilizationSoftTainter(t *testing.T) {
+	n1NodeName := "n1"
+	n2NodeName := "n2"
+	n3NodeName := "n3"
+
+	testCases := []struct {
+		name                                  string
+		useDeviationThresholds                bool
+		thresholds, targetThresholds          api.ResourceThresholds
+		nodes                                 []*v1.Node
+		nodemetricses                         []*v1beta1.NodeMetrics
+		expectedSoftTaintedNodeNames          []string
+		expectedSoftUntaintedNodeNames        []string
+		expectedSoftTaintedNodeNamesMetrics   []string
+		expectedSoftUntaintedNodeNamesMetrics []string
+	}{
+		{
+			name: "case_1",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 9, test.SetNodeSoftTainted),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, nil),
+			},
+			nodemetricses: []*v1beta1.NodeMetrics{
+				test.BuildNodeMetrics(n1NodeName, 401, 171),
+				test.BuildNodeMetrics(n2NodeName, 3401, 1714),
+				test.BuildNodeMetrics(n3NodeName, 3410, 1714),
+			},
+
+			expectedSoftTaintedNodeNames:          []string{},
+			expectedSoftUntaintedNodeNames:        []string{"n1"},
+			expectedSoftTaintedNodeNamesMetrics:   []string{"n2", "n3"},
+			expectedSoftUntaintedNodeNamesMetrics: []string{"n1"},
+		},
+		{
+			name: "case_2",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 9, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 9, nil),
+			},
+			nodemetricses: []*v1beta1.NodeMetrics{
+				test.BuildNodeMetrics(n1NodeName, 2401, 171),
+				test.BuildNodeMetrics(n2NodeName, 401, 171),
+				test.BuildNodeMetrics(n3NodeName, 10, 171),
+			},
+
+			expectedSoftTaintedNodeNames:          []string{},
+			expectedSoftUntaintedNodeNames:        []string{},
+			expectedSoftTaintedNodeNamesMetrics:   []string{},
+			expectedSoftUntaintedNodeNamesMetrics: []string{},
+		},
+		{
+			name: "case_3",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 9, test.SetNodeSoftTainted),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, test.SetNodeSoftTainted),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeSoftTainted),
+			},
+			nodemetricses: []*v1beta1.NodeMetrics{
+				test.BuildNodeMetrics(n1NodeName, 5, 1714),
+				test.BuildNodeMetrics(n2NodeName, 3401, 171),
+				test.BuildNodeMetrics(n3NodeName, 10, 1714),
+			},
+
+			expectedSoftTaintedNodeNames:          []string{},
+			expectedSoftUntaintedNodeNames:        []string{"n1", "n2", "n3"},
+			expectedSoftTaintedNodeNamesMetrics:   []string{},
+			expectedSoftUntaintedNodeNamesMetrics: []string{"n1", "n3"},
+		},
+	}
+
+	for _, tc := range testCases {
+		testFnc := func(metricsEnabled bool) func(t *testing.T) {
+			return func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+
+				var objs []runtime.Object
+				for _, node := range tc.nodes {
+					objs = append(objs, node)
+				}
+
+				fakeClient := fake.NewClientset(objs...)
+
+				var collector *metricscollector.MetricsCollector
+				if metricsEnabled {
+					metricsClientset := fakemetricsclient.NewSimpleClientset()
+					for _, nodemetrics := range tc.nodemetricses {
+						metricsClientset.Tracker().Create(nodesgvr, nodemetrics, "")
+					}
+
+					sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+					nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
+					sharedInformerFactory.Start(ctx.Done())
+					sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+					collector = metricscollector.NewMetricsCollector(nodeLister, metricsClientset, labels.Everything())
+					err := collector.Collect(ctx)
+					if err != nil {
+						t.Fatalf("unable to collect metrics: %v", err)
+					}
+				}
+
+				nodesForTainting := make(map[string]struct{})
+				nodesForUntainting := make(map[string]struct{})
+				if metricsEnabled {
+					for _, node := range tc.expectedSoftTaintedNodeNamesMetrics {
+						nodesForTainting[node] = struct{}{}
+					}
+					for _, node := range tc.expectedSoftUntaintedNodeNamesMetrics {
+						nodesForUntainting[node] = struct{}{}
+					}
+				} else {
+					for _, node := range tc.expectedSoftTaintedNodeNames {
+						nodesForTainting[node] = struct{}{}
+					}
+					for _, node := range tc.expectedSoftUntaintedNodeNames {
+						nodesForUntainting[node] = struct{}{}
+					}
+				}
+
+				// evictionFailed := false
+				untaintPatch := "{\"spec\":{\"taints\":null}}"
+				taintPatch := "{\"spec\":{\"taints\":[{\"effect\":\"PreferNoSchedule\",\"key\":\"nodeutilization.descheduler.kubernetes.io/overutilized\",\"value\":\"true\"}]}}"
+				untaintPatchB := []byte(untaintPatch)
+				taintPatchB := []byte(taintPatch)
+
+				for range append(tc.expectedSoftTaintedNodeNames, tc.expectedSoftUntaintedNodeNames...) {
+					fakeClient.Fake.PrependReactor("patch", "nodes", func(action core.Action) (bool, runtime.Object, error) {
+						patchAction := action.(core.PatchAction)
+						patch := patchAction.GetPatch()
+						nodeName := patchAction.GetName()
+						if bytes.Equal(patch, untaintPatchB) {
+							if _, exists := nodesForUntainting[nodeName]; exists {
+								delete(nodesForUntainting, nodeName)
+								return true, nil, nil
+							}
+							t.Errorf("node %q was unexpectedly untainted", nodeName)
+							return true, nil, fmt.Errorf("node %q was unexpectedly untainted", nodeName)
+						} else if bytes.Equal(patch, taintPatchB) {
+							if _, exists := nodesForTainting[nodeName]; exists {
+								delete(nodesForTainting, nodeName)
+								return true, nil, nil
+							}
+							t.Errorf("node %q was unexpectedly tainted", nodeName)
+							return true, nil, fmt.Errorf("node %q was unexpectedly tainted", nodeName)
+						}
+						return true, nil, fmt.Errorf("unexpected patch on %q. Patch: %q", nodeName, patch)
+					})
+				}
+
+				handle, _, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{NodeFit: true}, nil)
+				if err != nil {
+					t.Fatalf("Unable to initialize a framework handle: %v", err)
+				}
+				handle.MetricsCollectorImpl = collector
+
+				plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
+					Thresholds:             tc.thresholds,
+					TargetThresholds:       tc.targetThresholds,
+					UseDeviationThresholds: tc.useDeviationThresholds,
+					MetricsUtilization: MetricsUtilization{
+						MetricsServer: metricsEnabled,
+					},
+					SoftTainter: SoftTainter{
+						ApplySoftTaints: true,
+						SoftTaintKey:    defaultSoftTaintKey,
+						SoftTaintValue:  defaultSoftTaintValue,
+					},
+				},
+					handle)
+				if err != nil {
+					t.Fatalf("Unable to initialize the plugin: %v", err)
+				}
+				plugin.(frameworktypes.BalancePlugin).Balance(ctx, tc.nodes)
+
+				if len(nodesForTainting) > 0 {
+					t.Errorf("Not all the expected node got tainted, remaining: %v", slices.Sorted(maps.Keys(nodesForTainting)))
+				}
+				if len(nodesForUntainting) > 0 {
+					t.Errorf("Not all the expected node got untainted, remaining: %v", slices.Sorted(maps.Keys(nodesForUntainting)))
+				}
+			}
+		}
+		t.Run(tc.name, testFnc(false))
+		t.Run(tc.name+" with metrics enabled", testFnc(true))
 	}
 }

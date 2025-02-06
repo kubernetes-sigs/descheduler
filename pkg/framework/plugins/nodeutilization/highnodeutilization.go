@@ -102,7 +102,7 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		}
 	}
 
-	sourceNodes, highNodes := classifyNodes(
+	sourceNodes, _, highNodes := classifyNodes(
 		getNodeUsage(nodes, h.usageClient),
 		getNodeThresholds(nodes, h.args.Thresholds, h.targetThresholds, h.resourceNames, false, h.usageClient),
 		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
