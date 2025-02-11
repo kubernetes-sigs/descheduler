@@ -8,7 +8,7 @@ jobs:
     strategy:
       matrix:
         k8s-version: ["v1.32.0"]
-        descheduler-version: ["v0.32.1"]
+        descheduler-version: ["v0.32.2"]
         descheduler-api: ["v1alpha2"]
         manifest: ["deployment"]
     runs-on: ubuntu-latest
