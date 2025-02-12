@@ -417,18 +417,23 @@ func sortDomains(constraintTopologyPairs map[topologyPair][]*v1.Pod, isEvictable
 		// followed by the highest priority pods with affinity or nodeSelector
 		sort.Slice(list, func(i, j int) bool {
 			// any non-evictable pods should be considered last (ie, first in the list)
-			if !isEvictable(list[i]) || !isEvictable(list[j]) {
+			evictableI := isEvictable(list[i])
+			evictableJ := isEvictable(list[j])
+
+			if !evictableI || !evictableJ {
 				// false - i is the only non-evictable, so return true to put it first
 				// true - j is non-evictable, so return false to put j before i
 				// if true and both and non-evictable, order doesn't matter
-				return !(isEvictable(list[i]) && !isEvictable(list[j]))
+				return !(evictableI && !evictableJ)
 			}
+			hasSelectorOrAffinityI := hasSelectorOrAffinity(*list[i])
+			hasSelectorOrAffinityJ := hasSelectorOrAffinity(*list[j])
 			// if both pods have selectors/affinity, compare them by their priority
-			if hasSelectorOrAffinity(*list[i]) == hasSelectorOrAffinity(*list[j]) {
+			if hasSelectorOrAffinityI == hasSelectorOrAffinityJ {
 				// Sort by priority in ascending order (lower priority Pods first)
 				return !comparePodsByPriority(list[i], list[j])
 			}
-			return hasSelectorOrAffinity(*list[i]) && !hasSelectorOrAffinity(*list[j])
+			return hasSelectorOrAffinityI && !hasSelectorOrAffinityJ
 		})
 		sortedTopologies = append(sortedTopologies, topology{pair: pair, pods: list})
 	}
