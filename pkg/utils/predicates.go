@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/component-helpers/scheduling/corev1"
+	"k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
 	"k8s.io/klog/v2"
 )
 
@@ -55,56 +56,13 @@ func PodMatchesTermsNamespaceAndSelector(pod *v1.Pod, namespaces sets.Set[string
 	return true
 }
 
-// The following code has been copied from predicates package to avoid the
-// huge vendoring issues, mostly copied from
-// k8s.io/kubernetes/plugin/pkg/scheduler/algorithm/predicates/
-// Some minor changes have been made to ease the imports, but most of the code
-// remains untouched
-
 // PodMatchNodeSelector checks if a pod node selector matches the node label.
 func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) (bool, error) {
 	if node == nil {
 		return false, fmt.Errorf("node not found")
 	}
-	return podMatchesNodeLabels(pod, node), nil
-}
-
-// The pod can only schedule onto nodes that satisfy requirements in both NodeAffinity and nodeSelector.
-func podMatchesNodeLabels(pod *v1.Pod, node *v1.Node) bool {
-	// Check if node.Labels match pod.Spec.NodeSelector.
-	if len(pod.Spec.NodeSelector) > 0 {
-		selector := labels.SelectorFromSet(pod.Spec.NodeSelector)
-		if !selector.Matches(labels.Set(node.Labels)) {
-			return false
-		}
-	}
-
-	// 1. nil NodeSelector matches all nodes (i.e. does not filter out any nodes)
-	// 2. nil []NodeSelectorTerm (equivalent to non-nil empty NodeSelector) matches no nodes
-	// 3. zero-length non-nil []NodeSelectorTerm matches no nodes also, just for simplicity
-	// 4. nil []NodeSelectorRequirement (equivalent to non-nil empty NodeSelectorTerm) matches no nodes
-	// 5. zero-length non-nil []NodeSelectorRequirement matches no nodes also, just for simplicity
-	// 6. non-nil empty NodeSelectorRequirement is not allowed
-
-	affinity := pod.Spec.Affinity
-	if affinity != nil && affinity.NodeAffinity != nil {
-		nodeAffinity := affinity.NodeAffinity
-		// if no required NodeAffinity requirements, will do no-op, means select all nodes.
-		if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
-			return true
-		}
-
-		// Match node selector for requiredDuringSchedulingIgnoredDuringExecution.
-		if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-			klog.V(10).InfoS("Match for RequiredDuringSchedulingIgnoredDuringExecution node selector", "selector", nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
-			matches, err := corev1.MatchNodeSelectorTerms(node, nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
-			if err != nil {
-				klog.ErrorS(err, "error parsing node selector", "selector", nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution)
-			}
-			return matches
-		}
-	}
-	return true
+	nodeRequiredAffinity := nodeaffinity.GetRequiredNodeAffinity(pod)
+	return nodeRequiredAffinity.Match(node)
 }
 
 func uniqueSortNodeSelectorTerms(srcTerms []v1.NodeSelectorTerm) []v1.NodeSelectorTerm {
