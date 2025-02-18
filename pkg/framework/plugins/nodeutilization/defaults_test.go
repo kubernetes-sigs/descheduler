@@ -23,6 +23,11 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
+const (
+	defaultSoftTaintKey   = "nodeutilization.descheduler.kubernetes.io/overutilized"
+	defaultSoftTaintValue = "true"
+)
+
 func TestSetDefaults_LowNodeUtilizationArgs(t *testing.T) {
 	tests := []struct {
 		name string
@@ -37,6 +42,11 @@ func TestSetDefaults_LowNodeUtilizationArgs(t *testing.T) {
 				Thresholds:             nil,
 				TargetThresholds:       nil,
 				NumberOfNodes:          0,
+				SoftTainter: SoftTainter{
+					ApplySoftTaints: false,
+					SoftTaintKey:    defaultSoftTaintKey,
+					SoftTaintValue:  defaultSoftTaintValue,
+				},
 			},
 		},
 		{
@@ -52,6 +62,11 @@ func TestSetDefaults_LowNodeUtilizationArgs(t *testing.T) {
 					v1.ResourceMemory: 80,
 				},
 				NumberOfNodes: 10,
+				SoftTainter: SoftTainter{
+					ApplySoftTaints: true,
+					SoftTaintKey:    defaultSoftTaintKey,
+					SoftTaintValue:  defaultSoftTaintValue,
+				},
 			},
 			want: &LowNodeUtilizationArgs{
 				UseDeviationThresholds: true,
@@ -64,12 +79,39 @@ func TestSetDefaults_LowNodeUtilizationArgs(t *testing.T) {
 					v1.ResourceMemory: 80,
 				},
 				NumberOfNodes: 10,
+				SoftTainter: SoftTainter{
+					ApplySoftTaints: true,
+					SoftTaintKey:    defaultSoftTaintKey,
+					SoftTaintValue:  defaultSoftTaintValue,
+				},
+			},
+		},
+		{
+			name: "LowNodeUtilizationArgs with custom SoftTainter",
+			in: &LowNodeUtilizationArgs{
+				SoftTainter: SoftTainter{
+					ApplySoftTaints: true,
+					SoftTaintKey:    "customKey",
+					SoftTaintValue:  "customValue",
+				},
+			},
+			want: &LowNodeUtilizationArgs{
+				UseDeviationThresholds: false,
+				Thresholds:             nil,
+				TargetThresholds:       nil,
+				NumberOfNodes:          0,
+				SoftTainter: SoftTainter{
+					ApplySoftTaints: true,
+					SoftTaintKey:    "customKey",
+					SoftTaintValue:  "customValue",
+				},
 			},
 		},
 	}
 	for _, tc := range tests {
 		scheme := runtime.NewScheme()
 		utilruntime.Must(AddToScheme(scheme))
+		scheme.Default(tc.in)
 		t.Run(tc.name, func(t *testing.T) {
 			scheme.Default(tc.in)
 			if diff := cmp.Diff(tc.in, tc.want); diff != "" {

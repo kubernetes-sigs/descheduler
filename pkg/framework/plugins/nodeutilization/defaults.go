@@ -37,6 +37,9 @@ func SetDefaults_LowNodeUtilizationArgs(obj runtime.Object) {
 	if args.NumberOfNodes == 0 {
 		args.NumberOfNodes = 0
 	}
+	if args.NumberOfNodes == 0 {
+		args.NumberOfNodes = 0
+	}
 }
 
 // SetDefaults_HighNodeUtilizationArgs

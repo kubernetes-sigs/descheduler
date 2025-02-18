@@ -184,8 +184,8 @@ func classifyNodes(
 	nodeUsages []NodeUsage,
 	nodeThresholds map[string]NodeThresholds,
 	lowThresholdFilter, highThresholdFilter func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool,
-) ([]NodeInfo, []NodeInfo) {
-	lowNodes, highNodes := []NodeInfo{}, []NodeInfo{}
+) ([]NodeInfo, []NodeInfo, []NodeInfo) {
+	lowNodes, apprNodes, highNodes := []NodeInfo{}, []NodeInfo{}, []NodeInfo{}
 
 	for _, nodeUsage := range nodeUsages {
 		nodeInfo := NodeInfo{
@@ -200,10 +200,11 @@ func classifyNodes(
 			highNodes = append(highNodes, nodeInfo)
 		} else {
 			klog.InfoS("Node is appropriately utilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
+			apprNodes = append(apprNodes, nodeInfo)
 		}
 	}
 
-	return lowNodes, highNodes
+	return lowNodes, apprNodes, highNodes
 }
 
 func usageToKeysAndValues(usage map[v1.ResourceName]*resource.Quantity) []interface{} {

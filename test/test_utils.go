@@ -240,6 +240,11 @@ func SetNodeUnschedulable(node *v1.Node) {
 	node.Spec.Unschedulable = true
 }
 
+// SetNodeSoftTainted sets the descheduler soft taints on the given node
+func SetNodeSoftTainted(node *v1.Node) {
+	node.Spec.Taints = append(node.Spec.Taints, v1.Taint{Key: "nodeutilization.descheduler.kubernetes.io/overutilized", Value: "true", Effect: v1.TaintEffectPreferNoSchedule})
+}
+
 // SetPodExtendedResourceRequest sets the given pod's extended resources
 func SetPodExtendedResourceRequest(pod *v1.Pod, resourceName v1.ResourceName, requestQuantity int64) {
 	pod.Spec.Containers[0].Resources.Requests[resourceName] = *resource.NewQuantity(requestQuantity, resource.DecimalSI)

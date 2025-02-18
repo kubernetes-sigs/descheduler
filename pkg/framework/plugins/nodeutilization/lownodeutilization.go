@@ -23,6 +23,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -45,6 +46,7 @@ type LowNodeUtilization struct {
 	overutilizationCriteria  []interface{}
 	resourceNames            []v1.ResourceName
 	usageClient              usageClient
+	client                   clientset.Interface
 }
 
 var _ frameworktypes.BalancePlugin = &LowNodeUtilization{}
@@ -107,6 +109,7 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 		resourceNames:            resourceNames,
 		podFilter:                podFilter,
 		usageClient:              usageClient,
+		client:                   handle.ClientSet(),
 	}, nil
 }
 
@@ -123,7 +126,7 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 		}
 	}
 
-	lowNodes, sourceNodes := classifyNodes(
+	lowNodes, apprNodes, sourceNodes := classifyNodes(
 		getNodeUsage(nodes, l.usageClient),
 		getNodeThresholds(nodes, l.args.Thresholds, l.args.TargetThresholds, l.resourceNames, l.args.UseDeviationThresholds, l.usageClient),
 		// The node has to be schedulable (to be able to move workload there)
@@ -138,6 +141,10 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 			return isNodeAboveTargetUtilization(usage, threshold.highResourceThreshold)
 		},
 	)
+
+	if l.args.SoftTainter.ApplySoftTaints {
+		l.taintOverUtilized(ctx, lowNodes, apprNodes, sourceNodes)
+	}
 
 	// log message for nodes with low utilization
 	klog.V(1).InfoS("Criteria for a node under utilization", l.underutilizationCriteria...)
@@ -227,6 +234,29 @@ func setDefaultForLNUThresholds(thresholds, targetThresholds api.ResourceThresho
 		} else {
 			thresholds[v1.ResourceMemory] = MaxResourcePercentage
 			targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
+		}
+	}
+}
+
+func (l *LowNodeUtilization) taintOverUtilized(ctx context.Context, lowNodes, apprNodes, highNodes []NodeInfo) {
+	for _, nodeInfo := range append(lowNodes, apprNodes...) {
+		if nodeutil.IsNodeSoftTainted(nodeInfo.node, l.args.SoftTainter.SoftTaintKey, l.args.SoftTainter.SoftTaintValue) {
+			removed, err := nodeutil.RemoveSoftTaint(ctx, l.client, nodeInfo.node, l.args.SoftTainter.SoftTaintKey)
+			if err != nil {
+				klog.ErrorS(err, "Failed removing soft taint from node, check RBAC", "node", nodeInfo.node.Name, "taint", l.args.SoftTainter.SoftTaintKey)
+			} else if removed {
+				klog.InfoS("The soft taint got removed from the node since it's not considered overutilized anymore", "node", nodeInfo.node.Name, "taint", l.args.SoftTainter.SoftTaintKey)
+			}
+		}
+	}
+	for _, nodeInfo := range highNodes {
+		if !nodeutil.IsNodeSoftTainted(nodeInfo.node, l.args.SoftTainter.SoftTaintKey, l.args.SoftTainter.SoftTaintValue) {
+			updated, err := nodeutil.AddOrUpdateSoftTaint(ctx, l.client, nodeInfo.node, l.args.SoftTainter.SoftTaintKey, l.args.SoftTainter.SoftTaintValue)
+			if err != nil {
+				klog.ErrorS(err, "Failed adding soft taint to node, check RBAC", "node", nodeInfo.node.Name, "taint", l.args.SoftTainter.SoftTaintKey)
+			} else if updated {
+				klog.InfoS("The soft taint got added to the node since it's now considered overutilized", "node", nodeInfo.node.Name, "taint", l.args.SoftTainter.SoftTaintKey)
+			}
 		}
 	}
 }
