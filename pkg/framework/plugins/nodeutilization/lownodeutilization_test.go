@@ -1183,7 +1183,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					})
 				}
 
-				handle, podEvictor, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{NodeFit: true}, nil)
+				handle, podEvictor, _, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{NodeFit: true}, nil)
 				if err != nil {
 					t.Fatalf("Unable to initialize a framework handle: %v", err)
 				}
@@ -1339,7 +1339,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+			handle, podEvictor, _, err := frameworktesting.InitFrameworkHandle(
 				ctx,
 				fakeClient,
 				evictions.NewOptions().WithMaxPodsToEvictPerNode(&item.evictionsExpected),

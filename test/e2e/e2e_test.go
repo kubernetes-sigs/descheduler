@@ -430,7 +430,7 @@ func runPodLifetimePlugin(
 		}
 	}
 
-	handle, _, err := frameworktesting.InitFrameworkHandle(
+	handle, _, _, err := frameworktesting.InitFrameworkHandle(
 		ctx,
 		clientset,
 		evictions.NewOptions().
@@ -589,7 +589,7 @@ func TestLowNodeUtilization(t *testing.T) {
 		t.Fatalf("Error detecting eviction policy group: %v", err)
 	}
 
-	handle, _, err := frameworktesting.InitFrameworkHandle(
+	handle, _, _, err := frameworktesting.InitFrameworkHandle(
 		ctx,
 		clientSet,
 		evictions.NewOptions().

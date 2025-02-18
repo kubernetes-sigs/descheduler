@@ -294,7 +294,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{NodeFit: testCase.nodefit}, nil)
+			handle, podEvictor, _, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{NodeFit: testCase.nodefit}, nil)
 			if err != nil {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
@@ -697,7 +697,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
 
-			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{}, nil)
+			handle, podEvictor, _, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{}, nil)
 			if err != nil {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
