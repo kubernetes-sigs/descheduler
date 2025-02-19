@@ -17,9 +17,10 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog/v2"
 )
 
-func ValidateRemoveDuplicatesArgs(obj runtime.Object) error {
+func ValidateRemoveDuplicatesArgs(_ klog.Logger, obj runtime.Object) error {
 	args := obj.(*RemoveDuplicatesArgs)
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {

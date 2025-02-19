@@ -21,7 +21,6 @@ import (
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/component-base/featuregate"
-	"k8s.io/klog/v2"
 	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	fakemetricsclient "k8s.io/metrics/pkg/client/clientset/versioned/fake"
@@ -63,12 +62,12 @@ func initFeatureGates() featuregate.FeatureGate {
 	return featureGates
 }
 
-func initPluginRegistry() {
+func initPluginRegistry(ctx context.Context) {
 	pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
-	pluginregistry.Register(removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicates{}, &removeduplicates.RemoveDuplicatesArgs{}, removeduplicates.ValidateRemoveDuplicatesArgs, removeduplicates.SetDefaults_RemoveDuplicatesArgs, pluginregistry.PluginRegistry)
-	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
-	pluginregistry.Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaints{}, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs, removepodsviolatingnodetaints.SetDefaults_RemovePodsViolatingNodeTaintsArgs, pluginregistry.PluginRegistry)
-	pluginregistry.Register(nodeutilization.LowNodeUtilizationPluginName, nodeutilization.NewLowNodeUtilization, &nodeutilization.LowNodeUtilization{}, &nodeutilization.LowNodeUtilizationArgs{}, nodeutilization.ValidateLowNodeUtilizationArgs, nodeutilization.SetDefaults_LowNodeUtilizationArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(ctx, removeduplicates.PluginName, removeduplicates.New, &removeduplicates.RemoveDuplicates{}, &removeduplicates.RemoveDuplicatesArgs{}, removeduplicates.ValidateRemoveDuplicatesArgs, removeduplicates.SetDefaults_RemoveDuplicatesArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(ctx, defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(ctx, removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaints{}, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs, removepodsviolatingnodetaints.SetDefaults_RemovePodsViolatingNodeTaintsArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(ctx, nodeutilization.LowNodeUtilizationPluginName, nodeutilization.NewLowNodeUtilization, &nodeutilization.LowNodeUtilization{}, &nodeutilization.LowNodeUtilizationArgs{}, nodeutilization.ValidateLowNodeUtilizationArgs, nodeutilization.SetDefaults_LowNodeUtilizationArgs, pluginregistry.PluginRegistry)
 }
 
 func removePodsViolatingNodeTaintsPolicy() *api.DeschedulerPolicy {
@@ -202,9 +201,9 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 }
 
 func TestTaintsUpdated(t *testing.T) {
-	initPluginRegistry()
-
 	ctx := context.Background()
+	initPluginRegistry(ctx)
+
 	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 
@@ -256,9 +255,9 @@ func TestTaintsUpdated(t *testing.T) {
 }
 
 func TestDuplicate(t *testing.T) {
-	initPluginRegistry()
-
 	ctx := context.Background()
+	initPluginRegistry(ctx)
+
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 
@@ -471,9 +470,9 @@ func taintNodeNoSchedule(node *v1.Node) {
 }
 
 func TestPodEvictorReset(t *testing.T) {
-	initPluginRegistry()
-
 	ctx := context.Background()
+	initPluginRegistry(ctx)
+
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, taintNodeNoSchedule)
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 	nodes := []*v1.Node{node1, node2}
@@ -501,7 +500,7 @@ func TestPodEvictorReset(t *testing.T) {
 	}
 
 	// a single pod eviction expected
-	klog.Infof("2 pod eviction expected per a descheduling cycle, 2 real evictions in total")
+	t.Logf("2 pod eviction expected per a descheduling cycle, 2 real evictions in total")
 	if err := descheduler.runDeschedulerLoop(ctx, nodes); err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
@@ -510,7 +509,7 @@ func TestPodEvictorReset(t *testing.T) {
 	}
 
 	// a single pod eviction expected
-	klog.Infof("2 pod eviction expected per a descheduling cycle, 4 real evictions in total")
+	t.Logf("2 pod eviction expected per a descheduling cycle, 4 real evictions in total")
 	if err := descheduler.runDeschedulerLoop(ctx, nodes); err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
@@ -519,11 +518,11 @@ func TestPodEvictorReset(t *testing.T) {
 	}
 
 	// check the fake client syncing and the right pods evicted
-	klog.Infof("Enabling the dry run mode")
+	t.Logf("Enabling the dry run mode")
 	rs.DryRun = true
 	evictedPods = []string{}
 
-	klog.Infof("2 pod eviction expected per a descheduling cycle, 2 fake evictions in total")
+	t.Logf("2 pod eviction expected per a descheduling cycle, 2 fake evictions in total")
 	if err := descheduler.runDeschedulerLoop(ctx, nodes); err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
@@ -531,7 +530,7 @@ func TestPodEvictorReset(t *testing.T) {
 		t.Fatalf("Expected (2,0,2) pods evicted, got (%v, %v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
 	}
 
-	klog.Infof("2 pod eviction expected per a descheduling cycle, 4 fake evictions in total")
+	t.Logf("2 pod eviction expected per a descheduling cycle, 4 fake evictions in total")
 	if err := descheduler.runDeschedulerLoop(ctx, nodes); err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
@@ -559,9 +558,9 @@ func runDeschedulingCycleAndCheckTotals(t *testing.T, ctx context.Context, nodes
 }
 
 func TestEvictionRequestsCache(t *testing.T) {
-	initPluginRegistry()
-
 	ctx := context.Background()
+	initPluginRegistry(ctx)
+
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, taintNodeNoSchedule)
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 	nodes := []*v1.Node{node1, node2}
@@ -602,78 +601,79 @@ func TestEvictionRequestsCache(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, func(name string) bool { return name == "p1" || name == "p2" }, nil))
 
-	klog.Infof("2 evictions in background expected, 2 normal evictions")
+	t.Logf("2 evictions in background expected, 2 normal evictions")
 	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 2, 2)
 
-	klog.Infof("Repeat the same as previously to confirm no more evictions in background are requested")
+	t.Logf("Repeat the same as previously to confirm no more evictions in background are requested")
 	// No evicted pod is actually deleted on purpose so the test can run the descheduling cycle repeatedly
 	// without recreating the pods.
 	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 2, 2)
 
-	klog.Infof("Scenario: Eviction in background got initiated")
+	t.Logf("Scenario: Eviction in background got initiated")
 	p2.Annotations[evictions.EvictionInProgressAnnotationKey] = ""
 	if _, err := client.CoreV1().Pods(p2.Namespace).Update(context.TODO(), p2, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("unable to update a pod: %v", err)
 	}
 	time.Sleep(100 * time.Millisecond)
 
-	klog.Infof("Repeat the same as previously to confirm no more evictions in background are requested")
+	t.Logf("Repeat the same as previously to confirm no more evictions in background are requested")
 	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 2, 2)
 
-	klog.Infof("Scenario: Another eviction in background got initiated")
+	t.Logf("Scenario: Another eviction in background got initiated")
 	p1.Annotations[evictions.EvictionInProgressAnnotationKey] = ""
 	if _, err := client.CoreV1().Pods(p1.Namespace).Update(context.TODO(), p1, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("unable to update a pod: %v", err)
 	}
 	time.Sleep(100 * time.Millisecond)
 
-	klog.Infof("Repeat the same as previously to confirm no more evictions in background are requested")
+	t.Logf("Repeat the same as previously to confirm no more evictions in background are requested")
 	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 2, 2)
 
-	klog.Infof("Scenario: Eviction in background completed")
+	t.Logf("Scenario: Eviction in background completed")
 	if err := client.CoreV1().Pods(p1.Namespace).Delete(context.TODO(), p1.Name, metav1.DeleteOptions{}); err != nil {
 		t.Fatalf("unable to delete a pod: %v", err)
 	}
 	time.Sleep(100 * time.Millisecond)
 
-	klog.Infof("Check the number of evictions in background decreased")
+	t.Logf("Check the number of evictions in background decreased")
 	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 1, 2)
 
-	klog.Infof("Scenario: A new pod without eviction in background added")
+	t.Logf("Scenario: A new pod without eviction in background added")
 	if _, err := client.CoreV1().Pods(p5.Namespace).Create(context.TODO(), p5, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("unable to create a pod: %v", err)
 	}
 	time.Sleep(100 * time.Millisecond)
 
-	klog.Infof("Check the number of evictions increased after running a descheduling cycle")
+	t.Logf("Check the number of evictions increased after running a descheduling cycle")
 	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 1, 3)
 
-	klog.Infof("Scenario: Eviction in background canceled => eviction in progress annotation removed")
+	t.Logf("Scenario: Eviction in background canceled => eviction in progress annotation removed")
 	delete(p2.Annotations, evictions.EvictionInProgressAnnotationKey)
 	if _, err := client.CoreV1().Pods(p2.Namespace).Update(context.TODO(), p2, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("unable to update a pod: %v", err)
 	}
 	time.Sleep(100 * time.Millisecond)
 
-	klog.Infof("Check the number of evictions in background decreased")
+	t.Logf("Check the number of evictions in background decreased")
 	checkTotals(t, ctx, descheduler, 0, 3)
 
-	klog.Infof("Scenario: Re-run the descheduling cycle to re-request eviction in background")
+	t.Logf("Scenario: Re-run the descheduling cycle to re-request eviction in background")
 	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 1, 3)
 
-	klog.Infof("Scenario: Eviction in background completed with a pod in completed state")
+	t.Logf("Scenario: Eviction in background completed with a pod in completed state")
 	p2.Status.Phase = v1.PodSucceeded
 	if _, err := client.CoreV1().Pods(p2.Namespace).Update(context.TODO(), p2, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("unable to delete a pod: %v", err)
 	}
 	time.Sleep(100 * time.Millisecond)
 
-	klog.Infof("Check the number of evictions in background decreased")
+	t.Logf("Check the number of evictions in background decreased")
 	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 0, 3)
 }
 
 func TestDeschedulingLimits(t *testing.T) {
-	initPluginRegistry()
+	ctx := context.Background()
+	initPluginRegistry(ctx)
 
 	tests := []struct {
 		description string
@@ -724,7 +724,6 @@ func TestDeschedulingLimits(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.description, func(t *testing.T) {
-			ctx := context.Background()
 			node1 := test.BuildTestNode("n1", 2000, 3000, 10, taintNodeNoSchedule)
 			node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 			nodes := []*v1.Node{node1, node2}
@@ -769,7 +768,7 @@ func TestDeschedulingLimits(t *testing.T) {
 					}
 					time.Sleep(100 * time.Millisecond)
 
-					klog.Infof("2 evictions in background expected, 2 normal evictions")
+					t.Logf("2 evictions in background expected, 2 normal evictions")
 					err := descheduler.runDeschedulerLoop(ctx, nodes)
 					if err != nil {
 						t.Fatalf("Unable to run a descheduling loop: %v", err)
@@ -787,14 +786,14 @@ func TestDeschedulingLimits(t *testing.T) {
 }
 
 func TestLoadAwareDescheduling(t *testing.T) {
-	initPluginRegistry()
+	ctx := context.Background()
+	initPluginRegistry(ctx)
 
 	ownerRef1 := test.GetReplicaSetOwnerRefList()
 	updatePod := func(pod *v1.Pod) {
 		pod.ObjectMeta.OwnerReferences = ownerRef1
 	}
 
-	ctx := context.Background()
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, taintNodeNoSchedule)
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 	nodes := []*v1.Node{node1, node2}

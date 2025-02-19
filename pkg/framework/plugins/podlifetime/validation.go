@@ -19,15 +19,15 @@ package podlifetime
 import (
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/runtime"
-
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/klog/v2"
 )
 
 // ValidatePodLifeTimeArgs validates PodLifeTime arguments
-func ValidatePodLifeTimeArgs(obj runtime.Object) error {
+func ValidatePodLifeTimeArgs(_ klog.Logger, obj runtime.Object) error {
 	args := obj.(*PodLifeTimeArgs)
 	if args.MaxPodLifeTimeSeconds == nil {
 		return fmt.Errorf("MaxPodLifeTimeSeconds not set")

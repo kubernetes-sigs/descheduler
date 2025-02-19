@@ -17,6 +17,7 @@ limitations under the License.
 package descheduler
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -50,7 +51,8 @@ func (s scope) Meta() *conversion.Meta {
 
 func TestDecodeVersionedPolicy(t *testing.T) {
 	client := fakeclientset.NewSimpleClientset()
-	SetupPlugins()
+	ctx := context.TODO()
+	SetupPlugins(ctx)
 
 	type testCase struct {
 		description string
@@ -125,7 +127,7 @@ profiles:
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			result, err := decode("filename", tc.policy, client, pluginregistry.PluginRegistry)
+			result, err := decode(ctx, "filename", tc.policy, client, pluginregistry.PluginRegistry)
 			if err != nil {
 				if tc.err == nil {
 					t.Errorf("unexpected error: %s.", err.Error())
@@ -142,7 +144,8 @@ profiles:
 }
 
 func TestValidateDeschedulerConfiguration(t *testing.T) {
-	SetupPlugins()
+	ctx := context.TODO()
+	SetupPlugins(ctx)
 	type testCase struct {
 		description       string
 		deschedulerPolicy api.DeschedulerPolicy
@@ -195,7 +198,7 @@ func TestValidateDeschedulerConfiguration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			result := validateDeschedulerConfiguration(tc.deschedulerPolicy, pluginregistry.PluginRegistry)
+			result := validateDeschedulerConfiguration(ctx, tc.deschedulerPolicy, pluginregistry.PluginRegistry)
 			if result.Error() != tc.result.Error() {
 				t.Errorf("test '%s' failed. expected \n'%s', got \n'%s'", tc.description, tc.result, result)
 			}
@@ -205,7 +208,8 @@ func TestValidateDeschedulerConfiguration(t *testing.T) {
 
 func TestDecodeDefaults(t *testing.T) {
 	client := fakeclientset.NewSimpleClientset()
-	SetupPlugins()
+	ctx := context.TODO()
+	SetupPlugins(ctx)
 	type testCase struct {
 		description string
 		policy      []byte
@@ -339,7 +343,7 @@ profiles:
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			result, err := decode("filename", tc.policy, client, pluginregistry.PluginRegistry)
+			result, err := decode(ctx, "filename", tc.policy, client, pluginregistry.PluginRegistry)
 			if err != nil {
 				if tc.err == nil {
 					t.Errorf("unexpected error: %s.", err.Error())

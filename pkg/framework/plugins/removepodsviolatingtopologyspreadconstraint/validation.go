@@ -24,10 +24,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/klog/v2"
 )
 
 // ValidateRemovePodsViolatingTopologySpreadConstraintArgs validates RemovePodsViolatingTopologySpreadConstraint arguments
-func ValidateRemovePodsViolatingTopologySpreadConstraintArgs(obj runtime.Object) error {
+func ValidateRemovePodsViolatingTopologySpreadConstraintArgs(_ klog.Logger, obj runtime.Object) error {
 	var errs []error
 
 	args := obj.(*RemovePodsViolatingTopologySpreadConstraintArgs)

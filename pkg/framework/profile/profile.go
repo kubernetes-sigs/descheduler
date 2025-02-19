@@ -50,13 +50,13 @@ type evictorImpl struct {
 var _ frameworktypes.Evictor = &evictorImpl{}
 
 // Filter checks if a pod can be evicted
-func (ei *evictorImpl) Filter(pod *v1.Pod) bool {
-	return ei.filter(pod)
+func (ei *evictorImpl) Filter(ctx context.Context, pod *v1.Pod) bool {
+	return ei.filter(ctx, pod)
 }
 
 // PreEvictionFilter checks if pod can be evicted right before eviction
-func (ei *evictorImpl) PreEvictionFilter(pod *v1.Pod) bool {
-	return ei.preEvictionFilter(pod)
+func (ei *evictorImpl) PreEvictionFilter(ctx context.Context, pod *v1.Pod) bool {
+	return ei.preEvictionFilter(ctx, pod)
 }
 
 // Evict evicts a pod (no pre-check performed)
@@ -102,12 +102,12 @@ func (hi *handleImpl) Evictor() frameworktypes.Evictor {
 
 type filterPlugin interface {
 	frameworktypes.Plugin
-	Filter(pod *v1.Pod) bool
+	Filter(ctx context.Context, pod *v1.Pod) bool
 }
 
 type preEvictionFilterPlugin interface {
 	frameworktypes.Plugin
-	PreEvictionFilter(pod *v1.Pod) bool
+	PreEvictionFilter(ctx context.Context, pod *v1.Pod) bool
 }
 
 type profileImpl struct {
@@ -177,21 +177,22 @@ func getPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) (*api.
 	return nil, 0
 }
 
-func buildPlugin(config api.DeschedulerProfile, pluginName string, handle *handleImpl, reg pluginregistry.Registry) (frameworktypes.Plugin, error) {
+func buildPlugin(ctx context.Context, config api.DeschedulerProfile, pluginName string, handle *handleImpl, reg pluginregistry.Registry) (frameworktypes.Plugin, error) {
+	logger := klog.FromContext(ctx)
 	pc, _ := getPluginConfig(pluginName, config.PluginConfigs)
 	if pc == nil {
-		klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", pluginName, "profile", config.Name)
+		logger.Error(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", pluginName, "profile", config.Name)
 		return nil, fmt.Errorf("unable to find %q plugin config", pluginName)
 	}
 
 	registryPlugin, ok := reg[pluginName]
 	if !ok {
-		klog.ErrorS(fmt.Errorf("unable to find plugin in the pluginsMap"), "skipping plugin", "plugin", pluginName)
+		logger.Error(fmt.Errorf("unable to find plugin in the pluginsMap"), "skipping plugin", "plugin", pluginName)
 		return nil, fmt.Errorf("unable to find %q plugin in the pluginsMap", pluginName)
 	}
-	pg, err := registryPlugin.PluginBuilder(pc.Args, handle)
+	pg, err := registryPlugin.PluginBuilder(ctx, pc.Args, handle)
 	if err != nil {
-		klog.ErrorS(err, "unable to initialize a plugin", "pluginName", pluginName)
+		logger.Error(err, "unable to initialize a plugin", "pluginName", pluginName)
 		return nil, fmt.Errorf("unable to initialize %q plugin: %v", pluginName, err)
 	}
 	return pg, nil
@@ -217,7 +218,7 @@ func (p *profileImpl) registryToExtensionPoints(registry pluginregistry.Registry
 	}
 }
 
-func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts ...Option) (*profileImpl, error) {
+func NewProfile(ctx context.Context, config api.DeschedulerProfile, reg pluginregistry.Registry, opts ...Option) (*profileImpl, error) {
 	hOpts := &handleImplOpts{}
 	for _, optFnc := range opts {
 		optFnc(hOpts)
@@ -275,7 +276,7 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 
 	plugins := make(map[string]frameworktypes.Plugin)
 	for _, plugin := range sets.New(pluginNames...).UnsortedList() {
-		pg, err := buildPlugin(config, plugin, handle, reg)
+		pg, err := buildPlugin(ctx, config, plugin, handle, reg)
 		if err != nil {
 			return nil, fmt.Errorf("unable to build %v plugin: %v", plugin, err)
 		}
@@ -314,6 +315,7 @@ func NewProfile(config api.DeschedulerProfile, reg pluginregistry.Registry, opts
 }
 
 func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	logger := klog.FromContext(ctx)
 	errs := []error{}
 	for _, pl := range d.deschedulePlugins {
 		var span trace.Span
@@ -329,7 +331,7 @@ func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node)
 			span.AddEvent("Plugin Execution Failed", trace.WithAttributes(attribute.String("err", status.Err.Error())))
 			errs = append(errs, fmt.Errorf("plugin %q finished with error: %v", pl.Name(), status.Err))
 		}
-		klog.V(1).InfoS("Total number of evictions/requests", "extension point", "Deschedule", "evictedPods", d.podEvictor.TotalEvicted()-evictedBeforeDeschedule, "evictionRequests", d.podEvictor.TotalEvictionRequests()-evictionRequestsBeforeDeschedule)
+		logger.V(1).Info("Total number of evictions/requests", "extension point", "Deschedule", "evictedPods", d.podEvictor.TotalEvicted()-evictedBeforeDeschedule, "evictionRequests", d.podEvictor.TotalEvictionRequests()-evictionRequestsBeforeDeschedule)
 	}
 
 	aggrErr := errors.NewAggregate(errs)
@@ -343,6 +345,7 @@ func (d profileImpl) RunDeschedulePlugins(ctx context.Context, nodes []*v1.Node)
 }
 
 func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	logger := klog.FromContext(ctx)
 	errs := []error{}
 	for _, pl := range d.balancePlugins {
 		var span trace.Span
@@ -358,7 +361,7 @@ func (d profileImpl) RunBalancePlugins(ctx context.Context, nodes []*v1.Node) *f
 			span.AddEvent("Plugin Execution Failed", trace.WithAttributes(attribute.String("err", status.Err.Error())))
 			errs = append(errs, fmt.Errorf("plugin %q finished with error: %v", pl.Name(), status.Err))
 		}
-		klog.V(1).InfoS("Total number of evictions/requests", "extension point", "Balance", "evictedPods", d.podEvictor.TotalEvicted()-evictedBeforeBalance, "evictionRequests", d.podEvictor.TotalEvictionRequests()-evictionRequestsBeforeBalance)
+		logger.V(1).Info("Total number of evictions/requests", "extension point", "Balance", "evictedPods", d.podEvictor.TotalEvicted()-evictedBeforeBalance, "evictionRequests", d.podEvictor.TotalEvictionRequests()-evictionRequestsBeforeBalance)
 	}
 
 	aggrErr := errors.NewAggregate(errs)

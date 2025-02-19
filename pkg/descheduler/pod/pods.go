@@ -17,6 +17,7 @@ limitations under the License.
 package pod
 
 import (
+	"context"
 	"sort"
 
 	v1 "k8s.io/api/core/v1"
@@ -33,20 +34,20 @@ const (
 )
 
 // FilterFunc is a filter for a pod.
-type FilterFunc func(*v1.Pod) bool
+type FilterFunc func(context.Context, *v1.Pod) bool
 
 // GetPodsAssignedToNodeFunc is a function which accept a node name and a pod filter function
 // as input and returns the pods that assigned to the node.
-type GetPodsAssignedToNodeFunc func(string, FilterFunc) ([]*v1.Pod, error)
+type GetPodsAssignedToNodeFunc func(context.Context, string, FilterFunc) ([]*v1.Pod, error)
 
 // PodUtilizationFnc is a function for getting pod's utilization. E.g. requested resources of utilization from metrics.
 type PodUtilizationFnc func(pod *v1.Pod) (v1.ResourceList, error)
 
 // WrapFilterFuncs wraps a set of FilterFunc in one.
 func WrapFilterFuncs(filters ...FilterFunc) FilterFunc {
-	return func(pod *v1.Pod) bool {
+	return func(ctx context.Context, pod *v1.Pod) bool {
 		for _, filter := range filters {
-			if filter != nil && !filter(pod) {
+			if filter != nil && !filter(ctx, pod) {
 				return false
 			}
 		}
@@ -101,7 +102,7 @@ func (o *Options) BuildFilterFunc() (FilterFunc, error) {
 			return nil, err
 		}
 	}
-	return func(pod *v1.Pod) bool {
+	return func(ctx context.Context, pod *v1.Pod) bool {
 		if len(o.includedNamespaces) > 0 && !o.includedNamespaces.Has(pod.Namespace) {
 			return false
 		}
@@ -111,7 +112,7 @@ func (o *Options) BuildFilterFunc() (FilterFunc, error) {
 		if s != nil && !s.Matches(labels.Set(pod.GetLabels())) {
 			return false
 		}
-		if o.filter != nil && !o.filter(pod) {
+		if o.filter != nil && !o.filter(ctx, pod) {
 			return false
 		}
 		return true
@@ -140,24 +141,24 @@ func BuildGetPodsAssignedToNodeFunc(podInformer cache.SharedIndexInformer) (GetP
 
 	// The indexer helps us get all the pods that assigned to a node.
 	podIndexer := podInformer.GetIndexer()
-	getPodsAssignedToNode := func(nodeName string, filter FilterFunc) ([]*v1.Pod, error) {
+	getPodsAssignedToNode := func(ctx context.Context, nodeName string, filter FilterFunc) ([]*v1.Pod, error) {
 		objs, err := podIndexer.ByIndex(nodeNameKeyIndex, nodeName)
 		if err != nil {
 			return nil, err
 		}
-		return ConvertToPods(objs, filter), nil
+		return ConvertToPods(ctx, objs, filter), nil
 	}
 	return getPodsAssignedToNode, nil
 }
 
-func ConvertToPods(objs []interface{}, filter FilterFunc) []*v1.Pod {
+func ConvertToPods(ctx context.Context, objs []interface{}, filter FilterFunc) []*v1.Pod {
 	pods := make([]*v1.Pod, 0, len(objs))
 	for _, obj := range objs {
 		pod, ok := obj.(*v1.Pod)
 		if !ok {
 			continue
 		}
-		if filter == nil || filter(pod) {
+		if filter == nil || filter(ctx, pod) {
 			pods = append(pods, pod)
 		}
 	}
@@ -165,10 +166,10 @@ func ConvertToPods(objs []interface{}, filter FilterFunc) []*v1.Pod {
 }
 
 // ListPodsOnNodes returns all pods on given nodes.
-func ListPodsOnNodes(nodes []*v1.Node, getPodsAssignedToNode GetPodsAssignedToNodeFunc, filter FilterFunc) ([]*v1.Pod, error) {
+func ListPodsOnNodes(ctx context.Context, nodes []*v1.Node, getPodsAssignedToNode GetPodsAssignedToNodeFunc, filter FilterFunc) ([]*v1.Pod, error) {
 	pods := make([]*v1.Pod, 0)
 	for _, node := range nodes {
-		podsOnNode, err := ListPodsOnANode(node.Name, getPodsAssignedToNode, filter)
+		podsOnNode, err := ListPodsOnANode(ctx, node.Name, getPodsAssignedToNode, filter)
 		if err != nil {
 			return nil, err
 		}
@@ -183,24 +184,26 @@ func ListPodsOnNodes(nodes []*v1.Node, getPodsAssignedToNode GetPodsAssignedToNo
 // (Usually this is podEvictor.Evictable().IsEvictable, in order to only list the evictable pods on a node, but can
 // be used by strategies to extend it if there are further restrictions, such as with NodeAffinity).
 func ListPodsOnANode(
+	ctx context.Context,
 	nodeName string,
 	getPodsAssignedToNode GetPodsAssignedToNodeFunc,
 	filter FilterFunc,
 ) ([]*v1.Pod, error) {
 	// Succeeded and failed pods are not considered because they don't occupy any resource.
-	f := func(pod *v1.Pod) bool {
+	f := func(_ context.Context, pod *v1.Pod) bool {
 		return pod.Status.Phase != v1.PodSucceeded && pod.Status.Phase != v1.PodFailed
 	}
-	return ListAllPodsOnANode(nodeName, getPodsAssignedToNode, WrapFilterFuncs(f, filter))
+	return ListAllPodsOnANode(ctx, nodeName, getPodsAssignedToNode, WrapFilterFuncs(f, filter))
 }
 
 // ListAllPodsOnANode lists all the pods on a node no matter what the phase of the pod is.
 func ListAllPodsOnANode(
+	ctx context.Context,
 	nodeName string,
 	getPodsAssignedToNode GetPodsAssignedToNodeFunc,
 	filter FilterFunc,
 ) ([]*v1.Pod, error) {
-	pods, err := getPodsAssignedToNode(nodeName, filter)
+	pods, err := getPodsAssignedToNode(ctx, nodeName, filter)
 	if err != nil {
 		return []*v1.Pod{}, err
 	}

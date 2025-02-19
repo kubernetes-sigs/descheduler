@@ -36,7 +36,6 @@ import (
 	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/events"
 	"k8s.io/component-base/featuregate"
-	"k8s.io/klog/v2"
 	utilptr "k8s.io/utils/ptr"
 
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -440,7 +439,7 @@ func TestEvictionRequestsCacheCleanup(t *testing.T) {
 	podEvictor.EvictPod(ctx, p3, EvictOptions{})
 	podEvictor.EvictPod(ctx, p4, EvictOptions{})
 
-	klog.Infof("2 evictions in background expected, 2 normal evictions")
+	t.Logf("2 evictions in background expected, 2 normal evictions")
 	if total := podEvictor.TotalEvictionRequests(); total != 2 {
 		t.Fatalf("Expected %v total eviction requests, got %v instead", 2, total)
 	}
@@ -448,9 +447,9 @@ func TestEvictionRequestsCacheCleanup(t *testing.T) {
 		t.Fatalf("Expected %v total evictions, got %v instead", 2, total)
 	}
 
-	klog.Infof("2 evictions in background assumed. Wait for few seconds and check the assumed requests timed out")
+	t.Logf("2 evictions in background assumed. Wait for few seconds and check the assumed requests timed out")
 	time.Sleep(2 * time.Second)
-	klog.Infof("Checking the assumed requests timed out and were deleted")
+	t.Logf("Checking the assumed requests timed out and were deleted")
 	// Set the timeout to 1s so the cleaning can be tested
 	podEvictor.erCache.assumedRequestTimeoutSeconds = 1
 	podEvictor.erCache.cleanCache(ctx)

@@ -16,7 +16,12 @@ limitations under the License.
 
 package removepodsviolatingnodeaffinity
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"k8s.io/klog/v2"
+)
 
 func TestValidateRemovePodsViolatingNodeAffinityArgs(t *testing.T) {
 	testCases := []struct {
@@ -49,7 +54,7 @@ func TestValidateRemovePodsViolatingNodeAffinityArgs(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			err := ValidateRemovePodsViolatingNodeAffinityArgs(tc.args)
+			err := ValidateRemovePodsViolatingNodeAffinityArgs(klog.FromContext(context.Background()), tc.args)
 
 			hasError := err != nil
 			if tc.expectError != hasError {

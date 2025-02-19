@@ -17,9 +17,11 @@ limitations under the License.
 package removepodshavingtoomanyrestarts
 
 import (
+	"context"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/klog/v2"
 )
 
 func TestValidateRemovePodsHavingTooManyRestartsArgs(t *testing.T) {
@@ -63,7 +65,7 @@ func TestValidateRemovePodsHavingTooManyRestartsArgs(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			err := ValidateRemovePodsHavingTooManyRestartsArgs(tc.args)
+			err := ValidateRemovePodsHavingTooManyRestartsArgs(klog.FromContext(context.Background()), tc.args)
 
 			hasError := err != nil
 			if tc.expectError != hasError {

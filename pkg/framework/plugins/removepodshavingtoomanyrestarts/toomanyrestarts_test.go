@@ -341,6 +341,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			}
 
 			plugin, err := New(
+				ctx,
 				&tc.args,
 				handle)
 			if err != nil {

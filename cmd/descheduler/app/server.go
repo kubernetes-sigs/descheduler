@@ -43,9 +43,10 @@ import (
 
 // NewDeschedulerCommand creates a *cobra.Command object with default parameters
 func NewDeschedulerCommand(out io.Writer) *cobra.Command {
+	logger := klog.FromContext(context.TODO())
 	s, err := options.NewDeschedulerServer()
 	if err != nil {
-		klog.ErrorS(err, "unable to initialize server")
+		logger.Error(err, "unable to initialize server")
 	}
 
 	featureGate := featuregate.NewFeatureGate()
@@ -60,17 +61,18 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 			if logsapi.ValidateAndApply(logConfig, featureGate); err != nil {
 				return err
 			}
-			descheduler.SetupPlugins()
+			descheduler.SetupPlugins(cmd.Context())
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err = s.Apply(); err != nil {
-				klog.ErrorS(err, "failed to apply")
+			logger := klog.FromContext(cmd.Context())
+			if err = s.Apply(logger); err != nil {
+				logger.Error(err, "failed to apply")
 				return err
 			}
 
 			if err = Run(cmd.Context(), s); err != nil {
-				klog.ErrorS(err, "failed to run descheduler server")
+				logger.Error(err, "failed to run descheduler server")
 				return err
 			}
 
@@ -89,6 +91,7 @@ func NewDeschedulerCommand(out io.Writer) *cobra.Command {
 
 func Run(rootCtx context.Context, rs *options.DeschedulerServer) error {
 	ctx, done := signal.NotifyContext(rootCtx, syscall.SIGINT, syscall.SIGTERM)
+	logger := klog.FromContext(ctx)
 
 	pathRecorderMux := mux.NewPathRecorderMux("descheduler")
 	if !rs.DisableMetrics {
@@ -99,13 +102,13 @@ func Run(rootCtx context.Context, rs *options.DeschedulerServer) error {
 
 	stoppedCh, _, err := rs.SecureServingInfo.Serve(pathRecorderMux, 0, ctx.Done())
 	if err != nil {
-		klog.Fatalf("failed to start secure server: %v", err)
+		logger.Error(err, "failed to start secure server")
 		return err
 	}
 
 	err = tracing.NewTracerProvider(ctx, rs.Tracing.CollectorEndpoint, rs.Tracing.TransportCert, rs.Tracing.ServiceName, rs.Tracing.ServiceNamespace, rs.Tracing.SampleRate, rs.Tracing.FallbackToNoOpProviderOnError)
 	if err != nil {
-		klog.ErrorS(err, "failed to create tracer provider")
+		logger.Error(err, "failed to create tracer provider")
 	}
 	defer tracing.Shutdown(ctx)
 

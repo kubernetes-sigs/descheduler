@@ -21,10 +21,11 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog/v2"
 )
 
 // ValidateRemovePodsViolatingNodeAffinityArgs validates RemovePodsViolatingNodeAffinity arguments
-func ValidateRemovePodsViolatingNodeAffinityArgs(obj runtime.Object) error {
+func ValidateRemovePodsViolatingNodeAffinityArgs(_ klog.Logger, obj runtime.Object) error {
 	args := obj.(*RemovePodsViolatingNodeAffinityArgs)
 	if args == nil || len(args.NodeAffinityType) == 0 {
 		return fmt.Errorf("nodeAffinityType needs to be set")

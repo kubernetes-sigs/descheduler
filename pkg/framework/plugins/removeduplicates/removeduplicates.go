@@ -62,7 +62,7 @@ func (po podOwner) String() string {
 }
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+func New(_ context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	removeDuplicatesArgs, ok := args.(*RemoveDuplicatesArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemoveDuplicatesArgs, got %T", args)
@@ -98,16 +98,17 @@ func (r *RemoveDuplicates) Name() string {
 
 // Balance extension point implementation for the plugin
 func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	logger := klog.FromContext(ctx)
 	duplicatePods := make(map[podOwner]map[string][]*v1.Pod)
 	ownerKeyOccurence := make(map[podOwner]int32)
 	nodeCount := 0
 	nodeMap := make(map[string]*v1.Node)
 
 	for _, node := range nodes {
-		klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
-		pods, err := podutil.ListPodsOnANode(node.Name, r.handle.GetPodsAssignedToNodeFunc(), r.podFilter)
+		logger.V(2).Info("Processing node", "node", klog.KObj(node))
+		pods, err := podutil.ListPodsOnANode(ctx, node.Name, r.handle.GetPodsAssignedToNodeFunc(), r.podFilter)
 		if err != nil {
-			klog.ErrorS(err, "Error listing evictable pods on node", "node", klog.KObj(node))
+			logger.Error(err, "Error listing evictable pods on node", "node", klog.KObj(node))
 			continue
 		}
 		nodeMap[node.Name] = node
@@ -163,7 +164,7 @@ func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) *frame
 				for _, keys := range existing {
 					if reflect.DeepEqual(keys, podContainerKeys) {
 						matched = true
-						klog.V(3).InfoS("Duplicate found", "pod", klog.KObj(pod))
+						logger.V(3).Info("Duplicate found", "pod", klog.KObj(pod))
 						for _, ownerRef := range ownerRefList {
 							ownerKey := podOwner{
 								namespace:  pod.ObjectMeta.Namespace,
@@ -193,18 +194,18 @@ func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) *frame
 	// 1. how many pods can be evicted to respect uniform placement of pods among viable nodes?
 	for ownerKey, podNodes := range duplicatePods {
 
-		targetNodes := getTargetNodes(podNodes, nodes)
+		targetNodes := getTargetNodes(ctx, podNodes, nodes)
 
-		klog.V(2).InfoS("Adjusting feasible nodes", "owner", ownerKey, "from", nodeCount, "to", len(targetNodes))
+		logger.V(2).Info("Adjusting feasible nodes", "owner", ownerKey, "from", nodeCount, "to", len(targetNodes))
 		if len(targetNodes) < 2 {
-			klog.V(1).InfoS("Less than two feasible nodes for duplicates to land, skipping eviction", "owner", ownerKey)
+			logger.V(1).Info("Less than two feasible nodes for duplicates to land, skipping eviction", "owner", ownerKey)
 			continue
 		}
 
 		upperAvg := int(math.Ceil(float64(ownerKeyOccurence[ownerKey]) / float64(len(targetNodes))))
 	loop:
 		for nodeName, pods := range podNodes {
-			klog.V(2).InfoS("Average occurrence per node", "node", klog.KObj(nodeMap[nodeName]), "ownerKey", ownerKey, "avg", upperAvg)
+			logger.V(2).Info("Average occurrence per node", "node", klog.KObj(nodeMap[nodeName]), "ownerKey", ownerKey, "avg", upperAvg)
 			// list of duplicated pods does not contain the original referential pod
 			if len(pods)+1 > upperAvg {
 				// It's assumed all duplicated pods are in the same priority class
@@ -220,7 +221,7 @@ func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) *frame
 					case *evictions.EvictionTotalLimitError:
 						return nil
 					default:
-						klog.Errorf("eviction failed: %v", err)
+						logger.Error(err, "unable to evict pod", "pod", klog.KObj(pod))
 					}
 				}
 			}
@@ -229,7 +230,7 @@ func (r *RemoveDuplicates) Balance(ctx context.Context, nodes []*v1.Node) *frame
 	return nil
 }
 
-func getTargetNodes(podNodes map[string][]*v1.Pod, nodes []*v1.Node) []*v1.Node {
+func getTargetNodes(ctx context.Context, podNodes map[string][]*v1.Pod, nodes []*v1.Node) []*v1.Node {
 	// In order to reduce the number of pods processed, identify pods which have
 	// equal (tolerations, nodeselectors, node affinity) terms and considered them
 	// as identical. Identical pods wrt. (tolerations, nodeselectors, node affinity) terms
@@ -266,7 +267,7 @@ func getTargetNodes(podNodes map[string][]*v1.Pod, nodes []*v1.Node) []*v1.Node 
 			}) {
 				continue
 			}
-			if match, err := utils.PodMatchNodeSelector(pod, node); err == nil && !match {
+			if match, err := utils.PodMatchNodeSelector(ctx, pod, node); err == nil && !match {
 				continue
 			}
 			matchingNodes[node.Name] = node

@@ -643,7 +643,7 @@ func TestPodLifeTime(t *testing.T) {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
-			plugin, err := New(tc.args, handle)
+			plugin, err := New(ctx, tc.args, handle)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}

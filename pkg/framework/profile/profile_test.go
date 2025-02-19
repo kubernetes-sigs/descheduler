@@ -207,6 +207,7 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 
 			pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
 			pluginregistry.Register(
+				ctx,
 				"FakePlugin",
 				fakeplugin.NewPluginFncFromFake(&fakePlugin),
 				&fakeplugin.FakePlugin{},
@@ -217,6 +218,7 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 			)
 
 			pluginregistry.Register(
+				ctx,
 				defaultevictor.PluginName,
 				defaultevictor.New,
 				&defaultevictor.DefaultEvictor{},
@@ -242,6 +244,7 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 			}
 
 			prfl, err := NewProfile(
+				ctx,
 				test.config,
 				pluginregistry.PluginRegistry,
 				WithClientSet(client),
@@ -319,6 +322,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 		fakeFilterPlugin := &fakeplugin.FakeFilterPlugin{PluginName: filterPluginName}
 
 		pluginregistry.Register(
+			ctx,
 			fakePluginName,
 			fakeplugin.NewPluginFncFromFake(fakePlugin),
 			&fakeplugin.FakePlugin{},
@@ -329,6 +333,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 		)
 
 		pluginregistry.Register(
+			ctx,
 			deschedulePluginName,
 			fakeplugin.NewFakeDeschedulePluginFncFromFake(fakeDeschedulePlugin),
 			&fakeplugin.FakeDeschedulePlugin{},
@@ -339,6 +344,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 		)
 
 		pluginregistry.Register(
+			ctx,
 			balancePluginName,
 			fakeplugin.NewFakeBalancePluginFncFromFake(fakeBalancePlugin),
 			&fakeplugin.FakeBalancePlugin{},
@@ -349,6 +355,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 		)
 
 		pluginregistry.Register(
+			ctx,
 			filterPluginName,
 			fakeplugin.NewFakeFilterPluginFncFromFake(fakeFilterPlugin),
 			&fakeplugin.FakeFilterPlugin{},
@@ -360,6 +367,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 	}
 
 	pluginregistry.Register(
+		ctx,
 		defaultevictor.PluginName,
 		defaultevictor.New,
 		&defaultevictor.DefaultEvictor{},
@@ -385,6 +393,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 	}
 
 	prfl, err := NewProfile(
+		ctx,
 		api.DeschedulerProfile{
 			Name: "strategy-test-profile",
 			PluginConfigs: []api.PluginConfig{
@@ -523,6 +532,7 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 
 		// plugin implementing Filter extension point
 		pluginregistry.Register(
+			ctx,
 			pluginName,
 			fakeplugin.NewFakeFilterPluginFncFromFake(fakeFilterPlugin),
 			&fakeplugin.FakeFilterPlugin{},
@@ -540,9 +550,9 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 			if idx == 0 {
 				if dAction, ok := action.(fakeplugin.DescheduleAction); ok {
 					// Invoke filters
-					dAction.Handle().Evictor().Filter(p1)
+					dAction.Handle().Evictor().Filter(ctx, p1)
 					// Invoke pre-eviction filters
-					dAction.Handle().Evictor().PreEvictionFilter(p1)
+					dAction.Handle().Evictor().PreEvictionFilter(ctx, p1)
 					return true, true, nil
 				}
 				return false, false, nil
@@ -556,6 +566,7 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 		})
 
 		pluginregistry.Register(
+			ctx,
 			fakePluginName,
 			fakeplugin.NewPluginFncFromFake(&fakePlugin),
 			&fakeplugin.FakePlugin{},
@@ -567,6 +578,7 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 	}
 
 	pluginregistry.Register(
+		ctx,
 		defaultevictor.PluginName,
 		defaultevictor.New,
 		&defaultevictor.DefaultEvictor{},
@@ -592,6 +604,7 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 	}
 
 	prfl, err := NewProfile(
+		ctx,
 		api.DeschedulerProfile{
 			Name: "strategy-test-profile",
 			PluginConfigs: []api.PluginConfig{

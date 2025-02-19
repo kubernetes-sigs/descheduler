@@ -1,9 +1,11 @@
 package removepodsviolatingtopologyspreadconstraint
 
 import (
+	"context"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/klog/v2"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -74,7 +76,7 @@ func TestValidateRemovePodsViolatingTopologySpreadConstraintArgs(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			err := ValidateRemovePodsViolatingTopologySpreadConstraintArgs(tc.args)
+			err := ValidateRemovePodsViolatingTopologySpreadConstraintArgs(klog.FromContext(context.Background()), tc.args)
 
 			hasError := err != nil
 			if tc.expectError != hasError {

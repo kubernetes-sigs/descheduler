@@ -1,7 +1,10 @@
 package removefailedpods
 
 import (
+	"context"
 	"testing"
+
+	"k8s.io/klog/v2"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -62,7 +65,7 @@ func TestValidateRemoveFailedPodsArgs(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			err := ValidateRemoveFailedPodsArgs(tc.args)
+			err := ValidateRemoveFailedPodsArgs(klog.FromContext(context.Background()), tc.args)
 			hasError := err != nil
 			if tc.expectError != hasError {
 				t.Error("unexpected arg validation behavior")

@@ -44,9 +44,9 @@ type Handle interface {
 // while abstracting away the specific pod evictor/evictor filter.
 type Evictor interface {
 	// Filter checks if a pod can be evicted
-	Filter(*v1.Pod) bool
+	Filter(context.Context, *v1.Pod) bool
 	// PreEvictionFilter checks if pod can be evicted right before eviction
-	PreEvictionFilter(*v1.Pod) bool
+	PreEvictionFilter(context.Context, *v1.Pod) bool
 	// Evict evicts a pod (no pre-check performed)
 	Evict(context.Context, *v1.Pod, evictions.EvictOptions) error
 }
@@ -79,8 +79,8 @@ type BalancePlugin interface {
 // like filtering, sorting, and other ones that might be relevant in the future
 type EvictorPlugin interface {
 	Plugin
-	Filter(pod *v1.Pod) bool
-	PreEvictionFilter(pod *v1.Pod) bool
+	Filter(ctx context.Context, pod *v1.Pod) bool
+	PreEvictionFilter(ctx context.Context, pod *v1.Pod) bool
 }
 
 type ExtensionPoint string

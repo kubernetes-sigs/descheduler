@@ -90,7 +90,7 @@ func tooManyRestartsPolicy(targetNamespace string, podRestartThresholds int32, i
 
 func TestTooManyRestarts(t *testing.T) {
 	ctx := context.Background()
-	initPluginRegistry()
+	initPluginRegistry(ctx)
 
 	clientSet, err := client.CreateClient(componentbaseconfig.ClientConnectionConfiguration{Kubeconfig: os.Getenv("KUBECONFIG")}, "")
 	if err != nil {

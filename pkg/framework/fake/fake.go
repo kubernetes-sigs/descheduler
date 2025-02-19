@@ -44,12 +44,12 @@ func (hi *HandleImpl) Evictor() frameworktypes.Evictor {
 	return hi
 }
 
-func (hi *HandleImpl) Filter(pod *v1.Pod) bool {
-	return hi.EvictorFilterImpl.Filter(pod)
+func (hi *HandleImpl) Filter(ctx context.Context, pod *v1.Pod) bool {
+	return hi.EvictorFilterImpl.Filter(ctx, pod)
 }
 
-func (hi *HandleImpl) PreEvictionFilter(pod *v1.Pod) bool {
-	return hi.EvictorFilterImpl.PreEvictionFilter(pod)
+func (hi *HandleImpl) PreEvictionFilter(ctx context.Context, pod *v1.Pod) bool {
+	return hi.EvictorFilterImpl.PreEvictionFilter(ctx, pod)
 }
 
 func (hi *HandleImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.EvictOptions) error {

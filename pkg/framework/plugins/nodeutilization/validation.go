@@ -17,10 +17,11 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
-func ValidateHighNodeUtilizationArgs(obj runtime.Object) error {
+func ValidateHighNodeUtilizationArgs(_ klog.Logger, obj runtime.Object) error {
 	args := obj.(*HighNodeUtilizationArgs)
 	// only exclude can be set, or not at all
 	if args.EvictableNamespaces != nil && len(args.EvictableNamespaces.Include) > 0 {
@@ -34,7 +35,7 @@ func ValidateHighNodeUtilizationArgs(obj runtime.Object) error {
 	return nil
 }
 
-func ValidateLowNodeUtilizationArgs(obj runtime.Object) error {
+func ValidateLowNodeUtilizationArgs(_ klog.Logger, obj runtime.Object) error {
 	args := obj.(*LowNodeUtilizationArgs)
 	// only exclude can be set, or not at all
 	if args.EvictableNamespaces != nil && len(args.EvictableNamespaces.Include) > 0 {

@@ -24,7 +24,7 @@ import (
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// RemovePodsViolatingInterPodAntiAffinity holds arguments used to configure RemovePodsViolatingInterPodAntiAffinity plugin.
+// RemovePodsViolatingInterPodAntiAffinityArgs holds arguments used to configure RemovePodsViolatingInterPodAntiAffinity plugin.
 type RemovePodsViolatingInterPodAntiAffinityArgs struct {
 	metav1.TypeMeta `json:",inline"`
 

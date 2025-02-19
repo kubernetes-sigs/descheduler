@@ -35,9 +35,10 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
-func LoadPolicyConfig(policyConfigFile string, client clientset.Interface, registry pluginregistry.Registry) (*api.DeschedulerPolicy, error) {
+func LoadPolicyConfig(ctx context.Context, policyConfigFile string, client clientset.Interface, registry pluginregistry.Registry) (*api.DeschedulerPolicy, error) {
+	logger := klog.FromContext(ctx)
 	if policyConfigFile == "" {
-		klog.V(1).InfoS("Policy config file not specified")
+		logger.V(1).Info("Policy config file not specified")
 		return nil, nil
 	}
 
@@ -46,10 +47,10 @@ func LoadPolicyConfig(policyConfigFile string, client clientset.Interface, regis
 		return nil, fmt.Errorf("failed to read policy config file %q: %+v", policyConfigFile, err)
 	}
 
-	return decode(policyConfigFile, policy, client, registry)
+	return decode(ctx, policyConfigFile, policy, client, registry)
 }
 
-func decode(policyConfigFile string, policy []byte, client clientset.Interface, registry pluginregistry.Registry) (*api.DeschedulerPolicy, error) {
+func decode(ctx context.Context, policyConfigFile string, policy []byte, client clientset.Interface, registry pluginregistry.Registry) (*api.DeschedulerPolicy, error) {
 	internalPolicy := &api.DeschedulerPolicy{}
 	var err error
 
@@ -58,20 +59,20 @@ func decode(policyConfigFile string, policy []byte, client clientset.Interface, 
 		return nil, fmt.Errorf("failed decoding descheduler's policy config %q: %v", policyConfigFile, err)
 	}
 
-	err = validateDeschedulerConfiguration(*internalPolicy, registry)
+	err = validateDeschedulerConfiguration(ctx, *internalPolicy, registry)
 	if err != nil {
 		return nil, err
 	}
 
-	setDefaults(*internalPolicy, registry, client)
+	setDefaults(ctx, *internalPolicy, registry, client)
 
 	return internalPolicy, nil
 }
 
-func setDefaults(in api.DeschedulerPolicy, registry pluginregistry.Registry, client clientset.Interface) *api.DeschedulerPolicy {
+func setDefaults(ctx context.Context, in api.DeschedulerPolicy, registry pluginregistry.Registry, client clientset.Interface) *api.DeschedulerPolicy {
 	for idx, profile := range in.Profiles {
 		// If we need to set defaults coming from loadtime in each profile we do it here
-		in.Profiles[idx] = setDefaultEvictor(profile, client)
+		in.Profiles[idx] = setDefaultEvictor(ctx, profile, client)
 		for _, pluginConfig := range profile.PluginConfigs {
 			setDefaultsPluginConfig(&pluginConfig, registry)
 		}
@@ -97,7 +98,7 @@ func findPluginName(names []string, key string) bool {
 	return false
 }
 
-func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interface) api.DeschedulerProfile {
+func setDefaultEvictor(ctx context.Context, profile api.DeschedulerProfile, client clientset.Interface) api.DeschedulerProfile {
 	newPluginConfig := api.PluginConfig{
 		Name: defaultevictor.PluginName,
 		Args: &defaultevictor.DefaultEvictorArgs{
@@ -108,6 +109,7 @@ func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interfac
 			IgnorePodsWithoutPDB:    false,
 		},
 	}
+	logger := klog.FromContext(ctx)
 
 	// Always enable DefaultEvictor plugin for filter/preEvictionFilter extension points
 	if !findPluginName(profile.Plugins.Filter.Enabled, defaultevictor.PluginName) {
@@ -125,16 +127,17 @@ func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interfac
 		idx = 0
 	}
 
-	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), client, defaultevictorPluginConfig.Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold)
+	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(ctx, client, defaultevictorPluginConfig.Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold)
 	if err != nil {
-		klog.Error(err, "Failed to get threshold priority from args")
+		logger.Error(err, "Failed to get threshold priority from args")
 	}
 	profile.PluginConfigs[idx].Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold = &api.PriorityThreshold{}
 	profile.PluginConfigs[idx].Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold.Value = &thresholdPriority
 	return profile
 }
 
-func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginregistry.Registry) error {
+func validateDeschedulerConfiguration(ctx context.Context, in api.DeschedulerPolicy, registry pluginregistry.Registry) error {
+	logger := klog.FromContext(ctx)
 	var errorsInProfiles []error
 	for _, profile := range in.Profiles {
 		for _, pluginConfig := range profile.PluginConfigs {
@@ -147,7 +150,7 @@ func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginr
 			if pluginUtilities.PluginArgValidator == nil {
 				continue
 			}
-			if err := pluginUtilities.PluginArgValidator(pluginConfig.Args); err != nil {
+			if err := pluginUtilities.PluginArgValidator(logger, pluginConfig.Args); err != nil {
 				errorsInProfiles = append(errorsInProfiles, fmt.Errorf("in profile %s: %s", profile.Name, err.Error()))
 			}
 		}

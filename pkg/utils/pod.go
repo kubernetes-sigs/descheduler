@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 
 	policy "k8s.io/api/policy/v1"
@@ -222,7 +223,8 @@ func maxResourceList(list, new v1.ResourceList) {
 }
 
 // PodToleratesTaints returns true if a pod tolerates one node's taints
-func PodToleratesTaints(pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
+func PodToleratesTaints(ctx context.Context, pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
+	logger := klog.FromContext(ctx)
 	for nodeName, taintsForNode := range taintsOfNodes {
 		if len(pod.Spec.Tolerations) >= len(taintsForNode) {
 
@@ -230,10 +232,10 @@ func PodToleratesTaints(pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
 				return true
 			}
 
-			if klog.V(5).Enabled() {
+			if logger.V(5).Enabled() {
 				for i := range taintsForNode {
 					if !TolerationsTolerateTaint(pod.Spec.Tolerations, &taintsForNode[i]) {
-						klog.V(5).InfoS("Pod doesn't tolerate node taint",
+						logger.V(5).Info("Pod doesn't tolerate node taint",
 							"pod", klog.KObj(pod),
 							"nodeName", nodeName,
 							"taint", fmt.Sprintf("%s:%s=%s", taintsForNode[i].Key, taintsForNode[i].Value, taintsForNode[i].Effect),
@@ -242,7 +244,7 @@ func PodToleratesTaints(pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
 				}
 			}
 		} else {
-			klog.V(5).InfoS("Pod doesn't tolerate nodes taint, count mismatch",
+			logger.V(5).Info("Pod doesn't tolerate nodes taint, count mismatch",
 				"pod", klog.KObj(pod),
 				"nodeName", nodeName,
 			)

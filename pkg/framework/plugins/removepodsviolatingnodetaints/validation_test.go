@@ -1,9 +1,12 @@
 package removepodsviolatingnodetaints
 
 import (
+	"context"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
@@ -73,7 +76,7 @@ func TestValidateRemovePodsViolatingNodeTaintsArgs(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			err := ValidateRemovePodsViolatingNodeTaintsArgs(tc.args)
+			err := ValidateRemovePodsViolatingNodeTaintsArgs(klog.FromContext(context.Background()), tc.args)
 
 			hasError := err != nil
 			if tc.expectError != hasError {

@@ -1,7 +1,10 @@
 package removeduplicates
 
 import (
+	"context"
 	"testing"
+
+	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 )
@@ -37,7 +40,7 @@ func TestValidateRemovePodsViolatingNodeTaintsArgs(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			err := ValidateRemoveDuplicatesArgs(tc.args)
+			err := ValidateRemoveDuplicatesArgs(klog.FromContext(context.Background()), tc.args)
 
 			hasError := err != nil
 			if tc.expectError != hasError {

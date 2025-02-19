@@ -66,11 +66,13 @@ func HaveEvictAnnotation(pod *v1.Pod) bool {
 
 // New builds plugin from its arguments while passing a handle
 // nolint: gocyclo
-func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	defaultEvictorArgs, ok := args.(*DefaultEvictorArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type defaultEvictorFilterArgs, got %T", args)
 	}
+
+	logger := klog.FromContext(ctx)
 
 	ev := &DefaultEvictor{
 		handle: handle,
@@ -78,7 +80,7 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 	}
 
 	if defaultEvictorArgs.EvictFailedBarePods {
-		klog.V(1).InfoS("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
+		logger.V(1).Info("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			ownerRefList := podutil.OwnerRef(pod)
 			// Enable evictFailedBarePods to evict bare pods in failed phase
@@ -117,7 +119,7 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 			})
 		}
 	} else {
-		klog.V(1).InfoS("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
+		logger.V(1).Info("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
 	}
 	if !defaultEvictorArgs.EvictLocalStoragePods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
@@ -169,7 +171,7 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 			}
 
 			if len(pod.OwnerReferences) > 1 {
-				klog.V(5).InfoS("pod has multiple owner references which is not supported for minReplicas check", "size", len(pod.OwnerReferences), "pod", klog.KObj(pod))
+				logger.V(5).Info("pod has multiple owner references which is not supported for minReplicas check", "size", len(pod.OwnerReferences), "pod", klog.KObj(pod))
 				return nil
 			}
 
@@ -217,15 +219,16 @@ func (d *DefaultEvictor) Name() string {
 	return PluginName
 }
 
-func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
+func (d *DefaultEvictor) PreEvictionFilter(ctx context.Context, pod *v1.Pod) bool {
+	logger := klog.FromContext(ctx)
 	if d.args.NodeFit {
-		nodes, err := nodeutil.ReadyNodes(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Nodes().Lister(), d.args.NodeSelector)
+		nodes, err := nodeutil.ReadyNodes(ctx, d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Nodes().Lister(), d.args.NodeSelector)
 		if err != nil {
-			klog.ErrorS(err, "unable to list ready nodes", "pod", klog.KObj(pod))
+			logger.Error(err, "unable to list ready nodes", "pod", klog.KObj(pod))
 			return false
 		}
-		if !nodeutil.PodFitsAnyOtherNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) {
-			klog.InfoS("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable", "pod", klog.KObj(pod))
+		if !nodeutil.PodFitsAnyOtherNode(ctx, d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) {
+			logger.Info("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable", "pod", klog.KObj(pod))
 			return false
 		}
 		return true
@@ -233,7 +236,8 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 	return true
 }
 
-func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
+func (d *DefaultEvictor) Filter(ctx context.Context, pod *v1.Pod) bool {
+	logger := klog.FromContext(ctx)
 	checkErrs := []error{}
 
 	if HaveEvictAnnotation(pod) {
@@ -259,7 +263,7 @@ func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
 	}
 
 	if len(checkErrs) > 0 {
-		klog.V(4).InfoS("Pod fails the following checks", "pod", klog.KObj(pod), "checks", utilerrors.NewAggregate(checkErrs).Error())
+		logger.V(4).Info("Pod fails the following checks", "pod", klog.KObj(pod), "checks", utilerrors.NewAggregate(checkErrs).Error())
 		return false
 	}
 

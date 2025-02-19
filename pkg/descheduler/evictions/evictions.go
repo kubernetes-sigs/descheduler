@@ -80,14 +80,15 @@ func (erc *evictionRequestsCache) run(ctx context.Context) {
 // cleanCache removes all assumed entries that has not been confirmed
 // for more than a specified timeout
 func (erc *evictionRequestsCache) cleanCache(ctx context.Context) {
+	logger := klog.FromContext(ctx)
 	erc.mu.Lock()
 	defer erc.mu.Unlock()
-	klog.V(4).Infof("Cleaning cache of assumed eviction requests in background")
+	logger.V(4).Info("Cleaning cache of assumed eviction requests in background")
 	for uid, item := range erc.requests {
 		if item.evictionAssumed {
 			requestAgeSeconds := uint(metav1.Now().Sub(item.assumedTimestamp.Local()).Seconds())
 			if requestAgeSeconds > erc.assumedRequestTimeoutSeconds {
-				klog.V(4).InfoS("Assumed eviction request in background timed out, deleting", "timeout", erc.assumedRequestTimeoutSeconds, "podNamespace", item.podNamespace, "podName", item.podName)
+				logger.V(4).Info("Assumed eviction request in background timed out, deleting", "timeout", erc.assumedRequestTimeoutSeconds, "podNamespace", item.podNamespace, "podName", item.podName)
 				erc.deleteItem(uid)
 			}
 		}
@@ -235,6 +236,7 @@ func NewPodEvictor(
 	featureGates featuregate.FeatureGate,
 	options *Options,
 ) (*PodEvictor, error) {
+	logger := klog.FromContext(ctx)
 	if options == nil {
 		options = NewOptions()
 	}
@@ -263,14 +265,14 @@ func NewPodEvictor(
 				AddFunc: func(obj interface{}) {
 					pod, ok := obj.(*v1.Pod)
 					if !ok {
-						klog.ErrorS(nil, "Cannot convert to *v1.Pod", "obj", obj)
+						logger.Error(nil, "Cannot convert to *v1.Pod", "obj", obj)
 						return
 					}
 					if _, exists := pod.Annotations[EvictionRequestAnnotationKey]; exists {
 						if _, exists := pod.Annotations[EvictionInProgressAnnotationKey]; exists {
 							// Ignore completed/suceeeded or failed pods
 							if pod.Status.Phase != v1.PodSucceeded && pod.Status.Phase != v1.PodFailed {
-								klog.V(3).InfoS("Eviction in background detected. Adding pod to the cache.", "pod", klog.KObj(pod))
+								logger.V(3).Info("Eviction in background detected. Adding pod to the cache.", "pod", klog.KObj(pod))
 								erCache.addPod(pod)
 							}
 						}
@@ -279,25 +281,25 @@ func NewPodEvictor(
 				UpdateFunc: func(oldObj, newObj interface{}) {
 					oldPod, ok := oldObj.(*v1.Pod)
 					if !ok {
-						klog.ErrorS(nil, "Cannot convert oldObj to *v1.Pod", "oldObj", oldObj)
+						logger.Error(nil, "Cannot convert oldObj to *v1.Pod", "oldObj", oldObj)
 						return
 					}
 					newPod, ok := newObj.(*v1.Pod)
 					if !ok {
-						klog.ErrorS(nil, "Cannot convert newObj to *v1.Pod", "newObj", newObj)
+						logger.Error(nil, "Cannot convert newObj to *v1.Pod", "newObj", newObj)
 						return
 					}
 					// Ignore pod's that are not subject to an eviction in background
 					if _, exists := newPod.Annotations[EvictionRequestAnnotationKey]; !exists {
 						if erCache.hasPod(newPod) {
-							klog.V(3).InfoS("Pod with eviction in background lost annotation. Removing pod from the cache.", "pod", klog.KObj(newPod))
+							logger.V(3).Info("Pod with eviction in background lost annotation. Removing pod from the cache.", "pod", klog.KObj(newPod))
 						}
 						erCache.deletePod(newPod)
 						return
 					}
 					// Remove completed/suceeeded or failed pods from the cache
 					if newPod.Status.Phase == v1.PodSucceeded || newPod.Status.Phase == v1.PodFailed {
-						klog.V(3).InfoS("Pod with eviction in background completed. Removing pod from the cache.", "pod", klog.KObj(newPod))
+						logger.V(3).Info("Pod with eviction in background completed. Removing pod from the cache.", "pod", klog.KObj(newPod))
 						erCache.deletePod(newPod)
 						return
 					}
@@ -315,13 +317,13 @@ func NewPodEvictor(
 						// the eviction again is expected to be a no-op. In case the eviction
 						// got terminated with no-retry, requesting a new eviction is a normal
 						// operation.
-						klog.V(3).InfoS("Eviction in background canceled (annotation removed). Removing pod from the cache.", "annotation", EvictionInProgressAnnotationKey, "pod", klog.KObj(newPod))
+						logger.V(3).Info("Eviction in background canceled (annotation removed). Removing pod from the cache.", "annotation", EvictionInProgressAnnotationKey, "pod", klog.KObj(newPod))
 						erCache.deletePod(newPod)
 						return
 					}
 					// Pick up the eviction in progress
 					if !erCache.hasPod(newPod) {
-						klog.V(3).InfoS("Eviction in background detected. Updating the cache.", "pod", klog.KObj(newPod))
+						logger.V(3).Info("Eviction in background detected. Updating the cache.", "pod", klog.KObj(newPod))
 					}
 					erCache.addPod(newPod)
 				},
@@ -334,15 +336,15 @@ func NewPodEvictor(
 						var ok bool
 						pod, ok = t.Obj.(*v1.Pod)
 						if !ok {
-							klog.ErrorS(nil, "Cannot convert to *v1.Pod", "obj", t.Obj)
+							logger.Error(nil, "Cannot convert to *v1.Pod", "obj", t.Obj)
 							return
 						}
 					default:
-						klog.ErrorS(nil, "Cannot convert to *v1.Pod", "obj", t)
+						logger.Error(nil, "Cannot convert to *v1.Pod", "obj", t)
 						return
 					}
 					if erCache.hasPod(pod) {
-						klog.V(3).InfoS("Pod with eviction in background deleted/evicted. Removing pod from the cache.", "pod", klog.KObj(pod))
+						logger.V(3).Info("Pod with eviction in background deleted/evicted. Removing pod from the cache.", "pod", klog.KObj(pod))
 					}
 					erCache.deletePod(pod)
 				},
@@ -456,8 +458,9 @@ type EvictOptions struct {
 // EvictPod evicts a pod while exercising eviction limits.
 // Returns true when the pod is evicted on the server side.
 func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptions) error {
+	logger := klog.FromContext(ctx)
 	if len(pod.UID) == 0 {
-		klog.InfoS("Ignoring pod eviction due to missing UID", "pod", pod)
+		logger.Info("Ignoring pod eviction due to missing UID", "pod", pod)
 		return fmt.Errorf("Pod %v is missing UID", klog.KObj(pod))
 	}
 
@@ -465,7 +468,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		// eviction in background requested
 		if _, exists := pod.Annotations[EvictionRequestAnnotationKey]; exists {
 			if pe.erCache.hasPod(pod) {
-				klog.V(3).InfoS("Eviction in background already requested (ignoring)", "pod", klog.KObj(pod))
+				logger.V(3).Info("Eviction in background already requested (ignoring)", "pod", klog.KObj(pod))
 				return nil
 			}
 		}
@@ -484,7 +487,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 			metrics.PodsEvicted.With(map[string]string{"result": err.Error(), "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
 		}
 		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
-		klog.ErrorS(err, "Error evicting pod", "limit", *pe.maxPodsToEvictTotal)
+		logger.Error(err, "Error evicting pod", "limit", *pe.maxPodsToEvictTotal)
 		if pe.evictionFailureEventNotification {
 			pe.eventRecorder.Eventf(pod, nil, v1.EventTypeWarning, "EvictionFailed", "Descheduled", "pod eviction from %v node by sigs.k8s.io/descheduler failed: total eviction limit exceeded (%v)", pod.Spec.NodeName, *pe.maxPodsToEvictTotal)
 		}
@@ -498,7 +501,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 				metrics.PodsEvicted.With(map[string]string{"result": err.Error(), "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
 			}
 			span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
-			klog.ErrorS(err, "Error evicting pod", "limit", *pe.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
+			logger.Error(err, "Error evicting pod", "limit", *pe.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
 			if pe.evictionFailureEventNotification {
 				pe.eventRecorder.Eventf(pod, nil, v1.EventTypeWarning, "EvictionFailed", "Descheduled", "pod eviction from %v node by sigs.k8s.io/descheduler failed: node eviction limit exceeded (%v)", pod.Spec.NodeName, *pe.maxPodsToEvictPerNode)
 			}
@@ -512,7 +515,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 			metrics.PodsEvicted.With(map[string]string{"result": err.Error(), "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
 		}
 		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
-		klog.ErrorS(err, "Error evicting pod", "limit", *pe.maxPodsToEvictPerNamespace, "namespace", pod.Namespace, "pod", klog.KObj(pod))
+		logger.Error(err, "Error evicting pod", "limit", *pe.maxPodsToEvictPerNamespace, "namespace", pod.Namespace, "pod", klog.KObj(pod))
 		if pe.evictionFailureEventNotification {
 			pe.eventRecorder.Eventf(pod, nil, v1.EventTypeWarning, "EvictionFailed", "Descheduled", "pod eviction from %v node by sigs.k8s.io/descheduler failed: namespace eviction limit exceeded (%v)", pod.Spec.NodeName, *pe.maxPodsToEvictPerNamespace)
 		}
@@ -523,7 +526,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 	if err != nil {
 		// err is used only for logging purposes
 		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
-		klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", opts.Reason)
+		logger.Error(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", opts.Reason)
 		if pe.metricsEnabled {
 			metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
 		}
@@ -548,9 +551,9 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 	}
 
 	if pe.dryRun {
-		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", opts.StrategyName, "node", pod.Spec.NodeName, "profile", opts.ProfileName)
+		logger.V(1).Info("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", opts.StrategyName, "node", pod.Spec.NodeName, "profile", opts.ProfileName)
 	} else {
-		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", opts.StrategyName, "node", pod.Spec.NodeName, "profile", opts.ProfileName)
+		logger.V(1).Info("Evicted pod", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", opts.StrategyName, "node", pod.Spec.NodeName, "profile", opts.ProfileName)
 		reason := opts.Reason
 		if len(reason) == 0 {
 			reason = opts.StrategyName
@@ -565,6 +568,8 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 
 // return (ignore, err)
 func (pe *PodEvictor) evictPod(ctx context.Context, pod *v1.Pod) (bool, error) {
+	logger := klog.FromContext(ctx)
+
 	deleteOptions := &metav1.DeleteOptions{
 		GracePeriodSeconds: pe.gracePeriodSeconds,
 	}
@@ -595,10 +600,10 @@ func (pe *PodEvictor) evictPod(ctx context.Context, pod *v1.Pod) (bool, error) {
 				// However, some custom eviction policies may end up with completed pods around.
 				// Which leads to all the completed pods to be considered still as unfinished evictions in background.
 				if pod.Status.Phase == v1.PodSucceeded || pod.Status.Phase == v1.PodFailed {
-					klog.V(3).InfoS("Ignoring eviction of a completed/failed pod", "pod", klog.KObj(pod))
+					logger.V(3).Info("Ignoring eviction of a completed/failed pod", "pod", klog.KObj(pod))
 					return true, nil
 				}
-				klog.V(3).InfoS("Eviction in background assumed", "pod", klog.KObj(pod))
+				logger.V(3).Info("Eviction in background assumed", "pod", klog.KObj(pod))
 				pe.erCache.assumePod(pod)
 				return true, nil
 			}

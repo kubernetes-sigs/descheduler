@@ -17,6 +17,8 @@ limitations under the License.
 package pluginregistry
 
 import (
+	"context"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -35,10 +37,10 @@ type PluginUtilities struct {
 	PluginArgDefaulter PluginArgDefaulter
 }
 
-type PluginBuilder = func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error)
+type PluginBuilder = func(ctx context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error)
 
 type (
-	PluginArgValidator = func(args runtime.Object) error
+	PluginArgValidator = func(logger klog.Logger, args runtime.Object) error
 	PluginArgDefaulter = func(args runtime.Object)
 )
 
@@ -49,6 +51,7 @@ func NewRegistry() Registry {
 }
 
 func Register(
+	ctx context.Context,
 	name string,
 	builderFunc PluginBuilder,
 	pluginType interface{},
@@ -57,8 +60,9 @@ func Register(
 	pluginArgDefaulter PluginArgDefaulter,
 	registry Registry,
 ) {
+	logger := klog.FromContext(ctx)
 	if _, ok := registry[name]; ok {
-		klog.V(10).InfoS("Plugin already registered", "plugin", name)
+		logger.V(10).Info("Plugin already registered", "plugin", name)
 	} else {
 		registry[name] = PluginUtilities{
 			PluginBuilder:      builderFunc,

@@ -66,25 +66,26 @@ func Tracer() trace.Tracer {
 
 // NewTracerProvider creates a new trace provider with the given options.
 func NewTracerProvider(ctx context.Context, endpoint, caCert, name, namespace string, sampleRate float64, fallbackToNoOpTracer bool) (err error) {
+	logger := klog.FromContext(ctx)
 	defer func(p trace.TracerProvider) {
 		if err != nil && !fallbackToNoOpTracer {
 			return
 		}
 		if err != nil && fallbackToNoOpTracer {
-			klog.ErrorS(err, "ran into an error trying to setup a trace provider. Falling back to NoOp provider")
+			logger.Error(err, "ran into an error trying to setup a trace provider. Falling back to NoOp provider")
 			err = nil
 			provider = trace.NewNoopTracerProvider()
 		}
 		otel.SetTextMapPropagator(propagation.TraceContext{})
 		otel.SetTracerProvider(provider)
 		otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-			klog.ErrorS(err, "got error from opentelemetry")
+			logger.Error(err, "got error from opentelemetry")
 		}))
 		tracer = otel.GetTracerProvider().Tracer(TracerName)
 	}(provider)
 
 	if endpoint == "" {
-		klog.V(2).Info("Did not find a trace collector endpoint defined. Switching to NoopTraceProvider")
+		logger.V(2).Info("Did not find a trace collector endpoint defined. Switching to NoopTraceProvider")
 		provider = trace.NewNoopTracerProvider()
 		return
 	}
@@ -95,18 +96,18 @@ func NewTracerProvider(ctx context.Context, endpoint, caCert, name, namespace st
 	if caCert != "" {
 		data, err = os.ReadFile(caCert)
 		if err != nil {
-			klog.ErrorS(err, "failed to extract ca certificate required to generate the transport credentials")
+			logger.Error(err, "failed to extract ca certificate required to generate the transport credentials")
 			return err
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(data) {
-			klog.Error("failed to create cert pool using the ca certificate provided for generating the transport credentials")
+			logger.Error(nil, "failed to create cert pool using the ca certificate provided for generating the transport credentials")
 			return err
 		}
-		klog.Info("Enabling trace GRPC client in secure TLS mode")
+		logger.Info("Enabling trace GRPC client in secure TLS mode")
 		opts = append(opts, otlptracegrpc.WithTLSCredentials(credentials.NewClientTLSFromCert(pool, "")))
 	} else {
-		klog.Info("Enabling trace GRPC client in insecure mode")
+		logger.Info("Enabling trace GRPC client in insecure mode")
 		opts = append(opts, otlptracegrpc.WithInsecure())
 	}
 
@@ -114,11 +115,11 @@ func NewTracerProvider(ctx context.Context, endpoint, caCert, name, namespace st
 
 	exporter, err := otlptrace.New(ctx, client)
 	if err != nil {
-		klog.ErrorS(err, "failed to create an instance of the trace exporter")
+		logger.Error(err, "failed to create an instance of the trace exporter")
 		return err
 	}
 	if name == "" {
-		klog.V(5).InfoS("no name provided, using default service name for tracing", "name", DefaultServiceName)
+		logger.V(5).Info("no name provided, using default service name for tracing", "name", DefaultServiceName)
 		name = DefaultServiceName
 	}
 	resourceOpts := defaultResourceOpts(name)
@@ -127,7 +128,7 @@ func NewTracerProvider(ctx context.Context, endpoint, caCert, name, namespace st
 	}
 	resource, err := sdkresource.New(ctx, resourceOpts...)
 	if err != nil {
-		klog.ErrorS(err, "failed to create traceable resource")
+		logger.Error(err, "failed to create traceable resource")
 		return err
 	}
 
@@ -137,7 +138,7 @@ func NewTracerProvider(ctx context.Context, endpoint, caCert, name, namespace st
 		sdktrace.WithSpanProcessor(spanProcessor),
 		sdktrace.WithResource(resource),
 	)
-	klog.V(2).Info("Successfully setup trace provider")
+	logger.V(2).Info("Successfully setup trace provider")
 	return
 }
 
@@ -147,13 +148,14 @@ func defaultResourceOpts(name string) []sdkresource.Option {
 
 // Shutdown shuts down the global trace exporter.
 func Shutdown(ctx context.Context) error {
+	logger := klog.FromContext(ctx)
 	tp, ok := provider.(*sdktrace.TracerProvider)
 	if !ok {
 		return nil
 	}
 	if err := tp.Shutdown(ctx); err != nil {
 		otel.Handle(err)
-		klog.ErrorS(err, "failed to shutdown the trace exporter")
+		logger.Error(err, "failed to shutdown the trace exporter")
 		return err
 	}
 	return nil

@@ -127,7 +127,7 @@ func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	rs.SecureServing.AddFlags(fs)
 }
 
-func (rs *DeschedulerServer) Apply() error {
+func (rs *DeschedulerServer) Apply(logger klog.Logger) error {
 	err := features.DefaultMutableFeatureGate.SetFromMap(rs.FeatureGates)
 	if err != nil {
 		return err
@@ -138,7 +138,7 @@ func (rs *DeschedulerServer) Apply() error {
 	var loopbackClientConfig *restclient.Config
 	var secureServing *apiserver.SecureServingInfo
 	if err := rs.SecureServing.ApplyTo(&secureServing, &loopbackClientConfig); err != nil {
-		klog.ErrorS(err, "failed to apply secure server configuration")
+		logger.Error(err, "failed to apply secure server configuration")
 		return err
 	}
 

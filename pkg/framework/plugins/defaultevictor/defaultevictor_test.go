@@ -321,7 +321,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			result := evictorPlugin.(frameworktypes.EvictorPlugin).PreEvictionFilter(test.pods[0])
+			result := evictorPlugin.(frameworktypes.EvictorPlugin).PreEvictionFilter(ctx, test.pods[0])
 			if (result) != test.result {
 				t.Errorf("Filter should return for pod %s %t, but it returns %t", test.pods[0].Name, test.result, result)
 			}
@@ -815,7 +815,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}
 
-			result := evictorPlugin.(frameworktypes.EvictorPlugin).Filter(test.pods[0])
+			result := evictorPlugin.(frameworktypes.EvictorPlugin).Filter(ctx, test.pods[0])
 			if (result) != test.result {
 				t.Errorf("Filter should return for pod %s %t, but it returns %t", test.pods[0].Name, test.result, result)
 			}
@@ -858,7 +858,7 @@ func TestReinitialization(t *testing.T) {
 			if !ok {
 				t.Fatalf("Unable to initialize as a DefaultEvictor plugin")
 			}
-			_, err = New(defaultEvictor.args, defaultEvictor.handle)
+			_, err = New(ctx, defaultEvictor.args, defaultEvictor.handle)
 			if err != nil {
 				t.Fatalf("Unable to reinitialize the plugin: %v", err)
 			}
@@ -907,6 +907,7 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 	}
 
 	evictorPlugin, err := New(
+		ctx,
 		defaultEvictorArgs,
 		&frameworkfake.HandleImpl{
 			ClientsetImpl:                 fakeClient,
