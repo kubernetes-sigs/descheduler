@@ -565,9 +565,14 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 
 // return (ignore, err)
 func (pe *PodEvictor) evictPod(ctx context.Context, pod *v1.Pod) (bool, error) {
-	deleteOptions := &metav1.DeleteOptions{
-		GracePeriodSeconds: pe.gracePeriodSeconds,
+	deleteOptions := &metav1.DeleteOptions{}
+
+	// Honor the pod's TerminationGracePeriodSeconds firstly.
+	// If the gracePeriodSeconds of pod is not set, then set our value.
+	if pod.Spec.TerminationGracePeriodSeconds == nil {
+		deleteOptions.GracePeriodSeconds = pe.gracePeriodSeconds
 	}
+
 	// GracePeriodSeconds ?
 	eviction := &policy.Eviction{
 		TypeMeta: metav1.TypeMeta{
