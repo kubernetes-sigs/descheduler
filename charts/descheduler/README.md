@@ -64,7 +64,6 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `replicas`                          | The replica count for Deployment                                                                                      | `1`                                       |
 | `leaderElection`                    | The options for high availability when running replicated components                                                  | _see values.yaml_                         |
 | `cmdOptions`                        | The options to pass to the _descheduler_ command                                                                      | _see values.yaml_                         |
-| `deschedulerPolicy.strategies`      | The _descheduler_ strategies to apply                                                                                 | _see values.yaml_                         |
 | `priorityClassName`                 | The name of the priority class to add to pods                                                                         | `system-cluster-critical`                 |
 | `rbac.create`                       | If `true`, create & use RBAC resources                                                                                | `true`                                    |
 | `resources`                         | Descheduler container CPU and memory requests/limits                                                                  | _see values.yaml_                         |

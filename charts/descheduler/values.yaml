@@ -18,9 +18,13 @@ resources:
   requests:
     cpu: 500m
     memory: 256Mi
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+ports:
+  - containerPort: 10258
+    protocol: TCP
 
 securityContext:
   allowPrivilegeEscalation: false
@@ -92,6 +96,8 @@ deschedulerPolicy:
   # nodeSelector: "key1=value1,key2=value2"
   # maxNoOfPodsToEvictPerNode: 10
   # maxNoOfPodsToEvictPerNamespace: 10
+  # metricsCollector:
+  #   enabled: true
   # ignorePvcPods: true
   # evictLocalStoragePods: true
   # evictDaemonSetPods: true

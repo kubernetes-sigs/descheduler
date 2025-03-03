@@ -15,10 +15,10 @@ spec:
   {{- if .Values.startingDeadlineSeconds }}
   startingDeadlineSeconds: {{ .Values.startingDeadlineSeconds }}
   {{- end }}
-  {{- if .Values.successfulJobsHistoryLimit }}
+  {{- if ne .Values.successfulJobsHistoryLimit nil }}
   successfulJobsHistoryLimit: {{ .Values.successfulJobsHistoryLimit }}
   {{- end }}
-  {{- if .Values.failedJobsHistoryLimit }}
+  {{- if ne .Values.failedJobsHistoryLimit nil }}
   failedJobsHistoryLimit: {{ .Values.failedJobsHistoryLimit }}
   {{- end }}
   {{- if .Values.timeZone }}
@@ -89,6 +89,8 @@ spec:
                 {{- end }}
               livenessProbe:
                 {{- toYaml .Values.livenessProbe | nindent 16 }}
+              ports:
+                {{- toYaml .Values.ports | nindent 16 }}
               resources:
                 {{- toYaml .Values.resources | nindent 16 }}
               {{- if .Values.securityContext }}

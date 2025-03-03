@@ -1143,7 +1143,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				fakeClient := fake.NewSimpleClientset(objs...)
 
 				var collector *metricscollector.MetricsCollector
-				if len(tc.nodemetricses) > 0 || len(tc.podmetricses) > 0 {
+				if metricsEnabled {
 					metricsClientset := fakemetricsclient.NewSimpleClientset()
 					for _, nodemetrics := range tc.nodemetricses {
 						metricsClientset.Tracker().Create(nodesgvr, nodemetrics, "")

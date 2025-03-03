@@ -43,7 +43,7 @@ import (
 
 const deploymentReplicas = 4
 
-func tooManyRestartsPolicy(targetNamespace string, podRestartThresholds int32, includingInitContainers bool) *apiv1alpha2.DeschedulerPolicy {
+func tooManyRestartsPolicy(targetNamespace string, podRestartThresholds int32, includingInitContainers bool, gracePeriodSeconds int64) *apiv1alpha2.DeschedulerPolicy {
 	return &apiv1alpha2.DeschedulerPolicy{
 		Profiles: []apiv1alpha2.DeschedulerProfile{
 			{
@@ -84,6 +84,7 @@ func tooManyRestartsPolicy(targetNamespace string, podRestartThresholds int32, i
 				},
 			},
 		},
+		GracePeriodSeconds: &gracePeriodSeconds,
 	}
 }
 
@@ -127,16 +128,17 @@ func TestTooManyRestarts(t *testing.T) {
 	tests := []struct {
 		name                    string
 		policy                  *apiv1alpha2.DeschedulerPolicy
+		enableGracePeriod       bool
 		expectedEvictedPodCount uint
 	}{
 		{
 			name:                    "test-no-evictions",
-			policy:                  tooManyRestartsPolicy(testNamespace.Name, 10000, true),
+			policy:                  tooManyRestartsPolicy(testNamespace.Name, 10000, true, 0),
 			expectedEvictedPodCount: 0,
 		},
 		{
 			name:                    "test-one-evictions",
-			policy:                  tooManyRestartsPolicy(testNamespace.Name, 3, true),
+			policy:                  tooManyRestartsPolicy(testNamespace.Name, 3, true, 0),
 			expectedEvictedPodCount: 4,
 		},
 	}
@@ -196,9 +198,8 @@ func TestTooManyRestarts(t *testing.T) {
 			if len(deschedulerPods) != 0 {
 				deschedulerPodName = deschedulerPods[0].Name
 			}
-
 			// Run RemovePodsHavingTooManyRestarts strategy
-			if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 20*time.Second, true, func(ctx context.Context) (bool, error) {
+			if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 50*time.Second, true, func(ctx context.Context) (bool, error) {
 				currentRunNames := sets.NewString(getCurrentPodNames(ctx, clientSet, testNamespace.Name, t)...)
 				actualEvictedPod := preRunNames.Difference(currentRunNames)
 				actualEvictedPodCount := uint(actualEvictedPod.Len())
@@ -210,7 +211,7 @@ func TestTooManyRestarts(t *testing.T) {
 
 				return true, nil
 			}); err != nil {
-				t.Errorf("Error waiting for descheduler running: %v", err)
+				t.Fatalf("Error waiting for descheduler running: %v", err)
 			}
 			waitForTerminatingPodsToDisappear(ctx, t, clientSet, testNamespace.Name)
 		})

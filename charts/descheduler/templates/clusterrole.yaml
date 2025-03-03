@@ -24,6 +24,9 @@ rules:
 - apiGroups: ["scheduling.k8s.io"]
   resources: ["priorityclasses"]
   verbs: ["get", "watch", "list"]
+- apiGroups: ["policy"]
+  resources: ["poddisruptionbudgets"]
+  verbs: ["get", "watch", "list"]
 {{- if .Values.leaderElection.enabled }}
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
@@ -32,5 +35,10 @@ rules:
   resources: ["leases"]
   resourceNames: ["{{ .Values.leaderElection.resourceName | default "descheduler" }}"]
   verbs: ["get", "patch", "delete"]
+{{- end }}
+{{- if and .Values.deschedulerPolicy .Values.deschedulerPolicy.metricsCollector .Values.deschedulerPolicy.metricsCollector.enabled }}
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
 {{- end }}
 {{- end -}}

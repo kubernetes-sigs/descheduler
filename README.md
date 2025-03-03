@@ -9,7 +9,7 @@
     <img src="assets/logo/descheduler-stacked-color.png" width="40%" align="center" alt="descheduler">
 </p>
 
-# Descheduler for  Kubernetes
+# Descheduler for Kubernetes
 
 Scheduling in Kubernetes is the process of binding pending pods to nodes, and is performed by
 a component of Kubernetes called kube-scheduler. The scheduler's decisions, whether or where a
@@ -38,10 +38,10 @@ that version's release branch, as listed below:
 
 |Descheduler Version|Docs link|
 |---|---|
+|v0.32.x|[`release-1.32`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.32/README.md)|
 |v0.31.x|[`release-1.31`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.31/README.md)|
 |v0.30.x|[`release-1.30`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.30/README.md)|
 |v0.29.x|[`release-1.29`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.29/README.md)|
-|v0.28.x|[`release-1.28`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.28/README.md)|
 
 The
 [`master`](https://github.com/kubernetes-sigs/descheduler/blob/master/README.md)
@@ -93,17 +93,17 @@ See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/ku
 
 Run As A Job
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=release-1.31' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=release-1.32' | kubectl apply -f -
 ```
 
 Run As A CronJob
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=release-1.31' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=release-1.32' | kubectl apply -f -
 ```
 
 Run As A Deployment
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=release-1.31' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=release-1.32' | kubectl apply -f -
 ```
 
 ## User Guide
@@ -118,14 +118,16 @@ The Descheduler Policy is configurable and includes default strategy plugins tha
 
 These are top level keys in the Descheduler Policy that you can use to configure all evictions.
 
-| Name |type| Default Value | Description |
-|------|----|---------------|-------------|
-| `nodeSelector` |`string`| `nil` | limiting the nodes which are processed. Only used when `nodeFit`=`true` and only by the PreEvictionFilter Extension Point |
-| `maxNoOfPodsToEvictPerNode` |`int`| `nil` | maximum number of pods evicted from each node (summed through all strategies) |
-| `maxNoOfPodsToEvictPerNamespace` |`int`| `nil` | maximum number of pods evicted from each namespace (summed through all strategies) |
-| `maxNoOfPodsToEvictTotal` |`int`| `nil` | maximum number of pods evicted per rescheduling cycle (summed through all strategies) |
-| `metricsCollector` |`object`| `nil` | configures collection of metrics for actual resource utilization |
-| `metricsCollector.enabled` |`bool`| `false` | enables kubernetes [metrics server](https://kubernetes-sigs.github.io/metrics-server/) collection |
+| Name                               | type     | Default Value | Description                                                                                                                |
+|------------------------------------|----------|---------------|----------------------------------------------------------------------------------------------------------------------------|
+| `nodeSelector`                     | `string` | `nil`         | Limiting the nodes which are processed. Only used when `nodeFit`=`true` and only by the PreEvictionFilter Extension Point. |
+| `maxNoOfPodsToEvictPerNode`        | `int`    | `nil`         | Maximum number of pods evicted from each node (summed through all strategies).                                             |
+| `maxNoOfPodsToEvictPerNamespace`   | `int`    | `nil`         | Maximum number of pods evicted from each namespace (summed through all strategies).                                        |
+| `maxNoOfPodsToEvictTotal`          | `int`    | `nil`         | Maximum number of pods evicted per rescheduling cycle (summed through all strategies).                                     |
+| `metricsCollector`                 | `object` | `nil`         | Configures collection of metrics for actual resource utilization.                                                          |
+| `metricsCollector.enabled`         | `bool`   | `false`       | Enables Kubernetes [Metrics Server](https://kubernetes-sigs.github.io/metrics-server/) collection.                         |
+| `evictionFailureEventNotification` | `bool`   | `false`       | Enables eviction failure event notification.                                                                               |
+| `gracePeriodSeconds`               | `int`    | `0`           | The duration in seconds before the object should be deleted. The value zero indicates delete immediately.                  |
 | `prometheus` |`object`| `nil` | configures collection of Prometheus metrics for actual resource utilization |
 | `prometheus.url` |`string`| `nil` | points to a Prometheus server url |
 | `prometheus.insecureSkipVerify` |`bool`| `nil` | disables server certificate chain and host name verification |
@@ -168,6 +170,7 @@ nodeSelector: "node=node1" # you don't need to set this, if not set all will be 
 maxNoOfPodsToEvictPerNode: 5000 # you don't need to set this, unlimited if not set
 maxNoOfPodsToEvictPerNamespace: 5000 # you don't need to set this, unlimited if not set
 maxNoOfPodsToEvictTotal: 5000 # you don't need to set this, unlimited if not set
+gracePeriodSeconds: 60 # you don't need to set this, 0 if not set
 metricsCollector:
   enabled: true # you don't need to set this, metrics are not collected if not set
 prometheus: # you don't need to set this, prometheus client will not get created if not set
@@ -893,7 +896,7 @@ does not exist, descheduler won't create it and will throw an error.
 
 ### Label filtering
 
-The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#labelselector-v1-meta)
+The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#labelselector-v1-meta)
 to filter pods by their labels:
 
 * `PodLifeTime`
@@ -1032,6 +1035,11 @@ packages that it is compiled with.
 
 | Descheduler | Supported Kubernetes Version |
 |-------------|------------------------------|
+| v0.32       | v1.32                        |
+| v0.31       | v1.31                        |
+| v0.30       | v1.30                        |
+| v0.29       | v1.29                        |
+| v0.28       | v1.28                        |
 | v0.27       | v1.27                        |
 | v0.26       | v1.26                        |
 | v0.25       | v1.25                        |

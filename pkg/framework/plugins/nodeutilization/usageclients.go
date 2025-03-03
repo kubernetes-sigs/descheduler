@@ -173,8 +173,11 @@ func (client *actualUsageClient) podUsage(pod *v1.Pod) (map[v1.ResourceName]*res
 	totalUsage := make(map[v1.ResourceName]*resource.Quantity)
 	for _, container := range podMetrics.Containers {
 		for _, resourceName := range client.resourceNames {
-			if _, exists := container.Usage[resourceName]; !exists {
+			if resourceName == v1.ResourcePods {
 				continue
+			}
+			if _, exists := container.Usage[resourceName]; !exists {
+				return nil, fmt.Errorf("pod %v/%v: container %q is missing %q resource", pod.Namespace, pod.Name, container.Name, resourceName)
 			}
 			if totalUsage[resourceName] == nil {
 				totalUsage[resourceName] = utilptr.To[resource.Quantity](container.Usage[resourceName].DeepCopy())

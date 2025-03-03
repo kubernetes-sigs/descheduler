@@ -41,8 +41,18 @@ type DeschedulerPolicy struct {
 	// MaxNoOfPodsToTotal restricts maximum of pods to be evicted total.
 	MaxNoOfPodsToEvictTotal *uint `json:"maxNoOfPodsToEvictTotal,omitempty"`
 
+	// EvictionFailureEventNotification should be set to true to enable eviction failure event notification.
+	// Default is false.
+	EvictionFailureEventNotification *bool `json:"evictionFailureEventNotification,omitempty"`
+
 	// MetricsCollector configures collection of metrics for actual resource utilization
 	MetricsCollector MetricsCollector `json:"metricsCollector,omitempty"`
+
+	// GracePeriodSeconds The duration in seconds before the object should be deleted. Value must be non-negative integer.
+	// The value zero indicates delete immediately. If this value is nil, the default grace period for the
+	// specified type will be used.
+	// Defaults to a per object value if not specified. zero means delete immediately.
+	GracePeriodSeconds *int64 `json:"gracePeriodSeconds,omitempty"`
 
 	// Prometheus enables metrics collection through Prometheus
 	Prometheus Prometheus `json:"prometheus,omitempty"`
