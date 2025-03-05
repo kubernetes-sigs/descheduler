@@ -17,6 +17,7 @@ limitations under the License.
 package descheduler
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -120,6 +121,25 @@ profiles:
 					},
 				},
 			},
+		},
+		{
+			description: "v1alpha2 to internal, validate error handling (priorityThreshold exceeding maximum)",
+			policy: []byte(`apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+      args:
+        priorityThreshold:
+          value: 2000000001
+    plugins:
+      deschedule:
+        enabled:
+          - "RemovePodsHavingTooManyRestarts"
+`),
+			result: nil,
+			err:    errors.New("priority threshold can't be greater than 2000000000"),
 		},
 	}
 

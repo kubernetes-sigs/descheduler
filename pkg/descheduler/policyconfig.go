@@ -62,21 +62,22 @@ func decode(policyConfigFile string, policy []byte, client clientset.Interface, 
 	if err != nil {
 		return nil, err
 	}
-
-	setDefaults(*internalPolicy, registry, client)
-
-	return internalPolicy, nil
+	return setDefaults(*internalPolicy, registry, client)
 }
 
-func setDefaults(in api.DeschedulerPolicy, registry pluginregistry.Registry, client clientset.Interface) *api.DeschedulerPolicy {
+func setDefaults(in api.DeschedulerPolicy, registry pluginregistry.Registry, client clientset.Interface) (*api.DeschedulerPolicy, error) {
+	var err error
 	for idx, profile := range in.Profiles {
 		// If we need to set defaults coming from loadtime in each profile we do it here
-		in.Profiles[idx] = setDefaultEvictor(profile, client)
+		in.Profiles[idx], err = setDefaultEvictor(profile, client)
+		if err != nil {
+			return nil, err
+		}
 		for _, pluginConfig := range profile.PluginConfigs {
 			setDefaultsPluginConfig(&pluginConfig, registry)
 		}
 	}
-	return &in
+	return &in, nil
 }
 
 func setDefaultsPluginConfig(pluginConfig *api.PluginConfig, registry pluginregistry.Registry) {
@@ -97,7 +98,7 @@ func findPluginName(names []string, key string) bool {
 	return false
 }
 
-func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interface) api.DeschedulerProfile {
+func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interface) (api.DeschedulerProfile, error) {
 	newPluginConfig := api.PluginConfig{
 		Name: defaultevictor.PluginName,
 		Args: &defaultevictor.DefaultEvictorArgs{
@@ -128,10 +129,11 @@ func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interfac
 	thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), client, defaultevictorPluginConfig.Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold)
 	if err != nil {
 		klog.Error(err, "Failed to get threshold priority from args")
+		return profile, err
 	}
 	profile.PluginConfigs[idx].Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold = &api.PriorityThreshold{}
 	profile.PluginConfigs[idx].Args.(*defaultevictor.DefaultEvictorArgs).PriorityThreshold.Value = &thresholdPriority
-	return profile
+	return profile, nil
 }
 
 func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginregistry.Registry) error {
