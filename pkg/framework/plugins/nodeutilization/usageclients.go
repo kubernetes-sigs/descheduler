@@ -265,34 +265,43 @@ func (client *prometheusUsageClient) resourceNames() []v1.ResourceName {
 	return []v1.ResourceName{ResourceMetrics}
 }
 
-func (client *prometheusUsageClient) sync(nodes []*v1.Node) error {
-	client._nodeUtilization = make(map[string]map[v1.ResourceName]*resource.Quantity)
-	client._pods = make(map[string][]*v1.Pod)
-
-	results, warnings, err := promv1.NewAPI(client.promClient).Query(context.TODO(), client.promQuery, time.Now())
+func NodeUsageFromPrometheusMetrics(ctx context.Context, promClient promapi.Client, promQuery string) (map[string]map[v1.ResourceName]*resource.Quantity, error) {
+	results, warnings, err := promv1.NewAPI(promClient).Query(ctx, promQuery, time.Now())
 	if err != nil {
-		return fmt.Errorf("unable to capture prometheus metrics: %v", err)
+		return nil, fmt.Errorf("unable to capture prometheus metrics: %v", err)
 	}
 	if len(warnings) > 0 {
 		klog.Infof("prometheus metrics warnings: %v", warnings)
 	}
 
 	if results.Type() != model.ValVector {
-		return fmt.Errorf("expected query results to be of type %q, got %q instead", model.ValVector, results.Type())
+		return nil, fmt.Errorf("expected query results to be of type %q, got %q instead", model.ValVector, results.Type())
 	}
 
 	nodeUsages := make(map[string]map[v1.ResourceName]*resource.Quantity)
 	for _, sample := range results.(model.Vector) {
 		nodeName, exists := sample.Metric["instance"]
 		if !exists {
-			return fmt.Errorf("The collected metrics sample is missing 'instance' key")
+			return nil, fmt.Errorf("The collected metrics sample is missing 'instance' key")
 		}
 		if sample.Value < 0 || sample.Value > 1 {
-			return fmt.Errorf("The collected metrics sample for %q has value %v outside of <0; 1> interval", string(nodeName), sample.Value)
+			return nil, fmt.Errorf("The collected metrics sample for %q has value %v outside of <0; 1> interval", string(nodeName), sample.Value)
 		}
 		nodeUsages[string(nodeName)] = map[v1.ResourceName]*resource.Quantity{
 			ResourceMetrics: resource.NewQuantity(int64(sample.Value*100), resource.DecimalSI),
 		}
+	}
+
+	return nodeUsages, nil
+}
+
+func (client *prometheusUsageClient) sync(nodes []*v1.Node) error {
+	client._nodeUtilization = make(map[string]map[v1.ResourceName]*resource.Quantity)
+	client._pods = make(map[string][]*v1.Pod)
+
+	nodeUsages, err := NodeUsageFromPrometheusMetrics(context.TODO(), client.promClient, client.promQuery)
+	if err != nil {
+		return err
 	}
 
 	for _, node := range nodes {
