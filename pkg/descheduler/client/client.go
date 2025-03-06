@@ -133,7 +133,9 @@ func CreatePrometheusClient(prometheusURL, authToken string, insecureSkipVerify 
 				KeepAlive: 30 * time.Second,
 			}).DialContext,
 			TLSHandshakeTimeout: 10 * time.Second,
-			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: insecureSkipVerify,
+			},
 		}
 	} else {
 		// Retrieve Pod CA cert
