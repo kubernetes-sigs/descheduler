@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -138,7 +137,7 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 	}
 
 	// stop if the total available usage has dropped to zero - no more pods can be scheduled
-	continueEvictionCond := func(nodeInfo NodeInfo, totalAvailableUsage map[v1.ResourceName]*resource.Quantity) bool {
+	continueEvictionCond := func(nodeInfo NodeInfo, totalAvailableUsage api.ReferencedResourceList) bool {
 		for name := range totalAvailableUsage {
 			if totalAvailableUsage[name].CmpInt64(0) < 1 {
 				return false
