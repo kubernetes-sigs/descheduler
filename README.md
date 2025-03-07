@@ -300,6 +300,7 @@ See `metricsCollector` field at [Top Level configuration](#top-level-configurati
 |`thresholds`|map(string:int)|
 |`targetThresholds`|map(string:int)|
 |`numberOfNodes`|int|
+|`evictionLimits`|object|
 |`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
 |`metricsUtilization`|object|
 |`metricsUtilization.metricsServer`|bool|
@@ -325,6 +326,8 @@ profiles:
           "pods": 50
         metricsUtilization:
           metricsServer: true
+        evictionLimits:
+          node: 5
     plugins:
       balance:
         enabled:
@@ -340,10 +343,12 @@ and will not be used to compute node's usage if it's not specified in `threshold
 * The valid range of the resource's percentage value is \[0, 100\]
 * Percentage value of `thresholds` can not be greater than `targetThresholds` for the same resource.
 
-There is another parameter associated with the `LowNodeUtilization` strategy, called `numberOfNodes`.
-This parameter can be configured to activate the strategy only when the number of under utilized nodes
+There are two more parameters associated with the `LowNodeUtilization` strategy, called `numberOfNodes` and `evictionLimits`.
+The first parameter can be configured to activate the strategy only when the number of under utilized nodes
 are above the configured value. This could be helpful in large clusters where a few nodes could go
 under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero.
+The second parameter is useful when a number of evictions per the plugin per a descheduling cycle needs to be limited.
+The parameter currently enables to limit the number of evictions per node through `node` field.
 
 ### HighNodeUtilization
 
