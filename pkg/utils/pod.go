@@ -120,6 +120,11 @@ func IsPodWithPVC(pod *v1.Pod) bool {
 	return false
 }
 
+// IsPodWithResourceClaims returns true if the pod has resource claims.
+func IsPodWithResourceClaims(pod *v1.Pod) bool {
+	return len(pod.Spec.ResourceClaims) != 0
+}
+
 // IsPodCoveredByPDB returns true if the pod is covered by at least one PodDisruptionBudget.
 func IsPodCoveredByPDB(pod *v1.Pod, lister policyv1.PodDisruptionBudgetLister) (bool, error) {
 	// We can't use the GetPodPodDisruptionBudgets expansion method here because it treats no pdb as an error,

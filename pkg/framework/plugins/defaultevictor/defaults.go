@@ -52,4 +52,10 @@ func SetDefaults_DefaultEvictorArgs(obj runtime.Object) {
 	if !args.NodeFit {
 		args.NodeFit = false
 	}
+	if !args.IgnorePodsWithoutPDB {
+		args.IgnorePodsWithoutPDB = false
+	}
+	if !args.IgnorePodsWithResourceClaims {
+		args.IgnorePodsWithResourceClaims = false
+	}
 }
