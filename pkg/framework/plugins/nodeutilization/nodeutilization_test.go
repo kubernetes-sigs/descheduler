@@ -23,6 +23,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/descheduler/pkg/api"
 )
 
 func BuildTestNodeInfo(name string, apply func(*NodeInfo)) *NodeInfo {
@@ -71,7 +72,7 @@ func TestResourceUsagePercentages(t *testing.T) {
 				},
 			},
 		},
-		usage: map[v1.ResourceName]*resource.Quantity{
+		usage: api.ReferencedResourceList{
 			v1.ResourceCPU:    resource.NewMilliQuantity(1220, resource.DecimalSI),
 			v1.ResourceMemory: resource.NewQuantity(3038982964, resource.BinarySI),
 			v1.ResourcePods:   resource.NewQuantity(11, resource.BinarySI),
@@ -103,21 +104,21 @@ func TestSortNodesByUsage(t *testing.T) {
 			name: "cpu memory pods",
 			nodeInfoList: []NodeInfo{
 				*BuildTestNodeInfo("node1", func(nodeInfo *NodeInfo) {
-					nodeInfo.usage = map[v1.ResourceName]*resource.Quantity{
+					nodeInfo.usage = api.ReferencedResourceList{
 						v1.ResourceCPU:    resource.NewMilliQuantity(1730, resource.DecimalSI),
 						v1.ResourceMemory: resource.NewQuantity(3038982964, resource.BinarySI),
 						v1.ResourcePods:   resource.NewQuantity(25, resource.BinarySI),
 					}
 				}),
 				*BuildTestNodeInfo("node2", func(nodeInfo *NodeInfo) {
-					nodeInfo.usage = map[v1.ResourceName]*resource.Quantity{
+					nodeInfo.usage = api.ReferencedResourceList{
 						v1.ResourceCPU:    resource.NewMilliQuantity(1220, resource.DecimalSI),
 						v1.ResourceMemory: resource.NewQuantity(3038982964, resource.BinarySI),
 						v1.ResourcePods:   resource.NewQuantity(11, resource.BinarySI),
 					}
 				}),
 				*BuildTestNodeInfo("node3", func(nodeInfo *NodeInfo) {
-					nodeInfo.usage = map[v1.ResourceName]*resource.Quantity{
+					nodeInfo.usage = api.ReferencedResourceList{
 						v1.ResourceCPU:    resource.NewMilliQuantity(1530, resource.DecimalSI),
 						v1.ResourceMemory: resource.NewQuantity(5038982964, resource.BinarySI),
 						v1.ResourcePods:   resource.NewQuantity(20, resource.BinarySI),
@@ -130,17 +131,17 @@ func TestSortNodesByUsage(t *testing.T) {
 			name: "memory",
 			nodeInfoList: []NodeInfo{
 				*BuildTestNodeInfo("node1", func(nodeInfo *NodeInfo) {
-					nodeInfo.usage = map[v1.ResourceName]*resource.Quantity{
+					nodeInfo.usage = api.ReferencedResourceList{
 						v1.ResourceMemory: resource.NewQuantity(3038982964, resource.BinarySI),
 					}
 				}),
 				*BuildTestNodeInfo("node2", func(nodeInfo *NodeInfo) {
-					nodeInfo.usage = map[v1.ResourceName]*resource.Quantity{
+					nodeInfo.usage = api.ReferencedResourceList{
 						v1.ResourceMemory: resource.NewQuantity(2038982964, resource.BinarySI),
 					}
 				}),
 				*BuildTestNodeInfo("node3", func(nodeInfo *NodeInfo) {
-					nodeInfo.usage = map[v1.ResourceName]*resource.Quantity{
+					nodeInfo.usage = api.ReferencedResourceList{
 						v1.ResourceMemory: resource.NewQuantity(5038982964, resource.BinarySI),
 					}
 				}),

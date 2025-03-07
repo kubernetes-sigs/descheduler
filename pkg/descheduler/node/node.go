@@ -30,6 +30,7 @@ import (
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/descheduler/pkg/api"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
@@ -244,7 +245,7 @@ func fitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nod
 }
 
 // nodeAvailableResources returns resources mapped to the quanitity available on the node.
-func nodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node *v1.Node, resourceNames []v1.ResourceName, podUtilization podutil.PodUtilizationFnc) (map[v1.ResourceName]*resource.Quantity, error) {
+func nodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node *v1.Node, resourceNames []v1.ResourceName, podUtilization podutil.PodUtilizationFnc) (api.ReferencedResourceList, error) {
 	podsOnNode, err := podutil.ListPodsOnANode(node.Name, nodeIndexer, nil)
 	if err != nil {
 		return nil, err
@@ -253,7 +254,7 @@ func nodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node 
 	if err != nil {
 		return nil, err
 	}
-	remainingResources := map[v1.ResourceName]*resource.Quantity{
+	remainingResources := api.ReferencedResourceList{
 		v1.ResourceCPU:    resource.NewMilliQuantity(node.Status.Allocatable.Cpu().MilliValue()-nodeUtilization[v1.ResourceCPU].MilliValue(), resource.DecimalSI),
 		v1.ResourceMemory: resource.NewQuantity(node.Status.Allocatable.Memory().Value()-nodeUtilization[v1.ResourceMemory].Value(), resource.BinarySI),
 		v1.ResourcePods:   resource.NewQuantity(node.Status.Allocatable.Pods().Value()-nodeUtilization[v1.ResourcePods].Value(), resource.DecimalSI),
@@ -273,8 +274,8 @@ func nodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node 
 }
 
 // NodeUtilization returns the resources requested by the given pods. Only resources supplied in the resourceNames parameter are calculated.
-func NodeUtilization(pods []*v1.Pod, resourceNames []v1.ResourceName, podUtilization podutil.PodUtilizationFnc) (map[v1.ResourceName]*resource.Quantity, error) {
-	totalUtilization := map[v1.ResourceName]*resource.Quantity{
+func NodeUtilization(pods []*v1.Pod, resourceNames []v1.ResourceName, podUtilization podutil.PodUtilizationFnc) (api.ReferencedResourceList, error) {
+	totalUtilization := api.ReferencedResourceList{
 		v1.ResourceCPU:    resource.NewMilliQuantity(0, resource.DecimalSI),
 		v1.ResourceMemory: resource.NewQuantity(0, resource.BinarySI),
 		v1.ResourcePods:   resource.NewQuantity(int64(len(pods)), resource.DecimalSI),
