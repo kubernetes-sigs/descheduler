@@ -291,19 +291,28 @@ like `kubectl top`) may differ from the calculated consumption, due to these com
 actual usage metrics. Metrics-based descheduling can be enabled by setting `metricsUtilization.metricsServer` field.
 In order to have the plugin consume the metrics the metric collector needs to be configured as well.
 See `metricsCollector` field at [Top Level configuration](#top-level-configuration) for available options.
+That gap can only be reduced using the SoftTainter to dinamically apply/remove soft taints (`effect: PreferNoSchedule`) to/from nodes.
+The soft taint will simply gave an hint to the scheduler to try avoiding nodes that looks overutilized at
+the descheduler eyes. Since it's just a soft taint (do it just if possible) there is no guaranteee or results, on the other side even in the worst case it will not introduce any disruption or shortage of workers' nodes.
+The descheduler SoftTainter can be enabled by setting `softTainter.applySoftTaints` field.
+Since it's just an optional sub-feature, the `descheduler-cluster-role` is not granting the right to amend nodes.
+Cluster admins that want to use this feature should create an additional cluster role to grant `patch` and `update` verbs on `nodes` and bind it to the `descheduler-sa` ServiceAccount.
 
 **Parameters:**
 
-|Name|Type|
-|---|---|
-|`useDeviationThresholds`|bool|
-|`thresholds`|map(string:int)|
-|`targetThresholds`|map(string:int)|
-|`numberOfNodes`|int|
-|`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
-|`metricsUtilization`|object|
-|`metricsUtilization.metricsServer`|bool|
-
+| Name                               |Type|
+|------------------------------------|---|
+| `useDeviationThresholds`           |bool|
+| `thresholds`                       |map(string:int)|
+| `targetThresholds`                 |map(string:int)|
+| `numberOfNodes`                    |int|
+| `evictableNamespaces`              |(see [namespace filtering](#namespace-filtering))|
+| `metricsUtilization`               |object|
+| `metricsUtilization.metricsServer` |bool|
+| `softTainter`                      |object|
+| `softTainter.applySoftTaints`      |bool|
+| `softTainter.softTaintKey`         |string|
+| `softTainter.softTaintValue`       |string|
 
 **Example:**
 
@@ -325,6 +334,10 @@ profiles:
           "pods": 50
         metricsUtilization:
           metricsServer: true
+        softTainter:
+          applySoftTaints: true
+          softTaintKey: "nodeutilization.descheduler.kubernetes.io/overutilized"
+          softTaintValue: "true"
     plugins:
       balance:
         enabled:

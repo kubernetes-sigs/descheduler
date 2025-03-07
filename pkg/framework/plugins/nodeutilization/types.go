@@ -29,6 +29,7 @@ type LowNodeUtilizationArgs struct {
 	TargetThresholds       api.ResourceThresholds `json:"targetThresholds"`
 	NumberOfNodes          int                    `json:"numberOfNodes,omitempty"`
 	MetricsUtilization     MetricsUtilization     `json:"metricsUtilization,omitempty"`
+	SoftTainter            SoftTainter            `json:"softTainter,omitempty"`
 
 	// Naming this one differently since namespaces are still
 	// considered while considering resources used by pods
@@ -57,4 +58,16 @@ type MetricsUtilization struct {
 	// metricsServer enables metrics from a kubernetes metrics server.
 	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
 	MetricsServer bool `json:"metricsServer,omitempty"`
+}
+
+// SoftTainter allow to dynamically set/remove a soft taint to hint the scheduler to avoid overutilized nodes
+type SoftTainter struct {
+	// ApplySoftTaints enables the node soft tainter
+	ApplySoftTaints bool `json:"applySoftTaints,omitempty"`
+
+	// +default="nodeutilization.descheduler.kubernetes.io/overutilized"
+	SoftTaintKey string `json:"softTaintKey,omitempty"`
+
+	// +default="true"
+	SoftTaintValue string `json:"softTaintValue,omitempty"`
 }

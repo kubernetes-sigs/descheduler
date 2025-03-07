@@ -29,5 +29,15 @@ import (
 // Public to allow building arbitrary schemes.
 // All generated defaulters are covering - they call all nested defaulters.
 func RegisterDefaults(scheme *runtime.Scheme) error {
+	scheme.AddTypeDefaultingFunc(&LowNodeUtilizationArgs{}, func(obj interface{}) { SetObjectDefaults_LowNodeUtilizationArgs(obj.(*LowNodeUtilizationArgs)) })
 	return nil
+}
+
+func SetObjectDefaults_LowNodeUtilizationArgs(in *LowNodeUtilizationArgs) {
+	if in.SoftTainter.SoftTaintKey == "" {
+		in.SoftTainter.SoftTaintKey = "nodeutilization.descheduler.kubernetes.io/overutilized"
+	}
+	if in.SoftTainter.SoftTaintValue == "" {
+		in.SoftTainter.SoftTaintValue = "true"
+	}
 }
