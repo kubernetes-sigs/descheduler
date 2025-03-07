@@ -194,6 +194,15 @@ serviceAccount:
   name:
   # Specifies custom annotations for the serviceAccount
   annotations: {}
+  # Opt out of API credential automounting
+  # 
+  # automountServiceAccountToken Default is not set 
+  # automountServiceAccountToken: true
+  
+
+# Mount the ServiceAccountToken in the Pod of a CronJob or Deployment 
+# Default is not set - but only implied by the ServiceAccount
+# automountServiceAccountToken: true
 
 podAnnotations: {}
 
@@ -245,3 +254,30 @@ serviceMonitor:
     #   targetLabel: nodename
     #   replacement: $1
     #   action: replace
+
+## Additional Volume mounts when automountServiceAccountToken is false
+# extraServiceAccountVolumeMounts: 
+# - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+#   name: kube-api-access
+#   readOnly: true
+
+## Additional Volumes when automountServiceAccountToken is false
+# extraServiceAccountVolumes:
+# - name: kube-api-access
+#   projected:
+#     defaultMode: 0444
+#     sources:
+#     - configMap:
+#         items:
+#         - key: ca.crt
+#           path: ca.crt
+#         name: kube-root-ca.crt
+#     - downwardAPI:
+#         items:
+#         - fieldRef:
+#             apiVersion: v1
+#             fieldPath: metadata.namespace
+#           path: namespace
+#     - serviceAccountToken:
+#         expirationSeconds: 3600
+#         path: token
