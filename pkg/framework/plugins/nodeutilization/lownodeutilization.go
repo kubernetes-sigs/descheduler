@@ -194,6 +194,7 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 		l.resourceNames,
 		continueEvictionCond,
 		l.usageClient,
+		l.handle.Tainter(),
 	)
 
 	return nil

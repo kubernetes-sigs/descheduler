@@ -127,14 +127,6 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(sourceNodes), "numberOfNodes", h.args.NumberOfNodes)
 		return nil
 	}
-	if len(sourceNodes) == len(nodes) {
-		klog.V(1).InfoS("All nodes are underutilized, nothing to do here")
-		return nil
-	}
-	if len(highNodes) == 0 {
-		klog.V(1).InfoS("No node is available to schedule the pods, nothing to do here")
-		return nil
-	}
 
 	// stop if the total available usage has dropped to zero - no more pods can be scheduled
 	continueEvictionCond := func(nodeInfo NodeInfo, totalAvailableUsage api.ReferencedResourceList) bool {
@@ -149,6 +141,13 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 
 	// Sort the nodes by the usage in ascending order
 	sortNodesByUsage(sourceNodes, true)
+	// If all nodes are underutilized and removing a node means that there is at least 1
+	// leftover node for pods to be scheduled on then then remove the least used node
+	if len(sourceNodes) == len(nodes) && len(sourceNodes) > 1 {
+		highNodes = sourceNodes[1:]
+		sourceNodes = sourceNodes[:1]
+		klog.InfoS("All nodes are underutilized, selecting a random node", "selected", sourceNodes[0])
+	}
 
 	evictPodsFromSourceNodes(
 		ctx,
@@ -161,6 +160,7 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		h.resourceNames,
 		continueEvictionCond,
 		h.usageClient,
+		h.handle.Tainter(),
 	)
 
 	return nil

@@ -230,7 +230,7 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 			var evictedPods []string
 			client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+			handle, podEvictor, tainter, err := frameworktesting.InitFrameworkHandle(
 				ctx,
 				client,
 				nil,
@@ -247,6 +247,7 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 				WithClientSet(client),
 				WithSharedInformerFactory(handle.SharedInformerFactoryImpl),
 				WithPodEvictor(podEvictor),
+				WithTainter(tainter),
 				WithGetPodsAssignedToNodeFnc(handle.GetPodsAssignedToNodeFuncImpl),
 			)
 			if err != nil {
@@ -373,7 +374,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+	handle, podEvictor, tainter, err := frameworktesting.InitFrameworkHandle(
 		ctx,
 		client,
 		nil,
@@ -425,6 +426,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 		WithClientSet(client),
 		WithSharedInformerFactory(handle.SharedInformerFactoryImpl),
 		WithPodEvictor(podEvictor),
+		WithTainter(tainter),
 		WithGetPodsAssignedToNodeFnc(handle.GetPodsAssignedToNodeFuncImpl),
 	)
 	if err != nil {
@@ -580,7 +582,7 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionFuc(&evictedPods))
 
-	handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+	handle, podEvictor, tainter, err := frameworktesting.InitFrameworkHandle(
 		ctx,
 		client,
 		nil,
@@ -647,6 +649,7 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 		WithClientSet(client),
 		WithSharedInformerFactory(handle.SharedInformerFactoryImpl),
 		WithPodEvictor(podEvictor),
+		WithTainter(tainter),
 		WithGetPodsAssignedToNodeFnc(handle.GetPodsAssignedToNodeFuncImpl),
 	)
 	if err != nil {

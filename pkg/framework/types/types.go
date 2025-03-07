@@ -35,6 +35,7 @@ type Handle interface {
 	// ClientSet returns a kubernetes clientSet.
 	ClientSet() clientset.Interface
 	Evictor() Evictor
+	Tainter() Tainter
 	GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc
 	SharedInformerFactory() informers.SharedInformerFactory
 	MetricsCollector() *metricscollector.MetricsCollector
@@ -49,6 +50,13 @@ type Evictor interface {
 	PreEvictionFilter(*v1.Pod) bool
 	// Evict evicts a pod (no pre-check performed)
 	Evict(context.Context, *v1.Pod, evictions.EvictOptions) error
+}
+
+// Evictor defines an interface for filtering and evicting pods
+// while abstracting away the specific pod evictor/evictor filter.
+type Tainter interface {
+	// Adds a taint t
+	Taint(context.Context, *v1.Node) error
 }
 
 // Status describes result of an extension point invocation
