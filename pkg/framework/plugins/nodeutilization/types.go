@@ -54,7 +54,13 @@ type HighNodeUtilizationArgs struct {
 
 // MetricsUtilization allow to consume actual resource utilization from metrics
 type MetricsUtilization struct {
-	// metricsServer enables metrics from a kubernetes metrics server.
-	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
-	MetricsServer bool `json:"metricsServer,omitempty"`
+	Source MetricsSource `json:"source"`
 }
+
+type MetricsSource string
+
+const (
+	// KubernetesMetrics enables metrics from a kubernetes metrics server.
+	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
+	KubernetesMetrics MetricsSource = "KubernetesMetrics"
+)
