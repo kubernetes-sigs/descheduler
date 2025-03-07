@@ -64,6 +64,12 @@ type Namespaces struct {
 	Exclude []string `json:"exclude,omitempty"`
 }
 
+// EvictionLimits limits the number of evictions per domain. E.g. node, namespace, total.
+type EvictionLimits struct {
+	// node restricts the maximum number of evictions per node
+	Node *uint `json:"node,omitempty"`
+}
+
 type (
 	Percentage         float64
 	ResourceThresholds map[v1.ResourceName]Percentage

@@ -239,6 +239,7 @@ func evictPodsFromSourceNodes(
 	resourceNames []v1.ResourceName,
 	continueEviction continueEvictionCond,
 	usageClient usageClient,
+	maxNoOfPodsToEvictPerNode *uint,
 ) {
 	// upper bound on total number of pods/cpu/memory and optional extended resources to be moved
 	totalAvailableUsage := api.ReferencedResourceList{}
@@ -280,7 +281,7 @@ func evictPodsFromSourceNodes(
 		klog.V(1).InfoS("Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers")
 		// sort the evictable Pods based on priority. This also sorts them based on QoS. If there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
-		err := evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction, usageClient)
+		err := evictPods(ctx, evictableNamespaces, removablePods, node, totalAvailableUsage, taintsOfDestinationNodes, podEvictor, evictOptions, continueEviction, usageClient, maxNoOfPodsToEvictPerNode)
 		if err != nil {
 			switch err.(type) {
 			case *evictions.EvictionTotalLimitError:
@@ -302,14 +303,20 @@ func evictPods(
 	evictOptions evictions.EvictOptions,
 	continueEviction continueEvictionCond,
 	usageClient usageClient,
+	maxNoOfPodsToEvictPerNode *uint,
 ) error {
 	var excludedNamespaces sets.Set[string]
 	if evictableNamespaces != nil {
 		excludedNamespaces = sets.New(evictableNamespaces.Exclude...)
 	}
 
+	var evictionCounter uint = 0
 	if continueEviction(nodeInfo, totalAvailableUsage) {
 		for _, pod := range inputPods {
+			if maxNoOfPodsToEvictPerNode != nil && evictionCounter >= *maxNoOfPodsToEvictPerNode {
+				klog.V(3).InfoS("Max number of evictions per node per plugin reached", "limit", *maxNoOfPodsToEvictPerNode)
+				break
+			}
 			if !utils.PodToleratesTaints(pod, taintsOfLowNodes) {
 				klog.V(3).InfoS("Skipping eviction for pod, doesn't tolerate node taint", "pod", klog.KObj(pod))
 				continue
@@ -334,6 +341,7 @@ func evictPods(
 			}
 			err = podEvictor.Evict(ctx, pod, evictOptions)
 			if err == nil {
+				evictionCounter++
 				klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
 
 				for name := range totalAvailableUsage {
