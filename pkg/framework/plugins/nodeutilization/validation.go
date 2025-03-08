@@ -23,8 +23,8 @@ import (
 func ValidateHighNodeUtilizationArgs(obj runtime.Object) error {
 	args := obj.(*HighNodeUtilizationArgs)
 	// only exclude can be set, or not at all
-	if args.EvictableNamespaces != nil && len(args.EvictableNamespaces.Include) > 0 {
-		return fmt.Errorf("only Exclude namespaces can be set, inclusion is not supported")
+	if args.EvictableNamespaces != nil && len(args.EvictableNamespaces.Include) > 0 && len(args.EvictableNamespaces.Exclude) > 0 {
+		return fmt.Errorf("cannot set both Include and Exclude namespaces")
 	}
 	err := validateThresholds(args.Thresholds)
 	if err != nil {
@@ -37,8 +37,8 @@ func ValidateHighNodeUtilizationArgs(obj runtime.Object) error {
 func ValidateLowNodeUtilizationArgs(obj runtime.Object) error {
 	args := obj.(*LowNodeUtilizationArgs)
 	// only exclude can be set, or not at all
-	if args.EvictableNamespaces != nil && len(args.EvictableNamespaces.Include) > 0 {
-		return fmt.Errorf("only Exclude namespaces can be set, inclusion is not supported")
+	if args.EvictableNamespaces != nil && len(args.EvictableNamespaces.Include) > 0 && len(args.EvictableNamespaces.Exclude) > 0 {
+		return fmt.Errorf("cannot set both Include and Exclude namespaces")
 	}
 	err := validateLowNodeUtilizationThresholds(args.Thresholds, args.TargetThresholds, args.UseDeviationThresholds)
 	if err != nil {

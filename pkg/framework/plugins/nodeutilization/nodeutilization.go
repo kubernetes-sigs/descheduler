@@ -304,7 +304,9 @@ func evictPods(
 	usageClient usageClient,
 ) error {
 	var excludedNamespaces sets.Set[string]
+	var includedNamespaces sets.Set[string]
 	if evictableNamespaces != nil {
+		includedNamespaces = sets.New(evictableNamespaces.Include...)
 		excludedNamespaces = sets.New(evictableNamespaces.Exclude...)
 	}
 
@@ -318,6 +320,7 @@ func evictPods(
 			preEvictionFilterWithOptions, err := podutil.NewOptions().
 				WithFilter(podEvictor.PreEvictionFilter).
 				WithoutNamespaces(excludedNamespaces).
+				WithNamespaces(includedNamespaces).
 				BuildFilterFunc()
 			if err != nil {
 				klog.ErrorS(err, "could not build preEvictionFilter with namespace exclusion")
