@@ -88,6 +88,11 @@ func (in *LowNodeUtilizationArgs) DeepCopyInto(out *LowNodeUtilizationArgs) {
 		*out = new(api.Namespaces)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.EvictionLimits != nil {
+		in, out := &in.EvictionLimits, &out.EvictionLimits
+		*out = new(api.EvictionLimits)
+		(*in).DeepCopyInto(*out)
+	}
 	return
 }
 
