@@ -46,6 +46,12 @@ func (in *DefaultEvictorArgs) DeepCopyInto(out *DefaultEvictorArgs) {
 		*out = new(v1.Duration)
 		**out = **in
 	}
+
+	if in.NamespaceLabelSelector != nil {
+		in, out := &in.NamespaceLabelSelector, &out.NamespaceLabelSelector
+		*out = new(v1.LabelSelector)
+		(*in).DeepCopyInto(*out)
+	}
 	return
 }
 
