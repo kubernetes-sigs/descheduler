@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/api"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
@@ -37,20 +38,21 @@ import (
 )
 
 type testCase struct {
-	description             string
-	pods                    []*v1.Pod
-	nodes                   []*v1.Node
-	pdbs                    []*policyv1.PodDisruptionBudget
-	evictFailedBarePods     bool
-	evictLocalStoragePods   bool
-	evictSystemCriticalPods bool
-	ignorePvcPods           bool
-	priorityThreshold       *int32
-	nodeFit                 bool
-	minReplicas             uint
-	minPodAge               *metav1.Duration
-	result                  bool
-	ignorePodsWithoutPDB    bool
+	description                  string
+	pods                         []*v1.Pod
+	nodes                        []*v1.Node
+	pdbs                         []*policyv1.PodDisruptionBudget
+	evictFailedBarePods          bool
+	evictLocalStoragePods        bool
+	evictSystemCriticalPods      bool
+	ignorePvcPods                bool
+	priorityThreshold            *int32
+	nodeFit                      bool
+	minReplicas                  uint
+	minPodAge                    *metav1.Duration
+	result                       bool
+	ignorePodsWithoutPDB         bool
+	ignorePodsWithResourceClaims bool
 }
 
 func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
@@ -802,6 +804,36 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			},
 			ignorePvcPods: false,
 			result:        true,
+		}, {
+			description: "ignorePodsWithResourceClaims is not set, pod with ResourceClaims, evicts",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p15", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.ResourceClaims = []v1.PodResourceClaim{
+						{
+							Name:              "test-name",
+							ResourceClaimName: ptr.To("test-resourceclaim"),
+						},
+					}
+				}),
+			},
+			ignorePodsWithResourceClaims: false,
+			result:                       true,
+		}, {
+			description: "ignorePodsWithResourceClaims is set, pod with ResourceClaims, evicts",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p15", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.ResourceClaims = []v1.PodResourceClaim{
+						{
+							Name:              "test-name",
+							ResourceClaimName: ptr.To("test-resourceclaim"),
+						},
+					}
+				}),
+			},
+			ignorePodsWithResourceClaims: true,
+			result:                       false,
 		},
 	}
 
@@ -900,10 +932,11 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 		PriorityThreshold: &api.PriorityThreshold{
 			Value: test.priorityThreshold,
 		},
-		NodeFit:              test.nodeFit,
-		MinReplicas:          test.minReplicas,
-		MinPodAge:            test.minPodAge,
-		IgnorePodsWithoutPDB: test.ignorePodsWithoutPDB,
+		NodeFit:                      test.nodeFit,
+		MinReplicas:                  test.minReplicas,
+		MinPodAge:                    test.minPodAge,
+		IgnorePodsWithoutPDB:         test.ignorePodsWithoutPDB,
+		IgnorePodsWithResourceClaims: test.ignorePodsWithResourceClaims,
 	}
 
 	evictorPlugin, err := New(

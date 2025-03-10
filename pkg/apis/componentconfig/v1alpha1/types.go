@@ -57,6 +57,9 @@ type DeschedulerConfiguration struct {
 	// IgnorePVCPods sets whether PVC pods should be allowed to be evicted
 	IgnorePVCPods bool `json:"ignorePvcPods,omitempty"`
 
+	// IgnorePodsWithResourceClaims sets whether pods using resource claims should be allowed to be evicted
+	IgnorePodsWithResourceClaims bool `json:"ignorePodsWithResourceClaims,omitempty"`
+
 	// Tracing is used to setup the required OTEL tracing configuration
 	Tracing TracingConfiguration `json:"tracing,omitempty"`
 
