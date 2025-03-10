@@ -136,6 +136,10 @@ func removeDuplicatesPolicy() *api.DeschedulerPolicy {
 }
 
 func lowNodeUtilizationPolicy(thresholds, targetThresholds api.ResourceThresholds, metricsEnabled bool) *api.DeschedulerPolicy {
+	var metricsSource nodeutilization.MetricsSource = ""
+	if metricsEnabled {
+		metricsSource = nodeutilization.KubernetesMetrics
+	}
 	return &api.DeschedulerPolicy{
 		Profiles: []api.DeschedulerProfile{
 			{
@@ -147,7 +151,7 @@ func lowNodeUtilizationPolicy(thresholds, targetThresholds api.ResourceThreshold
 							Thresholds:       thresholds,
 							TargetThresholds: targetThresholds,
 							MetricsUtilization: nodeutilization.MetricsUtilization{
-								MetricsServer: metricsEnabled,
+								Source: metricsSource,
 							},
 						},
 					},

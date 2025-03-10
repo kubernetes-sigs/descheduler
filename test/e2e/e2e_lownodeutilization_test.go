@@ -148,7 +148,7 @@ func TestLowNodeUtilizationKubernetesMetrics(t *testing.T) {
 					v1.ResourcePods: 50,
 				},
 				MetricsUtilization: nodeutilization.MetricsUtilization{
-					MetricsServer: true,
+					Source: nodeutilization.KubernetesMetrics,
 				},
 			},
 			evictorArgs:             &defaultevictor.DefaultEvictorArgs{},
@@ -172,7 +172,7 @@ func TestLowNodeUtilizationKubernetesMetrics(t *testing.T) {
 					v1.ResourcePods: 50,
 				},
 				MetricsUtilization: nodeutilization.MetricsUtilization{
-					MetricsServer: true,
+					Source: nodeutilization.KubernetesMetrics,
 				},
 			},
 			evictorArgs:             &defaultevictor.DefaultEvictorArgs{},
