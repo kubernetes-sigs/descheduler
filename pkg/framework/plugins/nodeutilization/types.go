@@ -28,7 +28,7 @@ type LowNodeUtilizationArgs struct {
 	Thresholds             api.ResourceThresholds `json:"thresholds"`
 	TargetThresholds       api.ResourceThresholds `json:"targetThresholds"`
 	NumberOfNodes          int                    `json:"numberOfNodes,omitempty"`
-	MetricsUtilization     MetricsUtilization     `json:"metricsUtilization,omitempty"`
+	MetricsUtilization     *MetricsUtilization    `json:"metricsUtilization,omitempty"`
 
 	// Naming this one differently since namespaces are still
 	// considered while considering resources used by pods
@@ -45,9 +45,8 @@ type LowNodeUtilizationArgs struct {
 type HighNodeUtilizationArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	Thresholds         api.ResourceThresholds `json:"thresholds"`
-	NumberOfNodes      int                    `json:"numberOfNodes,omitempty"`
-	MetricsUtilization MetricsUtilization     `json:"metricsUtilization,omitempty"`
+	Thresholds    api.ResourceThresholds `json:"thresholds"`
+	NumberOfNodes int                    `json:"numberOfNodes,omitempty"`
 
 	// Naming this one differently since namespaces are still
 	// considered while considering resources used by pods
@@ -59,5 +58,10 @@ type HighNodeUtilizationArgs struct {
 type MetricsUtilization struct {
 	// metricsServer enables metrics from a kubernetes metrics server.
 	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
+	// Deprecated. Use MetricsSource instead.
 	MetricsServer bool `json:"metricsServer,omitempty"`
+
+	// source enables the plugin to consume metrics from a metrics source.
+	// Currently only KubernetesMetrics available.
+	Source api.MetricsSource `json:"source,omitempty"`
 }

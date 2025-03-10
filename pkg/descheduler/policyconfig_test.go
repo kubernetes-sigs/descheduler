@@ -211,6 +211,28 @@ func TestValidateDeschedulerConfiguration(t *testing.T) {
 			},
 			result: fmt.Errorf("[in profile RemoveFailedPods: only one of Include/Exclude namespaces can be set, in profile RemovePodsViolatingTopologySpreadConstraint: only one of Include/Exclude namespaces can be set]"),
 		},
+		{
+			description: "Too many metrics providers error",
+			deschedulerPolicy: api.DeschedulerPolicy{
+				MetricsProviders: []api.MetricsProvider{
+					{Source: api.KubernetesMetrics},
+					{Source: api.KubernetesMetrics},
+				},
+			},
+			result: fmt.Errorf("only a single metrics provider can be set, got 2 instead"),
+		},
+		{
+			description: "Too many metrics providers error",
+			deschedulerPolicy: api.DeschedulerPolicy{
+				MetricsCollector: &api.MetricsCollector{
+					Enabled: true,
+				},
+				MetricsProviders: []api.MetricsProvider{
+					{Source: api.KubernetesMetrics},
+				},
+			},
+			result: fmt.Errorf("it is not allowed to combine metrics provider when metrics collector is enabled"),
+		},
 	}
 
 	for _, tc := range testCases {
