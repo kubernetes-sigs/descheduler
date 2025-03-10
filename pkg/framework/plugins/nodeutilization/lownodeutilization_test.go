@@ -1257,6 +1257,11 @@ func TestLowNodeUtilization(t *testing.T) {
 				}
 				handle.MetricsCollectorImpl = collector
 
+				var metricsSource MetricsSource = ""
+				if metricsEnabled {
+					metricsSource = KubernetesMetrics
+				}
+
 				plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
 					Thresholds:             tc.thresholds,
 					TargetThresholds:       tc.targetThresholds,
@@ -1264,7 +1269,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					EvictionLimits:         tc.evictionLimits,
 					EvictableNamespaces:    tc.evictableNamespaces,
 					MetricsUtilization: MetricsUtilization{
-						MetricsServer: metricsEnabled,
+						Source: metricsSource,
 					},
 				},
 					handle)

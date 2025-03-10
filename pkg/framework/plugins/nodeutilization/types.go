@@ -55,9 +55,22 @@ type HighNodeUtilizationArgs struct {
 	EvictableNamespaces *api.Namespaces `json:"evictableNamespaces,omitempty"`
 }
 
+type MetricsSource string
+
+const (
+	// KubernetesMetrics enables metrics from a Kubernetes metrics server.
+	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
+	KubernetesMetrics MetricsSource = "KubernetesMetrics"
+)
+
 // MetricsUtilization allow to consume actual resource utilization from metrics
 type MetricsUtilization struct {
 	// metricsServer enables metrics from a kubernetes metrics server.
 	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
+	// Deprecated. Use MetricsSource instead.
 	MetricsServer bool `json:"metricsServer,omitempty"`
+
+	// source enables the plugin to consume metrics from a metrics source.
+	// Currently only KubernetesMetrics available.
+	Source MetricsSource `json:source,omitempty`
 }
