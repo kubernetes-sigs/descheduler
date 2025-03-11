@@ -19,6 +19,7 @@ package nodeutilization
 import (
 	"context"
 	"math"
+	"slices"
 	"sort"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -33,6 +34,29 @@ import (
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
+
+// []NodeUsage is a snapshot, so allPods can not be read any time to avoid breaking consistency between the node's actual usage and available pods
+//
+// New data model:
+// - node usage: map[string]api.ReferencedResourceList
+// - thresholds: map[string]api.ReferencedResourceList
+// - all pods:   map[string][]*v1.Pod
+// After classification:
+// - each group will have its own (smaller) node usage and thresholds and allPods
+// Both node usage and thresholds are needed to compute the remaining resources that can be evicted/can accepted evicted pods
+//
+// 1. translate node usages into percentages as float or int64 (how much precision is lost?, maybe use BigInt?)
+// 2. produce thresholds (if they need to be computed, otherwise use user provided, they are already in percentages)
+// 3. classify nodes into groups
+// 4. produces a list of nodes (sorted as before) that have the node usage, the threshold (only one this time) and the snapshottted pod list present
+
+// Data wise
+// Produce separated maps for:
+// - nodes: map[string]*v1.Node
+// - node usage: map[string]api.ReferencedResourceList
+// - thresholds: map[string][]api.ReferencedResourceList
+// - pod list: map[string][]*v1.Pod
+// Once the nodes are classified produce the original []NodeInfo so the code is not that much changed (postponing further refactoring once it is needed)
 
 // NodeUsage stores a node's info, pods on it, thresholds and its resource usage
 type NodeUsage struct {
@@ -53,9 +77,6 @@ type NodeInfo struct {
 
 type continueEvictionCond func(nodeInfo NodeInfo, totalAvailableUsage api.ReferencedResourceList) bool
 
-// NodePodsMap is a set of (node, pods) pairs
-type NodePodsMap map[*v1.Node][]*v1.Pod
-
 const (
 	// MinResourcePercentage is the minimum value of a resource's percentage
 	MinResourcePercentage = 0
@@ -73,66 +94,86 @@ func normalizePercentage(percent api.Percentage) api.Percentage {
 	return percent
 }
 
-func getNodeThresholds(
+func getNodeThresholdsFromAverageNodeUsage(
 	nodes []*v1.Node,
-	lowThreshold, highThreshold api.ResourceThresholds,
-	resourceNames []v1.ResourceName,
-	useDeviationThresholds bool,
 	usageClient usageClient,
-) map[string]NodeThresholds {
-	nodeThresholdsMap := map[string]NodeThresholds{}
-
-	averageResourceUsagePercent := api.ResourceThresholds{}
-	if useDeviationThresholds {
-		averageResourceUsagePercent = averageNodeBasicresources(nodes, usageClient)
-	}
-
+	lowSpan, highSpan api.ResourceThresholds,
+) map[string][]api.ResourceThresholds {
+	total := api.ResourceThresholds{}
+	average := api.ResourceThresholds{}
+	numberOfNodes := len(nodes)
 	for _, node := range nodes {
+		usage := usageClient.nodeUtilization(node.Name)
 		nodeCapacity := node.Status.Capacity
 		if len(node.Status.Allocatable) > 0 {
 			nodeCapacity = node.Status.Allocatable
 		}
-
-		nodeThresholdsMap[node.Name] = NodeThresholds{
-			lowResourceThreshold:  api.ReferencedResourceList{},
-			highResourceThreshold: api.ReferencedResourceList{},
-		}
-
-		for _, resourceName := range resourceNames {
-			if useDeviationThresholds {
-				cap := nodeCapacity[resourceName]
-				if lowThreshold[resourceName] == MinResourcePercentage {
-					nodeThresholdsMap[node.Name].lowResourceThreshold[resourceName] = &cap
-					nodeThresholdsMap[node.Name].highResourceThreshold[resourceName] = &cap
-				} else {
-					nodeThresholdsMap[node.Name].lowResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, normalizePercentage(averageResourceUsagePercent[resourceName]-lowThreshold[resourceName]))
-					nodeThresholdsMap[node.Name].highResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, normalizePercentage(averageResourceUsagePercent[resourceName]+highThreshold[resourceName]))
-				}
+		for resource, value := range usage {
+			nodeCapacityValue := nodeCapacity[resource]
+			if resource == v1.ResourceCPU {
+				total[resource] += api.Percentage(value.MilliValue()) / api.Percentage(nodeCapacityValue.MilliValue()) * 100.0
 			} else {
-				nodeThresholdsMap[node.Name].lowResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, lowThreshold[resourceName])
-				nodeThresholdsMap[node.Name].highResourceThreshold[resourceName] = resourceThreshold(nodeCapacity, resourceName, highThreshold[resourceName])
+				total[resource] += api.Percentage(value.Value()) / api.Percentage(nodeCapacityValue.Value()) * 100.0
 			}
 		}
-
 	}
-	return nodeThresholdsMap
+	lowThreshold, highThreshold := api.ResourceThresholds{}, api.ResourceThresholds{}
+	for resource, value := range total {
+		average[resource] = value / api.Percentage(numberOfNodes)
+		// If either of the spans are 0, ignore the resource. I.e. 0%:5% is invalid.
+		// Any zero span signifies a resource is either not set or is to be ignored.
+		if lowSpan[resource] == MinResourcePercentage || highSpan[resource] == MinResourcePercentage {
+			lowThreshold[resource] = 1
+			highThreshold[resource] = 1
+		} else {
+			lowThreshold[resource] = normalizePercentage(average[resource] - lowSpan[resource])
+			highThreshold[resource] = normalizePercentage(average[resource] + highSpan[resource])
+		}
+	}
+
+	nodeThresholds := make(map[string][]api.ResourceThresholds)
+	for _, node := range nodes {
+		nodeThresholds[node.Name] = []api.ResourceThresholds{
+			lowThreshold,
+			highThreshold,
+		}
+	}
+	return nodeThresholds
 }
 
-func getNodeUsage(
+func getStaticNodeThresholds(
+	nodes []*v1.Node,
+	thresholdsList ...api.ResourceThresholds,
+) map[string][]api.ResourceThresholds {
+	nodeThresholds := make(map[string][]api.ResourceThresholds)
+	for _, node := range nodes {
+		nodeThresholds[node.Name] = append([]api.ResourceThresholds{}, slices.Clone(thresholdsList)...)
+	}
+	return nodeThresholds
+}
+
+// getNodeUsageSnapshot separates the snapshot into easily accesible
+// data chunks so the node usage can be processed separately.
+func getNodeUsageSnapshot(
 	nodes []*v1.Node,
 	usageClient usageClient,
-) []NodeUsage {
-	var nodeUsageList []NodeUsage
+) (
+	map[string]*v1.Node,
+	map[string]api.ReferencedResourceList,
+	map[string][]*v1.Pod,
+) {
+	nodesMap := make(map[string]*v1.Node)
+	// node usage needs to be kept in the original resource quantity since converting to percentages and back is losing precision
+	nodesUsageMap := make(map[string]api.ReferencedResourceList)
+	podListMap := make(map[string][]*v1.Pod)
 
 	for _, node := range nodes {
-		nodeUsageList = append(nodeUsageList, NodeUsage{
-			node:    node,
-			usage:   usageClient.nodeUtilization(node.Name),
-			allPods: usageClient.pods(node.Name),
-		})
+		nodesMap[node.Name] = node
+		nodesUsageMap[node.Name] = usageClient.nodeUtilization(node.Name)
+		podListMap[node.Name] = usageClient.pods(node.Name)
 	}
 
-	return nodeUsageList
+	return nodesMap, nodesUsageMap, podListMap
 }
 
 func resourceThreshold(nodeCapacity v1.ResourceList, resourceName v1.ResourceName, threshold api.Percentage) *resource.Quantity {
@@ -156,54 +197,74 @@ func resourceThreshold(nodeCapacity v1.ResourceList, resourceName v1.ResourceNam
 	return resource.NewQuantity(resourceCapacityFraction(resourceCapacityQuantity.Value()), defaultFormat)
 }
 
+func resourceThresholdsToNodeUsage(resourceThresholds api.ResourceThresholds, node *v1.Node) api.ReferencedResourceList {
+	nodeUsage := make(api.ReferencedResourceList)
+
+	nodeCapacity := node.Status.Capacity
+	if len(node.Status.Allocatable) > 0 {
+		nodeCapacity = node.Status.Allocatable
+	}
+	for resourceName, threshold := range resourceThresholds {
+		nodeUsage[resourceName] = resourceThreshold(nodeCapacity, resourceName, threshold)
+	}
+
+	return nodeUsage
+}
+
 func roundTo2Decimals(percentage float64) float64 {
 	return math.Round(percentage*100) / 100
 }
 
-func resourceUsagePercentages(nodeUsage NodeUsage) map[v1.ResourceName]float64 {
-	nodeCapacity := nodeUsage.node.Status.Capacity
-	if len(nodeUsage.node.Status.Allocatable) > 0 {
-		nodeCapacity = nodeUsage.node.Status.Allocatable
+func resourceUsagePercentages(nodeUsage api.ReferencedResourceList, node *v1.Node, round bool) api.ResourceThresholds {
+	nodeCapacity := node.Status.Capacity
+	if len(node.Status.Allocatable) > 0 {
+		nodeCapacity = node.Status.Allocatable
 	}
 
-	resourceUsagePercentage := map[v1.ResourceName]float64{}
-	for resourceName, resourceUsage := range nodeUsage.usage {
+	resourceUsagePercentage := api.ResourceThresholds{}
+	for resourceName, resourceUsage := range nodeUsage {
 		cap := nodeCapacity[resourceName]
 		if !cap.IsZero() {
-			resourceUsagePercentage[resourceName] = 100 * float64(resourceUsage.MilliValue()) / float64(cap.MilliValue())
-			resourceUsagePercentage[resourceName] = roundTo2Decimals(resourceUsagePercentage[resourceName])
+			value := 100 * float64(resourceUsage.MilliValue()) / float64(cap.MilliValue())
+			if round {
+				value = roundTo2Decimals(float64(value))
+			}
+			resourceUsagePercentage[resourceName] = api.Percentage(value)
 		}
 	}
-
 	return resourceUsagePercentage
 }
 
-// classifyNodes classifies the nodes into low-utilization or high-utilization nodes. If a node lies between
-// low and high thresholds, it is simply ignored.
-func classifyNodes(
-	nodeUsages []NodeUsage,
-	nodeThresholds map[string]NodeThresholds,
-	lowThresholdFilter, highThresholdFilter func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool,
-) ([]NodeInfo, []NodeInfo) {
-	lowNodes, highNodes := []NodeInfo{}, []NodeInfo{}
+func nodeUsageToResourceThresholds(nodeUsage map[string]api.ReferencedResourceList, nodes map[string]*v1.Node) map[string]api.ResourceThresholds {
+	resourceThresholds := make(map[string]api.ResourceThresholds)
+	for nodeName, node := range nodes {
+		resourceThresholds[nodeName] = resourceUsagePercentages(nodeUsage[nodeName], node, false)
+	}
+	return resourceThresholds
+}
 
-	for _, nodeUsage := range nodeUsages {
-		nodeInfo := NodeInfo{
-			NodeUsage:  nodeUsage,
-			thresholds: nodeThresholds[nodeUsage.node.Name],
-		}
-		if lowThresholdFilter(nodeUsage.node, nodeUsage, nodeThresholds[nodeUsage.node.Name]) {
-			klog.InfoS("Node is underutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
-			lowNodes = append(lowNodes, nodeInfo)
-		} else if highThresholdFilter(nodeUsage.node, nodeUsage, nodeThresholds[nodeUsage.node.Name]) {
-			klog.InfoS("Node is overutilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
-			highNodes = append(highNodes, nodeInfo)
-		} else {
-			klog.InfoS("Node is appropriately utilized", "node", klog.KObj(nodeUsage.node), "usage", nodeUsage.usage, "usagePercentage", resourceUsagePercentages(nodeUsage))
+type classifierFnc func(nodeName string, value, threshold api.ResourceThresholds) bool
+
+func classifyNodeUsage(
+	nodeUsageAsNodeThresholds map[string]api.ResourceThresholds,
+	nodeThresholdsMap map[string][]api.ResourceThresholds,
+	classifiers []classifierFnc,
+) []map[string]api.ResourceThresholds {
+	nodeGroups := make([]map[string]api.ResourceThresholds, len(classifiers))
+	for i := range len(classifiers) {
+		nodeGroups[i] = make(map[string]api.ResourceThresholds)
+	}
+
+	for nodeName, nodeUsage := range nodeUsageAsNodeThresholds {
+		for idx, classFnc := range classifiers {
+			if classFnc(nodeName, nodeUsage, nodeThresholdsMap[nodeName][idx]) {
+				nodeGroups[idx][nodeName] = nodeUsage
+				break
+			}
 		}
 	}
 
-	return lowNodes, highNodes
+	return nodeGroups
 }
 
 func usageToKeysAndValues(usage api.ReferencedResourceList) []interface{} {
@@ -418,16 +479,25 @@ func isNodeAboveTargetUtilization(usage NodeUsage, threshold api.ReferencedResou
 	return false
 }
 
-// isNodeWithLowUtilization checks if a node is underutilized
-// All resources have to be below the low threshold
-func isNodeWithLowUtilization(usage NodeUsage, threshold api.ReferencedResourceList) bool {
-	for name, nodeValue := range usage.usage {
-		// usage.lowResourceThreshold[name] < nodeValue
-		if threshold[name].Cmp(*nodeValue) == -1 {
+// isNodeAboveThreshold checks if a node is over a threshold
+// At least one resource has to be above the threshold
+func isNodeAboveThreshold(usage, threshold api.ResourceThresholds) bool {
+	for name, resourceValue := range usage {
+		if threshold[name] < resourceValue {
+			return true
+		}
+	}
+	return false
+}
+
+// isNodeBelowThreshold checks if a node is under a threshold
+// All resources have to be below the threshold
+func isNodeBelowThreshold(usage, threshold api.ResourceThresholds) bool {
+	for name, resourceValue := range usage {
+		if threshold[name] < resourceValue {
 			return false
 		}
 	}
-
 	return true
 }
 
@@ -452,29 +522,4 @@ func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*
 	}
 
 	return nonRemovablePods, removablePods
-}
-
-func averageNodeBasicresources(nodes []*v1.Node, usageClient usageClient) api.ResourceThresholds {
-	total := api.ResourceThresholds{}
-	average := api.ResourceThresholds{}
-	numberOfNodes := len(nodes)
-	for _, node := range nodes {
-		usage := usageClient.nodeUtilization(node.Name)
-		nodeCapacity := node.Status.Capacity
-		if len(node.Status.Allocatable) > 0 {
-			nodeCapacity = node.Status.Allocatable
-		}
-		for resource, value := range usage {
-			nodeCapacityValue := nodeCapacity[resource]
-			if resource == v1.ResourceCPU {
-				total[resource] += api.Percentage(value.MilliValue()) / api.Percentage(nodeCapacityValue.MilliValue()) * 100.0
-			} else {
-				total[resource] += api.Percentage(value.Value()) / api.Percentage(nodeCapacityValue.Value()) * 100.0
-			}
-		}
-	}
-	for resource, value := range total {
-		average[resource] = value / api.Percentage(numberOfNodes)
-	}
-	return average
 }
