@@ -18,7 +18,7 @@ package nodeutilization
 
 import (
 	"context"
-	"math"
+	"maps"
 	"slices"
 	"sort"
 
@@ -28,9 +28,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization/normalizer"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
@@ -85,84 +87,6 @@ const (
 	MaxResourcePercentage = 100
 )
 
-func normalizePercentage(percent api.Percentage) api.Percentage {
-	if percent > MaxResourcePercentage {
-		return MaxResourcePercentage
-	}
-	if percent < MinResourcePercentage {
-		return MinResourcePercentage
-	}
-	return percent
-}
-
-func nodeCapacity(node *v1.Node, nodeUsage api.ReferencedResourceList) v1.ResourceList {
-	capacity := node.Status.Capacity
-	if len(node.Status.Allocatable) > 0 {
-		capacity = node.Status.Allocatable
-	}
-	// the usage captures the metrics resource
-	if _, ok := nodeUsage[MetricResource]; ok {
-		// Make ResourceMetrics 100% => 100 points
-		capacity[MetricResource] = *resource.NewQuantity(int64(100), resource.DecimalSI)
-	}
-	return capacity
-}
-
-func getNodeThresholdsFromAverageNodeUsage(
-	nodes []*v1.Node,
-	usageClient usageClient,
-	lowSpan, highSpan api.ResourceThresholds,
-) (map[string][]api.ResourceThresholds, api.ResourceThresholds) {
-	total := api.ResourceThresholds{}
-	average := api.ResourceThresholds{}
-	numberOfNodes := len(nodes)
-	for _, node := range nodes {
-		usage := usageClient.nodeUtilization(node.Name)
-		nodeCapacity := nodeCapacity(node, usage)
-		for resource, value := range usage {
-			nodeCapacityValue := nodeCapacity[resource]
-			if resource == v1.ResourceCPU {
-				total[resource] += api.Percentage(value.MilliValue()) / api.Percentage(nodeCapacityValue.MilliValue()) * 100.0
-			} else {
-				total[resource] += api.Percentage(value.Value()) / api.Percentage(nodeCapacityValue.Value()) * 100.0
-			}
-		}
-	}
-	lowThreshold, highThreshold := api.ResourceThresholds{}, api.ResourceThresholds{}
-	for resource, value := range total {
-		average[resource] = value / api.Percentage(numberOfNodes)
-		// If either of the spans are 0, ignore the resource. I.e. 0%:5% is invalid.
-		// Any zero span signifies a resource is either not set or is to be ignored.
-		if lowSpan[resource] == MinResourcePercentage || highSpan[resource] == MinResourcePercentage {
-			lowThreshold[resource] = 1
-			highThreshold[resource] = 1
-		} else {
-			lowThreshold[resource] = normalizePercentage(average[resource] - lowSpan[resource])
-			highThreshold[resource] = normalizePercentage(average[resource] + highSpan[resource])
-		}
-	}
-
-	nodeThresholds := make(map[string][]api.ResourceThresholds)
-	for _, node := range nodes {
-		nodeThresholds[node.Name] = []api.ResourceThresholds{
-			lowThreshold,
-			highThreshold,
-		}
-	}
-	return nodeThresholds, average
-}
-
-func getStaticNodeThresholds(
-	nodes []*v1.Node,
-	thresholdsList ...api.ResourceThresholds,
-) map[string][]api.ResourceThresholds {
-	nodeThresholds := make(map[string][]api.ResourceThresholds)
-	for _, node := range nodes {
-		nodeThresholds[node.Name] = append([]api.ResourceThresholds{}, slices.Clone(thresholdsList)...)
-	}
-	return nodeThresholds
-}
-
 // getNodeUsageSnapshot separates the snapshot into easily accesible
 // data chunks so the node usage can be processed separately.
 func getNodeUsageSnapshot(
@@ -187,7 +111,7 @@ func getNodeUsageSnapshot(
 	return nodesMap, nodesUsageMap, podListMap
 }
 
-func resourceThreshold(nodeCapacity v1.ResourceList, resourceName v1.ResourceName, threshold api.Percentage) *resource.Quantity {
+func resourceThreshold(nodeCapacity api.ReferencedResourceList, resourceName v1.ResourceName, threshold api.Percentage) *resource.Quantity {
 	defaultFormat := resource.DecimalSI
 	if resourceName == v1.ResourceMemory {
 		defaultFormat = resource.BinarySI
@@ -200,7 +124,10 @@ func resourceThreshold(nodeCapacity v1.ResourceList, resourceName v1.ResourceNam
 		return int64(float64(threshold) * 0.01 * float64(resourceNodeCapacity))
 	}
 
-	resourceCapacityQuantity := nodeCapacity.Name(resourceName, defaultFormat)
+	resourceCapacityQuantity := &resource.Quantity{Format: defaultFormat}
+	if _, ok := nodeCapacity[resourceName]; ok {
+		resourceCapacityQuantity = nodeCapacity[resourceName]
+	}
 
 	if resourceName == v1.ResourceCPU {
 		return resource.NewMilliQuantity(resourceCapacityFraction(resourceCapacityQuantity.MilliValue()), defaultFormat)
@@ -208,47 +135,17 @@ func resourceThreshold(nodeCapacity v1.ResourceList, resourceName v1.ResourceNam
 	return resource.NewQuantity(resourceCapacityFraction(resourceCapacityQuantity.Value()), defaultFormat)
 }
 
-func resourceThresholdsToNodeUsage(resourceThresholds api.ResourceThresholds, node *v1.Node) api.ReferencedResourceList {
+func resourceThresholdsToNodeUsage(resourceThresholds api.ResourceThresholds, capacity api.ReferencedResourceList, resourceNames []v1.ResourceName) api.ReferencedResourceList {
 	nodeUsage := make(api.ReferencedResourceList)
-
-	nodeCapacity := node.Status.Capacity
-	if len(node.Status.Allocatable) > 0 {
-		nodeCapacity = node.Status.Allocatable
-	}
 	for resourceName, threshold := range resourceThresholds {
-		nodeUsage[resourceName] = resourceThreshold(nodeCapacity, resourceName, threshold)
+		nodeUsage[resourceName] = resourceThreshold(capacity, resourceName, threshold)
 	}
-
-	return nodeUsage
-}
-
-func roundTo2Decimals(percentage float64) float64 {
-	return math.Round(percentage*100) / 100
-}
-
-func resourceUsagePercentages(nodeUsage api.ReferencedResourceList, node *v1.Node, round bool) api.ResourceThresholds {
-	nodeCapacity := nodeCapacity(node, nodeUsage)
-
-	resourceUsagePercentage := api.ResourceThresholds{}
-	for resourceName, resourceUsage := range nodeUsage {
-		cap := nodeCapacity[resourceName]
-		if !cap.IsZero() {
-			value := 100 * float64(resourceUsage.MilliValue()) / float64(cap.MilliValue())
-			if round {
-				value = roundTo2Decimals(float64(value))
-			}
-			resourceUsagePercentage[resourceName] = api.Percentage(value)
+	for _, resourceName := range resourceNames {
+		if _, exists := nodeUsage[resourceName]; !exists {
+			nodeUsage[resourceName] = capacity[resourceName]
 		}
 	}
-	return resourceUsagePercentage
-}
-
-func nodeUsageToResourceThresholds(nodeUsage map[string]api.ReferencedResourceList, nodes map[string]*v1.Node) map[string]api.ResourceThresholds {
-	resourceThresholds := make(map[string]api.ResourceThresholds)
-	for nodeName, node := range nodes {
-		resourceThresholds[nodeName] = resourceUsagePercentages(nodeUsage[nodeName], node, false)
-	}
-	return resourceThresholds
+	return nodeUsage
 }
 
 type classifierFnc func(nodeName string, value, threshold api.ResourceThresholds) bool
@@ -503,8 +400,8 @@ func isNodeAboveTargetUtilization(usage NodeUsage, threshold api.ReferencedResou
 // isNodeAboveThreshold checks if a node is over a threshold
 // At least one resource has to be above the threshold
 func isNodeAboveThreshold(usage, threshold api.ResourceThresholds) bool {
-	for name, resourceValue := range usage {
-		if threshold[name] < resourceValue {
+	for name := range threshold {
+		if threshold[name] < usage[name] {
 			return true
 		}
 	}
@@ -514,8 +411,8 @@ func isNodeAboveThreshold(usage, threshold api.ResourceThresholds) bool {
 // isNodeBelowThreshold checks if a node is under a threshold
 // All resources have to be below the threshold
 func isNodeBelowThreshold(usage, threshold api.ResourceThresholds) bool {
-	for name, resourceValue := range usage {
-		if threshold[name] < resourceValue {
+	for name := range threshold {
+		if threshold[name] < usage[name] {
 			return false
 		}
 	}
@@ -543,4 +440,156 @@ func classifyPods(pods []*v1.Pod, filter func(pod *v1.Pod) bool) ([]*v1.Pod, []*
 	}
 
 	return nonRemovablePods, removablePods
+}
+
+// assessNodesUsagesAndStaticThresholds converts the raw usage data into
+// percentage. Returns the usage (pct) and the thresholds (pct) for each
+// node.
+func assessNodesUsagesAndStaticThresholds(
+	rawUsages, rawCapacities map[string]api.ReferencedResourceList,
+	lowSpan, highSpan api.ResourceThresholds,
+) (map[string]api.ResourceThresholds, map[string][]api.ResourceThresholds) {
+	// first we normalize the node usage from the raw data (Mi, Gi, etc)
+	// into api.Percentage values.
+	usage := normalizer.Normalize(
+		rawUsages, rawCapacities, ResourceUsageToResourceThreshold,
+	)
+
+	// we are not taking the average and applying deviations to it we can
+	// simply replicate the same threshold across all nodes and return.
+	thresholds := normalizer.Replicate(
+		slices.Collect(maps.Keys(usage)),
+		[]api.ResourceThresholds{lowSpan, highSpan},
+	)
+	return usage, thresholds
+}
+
+// assessNodesUsagesAndRelativeThresholds converts the raw usage data into
+// percentage. Thresholds are calculated based on the average usage. Returns
+// the usage (pct) and the thresholds (pct) for each node.
+func assessNodesUsagesAndRelativeThresholds(
+	rawUsages, rawCapacities map[string]api.ReferencedResourceList,
+	lowSpan, highSpan api.ResourceThresholds,
+) (map[string]api.ResourceThresholds, map[string][]api.ResourceThresholds) {
+	// first we normalize the node usage from the raw data (Mi, Gi, etc)
+	// into api.Percentage values.
+	usage := normalizer.Normalize(
+		rawUsages, rawCapacities, ResourceUsageToResourceThreshold,
+	)
+
+	// calculate the average usage and then deviate it according to the
+	// user provided thresholds.
+	average := normalizer.Average(usage)
+
+	// calculate the average usage and then deviate it according to the
+	// user provided thresholds. We also ensure that the value after the
+	// deviation is at least 1%. this call also replicates the thresholds
+	// across all nodes.
+	thresholds := normalizer.Replicate(
+		slices.Collect(maps.Keys(usage)),
+		normalizer.Map(
+			[]api.ResourceThresholds{
+				normalizer.Sum(average, normalizer.Negate(lowSpan)),
+				normalizer.Sum(average, highSpan),
+			},
+			func(thresholds api.ResourceThresholds) api.ResourceThresholds {
+				return normalizer.Clamp(thresholds, 0, 100)
+			},
+		),
+	)
+
+	return usage, thresholds
+}
+
+// referencedResourceListForNodesCapacity returns a ReferencedResourceList for
+// the capacity of a list of nodes. If allocatable resources are present, they
+// are used instead of capacity.
+func referencedResourceListForNodesCapacity(nodes []*v1.Node) map[string]api.ReferencedResourceList {
+	capacities := map[string]api.ReferencedResourceList{}
+	for _, node := range nodes {
+		capacity := node.Status.Capacity
+		if len(node.Status.Allocatable) > 0 {
+			capacity = node.Status.Allocatable
+		}
+
+		referenced := api.ReferencedResourceList{}
+		for name, quantity := range capacity {
+			referenced[name] = ptr.To(quantity)
+		}
+
+		// XXX the descheduler also manages monitoring queries that are
+		// supposed to return a value representing a percentage of the
+		// resource usage. In this case we need to provide a value for
+		// the MetricResource, which is not present in the node capacity.
+		referenced[MetricResource] = resource.NewQuantity(
+			100, resource.DecimalSI,
+		)
+
+		capacities[node.Name] = referenced
+	}
+	return capacities
+}
+
+// ResourceUsage2ResourceThreshold is an implementation of a Normalizer that
+// converts a set of resource usages and totals into percentage. This function
+// operates on Quantity Value() for all the resources except CPU, where it uses
+// MilliValue().
+func ResourceUsageToResourceThreshold(
+	usages, totals api.ReferencedResourceList,
+) api.ResourceThresholds {
+	result := api.ResourceThresholds{}
+	for rname, value := range usages {
+		if value == nil || totals[rname] == nil {
+			continue
+		}
+
+		total := totals[rname]
+		used, capacity := value.Value(), total.Value()
+		if rname == v1.ResourceCPU {
+			used, capacity = value.MilliValue(), total.MilliValue()
+		}
+
+		var percent float64
+		if capacity > 0 {
+			percent = float64(used) / float64(capacity) * 100
+		}
+
+		result[rname] = api.Percentage(percent)
+	}
+	return result
+}
+
+// uniquifyResourceNames returns a slice of resource names with duplicates
+// removed.
+func uniquifyResourceNames(resourceNames []v1.ResourceName) []v1.ResourceName {
+	resourceNamesMap := map[v1.ResourceName]bool{
+		v1.ResourceCPU:    true,
+		v1.ResourceMemory: true,
+		v1.ResourcePods:   true,
+	}
+	for _, resourceName := range resourceNames {
+		resourceNamesMap[resourceName] = true
+	}
+	extendedResourceNames := []v1.ResourceName{}
+	for resourceName := range resourceNamesMap {
+		extendedResourceNames = append(extendedResourceNames, resourceName)
+	}
+	return extendedResourceNames
+}
+
+// filterResourceNamesFromNodeUsage removes from the node usage slice all keys
+// that are not present in the resourceNames slice.
+func filterResourceNamesFromNodeUsage(
+	nodeUsage map[string]api.ReferencedResourceList, resourceNames []v1.ResourceName,
+) map[string]api.ReferencedResourceList {
+	newNodeUsage := make(map[string]api.ReferencedResourceList)
+	for nodeName, usage := range nodeUsage {
+		newNodeUsage[nodeName] = api.ReferencedResourceList{}
+		for _, resourceName := range resourceNames {
+			if _, exists := usage[resourceName]; exists {
+				newNodeUsage[nodeName][resourceName] = usage[resourceName]
+			}
+		}
+	}
+	return newNodeUsage
 }
