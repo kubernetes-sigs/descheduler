@@ -122,21 +122,63 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 		}
 	}
 
-	lowNodes, sourceNodes := classifyNodes(
-		getNodeUsage(nodes, l.usageClient),
-		getNodeThresholds(nodes, l.args.Thresholds, l.args.TargetThresholds, l.resourceNames, l.args.UseDeviationThresholds, l.usageClient),
-		// The node has to be schedulable (to be able to move workload there)
-		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
-			if nodeutil.IsNodeUnschedulable(node) {
-				klog.V(2).InfoS("Node is unschedulable, thus not considered as underutilized", "node", klog.KObj(node))
-				return false
-			}
-			return isNodeWithLowUtilization(usage, threshold.lowResourceThreshold)
-		},
-		func(node *v1.Node, usage NodeUsage, threshold NodeThresholds) bool {
-			return isNodeAboveTargetUtilization(usage, threshold.highResourceThreshold)
+	nodesMap, nodesUsageMap, podListMap := getNodeUsageSnapshot(nodes, l.usageClient)
+	var nodeThresholdsMap map[string][]api.ResourceThresholds
+	if l.args.UseDeviationThresholds {
+		nodeThresholdsMap = getNodeThresholdsFromAverageNodeUsage(nodes, l.usageClient, l.args.Thresholds, l.args.TargetThresholds)
+	} else {
+		nodeThresholdsMap = getStaticNodeThresholds(nodes, l.args.Thresholds, l.args.TargetThresholds)
+	}
+	nodesUsageAsNodeThresholdsMap := nodeUsageToResourceThresholds(nodesUsageMap, nodesMap)
+
+	nodeGroups := classifyNodeUsage(
+		nodesUsageAsNodeThresholdsMap,
+		nodeThresholdsMap,
+		[]classifierFnc{
+			// underutilization
+			func(nodeName string, usage, threshold api.ResourceThresholds) bool {
+				if nodeutil.IsNodeUnschedulable(nodesMap[nodeName]) {
+					klog.V(2).InfoS("Node is unschedulable, thus not considered as underutilized", "node", klog.KObj(nodesMap[nodeName]))
+					return false
+				}
+				return isNodeBelowThreshold(usage, threshold)
+			},
+			// overutilization
+			func(nodeName string, usage, threshold api.ResourceThresholds) bool {
+				return isNodeAboveThreshold(usage, threshold)
+			},
 		},
 	)
+
+	// convert groups node []NodeInfo
+	nodeInfos := make([][]NodeInfo, 2)
+	category := []string{"underutilized", "overutilized"}
+	listedNodes := map[string]struct{}{}
+	for i := range nodeGroups {
+		for nodeName := range nodeGroups[i] {
+			klog.InfoS("Node is "+category[i], "node", klog.KObj(nodesMap[nodeName]), "usage", nodesUsageMap[nodeName], "usagePercentage", resourceUsagePercentages(nodesUsageMap[nodeName], nodesMap[nodeName], true))
+			listedNodes[nodeName] = struct{}{}
+			nodeInfos[i] = append(nodeInfos[i], NodeInfo{
+				NodeUsage: NodeUsage{
+					node:    nodesMap[nodeName],
+					usage:   nodesUsageMap[nodeName], // get back the original node usage
+					allPods: podListMap[nodeName],
+				},
+				thresholds: NodeThresholds{
+					lowResourceThreshold:  resourceThresholdsToNodeUsage(nodeThresholdsMap[nodeName][0], nodesMap[nodeName]),
+					highResourceThreshold: resourceThresholdsToNodeUsage(nodeThresholdsMap[nodeName][1], nodesMap[nodeName]),
+				},
+			})
+		}
+	}
+	for nodeName := range nodesMap {
+		if _, ok := listedNodes[nodeName]; !ok {
+			klog.InfoS("Node is appropriately utilized", "node", klog.KObj(nodesMap[nodeName]), "usage", nodesUsageMap[nodeName], "usagePercentage", resourceUsagePercentages(nodesUsageMap[nodeName], nodesMap[nodeName], true))
+		}
+	}
+
+	lowNodes := nodeInfos[0]
+	sourceNodes := nodeInfos[1]
 
 	// log message for nodes with low utilization
 	klog.V(1).InfoS("Criteria for a node under utilization", l.underutilizationCriteria...)

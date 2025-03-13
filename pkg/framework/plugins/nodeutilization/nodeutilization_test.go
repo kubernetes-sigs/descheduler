@@ -57,8 +57,13 @@ var (
 )
 
 func TestResourceUsagePercentages(t *testing.T) {
-	resourceUsagePercentage := resourceUsagePercentages(NodeUsage{
-		node: &v1.Node{
+	resourceUsagePercentage := resourceUsagePercentages(
+		api.ReferencedResourceList{
+			v1.ResourceCPU:    resource.NewMilliQuantity(1220, resource.DecimalSI),
+			v1.ResourceMemory: resource.NewQuantity(3038982964, resource.BinarySI),
+			v1.ResourcePods:   resource.NewQuantity(11, resource.BinarySI),
+		},
+		&v1.Node{
 			Status: v1.NodeStatus{
 				Capacity: v1.ResourceList{
 					v1.ResourceCPU:    *resource.NewMilliQuantity(2000, resource.DecimalSI),
@@ -72,12 +77,8 @@ func TestResourceUsagePercentages(t *testing.T) {
 				},
 			},
 		},
-		usage: api.ReferencedResourceList{
-			v1.ResourceCPU:    resource.NewMilliQuantity(1220, resource.DecimalSI),
-			v1.ResourceMemory: resource.NewQuantity(3038982964, resource.BinarySI),
-			v1.ResourcePods:   resource.NewQuantity(11, resource.BinarySI),
-		},
-	})
+		true,
+	)
 
 	expectedUsageInIntPercentage := map[v1.ResourceName]float64{
 		v1.ResourceCPU:    63,
@@ -86,7 +87,7 @@ func TestResourceUsagePercentages(t *testing.T) {
 	}
 
 	for resourceName, percentage := range expectedUsageInIntPercentage {
-		if math.Floor(resourceUsagePercentage[resourceName]) != percentage {
+		if math.Floor(float64(resourceUsagePercentage[resourceName])) != percentage {
 			t.Errorf("Incorrect percentange computation, expected %v, got math.Floor(%v) instead", percentage, resourceUsagePercentage[resourceName])
 		}
 	}
