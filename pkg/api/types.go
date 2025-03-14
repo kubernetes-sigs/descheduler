@@ -48,7 +48,11 @@ type DeschedulerPolicy struct {
 	EvictionFailureEventNotification *bool
 
 	// MetricsCollector configures collection of metrics about actual resource utilization
-	MetricsCollector MetricsCollector
+	// Deprecated. Use MetricsProviders field instead.
+	MetricsCollector *MetricsCollector
+
+	// MetricsProviders configure collection of metrics about actual resource utilization from various sources
+	MetricsProviders []MetricsProvider
 
 	// GracePeriodSeconds The duration in seconds before the object should be deleted. Value must be non-negative integer.
 	// The value zero indicates delete immediately. If this value is nil, the default grace period for the
@@ -105,11 +109,25 @@ type PluginSet struct {
 	Disabled []string
 }
 
+type MetricsSource string
+
+const (
+	// KubernetesMetrics enables metrics from a Kubernetes metrics server.
+	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
+	KubernetesMetrics MetricsSource = "KubernetesMetrics"
+)
+
 // MetricsCollector configures collection of metrics about actual resource utilization
 type MetricsCollector struct {
-	// Enabled metrics collection from kubernetes metrics.
-	// Later, the collection can be extended to other providers.
+	// Enabled metrics collection from Kubernetes metrics.
+	// Deprecated. Use MetricsProvider.Source field instead.
 	Enabled bool
+}
+
+// MetricsProvider configures collection of metrics about actual resource utilization from a given source
+type MetricsProvider struct {
+	// Source enables metrics from Kubernetes metrics server.
+	Source MetricsSource
 }
 
 // ReferencedResourceList is an adaption of v1.ResourceList with resources as references

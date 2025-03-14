@@ -89,7 +89,8 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 	resourceNames := getResourceNames(lowNodeUtilizationArgsArgs.Thresholds)
 
 	var usageClient usageClient
-	if lowNodeUtilizationArgsArgs.MetricsUtilization.MetricsServer {
+	// MetricsServer is deprecated, removed once dropped
+	if lowNodeUtilizationArgsArgs.MetricsUtilization != nil && (lowNodeUtilizationArgsArgs.MetricsUtilization.MetricsServer || lowNodeUtilizationArgsArgs.MetricsUtilization.Source == api.KubernetesMetrics) {
 		if handle.MetricsCollector() == nil {
 			return nil, fmt.Errorf("metrics client not initialized")
 		}

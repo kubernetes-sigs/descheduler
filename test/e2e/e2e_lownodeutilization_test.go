@@ -43,7 +43,7 @@ import (
 
 func lowNodeUtilizationPolicy(lowNodeUtilizationArgs *nodeutilization.LowNodeUtilizationArgs, evictorArgs *defaultevictor.DefaultEvictorArgs, metricsCollectorEnabled bool) *apiv1alpha2.DeschedulerPolicy {
 	return &apiv1alpha2.DeschedulerPolicy{
-		MetricsCollector: apiv1alpha2.MetricsCollector{
+		MetricsCollector: &apiv1alpha2.MetricsCollector{
 			Enabled: metricsCollectorEnabled,
 		},
 		Profiles: []apiv1alpha2.DeschedulerProfile{
@@ -147,8 +147,8 @@ func TestLowNodeUtilizationKubernetesMetrics(t *testing.T) {
 					v1.ResourceCPU:  50,
 					v1.ResourcePods: 50,
 				},
-				MetricsUtilization: nodeutilization.MetricsUtilization{
-					MetricsServer: true,
+				MetricsUtilization: &nodeutilization.MetricsUtilization{
+					Source: api.KubernetesMetrics,
 				},
 			},
 			evictorArgs:             &defaultevictor.DefaultEvictorArgs{},
@@ -171,8 +171,8 @@ func TestLowNodeUtilizationKubernetesMetrics(t *testing.T) {
 					v1.ResourceCPU:  50,
 					v1.ResourcePods: 50,
 				},
-				MetricsUtilization: nodeutilization.MetricsUtilization{
-					MetricsServer: true,
+				MetricsUtilization: &nodeutilization.MetricsUtilization{
+					Source: api.KubernetesMetrics,
 				},
 			},
 			evictorArgs:             &defaultevictor.DefaultEvictorArgs{},

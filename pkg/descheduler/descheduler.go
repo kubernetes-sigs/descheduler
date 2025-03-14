@@ -166,7 +166,7 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 	}
 
 	var metricsCollector *metricscollector.MetricsCollector
-	if deschedulerPolicy.MetricsCollector.Enabled {
+	if (deschedulerPolicy.MetricsCollector != nil && deschedulerPolicy.MetricsCollector.Enabled) || (len(deschedulerPolicy.MetricsProviders) > 0 && deschedulerPolicy.MetricsProviders[0].Source == api.KubernetesMetrics) {
 		nodeSelector := labels.Everything()
 		if deschedulerPolicy.NodeSelector != nil {
 			sel, err := labels.Parse(*deschedulerPolicy.NodeSelector)
@@ -332,7 +332,7 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 		return err
 	}
 
-	if deschedulerPolicy.MetricsCollector.Enabled {
+	if (deschedulerPolicy.MetricsCollector != nil && deschedulerPolicy.MetricsCollector.Enabled) || (len(deschedulerPolicy.MetricsProviders) > 0 && deschedulerPolicy.MetricsProviders[0].Source == api.KubernetesMetrics) {
 		metricsClient, err := client.CreateMetricsClient(clientConnection, "descheduler")
 		if err != nil {
 			return err
@@ -448,7 +448,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 	descheduler.podEvictor.WaitForEventHandlersSync(ctx)
 
-	if deschedulerPolicy.MetricsCollector.Enabled {
+	if (deschedulerPolicy.MetricsCollector != nil && deschedulerPolicy.MetricsCollector.Enabled) || (len(deschedulerPolicy.MetricsProviders) > 0 && deschedulerPolicy.MetricsProviders[0].Source == api.KubernetesMetrics) {
 		go func() {
 			klog.V(2).Infof("Starting metrics collector")
 			descheduler.metricsCollector.Run(ctx)

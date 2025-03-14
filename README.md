@@ -124,10 +124,21 @@ These are top level keys in the Descheduler Policy that you can use to configure
 | `maxNoOfPodsToEvictPerNode`        | `int`    | `nil`         | Maximum number of pods evicted from each node (summed through all strategies).                                             |
 | `maxNoOfPodsToEvictPerNamespace`   | `int`    | `nil`         | Maximum number of pods evicted from each namespace (summed through all strategies).                                        |
 | `maxNoOfPodsToEvictTotal`          | `int`    | `nil`         | Maximum number of pods evicted per rescheduling cycle (summed through all strategies).                                     |
-| `metricsCollector`                 | `object` | `nil`         | Configures collection of metrics for actual resource utilization.                                                          |
+| `metricsCollector` (deprecated)    | `object` | `nil`         | Configures collection of metrics for actual resource utilization.                                                          |
 | `metricsCollector.enabled`         | `bool`   | `false`       | Enables Kubernetes [Metrics Server](https://kubernetes-sigs.github.io/metrics-server/) collection.                         |
+| `metricsProviders`                 | `[]object` | `nil`       | Enables various metrics providers like Kubernetes [Metrics Server](https://kubernetes-sigs.github.io/metrics-server/)      |
 | `evictionFailureEventNotification` | `bool`   | `false`       | Enables eviction failure event notification.                                                                               |
 | `gracePeriodSeconds`               | `int`    | `0`           | The duration in seconds before the object should be deleted. The value zero indicates delete immediately.                  |
+
+The descheduler currently allows to configure a metric collection of Kubernetes Metrics through `metricsProviders` field.
+The previous way of setting `metricsCollector` field is deprecated. There is currently one source to configure:
+```
+metricsProviders:
+- source: KubernetesMetrics
+```
+The list can be extended with other metrics providers in the future.
+In general, each plugin can consume metrics from a different provider so multiple distinct providers can be configured in parallel.
+
 
 ### Evictor Plugin configuration (Default Evictor)
 
@@ -163,8 +174,9 @@ maxNoOfPodsToEvictPerNode: 5000 # you don't need to set this, unlimited if not s
 maxNoOfPodsToEvictPerNamespace: 5000 # you don't need to set this, unlimited if not set
 maxNoOfPodsToEvictTotal: 5000 # you don't need to set this, unlimited if not set
 gracePeriodSeconds: 60 # you don't need to set this, 0 if not set
-metricsCollector:
-  enabled: true # you don't need to set this, metrics are not collected if not set
+# you don't need to set this, Kubernetes metrics are not collected if not set
+metricsProviders:
+- source: KubernetesMetrics
 profiles:
   - name: ProfileName
     pluginConfig:
@@ -288,9 +300,10 @@ A resource consumption above (resp. below) this window is considered as overutil
 This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same
 design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands
 like `kubectl top`) may differ from the calculated consumption, due to these components reporting
-actual usage metrics. Metrics-based descheduling can be enabled by setting `metricsUtilization.metricsServer` field.
-In order to have the plugin consume the metrics the metric collector needs to be configured as well.
-See `metricsCollector` field at [Top Level configuration](#top-level-configuration) for available options.
+actual usage metrics. Metrics-based descheduling can be enabled by setting `metricsUtilization.metricsServer` field (deprecated)
+or `metricsUtilization.source` field to `KubernetesMetrics`.
+In order to have the plugin consume the metrics the metric provider needs to be configured as well.
+See `metricsProviders` field at [Top Level configuration](#top-level-configuration) for available options.
 
 **Parameters:**
 
@@ -303,7 +316,8 @@ See `metricsCollector` field at [Top Level configuration](#top-level-configurati
 |`evictionLimits`|object|
 |`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
 |`metricsUtilization`|object|
-|`metricsUtilization.metricsServer`|bool|
+|`metricsUtilization.metricsServer` (deprecated)|bool|
+|`metricsUtilization.source`|string|
 
 
 **Example:**
@@ -325,7 +339,7 @@ profiles:
           "memory": 50
           "pods": 50
         metricsUtilization:
-          metricsServer: true
+          source: KubernetesMetrics
         evictionLimits:
           node: 5
     plugins:

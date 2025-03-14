@@ -96,8 +96,8 @@ deschedulerPolicy:
   # nodeSelector: "key1=value1,key2=value2"
   # maxNoOfPodsToEvictPerNode: 10
   # maxNoOfPodsToEvictPerNamespace: 10
-  # metricsCollector:
-  #   enabled: true
+  # metricsProviders:
+  # - source: KubernetesMetrics
   # ignorePvcPods: true
   # evictLocalStoragePods: true
   # evictDaemonSetPods: true

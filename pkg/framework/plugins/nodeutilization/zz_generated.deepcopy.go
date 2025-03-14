@@ -37,7 +37,6 @@ func (in *HighNodeUtilizationArgs) DeepCopyInto(out *HighNodeUtilizationArgs) {
 			(*out)[key] = val
 		}
 	}
-	out.MetricsUtilization = in.MetricsUtilization
 	if in.EvictableNamespaces != nil {
 		in, out := &in.EvictableNamespaces, &out.EvictableNamespaces
 		*out = new(api.Namespaces)
@@ -82,7 +81,11 @@ func (in *LowNodeUtilizationArgs) DeepCopyInto(out *LowNodeUtilizationArgs) {
 			(*out)[key] = val
 		}
 	}
-	out.MetricsUtilization = in.MetricsUtilization
+	if in.MetricsUtilization != nil {
+		in, out := &in.MetricsUtilization, &out.MetricsUtilization
+		*out = new(MetricsUtilization)
+		**out = **in
+	}
 	if in.EvictableNamespaces != nil {
 		in, out := &in.EvictableNamespaces, &out.EvictableNamespaces
 		*out = new(api.Namespaces)

@@ -137,11 +137,11 @@ func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interfac
 }
 
 func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginregistry.Registry) error {
-	var errorsInProfiles []error
+	var errorsInPolicy []error
 	for _, profile := range in.Profiles {
 		for _, pluginConfig := range profile.PluginConfigs {
 			if _, ok := registry[pluginConfig.Name]; !ok {
-				errorsInProfiles = append(errorsInProfiles, fmt.Errorf("in profile %s: plugin %s in pluginConfig not registered", profile.Name, pluginConfig.Name))
+				errorsInPolicy = append(errorsInPolicy, fmt.Errorf("in profile %s: plugin %s in pluginConfig not registered", profile.Name, pluginConfig.Name))
 				continue
 			}
 
@@ -150,9 +150,15 @@ func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginr
 				continue
 			}
 			if err := pluginUtilities.PluginArgValidator(pluginConfig.Args); err != nil {
-				errorsInProfiles = append(errorsInProfiles, fmt.Errorf("in profile %s: %s", profile.Name, err.Error()))
+				errorsInPolicy = append(errorsInPolicy, fmt.Errorf("in profile %s: %s", profile.Name, err.Error()))
 			}
 		}
 	}
-	return utilerrors.NewAggregate(errorsInProfiles)
+	if len(in.MetricsProviders) > 1 {
+		errorsInPolicy = append(errorsInPolicy, fmt.Errorf("only a single metrics provider can be set, got %v instead", len(in.MetricsProviders)))
+	}
+	if len(in.MetricsProviders) > 0 && in.MetricsCollector != nil && in.MetricsCollector.Enabled {
+		errorsInPolicy = append(errorsInPolicy, fmt.Errorf("it is not allowed to combine metrics provider when metrics collector is enabled"))
+	}
+	return utilerrors.NewAggregate(errorsInPolicy)
 }
