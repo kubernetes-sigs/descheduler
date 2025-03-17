@@ -183,6 +183,65 @@ func TestValidateLowNodeUtilizationPluginConfig(t *testing.T) {
 			},
 			errInfo: nil,
 		},
+		{
+			name: "setting both kubernetes metrics source and metricsserver",
+			args: &LowNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    20,
+					v1.ResourceMemory: 20,
+					extendedResource:  20,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    80,
+					v1.ResourceMemory: 80,
+					extendedResource:  80,
+				},
+				MetricsUtilization: &MetricsUtilization{
+					MetricsServer: true,
+					Source:        api.KubernetesMetrics,
+				},
+			},
+			errInfo: fmt.Errorf("it is not allowed to set both \"KubernetesMetrics\" source and metricsServer"),
+		},
+		{
+			name: "missing prometheus query",
+			args: &LowNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    20,
+					v1.ResourceMemory: 20,
+					extendedResource:  20,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    80,
+					v1.ResourceMemory: 80,
+					extendedResource:  80,
+				},
+				MetricsUtilization: &MetricsUtilization{
+					Source: api.PrometheusMetrics,
+				},
+			},
+			errInfo: fmt.Errorf("prometheus query is required when metrics source is set to \"Prometheus\""),
+		},
+		{
+			name: "prometheus set when source set to kubernetes metrics",
+			args: &LowNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    20,
+					v1.ResourceMemory: 20,
+					extendedResource:  20,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    80,
+					v1.ResourceMemory: 80,
+					extendedResource:  80,
+				},
+				MetricsUtilization: &MetricsUtilization{
+					Source:     api.KubernetesMetrics,
+					Prometheus: &Prometheus{},
+				},
+			},
+			errInfo: fmt.Errorf("prometheus configuration is not allowed to set when source is set to \"KubernetesMetrics\""),
+		},
 	}
 
 	for _, testCase := range tests {
@@ -190,10 +249,10 @@ func TestValidateLowNodeUtilizationPluginConfig(t *testing.T) {
 			validateErr := ValidateLowNodeUtilizationArgs(runtime.Object(testCase.args))
 			if validateErr == nil || testCase.errInfo == nil {
 				if validateErr != testCase.errInfo {
-					t.Errorf("expected validity of plugin config: %v but got %v instead", testCase.errInfo, validateErr)
+					t.Errorf("expected validity of plugin config: %q but got %q instead", testCase.errInfo, validateErr)
 				}
 			} else if validateErr.Error() != testCase.errInfo.Error() {
-				t.Errorf("expected validity of plugin config: %v but got %v instead", testCase.errInfo, validateErr)
+				t.Errorf("expected validity of plugin config: %q but got %q instead", testCase.errInfo, validateErr)
 			}
 		})
 	}

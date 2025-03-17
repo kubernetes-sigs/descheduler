@@ -129,14 +129,18 @@ These are top level keys in the Descheduler Policy that you can use to configure
 | `metricsProviders`                 | `[]object` | `nil`       | Enables various metrics providers like Kubernetes [Metrics Server](https://kubernetes-sigs.github.io/metrics-server/)      |
 | `evictionFailureEventNotification` | `bool`   | `false`       | Enables eviction failure event notification.                                                                               |
 | `gracePeriodSeconds`               | `int`    | `0`           | The duration in seconds before the object should be deleted. The value zero indicates delete immediately.                  |
+| `prometheus` |`object`| `nil` | Configures collection of Prometheus metrics for actual resource utilization |
+| `prometheus.url` |`string`| `nil` | Points to a Prometheus server url |
+| `prometheus.authToken` |`object`| `nil` | Sets Prometheus server authentication token. If not specified in cluster authentication token from the container's file system is read. |
+| `prometheus.authToken.secretReference` |`object`| `nil` | Read the authentication token from a kubernetes secret (the secret is expected to contain the token under `prometheusAuthToken` data key) |
+| `prometheus.authToken.secretReference.namespace` |`string`| `nil` | Authentication token kubernetes secret namespace (currently, the RBAC configuration permits retrieving secrets from the `kube-system` namespace. If the secret needs to be accessed from a different namespace, the existing RBAC rules must be explicitly extended. |
+| `prometheus.authToken.secretReference.name` |`string`| `nil` | Authentication token kubernetes secret name |
 
 The descheduler currently allows to configure a metric collection of Kubernetes Metrics through `metricsProviders` field.
-The previous way of setting `metricsCollector` field is deprecated. There is currently one source to configure:
-```
-metricsProviders:
-- source: KubernetesMetrics
-```
-The list can be extended with other metrics providers in the future.
+The previous way of setting `metricsCollector` field is deprecated. There are currently two sources to configure:
+- `KubernetesMetrics`: enables metrics collection from Kubernetes Metrics server
+- `Prometheus`: enables metrics collection from Prometheus server
+
 In general, each plugin can consume metrics from a different provider so multiple distinct providers can be configured in parallel.
 
 
@@ -174,9 +178,15 @@ maxNoOfPodsToEvictPerNode: 5000 # you don't need to set this, unlimited if not s
 maxNoOfPodsToEvictPerNamespace: 5000 # you don't need to set this, unlimited if not set
 maxNoOfPodsToEvictTotal: 5000 # you don't need to set this, unlimited if not set
 gracePeriodSeconds: 60 # you don't need to set this, 0 if not set
-# you don't need to set this, Kubernetes metrics are not collected if not set
+# you don't need to set this, metrics are not collected if not set
 metricsProviders:
-- source: KubernetesMetrics
+- source: Prometheus
+  prometheus:
+    url: http://prometheus-kube-prometheus-prometheus.prom.svc.cluster.local
+    authToken:
+      secretReference:
+        namespace: "kube-system"
+        name: "authtoken"
 profiles:
   - name: ProfileName
     pluginConfig:
@@ -303,6 +313,10 @@ like `kubectl top`) may differ from the calculated consumption, due to these com
 actual usage metrics. Metrics-based descheduling can be enabled by setting `metricsUtilization.metricsServer` field (deprecated)
 or `metricsUtilization.source` field to `KubernetesMetrics`.
 In order to have the plugin consume the metrics the metric provider needs to be configured as well.
+Alternatively, it is possible to create a prometheus client and configure a prometheus query to consume
+metrics outside of the kubernetes metrics server. The query is expected to return a vector of values for
+each node. The values are expected to be any real number within <0; 1> interval. During eviction only
+a single pod is evicted at most from each overutilized node. There's currently no support for evicting more.
 See `metricsProviders` field at [Top Level configuration](#top-level-configuration) for available options.
 
 **Parameters:**
@@ -318,6 +332,7 @@ See `metricsProviders` field at [Top Level configuration](#top-level-configurati
 |`metricsUtilization`|object|
 |`metricsUtilization.metricsServer` (deprecated)|bool|
 |`metricsUtilization.source`|string|
+|`metricsUtilization.prometheus.query`|string|
 
 
 **Example:**
@@ -338,8 +353,10 @@ profiles:
           "cpu" : 50
           "memory": 50
           "pods": 50
-        metricsUtilization:
-          source: KubernetesMetrics
+        # metricsUtilization:
+        #   source: Prometheus
+        #   prometheus:
+        #     query: instance:node_cpu:rate:sum
         evictionLimits:
           node: 5
     plugins:

@@ -90,6 +90,9 @@ const (
 	// KubernetesMetrics enables metrics from a Kubernetes metrics server.
 	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
 	KubernetesMetrics MetricsSource = "KubernetesMetrics"
+
+	// KubernetesMetrics enables metrics from a Prometheus metrics server.
+	PrometheusMetrics MetricsSource = "Prometheus"
 )
 
 // MetricsCollector configures collection of metrics about actual resource utilization
@@ -103,4 +106,29 @@ type MetricsCollector struct {
 type MetricsProvider struct {
 	// Source enables metrics from Kubernetes metrics server.
 	Source MetricsSource `json:"source,omitempty"`
+
+	// Prometheus enables metrics collection through Prometheus
+	Prometheus *Prometheus `json:"prometheus,omitempty"`
+}
+
+type Prometheus struct {
+	URL string `json:"url,omitempty"`
+	// authToken used for authentication with the prometheus server.
+	// If not set the in cluster authentication token for the descheduler service
+	// account is read from the container's file system.
+	AuthToken *AuthToken `json:"authToken,omitempty"`
+}
+
+type AuthToken struct {
+	// secretReference references an authentication token.
+	// secrets are expected to be created under the descheduler's namespace.
+	SecretReference *SecretReference `json:"secretReference,omitempty"`
+}
+
+// SecretReference holds a reference to a Secret
+type SecretReference struct {
+	// namespace is the namespace of the secret.
+	Namespace string `json:"namespace,omitempty"`
+	// name is the name of the secret.
+	Name string `json:"name,omitempty"`
 }

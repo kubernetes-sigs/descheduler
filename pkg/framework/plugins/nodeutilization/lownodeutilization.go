@@ -55,7 +55,23 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 		return nil, fmt.Errorf("want args to be of type LowNodeUtilizationArgs, got %T", args)
 	}
 
-	setDefaultForLNUThresholds(lowNodeUtilizationArgsArgs.Thresholds, lowNodeUtilizationArgsArgs.TargetThresholds, lowNodeUtilizationArgsArgs.UseDeviationThresholds)
+	metricsUtilization := lowNodeUtilizationArgsArgs.MetricsUtilization
+	if metricsUtilization != nil && metricsUtilization.Source == api.PrometheusMetrics {
+		if metricsUtilization.Prometheus != nil && metricsUtilization.Prometheus.Query != "" {
+			uResourceNames := getResourceNames(lowNodeUtilizationArgsArgs.Thresholds)
+			oResourceNames := getResourceNames(lowNodeUtilizationArgsArgs.TargetThresholds)
+			if len(uResourceNames) != 1 || uResourceNames[0] != MetricResource {
+				return nil, fmt.Errorf("thresholds are expected to specify a single instance of %q resource, got %v instead", MetricResource, uResourceNames)
+			}
+			if len(oResourceNames) != 1 || oResourceNames[0] != MetricResource {
+				return nil, fmt.Errorf("targetThresholds are expected to specify a single instance of %q resource, got %v instead", MetricResource, oResourceNames)
+			}
+		} else {
+			return nil, fmt.Errorf("prometheus query is missing")
+		}
+	} else {
+		setDefaultForLNUThresholds(lowNodeUtilizationArgsArgs.Thresholds, lowNodeUtilizationArgsArgs.TargetThresholds, lowNodeUtilizationArgsArgs.UseDeviationThresholds)
+	}
 
 	underutilizationCriteria := []interface{}{
 		"CPU", lowNodeUtilizationArgsArgs.Thresholds[v1.ResourceCPU],
@@ -90,11 +106,23 @@ func NewLowNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (f
 
 	var usageClient usageClient
 	// MetricsServer is deprecated, removed once dropped
-	if lowNodeUtilizationArgsArgs.MetricsUtilization != nil && (lowNodeUtilizationArgsArgs.MetricsUtilization.MetricsServer || lowNodeUtilizationArgsArgs.MetricsUtilization.Source == api.KubernetesMetrics) {
-		if handle.MetricsCollector() == nil {
-			return nil, fmt.Errorf("metrics client not initialized")
+	if metricsUtilization != nil {
+		switch {
+		case metricsUtilization.MetricsServer, metricsUtilization.Source == api.KubernetesMetrics:
+			if handle.MetricsCollector() == nil {
+				return nil, fmt.Errorf("metrics client not initialized")
+			}
+			usageClient = newActualUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc(), handle.MetricsCollector())
+		case metricsUtilization.Source == api.PrometheusMetrics:
+			if handle.PrometheusClient() == nil {
+				return nil, fmt.Errorf("prometheus client not initialized")
+			}
+			usageClient = newPrometheusUsageClient(handle.GetPodsAssignedToNodeFunc(), handle.PrometheusClient(), metricsUtilization.Prometheus.Query)
+		case metricsUtilization.Source != "":
+			return nil, fmt.Errorf("unrecognized metrics source")
+		default:
+			return nil, fmt.Errorf("metrics source is empty")
 		}
-		usageClient = newActualUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc(), handle.MetricsCollector())
 	} else {
 		usageClient = newRequestedUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc())
 	}
@@ -117,7 +145,7 @@ func (l *LowNodeUtilization) Name() string {
 
 // Balance extension point implementation for the plugin
 func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
-	if err := l.usageClient.sync(nodes); err != nil {
+	if err := l.usageClient.sync(ctx, nodes); err != nil {
 		return &frameworktypes.Status{
 			Err: fmt.Errorf("error getting node usage: %v", err),
 		}
@@ -126,12 +154,20 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 	nodesMap, nodesUsageMap, podListMap := getNodeUsageSnapshot(nodes, l.usageClient)
 	var nodeThresholdsMap map[string][]api.ResourceThresholds
 	if l.args.UseDeviationThresholds {
-		nodeThresholdsMap = getNodeThresholdsFromAverageNodeUsage(nodes, l.usageClient, l.args.Thresholds, l.args.TargetThresholds)
+		thresholds, average := getNodeThresholdsFromAverageNodeUsage(nodes, l.usageClient, l.args.Thresholds, l.args.TargetThresholds)
+		klog.InfoS("Average utilization through all nodes", "utilization", average)
+		// All nodes are expected to have the same thresholds
+		for nodeName := range thresholds {
+			klog.InfoS("Underutilization threshold based on average utilization", "threshold", thresholds[nodeName][0])
+			klog.InfoS("Overutilization threshold based on average utilization", "threshold", thresholds[nodeName][1])
+			break
+		}
+		nodeThresholdsMap = thresholds
 	} else {
 		nodeThresholdsMap = getStaticNodeThresholds(nodes, l.args.Thresholds, l.args.TargetThresholds)
 	}
-	nodesUsageAsNodeThresholdsMap := nodeUsageToResourceThresholds(nodesUsageMap, nodesMap)
 
+	nodesUsageAsNodeThresholdsMap := nodeUsageToResourceThresholds(nodesUsageMap, nodesMap)
 	nodeGroups := classifyNodeUsage(
 		nodesUsageAsNodeThresholdsMap,
 		nodeThresholdsMap,
