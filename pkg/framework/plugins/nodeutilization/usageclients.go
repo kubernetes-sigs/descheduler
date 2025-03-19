@@ -207,18 +207,19 @@ func (client *actualUsageClient) sync(ctx context.Context, nodes []*v1.Node) err
 			return fmt.Errorf("error accessing %q node's pods: %v", node.Name, err)
 		}
 
-		nodeUsage, ok := nodesUsage[node.Name]
+		collectedNodeUsage, ok := nodesUsage[node.Name]
 		if !ok {
 			return fmt.Errorf("unable to find node %q in the collected metrics", node.Name)
 		}
-		nodeUsage[v1.ResourcePods] = resource.NewQuantity(int64(len(pods)), resource.DecimalSI)
+		collectedNodeUsage[v1.ResourcePods] = resource.NewQuantity(int64(len(pods)), resource.DecimalSI)
 
+		nodeUsage := api.ReferencedResourceList{}
 		for _, resourceName := range client.resourceNames {
-			if _, exists := nodeUsage[resourceName]; !exists {
+			if _, exists := collectedNodeUsage[resourceName]; !exists {
 				return fmt.Errorf("unable to find %q resource for collected %q node metric", resourceName, node.Name)
 			}
+			nodeUsage[resourceName] = collectedNodeUsage[resourceName]
 		}
-
 		// store the snapshot of pods from the same (or the closest) node utilization computation
 		client._pods[node.Name] = pods
 		client._nodeUtilization[node.Name] = nodeUsage
