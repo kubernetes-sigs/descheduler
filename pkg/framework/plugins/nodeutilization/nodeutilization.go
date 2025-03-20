@@ -38,28 +38,40 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
-// []NodeUsage is a snapshot, so allPods can not be read any time to avoid breaking consistency between the node's actual usage and available pods
+// []NodeUsage is a snapshot, so allPods can not be read any time to avoid
+// breaking consistency between the node's actual usage and available pods.
 //
 // New data model:
 // - node usage: map[string]api.ReferencedResourceList
 // - thresholds: map[string]api.ReferencedResourceList
 // - all pods:   map[string][]*v1.Pod
-// After classification:
-// - each group will have its own (smaller) node usage and thresholds and allPods
-// Both node usage and thresholds are needed to compute the remaining resources that can be evicted/can accepted evicted pods
 //
-// 1. translate node usages into percentages as float or int64 (how much precision is lost?, maybe use BigInt?)
-// 2. produce thresholds (if they need to be computed, otherwise use user provided, they are already in percentages)
-// 3. classify nodes into groups
-// 4. produces a list of nodes (sorted as before) that have the node usage, the threshold (only one this time) and the snapshottted pod list present
-
+// After classification:
+//   - each group will have its own (smaller) node usage and thresholds and
+//     allPods.
+//
+// Both node usage and thresholds are needed to compute the remaining resources
+// that can be evicted/can accepted evicted pods.
+//
+//  1. translate node usages into percentages as float or int64 (how much
+//     precision is lost?, maybe use BigInt?).
+//  2. produce thresholds (if they need to be computed, otherwise use user
+//     provided, they are already in percentages).
+//  3. classify nodes into groups.
+//  4. produces a list of nodes (sorted as before) that have the node usage,
+//     the threshold (only one this time) and the snapshottted pod list
+//     present.
+//
 // Data wise
 // Produce separated maps for:
 // - nodes: map[string]*v1.Node
 // - node usage: map[string]api.ReferencedResourceList
 // - thresholds: map[string][]api.ReferencedResourceList
 // - pod list: map[string][]*v1.Pod
-// Once the nodes are classified produce the original []NodeInfo so the code is not that much changed (postponing further refactoring once it is needed)
+//
+// Once the nodes are classified produce the original []NodeInfo so the code is
+// not that much changed (postponing further refactoring once it is needed).
+
 const (
 	// MetricResource is a special resource name we use to keep track of a
 	// metric obtained from a third party entity.
@@ -116,35 +128,6 @@ func getNodeUsageSnapshot(
 	}
 
 	return nodesMap, nodesUsageMap, podListMap
-}
-
-// classifierFnc is a function that classifies a node based on its usage and
-// thresholds. returns true if it belongs to the group the classifier
-// represents.
-type classifierFnc func(string, api.ResourceThresholds, api.ResourceThresholds) bool
-
-// classifyNodeUsage classify nodes into different groups based on classifiers.
-// returns one group for each classifier.
-func classifyNodeUsage(
-	nodeUsageAsNodeThresholds map[string]api.ResourceThresholds,
-	nodeThresholdsMap map[string][]api.ResourceThresholds,
-	classifiers []classifierFnc,
-) []map[string]api.ResourceThresholds {
-	nodeGroups := make([]map[string]api.ResourceThresholds, len(classifiers))
-	for i := range len(classifiers) {
-		nodeGroups[i] = make(map[string]api.ResourceThresholds)
-	}
-
-	for nodeName, nodeUsage := range nodeUsageAsNodeThresholds {
-		for idx, classFnc := range classifiers {
-			if classFnc(nodeName, nodeUsage, nodeThresholdsMap[nodeName][idx]) {
-				nodeGroups[idx][nodeName] = nodeUsage
-				break
-			}
-		}
-	}
-
-	return nodeGroups
 }
 
 // usageToKeysAndValues converts a ReferencedResourceList into a list of

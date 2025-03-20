@@ -28,6 +28,7 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization/classifier"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization/normalizer"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
@@ -144,24 +145,22 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 
 	// classify nodes in two groups: underutilized and schedulable. we will
 	// later try to move pods from the first group to the second.
-	nodeGroups := classifyNodeUsage(
+	nodeGroups := classifier.Classify(
 		usage, thresholds,
-		[]classifierFnc{
-			// underutilized nodes.
-			func(nodeName string, usage, threshold api.ResourceThresholds) bool {
-				return isNodeBelowThreshold(usage, threshold)
-			},
-			// schedulable nodes.
-			func(nodeName string, usage, threshold api.ResourceThresholds) bool {
-				if nodeutil.IsNodeUnschedulable(nodesMap[nodeName]) {
-					klog.V(2).InfoS(
-						"Node is unschedulable",
-						"node", klog.KObj(nodesMap[nodeName]),
-					)
-					return false
-				}
-				return true
-			},
+		// underutilized nodes.
+		func(nodeName string, usage, threshold api.ResourceThresholds) bool {
+			return isNodeBelowThreshold(usage, threshold)
+		},
+		// schedulable nodes.
+		func(nodeName string, usage, threshold api.ResourceThresholds) bool {
+			if nodeutil.IsNodeUnschedulable(nodesMap[nodeName]) {
+				klog.V(2).InfoS(
+					"Node is unschedulable",
+					"node", klog.KObj(nodesMap[nodeName]),
+				)
+				return false
+			}
+			return true
 		},
 	)
 

@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization/classifier"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization/normalizer"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
@@ -185,25 +186,23 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 
 	// classify nodes in under and over utilized. we will later try to move
 	// pods from the overutilized nodes to the underutilized ones.
-	nodeGroups := classifyNodeUsage(
+	nodeGroups := classifier.Classify(
 		usage, thresholds,
-		[]classifierFnc{
-			// underutilization criteria processing. nodes that are
-			// underutilized but aren't schedulable are ignored.
-			func(nodeName string, usage, threshold api.ResourceThresholds) bool {
-				if nodeutil.IsNodeUnschedulable(nodesMap[nodeName]) {
-					klog.V(2).InfoS(
-						"Node is unschedulable, thus not considered as underutilized",
-						"node", klog.KObj(nodesMap[nodeName]),
-					)
-					return false
-				}
-				return isNodeBelowThreshold(usage, threshold)
-			},
-			// overutilization criteria evaluation.
-			func(nodeName string, usage, threshold api.ResourceThresholds) bool {
-				return isNodeAboveThreshold(usage, threshold)
-			},
+		// underutilization criteria processing. nodes that are
+		// underutilized but aren't schedulable are ignored.
+		func(nodeName string, usage, threshold api.ResourceThresholds) bool {
+			if nodeutil.IsNodeUnschedulable(nodesMap[nodeName]) {
+				klog.V(2).InfoS(
+					"Node is unschedulable, thus not considered as underutilized",
+					"node", klog.KObj(nodesMap[nodeName]),
+				)
+				return false
+			}
+			return isNodeBelowThreshold(usage, threshold)
+		},
+		// overutilization criteria evaluation.
+		func(nodeName string, usage, threshold api.ResourceThresholds) bool {
+			return isNodeAboveThreshold(usage, threshold)
 		},
 	)
 
