@@ -17,7 +17,7 @@ limitations under the License.
 package nodeutilization
 
 import (
-	"math"
+	"reflect"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -55,45 +55,6 @@ var (
 	highPriority     = int32(10000)
 	extendedResource = v1.ResourceName("example.com/foo")
 )
-
-func TestResourceUsagePercentages(t *testing.T) {
-	resourceUsagePercentage := resourceUsagePercentages(
-		api.ReferencedResourceList{
-			v1.ResourceCPU:    resource.NewMilliQuantity(1220, resource.DecimalSI),
-			v1.ResourceMemory: resource.NewQuantity(3038982964, resource.BinarySI),
-			v1.ResourcePods:   resource.NewQuantity(11, resource.BinarySI),
-		},
-		&v1.Node{
-			Status: v1.NodeStatus{
-				Capacity: v1.ResourceList{
-					v1.ResourceCPU:    *resource.NewMilliQuantity(2000, resource.DecimalSI),
-					v1.ResourceMemory: *resource.NewQuantity(3977868*1024, resource.BinarySI),
-					v1.ResourcePods:   *resource.NewQuantity(29, resource.BinarySI),
-				},
-				Allocatable: v1.ResourceList{
-					v1.ResourceCPU:    *resource.NewMilliQuantity(1930, resource.DecimalSI),
-					v1.ResourceMemory: *resource.NewQuantity(3287692*1024, resource.BinarySI),
-					v1.ResourcePods:   *resource.NewQuantity(29, resource.BinarySI),
-				},
-			},
-		},
-		true,
-	)
-
-	expectedUsageInIntPercentage := map[v1.ResourceName]float64{
-		v1.ResourceCPU:    63,
-		v1.ResourceMemory: 90,
-		v1.ResourcePods:   37,
-	}
-
-	for resourceName, percentage := range expectedUsageInIntPercentage {
-		if math.Floor(float64(resourceUsagePercentage[resourceName])) != percentage {
-			t.Errorf("Incorrect percentange computation, expected %v, got math.Floor(%v) instead", percentage, resourceUsagePercentage[resourceName])
-		}
-	}
-
-	t.Logf("resourceUsagePercentage: %#v\n", resourceUsagePercentage)
-}
 
 func TestSortNodesByUsage(t *testing.T) {
 	tests := []struct {
@@ -169,6 +130,86 @@ func TestSortNodesByUsage(t *testing.T) {
 				if tc.nodeInfoList[i].NodeUsage.node.Name != tc.expectedNodeInfoNames[size-i-1] {
 					t.Errorf("Expected %v, got %v", tc.expectedNodeInfoNames[size-i-1], tc.nodeInfoList[i].NodeUsage.node.Name)
 				}
+			}
+		})
+	}
+}
+
+func TestResourceUsageToResourceThreshold(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		usage    api.ReferencedResourceList
+		capacity api.ReferencedResourceList
+		expected api.ResourceThresholds
+	}{
+		{
+			name: "10 percent",
+			usage: api.ReferencedResourceList{
+				v1.ResourceCPU: resource.NewMilliQuantity(100, resource.DecimalSI),
+			},
+			capacity: api.ReferencedResourceList{
+				v1.ResourceCPU: resource.NewMilliQuantity(1000, resource.DecimalSI),
+			},
+			expected: api.ResourceThresholds{v1.ResourceCPU: 10},
+		},
+		{
+			name: "zeroed out capacity",
+			usage: api.ReferencedResourceList{
+				v1.ResourceCPU: resource.NewMilliQuantity(100, resource.DecimalSI),
+			},
+			capacity: api.ReferencedResourceList{
+				v1.ResourceCPU: resource.NewMilliQuantity(0, resource.DecimalSI),
+			},
+			expected: api.ResourceThresholds{v1.ResourceCPU: 0},
+		},
+		{
+			name: "non existing usage",
+			usage: api.ReferencedResourceList{
+				"does-not-exist": resource.NewMilliQuantity(100, resource.DecimalSI),
+			},
+			capacity: api.ReferencedResourceList{
+				v1.ResourceCPU:    resource.NewMilliQuantity(100, resource.DecimalSI),
+				v1.ResourceMemory: resource.NewMilliQuantity(100, resource.DecimalSI),
+			},
+			expected: api.ResourceThresholds{},
+		},
+		{
+			name: "existing and non existing usage",
+			usage: api.ReferencedResourceList{
+				"does-not-exist": resource.NewMilliQuantity(100, resource.DecimalSI),
+				v1.ResourceCPU:   resource.NewMilliQuantity(200, resource.DecimalSI),
+			},
+			capacity: api.ReferencedResourceList{
+				v1.ResourceCPU:    resource.NewMilliQuantity(1000, resource.DecimalSI),
+				v1.ResourceMemory: resource.NewMilliQuantity(1000, resource.DecimalSI),
+			},
+			expected: api.ResourceThresholds{v1.ResourceCPU: 20},
+		},
+		{
+			name: "nil usage",
+			usage: api.ReferencedResourceList{
+				v1.ResourceCPU: nil,
+			},
+			capacity: api.ReferencedResourceList{
+				v1.ResourceCPU: resource.NewMilliQuantity(1000, resource.DecimalSI),
+			},
+			expected: api.ResourceThresholds{},
+		},
+		{
+			name: "nil capacity",
+			usage: api.ReferencedResourceList{
+				v1.ResourceCPU: resource.NewMilliQuantity(100, resource.DecimalSI),
+			},
+			capacity: api.ReferencedResourceList{
+				v1.ResourceCPU: nil,
+			},
+			expected: api.ResourceThresholds{},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ResourceUsageToResourceThreshold(tt.usage, tt.capacity)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("Expected %v, got %v", tt.expected, result)
 			}
 		})
 	}

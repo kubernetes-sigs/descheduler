@@ -28,72 +28,100 @@ import (
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization/normalizer"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 )
 
 const HighNodeUtilizationPluginName = "HighNodeUtilization"
 
-// HighNodeUtilization evicts pods from under utilized nodes so that scheduler can schedule according to its plugin.
-// Note that CPU/Memory requests are used to calculate nodes' utilization and not the actual resource usage.
-
-type HighNodeUtilization struct {
-	handle                   frameworktypes.Handle
-	args                     *HighNodeUtilizationArgs
-	podFilter                func(pod *v1.Pod) bool
-	underutilizationCriteria []interface{}
-	resourceNames            []v1.ResourceName
-	targetThresholds         api.ResourceThresholds
-	usageClient              usageClient
-}
-
+// this lines makes sure that HighNodeUtilization implements the BalancePlugin
+// interface.
 var _ frameworktypes.BalancePlugin = &HighNodeUtilization{}
 
-// NewHighNodeUtilization builds plugin from its arguments while passing a handle
-func NewHighNodeUtilization(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
-	highNodeUtilizatioArgs, ok := args.(*HighNodeUtilizationArgs)
+// HighNodeUtilization evicts pods from under utilized nodes so that scheduler
+// can schedule according to its plugin. Note that CPU/Memory requests are used
+// to calculate nodes' utilization and not the actual resource usage.
+type HighNodeUtilization struct {
+	handle         frameworktypes.Handle
+	args           *HighNodeUtilizationArgs
+	podFilter      func(pod *v1.Pod) bool
+	criteria       []any
+	resourceNames  []v1.ResourceName
+	highThresholds api.ResourceThresholds
+	usageClient    usageClient
+}
+
+// NewHighNodeUtilization builds plugin from its arguments while passing a handle.
+func NewHighNodeUtilization(
+	genericArgs runtime.Object, handle frameworktypes.Handle,
+) (frameworktypes.Plugin, error) {
+	args, ok := genericArgs.(*HighNodeUtilizationArgs)
 	if !ok {
-		return nil, fmt.Errorf("want args to be of type HighNodeUtilizationArgs, got %T", args)
+		return nil, fmt.Errorf(
+			"want args to be of type HighNodeUtilizationArgs, got %T",
+			genericArgs,
+		)
 	}
 
-	targetThresholds := make(api.ResourceThresholds)
-	setDefaultForThresholds(highNodeUtilizatioArgs.Thresholds, targetThresholds)
-	resourceNames := getResourceNames(targetThresholds)
-
-	underutilizationCriteria := []interface{}{
-		"CPU", highNodeUtilizatioArgs.Thresholds[v1.ResourceCPU],
-		"Mem", highNodeUtilizatioArgs.Thresholds[v1.ResourceMemory],
-		"Pods", highNodeUtilizatioArgs.Thresholds[v1.ResourcePods],
-	}
-	for name := range highNodeUtilizatioArgs.Thresholds {
-		if !nodeutil.IsBasicResource(name) {
-			underutilizationCriteria = append(underutilizationCriteria, string(name), int64(highNodeUtilizatioArgs.Thresholds[name]))
-		}
+	// this plugins worries only about thresholds but the nodeplugins
+	// package was made to take two thresholds into account, one for low
+	// and another for high usage. here we make sure we set the high
+	// threshold to the maximum value for all resources for which we have a
+	// threshold.
+	highThresholds := make(api.ResourceThresholds)
+	for rname := range args.Thresholds {
+		highThresholds[rname] = MaxResourcePercentage
 	}
 
-	podFilter, err := podutil.NewOptions().
+	// criteria is a list of thresholds that are used to determine if a node
+	// is underutilized. it is used only for logging purposes.
+	criteria := []any{}
+	for rname, rvalue := range args.Thresholds {
+		criteria = append(criteria, rname, rvalue)
+	}
+
+	podFilter, err := podutil.
+		NewOptions().
 		WithFilter(handle.Evictor().Filter).
 		BuildFilterFunc()
 	if err != nil {
 		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
 	}
 
+	// resourceNames is a list of all resource names this plugin cares
+	// about. we care about the resources for which we have a threshold and
+	// all we consider the basic resources (cpu, memory, pods).
+	resourceNames := uniquifyResourceNames(
+		append(
+			getResourceNames(args.Thresholds),
+			v1.ResourceCPU,
+			v1.ResourceMemory,
+			v1.ResourcePods,
+		),
+	)
+
 	return &HighNodeUtilization{
-		handle:                   handle,
-		args:                     highNodeUtilizatioArgs,
-		resourceNames:            resourceNames,
-		targetThresholds:         targetThresholds,
-		underutilizationCriteria: underutilizationCriteria,
-		podFilter:                podFilter,
-		usageClient:              newRequestedUsageClient(resourceNames, handle.GetPodsAssignedToNodeFunc()),
+		handle:         handle,
+		args:           args,
+		resourceNames:  resourceNames,
+		highThresholds: highThresholds,
+		criteria:       criteria,
+		podFilter:      podFilter,
+		usageClient: newRequestedUsageClient(
+			resourceNames,
+			handle.GetPodsAssignedToNodeFunc(),
+		),
 	}, nil
 }
 
-// Name retrieves the plugin name
+// Name retrieves the plugin name.
 func (h *HighNodeUtilization) Name() string {
 	return HighNodeUtilizationPluginName
 }
 
-// Balance extension point implementation for the plugin
+// Balance holds the main logic of the plugin. It evicts pods from under
+// utilized nodes. The goal here is to concentrate pods in fewer nodes so that
+// less nodes are used.
 func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	if err := h.usageClient.sync(ctx, nodes); err != nil {
 		return &frameworktypes.Status{
@@ -101,21 +129,35 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		}
 	}
 
+	// take a picture of the current state of the nodes, everything else
+	// here is based on this snapshot.
 	nodesMap, nodesUsageMap, podListMap := getNodeUsageSnapshot(nodes, h.usageClient)
-	nodeThresholdsMap := getStaticNodeThresholds(nodes, h.args.Thresholds, h.targetThresholds)
-	nodesUsageAsNodeThresholdsMap := nodeUsageToResourceThresholds(nodesUsageMap, nodesMap)
+	capacities := referencedResourceListForNodesCapacity(nodes)
+
+	// node usages are not presented as percentages over the capacity.
+	// we need to normalize them to be able to compare them with the
+	// thresholds. thresholds are already provided by the user in
+	// percentage.
+	usage, thresholds := assessNodesUsagesAndStaticThresholds(
+		nodesUsageMap, capacities, h.args.Thresholds, h.highThresholds,
+	)
+
+	// classify nodes in two groups: underutilized and schedulable. we will
+	// later try to move pods from the first group to the second.
 	nodeGroups := classifyNodeUsage(
-		nodesUsageAsNodeThresholdsMap,
-		nodeThresholdsMap,
+		usage, thresholds,
 		[]classifierFnc{
-			// underutilized nodes
+			// underutilized nodes.
 			func(nodeName string, usage, threshold api.ResourceThresholds) bool {
 				return isNodeBelowThreshold(usage, threshold)
 			},
-			// every other node that is schedulable
+			// schedulable nodes.
 			func(nodeName string, usage, threshold api.ResourceThresholds) bool {
 				if nodeutil.IsNodeUnschedulable(nodesMap[nodeName]) {
-					klog.V(2).InfoS("Node is unschedulable", "node", klog.KObj(nodesMap[nodeName]))
+					klog.V(2).InfoS(
+						"Node is unschedulable",
+						"node", klog.KObj(nodesMap[nodeName]),
+					)
 					return false
 				}
 				return true
@@ -123,69 +165,88 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		},
 	)
 
-	// convert groups node []NodeInfo
+	// the nodeplugin package works by means of NodeInfo structures. these
+	// structures hold a series of information about the nodes. now that
+	// we have classified the nodes, we can build the NodeInfo structures
+	// for each group. NodeInfo structs carry usage and available resources
+	// for each node.
 	nodeInfos := make([][]NodeInfo, 2)
 	category := []string{"underutilized", "overutilized"}
 	for i := range nodeGroups {
 		for nodeName := range nodeGroups[i] {
-			klog.InfoS("Node is "+category[i], "node", klog.KObj(nodesMap[nodeName]), "usage", nodesUsageMap[nodeName], "usagePercentage", resourceUsagePercentages(nodesUsageMap[nodeName], nodesMap[nodeName], true))
+			klog.InfoS(
+				"Node has been classified",
+				"category", category[i],
+				"node", klog.KObj(nodesMap[nodeName]),
+				"usage", nodesUsageMap[nodeName],
+				"usagePercentage", normalizer.Round(usage[nodeName]),
+			)
 			nodeInfos[i] = append(nodeInfos[i], NodeInfo{
 				NodeUsage: NodeUsage{
 					node:    nodesMap[nodeName],
-					usage:   nodesUsageMap[nodeName], // get back the original node usage
+					usage:   nodesUsageMap[nodeName],
 					allPods: podListMap[nodeName],
 				},
-				thresholds: NodeThresholds{
-					lowResourceThreshold:  resourceThresholdsToNodeUsage(nodeThresholdsMap[nodeName][0], nodesMap[nodeName]),
-					highResourceThreshold: resourceThresholdsToNodeUsage(nodeThresholdsMap[nodeName][1], nodesMap[nodeName]),
-				},
+				available: capNodeCapacitiesToThreshold(
+					nodesMap[nodeName],
+					thresholds[nodeName][1],
+					h.resourceNames,
+				),
 			})
 		}
 	}
 
-	sourceNodes := nodeInfos[0]
-	highNodes := nodeInfos[1]
+	lowNodes, schedulableNodes := nodeInfos[0], nodeInfos[1]
 
-	// log message in one line
-	klog.V(1).InfoS("Criteria for a node below target utilization", h.underutilizationCriteria...)
-	klog.V(1).InfoS("Number of underutilized nodes", "totalNumber", len(sourceNodes))
+	klog.V(1).InfoS("Criteria for a node below target utilization", h.criteria...)
+	klog.V(1).InfoS("Number of underutilized nodes", "totalNumber", len(lowNodes))
 
-	if len(sourceNodes) == 0 {
-		klog.V(1).InfoS("No node is underutilized, nothing to do here, you might tune your thresholds further")
+	if len(lowNodes) == 0 {
+		klog.V(1).InfoS(
+			"No node is underutilized, nothing to do here, you might tune your thresholds further",
+		)
 		return nil
 	}
-	if len(sourceNodes) <= h.args.NumberOfNodes {
-		klog.V(1).InfoS("Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here", "underutilizedNodes", len(sourceNodes), "numberOfNodes", h.args.NumberOfNodes)
+
+	if len(lowNodes) <= h.args.NumberOfNodes {
+		klog.V(1).InfoS(
+			"Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here",
+			"underutilizedNodes", len(lowNodes),
+			"numberOfNodes", h.args.NumberOfNodes,
+		)
 		return nil
 	}
-	if len(sourceNodes) == len(nodes) {
+
+	if len(lowNodes) == len(nodes) {
 		klog.V(1).InfoS("All nodes are underutilized, nothing to do here")
 		return nil
 	}
-	if len(highNodes) == 0 {
+
+	if len(schedulableNodes) == 0 {
 		klog.V(1).InfoS("No node is available to schedule the pods, nothing to do here")
 		return nil
 	}
 
-	// stop if the total available usage has dropped to zero - no more pods can be scheduled
-	continueEvictionCond := func(nodeInfo NodeInfo, totalAvailableUsage api.ReferencedResourceList) bool {
-		for name := range totalAvailableUsage {
-			if totalAvailableUsage[name].CmpInt64(0) < 1 {
+	// stops the eviction process if the total available capacity sage has
+	// dropped to zero - no more pods can be scheduled. this will signalize
+	// to stop if any of the available resources has dropped to zero.
+	continueEvictionCond := func(_ NodeInfo, avail api.ReferencedResourceList) bool {
+		for name := range avail {
+			if avail[name].CmpInt64(0) < 1 {
 				return false
 			}
 		}
-
 		return true
 	}
 
-	// Sort the nodes by the usage in ascending order
-	sortNodesByUsage(sourceNodes, true)
+	// sorts the nodes by the usage in ascending order.
+	sortNodesByUsage(lowNodes, true)
 
 	evictPodsFromSourceNodes(
 		ctx,
 		h.args.EvictableNamespaces,
-		sourceNodes,
-		highNodes,
+		lowNodes,
+		schedulableNodes,
 		h.handle.Evictor(),
 		evictions.EvictOptions{StrategyName: HighNodeUtilizationPluginName},
 		h.podFilter,
@@ -196,28 +257,4 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 	)
 
 	return nil
-}
-
-func setDefaultForThresholds(thresholds, targetThresholds api.ResourceThresholds) {
-	// check if Pods/CPU/Mem are set, if not, set them to 100
-	if _, ok := thresholds[v1.ResourcePods]; !ok {
-		thresholds[v1.ResourcePods] = MaxResourcePercentage
-	}
-	if _, ok := thresholds[v1.ResourceCPU]; !ok {
-		thresholds[v1.ResourceCPU] = MaxResourcePercentage
-	}
-	if _, ok := thresholds[v1.ResourceMemory]; !ok {
-		thresholds[v1.ResourceMemory] = MaxResourcePercentage
-	}
-
-	// Default targetThreshold resource values to 100
-	targetThresholds[v1.ResourcePods] = MaxResourcePercentage
-	targetThresholds[v1.ResourceCPU] = MaxResourcePercentage
-	targetThresholds[v1.ResourceMemory] = MaxResourcePercentage
-
-	for name := range thresholds {
-		if !nodeutil.IsBasicResource(name) {
-			targetThresholds[name] = MaxResourcePercentage
-		}
-	}
 }
