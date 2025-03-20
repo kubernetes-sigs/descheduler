@@ -717,6 +717,60 @@ func TestLowNodeUtilization(t *testing.T) {
 			expectedPodsWithMetricsEvicted: 0,
 		},
 		{
+			name: "with extended resource in some of nodes with deviation",
+			thresholds: api.ResourceThresholds{
+				v1.ResourcePods:  5,
+				extendedResource: 10,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourcePods:  5,
+				extendedResource: 10,
+			},
+			useDeviationThresholds: true,
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 10, func(node *v1.Node) {
+					test.SetNodeExtendedResource(node, extendedResource, 8)
+				}),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, func(node *v1.Node) {
+					test.SetNodeExtendedResource(node, extendedResource, 8)
+				}),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 0, 0, n1NodeName, func(pod *v1.Pod) {
+					// A pod with extended resource.
+					test.SetRSOwnerRef(pod)
+					test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
+				}),
+				test.BuildTestPod("p2", 0, 0, n2NodeName, func(pod *v1.Pod) {
+					// A pod with extended resource.
+					test.SetRSOwnerRef(pod)
+					test.SetPodExtendedResourceRequest(pod, extendedResource, 7)
+				}),
+				test.BuildTestPod("p3", 0, 0, n2NodeName, func(pod *v1.Pod) {
+					test.SetRSOwnerRef(pod)
+				}),
+				test.BuildTestPod("p8", 0, 0, n3NodeName, func(pod *v1.Pod) {
+					test.SetRSOwnerRef(pod)
+				}),
+				test.BuildTestPod("p9", 0, 0, n3NodeName, test.SetRSOwnerRef),
+			},
+			nodemetricses: []*v1beta1.NodeMetrics{
+				test.BuildNodeMetrics(n1NodeName, 3201, 0),
+				test.BuildNodeMetrics(n2NodeName, 401, 0),
+				test.BuildNodeMetrics(n3NodeName, 11, 0),
+			},
+			podmetricses: []*v1beta1.PodMetrics{
+				test.BuildPodMetrics("p1", 401, 0),
+				test.BuildPodMetrics("p2", 401, 0),
+				test.BuildPodMetrics("p3", 401, 0),
+				test.BuildPodMetrics("p4", 401, 0),
+				test.BuildPodMetrics("p5", 401, 0),
+			},
+			expectedPodsEvicted:            1,
+			expectedPodsWithMetricsEvicted: 0,
+		},
+		{
 			name: "without priorities, but only other node is unschedulable",
 			thresholds: api.ResourceThresholds{
 				v1.ResourceCPU:  30,
