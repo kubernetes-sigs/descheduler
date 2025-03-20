@@ -423,10 +423,10 @@ func sortDomains(constraintTopologyPairs map[topologyPair][]*v1.Pod, isEvictable
 				// if true and both and non-evictable, order doesn't matter
 				return !(isEvictable(list[i]) && !isEvictable(list[j]))
 			}
-
 			// if both pods have selectors/affinity, compare them by their priority
 			if hasSelectorOrAffinity(*list[i]) == hasSelectorOrAffinity(*list[j]) {
-				comparePodsByPriority(list[i], list[j])
+				// Sort by priority in ascending order (lower priority Pods first)
+				return !comparePodsByPriority(list[i], list[j])
 			}
 			return hasSelectorOrAffinity(*list[i]) && !hasSelectorOrAffinity(*list[j])
 		})
