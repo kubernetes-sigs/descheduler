@@ -275,6 +275,7 @@ func GetNodeWeightGivenPodPreferredAffinity(pod *v1.Pod, node *v1.Node) (int32, 
 		match, err := corev1.MatchNodeSelectorTerms(node, preferredNodeSelector)
 		if err != nil {
 			klog.ErrorS(err, "error parsing node selector", "selector", preferredNodeSelector)
+			continue
 		}
 		if match {
 			sumWeights += prefSchedulTerm.Weight

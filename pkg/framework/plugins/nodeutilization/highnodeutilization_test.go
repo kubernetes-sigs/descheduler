@@ -244,7 +244,7 @@ func TestHighNodeUtilization(t *testing.T) {
 			},
 			// All pods are assumed to be burstable (test.BuildTestNode always sets both cpu/memory resource requests to some value)
 			pods: []*v1.Pod{
-				test.BuildTestPod("p1", 400, 0, n1NodeName, func(pod *v1.Pod) {
+				test.BuildTestPod("p1", 0, 0, n1NodeName, func(pod *v1.Pod) {
 					test.SetRSOwnerRef(pod)
 					test.MakeBestEffortPod(pod)
 				}),

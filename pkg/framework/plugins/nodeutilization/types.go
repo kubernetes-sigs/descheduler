@@ -28,12 +28,15 @@ type LowNodeUtilizationArgs struct {
 	Thresholds             api.ResourceThresholds `json:"thresholds"`
 	TargetThresholds       api.ResourceThresholds `json:"targetThresholds"`
 	NumberOfNodes          int                    `json:"numberOfNodes,omitempty"`
-	MetricsUtilization     MetricsUtilization     `json:"metricsUtilization,omitempty"`
+	MetricsUtilization     *MetricsUtilization    `json:"metricsUtilization,omitempty"`
 
 	// Naming this one differently since namespaces are still
 	// considered while considering resources used by pods
 	// but then filtered out before eviction
 	EvictableNamespaces *api.Namespaces `json:"evictableNamespaces,omitempty"`
+
+	// evictionLimits limits the number of evictions per domain. E.g. node, namespace, total.
+	EvictionLimits *api.EvictionLimits `json:"evictionLimits,omitempty"`
 }
 
 // +k8s:deepcopy-gen=true
@@ -42,9 +45,8 @@ type LowNodeUtilizationArgs struct {
 type HighNodeUtilizationArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	Thresholds         api.ResourceThresholds `json:"thresholds"`
-	NumberOfNodes      int                    `json:"numberOfNodes,omitempty"`
-	MetricsUtilization MetricsUtilization     `json:"metricsUtilization,omitempty"`
+	Thresholds    api.ResourceThresholds `json:"thresholds"`
+	NumberOfNodes int                    `json:"numberOfNodes,omitempty"`
 
 	// Naming this one differently since namespaces are still
 	// considered while considering resources used by pods
@@ -53,13 +55,19 @@ type HighNodeUtilizationArgs struct {
 }
 
 // MetricsUtilization allow to consume actual resource utilization from metrics
+// +k8s:deepcopy-gen=true
 type MetricsUtilization struct {
 	// metricsServer enables metrics from a kubernetes metrics server.
 	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
+	// Deprecated. Use Source instead.
 	MetricsServer bool `json:"metricsServer,omitempty"`
 
+	// source enables the plugin to consume metrics from a metrics source.
+	// Currently only KubernetesMetrics available.
+	Source api.MetricsSource `json:"source,omitempty"`
+
 	// prometheus enables metrics collection through a prometheus query.
-	Prometheus Prometheus `json:"prometheus,omitempty"`
+	Prometheus *Prometheus `json:"prometheus,omitempty"`
 }
 
 type Prometheus struct {

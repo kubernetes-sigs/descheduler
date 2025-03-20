@@ -63,7 +63,7 @@ func updateMetricsAndCheckNodeUtilization(
 	if err != nil {
 		t.Fatalf("failed to capture metrics: %v", err)
 	}
-	err = usageClient.sync(nodes)
+	err = usageClient.sync(ctx, nodes)
 	if err != nil {
 		t.Fatalf("failed to sync a snapshot: %v", err)
 	}
@@ -272,7 +272,7 @@ func TestPrometheusUsageClient(t *testing.T) {
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
 			prometheusUsageClient := newPrometheusUsageClient(podsAssignedToNode, pClient, "instance:node_cpu:rate:sum")
-			err = prometheusUsageClient.sync(nodes)
+			err = prometheusUsageClient.sync(ctx, nodes)
 			if tc.err == nil {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
@@ -288,10 +288,10 @@ func TestPrometheusUsageClient(t *testing.T) {
 
 			for _, node := range nodes {
 				nodeUtil := prometheusUsageClient.nodeUtilization(node.Name)
-				if nodeUtil[ResourceMetrics].Value() != tc.nodeUsage[node.Name] {
-					t.Fatalf("expected %q node utilization to be %v, got %v instead", node.Name, tc.nodeUsage[node.Name], nodeUtil[ResourceMetrics])
+				if nodeUtil[MetricResource].Value() != tc.nodeUsage[node.Name] {
+					t.Fatalf("expected %q node utilization to be %v, got %v instead", node.Name, tc.nodeUsage[node.Name], nodeUtil[MetricResource])
 				} else {
-					t.Logf("%v node utilization: %v", node.Name, nodeUtil[ResourceMetrics])
+					t.Logf("%v node utilization: %v", node.Name, nodeUtil[MetricResource])
 				}
 			}
 		})

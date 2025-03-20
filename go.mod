@@ -29,11 +29,12 @@ require (
 	kubevirt.io/api v1.3.0
 	kubevirt.io/client-go v1.3.0
 	kubevirt.io/containerized-data-importer-api v1.60.1 // indirect; drops dependency on o/api
+	sigs.k8s.io/controller-tools v0.16.5
 	sigs.k8s.io/mdtoc v1.1.0
 	sigs.k8s.io/yaml v1.4.0
 )
 
-require sigs.k8s.io/controller-tools v0.16.5
+require golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56
 
 require (
 	cel.dev/expr v0.18.0 // indirect
@@ -105,7 +106,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/crypto v0.31.0 // indirect
-	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/mod v0.21.0 // indirect
 	golang.org/x/net v0.30.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect

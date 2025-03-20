@@ -17,6 +17,7 @@ limitations under the License.
 package descheduler
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -121,6 +122,25 @@ profiles:
 				},
 			},
 		},
+		{
+			description: "v1alpha2 to internal, validate error handling (priorityThreshold exceeding maximum)",
+			policy: []byte(`apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+      args:
+        priorityThreshold:
+          value: 2000000001
+    plugins:
+      deschedule:
+        enabled:
+          - "RemovePodsHavingTooManyRestarts"
+`),
+			result: nil,
+			err:    errors.New("priority threshold can't be greater than 2000000000"),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -191,12 +211,167 @@ func TestValidateDeschedulerConfiguration(t *testing.T) {
 			},
 			result: fmt.Errorf("[in profile RemoveFailedPods: only one of Include/Exclude namespaces can be set, in profile RemovePodsViolatingTopologySpreadConstraint: only one of Include/Exclude namespaces can be set]"),
 		},
+		{
+			description: "Duplicit metrics providers error",
+			deschedulerPolicy: api.DeschedulerPolicy{
+				MetricsProviders: []api.MetricsProvider{
+					{Source: api.KubernetesMetrics},
+					{Source: api.KubernetesMetrics},
+				},
+			},
+			result: fmt.Errorf("metric provider \"KubernetesMetrics\" is already configured, each source can be configured only once"),
+		},
+		{
+			description: "Too many metrics providers error",
+			deschedulerPolicy: api.DeschedulerPolicy{
+				MetricsCollector: &api.MetricsCollector{
+					Enabled: true,
+				},
+				MetricsProviders: []api.MetricsProvider{
+					{Source: api.KubernetesMetrics},
+				},
+			},
+			result: fmt.Errorf("it is not allowed to combine metrics provider when metrics collector is enabled"),
+		},
+		{
+			description: "missing prometheus url error",
+			deschedulerPolicy: api.DeschedulerPolicy{
+				MetricsProviders: []api.MetricsProvider{
+					{
+						Source:     api.PrometheusMetrics,
+						Prometheus: &api.Prometheus{},
+					},
+				},
+			},
+			result: fmt.Errorf("prometheus URL is required when prometheus is enabled"),
+		},
+		{
+			description: "prometheus url is not valid error",
+			deschedulerPolicy: api.DeschedulerPolicy{
+				MetricsProviders: []api.MetricsProvider{
+					{
+						Source: api.PrometheusMetrics,
+						Prometheus: &api.Prometheus{
+							URL: "http://example.com:-80",
+						},
+					},
+				},
+			},
+			result: fmt.Errorf("error parsing prometheus URL: parse \"http://example.com:-80\": invalid port \":-80\" after host"),
+		},
+		{
+			description: "prometheus url does not have https error",
+			deschedulerPolicy: api.DeschedulerPolicy{
+				MetricsProviders: []api.MetricsProvider{
+					{
+						Source: api.PrometheusMetrics,
+						Prometheus: &api.Prometheus{
+							URL: "http://example.com:80",
+						},
+					},
+				},
+			},
+			result: fmt.Errorf("prometheus URL's scheme is not https, got \"http\" instead"),
+		},
+		{
+			description: "prometheus authtoken with no secret reference error",
+			deschedulerPolicy: api.DeschedulerPolicy{
+				MetricsProviders: []api.MetricsProvider{
+					{
+						Source: api.PrometheusMetrics,
+						Prometheus: &api.Prometheus{
+							URL:       "https://example.com:80",
+							AuthToken: &api.AuthToken{},
+						},
+					},
+				},
+			},
+			result: fmt.Errorf("prometheus authToken secret is expected to be set when authToken field is"),
+		},
+		{
+			description: "prometheus authtoken with empty secret reference error",
+			deschedulerPolicy: api.DeschedulerPolicy{
+				MetricsProviders: []api.MetricsProvider{
+					{
+						Source: api.PrometheusMetrics,
+						Prometheus: &api.Prometheus{
+							URL: "https://example.com:80",
+							AuthToken: &api.AuthToken{
+								SecretReference: &api.SecretReference{},
+							},
+						},
+					},
+				},
+			},
+			result: fmt.Errorf("prometheus authToken secret reference does not set both namespace and name"),
+		},
+		{
+			description: "prometheus authtoken missing secret reference namespace error",
+			deschedulerPolicy: api.DeschedulerPolicy{
+				MetricsProviders: []api.MetricsProvider{
+					{
+						Source: api.PrometheusMetrics,
+						Prometheus: &api.Prometheus{
+							URL: "https://example.com:80",
+							AuthToken: &api.AuthToken{
+								SecretReference: &api.SecretReference{
+									Name: "secretname",
+								},
+							},
+						},
+					},
+				},
+			},
+			result: fmt.Errorf("prometheus authToken secret reference does not set both namespace and name"),
+		},
+		{
+			description: "prometheus authtoken missing secret reference name error",
+			deschedulerPolicy: api.DeschedulerPolicy{
+				MetricsProviders: []api.MetricsProvider{
+					{
+						Source: api.PrometheusMetrics,
+						Prometheus: &api.Prometheus{
+							URL: "https://example.com:80",
+							AuthToken: &api.AuthToken{
+								SecretReference: &api.SecretReference{
+									Namespace: "secretnamespace",
+								},
+							},
+						},
+					},
+				},
+			},
+			result: fmt.Errorf("prometheus authToken secret reference does not set both namespace and name"),
+		},
+		{
+			description: "valid prometheus authtoken secret reference",
+			deschedulerPolicy: api.DeschedulerPolicy{
+				MetricsProviders: []api.MetricsProvider{
+					{
+						Source: api.PrometheusMetrics,
+						Prometheus: &api.Prometheus{
+							URL: "https://example.com:80",
+							AuthToken: &api.AuthToken{
+								SecretReference: &api.SecretReference{
+									Name:      "secretname",
+									Namespace: "secretnamespace",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
 			result := validateDeschedulerConfiguration(tc.deschedulerPolicy, pluginregistry.PluginRegistry)
-			if result.Error() != tc.result.Error() {
+			if result == nil && tc.result != nil || result != nil && tc.result == nil {
+				t.Errorf("test '%s' failed. expected \n'%s', got \n'%s'", tc.description, tc.result, result)
+			} else if result == nil && tc.result == nil {
+				return
+			} else if result.Error() != tc.result.Error() {
 				t.Errorf("test '%s' failed. expected \n'%s', got \n'%s'", tc.description, tc.result, result)
 			}
 		})

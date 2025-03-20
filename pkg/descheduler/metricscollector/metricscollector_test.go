@@ -29,10 +29,11 @@ import (
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	fakemetricsclient "k8s.io/metrics/pkg/client/clientset/versioned/fake"
 
+	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/test"
 )
 
-func checkCpuNodeUsage(t *testing.T, usage map[v1.ResourceName]*resource.Quantity, millicpu int64) {
+func checkCpuNodeUsage(t *testing.T, usage api.ReferencedResourceList, millicpu int64) {
 	t.Logf("current node cpu usage: %v\n", usage[v1.ResourceCPU].MilliValue())
 	if usage[v1.ResourceCPU].MilliValue() != millicpu {
 		t.Fatalf("cpu node usage expected to be %v, got %v instead", millicpu, usage[v1.ResourceCPU].MilliValue())

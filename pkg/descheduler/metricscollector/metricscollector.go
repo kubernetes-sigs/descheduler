@@ -32,6 +32,7 @@ import (
 	"k8s.io/klog/v2"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	utilptr "k8s.io/utils/ptr"
+	"sigs.k8s.io/descheduler/pkg/api"
 )
 
 const (
@@ -43,7 +44,7 @@ type MetricsCollector struct {
 	metricsClientset metricsclient.Interface
 	nodeSelector     labels.Selector
 
-	nodes map[string]map[v1.ResourceName]*resource.Quantity
+	nodes map[string]api.ReferencedResourceList
 
 	mu sync.RWMutex
 	// hasSynced signals at least one sync succeeded
@@ -55,7 +56,7 @@ func NewMetricsCollector(nodeLister listercorev1.NodeLister, metricsClientset me
 		nodeLister:       nodeLister,
 		metricsClientset: metricsClientset,
 		nodeSelector:     nodeSelector,
-		nodes:            make(map[string]map[v1.ResourceName]*resource.Quantity),
+		nodes:            make(map[string]api.ReferencedResourceList),
 	}
 }
 
@@ -77,13 +78,13 @@ func weightedAverage(prevValue, value int64) int64 {
 	return int64(math.Round(beta*float64(prevValue) + (1-beta)*float64(value)))
 }
 
-func (mc *MetricsCollector) AllNodesUsage() (map[string]map[v1.ResourceName]*resource.Quantity, error) {
+func (mc *MetricsCollector) AllNodesUsage() (map[string]api.ReferencedResourceList, error) {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
-	allNodesUsage := make(map[string]map[v1.ResourceName]*resource.Quantity)
+	allNodesUsage := make(map[string]api.ReferencedResourceList)
 	for nodeName := range mc.nodes {
-		allNodesUsage[nodeName] = map[v1.ResourceName]*resource.Quantity{
+		allNodesUsage[nodeName] = api.ReferencedResourceList{
 			v1.ResourceCPU:    utilptr.To[resource.Quantity](mc.nodes[nodeName][v1.ResourceCPU].DeepCopy()),
 			v1.ResourceMemory: utilptr.To[resource.Quantity](mc.nodes[nodeName][v1.ResourceMemory].DeepCopy()),
 		}
@@ -92,7 +93,7 @@ func (mc *MetricsCollector) AllNodesUsage() (map[string]map[v1.ResourceName]*res
 	return allNodesUsage, nil
 }
 
-func (mc *MetricsCollector) NodeUsage(node *v1.Node) (map[v1.ResourceName]*resource.Quantity, error) {
+func (mc *MetricsCollector) NodeUsage(node *v1.Node) (api.ReferencedResourceList, error) {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
@@ -100,7 +101,7 @@ func (mc *MetricsCollector) NodeUsage(node *v1.Node) (map[v1.ResourceName]*resou
 		klog.V(4).InfoS("unable to find node in the collected metrics", "node", klog.KObj(node))
 		return nil, fmt.Errorf("unable to find node %q in the collected metrics", node.Name)
 	}
-	return map[v1.ResourceName]*resource.Quantity{
+	return api.ReferencedResourceList{
 		v1.ResourceCPU:    utilptr.To[resource.Quantity](mc.nodes[node.Name][v1.ResourceCPU].DeepCopy()),
 		v1.ResourceMemory: utilptr.To[resource.Quantity](mc.nodes[node.Name][v1.ResourceMemory].DeepCopy()),
 	}, nil
@@ -131,7 +132,7 @@ func (mc *MetricsCollector) Collect(ctx context.Context) error {
 		}
 
 		if _, exists := mc.nodes[node.Name]; !exists {
-			mc.nodes[node.Name] = map[v1.ResourceName]*resource.Quantity{
+			mc.nodes[node.Name] = api.ReferencedResourceList{
 				v1.ResourceCPU:    utilptr.To[resource.Quantity](metrics.Usage.Cpu().DeepCopy()),
 				v1.ResourceMemory: utilptr.To[resource.Quantity](metrics.Usage.Memory().DeepCopy()),
 			}

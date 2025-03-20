@@ -122,57 +122,46 @@ func loadCAFile(filepath string) (*x509.CertPool, error) {
 	return caCertPool, nil
 }
 
-func CreatePrometheusClient(prometheusURL, authToken string, insecureSkipVerify bool) (promapi.Client, error) {
-	// Ignore TLS verify errors if InsecureSkipVerify is set
-	roundTripper := promapi.DefaultRoundTripper
-	if insecureSkipVerify {
-		roundTripper = &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			TLSHandshakeTimeout: 10 * time.Second,
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: insecureSkipVerify,
-			},
-		}
-	} else {
-		// Retrieve Pod CA cert
-		caCertPool, err := loadCAFile(K8sPodCAFilePath)
-		if err != nil {
-			return nil, fmt.Errorf("Error loading CA file: %v", err)
-		}
-
-		// Get Prometheus Host
-		u, err := url.Parse(prometheusURL)
-		if err != nil {
-			return nil, fmt.Errorf("Error parsing prometheus URL: %v", err)
-		}
-		roundTripper = transport.NewBearerAuthRoundTripper(
-			authToken,
-			&http.Transport{
-				Proxy: http.ProxyFromEnvironment,
-				DialContext: (&net.Dialer{
-					Timeout:   30 * time.Second,
-					KeepAlive: 30 * time.Second,
-				}).DialContext,
-				TLSHandshakeTimeout: 10 * time.Second,
-				TLSClientConfig: &tls.Config{
-					RootCAs:    caCertPool,
-					ServerName: u.Host,
-				},
-			},
-		)
+func CreatePrometheusClient(prometheusURL, authToken string) (promapi.Client, *http.Transport, error) {
+	// Retrieve Pod CA cert
+	caCertPool, err := loadCAFile(K8sPodCAFilePath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("Error loading CA file: %v", err)
 	}
 
+	// Get Prometheus Host
+	u, err := url.Parse(prometheusURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("Error parsing prometheus URL: %v", err)
+	}
+	t := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:        100,
+		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
+		TLSClientConfig: &tls.Config{
+			RootCAs:    caCertPool,
+			ServerName: u.Host,
+		},
+	}
+	roundTripper := transport.NewBearerAuthRoundTripper(
+		authToken,
+		t,
+	)
+
 	if authToken != "" {
-		return promapi.NewClient(promapi.Config{
+		client, err := promapi.NewClient(promapi.Config{
 			Address:      prometheusURL,
 			RoundTripper: config.NewAuthorizationCredentialsRoundTripper("Bearer", config.NewInlineSecret(authToken), roundTripper),
 		})
+		return client, t, err
 	}
-	return promapi.NewClient(promapi.Config{
+	client, err := promapi.NewClient(promapi.Config{
 		Address: prometheusURL,
 	})
+	return client, t, err
 }
