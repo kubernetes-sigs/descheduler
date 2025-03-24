@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/informers"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/klog/v2"
 	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	fakemetricsclient "k8s.io/metrics/pkg/client/clientset/versioned/fake"
 
@@ -122,6 +123,7 @@ func TestActualUsageClient(t *testing.T) {
 	collector := metricscollector.NewMetricsCollector(nodeLister, metricsClientset, labels.Everything())
 
 	usageClient := newActualUsageClient(
+		klog.FromContext(ctx),
 		resourceNames,
 		podsAssignedToNode,
 		collector,
@@ -271,7 +273,7 @@ func TestPrometheusUsageClient(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			prometheusUsageClient := newPrometheusUsageClient(podsAssignedToNode, pClient, "instance:node_cpu:rate:sum")
+			prometheusUsageClient := newPrometheusUsageClient(klog.FromContext(ctx), podsAssignedToNode, pClient, "instance:node_cpu:rate:sum")
 			err = prometheusUsageClient.sync(ctx, nodes)
 			if tc.err == nil {
 				if err != nil {

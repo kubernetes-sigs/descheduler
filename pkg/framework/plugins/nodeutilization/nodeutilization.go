@@ -165,13 +165,14 @@ func evictPodsFromSourceNodes(
 	usageClient usageClient,
 	maxNoOfPodsToEvictPerNode *uint,
 ) {
+	logger := klog.FromContext(ctx)
 	available, err := assessAvailableResourceInNodes(destinationNodes, resourceNames)
 	if err != nil {
-		klog.ErrorS(err, "unable to assess available resources in nodes")
+		logger.Error(err, "unable to assess available resources in nodes")
 		return
 	}
 
-	klog.V(1).InfoS("Total capacity to be moved", usageToKeysAndValues(available)...)
+	logger.V(1).Info("Total capacity to be moved", usageToKeysAndValues(available)...)
 
 	destinationTaints := make(map[string][]v1.Taint, len(destinationNodes))
 	for _, node := range destinationNodes {
@@ -179,14 +180,14 @@ func evictPodsFromSourceNodes(
 	}
 
 	for _, node := range sourceNodes {
-		klog.V(3).InfoS(
+		logger.V(3).Info(
 			"Evicting pods from node",
 			"node", klog.KObj(node.node),
 			"usage", node.usage,
 		)
 
 		nonRemovablePods, removablePods := classifyPods(node.allPods, podFilter)
-		klog.V(2).InfoS(
+		logger.V(2).Info(
 			"Pods on node",
 			"node", klog.KObj(node.node),
 			"allPods", len(node.allPods),
@@ -195,14 +196,14 @@ func evictPodsFromSourceNodes(
 		)
 
 		if len(removablePods) == 0 {
-			klog.V(1).InfoS(
+			logger.V(1).Info(
 				"No removable pods on node, try next node",
 				"node", klog.KObj(node.node),
 			)
 			continue
 		}
 
-		klog.V(1).InfoS(
+		logger.V(1).Info(
 			"Evicting pods based on priority, if they have same priority, they'll be evicted based on QoS tiers",
 		)
 
@@ -249,6 +250,7 @@ func evictPods(
 	usageClient usageClient,
 	maxNoOfPodsToEvictPerNode *uint,
 ) error {
+	logger := klog.FromContext(ctx)
 	// preemptive check to see if we should continue evicting pods.
 	if !continueEviction(nodeInfo, totalAvailableUsage) {
 		return nil
@@ -263,7 +265,7 @@ func evictPods(
 	var evictionCounter uint = 0
 	for _, pod := range inputPods {
 		if maxNoOfPodsToEvictPerNode != nil && evictionCounter >= *maxNoOfPodsToEvictPerNode {
-			klog.V(3).InfoS(
+			logger.V(3).Info(
 				"Max number of evictions per node per plugin reached",
 				"limit", *maxNoOfPodsToEvictPerNode,
 			)
@@ -271,7 +273,7 @@ func evictPods(
 		}
 
 		if !utils.PodToleratesTaints(pod, destinationTaints) {
-			klog.V(3).InfoS(
+			logger.V(3).Info(
 				"Skipping eviction for pod, doesn't tolerate node taint",
 				"pod", klog.KObj(pod),
 			)
@@ -286,7 +288,7 @@ func evictPods(
 			WithoutNamespaces(excludedNamespaces).
 			BuildFilterFunc()
 		if err != nil {
-			klog.ErrorS(err, "could not build preEvictionFilter with namespace exclusion")
+			logger.Error(err, "could not build preEvictionFilter with namespace exclusion")
 			continue
 		}
 
@@ -300,9 +302,8 @@ func evictPods(
 		podUsage, err := usageClient.podUsage(pod)
 		if err != nil {
 			if _, ok := err.(*notSupportedError); !ok {
-				klog.Errorf(
-					"unable to get pod usage for %v/%v: %v",
-					pod.Namespace, pod.Name, err,
+				logger.Error(err,
+					"unable to get pod usage", "pod", klog.KObj(pod),
 				)
 				continue
 			}
@@ -314,18 +315,18 @@ func evictPods(
 			case *evictions.EvictionNodeLimitError, *evictions.EvictionTotalLimitError:
 				return err
 			default:
-				klog.Errorf("eviction failed: %v", err)
+				logger.Error(err, "eviction failed")
 				continue
 			}
 		}
 
 		if maxNoOfPodsToEvictPerNode == nil && unconstrainedResourceEviction {
-			klog.V(3).InfoS("Currently, only a single pod eviction is allowed")
+			logger.V(3).Info("Currently, only a single pod eviction is allowed")
 			break
 		}
 
 		evictionCounter++
-		klog.V(3).InfoS("Evicted pods", "pod", klog.KObj(pod))
+		logger.V(3).Info("Evicted pods", "pod", klog.KObj(pod))
 		if unconstrainedResourceEviction {
 			continue
 		}
@@ -334,7 +335,7 @@ func evictPods(
 
 		keysAndValues := []any{"node", nodeInfo.node.Name}
 		keysAndValues = append(keysAndValues, usageToKeysAndValues(nodeInfo.usage)...)
-		klog.V(3).InfoS("Updated node usage", keysAndValues...)
+		logger.V(3).Info("Updated node usage", keysAndValues...)
 
 		// make sure we should continue evicting pods.
 		if !continueEviction(nodeInfo, totalAvailableUsage) {
