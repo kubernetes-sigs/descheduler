@@ -29,9 +29,9 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
-func evictionConstraintsForFailedBarePods(evictFailedBarePods bool) []constraint {
+func evictionConstraintsForFailedBarePods(logger klog.Logger, evictFailedBarePods bool) []constraint {
 	if evictFailedBarePods {
-		klog.V(1).InfoS("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
+		logger.V(1).Info("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
 		return []constraint{
 			func(pod *v1.Pod) error {
 				ownerRefList := podutil.OwnerRef(pod)
@@ -52,7 +52,7 @@ func evictionConstraintsForFailedBarePods(evictFailedBarePods bool) []constraint
 	}
 }
 
-func evictionConstraintsForSystemCriticalPods(evictSystemCriticalPods bool, priorityThreshold *api.PriorityThreshold, handle frameworktypes.Handle) ([]constraint, error) {
+func evictionConstraintsForSystemCriticalPods(logger klog.Logger, evictSystemCriticalPods bool, priorityThreshold *api.PriorityThreshold, handle frameworktypes.Handle) ([]constraint, error) {
 	var constraints []constraint
 
 	if !evictSystemCriticalPods {
@@ -66,7 +66,7 @@ func evictionConstraintsForSystemCriticalPods(evictSystemCriticalPods bool, prio
 		if priorityThreshold != nil && (priorityThreshold.Value != nil || len(priorityThreshold.Name) > 0) {
 			thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), priorityThreshold)
 			if err != nil {
-				klog.Errorf("failed to get priority threshold: %v", err)
+				logger.Error(err, "failed to get priority threshold")
 				return nil, err
 			}
 			constraints = append(constraints, func(pod *v1.Pod) error {
@@ -77,7 +77,7 @@ func evictionConstraintsForSystemCriticalPods(evictSystemCriticalPods bool, prio
 			})
 		}
 	} else {
-		klog.V(1).InfoS("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
+		logger.V(1).Info("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
 	}
 
 	return constraints, nil
@@ -126,11 +126,11 @@ func evictionConstraintsForPvcPods(ignorePvcPods bool) []constraint {
 	return nil
 }
 
-func evictionConstraintsForLabelSelector(labelSelector *metav1.LabelSelector) ([]constraint, error) {
+func evictionConstraintsForLabelSelector(logger klog.Logger, labelSelector *metav1.LabelSelector) ([]constraint, error) {
 	if labelSelector != nil {
 		selector, err := metav1.LabelSelectorAsSelector(labelSelector)
 		if err != nil {
-			klog.Error(err, "could not get selector from label selector")
+			logger.Error(err, "could not get selector from label selector")
 			return nil, err
 		}
 		if !selector.Empty() {
@@ -147,12 +147,12 @@ func evictionConstraintsForLabelSelector(labelSelector *metav1.LabelSelector) ([
 	return nil, nil
 }
 
-func evictionConstraintsForMinReplicas(minReplicas uint, handle frameworktypes.Handle) ([]constraint, error) {
+func evictionConstraintsForMinReplicas(logger klog.Logger, minReplicas uint, handle frameworktypes.Handle) ([]constraint, error) {
 	if minReplicas > 1 {
 		indexName := "metadata.ownerReferences"
 		indexer, err := getPodIndexerByOwnerRefs(indexName, handle)
 		if err != nil {
-			klog.Error(err, "could not get pod indexer by ownerRefs")
+			logger.Error(err, "could not get pod indexer by ownerRefs")
 			return nil, err
 		}
 		return []constraint{
@@ -161,7 +161,7 @@ func evictionConstraintsForMinReplicas(minReplicas uint, handle frameworktypes.H
 					return nil
 				}
 				if len(pod.OwnerReferences) > 1 {
-					klog.V(5).InfoS("pod has multiple owner references which is not supported for minReplicas check", "size", len(pod.OwnerReferences), "pod", klog.KObj(pod))
+					logger.V(5).Info("pod has multiple owner references which is not supported for minReplicas check", "size", len(pod.OwnerReferences), "pod", klog.KObj(pod))
 					return nil
 				}
 				ownerRef := pod.OwnerReferences[0]
