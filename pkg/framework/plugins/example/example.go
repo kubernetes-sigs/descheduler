@@ -46,6 +46,7 @@ var _ fwtypes.DeschedulePlugin = &Example{}
 // Example is our plugin (implementing the DeschedulePlugin interface). This
 // plugin will evict pods that match a regex and are older than a certain age.
 type Example struct {
+	logger    klog.Logger
 	handle    fwtypes.Handle
 	args      *ExampleArgs
 	podFilter podutil.FilterFunc
@@ -61,6 +62,7 @@ func New(ctx context.Context, args runtime.Object, handle fwtypes.Handle) (fwtyp
 	if !ok {
 		return nil, fmt.Errorf("args must be of type ExampleArgs, got %T", args)
 	}
+	logger := klog.FromContext(ctx).WithValues("plugin", PluginName)
 
 	// we can use the included and excluded namespaces to filter the pods we want
 	// to evict.
@@ -90,6 +92,7 @@ func New(ctx context.Context, args runtime.Object, handle fwtypes.Handle) (fwtyp
 	}
 
 	return &Example{
+		logger:    logger,
 		handle:    handle,
 		podFilter: podFilter,
 		args:      exampleArgs,
@@ -107,7 +110,7 @@ func (d *Example) Name() string {
 // of nodes we need to process.
 func (d *Example) Deschedule(ctx context.Context, nodes []*v1.Node) *fwtypes.Status {
 	var podsToEvict []*v1.Pod
-	logger := klog.FromContext(ctx)
+	logger := klog.FromContext(klog.NewContext(ctx, d.logger)).WithValues("ExtensionPoint", fwtypes.DescheduleExtensionPoint)
 	logger.Info("Example plugin starting descheduling")
 
 	re, err := regexp.Compile(d.args.Regex)

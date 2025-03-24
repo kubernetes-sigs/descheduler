@@ -38,6 +38,7 @@ var _ frameworktypes.DeschedulePlugin = &PodLifeTime{}
 
 // PodLifeTime evicts pods on the node that violate the max pod lifetime threshold
 type PodLifeTime struct {
+	logger    klog.Logger
 	handle    frameworktypes.Handle
 	args      *PodLifeTimeArgs
 	podFilter podutil.FilterFunc
@@ -49,6 +50,7 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type PodLifeTimeArgs, got %T", args)
 	}
+	logger := klog.FromContext(ctx).WithValues("plugin", PluginName)
 
 	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if podLifeTimeArgs.Namespaces != nil {
@@ -115,6 +117,7 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 	}
 
 	return &PodLifeTime{
+		logger:    logger,
 		handle:    handle,
 		podFilter: podFilter,
 		args:      podLifeTimeArgs,
@@ -130,9 +133,9 @@ func (d *PodLifeTime) Name() string {
 func (d *PodLifeTime) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	podsToEvict := make([]*v1.Pod, 0)
 	nodeMap := make(map[string]*v1.Node, len(nodes))
-
+	logger := klog.FromContext(klog.NewContext(ctx, d.logger)).WithValues("ExtensionPoint", frameworktypes.DescheduleExtensionPoint)
 	for _, node := range nodes {
-		klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
+		logger.V(2).Info("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListAllPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			// no pods evicted as error encountered retrieving evictable Pods
@@ -161,7 +164,7 @@ loop:
 		case *evictions.EvictionTotalLimitError:
 			return nil
 		default:
-			klog.Errorf("eviction failed: %v", err)
+			logger.Error(err, "eviction failed")
 		}
 	}
 
