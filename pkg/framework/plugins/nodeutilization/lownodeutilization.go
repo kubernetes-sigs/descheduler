@@ -92,16 +92,6 @@ func NewLowNodeUtilization(
 		)
 	}
 
-	// underCriteria and overCriteria are slices used for logging purposes.
-	// we assemble them only once.
-	underCriteria, overCriteria := []any{}, []any{}
-	for name := range args.Thresholds {
-		underCriteria = append(underCriteria, name, args.Thresholds[name])
-	}
-	for name := range args.TargetThresholds {
-		overCriteria = append(overCriteria, name, args.TargetThresholds[name])
-	}
-
 	podFilter, err := podutil.
 		NewOptions().
 		WithFilter(handle.Evictor().Filter).
@@ -127,8 +117,8 @@ func NewLowNodeUtilization(
 	return &LowNodeUtilization{
 		handle:                handle,
 		args:                  args,
-		underCriteria:         underCriteria,
-		overCriteria:          overCriteria,
+		underCriteria:         thresholdsToKeysAndValues(args.Thresholds),
+		overCriteria:          thresholdsToKeysAndValues(args.TargetThresholds),
 		resourceNames:         resourceNames,
 		extendedResourceNames: extendedResourceNames,
 		podFilter:             podFilter,
