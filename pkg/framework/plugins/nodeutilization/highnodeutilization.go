@@ -74,13 +74,6 @@ func NewHighNodeUtilization(
 		highThresholds[rname] = MaxResourcePercentage
 	}
 
-	// criteria is a list of thresholds that are used to determine if a node
-	// is underutilized. it is used only for logging purposes.
-	criteria := []any{}
-	for rname, rvalue := range args.Thresholds {
-		criteria = append(criteria, rname, rvalue)
-	}
-
 	podFilter, err := podutil.
 		NewOptions().
 		WithFilter(handle.Evictor().Filter).
@@ -106,7 +99,7 @@ func NewHighNodeUtilization(
 		args:           args,
 		resourceNames:  resourceNames,
 		highThresholds: highThresholds,
-		criteria:       criteria,
+		criteria:       thresholdsToKeysAndValues(args.Thresholds),
 		podFilter:      podFilter,
 		usageClient: newRequestedUsageClient(
 			resourceNames,
