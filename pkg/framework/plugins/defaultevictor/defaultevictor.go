@@ -209,6 +209,15 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		})
 	}
 
+	if defaultEvictorArgs.IgnorePodsWithResourceClaims {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			if utils.IsPodWithResourceClaims(pod) {
+				return fmt.Errorf("pod has a ResourceClaim and descheduler is configured to ignore ResourceClaim pods")
+			}
+			return nil
+		})
+	}
+
 	return ev, nil
 }
 
