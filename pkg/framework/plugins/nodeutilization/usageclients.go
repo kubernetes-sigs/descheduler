@@ -70,6 +70,7 @@ type usageClient interface {
 }
 
 type requestedUsageClient struct {
+	logger                klog.Logger
 	resourceNames         []v1.ResourceName
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc
 
@@ -80,10 +81,12 @@ type requestedUsageClient struct {
 var _ usageClient = &requestedUsageClient{}
 
 func newRequestedUsageClient(
+	logger klog.Logger,
 	resourceNames []v1.ResourceName,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 ) *requestedUsageClient {
 	return &requestedUsageClient{
+		logger:                logger,
 		resourceNames:         resourceNames,
 		getPodsAssignedToNode: getPodsAssignedToNode,
 	}
@@ -106,13 +109,14 @@ func (s *requestedUsageClient) podUsage(pod *v1.Pod) (api.ReferencedResourceList
 }
 
 func (s *requestedUsageClient) sync(ctx context.Context, nodes []*v1.Node) error {
+	s.logger = klog.FromContext(klog.NewContext(ctx, s.logger))
 	s._nodeUtilization = make(map[string]api.ReferencedResourceList)
 	s._pods = make(map[string][]*v1.Pod)
 
 	for _, node := range nodes {
 		pods, err := podutil.ListPodsOnANode(node.Name, s.getPodsAssignedToNode, nil)
 		if err != nil {
-			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
+			s.logger.V(2).Info("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
 			return fmt.Errorf("error accessing %q node's pods: %v", node.Name, err)
 		}
 
@@ -133,6 +137,7 @@ func (s *requestedUsageClient) sync(ctx context.Context, nodes []*v1.Node) error
 }
 
 type actualUsageClient struct {
+	logger                klog.Logger
 	resourceNames         []v1.ResourceName
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc
 	metricsCollector      *metricscollector.MetricsCollector
@@ -144,11 +149,13 @@ type actualUsageClient struct {
 var _ usageClient = &actualUsageClient{}
 
 func newActualUsageClient(
+	logger klog.Logger,
 	resourceNames []v1.ResourceName,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 	metricsCollector *metricscollector.MetricsCollector,
 ) *actualUsageClient {
 	return &actualUsageClient{
+		logger:                logger,
 		resourceNames:         resourceNames,
 		getPodsAssignedToNode: getPodsAssignedToNode,
 		metricsCollector:      metricsCollector,
@@ -192,6 +199,7 @@ func (client *actualUsageClient) podUsage(pod *v1.Pod) (api.ReferencedResourceLi
 }
 
 func (client *actualUsageClient) sync(ctx context.Context, nodes []*v1.Node) error {
+	client.logger = klog.FromContext(klog.NewContext(ctx, client.logger))
 	client._nodeUtilization = make(map[string]api.ReferencedResourceList)
 	client._pods = make(map[string][]*v1.Pod)
 
@@ -203,7 +211,7 @@ func (client *actualUsageClient) sync(ctx context.Context, nodes []*v1.Node) err
 	for _, node := range nodes {
 		pods, err := podutil.ListPodsOnANode(node.Name, client.getPodsAssignedToNode, nil)
 		if err != nil {
-			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
+			client.logger.V(2).Info("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
 			return fmt.Errorf("error accessing %q node's pods: %v", node.Name, err)
 		}
 
@@ -229,6 +237,7 @@ func (client *actualUsageClient) sync(ctx context.Context, nodes []*v1.Node) err
 }
 
 type prometheusUsageClient struct {
+	logger                klog.Logger
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc
 	promClient            promapi.Client
 	promQuery             string
@@ -240,11 +249,13 @@ type prometheusUsageClient struct {
 var _ usageClient = &actualUsageClient{}
 
 func newPrometheusUsageClient(
+	logger klog.Logger,
 	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc,
 	promClient promapi.Client,
 	promQuery string,
 ) *prometheusUsageClient {
 	return &prometheusUsageClient{
+		logger:                logger,
 		getPodsAssignedToNode: getPodsAssignedToNode,
 		promClient:            promClient,
 		promQuery:             promQuery,
@@ -264,12 +275,13 @@ func (client *prometheusUsageClient) podUsage(pod *v1.Pod) (map[v1.ResourceName]
 }
 
 func NodeUsageFromPrometheusMetrics(ctx context.Context, promClient promapi.Client, promQuery string) (map[string]map[v1.ResourceName]*resource.Quantity, error) {
+	logger := klog.FromContext(ctx)
 	results, warnings, err := promv1.NewAPI(promClient).Query(ctx, promQuery, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("unable to capture prometheus metrics: %v", err)
 	}
 	if len(warnings) > 0 {
-		klog.Infof("prometheus metrics warnings: %v", warnings)
+		logger.Info("prometheus metrics warnings: %v", warnings)
 	}
 
 	if results.Type() != model.ValVector {
@@ -294,6 +306,7 @@ func NodeUsageFromPrometheusMetrics(ctx context.Context, promClient promapi.Clie
 }
 
 func (client *prometheusUsageClient) sync(ctx context.Context, nodes []*v1.Node) error {
+	client.logger = klog.FromContext(klog.NewContext(ctx, client.logger))
 	client._nodeUtilization = make(map[string]map[v1.ResourceName]*resource.Quantity)
 	client._pods = make(map[string][]*v1.Pod)
 
@@ -308,7 +321,7 @@ func (client *prometheusUsageClient) sync(ctx context.Context, nodes []*v1.Node)
 		}
 		pods, err := podutil.ListPodsOnANode(node.Name, client.getPodsAssignedToNode, nil)
 		if err != nil {
-			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
+			client.logger.V(2).Info("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
 			return fmt.Errorf("error accessing %q node's pods: %v", node.Name, err)
 		}
 
