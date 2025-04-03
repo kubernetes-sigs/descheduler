@@ -318,8 +318,6 @@ func makePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 	return v1.PodSpec{
 		SecurityContext: &v1.PodSecurityContext{
 			RunAsNonRoot: utilptr.To(true),
-			RunAsUser:    utilptr.To[int64](1000),
-			RunAsGroup:   utilptr.To[int64](1000),
 			SeccompProfile: &v1.SeccompProfile{
 				Type: v1.SeccompProfileTypeRuntimeDefault,
 			},
@@ -527,8 +525,6 @@ func TestLowNodeUtilization(t *testing.T) {
 			Spec: v1.PodSpec{
 				SecurityContext: &v1.PodSecurityContext{
 					RunAsNonRoot: utilptr.To(true),
-					RunAsUser:    utilptr.To[int64](1000),
-					RunAsGroup:   utilptr.To[int64](1000),
 					SeccompProfile: &v1.SeccompProfile{
 						Type: v1.SeccompProfileTypeRuntimeDefault,
 					},
@@ -1610,8 +1606,6 @@ func createBalancedPodForNodes(
 			Spec: v1.PodSpec{
 				SecurityContext: &v1.PodSecurityContext{
 					RunAsNonRoot: utilptr.To(true),
-					RunAsUser:    utilptr.To[int64](1000),
-					RunAsGroup:   utilptr.To[int64](1000),
 					SeccompProfile: &v1.SeccompProfile{
 						Type: v1.SeccompProfileTypeRuntimeDefault,
 					},
