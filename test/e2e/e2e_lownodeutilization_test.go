@@ -111,7 +111,7 @@ func TestLowNodeUtilizationKubernetesMetrics(t *testing.T) {
 	testLabel := map[string]string{"app": "test-lownodeutilization-kubernetes-metrics", "name": "test-lownodeutilization-kubernetes-metrics"}
 	deploymentObj := buildTestDeployment("lownodeutilization-kubernetes-metrics-pod", testNamespace.Name, 0, testLabel, nil)
 	deploymentObj.Spec.Template.Spec.Containers[0].Image = "narmidm/k8s-pod-cpu-stressor:latest"
-	deploymentObj.Spec.Template.Spec.Containers[0].Args = []string{"-cpu=3", "-duration=10s", "-forever"}
+	deploymentObj.Spec.Template.Spec.Containers[0].Args = []string{"-cpu=1.0", "-duration=10s", "-forever"}
 	deploymentObj.Spec.Template.Spec.Containers[0].Resources = v1.ResourceRequirements{
 		Limits: v1.ResourceList{
 			v1.ResourceCPU: resource.MustParse("3000m"),
