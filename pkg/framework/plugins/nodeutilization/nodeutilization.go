@@ -32,6 +32,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
+	"sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization/normalizer"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -751,4 +752,20 @@ func assessAvailableResourceInNodes(
 	}
 
 	return available, nil
+}
+
+// withResourceRequestForAny returns a filter function that checks if a pod
+// has a resource request specified for any of the given resources names.
+func withResourceRequestForAny(names ...v1.ResourceName) pod.FilterFunc {
+	return func(pod *v1.Pod) bool {
+		all := append(pod.Spec.Containers, pod.Spec.InitContainers...)
+		for _, name := range names {
+			for _, container := range all {
+				if _, ok := container.Resources.Requests[name]; ok {
+					return true
+				}
+			}
+		}
+		return false
+	}
 }

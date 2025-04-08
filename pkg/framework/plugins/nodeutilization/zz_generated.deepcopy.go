@@ -37,6 +37,11 @@ func (in *HighNodeUtilizationArgs) DeepCopyInto(out *HighNodeUtilizationArgs) {
 			(*out)[key] = val
 		}
 	}
+	if in.EvictionModes != nil {
+		in, out := &in.EvictionModes, &out.EvictionModes
+		*out = make([]EvictionMode, len(*in))
+		copy(*out, *in)
+	}
 	if in.EvictableNamespaces != nil {
 		in, out := &in.EvictableNamespaces, &out.EvictableNamespaces
 		*out = new(api.Namespaces)

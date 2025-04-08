@@ -18,6 +18,18 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
+// EvictionMode describe a mode of eviction. See the list below for the
+// available modes.
+type EvictionMode string
+
+const (
+	// EvictionModeOnlyThresholdingResources makes the descheduler evict
+	// only pods that have a resource request defined for any of the user
+	// provided thresholds. If the pod does not request the resource, it
+	// will not be evicted.
+	EvictionModeOnlyThresholdingResources EvictionMode = "OnlyThresholdingResources"
+)
+
 // +k8s:deepcopy-gen=true
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
@@ -47,6 +59,13 @@ type HighNodeUtilizationArgs struct {
 
 	Thresholds    api.ResourceThresholds `json:"thresholds"`
 	NumberOfNodes int                    `json:"numberOfNodes,omitempty"`
+
+	// EvictionModes is a set of modes to be taken into account when the
+	// descheduler evicts pods. For example the mode
+	// `OnlyThresholdingResources` can be used to make sure the descheduler
+	// only evicts pods who have resource requests for the defined
+	// thresholds.
+	EvictionModes []EvictionMode `json:"evictionModes,omitempty"`
 
 	// Naming this one differently since namespaces are still
 	// considered while considering resources used by pods

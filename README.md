@@ -405,6 +405,12 @@ strategy evicts pods from `underutilized nodes` (those with usage below `thresho
 so that they can be recreated in appropriately utilized nodes.
 The strategy will abort if any number of `underutilized nodes` or `appropriately utilized nodes` is zero.
 
+To control pod eviction from underutilized nodes, use the `evictionModes`
+array. A lenient policy, which evicts pods regardless of their resource
+requests, is the default. To enable a stricter policy that only evicts pods
+with resource requests defined for the provided threshold resources, add the
+option `OnlyThresholdingResources` to the `evictionModes` configuration.
+
 **NOTE:** Node resource consumption is determined by the requests and limits of pods, not actual usage.
 This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same
 design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands
@@ -417,7 +423,14 @@ actual usage metrics. Implementing metrics-based descheduling is currently TODO 
 |---|---|
 |`thresholds`|map(string:int)|
 |`numberOfNodes`|int|
+|`evictionModes`|list(string)|
 |`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
+
+**Supported Eviction Modes:**
+
+|Name|Description|
+|---|---|
+|`OnlyThresholdingResources`|Evict only pods that have resource requests defined for the provided threshold resources.|
 
 **Example:**
 
@@ -437,6 +450,8 @@ profiles:
           exclude:
           - "kube-system"
           - "namespace1"
+        evictionModes:
+          - "OnlyThresholdingResources"
     plugins:
       balance:
         enabled:
