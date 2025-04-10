@@ -48,6 +48,7 @@ func TestHighNodeUtilization(t *testing.T) {
 	testCases := []struct {
 		name                string
 		thresholds          api.ResourceThresholds
+		evictionModes       []EvictionMode
 		nodes               []*v1.Node
 		pods                []*v1.Pod
 		expectedPodsEvicted uint
@@ -433,6 +434,53 @@ func TestHighNodeUtilization(t *testing.T) {
 			},
 			expectedPodsEvicted: 0,
 		},
+		{
+			name: "with extended resource threshold and no extended resource pods",
+			thresholds: api.ResourceThresholds{
+				extendedResource: 40,
+			},
+			evictionModes: []EvictionMode{EvictionModeOnlyThresholdingResources},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 10, func(node *v1.Node) {
+					test.SetNodeExtendedResource(node, extendedResource, 10)
+				}),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, func(node *v1.Node) {
+					test.SetNodeExtendedResource(node, extendedResource, 10)
+				}),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, func(node *v1.Node) {
+					test.SetNodeExtendedResource(node, extendedResource, 10)
+				}),
+			},
+			pods: []*v1.Pod{
+				// pods on node1 have the extended resource
+				// request set and they put the node in the
+				// over utilization range.
+				test.BuildTestPod("p1", 100, 0, n1NodeName, func(pod *v1.Pod) {
+					test.SetRSOwnerRef(pod)
+					test.SetPodExtendedResourceRequest(pod, extendedResource, 3)
+				}),
+				test.BuildTestPod("p2", 100, 0, n1NodeName, func(pod *v1.Pod) {
+					test.SetRSOwnerRef(pod)
+					test.SetPodExtendedResourceRequest(pod, extendedResource, 3)
+				}),
+				// pods in the other nodes must not be evicted
+				// because they do not have the extended
+				// resource defined in their requests.
+				test.BuildTestPod("p3", 500, 0, n2NodeName, func(pod *v1.Pod) {
+					test.SetRSOwnerRef(pod)
+				}),
+				test.BuildTestPod("p4", 500, 0, n2NodeName, func(pod *v1.Pod) {
+					test.SetRSOwnerRef(pod)
+				}),
+				test.BuildTestPod("p5", 500, 0, n2NodeName, func(pod *v1.Pod) {
+					test.SetRSOwnerRef(pod)
+				}),
+				test.BuildTestPod("p6", 500, 0, n2NodeName, func(pod *v1.Pod) {
+					test.SetRSOwnerRef(pod)
+				}),
+			},
+			expectedPodsEvicted: 0,
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -474,10 +522,13 @@ func TestHighNodeUtilization(t *testing.T) {
 				})
 			}
 
-			plugin, err := NewHighNodeUtilization(&HighNodeUtilizationArgs{
-				Thresholds: testCase.thresholds,
-			},
-				handle)
+			plugin, err := NewHighNodeUtilization(
+				&HighNodeUtilizationArgs{
+					Thresholds:    testCase.thresholds,
+					EvictionModes: testCase.evictionModes,
+				},
+				handle,
+			)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
 			}

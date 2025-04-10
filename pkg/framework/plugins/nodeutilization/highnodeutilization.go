@@ -19,6 +19,7 @@ package nodeutilization
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -74,9 +75,26 @@ func NewHighNodeUtilization(
 		highThresholds[rname] = MaxResourcePercentage
 	}
 
+	// get the resource names for which we have a threshold. this is
+	// later used when determining if we are going to evict a pod.
+	resourceThresholds := getResourceNames(args.Thresholds)
+
+	// by default we evict pods from the under utilized nodes even if they
+	// don't define a request for a given threshold. this works most of the
+	// times and there is an use case for it. When using the restrict mode
+	// we evaluate if the pod has a request for any of the resources the
+	// user has provided as threshold.
+	filters := []podutil.FilterFunc{handle.Evictor().Filter}
+	if slices.Contains(args.EvictionModes, EvictionModeOnlyThresholdingResources) {
+		filters = append(
+			filters,
+			withResourceRequestForAny(resourceThresholds...),
+		)
+	}
+
 	podFilter, err := podutil.
 		NewOptions().
-		WithFilter(handle.Evictor().Filter).
+		WithFilter(podutil.WrapFilterFuncs(filters...)).
 		BuildFilterFunc()
 	if err != nil {
 		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
@@ -87,7 +105,7 @@ func NewHighNodeUtilization(
 	// all we consider the basic resources (cpu, memory, pods).
 	resourceNames := uniquifyResourceNames(
 		append(
-			getResourceNames(args.Thresholds),
+			resourceThresholds,
 			v1.ResourceCPU,
 			v1.ResourceMemory,
 			v1.ResourcePods,
