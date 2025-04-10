@@ -66,6 +66,7 @@ type topologySpreadConstraint struct {
 
 // RemovePodsViolatingTopologySpreadConstraint evicts pods which violate their topology spread constraints
 type RemovePodsViolatingTopologySpreadConstraint struct {
+	logger    klog.Logger
 	handle    frameworktypes.Handle
 	args      *RemovePodsViolatingTopologySpreadConstraintArgs
 	podFilter podutil.FilterFunc
@@ -79,6 +80,7 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingTopologySpreadConstraintArgs, got %T", args)
 	}
+	logger := klog.Background().WithValues("plugin", PluginName)
 
 	podFilter, err := podutil.NewOptions().
 		WithFilter(handle.Evictor().Filter).
@@ -89,6 +91,7 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 	}
 
 	return &RemovePodsViolatingTopologySpreadConstraint{
+		logger:    logger,
 		handle:    handle,
 		podFilter: podFilter,
 		args:      pluginArgs,
@@ -102,6 +105,8 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Name() string {
 
 // nolint: gocyclo
 func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	logger := klog.FromContext(klog.NewContext(ctx, d.logger)).WithValues("ExtensionPoint", frameworktypes.BalanceExtensionPoint)
+
 	nodeMap := make(map[string]*v1.Node, len(nodes))
 	for _, node := range nodes {
 		nodeMap[node.Name] = node
@@ -119,7 +124,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 	// iterate through all topoPairs for this topologyKey and diff currentPods -minPods <=maxSkew
 	// if diff > maxSkew, add this pod in the current bucket for eviction
 
-	klog.V(1).Info("Processing namespaces for topology spread constraints")
+	logger.V(1).Info("Processing namespaces for topology spread constraints")
 	podsForEviction := make(map[*v1.Pod]struct{})
 	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if d.args.Namespaces != nil {
@@ -140,7 +145,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 
 	// 1. for each namespace...
 	for namespace := range namespacedPods {
-		klog.V(4).InfoS("Processing namespace for topology spread constraints", "namespace", namespace)
+		logger.V(4).Info("Processing namespace for topology spread constraints", "namespace", namespace)
 
 		if (len(includedNamespaces) > 0 && !includedNamespaces.Has(namespace)) ||
 			(len(excludedNamespaces) > 0 && excludedNamespaces.Has(namespace)) {
@@ -158,7 +163,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 
 				namespaceTopologySpreadConstraint, err := newTopologySpreadConstraint(constraint, pod)
 				if err != nil {
-					klog.ErrorS(err, "cannot process topology spread constraint")
+					logger.Error(err, "cannot process topology spread constraint")
 					continue
 				}
 
@@ -218,7 +223,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 				sumPods++
 			}
 			if topologyIsBalanced(constraintTopologies, tsc) {
-				klog.V(2).InfoS("Skipping topology constraint because it is already balanced", "constraint", tsc)
+				logger.V(2).Info("Skipping topology constraint because it is already balanced", "constraint", tsc)
 				continue
 			}
 			d.balanceDomains(podsForEviction, tsc, constraintTopologies, sumPods, nodes)
@@ -245,7 +250,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 			case *evictions.EvictionTotalLimitError:
 				return nil
 			default:
-				klog.Errorf("eviction failed: %v", err)
+				logger.Error(err, "eviction failed")
 			}
 		}
 	}
@@ -370,7 +375,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(
 			// So, a better selection heuristic could improve performance.
 
 			if topologyBalanceNodeFit && !node.PodFitsAnyOtherNode(getPodsAssignedToNode, aboveToEvict[k], nodesBelowIdealAvg) {
-				klog.V(2).InfoS("ignoring pod for eviction as it does not fit on any other node", "pod", klog.KObj(aboveToEvict[k]))
+				d.logger.V(2).Info("ignoring pod for eviction as it does not fit on any other node", "pod", klog.KObj(aboveToEvict[k]))
 				continue
 			}
 
