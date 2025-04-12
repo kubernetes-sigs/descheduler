@@ -67,6 +67,7 @@ spec:
           priorityClassName: {{ .Values.priorityClassName }}
           {{- end }}
           serviceAccountName: {{ template "descheduler.serviceAccountName" . }}
+          automountServiceAccountToken: {{ .Values.automountServiceAccountToken }}
           restartPolicy: "Never"
           {{- with .Values.imagePullSecrets }}
           imagePullSecrets:

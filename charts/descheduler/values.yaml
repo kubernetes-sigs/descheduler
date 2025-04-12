@@ -199,6 +199,11 @@ serviceAccount:
   name:
   # Specifies custom annotations for the serviceAccount
   annotations: {}
+  # Opt out of API credential automounting
+  automountServiceAccountToken: true
+
+# Mount the ServiceAccountToken in the Pod of a CronJob or Deployment 
+automountServiceAccountToken: true
 
 podAnnotations: {}
 
