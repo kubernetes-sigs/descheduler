@@ -209,7 +209,103 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		})
 	}
 
+	// add constraints based on EvictionActions
+	addEvictionActionConstraints(ev, defaultEvictorArgs.EvictionActions, handle)
+	// add constraints based on EvictionProtections
+	addEvictionProtectionConstraints(ev, defaultEvictorArgs.EvictionProtections, handle)
 	return ev, nil
+}
+
+func addEvictionActionConstraints(ev *DefaultEvictor, actions []EvictionActionType, handle frameworktypes.Handle) {
+	// helper function to check if a specific EvictionActionType is in the list.
+	isActionSet := func(action EvictionActionType) bool {
+		for _, a := range actions {
+			if a == action {
+				return true
+			}
+		}
+		return false
+	}
+
+	// handle WithLocalStorage
+	if !isActionSet(WithLocalStorage) {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			if utils.IsPodWithLocalStorage(pod) {
+				return fmt.Errorf("pod has local storage and descheduler is not configured with evictLocalStoragePods")
+			}
+			return nil
+		})
+	}
+
+	// handle DaemonSetPods
+	if !isActionSet(DaemonSetPods) {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			ownerRefList := podutil.OwnerRef(pod)
+			if utils.IsDaemonsetPod(ownerRefList) {
+				return fmt.Errorf("pod is managed by a DaemonSet and descheduler is not configured with evictDaemonSetPods")
+			}
+			return nil
+		})
+	}
+
+	// handle SystemCriticalPods
+	if !isActionSet(SystemCriticalPods) {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			if utils.IsCriticalPriorityPod(pod) {
+				return fmt.Errorf("pod has system-critical priority and descheduler is not configured with evictSystemCriticalPods")
+			}
+			return nil
+		})
+	}
+
+	// handle FailedBarePods
+	if !isActionSet(FailedBarePods) {
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			ownerRefList := podutil.OwnerRef(pod)
+			if len(ownerRefList) == 0 {
+				return fmt.Errorf("pod is a failed bare pod and descheduler is not configured with evictFailedBarePods")
+			}
+			return nil
+		})
+	} else {
+		klog.V(1).InfoS("Warning: failedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
+		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+			ownerRefList := podutil.OwnerRef(pod)
+			// Enable evictFailedBarePods to evict bare pods in failed phase
+			if len(ownerRefList) == 0 && pod.Status.Phase != v1.PodFailed {
+				return fmt.Errorf("pod does not have any ownerRefs and is not in failed phase")
+			}
+			return nil
+		})
+	}
+}
+
+// addEvictionProtectionConstraints adds constraints based on EvictionProtections.
+func addEvictionProtectionConstraints(ev *DefaultEvictor, protections []EvictionProtectionType, handle frameworktypes.Handle) {
+	for _, protection := range protections {
+		switch protection {
+		case WithPVC:
+			ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+				if utils.IsPodWithPVC(pod) {
+					return fmt.Errorf("pod has PVC and is protected by EvictionProtection: %s", WithPVC)
+				}
+				return nil
+			})
+		case WithoutPDB:
+			ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
+				hasPdb, err := utils.IsPodCoveredByPDB(pod, handle.SharedInformerFactory().Policy().V1().PodDisruptionBudgets().Lister())
+				if err != nil {
+					return fmt.Errorf("unable to check if pod is covered by PodDisruptionBudget: %w", err)
+				}
+				if !hasPdb {
+					return fmt.Errorf("pod is not covered by a PodDisruptionBudget and is protected by EvictionProtection: %s", WithoutPDB)
+				}
+				return nil
+			})
+		default:
+			klog.Warningf("Unknown EvictionProtection type: %s", protection)
+		}
+	}
 }
 
 // Name retrieves the plugin name

@@ -46,6 +46,16 @@ func (in *DefaultEvictorArgs) DeepCopyInto(out *DefaultEvictorArgs) {
 		*out = new(v1.Duration)
 		**out = **in
 	}
+	if in.EvictionActions != nil {
+		in, out := &in.EvictionActions, &out.EvictionActions
+		*out = make([]EvictionActionType, len(*in))
+		copy(*out, *in)
+	}
+	if in.EvictionProtections != nil {
+		in, out := &in.EvictionProtections, &out.EvictionProtections
+		*out = make([]EvictionProtectionType, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 
