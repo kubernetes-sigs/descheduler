@@ -83,15 +83,14 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 
 func (d *DefaultEvictor) addAllConstraints(handle frameworktypes.Handle) error {
 	args := d.args
-	d.constraints = append(d.constraints, evictionConstraintsForFailedBarePods(args.EvictFailedBarePods)...)
-	if constraints, err := evictionConstraintsForSystemCriticalPods(args.EvictSystemCriticalPods, args.PriorityThreshold, handle); err != nil {
-		return err
-	} else {
-		d.constraints = append(d.constraints, constraints...)
+
+	// Step 1: Determine effective protected policies based on the provided arguments.
+	effectiveProtectedPolicies := getEffectiveProtectedPolicies(args)
+
+	if err := applyEffectiveProtectedPolicies(d, effectiveProtectedPolicies, handle); err != nil {
+		return fmt.Errorf("failed to apply effective protected policies: %w", err)
 	}
-	d.constraints = append(d.constraints, evictionConstraintsForLocalStoragePods(args.EvictLocalStoragePods)...)
-	d.constraints = append(d.constraints, evictionConstraintsForDaemonSetPods(args.EvictDaemonSetPods)...)
-	d.constraints = append(d.constraints, evictionConstraintsForPvcPods(args.IgnorePvcPods)...)
+
 	if constraints, err := evictionConstraintsForLabelSelector(args.LabelSelector); err != nil {
 		return err
 	} else {
@@ -103,8 +102,123 @@ func (d *DefaultEvictor) addAllConstraints(handle frameworktypes.Handle) error {
 		d.constraints = append(d.constraints, constraints...)
 	}
 	d.constraints = append(d.constraints, evictionConstraintsForMinPodAge(args.MinPodAge)...)
-	d.constraints = append(d.constraints, evictionConstraintsForIgnorePodsWithoutPDB(args.IgnorePodsWithoutPDB, handle)...)
 	return nil
+}
+
+//// addAllConstraints adds all constraints based on arguments.
+//func addAllConstraints(ev *DefaultEvictor, args *DefaultEvictorArgs, handle frameworktypes.Handle) error {
+//	// Step 1: Determine effective protected policies based on the provided arguments.
+//	effectiveProtectedPolicies := getEffectiveProtectedPolicies(args)
+//
+//	if err := applyEffectiveProtectedPolicies(ev, effectiveProtectedPolicies, handle); err != nil {
+//		return fmt.Errorf("failed to apply effective protected policies: %w", err)
+//	}
+//
+//	// Step 2: Add label selector constraint
+//	if err := addLabelSelectorConstraint(ev, args.LabelSelector); err != nil {
+//		return fmt.Errorf("failed to add label selector constraint: %w", err)
+//	}
+//
+//	// Step 3: Add min replicas constraint
+//	if err := addMinReplicasConstraint(ev, args.MinReplicas, handle); err != nil {
+//		return fmt.Errorf("failed to add min replicas constraint: %w", err)
+//	}
+//
+//	// Step 4: Add min pod age constraint
+//	if err := addMinPodAgeConstraint(ev, args.MinPodAge); err != nil {
+//		return fmt.Errorf("failed to add min pod age constraint: %w", err)
+//	}
+//	return nil
+//}
+
+// applyEffectiveProtectedPolicies applies all relevant protection policies to the plugin.
+// For each policy:
+// - If it's in the list, we disallow eviction (shouldEvict = false).
+// - If it's NOT in the list, we allow eviction (shouldEvict = true).
+func applyEffectiveProtectedPolicies(d *DefaultEvictor, policies []PodProtectionPolicy, handle frameworktypes.Handle) error {
+	policyMap := make(map[PodProtectionPolicy]bool)
+	for _, policy := range policies {
+		policyMap[policy] = true
+	}
+
+	d.constraints = append(d.constraints, evictionConstraintsForFailedBarePods(!policyMap[FailedBarePods])...)
+	if constraints, err := evictionConstraintsForSystemCriticalPods(!policyMap[SystemCriticalPods], d.args.PriorityThreshold, handle); err != nil {
+		return err
+	} else {
+		d.constraints = append(d.constraints, constraints...)
+	}
+	d.constraints = append(d.constraints, evictionConstraintsForLocalStoragePods(!policyMap[PodsWithLocalStorage])...)
+	d.constraints = append(d.constraints, evictionConstraintsForDaemonSetPods(!policyMap[DaemonSetPods])...)
+	d.constraints = append(d.constraints, evictionConstraintsForPvcPods(policyMap[PodsWithPVC])...)
+	d.constraints = append(d.constraints, evictionConstraintsForIgnorePodsWithoutPDB(policyMap[PodsWithoutPDB], handle)...)
+	return nil
+}
+
+// contains checks if a slice of PodProtectionPolicy contains a given policy.
+func contains(list []PodProtectionPolicy, item PodProtectionPolicy) bool {
+	for _, v := range list {
+		if v == item {
+			return true
+		}
+	}
+	return false
+}
+
+// getEffectiveProtectedPolicies determines which policies are currently active.
+// It supports both new-style (PodProtectionPolicies) and legacy-style flags.
+func getEffectiveProtectedPolicies(args *DefaultEvictorArgs) []PodProtectionPolicy {
+	// determine whether to use PodProtectionPolicies config
+	useNewConfig := len(args.PodProtectionPolicies.Disabled) > 0 || len(args.PodProtectionPolicies.ExtraEnabled) > 0
+
+	if !useNewConfig {
+		// fall back to the Deprecated config
+		return legacyGetProtectedPolicies(args)
+	}
+
+	effective := make([]PodProtectionPolicy, 0)
+
+	// Add default policies that are not explicitly disabled
+	for _, policy := range args.defaultPodProtectionPolicies {
+		if !contains(args.PodProtectionPolicies.Disabled, policy) {
+			// Only add if not in the Disabled list
+			effective = append(effective, policy)
+		}
+	}
+
+	// Add extra enabled policies if not already included
+	for _, policy := range args.PodProtectionPolicies.ExtraEnabled {
+		if !contains(effective, policy) {
+			// Add to effective if not already present
+			effective = append(effective, policy)
+		}
+	}
+
+	return effective
+}
+
+// legacyGetProtectedPolicies returns protected policies using old-style boolean flags.
+func legacyGetProtectedPolicies(args *DefaultEvictorArgs) []PodProtectionPolicy {
+	var policies []PodProtectionPolicy
+
+	if !args.EvictLocalStoragePods {
+		policies = append(policies, PodsWithLocalStorage)
+	}
+	if !args.EvictDaemonSetPods {
+		policies = append(policies, DaemonSetPods)
+	}
+	if !args.EvictSystemCriticalPods {
+		policies = append(policies, SystemCriticalPods)
+	}
+	if !args.EvictFailedBarePods {
+		policies = append(policies, FailedBarePods)
+	}
+	if args.IgnorePvcPods {
+		policies = append(policies, PodsWithPVC)
+	}
+	if args.IgnorePodsWithoutPDB {
+		policies = append(policies, PodsWithoutPDB)
+	}
+	return policies
 }
 
 // Name retrieves the plugin name
