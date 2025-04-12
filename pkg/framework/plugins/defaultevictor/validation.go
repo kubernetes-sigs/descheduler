@@ -15,6 +15,7 @@ package defaultevictor
 
 import (
 	"fmt"
+	"slices"
 
 	"k8s.io/klog/v2"
 
@@ -35,6 +36,33 @@ func ValidateDefaultEvictorArgs(obj runtime.Object) error {
 	if args.NoEvictionPolicy != "" {
 		if args.NoEvictionPolicy != PreferredNoEvictionPolicy && args.NoEvictionPolicy != MandatoryNoEvictionPolicy {
 			return fmt.Errorf("noEvictionPolicy accepts only %q values", []NoEvictionPolicy{PreferredNoEvictionPolicy, MandatoryNoEvictionPolicy})
+		}
+	}
+
+	// check if any deprecated fields are set to true
+	hasDeprecatedFields := args.EvictLocalStoragePods || args.EvictDaemonSetPods ||
+		args.EvictSystemCriticalPods || args.IgnorePvcPods ||
+		args.EvictFailedBarePods || args.IgnorePodsWithoutPDB
+
+	// disallow mixing deprecated fields with PodProtections.ExtraEnabled and PodProtections.DefaultDisabled
+	if hasDeprecatedFields && (len(args.PodProtections.ExtraEnabled) > 0 || len(args.PodProtections.DefaultDisabled) > 0) {
+		return fmt.Errorf("cannot use Deprecated fields alongside PodProtections.ExtraEnabled or PodProtections.DefaultDisabled")
+	}
+
+	if len(args.PodProtections.ExtraEnabled) > 0 || len(args.PodProtections.DefaultDisabled) > 0 {
+
+		for _, policy := range args.PodProtections.ExtraEnabled {
+			if !slices.Contains(ExtraPodProtections, policy) {
+				return fmt.Errorf("invalid pod protection policy in ExtraEnabled: %q. Valid options are: %v",
+					string(policy), ExtraPodProtections)
+			}
+		}
+
+		for _, policy := range args.PodProtections.DefaultDisabled {
+			if !slices.Contains(DefaultPodProtections, policy) {
+				return fmt.Errorf("invalid pod protection policy in DefaultDisabled: %q. Valid options are: %v",
+					string(policy), DefaultPodProtections)
+			}
 		}
 	}
 
