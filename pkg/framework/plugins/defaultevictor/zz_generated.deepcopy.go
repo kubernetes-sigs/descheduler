@@ -46,6 +46,16 @@ func (in *DefaultEvictorArgs) DeepCopyInto(out *DefaultEvictorArgs) {
 		*out = new(v1.Duration)
 		**out = **in
 	}
+	if in.DisabledDefaultPodProtections != nil {
+		in, out := &in.DisabledDefaultPodProtections, &out.DisabledDefaultPodProtections
+		*out = make([]DisabledDefaultPodProtection, len(*in))
+		copy(*out, *in)
+	}
+	if in.ExtraPodProtections != nil {
+		in, out := &in.ExtraPodProtections, &out.ExtraPodProtections
+		*out = make([]ExtraPodProtection, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 
