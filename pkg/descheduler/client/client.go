@@ -17,16 +17,29 @@ limitations under the License.
 package client
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
+	"net"
+	"net/http"
+	"net/url"
+	"time"
+
+	promapi "github.com/prometheus/client_golang/api"
+	"github.com/prometheus/common/config"
 
 	// Ensure to load all auth plugins.
 	clientset "k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/transport"
 	componentbaseconfig "k8s.io/component-base/config"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 )
+
+var K8sPodCAFilePath = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 
 func createConfig(clientConnection componentbaseconfig.ClientConnectionConfiguration, userAgt string) (*rest.Config, error) {
 	var cfg *rest.Config
@@ -93,4 +106,62 @@ func GetMasterFromKubeconfig(filename string) (string, error) {
 		return val.Server, nil
 	}
 	return "", fmt.Errorf("failed to get master address from kubeconfig: cluster information not found")
+}
+
+func loadCAFile(filepath string) (*x509.CertPool, error) {
+	caCert, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return nil, err
+	}
+
+	caCertPool := x509.NewCertPool()
+	if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
+		return nil, fmt.Errorf("failed to append CA certificate to the pool")
+	}
+
+	return caCertPool, nil
+}
+
+func CreatePrometheusClient(prometheusURL, authToken string) (promapi.Client, *http.Transport, error) {
+	// Retrieve Pod CA cert
+	caCertPool, err := loadCAFile(K8sPodCAFilePath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("Error loading CA file: %v", err)
+	}
+
+	// Get Prometheus Host
+	u, err := url.Parse(prometheusURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("Error parsing prometheus URL: %v", err)
+	}
+	t := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:        100,
+		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
+		TLSClientConfig: &tls.Config{
+			RootCAs:    caCertPool,
+			ServerName: u.Host,
+		},
+	}
+	roundTripper := transport.NewBearerAuthRoundTripper(
+		authToken,
+		t,
+	)
+
+	if authToken != "" {
+		client, err := promapi.NewClient(promapi.Config{
+			Address:      prometheusURL,
+			RoundTripper: config.NewAuthorizationCredentialsRoundTripper("Bearer", config.NewInlineSecret(authToken), roundTripper),
+		})
+		return client, t, err
+	}
+	client, err := promapi.NewClient(promapi.Config{
+		Address: prometheusURL,
+	})
+	return client, t, err
 }

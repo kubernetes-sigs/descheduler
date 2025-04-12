@@ -3,6 +3,7 @@ package removepodsviolatingtopologyspreadconstraint
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"testing"
 
@@ -1471,6 +1472,231 @@ func TestTopologySpreadConstraint(t *testing.T) {
 						evictedPods,
 					)
 				}
+			}
+		})
+	}
+}
+
+func TestSortDomains(t *testing.T) {
+	tests := []struct {
+		name               string
+		constraintTopology map[topologyPair][]*v1.Pod
+		want               []topology
+	}{
+		{
+			name:               "empty input",
+			constraintTopology: map[topologyPair][]*v1.Pod{},
+			want:               []topology{},
+		},
+		{
+			name: "single domain with mixed pods",
+			constraintTopology: map[topologyPair][]*v1.Pod{
+				{"zone", "a"}: {
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "non-evictable-pod",
+							Annotations: map[string]string{"evictable": "false"},
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "evictable-with-affinity",
+							Annotations: map[string]string{"evictable": "true", "hasSelectorOrAffinity": "true"},
+						},
+						Spec: v1.PodSpec{
+							Priority: utilptr.To[int32](10),
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "evictable-high-priority",
+							Annotations: map[string]string{"evictable": "true"},
+						},
+						Spec: v1.PodSpec{
+							Priority: utilptr.To[int32](15),
+						},
+					},
+				},
+			},
+			want: []topology{
+				{pair: topologyPair{"zone", "a"}, pods: []*v1.Pod{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "non-evictable-pod",
+							Annotations: map[string]string{"evictable": "false"},
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "evictable-with-affinity",
+							Annotations: map[string]string{"evictable": "true", "hasSelectorOrAffinity": "true"},
+						},
+						Spec: v1.PodSpec{
+							Priority: utilptr.To[int32](10),
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "evictable-high-priority",
+							Annotations: map[string]string{"evictable": "true"},
+						},
+						Spec: v1.PodSpec{
+							Priority: utilptr.To[int32](15),
+						},
+					},
+				}},
+			},
+		},
+		{
+			name: "multiple domains with different priorities and selectors",
+			constraintTopology: map[topologyPair][]*v1.Pod{
+				{"zone", "a"}: {
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "high-priority-affinity",
+							Annotations: map[string]string{"evictable": "true"},
+						},
+						Spec: v1.PodSpec{
+							Priority: utilptr.To[int32](20),
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "low-priority-no-affinity",
+							Annotations: map[string]string{"evictable": "true"},
+						},
+						Spec: v1.PodSpec{
+							Priority: utilptr.To[int32](5),
+						},
+					},
+				},
+				{"zone", "b"}: {
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "medium-priority-affinity",
+							Annotations: map[string]string{"evictable": "true"},
+						},
+						Spec: v1.PodSpec{
+							Priority: utilptr.To[int32](15),
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "non-evictable-pod",
+							Annotations: map[string]string{"evictable": "false"},
+						},
+					},
+				},
+			},
+			want: []topology{
+				{pair: topologyPair{"zone", "a"}, pods: []*v1.Pod{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "low-priority-no-affinity",
+							Annotations: map[string]string{"evictable": "true"},
+						},
+						Spec: v1.PodSpec{
+							Priority: utilptr.To[int32](5),
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "high-priority-affinity",
+							Annotations: map[string]string{"evictable": "true"},
+						},
+						Spec: v1.PodSpec{
+							Priority: utilptr.To[int32](20),
+						},
+					},
+				}},
+				{pair: topologyPair{"zone", "b"}, pods: []*v1.Pod{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "non-evictable-pod",
+							Annotations: map[string]string{"evictable": "false"},
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "medium-priority-affinity",
+							Annotations: map[string]string{"evictable": "true"},
+						},
+						Spec: v1.PodSpec{
+							Priority: utilptr.To[int32](15),
+						},
+					},
+				}},
+			},
+		},
+		{
+			name: "domain with pods having different selector/affinity",
+			constraintTopology: map[topologyPair][]*v1.Pod{
+				{"zone", "a"}: {
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "pod-with-affinity",
+							Annotations: map[string]string{"evictable": "true"},
+						},
+						Spec: v1.PodSpec{
+							Affinity: &v1.Affinity{
+								NodeAffinity: &v1.NodeAffinity{},
+							},
+							Priority: utilptr.To[int32](10),
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "pod-no-affinity",
+							Annotations: map[string]string{"evictable": "true"},
+						},
+						Spec: v1.PodSpec{
+							Priority: utilptr.To[int32](15),
+						},
+					},
+				},
+			},
+			want: []topology{
+				{pair: topologyPair{"zone", "a"}, pods: []*v1.Pod{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "pod-with-affinity",
+							Annotations: map[string]string{"evictable": "true"},
+						},
+						Spec: v1.PodSpec{
+							Affinity: &v1.Affinity{
+								NodeAffinity: &v1.NodeAffinity{},
+							},
+							Priority: utilptr.To[int32](10),
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "pod-no-affinity",
+							Annotations: map[string]string{"evictable": "true"},
+						},
+						Spec: v1.PodSpec{
+							Priority: utilptr.To[int32](15),
+						},
+					},
+				}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockIsEvictable := func(pod *v1.Pod) bool {
+				if val, exists := pod.Annotations["evictable"]; exists {
+					return val == "true"
+				}
+				return false
+			}
+			got := sortDomains(tt.constraintTopology, mockIsEvictable)
+			sort.Slice(got, func(i, j int) bool {
+				return got[i].pair.value < got[j].pair.value
+			})
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("sortDomains() = %v, want %v", got, tt.want)
 			}
 		})
 	}

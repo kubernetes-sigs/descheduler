@@ -124,10 +124,25 @@ These are top level keys in the Descheduler Policy that you can use to configure
 | `maxNoOfPodsToEvictPerNode`        | `int`    | `nil`         | Maximum number of pods evicted from each node (summed through all strategies).                                             |
 | `maxNoOfPodsToEvictPerNamespace`   | `int`    | `nil`         | Maximum number of pods evicted from each namespace (summed through all strategies).                                        |
 | `maxNoOfPodsToEvictTotal`          | `int`    | `nil`         | Maximum number of pods evicted per rescheduling cycle (summed through all strategies).                                     |
-| `metricsCollector`                 | `object` | `nil`         | Configures collection of metrics for actual resource utilization.                                                          |
+| `metricsCollector` (deprecated)    | `object` | `nil`         | Configures collection of metrics for actual resource utilization.                                                          |
 | `metricsCollector.enabled`         | `bool`   | `false`       | Enables Kubernetes [Metrics Server](https://kubernetes-sigs.github.io/metrics-server/) collection.                         |
+| `metricsProviders`                 | `[]object` | `nil`       | Enables various metrics providers like Kubernetes [Metrics Server](https://kubernetes-sigs.github.io/metrics-server/)      |
 | `evictionFailureEventNotification` | `bool`   | `false`       | Enables eviction failure event notification.                                                                               |
 | `gracePeriodSeconds`               | `int`    | `0`           | The duration in seconds before the object should be deleted. The value zero indicates delete immediately.                  |
+| `prometheus` |`object`| `nil` | Configures collection of Prometheus metrics for actual resource utilization |
+| `prometheus.url` |`string`| `nil` | Points to a Prometheus server url |
+| `prometheus.authToken` |`object`| `nil` | Sets Prometheus server authentication token. If not specified in cluster authentication token from the container's file system is read. |
+| `prometheus.authToken.secretReference` |`object`| `nil` | Read the authentication token from a kubernetes secret (the secret is expected to contain the token under `prometheusAuthToken` data key) |
+| `prometheus.authToken.secretReference.namespace` |`string`| `nil` | Authentication token kubernetes secret namespace (currently, the RBAC configuration permits retrieving secrets from the `kube-system` namespace. If the secret needs to be accessed from a different namespace, the existing RBAC rules must be explicitly extended. |
+| `prometheus.authToken.secretReference.name` |`string`| `nil` | Authentication token kubernetes secret name |
+
+The descheduler currently allows to configure a metric collection of Kubernetes Metrics through `metricsProviders` field.
+The previous way of setting `metricsCollector` field is deprecated. There are currently two sources to configure:
+- `KubernetesMetrics`: enables metrics collection from Kubernetes Metrics server
+- `Prometheus`: enables metrics collection from Prometheus server
+
+In general, each plugin can consume metrics from a different provider so multiple distinct providers can be configured in parallel.
+
 
 ### Evictor Plugin configuration (Default Evictor)
 
@@ -163,8 +178,15 @@ maxNoOfPodsToEvictPerNode: 5000 # you don't need to set this, unlimited if not s
 maxNoOfPodsToEvictPerNamespace: 5000 # you don't need to set this, unlimited if not set
 maxNoOfPodsToEvictTotal: 5000 # you don't need to set this, unlimited if not set
 gracePeriodSeconds: 60 # you don't need to set this, 0 if not set
-metricsCollector:
-  enabled: true # you don't need to set this, metrics are not collected if not set
+# you don't need to set this, metrics are not collected if not set
+metricsProviders:
+- source: Prometheus
+  prometheus:
+    url: http://prometheus-kube-prometheus-prometheus.prom.svc.cluster.local
+    authToken:
+      secretReference:
+        namespace: "kube-system"
+        name: "authtoken"
 profiles:
   - name: ProfileName
     pluginConfig:
@@ -288,9 +310,14 @@ A resource consumption above (resp. below) this window is considered as overutil
 This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same
 design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands
 like `kubectl top`) may differ from the calculated consumption, due to these components reporting
-actual usage metrics. Metrics-based descheduling can be enabled by setting `metricsUtilization.metricsServer` field.
-In order to have the plugin consume the metrics the metric collector needs to be configured as well.
-See `metricsCollector` field at [Top Level configuration](#top-level-configuration) for available options.
+actual usage metrics. Metrics-based descheduling can be enabled by setting `metricsUtilization.metricsServer` field (deprecated)
+or `metricsUtilization.source` field to `KubernetesMetrics`.
+In order to have the plugin consume the metrics the metric provider needs to be configured as well.
+Alternatively, it is possible to create a prometheus client and configure a prometheus query to consume
+metrics outside of the kubernetes metrics server. The query is expected to return a vector of values for
+each node. The values are expected to be any real number within <0; 1> interval. During eviction only
+a single pod is evicted at most from each overutilized node. There's currently no support for evicting more.
+See `metricsProviders` field at [Top Level configuration](#top-level-configuration) for available options.
 
 **Parameters:**
 
@@ -300,9 +327,12 @@ See `metricsCollector` field at [Top Level configuration](#top-level-configurati
 |`thresholds`|map(string:int)|
 |`targetThresholds`|map(string:int)|
 |`numberOfNodes`|int|
+|`evictionLimits`|object|
 |`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
 |`metricsUtilization`|object|
-|`metricsUtilization.metricsServer`|bool|
+|`metricsUtilization.metricsServer` (deprecated)|bool|
+|`metricsUtilization.source`|string|
+|`metricsUtilization.prometheus.query`|string|
 
 
 **Example:**
@@ -323,8 +353,12 @@ profiles:
           "cpu" : 50
           "memory": 50
           "pods": 50
-        metricsUtilization:
-          metricsServer: true
+        # metricsUtilization:
+        #   source: Prometheus
+        #   prometheus:
+        #     query: instance:node_cpu:rate:sum
+        evictionLimits:
+          node: 5
     plugins:
       balance:
         enabled:
@@ -340,10 +374,12 @@ and will not be used to compute node's usage if it's not specified in `threshold
 * The valid range of the resource's percentage value is \[0, 100\]
 * Percentage value of `thresholds` can not be greater than `targetThresholds` for the same resource.
 
-There is another parameter associated with the `LowNodeUtilization` strategy, called `numberOfNodes`.
-This parameter can be configured to activate the strategy only when the number of under utilized nodes
+There are two more parameters associated with the `LowNodeUtilization` strategy, called `numberOfNodes` and `evictionLimits`.
+The first parameter can be configured to activate the strategy only when the number of under utilized nodes
 are above the configured value. This could be helpful in large clusters where a few nodes could go
 under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero.
+The second parameter is useful when a number of evictions per the plugin per a descheduling cycle needs to be limited.
+The parameter currently enables to limit the number of evictions per node through `node` field.
 
 ### HighNodeUtilization
 
@@ -369,6 +405,12 @@ strategy evicts pods from `underutilized nodes` (those with usage below `thresho
 so that they can be recreated in appropriately utilized nodes.
 The strategy will abort if any number of `underutilized nodes` or `appropriately utilized nodes` is zero.
 
+To control pod eviction from underutilized nodes, use the `evictionModes`
+array. A lenient policy, which evicts pods regardless of their resource
+requests, is the default. To enable a stricter policy that only evicts pods
+with resource requests defined for the provided threshold resources, add the
+option `OnlyThresholdingResources` to the `evictionModes` configuration.
+
 **NOTE:** Node resource consumption is determined by the requests and limits of pods, not actual usage.
 This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same
 design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands
@@ -381,7 +423,14 @@ actual usage metrics. Implementing metrics-based descheduling is currently TODO 
 |---|---|
 |`thresholds`|map(string:int)|
 |`numberOfNodes`|int|
+|`evictionModes`|list(string)|
 |`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
+
+**Supported Eviction Modes:**
+
+|Name|Description|
+|---|---|
+|`OnlyThresholdingResources`|Evict only pods that have resource requests defined for the provided threshold resources.|
 
 **Example:**
 
@@ -401,6 +450,8 @@ profiles:
           exclude:
           - "kube-system"
           - "namespace1"
+        evictionModes:
+          - "OnlyThresholdingResources"
     plugins:
       balance:
         enabled:
@@ -993,10 +1044,12 @@ To get best results from HA mode some additional configurations might require:
 
 ## Metrics
 
-| name	| type	| description |
-|-------|-------|----------------|
-| build_info |	gauge |	constant 1 |
-| pods_evicted | CounterVec | total number of pods evicted |
+| name	                                 | type	        | description                                                                       |
+|---------------------------------------|--------------|-----------------------------------------------------------------------------------|
+| build_info                            | 	gauge       | 	constant 1                                                                       |
+| pods_evicted                          | CounterVec   | total number of pods evicted                                                      |
+| descheduler_loop_duration_seconds     | HistogramVec | time taken to complete a whole descheduling cycle (support _bucket, _sum, _count) |
+| descheduler_strategy_duration_seconds | HistogramVec | time taken to complete each stragtegy of descheduling operation (support _bucket, _sum, _count) |
 
 The metrics are served through https://localhost:10258/metrics by default.
 The address and port can be changed by setting `--binding-address` and `--secure-port` flags.

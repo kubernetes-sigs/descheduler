@@ -136,6 +136,10 @@ func removeDuplicatesPolicy() *api.DeschedulerPolicy {
 }
 
 func lowNodeUtilizationPolicy(thresholds, targetThresholds api.ResourceThresholds, metricsEnabled bool) *api.DeschedulerPolicy {
+	var metricsSource api.MetricsSource = ""
+	if metricsEnabled {
+		metricsSource = api.KubernetesMetrics
+	}
 	return &api.DeschedulerPolicy{
 		Profiles: []api.DeschedulerProfile{
 			{
@@ -146,8 +150,8 @@ func lowNodeUtilizationPolicy(thresholds, targetThresholds api.ResourceThreshold
 						Args: &nodeutilization.LowNodeUtilizationArgs{
 							Thresholds:       thresholds,
 							TargetThresholds: targetThresholds,
-							MetricsUtilization: nodeutilization.MetricsUtilization{
-								MetricsServer: metricsEnabled,
+							MetricsUtilization: &nodeutilization.MetricsUtilization{
+								Source: metricsSource,
 							},
 						},
 					},
@@ -189,7 +193,7 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
 
-	descheduler, err := newDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", eventRecorder, sharedInformerFactory)
+	descheduler, err := newDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", eventRecorder, sharedInformerFactory, nil)
 	if err != nil {
 		eventBroadcaster.Shutdown()
 		t.Fatalf("Unable to create a descheduler instance: %v", err)
@@ -837,7 +841,7 @@ func TestLoadAwareDescheduling(t *testing.T) {
 		},
 		true, // enabled metrics utilization
 	)
-	policy.MetricsCollector.Enabled = true
+	policy.MetricsProviders = []api.MetricsProvider{{Source: api.KubernetesMetrics}}
 
 	ctxCancel, cancel := context.WithCancel(ctx)
 	_, descheduler, _ := initDescheduler(

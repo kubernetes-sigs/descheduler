@@ -214,7 +214,7 @@ func IsNodeUnschedulable(node *v1.Node) bool {
 func fitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, error) {
 	// Get pod requests
 	podRequests, _ := utils.PodRequestsAndLimits(pod)
-	resourceNames := make([]v1.ResourceName, 0, len(podRequests))
+	resourceNames := []v1.ResourceName{v1.ResourcePods}
 	for name := range podRequests {
 		resourceNames = append(resourceNames, name)
 	}
@@ -237,7 +237,7 @@ func fitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nod
 		}
 	}
 	// check pod num, at least one pod number is avaibalbe
-	if availableResources[v1.ResourcePods].MilliValue() <= 0 {
+	if quantity, ok := availableResources[v1.ResourcePods]; ok && quantity.MilliValue() <= 0 {
 		return false, fmt.Errorf("insufficient %v", v1.ResourcePods)
 	}
 
@@ -254,13 +254,18 @@ func nodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node 
 	if err != nil {
 		return nil, err
 	}
-	remainingResources := api.ReferencedResourceList{
-		v1.ResourceCPU:    resource.NewMilliQuantity(node.Status.Allocatable.Cpu().MilliValue()-nodeUtilization[v1.ResourceCPU].MilliValue(), resource.DecimalSI),
-		v1.ResourceMemory: resource.NewQuantity(node.Status.Allocatable.Memory().Value()-nodeUtilization[v1.ResourceMemory].Value(), resource.BinarySI),
-		v1.ResourcePods:   resource.NewQuantity(node.Status.Allocatable.Pods().Value()-nodeUtilization[v1.ResourcePods].Value(), resource.DecimalSI),
-	}
+	remainingResources := api.ReferencedResourceList{}
 	for _, name := range resourceNames {
-		if !IsBasicResource(name) {
+		if IsBasicResource(name) {
+			switch name {
+			case v1.ResourceCPU:
+				remainingResources[name] = resource.NewMilliQuantity(node.Status.Allocatable.Cpu().MilliValue()-nodeUtilization[v1.ResourceCPU].MilliValue(), resource.DecimalSI)
+			case v1.ResourceMemory:
+				remainingResources[name] = resource.NewQuantity(node.Status.Allocatable.Memory().Value()-nodeUtilization[v1.ResourceMemory].Value(), resource.BinarySI)
+			case v1.ResourcePods:
+				remainingResources[name] = resource.NewQuantity(node.Status.Allocatable.Pods().Value()-nodeUtilization[v1.ResourcePods].Value(), resource.DecimalSI)
+			}
+		} else {
 			if _, exists := node.Status.Allocatable[name]; exists {
 				allocatableResource := node.Status.Allocatable[name]
 				remainingResources[name] = resource.NewQuantity(allocatableResource.Value()-nodeUtilization[name].Value(), resource.DecimalSI)
@@ -275,13 +280,16 @@ func nodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node 
 
 // NodeUtilization returns the resources requested by the given pods. Only resources supplied in the resourceNames parameter are calculated.
 func NodeUtilization(pods []*v1.Pod, resourceNames []v1.ResourceName, podUtilization podutil.PodUtilizationFnc) (api.ReferencedResourceList, error) {
-	totalUtilization := api.ReferencedResourceList{
-		v1.ResourceCPU:    resource.NewMilliQuantity(0, resource.DecimalSI),
-		v1.ResourceMemory: resource.NewQuantity(0, resource.BinarySI),
-		v1.ResourcePods:   resource.NewQuantity(int64(len(pods)), resource.DecimalSI),
-	}
+	totalUtilization := api.ReferencedResourceList{}
 	for _, name := range resourceNames {
-		if !IsBasicResource(name) {
+		switch name {
+		case v1.ResourceCPU:
+			totalUtilization[name] = resource.NewMilliQuantity(0, resource.DecimalSI)
+		case v1.ResourceMemory:
+			totalUtilization[name] = resource.NewQuantity(0, resource.BinarySI)
+		case v1.ResourcePods:
+			totalUtilization[name] = resource.NewQuantity(int64(len(pods)), resource.DecimalSI)
+		default:
 			totalUtilization[name] = resource.NewQuantity(0, resource.DecimalSI)
 		}
 	}

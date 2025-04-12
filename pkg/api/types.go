@@ -48,7 +48,11 @@ type DeschedulerPolicy struct {
 	EvictionFailureEventNotification *bool
 
 	// MetricsCollector configures collection of metrics about actual resource utilization
-	MetricsCollector MetricsCollector
+	// Deprecated. Use MetricsProviders field instead.
+	MetricsCollector *MetricsCollector
+
+	// MetricsProviders configure collection of metrics about actual resource utilization from various sources
+	MetricsProviders []MetricsProvider
 
 	// GracePeriodSeconds The duration in seconds before the object should be deleted. Value must be non-negative integer.
 	// The value zero indicates delete immediately. If this value is nil, the default grace period for the
@@ -62,6 +66,12 @@ type DeschedulerPolicy struct {
 type Namespaces struct {
 	Include []string `json:"include,omitempty"`
 	Exclude []string `json:"exclude,omitempty"`
+}
+
+// EvictionLimits limits the number of evictions per domain. E.g. node, namespace, total.
+type EvictionLimits struct {
+	// node restricts the maximum number of evictions per node
+	Node *uint `json:"node,omitempty"`
 }
 
 type (
@@ -99,12 +109,54 @@ type PluginSet struct {
 	Disabled []string
 }
 
+type MetricsSource string
+
+const (
+	// KubernetesMetrics enables metrics from a Kubernetes metrics server.
+	// Please see https://kubernetes-sigs.github.io/metrics-server/ for more.
+	KubernetesMetrics MetricsSource = "KubernetesMetrics"
+
+	// KubernetesMetrics enables metrics from a Prometheus metrics server.
+	PrometheusMetrics MetricsSource = "Prometheus"
+)
+
 // MetricsCollector configures collection of metrics about actual resource utilization
 type MetricsCollector struct {
-	// Enabled metrics collection from kubernetes metrics.
-	// Later, the collection can be extended to other providers.
+	// Enabled metrics collection from Kubernetes metrics.
+	// Deprecated. Use MetricsProvider.Source field instead.
 	Enabled bool
+}
+
+// MetricsProvider configures collection of metrics about actual resource utilization from a given source
+type MetricsProvider struct {
+	// Source enables metrics from Kubernetes metrics server.
+	Source MetricsSource
+
+	// Prometheus enables metrics collection through Prometheus
+	Prometheus *Prometheus
 }
 
 // ReferencedResourceList is an adaption of v1.ResourceList with resources as references
 type ReferencedResourceList = map[v1.ResourceName]*resource.Quantity
+
+type Prometheus struct {
+	URL string
+	// authToken used for authentication with the prometheus server.
+	// If not set the in cluster authentication token for the descheduler service
+	// account is read from the container's file system.
+	AuthToken *AuthToken
+}
+
+type AuthToken struct {
+	// secretReference references an authentication token.
+	// secrets are expected to be created under the descheduler's namespace.
+	SecretReference *SecretReference
+}
+
+// SecretReference holds a reference to a Secret
+type SecretReference struct {
+	// namespace is the namespace of the secret.
+	Namespace string
+	// name is the name of the secret.
+	Name string
+}

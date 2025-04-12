@@ -31,6 +31,7 @@ import (
 	core "k8s.io/client-go/testing"
 	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	fakemetricsclient "k8s.io/metrics/pkg/client/clientset/versioned/fake"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -40,6 +41,8 @@ import (
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	"sigs.k8s.io/descheduler/test"
+
+	"github.com/prometheus/common/model"
 )
 
 func TestLowNodeUtilization(t *testing.T) {
@@ -63,6 +66,7 @@ func TestLowNodeUtilization(t *testing.T) {
 		expectedPodsWithMetricsEvicted uint
 		evictedPods                    []string
 		evictableNamespaces            *api.Namespaces
+		evictionLimits                 *api.EvictionLimits
 	}{
 		{
 			name: "no evictable pods",
@@ -713,6 +717,60 @@ func TestLowNodeUtilization(t *testing.T) {
 			expectedPodsWithMetricsEvicted: 0,
 		},
 		{
+			name: "with extended resource in some of nodes with deviation",
+			thresholds: api.ResourceThresholds{
+				v1.ResourcePods:  5,
+				extendedResource: 10,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourcePods:  5,
+				extendedResource: 10,
+			},
+			useDeviationThresholds: true,
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 10, func(node *v1.Node) {
+					test.SetNodeExtendedResource(node, extendedResource, 8)
+				}),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, func(node *v1.Node) {
+					test.SetNodeExtendedResource(node, extendedResource, 8)
+				}),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 0, 0, n1NodeName, func(pod *v1.Pod) {
+					// A pod with extended resource.
+					test.SetRSOwnerRef(pod)
+					test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
+				}),
+				test.BuildTestPod("p2", 0, 0, n2NodeName, func(pod *v1.Pod) {
+					// A pod with extended resource.
+					test.SetRSOwnerRef(pod)
+					test.SetPodExtendedResourceRequest(pod, extendedResource, 7)
+				}),
+				test.BuildTestPod("p3", 0, 0, n2NodeName, func(pod *v1.Pod) {
+					test.SetRSOwnerRef(pod)
+				}),
+				test.BuildTestPod("p8", 0, 0, n3NodeName, func(pod *v1.Pod) {
+					test.SetRSOwnerRef(pod)
+				}),
+				test.BuildTestPod("p9", 0, 0, n3NodeName, test.SetRSOwnerRef),
+			},
+			nodemetricses: []*v1beta1.NodeMetrics{
+				test.BuildNodeMetrics(n1NodeName, 3201, 0),
+				test.BuildNodeMetrics(n2NodeName, 401, 0),
+				test.BuildNodeMetrics(n3NodeName, 11, 0),
+			},
+			podmetricses: []*v1beta1.PodMetrics{
+				test.BuildPodMetrics("p1", 401, 0),
+				test.BuildPodMetrics("p2", 401, 0),
+				test.BuildPodMetrics("p3", 401, 0),
+				test.BuildPodMetrics("p4", 401, 0),
+				test.BuildPodMetrics("p5", 401, 0),
+			},
+			expectedPodsEvicted:            1,
+			expectedPodsWithMetricsEvicted: 0,
+		},
+		{
 			name: "without priorities, but only other node is unschedulable",
 			thresholds: api.ResourceThresholds{
 				v1.ResourceCPU:  30,
@@ -1019,6 +1077,79 @@ func TestLowNodeUtilization(t *testing.T) {
 			evictedPods:                    []string{},
 		},
 		{
+			name: "deviation thresholds and overevicting memory",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  5,
+				v1.ResourcePods: 5,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  5,
+				v1.ResourcePods: 5,
+			},
+			useDeviationThresholds: true,
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
+			},
+			// totalcpuusage = 3600m, avgcpuusage = 3600/12000 = 0.3 => 30%
+			// totalpodsusage = 9, avgpodsusage = 9/30 = 0.3 => 30%
+			// n1 and n2 are fully memory utilized
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 375, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 375, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 375, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 400, 375, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p5", 400, 375, n1NodeName, test.SetRSOwnerRef),
+				// These won't be evicted.
+				test.BuildTestPod("p6", 400, 375, n1NodeName, test.SetDSOwnerRef),
+				test.BuildTestPod("p7", 400, 375, n1NodeName, func(pod *v1.Pod) {
+					// A pod with local storage.
+					test.SetNormalOwnerRef(pod)
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "sample",
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+								EmptyDir: &v1.EmptyDirVolumeSource{
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
+							},
+						},
+					}
+					// A Mirror Pod.
+					pod.Annotations = test.GetMirrorPodAnnotation()
+				}),
+				test.BuildTestPod("p8", 400, 375, n1NodeName, func(pod *v1.Pod) {
+					// A Critical Pod.
+					test.SetNormalOwnerRef(pod)
+					pod.Namespace = "kube-system"
+					priority := utils.SystemCriticalPriority
+					pod.Spec.Priority = &priority
+				}),
+				test.BuildTestPod("p9", 400, 3000, n2NodeName, test.SetRSOwnerRef),
+			},
+			nodemetricses: []*v1beta1.NodeMetrics{
+				test.BuildNodeMetrics(n1NodeName, 4000, 3000),
+				test.BuildNodeMetrics(n2NodeName, 4000, 3000),
+				test.BuildNodeMetrics(n3NodeName, 4000, 3000),
+			},
+			podmetricses: []*v1beta1.PodMetrics{
+				test.BuildPodMetrics("p1", 400, 375),
+				test.BuildPodMetrics("p2", 400, 375),
+				test.BuildPodMetrics("p3", 400, 375),
+				test.BuildPodMetrics("p4", 400, 375),
+				test.BuildPodMetrics("p5", 400, 375),
+				test.BuildPodMetrics("p6", 400, 375),
+				test.BuildPodMetrics("p7", 400, 375),
+				test.BuildPodMetrics("p8", 400, 375),
+				test.BuildPodMetrics("p9", 400, 3000),
+			},
+			expectedPodsEvicted:            0,
+			expectedPodsWithMetricsEvicted: 0,
+			evictedPods:                    []string{},
+		},
+		{
 			name: "without priorities different evictions for requested and actual resources",
 			thresholds: api.ResourceThresholds{
 				v1.ResourceCPU:  30,
@@ -1122,6 +1253,72 @@ func TestLowNodeUtilization(t *testing.T) {
 			expectedPodsEvicted:            3,
 			expectedPodsWithMetricsEvicted: 2,
 		},
+		{
+			name: "without priorities with node eviction limit",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			targetThresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  50,
+				v1.ResourcePods: 50,
+			},
+			evictionLimits: &api.EvictionLimits{
+				Node: ptr.To[uint](2),
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, test.SetNodeUnschedulable),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p5", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				// These won't be evicted.
+				test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
+				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					// A pod with local storage.
+					test.SetNormalOwnerRef(pod)
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "sample",
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+								EmptyDir: &v1.EmptyDirVolumeSource{
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
+							},
+						},
+					}
+					// A Mirror Pod.
+					pod.Annotations = test.GetMirrorPodAnnotation()
+				}),
+				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
+					// A Critical Pod.
+					pod.Namespace = "kube-system"
+					priority := utils.SystemCriticalPriority
+					pod.Spec.Priority = &priority
+				}),
+				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
+			},
+			nodemetricses: []*v1beta1.NodeMetrics{
+				test.BuildNodeMetrics(n1NodeName, 3201, 0),
+				test.BuildNodeMetrics(n2NodeName, 401, 0),
+				test.BuildNodeMetrics(n3NodeName, 11, 0),
+			},
+			podmetricses: []*v1beta1.PodMetrics{
+				test.BuildPodMetrics("p1", 401, 0),
+				test.BuildPodMetrics("p2", 401, 0),
+				test.BuildPodMetrics("p3", 401, 0),
+				test.BuildPodMetrics("p4", 401, 0),
+				test.BuildPodMetrics("p5", 401, 0),
+			},
+			expectedPodsEvicted:            2,
+			expectedPodsWithMetricsEvicted: 2,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1189,14 +1386,18 @@ func TestLowNodeUtilization(t *testing.T) {
 				}
 				handle.MetricsCollectorImpl = collector
 
+				var metricsUtilization *MetricsUtilization
+				if metricsEnabled {
+					metricsUtilization = &MetricsUtilization{Source: api.KubernetesMetrics}
+				}
+
 				plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
 					Thresholds:             tc.thresholds,
 					TargetThresholds:       tc.targetThresholds,
 					UseDeviationThresholds: tc.useDeviationThresholds,
+					EvictionLimits:         tc.evictionLimits,
 					EvictableNamespaces:    tc.evictableNamespaces,
-					MetricsUtilization: MetricsUtilization{
-						MetricsServer: metricsEnabled,
-					},
+					MetricsUtilization:     metricsUtilization,
 				},
 					handle)
 				if err != nil {
@@ -1368,5 +1569,280 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				t.Errorf("Expected %v evictions, got %v", item.evictionsExpected, podEvictor.TotalEvicted())
 			}
 		})
+	}
+}
+
+func withLocalStorage(pod *v1.Pod) {
+	// A pod with local storage.
+	test.SetNormalOwnerRef(pod)
+	pod.Spec.Volumes = []v1.Volume{
+		{
+			Name: "sample",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+				EmptyDir: &v1.EmptyDirVolumeSource{
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+				},
+			},
+		},
+	}
+	// A Mirror Pod.
+	pod.Annotations = test.GetMirrorPodAnnotation()
+}
+
+func withCriticalPod(pod *v1.Pod) {
+	// A Critical Pod.
+	test.SetNormalOwnerRef(pod)
+	pod.Namespace = "kube-system"
+	priority := utils.SystemCriticalPriority
+	pod.Spec.Priority = &priority
+}
+
+func TestLowNodeUtilizationWithPrometheusMetrics(t *testing.T) {
+	n1NodeName := "n1"
+	n2NodeName := "n2"
+	n3NodeName := "n3"
+
+	testCases := []struct {
+		name                string
+		samples             model.Vector
+		nodes               []*v1.Node
+		pods                []*v1.Pod
+		expectedPodsEvicted uint
+		evictedPods         []string
+		args                *LowNodeUtilizationArgs
+	}{
+		{
+			name: "with instance:node_cpu:rate:sum query",
+			args: &LowNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					MetricResource: 30,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					MetricResource: 50,
+				},
+				MetricsUtilization: &MetricsUtilization{
+					Source: api.PrometheusMetrics,
+					Prometheus: &Prometheus{
+						Query: "instance:node_cpu:rate:sum",
+					},
+				},
+			},
+			samples: model.Vector{
+				sample("instance:node_cpu:rate:sum", n1NodeName, 0.5695757575757561),
+				sample("instance:node_cpu:rate:sum", n2NodeName, 0.4245454545454522),
+				sample("instance:node_cpu:rate:sum", n3NodeName, 0.20381818181818104),
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, nil),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p5", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				// These won't be evicted.
+				test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
+				test.BuildTestPod("p7", 400, 0, n1NodeName, withLocalStorage),
+				test.BuildTestPod("p8", 400, 0, n1NodeName, withCriticalPod),
+				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
+			},
+			expectedPodsEvicted: 1,
+		},
+		{
+			name: "with instance:node_cpu:rate:sum query with more evictions",
+			args: &LowNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					MetricResource: 30,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					MetricResource: 50,
+				},
+				EvictionLimits: &api.EvictionLimits{
+					Node: ptr.To[uint](3),
+				},
+				MetricsUtilization: &MetricsUtilization{
+					Source: api.PrometheusMetrics,
+					Prometheus: &Prometheus{
+						Query: "instance:node_cpu:rate:sum",
+					},
+				},
+			},
+			samples: model.Vector{
+				sample("instance:node_cpu:rate:sum", n1NodeName, 0.5695757575757561),
+				sample("instance:node_cpu:rate:sum", n2NodeName, 0.4245454545454522),
+				sample("instance:node_cpu:rate:sum", n3NodeName, 0.20381818181818104),
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, nil),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p5", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				// These won't be evicted.
+				test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
+				test.BuildTestPod("p7", 400, 0, n1NodeName, withLocalStorage),
+				test.BuildTestPod("p8", 400, 0, n1NodeName, withCriticalPod),
+				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
+			},
+			expectedPodsEvicted: 3,
+		},
+		{
+			name: "with instance:node_cpu:rate:sum query with deviation",
+			args: &LowNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					MetricResource: 5,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					MetricResource: 5,
+				},
+				EvictionLimits: &api.EvictionLimits{
+					Node: ptr.To[uint](2),
+				},
+				UseDeviationThresholds: true,
+				MetricsUtilization: &MetricsUtilization{
+					Source: api.PrometheusMetrics,
+					Prometheus: &Prometheus{
+						Query: "instance:node_cpu:rate:sum",
+					},
+				},
+			},
+			samples: model.Vector{
+				sample("instance:node_cpu:rate:sum", n1NodeName, 0.5695757575757561),
+				sample("instance:node_cpu:rate:sum", n2NodeName, 0.4245454545454522),
+				sample("instance:node_cpu:rate:sum", n3NodeName, 0.20381818181818104),
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, nil),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p5", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				// These won't be evicted.
+				test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
+				test.BuildTestPod("p7", 400, 0, n1NodeName, withLocalStorage),
+				test.BuildTestPod("p8", 400, 0, n1NodeName, withCriticalPod),
+				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
+			},
+			expectedPodsEvicted: 2,
+		},
+		{
+			name: "with instance:node_cpu:rate:sum query and deviation thresholds",
+			args: &LowNodeUtilizationArgs{
+				UseDeviationThresholds: true,
+				Thresholds:             api.ResourceThresholds{MetricResource: 10},
+				TargetThresholds:       api.ResourceThresholds{MetricResource: 10},
+				MetricsUtilization: &MetricsUtilization{
+					Source: api.PrometheusMetrics,
+					Prometheus: &Prometheus{
+						Query: "instance:node_cpu:rate:sum",
+					},
+				},
+			},
+			samples: model.Vector{
+				sample("instance:node_cpu:rate:sum", n1NodeName, 1),
+				sample("instance:node_cpu:rate:sum", n2NodeName, 0.5),
+				sample("instance:node_cpu:rate:sum", n3NodeName, 0),
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+				test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+				test.BuildTestNode(n3NodeName, 4000, 3000, 10, nil),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p5", 400, 0, n1NodeName, test.SetRSOwnerRef),
+				// These won't be evicted.
+				test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
+				test.BuildTestPod("p7", 400, 0, n1NodeName, withLocalStorage),
+				test.BuildTestPod("p8", 400, 0, n1NodeName, withCriticalPod),
+				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
+			},
+			expectedPodsEvicted: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		testFnc := func(metricsEnabled bool, expectedPodsEvicted uint) func(t *testing.T) {
+			return func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+
+				var objs []runtime.Object
+				for _, node := range tc.nodes {
+					objs = append(objs, node)
+				}
+				for _, pod := range tc.pods {
+					objs = append(objs, pod)
+				}
+
+				fakeClient := fake.NewSimpleClientset(objs...)
+
+				podsForEviction := make(map[string]struct{})
+				for _, pod := range tc.evictedPods {
+					podsForEviction[pod] = struct{}{}
+				}
+
+				evictionFailed := false
+				if len(tc.evictedPods) > 0 {
+					fakeClient.Fake.AddReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+						getAction := action.(core.CreateAction)
+						obj := getAction.GetObject()
+						if eviction, ok := obj.(*policy.Eviction); ok {
+							if _, exists := podsForEviction[eviction.Name]; exists {
+								return true, obj, nil
+							}
+							evictionFailed = true
+							return true, nil, fmt.Errorf("pod %q was unexpectedly evicted", eviction.Name)
+						}
+						return true, obj, nil
+					})
+				}
+
+				handle, podEvictor, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{NodeFit: true}, nil)
+				if err != nil {
+					t.Fatalf("Unable to initialize a framework handle: %v", err)
+				}
+
+				handle.PrometheusClientImpl = &fakePromClient{
+					result:   tc.samples,
+					dataType: model.ValVector,
+				}
+				plugin, err := NewLowNodeUtilization(tc.args, handle)
+				if err != nil {
+					t.Fatalf("Unable to initialize the plugin: %v", err)
+				}
+
+				status := plugin.(frameworktypes.BalancePlugin).Balance(ctx, tc.nodes)
+				if status != nil {
+					t.Fatalf("Balance.err: %v", status.Err)
+				}
+
+				podsEvicted := podEvictor.TotalEvicted()
+				if expectedPodsEvicted != podsEvicted {
+					t.Errorf("Expected %v pods to be evicted but %v got evicted", expectedPodsEvicted, podsEvicted)
+				}
+				if evictionFailed {
+					t.Errorf("Pod evictions failed unexpectedly")
+				}
+			}
+		}
+		t.Run(tc.name, testFnc(false, tc.expectedPodsEvicted))
 	}
 }
