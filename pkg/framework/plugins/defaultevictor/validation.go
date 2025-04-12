@@ -25,11 +25,22 @@ func ValidateDefaultEvictorArgs(obj runtime.Object) error {
 	args := obj.(*DefaultEvictorArgs)
 
 	if args.PriorityThreshold != nil && args.PriorityThreshold.Value != nil && len(args.PriorityThreshold.Name) > 0 {
-		return fmt.Errorf("priority threshold misconfigured, only one of priorityThreshold fields can be set, got %v", args)
+		return fmt.Errorf("priority threshold misconfigured, only one of priorityThreshold fields can be set, got Value: %v, Name: %q",
+			*args.PriorityThreshold.Value, args.PriorityThreshold.Name)
 	}
 
 	if args.MinReplicas == 1 {
 		klog.V(4).Info("DefaultEvictor minReplicas must be greater than 1 to check for min pods during eviction. This check will be ignored during eviction.")
+	}
+
+	// check if any deprecated fields are set to true
+	hasDeprecatedFields := args.EvictLocalStoragePods || args.EvictDaemonSetPods ||
+		args.EvictSystemCriticalPods || args.IgnorePvcPods ||
+		args.EvictFailedBarePods || args.IgnorePodsWithoutPDB
+
+	// disallow mixing deprecated fields with PodProtectionPolicies.ExtraEnabled and PodProtectionPolicies.Disabled
+	if hasDeprecatedFields && (len(args.PodProtectionPolicies.ExtraEnabled) > 0 || len(args.PodProtectionPolicies.Disabled) > 0) {
+		return fmt.Errorf("cannot use Deprecated fields alongside PodProtectionPolicies.ExtraEnabled or PodProtectionPolicies.Disabled")
 	}
 
 	return nil
