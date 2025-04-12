@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -87,15 +88,12 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 
 func (d *DefaultEvictor) addAllConstraints(logger klog.Logger, handle frameworktypes.Handle) error {
 	args := d.args
-	d.constraints = append(d.constraints, evictionConstraintsForFailedBarePods(logger, args.EvictFailedBarePods)...)
-	if constraints, err := evictionConstraintsForSystemCriticalPods(logger, args.EvictSystemCriticalPods, args.PriorityThreshold, handle); err != nil {
-		return err
-	} else {
-		d.constraints = append(d.constraints, constraints...)
+	// Determine effective protected policies based on the provided arguments.
+	effectivePodProtections := getEffectivePodProtections(args)
+
+	if err := applyEffectivePodProtections(d, effectivePodProtections, handle); err != nil {
+		return fmt.Errorf("failed to apply effective protected policies: %w", err)
 	}
-	d.constraints = append(d.constraints, evictionConstraintsForLocalStoragePods(args.EvictLocalStoragePods)...)
-	d.constraints = append(d.constraints, evictionConstraintsForDaemonSetPods(args.EvictDaemonSetPods)...)
-	d.constraints = append(d.constraints, evictionConstraintsForPvcPods(args.IgnorePvcPods)...)
 	if constraints, err := evictionConstraintsForLabelSelector(logger, args.LabelSelector); err != nil {
 		return err
 	} else {
@@ -107,8 +105,121 @@ func (d *DefaultEvictor) addAllConstraints(logger klog.Logger, handle frameworkt
 		d.constraints = append(d.constraints, constraints...)
 	}
 	d.constraints = append(d.constraints, evictionConstraintsForMinPodAge(args.MinPodAge)...)
-	d.constraints = append(d.constraints, evictionConstraintsForIgnorePodsWithoutPDB(args.IgnorePodsWithoutPDB, handle)...)
 	return nil
+}
+
+// applyEffectivePodProtections configures the evictor with specified Pod protection.
+func applyEffectivePodProtections(d *DefaultEvictor, podProtections []PodProtection, handle frameworktypes.Handle) error {
+	protectionMap := make(map[PodProtection]bool, len(podProtections))
+	for _, protection := range podProtections {
+		protectionMap[protection] = true
+	}
+
+	// Apply protections
+	if err := applySystemCriticalPodsProtection(d, protectionMap, handle); err != nil {
+		return err
+	}
+	applyFailedBarePodsProtection(d, protectionMap)
+	applyLocalStoragePodsProtection(d, protectionMap)
+	applyDaemonSetPodsProtection(d, protectionMap)
+	applyPvcPodsProtection(d, protectionMap)
+	applyPodsWithoutPDBProtection(d, protectionMap, handle)
+
+	return nil
+}
+
+func applyFailedBarePodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
+	isProtectionEnabled := protectionMap[FailedBarePods]
+	d.constraints = append(d.constraints, evictionConstraintsForFailedBarePods(d.logger, !isProtectionEnabled)...)
+}
+
+func applySystemCriticalPodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool, handle frameworktypes.Handle) error {
+	isProtectionEnabled := protectionMap[SystemCriticalPods]
+	constraints, err := evictionConstraintsForSystemCriticalPods(
+		d.logger,
+		!isProtectionEnabled,
+		d.args.PriorityThreshold,
+		handle,
+	)
+	if err != nil {
+		return err
+	}
+	d.constraints = append(d.constraints, constraints...)
+	return nil
+}
+
+func applyLocalStoragePodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
+	isProtectionEnabled := protectionMap[PodsWithLocalStorage]
+	d.constraints = append(d.constraints, evictionConstraintsForLocalStoragePods(!isProtectionEnabled)...)
+}
+
+func applyDaemonSetPodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
+	isProtectionEnabled := protectionMap[DaemonSetPods]
+	d.constraints = append(d.constraints, evictionConstraintsForDaemonSetPods(!isProtectionEnabled)...)
+}
+
+func applyPvcPodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
+	isProtectionEnabled := protectionMap[PodsWithPVC]
+	d.constraints = append(d.constraints, evictionConstraintsForPvcPods(isProtectionEnabled)...)
+}
+
+func applyPodsWithoutPDBProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool, handle frameworktypes.Handle) {
+	isProtectionEnabled := protectionMap[PodsWithoutPDB]
+	d.constraints = append(d.constraints, evictionConstraintsForIgnorePodsWithoutPDB(isProtectionEnabled, handle)...)
+}
+
+// getEffectivePodProtections determines which policies are currently active.
+// It supports both new-style (PodProtections) and legacy-style flags.
+func getEffectivePodProtections(args *DefaultEvictorArgs) []PodProtection {
+	// determine whether to use PodProtections config
+	useNewConfig := len(args.PodProtections.DefaultDisabled) > 0 || len(args.PodProtections.ExtraEnabled) > 0
+
+	if !useNewConfig {
+		// fall back to the Deprecated config
+		return legacyGetPodProtections(args)
+	}
+
+	// effective is the final list of active protection.
+	effective := make([]PodProtection, 0)
+	effective = append(effective, defaultPodProtections...)
+
+	// Remove PodProtections that are in the DefaultDisabled list.
+	effective = slices.DeleteFunc(effective, func(protection PodProtection) bool {
+		return slices.Contains(args.PodProtections.DefaultDisabled, protection)
+	})
+
+	// Add extra enabled in PodProtections
+	effective = append(effective, args.PodProtections.ExtraEnabled...)
+
+	return effective
+}
+
+// legacyGetPodProtections returns protections using deprecated boolean flags.
+func legacyGetPodProtections(args *DefaultEvictorArgs) []PodProtection {
+	var protections []PodProtection
+
+	// defaultDisabled
+	if !args.EvictLocalStoragePods {
+		protections = append(protections, PodsWithLocalStorage)
+	}
+	if !args.EvictDaemonSetPods {
+		protections = append(protections, DaemonSetPods)
+	}
+	if !args.EvictSystemCriticalPods {
+		protections = append(protections, SystemCriticalPods)
+	}
+	if !args.EvictFailedBarePods {
+		protections = append(protections, FailedBarePods)
+	}
+
+	// extraEnabled
+	if args.IgnorePvcPods {
+		protections = append(protections, PodsWithPVC)
+	}
+	if args.IgnorePodsWithoutPDB {
+		protections = append(protections, PodsWithoutPDB)
+	}
+	return protections
 }
 
 // Name retrieves the plugin name
