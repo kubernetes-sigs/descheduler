@@ -86,7 +86,7 @@ spec:
           configMap:
             name: {{ template "descheduler.fullname" . }}
         {{- if .Values.extraVolumes }}
-          {{ toYaml .Values.extraVolumes | indent 8}}
+          {{ toYaml .Values.extraVolumes | nindent 8}}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
