@@ -101,6 +101,9 @@ spec:
               volumeMounts:
                 - mountPath: /policy-dir
                   name: policy-volume
+                {{- if .Values.extraVolumeMounts }}
+                  {{ toYaml .Values.extraVolumeMounts | nindent 16 }}
+                {{- end }}
           {{- if .Values.podSecurityContext }}
           securityContext:
             {{- toYaml .Values.podSecurityContext | nindent 12 }}
@@ -109,4 +112,7 @@ spec:
           - name: policy-volume
             configMap:
               name: {{ template "descheduler.fullname" . }}
+          {{- if .Values.extraVolumes }}
+            {{ toYaml .Values.extraVolumes | indent 10}}
+          {{- end }}
 {{- end }}
