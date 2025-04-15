@@ -407,7 +407,7 @@ type stringFormatValidator struct{}
 
 // Name returns the name of the validator.
 func (stringFormatValidator) Name() string {
-	return "cel.lib.ext.validate.functions.string.format"
+	return "cel.validator.string_format"
 }
 
 // Configure implements the ASTValidatorConfigurer interface and augments the list of functions to skip
@@ -434,7 +434,7 @@ func (stringFormatValidator) Validate(env *cel.Env, _ cel.ValidatorConfig, a *as
 		// use a placeholder locale, since locale doesn't affect syntax
 		_, err := parseFormatString(formatStr, formatCheck, formatCheck, "en_US")
 		if err != nil {
-			iss.ReportErrorAtID(getErrorExprID(e.ID(), err), err.Error())
+			iss.ReportErrorAtID(getErrorExprID(e.ID(), err), "%v", err)
 			continue
 		}
 		seenArgs := formatCheck.argsRequested
