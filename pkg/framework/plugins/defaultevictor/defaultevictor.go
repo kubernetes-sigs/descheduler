@@ -48,6 +48,7 @@ type constraint func(pod *v1.Pod) error
 // This plugin is only meant to customize other actions (extension points) of the evictor,
 // like filtering, sorting, and other ones that might be relevant in the future
 type DefaultEvictor struct {
+	logger      klog.Logger
 	args        *DefaultEvictorArgs
 	constraints []constraint
 	handle      frameworktypes.Handle
@@ -71,14 +72,16 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type defaultEvictorFilterArgs, got %T", args)
 	}
+	logger := klog.Background().WithValues("plugin", PluginName)
 
 	ev := &DefaultEvictor{
+		logger: logger,
 		handle: handle,
 		args:   defaultEvictorArgs,
 	}
 
 	if defaultEvictorArgs.EvictFailedBarePods {
-		klog.V(1).InfoS("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
+		logger.V(1).Info("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
 			ownerRefList := podutil.OwnerRef(pod)
 			// Enable evictFailedBarePods to evict bare pods in failed phase
@@ -117,7 +120,7 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 			})
 		}
 	} else {
-		klog.V(1).InfoS("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
+		logger.V(1).Info("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
 	}
 	if !defaultEvictorArgs.EvictLocalStoragePods {
 		ev.constraints = append(ev.constraints, func(pod *v1.Pod) error {
@@ -169,7 +172,7 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 			}
 
 			if len(pod.OwnerReferences) > 1 {
-				klog.V(5).InfoS("pod has multiple owner references which is not supported for minReplicas check", "size", len(pod.OwnerReferences), "pod", klog.KObj(pod))
+				logger.V(5).Info("pod has multiple owner references which is not supported for minReplicas check", "size", len(pod.OwnerReferences), "pod", klog.KObj(pod))
 				return nil
 			}
 
@@ -218,14 +221,15 @@ func (d *DefaultEvictor) Name() string {
 }
 
 func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
+	logger := d.logger.WithValues("ExtensionPoint", frameworktypes.PreEvictionFilterExtensionPoint)
 	if d.args.NodeFit {
 		nodes, err := nodeutil.ReadyNodes(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Nodes().Lister(), d.args.NodeSelector)
 		if err != nil {
-			klog.ErrorS(err, "unable to list ready nodes", "pod", klog.KObj(pod))
+			logger.Error(err, "unable to list ready nodes", "pod", klog.KObj(pod))
 			return false
 		}
 		if !nodeutil.PodFitsAnyOtherNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) {
-			klog.InfoS("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable", "pod", klog.KObj(pod))
+			logger.Info("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable", "pod", klog.KObj(pod))
 			return false
 		}
 		return true
@@ -234,6 +238,7 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 }
 
 func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
+	logger := d.logger.WithValues("ExtensionPoint", frameworktypes.FilterExtensionPoint)
 	checkErrs := []error{}
 
 	if HaveEvictAnnotation(pod) {
@@ -259,7 +264,7 @@ func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
 	}
 
 	if len(checkErrs) > 0 {
-		klog.V(4).InfoS("Pod fails the following checks", "pod", klog.KObj(pod), "checks", utilerrors.NewAggregate(checkErrs).Error())
+		logger.V(4).Info("Pod fails the following checks", "pod", klog.KObj(pod), "checks", utilerrors.NewAggregate(checkErrs).Error())
 		return false
 	}
 
