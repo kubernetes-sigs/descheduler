@@ -144,8 +144,10 @@ func (rs *DeschedulerServer) Apply() error {
 		return err
 	}
 
-	secureServing.DisableHTTP2 = !rs.EnableHTTP2
-	rs.SecureServingInfo = secureServing
+	if secureServing != nil {
+		secureServing.DisableHTTP2 = !rs.EnableHTTP2
+		rs.SecureServingInfo = secureServing
+	}
 
 	return nil
 }
