@@ -108,6 +108,8 @@ func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interfac
 			IgnorePvcPods:           false,
 			EvictFailedBarePods:     false,
 			IgnorePodsWithoutPDB:    false,
+			EvictionActions:         []defaultevictor.EvictionActionType{},
+			EvictionProtections:     []defaultevictor.EvictionProtectionType{},
 		},
 	}
 

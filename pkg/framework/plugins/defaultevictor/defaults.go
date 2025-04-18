@@ -49,6 +49,12 @@ func SetDefaults_DefaultEvictorArgs(obj runtime.Object) {
 	if args.PriorityThreshold == nil {
 		args.PriorityThreshold = nil
 	}
+	if args.EvictionActions == nil {
+		args.EvictionActions = nil
+	}
+	if args.EvictionProtections == nil {
+		args.EvictionProtections = nil
+	}
 	if !args.NodeFit {
 		args.NodeFit = false
 	}

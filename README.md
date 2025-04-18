@@ -148,19 +148,20 @@ In general, each plugin can consume metrics from a different provider so multipl
 
 The Default Evictor Plugin is used by default for filtering pods before processing them in an strategy plugin, or for applying a PreEvictionFilter of pods before eviction. You can also create your own Evictor Plugin or use the Default one provided by Descheduler.  Other uses for the Evictor plugin can be to sort, filter, validate or group pods by different criteria, and that's why this is handled by a plugin and not configured in the top level config.
 
-| Name                      |type| Default Value | Description                                                                                                                 |
-|---------------------------|----|---------------|-----------------------------------------------------------------------------------------------------------------------------|
-| `nodeSelector`            |`string`| `nil` | limiting the nodes which are processed                                                                                      |
-| `evictLocalStoragePods`   |`bool`| `false` | allows eviction of pods with local storage                                                                                  |
-| `evictSystemCriticalPods` |`bool`| `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
-| `ignorePvcPods`           |`bool`| `false` | set whether PVC pods should be evicted or ignored                                                                           |
-| `evictFailedBarePods`     |`bool`| `false` | allow eviction of pods without owner references and in failed phase                                                         |
-| `labelSelector`           |`metav1.LabelSelector`|| (see [label filtering](#label-filtering))                                                                                   |
-| `priorityThreshold`       |`priorityThreshold`|| (see [priority filtering](#priority-filtering))                                                                             |
-| `nodeFit`                 |`bool`|`false`| (see [node fit filtering](#node-fit-filtering))                                                                             |
-| `minReplicas`             |`uint`|`0`| ignore eviction of pods where owner (e.g. `ReplicaSet`) replicas is below this threshold                                    |
-| `minPodAge`               |`metav1.Duration`|`0`| ignore eviction of pods with a creation time within this threshold                                                          |
-| `ignorePodsWithoutPDB`    |`bool`|`false`| set whether pods without PodDisruptionBudget should be evicted or ignored                                                   |
+| Name                      | Type                     | Default Value | Description                                                                                                                                                                                                 |
+|---------------------------|--------------------------|---------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `nodeSelector`            | `string`                 | `nil`         | Limits the nodes that are processed.                                                                                                                                                                       |
+| `evictLocalStoragePods`   | `bool`                   | `false`       | **[Deprecated: Use `evictionProtection` with `"withLocalStorage"` instead]**<br>Allows eviction of pods using local storage.                                                                               |
+| `evictSystemCriticalPods` | `bool`                   | `false`       | **[Deprecated: Use `evictionProtection` with `"systemCritical"` instead]**<br>[Warning: Will evict Kubernetes system pods] Allows eviction of pods with any priority, including system-critical pods like kube-dns. |
+| `ignorePvcPods`           | `bool`                   | `false`       | **[Deprecated: Use `evictionProtection` with `"withPVC"` instead]**<br>Sets whether PVC pods should be evicted or ignored.                                                                                 |
+| `evictFailedBarePods`     | `bool`                   | `false`       | **[Deprecated: Use `evictionProtection` with `"failedBarePods"` instead]**<br>Allows eviction of pods without owner references and in a failed phase.                                                     |
+| `labelSelector`           | `metav1.LabelSelector`   |               | (See [label filtering](#label-filtering))                                                                                                                                                                   |
+| `priorityThreshold`       | `priorityThreshold`      |               | (See [priority filtering](#priority-filtering))                                                                                                                                                             |
+| `nodeFit`                 | `bool`                   | `false`       | (See [node fit filtering](#node-fit-filtering))                                                                                                                                                             |
+| `minReplicas`             | `uint`                   | `0`           | Ignores eviction of pods where the owner (e.g., `ReplicaSet`) replicas are below this threshold.                                                                                                           |
+| `minPodAge`               | `metav1.Duration`        | `0`           | Ignores eviction of pods with a creation time within this threshold.                                                                                                                                       |
+| `ignorePodsWithoutPDB`    | `bool`                   | `false`       | **[Deprecated: Use `evictionProtection` with `"withoutPDB"` instead]**<br>Sets whether pods without PodDisruptionBudget should be evicted or ignored.                                                     |
+| `evictionProtection`      | `[]EvictionProtectionType` | `[]`         | Unified way to specify eviction constraints.<br>Supported values:<br>- `"withPVC"`: Protects pods with PersistentVolumeClaims.<br>- `"withoutPDB"`: Protects pods not covered by a PodDisruptionBudget.<br>- `"withLocalStorage"`: Protects pods using local storage.<br>- `"systemCritical"`: Protects system-critical priority pods.<br>- `"failedBarePods"`: Protects failed bare pods (pods without ownerReferences). |
 
 ### Example policy
 
@@ -192,11 +193,18 @@ profiles:
     pluginConfig:
     - name: "DefaultEvictor"
       args:
+        # Deprecated: Use `evictionProtection` with "systemCritical" instead.
         evictSystemCriticalPods: true
+        # Deprecated: Use `evictionProtection` with "failedBarePods" instead.
         evictFailedBarePods: true
+        # Deprecated: Use `evictionProtection` with "withLocalStorage" instead.
         evictLocalStoragePods: true
         nodeFit: true
         minReplicas: 2
+        evictionProtection:
+        - withLocalStorage
+        - systemCriticalPods
+        - failedBarePods
     plugins:
       # DefaultEvictor is enabled for both `filter` and `preEvictionFilter`
       # filter:
