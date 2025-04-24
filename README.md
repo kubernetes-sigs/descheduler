@@ -1015,10 +1015,16 @@ never evicted because these pods won't be recreated. (Standalone pods in failed 
 best effort pods are evicted before burstable and guaranteed pods.
 * All types of pods with the annotation `descheduler.alpha.kubernetes.io/evict` are eligible for eviction. This
   annotation is used to override checks which prevent eviction and users can select which pod is evicted.
+  This annotation is deprecated and could be ignored in future releases. Please use `descheduler.beta.kubernetes.io/evict=true|false` instead.
+* `descheduler.beta.kubernetes.io/evict` annotation can be used to selectively force eviction eligibility.
+  All types of pods with the annotation `descheduler.beta.kubernetes.io/evict=true` are eligible for eviction.
+  This annotation is used to override checks which prevent eviction and users can select which pod is evicted.
   Users should know how and if the pod will be recreated.
   The annotation only affects internal descheduler checks.
+  `descheduler.beta.kubernetes.io/evict=false` will force a pod to be considered not eligible for eviction.
   The anti-disruption protection provided by the [/eviction](https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/)
   subresource is still respected.
+  If both `descheduler.alpha.kubernetes.io/evict` and `descheduler.beta.kubernetes.io/evict` are set at the same time, the value of `descheduler.beta.kubernetes.io/evict` will be consumed.
 * Pods with a non-nil DeletionTimestamp are not evicted by default.
 
 Setting `--v=4` or greater on the Descheduler will log all reasons why any pod is not evictable.
