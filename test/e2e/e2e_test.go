@@ -23,6 +23,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1211,8 +1212,17 @@ func TestPodLabelSelector(t *testing.T) {
 	}
 }
 
-func TestEvictAnnotation(t *testing.T) {
+func TestEvictAnnotationFalse(t *testing.T) {
+	testEvictAnnotation(t, false)
+}
+
+func TestEvictAnnotationTrue(t *testing.T) {
+	testEvictAnnotation(t, true)
+}
+
+func testEvictAnnotation(t *testing.T, evictAnnotationValue bool) {
 	ctx := context.Background()
+	const podNumber = 5
 
 	clientSet, _, nodeLister, _ := initializeClient(ctx, t)
 
@@ -1222,18 +1232,26 @@ func TestEvictAnnotation(t *testing.T) {
 	}
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
-	t.Log("Create RC with pods with local storage which require descheduler.alpha.kubernetes.io/evict annotation to be set for eviction")
-	rc := RcByNameContainer("test-rc-evict-annotation", testNamespace.Name, int32(5), map[string]string{"test": "annotation"}, nil, "")
-	rc.Spec.Template.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
-	rc.Spec.Template.Spec.Volumes = []v1.Volume{
-		{
-			Name: "sample",
-			VolumeSource: v1.VolumeSource{
-				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+	if evictAnnotationValue {
+		t.Log("Create RC with pods with local storage which require descheduler.beta.kubernetes.io/evict=true annotation to be set for eviction")
+	} else {
+		t.Log("Create RC with pods with descheduler.beta.kubernetes.io/evict=false annotation to skip eviction")
+	}
+
+	rc := RcByNameContainer("test-rc-evict-annotation", testNamespace.Name, int32(podNumber), map[string]string{"test": "annotation"}, nil, "")
+	rc.Spec.Template.Annotations = map[string]string{"descheduler.beta.kubernetes.io/evict": strconv.FormatBool(evictAnnotationValue)}
+	if evictAnnotationValue {
+		t.Logf("Adding a local storage volume")
+		rc.Spec.Template.Spec.Volumes = []v1.Volume{
+			{
+				Name: "sample",
+				VolumeSource: v1.VolumeSource{
+					EmptyDir: &v1.EmptyDirVolumeSource{
+						SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+					},
 				},
 			},
-		},
+		}
 	}
 
 	if _, err := clientSet.CoreV1().ReplicationControllers(rc.Namespace).Create(ctx, rc, metav1.CreateOptions{}); err != nil {
@@ -1260,25 +1278,36 @@ func TestEvictAnnotation(t *testing.T) {
 	t.Log("Running PodLifetime plugin")
 	runPodLifetimePlugin(ctx, t, clientSet, nodeLister, nil, "", nil, false, false, nil, nil)
 
-	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, func(ctx context.Context) (bool, error) {
-		podList, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
-		if err != nil {
-			return false, fmt.Errorf("unable to list pods after running plugin: %v", err)
-		}
+	if evictAnnotationValue {
+		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, func(ctx context.Context) (bool, error) {
+			podList, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
+			if err != nil {
+				return false, fmt.Errorf("unable to list pods after running plugin: %v", err)
+			}
 
-		excludePodNames := getPodNames(podList.Items)
-		sort.Strings(excludePodNames)
-		t.Logf("Existing pods: %v", excludePodNames)
+			existingPodNames := getPodNames(podList.Items)
+			sort.Strings(existingPodNames)
+			t.Logf("Existing pods: %v", existingPodNames)
+			if len(intersectStrings(initialPodNames, existingPodNames)) > 0 {
+				t.Logf("Not every pods was evicted")
+				return false, nil
+			}
+
+			return true, nil
+		}); err != nil {
+			t.Fatalf("Error waiting for pods to be deleted: %v", err)
+		}
+	} else {
+		t.Logf("Waiting 10s for eventual deletions")
+		time.Sleep(10 * time.Second)
+		existingPodNames := getPodNames(podList.Items)
+		sort.Strings(existingPodNames)
+		t.Logf("Existing pods: %v", existingPodNames)
 
 		// validate no pods were deleted
-		if len(intersectStrings(initialPodNames, excludePodNames)) > 0 {
-			t.Logf("Not every pods was evicted")
-			return false, nil
+		if len(intersectStrings(initialPodNames, existingPodNames)) != podNumber {
+			t.Fatalf("None of %v pods are expected to be deleted", initialPodNames)
 		}
-
-		return true, nil
-	}); err != nil {
-		t.Fatalf("Error waiting for pods to be deleted: %v", err)
 	}
 }
 
