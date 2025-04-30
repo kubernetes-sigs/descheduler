@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -68,9 +67,8 @@ func init() {
 		host = shortHostname(h)
 	}
 
-	current, err := user.Current()
-	if err == nil {
-		userName = current.Username
+	if u := lookupUser(); u != "" {
+		userName = u
 	}
 	// Sanitize userName since it is used to construct file paths.
 	userName = strings.Map(func(r rune) rune {
