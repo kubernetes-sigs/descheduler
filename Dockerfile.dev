@@ -13,7 +13,7 @@
 # limitations under the License.
 FROM scratch
 
-MAINTAINER Kubernetes SIG Scheduling <kubernetes-sig-scheduling@googlegroups.com>
+MAINTAINER Kubernetes SIG Scheduling <sig-scheduling@kubernetes.io>
 
 USER 1000
 

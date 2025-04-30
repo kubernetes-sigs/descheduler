@@ -21,7 +21,7 @@ RUN VERSION=${VERSION} make build.$ARCH
 
 FROM scratch
 
-MAINTAINER Kubernetes SIG Scheduling <kubernetes-sig-scheduling@googlegroups.com>
+MAINTAINER Kubernetes SIG Scheduling <sig-scheduling@kubernetes.io>
 
 LABEL org.opencontainers.image.source https://github.com/kubernetes-sigs/descheduler
 
