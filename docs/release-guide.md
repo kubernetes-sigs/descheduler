@@ -26,7 +26,7 @@ When the above pre-release steps are complete and the release is ready to be cut
 3. Perform the [image promotion process](https://github.com/kubernetes/k8s.io/tree/main/k8s.gcr.io#image-promoter). [Example](https://github.com/kubernetes/k8s.io/pull/3344)
 4. Cut release branch from `master`, eg `release-1.24`
 5. Publish release using Github's release process from the git tag you created
-6. Email `kubernetes-sig-scheduling@googlegroups.com` to announce the release
+6. Email `sig-scheduling@kubernetes.io` to announce the release
 
 **Patch release**
 1. Pick relevant code change commits to the matching release branch, eg `release-1.24`
@@ -34,7 +34,7 @@ When the above pre-release steps are complete and the release is ready to be cut
 3. Merge Helm chart version update to release branch
 4. Perform the image promotion process for the patch version
 5. Publish release using Github's release process from the git tag you created
-6. Email `kubernetes-sig-scheduling@googlegroups.com` to announce the release
+6. Email `sig-scheduling@kubernetes.io` to announce the release
 
 ### Flowchart
 

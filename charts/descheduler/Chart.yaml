@@ -13,4 +13,4 @@ sources:
 - https://github.com/kubernetes-sigs/descheduler
 maintainers:
 - name: Kubernetes SIG Scheduling
-  email: kubernetes-sig-scheduling@googlegroups.com
+  email: sig-scheduling@kubernetes.io
