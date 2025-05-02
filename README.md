@@ -33,15 +33,15 @@ but relies on the default scheduler for that.
 ## ⚠️  Documentation Versions by Release
 
 If you are using a published release of Descheduler (such as
-`registry.k8s.io/descheduler/descheduler:v0.31.0`), follow the documentation in
+`registry.k8s.io/descheduler/descheduler:v0.33.0`), follow the documentation in
 that version's release branch, as listed below:
 
 |Descheduler Version|Docs link|
 |---|---|
+|v0.33.x|[`release-1.33`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.33/README.md)|
 |v0.32.x|[`release-1.32`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.32/README.md)|
 |v0.31.x|[`release-1.31`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.31/README.md)|
 |v0.30.x|[`release-1.30`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.30/README.md)|
-|v0.29.x|[`release-1.29`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.29/README.md)|
 
 The
 [`master`](https://github.com/kubernetes-sigs/descheduler/blob/master/README.md)
@@ -93,17 +93,17 @@ See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/ku
 
 Run As A Job
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=release-1.32' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=release-1.33' | kubectl apply -f -
 ```
 
 Run As A CronJob
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=release-1.32' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=release-1.33' | kubectl apply -f -
 ```
 
 Run As A Deployment
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=release-1.32' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=release-1.33' | kubectl apply -f -
 ```
 
 ## User Guide
@@ -1065,6 +1065,7 @@ packages that it is compiled with.
 
 | Descheduler | Supported Kubernetes Version |
 |-------------|------------------------------|
+| v0.33       | v1.33                        |
 | v0.32       | v1.32                        |
 | v0.31       | v1.31                        |
 | v0.30       | v1.30                        |
