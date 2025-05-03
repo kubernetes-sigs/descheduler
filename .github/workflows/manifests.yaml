@@ -7,10 +7,11 @@ jobs:
   deploy:
     strategy:
       matrix:
-        k8s-version: ["v1.32.0"]
-        descheduler-version: ["v0.32.0"]
+        k8s-version: ["v1.33.0"]
+        descheduler-version: ["v0.33.0"]
         descheduler-api: ["v1alpha2"]
         manifest: ["deployment"]
+        kind-version: ["v0.27.0"] # keep in sync with test/run-e2e-tests.sh
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
@@ -21,6 +22,7 @@ jobs:
           node_image: kindest/node:${{ matrix.k8s-version }}
           kubectl_version: ${{ matrix.k8s-version }}
           config: test/kind-config.yaml
+          version: ${{ matrix.kind-version }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
