@@ -95,9 +95,6 @@ deschedulerPolicy:
   # maxNoOfPodsToEvictPerNamespace: 10
   # metricsProviders:
   # - source: KubernetesMetrics
-  # ignorePvcPods: true
-  # evictLocalStoragePods: true
-  # evictDaemonSetPods: true
   # tracing:
   #   collectorEndpoint: otel-collector.observability.svc.cluster.local:4317
   #   transportCert: ""
