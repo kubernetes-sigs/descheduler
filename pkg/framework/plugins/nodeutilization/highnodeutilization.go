@@ -271,13 +271,6 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 	// sorts the nodes by the usage in ascending order.
 	sortNodesByUsage(lowNodes, true)
 
-	// adding nodeLimit to the function, since it uses
-	// the same one as in the LowNodeUtilization scenario.
-	var nodeLimit *uint
-	if h.args.EvictionLimits != nil {
-		nodeLimit = h.args.EvictionLimits.Node
-	}
-
 	evictPodsFromSourceNodes(
 		ctx,
 		h.args.EvictableNamespaces,
@@ -289,7 +282,7 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		h.resourceNames,
 		continueEvictionCond,
 		h.usageClient,
-		nodeLimit,
+		nil,
 	)
 
 	return nil

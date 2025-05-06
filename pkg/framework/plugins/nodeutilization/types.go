@@ -71,9 +71,6 @@ type HighNodeUtilizationArgs struct {
 	// considered while considering resources used by pods
 	// but then filtered out before eviction
 	EvictableNamespaces *api.Namespaces `json:"evictableNamespaces,omitempty"`
-
-	// evictionLimits limits the number of evictions per domain. E.g. node, namespace, total.
-	EvictionLimits *api.EvictionLimits `json:"evictionLimits,omitempty"`
 }
 
 // MetricsUtilization allow to consume actual resource utilization from metrics
