@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-FROM golang:1.23.3
+FROM golang:1.24.2
 
 WORKDIR /go/src/sigs.k8s.io/descheduler
 COPY . .
@@ -21,7 +21,7 @@ RUN VERSION=${VERSION} make build.$ARCH
 
 FROM scratch
 
-MAINTAINER Kubernetes SIG Scheduling <kubernetes-sig-scheduling@googlegroups.com>
+MAINTAINER Kubernetes SIG Scheduling <sig-scheduling@kubernetes.io>
 
 LABEL org.opencontainers.image.source https://github.com/kubernetes-sigs/descheduler
 

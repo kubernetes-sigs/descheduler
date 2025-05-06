@@ -19,6 +19,7 @@ package descheduler
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -137,11 +138,11 @@ func setDefaultEvictor(profile api.DeschedulerProfile, client clientset.Interfac
 }
 
 func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginregistry.Registry) error {
-	var errorsInProfiles []error
+	var errorsInPolicy []error
 	for _, profile := range in.Profiles {
 		for _, pluginConfig := range profile.PluginConfigs {
 			if _, ok := registry[pluginConfig.Name]; !ok {
-				errorsInProfiles = append(errorsInProfiles, fmt.Errorf("in profile %s: plugin %s in pluginConfig not registered", profile.Name, pluginConfig.Name))
+				errorsInPolicy = append(errorsInPolicy, fmt.Errorf("in profile %s: plugin %s in pluginConfig not registered", profile.Name, pluginConfig.Name))
 				continue
 			}
 
@@ -150,9 +151,46 @@ func validateDeschedulerConfiguration(in api.DeschedulerPolicy, registry pluginr
 				continue
 			}
 			if err := pluginUtilities.PluginArgValidator(pluginConfig.Args); err != nil {
-				errorsInProfiles = append(errorsInProfiles, fmt.Errorf("in profile %s: %s", profile.Name, err.Error()))
+				errorsInPolicy = append(errorsInPolicy, fmt.Errorf("in profile %s: %s", profile.Name, err.Error()))
 			}
 		}
 	}
-	return utilerrors.NewAggregate(errorsInProfiles)
+	providers := map[api.MetricsSource]api.MetricsProvider{}
+	for _, provider := range in.MetricsProviders {
+		if _, ok := providers[provider.Source]; ok {
+			errorsInPolicy = append(errorsInPolicy, fmt.Errorf("metric provider %q is already configured, each source can be configured only once", provider.Source))
+		} else {
+			providers[provider.Source] = provider
+		}
+	}
+	if _, exists := providers[api.KubernetesMetrics]; exists && in.MetricsCollector != nil && in.MetricsCollector.Enabled {
+		errorsInPolicy = append(errorsInPolicy, fmt.Errorf("it is not allowed to combine metrics provider when metrics collector is enabled"))
+	}
+	if prometheusConfig, exists := providers[api.PrometheusMetrics]; exists {
+		if prometheusConfig.Prometheus == nil {
+			errorsInPolicy = append(errorsInPolicy, fmt.Errorf("prometheus configuration is required when prometheus source is enabled"))
+		} else {
+			if prometheusConfig.Prometheus.URL == "" {
+				errorsInPolicy = append(errorsInPolicy, fmt.Errorf("prometheus URL is required when prometheus is enabled"))
+			} else {
+				u, err := url.Parse(prometheusConfig.Prometheus.URL)
+				if err != nil {
+					errorsInPolicy = append(errorsInPolicy, fmt.Errorf("error parsing prometheus URL: %v", err))
+				} else if u.Scheme != "https" {
+					errorsInPolicy = append(errorsInPolicy, fmt.Errorf("prometheus URL's scheme is not https, got %q instead", u.Scheme))
+				}
+			}
+
+			if prometheusConfig.Prometheus.AuthToken != nil {
+				secretRef := prometheusConfig.Prometheus.AuthToken.SecretReference
+				if secretRef == nil {
+					errorsInPolicy = append(errorsInPolicy, fmt.Errorf("prometheus authToken secret is expected to be set when authToken field is"))
+				} else if secretRef.Name == "" || secretRef.Namespace == "" {
+					errorsInPolicy = append(errorsInPolicy, fmt.Errorf("prometheus authToken secret reference does not set both namespace and name"))
+				}
+			}
+		}
+	}
+
+	return utilerrors.NewAggregate(errorsInPolicy)
 }
