@@ -262,9 +262,9 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		if _, err := client.CoreV1().
 			Nodes().
 			Patch(ctx, node.Name, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
-			klog.ErrorS(err, "Failed to cordon node", node.Name)
+			klog.ErrorS(err, "Failed to cordon", "node", node.Name)
 		} else {
-			klog.InfoS("Cordoned underutilized node", node.Name)
+			klog.InfoS("Cordoned underutilized", "node", node.Name)
 		}
 	}
 
