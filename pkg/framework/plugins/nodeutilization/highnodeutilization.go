@@ -22,7 +22,9 @@ import (
 	"slices"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	types "k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -249,8 +251,32 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		return true
 	}
 
+	// we do the cordon here so that when it evicts the pods,
+	// it doesn’t try to place them back on the same nodes.
+	// the risk we’re taking is that if evictPodsFromSourceNodes fails for some reason, we won’t notice.
+	// TODO: uncordon if it fails but to do that, we’d need to change the tool’s error handling.
+	client := h.handle.ClientSet()
+	for _, nodeInfo := range lowNodes {
+		node := nodeInfo.NodeUsage.node
+		patch := []byte(`{"spec":{"unschedulable":true}}`)
+		if _, err := client.CoreV1().
+			Nodes().
+			Patch(ctx, node.Name, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
+			klog.ErrorS(err, "Failed to cordon node", node.Name)
+		} else {
+			klog.InfoS("Cordoned underutilized node", node.Name)
+		}
+	}
+
 	// sorts the nodes by the usage in ascending order.
 	sortNodesByUsage(lowNodes, true)
+
+	// adding nodeLimit to the function, since it uses
+	// the same one as in the LowNodeUtilization scenario.
+	var nodeLimit *uint
+	if h.args.EvictionLimits != nil {
+		nodeLimit = h.args.EvictionLimits.Node
+	}
 
 	evictPodsFromSourceNodes(
 		ctx,
@@ -263,7 +289,7 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		h.resourceNames,
 		continueEvictionCond,
 		h.usageClient,
-		nil,
+		nodeLimit,
 	)
 
 	return nil
