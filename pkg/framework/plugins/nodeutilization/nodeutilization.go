@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"sort"
 
@@ -570,7 +571,7 @@ func referencedResourceListForNodeCapacity(node *v1.Node) api.ReferencedResource
 	return referenced
 }
 
-// ResourceUsage2ResourceThreshold is an implementation of a Normalizer that
+// ResourceUsageToResourceThreshold is an implementation of a Normalizer that
 // converts a set of resource usages and totals into percentage. This function
 // operates on Quantity Value() for all the resources except CPU, where it uses
 // MilliValue().
@@ -594,9 +595,16 @@ func ResourceUsageToResourceThreshold(
 			percent = float64(used) / float64(capacity) * 100
 		}
 
-		result[rname] = api.Percentage(percent)
+		roundedPercent := roundFloat(percent, 2)
+		result[rname] = api.Percentage(roundedPercent)
 	}
 	return result
+}
+
+// roundFloat rounds a float to a given precision (number of digits).
+func roundFloat(val float64, precision int) float64 {
+	ratio := math.Pow(10, float64(precision))
+	return math.Round(val*ratio) / ratio
 }
 
 // uniquifyResourceNames returns a slice of resource names with duplicates

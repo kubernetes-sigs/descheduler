@@ -157,6 +157,16 @@ func TestResourceUsageToResourceThreshold(t *testing.T) {
 			expected: api.ResourceThresholds{v1.ResourceCPU: 10},
 		},
 		{
+			name: "24.61 percent",
+			usage: api.ReferencedResourceList{
+				v1.ResourceCPU: resource.NewMilliQuantity(63, resource.DecimalSI),
+			},
+			capacity: api.ReferencedResourceList{
+				v1.ResourceCPU: resource.NewMilliQuantity(256, resource.DecimalSI),
+			},
+			expected: api.ResourceThresholds{v1.ResourceCPU: 24.61},
+		},
+		{
 			name: "zeroed out capacity",
 			usage: api.ReferencedResourceList{
 				v1.ResourceCPU: resource.NewMilliQuantity(100, resource.DecimalSI),
