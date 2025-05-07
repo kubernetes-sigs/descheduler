@@ -510,6 +510,230 @@ profiles:
 				},
 			},
 		},
+		{
+			description: "test DisabledDefaultPodProtections configuration",
+			policy: []byte(`apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+      args:
+        disabledDefaultPodProtections:
+          - "withLocalStorage"
+          - "daemonSetPods"
+        priorityThreshold:
+          value: 2000000000
+        nodeFit: true
+    plugins:
+      filter:
+        enabled:
+          - "DefaultEvictor"
+      preEvictionFilter:
+        enabled:
+          - "DefaultEvictor" 
+`),
+			result: &api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: "ProfileName",
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: defaultevictor.PluginName,
+								Args: &defaultevictor.DefaultEvictorArgs{
+									DisabledDefaultPodProtections: []defaultevictor.DisabledDefaultPodProtection{
+										defaultevictor.WithLocalStorage,
+										defaultevictor.DaemonSetPods,
+									},
+									PriorityThreshold: &api.PriorityThreshold{Value: utilptr.To[int32](2000000000)},
+									NodeFit:           true,
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			description: "test ExtraPodProtections configuration",
+			policy: []byte(`apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+      args:
+        extraPodProtections:
+          - "withPVC"
+          - "withoutPDB"
+        priorityThreshold:
+          value: 2000000000
+        nodeFit: true
+    plugins:
+      filter:
+        enabled:
+          - "DefaultEvictor"
+      preEvictionFilter:
+        enabled:
+          - "DefaultEvictor"
+`),
+			result: &api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: "ProfileName",
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: defaultevictor.PluginName,
+								Args: &defaultevictor.DefaultEvictorArgs{
+									ExtraPodProtections: []defaultevictor.ExtraPodProtection{
+										defaultevictor.WithPVC,
+										defaultevictor.WithoutPDB,
+									},
+									PriorityThreshold: &api.PriorityThreshold{Value: utilptr.To[int32](2000000000)},
+									NodeFit:           true,
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			description: "test both ExtraPodProtections and DisabledDefaultPodProtections configuration",
+			policy: []byte(`apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+      args:
+        disabledDefaultPodProtections:
+          - "withLocalStorage"
+          - "daemonSetPods"
+        extraPodProtections:
+          - "withPVC"
+          - "withoutPDB"
+        priorityThreshold:
+          value: 2000000000
+        nodeFit: true
+    plugins:
+      filter:
+        enabled:
+          - "DefaultEvictor"
+      preEvictionFilter:
+        enabled:
+          - "DefaultEvictor"
+`),
+			result: &api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: "ProfileName",
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: defaultevictor.PluginName,
+								Args: &defaultevictor.DefaultEvictorArgs{
+									ExtraPodProtections: []defaultevictor.ExtraPodProtection{
+										defaultevictor.WithPVC,
+										defaultevictor.WithoutPDB,
+									},
+									DisabledDefaultPodProtections: []defaultevictor.DisabledDefaultPodProtection{
+										defaultevictor.WithLocalStorage,
+										defaultevictor.DaemonSetPods,
+									},
+									PriorityThreshold: &api.PriorityThreshold{Value: utilptr.To[int32](2000000000)},
+									NodeFit:           true,
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			description: "test error when using both Deprecated fields and DisabledDefaultPodProtections/ExtraPodProtections",
+			policy: []byte(`apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "DefaultEvictor"
+      args:
+        evictSystemCriticalPods: true
+        disabledDefaultPodProtections:
+          - "withLocalStorage"
+          - "daemonSetPods"
+        extraPodProtections:
+          - "withPVC"
+          - "withoutPDB"
+        priorityThreshold:
+          value: 2000000000
+        nodeFit: true
+    plugins:
+      filter:
+        enabled:
+          - "DefaultEvictor"
+      preEvictionFilter:
+        enabled:
+          - "DefaultEvictor"
+`),
+			result: &api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: "ProfileName",
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: defaultevictor.PluginName,
+								Args: &defaultevictor.DefaultEvictorArgs{
+									ExtraPodProtections: []defaultevictor.ExtraPodProtection{
+										defaultevictor.WithPVC,
+										defaultevictor.WithoutPDB,
+									},
+									DisabledDefaultPodProtections: []defaultevictor.DisabledDefaultPodProtection{
+										defaultevictor.WithLocalStorage,
+										defaultevictor.DaemonSetPods,
+									},
+									PriorityThreshold: &api.PriorityThreshold{Value: utilptr.To[int32](2000000000)},
+									NodeFit:           true,
+								},
+							},
+						},
+						Plugins: api.Plugins{
+							Filter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+							PreEvictionFilter: api.PluginSet{
+								Enabled: []string{defaultevictor.PluginName},
+							},
+						},
+					},
+				},
+			},
+			err: fmt.Errorf("in profile ProfileName: cannot use Deprecated fields alongside DisabledDefaultPodProtections or ExtraPodProtections"),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -518,7 +742,7 @@ profiles:
 			if err != nil {
 				if tc.err == nil {
 					t.Errorf("unexpected error: %s.", err.Error())
-				} else {
+				} else if err.Error() != tc.err.Error() {
 					t.Errorf("unexpected error: %s. Was expecting %s", err.Error(), tc.err.Error())
 				}
 			}
