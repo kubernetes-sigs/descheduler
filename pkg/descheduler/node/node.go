@@ -105,20 +105,29 @@ func IsReady(node *v1.Node) bool {
 	return true
 }
 
-// NodeFit returns true if the provided pod can be scheduled onto the provided node.
+// NodeFit returns nil if the provided pod can be scheduled onto the provided node.
+// Otherwise, it returns an error explaining why the node does not fit the pod.
+//
 // This function is used when the NodeFit pod filtering feature of the Descheduler is enabled.
-// This function currently considers a subset of the Kubernetes Scheduler's predicates when
-// deciding if a pod would fit on a node, but more predicates may be added in the future.
-// There should be no methods to modify nodes or pods in this method.
+// It considers a subset of the Kubernetes Scheduler's predicates
+// when deciding if a pod would fit on a node. More predicates may be added in the future.
+//
+// The checks are ordered from fastest to slowest to reduce unnecessary computation,
+// especially for nodes that are clearly unsuitable early in the evaluation process.
 func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) error {
-	// Check node selector and required affinity
+	// Check if the node is marked as unschedulable.
+	if IsNodeUnschedulable(node) {
+		return errors.New("node is not schedulable")
+	}
+
+	// Check if the pod matches the node's label selector (nodeSelector) and required node affinity rules.
 	if ok, err := utils.PodMatchNodeSelector(pod, node); err != nil {
 		return err
 	} else if !ok {
 		return errors.New("pod node selector does not match the node label")
 	}
 
-	// Check taints (we only care about NoSchedule and NoExecute taints)
+	// Check taints on the node that have effect NoSchedule or NoExecute.
 	ok := utils.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, func(taint *v1.Taint) bool {
 		return taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectNoExecute
 	})
@@ -126,23 +135,19 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 		return errors.New("pod does not tolerate taints on the node")
 	}
 
-	// Check if the pod can fit on a node based off it's requests
-	if pod.Spec.NodeName == "" || pod.Spec.NodeName != node.Name {
-		if ok, reqError := fitsRequest(nodeIndexer, pod, node); !ok {
-			return reqError
-		}
-	}
-
-	// Check if node is schedulable
-	if IsNodeUnschedulable(node) {
-		return errors.New("node is not schedulable")
-	}
-
-	// Check if pod matches inter-pod anti-affinity rule of pod on node
+	// Check if the pod violates any inter-pod anti-affinity rules with existing pods on the node.
+	// This involves iterating over all pods assigned to the node and evaluating label selectors.
 	if match, err := podMatchesInterPodAntiAffinity(nodeIndexer, pod, node); err != nil {
 		return err
 	} else if match {
 		return errors.New("pod matches inter-pod anti-affinity rule of other pod on node")
+	}
+
+	// Check whether the node has enough available resources to accommodate the pod.
+	if pod.Spec.NodeName == "" || pod.Spec.NodeName != node.Name {
+		if ok, reqError := fitsRequest(nodeIndexer, pod, node); !ok {
+			return reqError
+		}
 	}
 
 	return nil
