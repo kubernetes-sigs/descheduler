@@ -80,9 +80,17 @@ func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plug
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingTopologySpreadConstraintArgs, got %T", args)
 	}
 
+	var includedNamespaces, excludedNamespaces sets.Set[string]
+	if pluginArgs.Namespaces != nil {
+		includedNamespaces = sets.New(pluginArgs.Namespaces.Include...)
+		excludedNamespaces = sets.New(pluginArgs.Namespaces.Exclude...)
+	}
+
 	podFilter, err := podutil.NewOptions().
 		WithFilter(handle.Evictor().Filter).
 		WithLabelSelector(pluginArgs.LabelSelector).
+		WithNamespaces(includedNamespaces).
+		WithoutNamespaces(excludedNamespaces).
 		BuildFilterFunc()
 	if err != nil {
 		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
@@ -121,11 +129,6 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 
 	klog.V(1).Info("Processing namespaces for topology spread constraints")
 	podsForEviction := make(map[*v1.Pod]struct{})
-	var includedNamespaces, excludedNamespaces sets.Set[string]
-	if d.args.Namespaces != nil {
-		includedNamespaces = sets.New(d.args.Namespaces.Include...)
-		excludedNamespaces = sets.New(d.args.Namespaces.Exclude...)
-	}
 
 	pods, err := podutil.ListPodsOnNodes(nodes, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 	if err != nil {
@@ -141,11 +144,6 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 	// 1. for each namespace...
 	for namespace := range namespacedPods {
 		klog.V(4).InfoS("Processing namespace for topology spread constraints", "namespace", namespace)
-
-		if (len(includedNamespaces) > 0 && !includedNamespaces.Has(namespace)) ||
-			(len(excludedNamespaces) > 0 && excludedNamespaces.Has(namespace)) {
-			continue
-		}
 
 		// ...where there is a topology constraint
 		var namespaceTopologySpreadConstraints []topologySpreadConstraint
