@@ -140,7 +140,7 @@ func (d *Example) Deschedule(ctx context.Context, nodes []*v1.Node) *fwtypes.Sta
 		// ListAllPodsOnANode is a helper function that retrieves all
 		// pods filtering out the ones we can't evict. We merge the
 		// default filters with the one we created above.
-		pods, err := podutil.ListAllPodsOnANode(
+		pods, err := podutil.ListPodsOnANode(
 			node.Name,
 			d.handle.GetPodsAssignedToNodeFunc(),
 			podutil.WrapFilterFuncs(d.podFilter, filter),
