@@ -137,10 +137,23 @@ func (d *Example) Deschedule(ctx context.Context, nodes []*v1.Node) *fwtypes.Sta
 
 	// go node by node getting all pods that we can evict.
 	for _, node := range nodes {
-		// ListAllPodsOnANode is a helper function that retrieves all
-		// pods filtering out the ones we can't evict. We merge the
-		// default filters with the one we created above.
-		pods, err := podutil.ListAllPodsOnANode(
+		// ListAllPodsOnANode is a helper function that retrieves all pods filtering out the ones we can't evict.
+		// ListPodsOnANode is a helper function that retrieves all pods(excluding Succeeded or Failed phases) filtering out the ones we can't evict.
+		// We merge the default filters with the one we created above.
+		//
+		// The difference between ListPodsOnANode and ListAllPodsOnANode lies in their handling of Pods based on their phase:
+		// - ListPodsOnANode excludes Pods that are in Succeeded or Failed phases because they do not occupy any resources.
+		// - ListAllPodsOnANode does not exclude Pods based on their phase, listing all Pods regardless of their state.
+		//
+		// In this context, we prefer using ListPodsOnANode because:
+		// 1. It ensures that only active Pods (not in Succeeded or Failed states) are considered for eviction.
+		// 2. This helps avoid unnecessary processing of Pods that no longer consume resources.
+		// 3. By applying an additional filter (d.podFilter and filter), we can further refine which Pods are eligible for eviction,
+		//    ensuring that only Pods meeting specific criteria are selected.
+		//
+		// However, if you need to consider all Pods including those in Succeeded or Failed states for other purposes,
+		// you should use ListAllPodsOnANode instead.
+		pods, err := podutil.ListPodsOnANode(
 			node.Name,
 			d.handle.GetPodsAssignedToNodeFunc(),
 			podutil.WrapFilterFuncs(d.podFilter, filter),
