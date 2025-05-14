@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -34,8 +35,9 @@ import (
 )
 
 const (
-	PluginName            = "DefaultEvictor"
-	evictPodAnnotationKey = "descheduler.alpha.kubernetes.io/evict"
+	PluginName                 = "DefaultEvictor"
+	evictPodAnnotationKeyAlpha = "descheduler.alpha.kubernetes.io/evict"
+	evictPodAnnotationKeyBeta  = "descheduler.beta.kubernetes.io/evict"
 )
 
 var _ frameworktypes.EvictorPlugin = &DefaultEvictor{}
@@ -58,10 +60,27 @@ func IsPodEvictableBasedOnPriority(pod *v1.Pod, priority int32) bool {
 	return pod.Spec.Priority == nil || *pod.Spec.Priority < priority
 }
 
-// HaveEvictAnnotation checks if the pod have evict annotation
-func HaveEvictAnnotation(pod *v1.Pod) bool {
-	_, found := pod.ObjectMeta.Annotations[evictPodAnnotationKey]
-	return found
+// HaveEvictAnnotation checks if the pod have evict annotation and its value
+func HaveEvictAnnotation(pod *v1.Pod) (bool, bool, string) {
+	svalue, found := pod.ObjectMeta.Annotations[evictPodAnnotationKeyBeta]
+	bvalue := false
+	annotationKey := ""
+	if found {
+		annotationKey = evictPodAnnotationKeyBeta
+		c, err := strconv.ParseBool(svalue)
+		if err != nil {
+			bvalue = false
+		} else {
+			bvalue = c
+		}
+	} else {
+		// backward compatibility
+		if _, found = pod.ObjectMeta.Annotations[evictPodAnnotationKeyAlpha]; found {
+			annotationKey = evictPodAnnotationKeyAlpha
+			bvalue = true
+		}
+	}
+	return bvalue, found, annotationKey
 }
 
 // New builds plugin from its arguments while passing a handle
@@ -236,8 +255,11 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
 	checkErrs := []error{}
 
-	if HaveEvictAnnotation(pod) {
-		return true
+	if value, found, annotationKey := HaveEvictAnnotation(pod); found {
+		if value {
+			return true
+		}
+		checkErrs = append(checkErrs, fmt.Errorf("pod is annotated with %v=%v", annotationKey, value))
 	}
 
 	if utils.IsMirrorPod(pod) {
