@@ -49,6 +49,15 @@ func SetDefaults_DefaultEvictorArgs(obj runtime.Object) {
 	if args.PriorityThreshold == nil {
 		args.PriorityThreshold = nil
 	}
+	if args.PodProtectionPolicies.ExtraEnabled == nil {
+		args.PodProtectionPolicies.ExtraEnabled = nil
+	}
+	if args.PodProtectionPolicies.Disabled == nil {
+		args.PodProtectionPolicies.Disabled = nil
+	}
+	if args.defaultPodProtectionPolicies == nil {
+		args.defaultPodProtectionPolicies = BuiltInPodProtectionPolicies
+	}
 	if !args.NodeFit {
 		args.NodeFit = false
 	}
