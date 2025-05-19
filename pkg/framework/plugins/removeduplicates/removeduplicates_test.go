@@ -299,7 +299,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
-			plugin, err := New(&RemoveDuplicatesArgs{
+			plugin, err := New(ctx, &RemoveDuplicatesArgs{
 				ExcludeOwnerKinds: testCase.excludeOwnerKinds,
 			},
 				handle,
@@ -702,7 +702,7 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
-			plugin, err := New(&RemoveDuplicatesArgs{},
+			plugin, err := New(ctx, &RemoveDuplicatesArgs{},
 				handle,
 			)
 			if err != nil {

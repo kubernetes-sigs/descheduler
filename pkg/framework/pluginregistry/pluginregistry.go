@@ -17,6 +17,8 @@ limitations under the License.
 package pluginregistry
 
 import (
+	"context"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -35,7 +37,7 @@ type PluginUtilities struct {
 	PluginArgDefaulter PluginArgDefaulter
 }
 
-type PluginBuilder = func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error)
+type PluginBuilder = func(ctx context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error)
 
 type (
 	PluginArgValidator = func(args runtime.Object) error

@@ -240,6 +240,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			}
 
 			plugin, err := New(
+				ctx,
 				&RemovePodsViolatingInterPodAntiAffinityArgs{},
 				handle,
 			)

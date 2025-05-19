@@ -57,7 +57,7 @@ type LowNodeUtilization struct {
 // handle. this plugin aims to move workload from overutilized nodes to
 // underutilized nodes.
 func NewLowNodeUtilization(
-	genericArgs runtime.Object, handle frameworktypes.Handle,
+	ctx context.Context, genericArgs runtime.Object, handle frameworktypes.Handle,
 ) (frameworktypes.Plugin, error) {
 	args, ok := genericArgs.(*LowNodeUtilizationArgs)
 	if !ok {
