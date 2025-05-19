@@ -63,7 +63,7 @@ func HaveEvictAnnotation(pod *v1.Pod) bool {
 
 // New builds plugin from its arguments while passing a handle
 // nolint: gocyclo
-func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	defaultEvictorArgs, ok := args.(*DefaultEvictorArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type defaultEvictorFilterArgs, got %T", args)

@@ -425,7 +425,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
-			plugin, err := New(&RemovePodsViolatingNodeTaintsArgs{
+			plugin, err := New(ctx, &RemovePodsViolatingNodeTaintsArgs{
 				IncludePreferNoSchedule: tc.includePreferNoSchedule,
 				ExcludedTaints:          tc.excludedTaints,
 				IncludedTaints:          tc.includedTaints,

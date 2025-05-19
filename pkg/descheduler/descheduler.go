@@ -415,6 +415,7 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 	var profileRunners []profileRunner
 	for _, profile := range d.deschedulerPolicy.Profiles {
 		currProfile, err := frameworkprofile.NewProfile(
+			ctx,
 			profile,
 			pluginregistry.PluginRegistry,
 			frameworkprofile.WithClientSet(client),

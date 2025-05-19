@@ -55,7 +55,7 @@ type Example struct {
 // a runtime.Object. Handle is used by plugins to retrieve a kubernetes client
 // set, evictor interface, shared informer factory and other instruments shared
 // across different plugins.
-func New(args runtime.Object, handle fwtypes.Handle) (fwtypes.Plugin, error) {
+func New(ctx context.Context, args runtime.Object, handle fwtypes.Handle) (fwtypes.Plugin, error) {
 	// make sure we are receiving the right argument type.
 	exampleArgs, ok := args.(*ExampleArgs)
 	if !ok {

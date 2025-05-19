@@ -60,7 +60,7 @@ type FakePlugin struct {
 }
 
 func NewPluginFncFromFake(fp *FakePlugin) pluginregistry.PluginBuilder {
-	return func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+	return func(ctx context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 		fakePluginArgs, ok := args.(*FakePluginArgs)
 		if !ok {
 			return nil, fmt.Errorf("want args to be of type FakePluginArgs, got %T", args)
@@ -74,7 +74,7 @@ func NewPluginFncFromFake(fp *FakePlugin) pluginregistry.PluginBuilder {
 }
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	fakePluginArgs, ok := args.(*FakePluginArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type FakePluginArgs, got %T", args)
@@ -165,7 +165,7 @@ type FakeDeschedulePlugin struct {
 }
 
 func NewFakeDeschedulePluginFncFromFake(fp *FakeDeschedulePlugin) pluginregistry.PluginBuilder {
-	return func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+	return func(ctx context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 		fakePluginArgs, ok := args.(*FakeDeschedulePluginArgs)
 		if !ok {
 			return nil, fmt.Errorf("want args to be of type FakeDeschedulePluginArgs, got %T", args)
@@ -252,7 +252,7 @@ type FakeBalancePlugin struct {
 }
 
 func NewFakeBalancePluginFncFromFake(fp *FakeBalancePlugin) pluginregistry.PluginBuilder {
-	return func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+	return func(ctx context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 		fakePluginArgs, ok := args.(*FakeBalancePluginArgs)
 		if !ok {
 			return nil, fmt.Errorf("want args to be of type FakeBalancePluginArgs, got %T", args)
@@ -339,7 +339,7 @@ type FakeFilterPlugin struct {
 }
 
 func NewFakeFilterPluginFncFromFake(fp *FakeFilterPlugin) pluginregistry.PluginBuilder {
-	return func(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+	return func(ctx context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 		fakePluginArgs, ok := args.(*FakeFilterPluginArgs)
 		if !ok {
 			return nil, fmt.Errorf("want args to be of type FakeFilterPluginArgs, got %T", args)

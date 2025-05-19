@@ -451,7 +451,7 @@ func runPodLifetimePlugin(
 
 	maxPodLifeTimeSeconds := uint(1)
 
-	plugin, err := podlifetime.New(&podlifetime.PodLifeTimeArgs{
+	plugin, err := podlifetime.New(ctx, &podlifetime.PodLifeTimeArgs{
 		MaxPodLifeTimeSeconds: &maxPodLifeTimeSeconds,
 		LabelSelector:         labelSelector,
 		Namespaces:            namespaces,
@@ -615,7 +615,7 @@ func TestLowNodeUtilization(t *testing.T) {
 	podsBefore := len(podsOnMosttUtilizedNode)
 
 	t.Log("Running LowNodeUtilization plugin")
-	plugin, err := nodeutilization.NewLowNodeUtilization(&nodeutilization.LowNodeUtilizationArgs{
+	plugin, err := nodeutilization.NewLowNodeUtilization(ctx, &nodeutilization.LowNodeUtilizationArgs{
 		Thresholds: api.ResourceThresholds{
 			v1.ResourceCPU: 70,
 		},

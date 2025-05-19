@@ -1391,7 +1391,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					metricsUtilization = &MetricsUtilization{Source: api.KubernetesMetrics}
 				}
 
-				plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
+				plugin, err := NewLowNodeUtilization(ctx, &LowNodeUtilizationArgs{
 					Thresholds:             tc.thresholds,
 					TargetThresholds:       tc.targetThresholds,
 					UseDeviationThresholds: tc.useDeviationThresholds,
@@ -1551,7 +1551,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
-			plugin, err := NewLowNodeUtilization(&LowNodeUtilizationArgs{
+			plugin, err := NewLowNodeUtilization(ctx, &LowNodeUtilizationArgs{
 				Thresholds: api.ResourceThresholds{
 					v1.ResourcePods: 20,
 				},
@@ -1824,7 +1824,7 @@ func TestLowNodeUtilizationWithPrometheusMetrics(t *testing.T) {
 					result:   tc.samples,
 					dataType: model.ValVector,
 				}
-				plugin, err := NewLowNodeUtilization(tc.args, handle)
+				plugin, err := NewLowNodeUtilization(ctx, tc.args, handle)
 				if err != nil {
 					t.Fatalf("Unable to initialize the plugin: %v", err)
 				}

@@ -55,7 +55,7 @@ type HighNodeUtilization struct {
 
 // NewHighNodeUtilization builds plugin from its arguments while passing a handle.
 func NewHighNodeUtilization(
-	genericArgs runtime.Object, handle frameworktypes.Handle,
+	ctx context.Context, genericArgs runtime.Object, handle frameworktypes.Handle,
 ) (frameworktypes.Plugin, error) {
 	args, ok := genericArgs.(*HighNodeUtilizationArgs)
 	if !ok {

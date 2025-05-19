@@ -55,6 +55,7 @@ func InitFrameworkHandle(
 		return nil, nil, fmt.Errorf("Unable to initialize pod evictor: %v", err)
 	}
 	evictorFilter, err := defaultevictor.New(
+		ctx,
 		&defaultEvictorArgs,
 		&frameworkfake.HandleImpl{
 			ClientsetImpl:                 client,

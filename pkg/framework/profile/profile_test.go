@@ -242,6 +242,7 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 			}
 
 			prfl, err := NewProfile(
+				ctx,
 				test.config,
 				pluginregistry.PluginRegistry,
 				WithClientSet(client),
@@ -385,6 +386,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 	}
 
 	prfl, err := NewProfile(
+		ctx,
 		api.DeschedulerProfile{
 			Name: "strategy-test-profile",
 			PluginConfigs: []api.PluginConfig{
@@ -592,6 +594,7 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 	}
 
 	prfl, err := NewProfile(
+		ctx,
 		api.DeschedulerProfile{
 			Name: "strategy-test-profile",
 			PluginConfigs: []api.PluginConfig{

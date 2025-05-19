@@ -45,7 +45,7 @@ type RemovePodsHavingTooManyRestarts struct {
 var _ frameworktypes.DeschedulePlugin = &RemovePodsHavingTooManyRestarts{}
 
 // New builds plugin from its arguments while passing a handle
-func New(args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	tooManyRestartsArgs, ok := args.(*RemovePodsHavingTooManyRestartsArgs)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsHavingTooManyRestartsArgs, got %T", args)
