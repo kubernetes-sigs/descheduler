@@ -10,5 +10,5 @@ data:
   policy.yaml: |
     apiVersion: "{{ .Values.deschedulerPolicyAPIVersion }}"
     kind: "DeschedulerPolicy"
-{{ toYaml .Values.deschedulerPolicy | trim | indent 4 }}
+{{ tpl (toYaml .Values.deschedulerPolicy) . | trim | indent 4 }}
 {{- end }}
