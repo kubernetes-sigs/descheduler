@@ -107,7 +107,6 @@ func Run(rootCtx context.Context, rs *options.DeschedulerServer) error {
 	if err != nil {
 		klog.ErrorS(err, "failed to create tracer provider")
 	}
-	defer tracing.Shutdown(ctx)
 
 	// increase the fake watch channel so the dry-run mode can be run
 	// over a cluster with thousands of pods
@@ -117,6 +116,7 @@ func Run(rootCtx context.Context, rs *options.DeschedulerServer) error {
 		return err
 	}
 
+	tracing.Shutdown(ctx)
 	done()
 	// wait for metrics server to close
 	<-stoppedCh
