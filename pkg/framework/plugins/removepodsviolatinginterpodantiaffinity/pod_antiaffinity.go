@@ -35,6 +35,7 @@ const PluginName = "RemovePodsViolatingInterPodAntiAffinity"
 
 // RemovePodsViolatingInterPodAntiAffinity evicts pods on the node which violate inter pod anti affinity
 type RemovePodsViolatingInterPodAntiAffinity struct {
+	logger    klog.Logger
 	handle    frameworktypes.Handle
 	args      *RemovePodsViolatingInterPodAntiAffinityArgs
 	podFilter podutil.FilterFunc
@@ -48,6 +49,7 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsViolatingInterPodAntiAffinityArgs, got %T", args)
 	}
+	logger := klog.FromContext(ctx).WithValues("plugin", PluginName)
 
 	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if interPodAntiAffinityArgs.Namespaces != nil {
@@ -65,6 +67,7 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 	}
 
 	return &RemovePodsViolatingInterPodAntiAffinity{
+		logger:    logger,
 		handle:    handle,
 		podFilter: podFilter,
 		args:      interPodAntiAffinityArgs,
@@ -77,6 +80,7 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Name() string {
 }
 
 func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	logger := klog.FromContext(klog.NewContext(ctx, d.logger)).WithValues("ExtensionPoint", frameworktypes.DescheduleExtensionPoint)
 	pods, err := podutil.ListPodsOnNodes(nodes, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 	if err != nil {
 		return &frameworktypes.Status{
@@ -90,7 +94,7 @@ func (d *RemovePodsViolatingInterPodAntiAffinity) Deschedule(ctx context.Context
 
 loop:
 	for _, node := range nodes {
-		klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
+		logger.V(2).Info("Processing node", "node", klog.KObj(node))
 		pods := podsOnANode[node.Name]
 		// sort the evict-able Pods based on priority, if there are multiple pods with same priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(pods)
@@ -115,7 +119,7 @@ loop:
 					case *evictions.EvictionTotalLimitError:
 						return nil
 					default:
-						klog.Errorf("eviction failed: %v", err)
+						logger.Error(err, "eviction failed")
 					}
 				}
 			}
