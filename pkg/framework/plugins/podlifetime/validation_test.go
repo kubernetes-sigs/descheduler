@@ -37,6 +37,14 @@ func TestValidateRemovePodLifeTimeArgs(t *testing.T) {
 			expectError: false,
 		},
 		{
+			description: "Pod Status Reasons Succeeded or Failed",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: func(i uint) *uint { return &i }(1),
+				States:                []string{string(v1.PodSucceeded), string(v1.PodFailed)},
+			},
+			expectError: false,
+		},
+		{
 			description: "Pod Status Reasons CrashLoopBackOff ",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: func(i uint) *uint { return &i }(1),
