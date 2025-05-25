@@ -727,7 +727,9 @@ profiles:
 This strategy evicts pods that are older than `maxPodLifeTimeSeconds`.
 
 You can also specify `states` parameter to **only** evict pods matching the following conditions:
-  - [Pod Phase](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase) status of: `Running`, `Pending`, `Unknown`
+> The primary purpose for using states like `Succeeded` and `Failed` is releasing resources so that new pods can be rescheduled.
+> I.e., the main motivation is not for cleaning pods, rather to release resources.
+  - [Pod Phase](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase) status of: `Running`, `Pending`, `Succeeded`, `Failed`, `Unknown`
   - [Pod Reason](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-conditions) reasons of: `NodeAffinity`, `NodeLost`, `Shutdown`, `UnexpectedAdmissionError`
   - [Container State Waiting](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-state-waiting) condition of: `PodInitializing`, `ContainerCreating`, `ImagePullBackOff`, `CrashLoopBackOff`, `CreateContainerConfigError`, `ErrImagePull`, `ImagePullBackOff`, `CreateContainerError`, `InvalidImageName`
 
