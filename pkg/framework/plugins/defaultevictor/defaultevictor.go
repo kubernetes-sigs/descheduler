@@ -45,6 +45,7 @@ type constraint func(pod *v1.Pod) error
 // This plugin is only meant to customize other actions (extension points) of the evictor,
 // like filtering, sorting, and other ones that might be relevant in the future
 type DefaultEvictor struct {
+	logger      klog.Logger
 	args        *DefaultEvictorArgs
 	constraints []constraint
 	handle      frameworktypes.Handle
@@ -68,23 +69,25 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type defaultEvictorFilterArgs, got %T", args)
 	}
+	logger := klog.FromContext(ctx).WithValues("plugin", PluginName)
 
 	ev := &DefaultEvictor{
+		logger: logger,
 		handle: handle,
 		args:   defaultEvictorArgs,
 	}
 	// add constraints
-	err := ev.addAllConstraints(handle)
+	err := ev.addAllConstraints(logger, handle)
 	if err != nil {
 		return nil, err
 	}
 	return ev, nil
 }
 
-func (d *DefaultEvictor) addAllConstraints(handle frameworktypes.Handle) error {
+func (d *DefaultEvictor) addAllConstraints(logger klog.Logger, handle frameworktypes.Handle) error {
 	args := d.args
-	d.constraints = append(d.constraints, evictionConstraintsForFailedBarePods(args.EvictFailedBarePods)...)
-	if constraints, err := evictionConstraintsForSystemCriticalPods(args.EvictSystemCriticalPods, args.PriorityThreshold, handle); err != nil {
+	d.constraints = append(d.constraints, evictionConstraintsForFailedBarePods(logger, args.EvictFailedBarePods)...)
+	if constraints, err := evictionConstraintsForSystemCriticalPods(logger, args.EvictSystemCriticalPods, args.PriorityThreshold, handle); err != nil {
 		return err
 	} else {
 		d.constraints = append(d.constraints, constraints...)
@@ -92,12 +95,12 @@ func (d *DefaultEvictor) addAllConstraints(handle frameworktypes.Handle) error {
 	d.constraints = append(d.constraints, evictionConstraintsForLocalStoragePods(args.EvictLocalStoragePods)...)
 	d.constraints = append(d.constraints, evictionConstraintsForDaemonSetPods(args.EvictDaemonSetPods)...)
 	d.constraints = append(d.constraints, evictionConstraintsForPvcPods(args.IgnorePvcPods)...)
-	if constraints, err := evictionConstraintsForLabelSelector(args.LabelSelector); err != nil {
+	if constraints, err := evictionConstraintsForLabelSelector(logger, args.LabelSelector); err != nil {
 		return err
 	} else {
 		d.constraints = append(d.constraints, constraints...)
 	}
-	if constraints, err := evictionConstraintsForMinReplicas(args.MinReplicas, handle); err != nil {
+	if constraints, err := evictionConstraintsForMinReplicas(logger, args.MinReplicas, handle); err != nil {
 		return err
 	} else {
 		d.constraints = append(d.constraints, constraints...)
@@ -113,14 +116,15 @@ func (d *DefaultEvictor) Name() string {
 }
 
 func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
+	logger := d.logger.WithValues("ExtensionPoint", frameworktypes.PreEvictionFilterExtensionPoint)
 	if d.args.NodeFit {
 		nodes, err := nodeutil.ReadyNodes(context.TODO(), d.handle.ClientSet(), d.handle.SharedInformerFactory().Core().V1().Nodes().Lister(), d.args.NodeSelector)
 		if err != nil {
-			klog.ErrorS(err, "unable to list ready nodes", "pod", klog.KObj(pod))
+			logger.Error(err, "unable to list ready nodes", "pod", klog.KObj(pod))
 			return false
 		}
 		if !nodeutil.PodFitsAnyOtherNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) {
-			klog.InfoS("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable", "pod", klog.KObj(pod))
+			logger.Info("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable", "pod", klog.KObj(pod))
 			return false
 		}
 		return true
@@ -129,6 +133,7 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 }
 
 func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
+	logger := d.logger.WithValues("ExtensionPoint", frameworktypes.FilterExtensionPoint)
 	checkErrs := []error{}
 
 	if HaveEvictAnnotation(pod) {
@@ -154,7 +159,7 @@ func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
 	}
 
 	if len(checkErrs) > 0 {
-		klog.V(4).InfoS("Pod fails the following checks", "pod", klog.KObj(pod), "checks", utilerrors.NewAggregate(checkErrs).Error())
+		logger.V(4).Info("Pod fails the following checks", "pod", klog.KObj(pod), "checks", utilerrors.NewAggregate(checkErrs).Error())
 		return false
 	}
 
