@@ -47,6 +47,8 @@ func ValidatePodLifeTimeArgs(obj runtime.Object) error {
 		// Pod Status Phase
 		string(v1.PodRunning),
 		string(v1.PodPending),
+		string(v1.PodSucceeded),
+		string(v1.PodFailed),
 		string(v1.PodUnknown),
 
 		// Pod Status Reasons
