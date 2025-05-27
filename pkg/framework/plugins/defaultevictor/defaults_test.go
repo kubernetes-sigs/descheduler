@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	utilptr "k8s.io/utils/ptr"
@@ -82,7 +84,7 @@ func TestSetDefaults_DefaultEvictorArgs(t *testing.T) {
 		utilruntime.Must(AddToScheme(scheme))
 		t.Run(tc.name, func(t *testing.T) {
 			scheme.Default(tc.in)
-			if diff := cmp.Diff(tc.in, tc.want); diff != "" {
+			if diff := cmp.Diff(tc.in, tc.want, cmpopts.IgnoreFields(DefaultEvictorArgs{}, "defaultPodProtectionPolicies")); diff != "" {
 				t.Errorf("Got unexpected defaults (-want, +got):\n%s", diff)
 			}
 		})
