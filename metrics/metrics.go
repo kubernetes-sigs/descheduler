@@ -32,9 +32,17 @@ const (
 var (
 	PodsEvicted = metrics.NewCounterVec(
 		&metrics.CounterOpts{
+			Subsystem:         DeschedulerSubsystem,
+			Name:              "pods_evicted",
+			Help:              "Number of total evicted pods, by the result, by the strategy, by the namespace, by the node name. 'error' result means a pod could not be evicted",
+			StabilityLevel:    metrics.ALPHA,
+			DeprecatedVersion: "0.34.0",
+		}, []string{"result", "strategy", "profile", "namespace", "node"})
+	PodsEvictedTotal = metrics.NewCounterVec(
+		&metrics.CounterOpts{
 			Subsystem:      DeschedulerSubsystem,
-			Name:           "pods_evicted",
-			Help:           "Number of evicted pods, by the result, by the strategy, by the namespace, by the node name. 'error' result means a pod could not be evicted",
+			Name:           "pods_evicted_total",
+			Help:           "Number of total evicted pods, by the result, by the strategy, by the namespace, by the node name. 'error' result means a pod could not be evicted",
 			StabilityLevel: metrics.ALPHA,
 		}, []string{"result", "strategy", "profile", "namespace", "node"})
 
@@ -50,8 +58,17 @@ var (
 
 	DeschedulerLoopDuration = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
+			Subsystem:         DeschedulerSubsystem,
+			Name:              "descheduler_loop_duration_seconds",
+			Help:              "Time taken to complete a full descheduling cycle",
+			StabilityLevel:    metrics.ALPHA,
+			DeprecatedVersion: "0.34.0",
+			Buckets:           []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 50, 100, 250, 500},
+		}, []string{})
+	LoopDuration = metrics.NewHistogramVec(
+		&metrics.HistogramOpts{
 			Subsystem:      DeschedulerSubsystem,
-			Name:           "descheduler_loop_duration_seconds",
+			Name:           "loop_duration_seconds",
 			Help:           "Time taken to complete a full descheduling cycle",
 			StabilityLevel: metrics.ALPHA,
 			Buckets:        []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 50, 100, 250, 500},
@@ -59,8 +76,17 @@ var (
 
 	DeschedulerStrategyDuration = metrics.NewHistogramVec(
 		&metrics.HistogramOpts{
+			Subsystem:         DeschedulerSubsystem,
+			Name:              "descheduler_strategy_duration_seconds",
+			Help:              "Time taken to complete Each strategy of the descheduling operation",
+			StabilityLevel:    metrics.ALPHA,
+			DeprecatedVersion: "0.34.0",
+			Buckets:           []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 50, 100},
+		}, []string{"strategy", "profile"})
+	StrategyDuration = metrics.NewHistogramVec(
+		&metrics.HistogramOpts{
 			Subsystem:      DeschedulerSubsystem,
-			Name:           "descheduler_strategy_duration_seconds",
+			Name:           "strategy_duration_seconds",
 			Help:           "Time taken to complete Each strategy of the descheduling operation",
 			StabilityLevel: metrics.ALPHA,
 			Buckets:        []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 50, 100},
@@ -68,9 +94,12 @@ var (
 
 	metricsList = []metrics.Registerable{
 		PodsEvicted,
+		PodsEvictedTotal,
 		buildInfo,
 		DeschedulerLoopDuration,
 		DeschedulerStrategyDuration,
+		LoopDuration,
+		StrategyDuration,
 	}
 )
 
