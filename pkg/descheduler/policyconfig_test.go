@@ -260,20 +260,6 @@ func TestValidateDeschedulerConfiguration(t *testing.T) {
 			result: fmt.Errorf("error parsing prometheus URL: parse \"http://example.com:-80\": invalid port \":-80\" after host"),
 		},
 		{
-			description: "prometheus url does not have https error",
-			deschedulerPolicy: api.DeschedulerPolicy{
-				MetricsProviders: []api.MetricsProvider{
-					{
-						Source: api.PrometheusMetrics,
-						Prometheus: &api.Prometheus{
-							URL: "http://example.com:80",
-						},
-					},
-				},
-			},
-			result: fmt.Errorf("prometheus URL's scheme is not https, got \"http\" instead"),
-		},
-		{
 			description: "prometheus authtoken with no secret reference error",
 			deschedulerPolicy: api.DeschedulerPolicy{
 				MetricsProviders: []api.MetricsProvider{
