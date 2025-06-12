@@ -60,6 +60,11 @@ type HighNodeUtilizationArgs struct {
 	Thresholds    api.ResourceThresholds `json:"thresholds"`
 	NumberOfNodes int                    `json:"numberOfNodes,omitempty"`
 
+	// MaxNodesToProcess limits the number of nodes to process in each
+	// the descheduling execution. This is useful to limit nodes descheduled each run 
+	// when turning this plugin on within a cluster with many underutilized nodes.
+	MaxNodesToProcess int                `json:"maxNodesToProcess,omitempty"`
+
 	// EvictionModes is a set of modes to be taken into account when the
 	// descheduler evicts pods. For example the mode
 	// `OnlyThresholdingResources` can be used to make sure the descheduler
