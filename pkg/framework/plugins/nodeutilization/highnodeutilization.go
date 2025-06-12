@@ -213,6 +213,12 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 
 	lowNodes, schedulableNodes := nodeInfos[0], nodeInfos[1]
 
+	// limit the number of nodes processed each execution if `MaxNodesToProcess` is set
+	if h.args.MaxNodesToProcess > 0 && len(lowNodes) > h.args.MaxNodesToProcess {
+		lowNodes = lowNodes[:h.args.MaxNodesToProcess]
+		logger.V(1).Info("Limiting the number of underutilized nodes to process", "maxNodesToProcess", h.args.MaxNodesToProcess)
+	}
+
 	logger.V(1).Info("Criteria for a node below target utilization", h.criteria...)
 	logger.V(1).Info("Number of underutilized nodes", "totalNumber", len(lowNodes))
 
