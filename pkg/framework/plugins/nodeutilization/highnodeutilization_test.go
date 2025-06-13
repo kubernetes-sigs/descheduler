@@ -481,6 +481,29 @@ func TestHighNodeUtilization(t *testing.T) {
 			},
 			expectedPodsEvicted: 0,
 		},
+		{
+			name: "limits number of underutilized nodes processed per run with MaxNodesToProcess",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:    30,
+				v1.ResourcePods:   30,
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 4000, 3000, 10, nil),
+				test.BuildTestNode("n2", 4000, 3000, 10, nil),
+				test.BuildTestNode("n3", 4000, 3000, 10, nil),
+				test.BuildTestNode("n4", 4000, 3000, 10, nil),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, "n1", test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 0, "n2", test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 400, 0, "n3", test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 400, 0, "n4", test.SetRSOwnerRef),
+			},
+			expectedPodsEvicted: 1, // Only one node's pod should be evicted per run
+			evictedPods:         []string{"p1", "p2", "p3", "p4"}, // Any one of these is valid
+			evictionModes:       nil,
+			// We'll set MaxNodesToProcess in the plugin args below
+		},
 	}
 
 	for _, testCase := range testCases {
