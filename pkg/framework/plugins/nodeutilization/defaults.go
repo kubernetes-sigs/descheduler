@@ -49,4 +49,7 @@ func SetDefaults_HighNodeUtilizationArgs(obj runtime.Object) {
 	if args.NumberOfNodes == 0 {
 		args.NumberOfNodes = 0
 	}
+	if args.MaxNodesToProcess == 0 {
+		args.MaxNodesToProcess = 0
+	}
 }
