@@ -208,12 +208,12 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 
 	lowNodes, schedulableNodes := nodeInfos[0], nodeInfos[1]
 
-    // limit the number of nodes processed each execution if `MaxNodesToProcess` is set
+	// limit the number of nodes processed each execution if `MaxNodesToProcess` is set
 	if h.args.MaxNodesToProcess > 0 && len(lowNodes) > h.args.MaxNodesToProcess {
 		lowNodes = lowNodes[:h.args.MaxNodesToProcess]
 		klog.V(1).InfoS("Limiting the number of underutilized nodes to process", "maxNodesToProcess", h.args.MaxNodesToProcess)
 	}
-	
+
 	klog.V(1).InfoS("Criteria for a node below target utilization", h.criteria...)
 	klog.V(1).InfoS("Number of underutilized nodes", "totalNumber", len(lowNodes))
 
