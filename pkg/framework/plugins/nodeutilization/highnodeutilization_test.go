@@ -662,6 +662,7 @@ func TestHighNodeUtilizationWithTaints(t *testing.T) {
 			}
 
 			plugin, err := NewHighNodeUtilization(ctx, &HighNodeUtilizationArgs{
+				MaxNodesToProcess: 1,
 				Thresholds: api.ResourceThresholds{
 					v1.ResourceCPU: 40,
 				},
