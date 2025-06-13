@@ -264,12 +264,13 @@ func (client *prometheusUsageClient) podUsage(pod *v1.Pod) (map[v1.ResourceName]
 }
 
 func NodeUsageFromPrometheusMetrics(ctx context.Context, promClient promapi.Client, promQuery string) (map[string]map[v1.ResourceName]*resource.Quantity, error) {
+	logger := klog.FromContext(ctx)
 	results, warnings, err := promv1.NewAPI(promClient).Query(ctx, promQuery, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("unable to capture prometheus metrics: %v", err)
 	}
 	if len(warnings) > 0 {
-		klog.Infof("prometheus metrics warnings: %v", warnings)
+		logger.Info("prometheus metrics warnings: %v", warnings)
 	}
 
 	if results.Type() != model.ValVector {
