@@ -73,7 +73,7 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 
 	podFilter = podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
 		if err := validateCanEvict(pod, failedPodsArgs); err != nil {
-			logger.Error(fmt.Errorf("ignoring pod for eviction due to: %s", err.Error()), "pod", klog.KObj(pod))
+			logger.V(4).Info(fmt.Sprintf("ignoring pod for eviction due to: %s", err.Error()), "pod", klog.KObj(pod))
 			return false
 		}
 
