@@ -37,6 +37,7 @@ const PluginName = "RemovePodsHavingTooManyRestarts"
 // There are too many cases leading this issue: Volume mount failed, app error due to nodes' different settings.
 // As of now, this strategy won't evict daemonsets, mirror pods, critical pods and pods with local storages.
 type RemovePodsHavingTooManyRestarts struct {
+	logger    klog.Logger
 	handle    frameworktypes.Handle
 	args      *RemovePodsHavingTooManyRestartsArgs
 	podFilter podutil.FilterFunc
@@ -50,6 +51,7 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemovePodsHavingTooManyRestartsArgs, got %T", args)
 	}
+	logger := klog.FromContext(ctx).WithValues("plugin", PluginName)
 
 	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if tooManyRestartsArgs.Namespaces != nil {
@@ -70,7 +72,7 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 
 	podFilter = podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
 		if err := validateCanEvict(pod, tooManyRestartsArgs); err != nil {
-			klog.V(4).InfoS(fmt.Sprintf("ignoring pod for eviction due to: %s", err.Error()), "pod", klog.KObj(pod))
+			logger.Error(fmt.Errorf("ignoring pod for eviction due to: %s", err.Error()), "pod", klog.KObj(pod))
 			return false
 		}
 		return true
@@ -100,6 +102,7 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 	}
 
 	return &RemovePodsHavingTooManyRestarts{
+		logger:    logger,
 		handle:    handle,
 		args:      tooManyRestartsArgs,
 		podFilter: podFilter,
@@ -113,8 +116,9 @@ func (d *RemovePodsHavingTooManyRestarts) Name() string {
 
 // Deschedule extension point implementation for the plugin
 func (d *RemovePodsHavingTooManyRestarts) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	logger := klog.FromContext(klog.NewContext(ctx, d.logger)).WithValues("ExtensionPoint", frameworktypes.DescheduleExtensionPoint)
 	for _, node := range nodes {
-		klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
+		logger.V(2).Info("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListAllPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			// no pods evicted as error encountered retrieving evictable Pods
@@ -144,7 +148,7 @@ func (d *RemovePodsHavingTooManyRestarts) Deschedule(ctx context.Context, nodes 
 			case *evictions.EvictionTotalLimitError:
 				return nil
 			default:
-				klog.Errorf("eviction failed: %v", err)
+				logger.Error(err, "eviction failed")
 			}
 		}
 	}

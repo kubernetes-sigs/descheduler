@@ -44,6 +44,7 @@ var _ frameworktypes.BalancePlugin = &HighNodeUtilization{}
 // can schedule according to its plugin. Note that CPU/Memory requests are used
 // to calculate nodes' utilization and not the actual resource usage.
 type HighNodeUtilization struct {
+	logger         klog.Logger
 	handle         frameworktypes.Handle
 	args           *HighNodeUtilizationArgs
 	podFilter      func(pod *v1.Pod) bool
@@ -64,6 +65,7 @@ func NewHighNodeUtilization(
 			genericArgs,
 		)
 	}
+	logger := klog.FromContext(ctx).WithValues("plugin", HighNodeUtilizationPluginName)
 
 	// this plugins worries only about thresholds but the nodeplugins
 	// package was made to take two thresholds into account, one for low
@@ -113,6 +115,7 @@ func NewHighNodeUtilization(
 	)
 
 	return &HighNodeUtilization{
+		logger:         logger,
 		handle:         handle,
 		args:           args,
 		resourceNames:  resourceNames,
@@ -135,6 +138,8 @@ func (h *HighNodeUtilization) Name() string {
 // utilized nodes. The goal here is to concentrate pods in fewer nodes so that
 // less nodes are used.
 func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	logger := klog.FromContext(klog.NewContext(ctx, h.logger)).WithValues("ExtensionPoint", frameworktypes.BalanceExtensionPoint)
+
 	if err := h.usageClient.sync(ctx, nodes); err != nil {
 		return &frameworktypes.Status{
 			Err: fmt.Errorf("error getting node usage: %v", err),
@@ -165,7 +170,7 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		// schedulable nodes.
 		func(nodeName string, usage, threshold api.ResourceThresholds) bool {
 			if nodeutil.IsNodeUnschedulable(nodesMap[nodeName]) {
-				klog.V(2).InfoS(
+				logger.V(2).Info(
 					"Node is unschedulable",
 					"node", klog.KObj(nodesMap[nodeName]),
 				)
@@ -184,7 +189,7 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 	category := []string{"underutilized", "overutilized"}
 	for i := range nodeGroups {
 		for nodeName := range nodeGroups[i] {
-			klog.InfoS(
+			logger.Info(
 				"Node has been classified",
 				"category", category[i],
 				"node", klog.KObj(nodesMap[nodeName]),
@@ -208,18 +213,18 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 
 	lowNodes, schedulableNodes := nodeInfos[0], nodeInfos[1]
 
-	klog.V(1).InfoS("Criteria for a node below target utilization", h.criteria...)
-	klog.V(1).InfoS("Number of underutilized nodes", "totalNumber", len(lowNodes))
+	logger.V(1).Info("Criteria for a node below target utilization", h.criteria...)
+	logger.V(1).Info("Number of underutilized nodes", "totalNumber", len(lowNodes))
 
 	if len(lowNodes) == 0 {
-		klog.V(1).InfoS(
+		logger.V(1).Info(
 			"No node is underutilized, nothing to do here, you might tune your thresholds further",
 		)
 		return nil
 	}
 
 	if len(lowNodes) <= h.args.NumberOfNodes {
-		klog.V(1).InfoS(
+		logger.V(1).Info(
 			"Number of nodes underutilized is less or equal than NumberOfNodes, nothing to do here",
 			"underutilizedNodes", len(lowNodes),
 			"numberOfNodes", h.args.NumberOfNodes,
@@ -228,12 +233,12 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 	}
 
 	if len(lowNodes) == len(nodes) {
-		klog.V(1).InfoS("All nodes are underutilized, nothing to do here")
+		logger.V(1).Info("All nodes are underutilized, nothing to do here")
 		return nil
 	}
 
 	if len(schedulableNodes) == 0 {
-		klog.V(1).InfoS("No node is available to schedule the pods, nothing to do here")
+		logger.V(1).Info("No node is available to schedule the pods, nothing to do here")
 		return nil
 	}
 

@@ -36,6 +36,7 @@ const PluginName = "RemoveFailedPods"
 
 // RemoveFailedPods evicts pods in failed status phase that match the given args criteria
 type RemoveFailedPods struct {
+	logger    klog.Logger
 	handle    frameworktypes.Handle
 	args      *RemoveFailedPodsArgs
 	podFilter podutil.FilterFunc
@@ -49,6 +50,7 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 	if !ok {
 		return nil, fmt.Errorf("want args to be of type RemoveFailedPodsArgs, got %T", args)
 	}
+	logger := klog.FromContext(ctx).WithValues("plugin", PluginName)
 
 	var includedNamespaces, excludedNamespaces sets.Set[string]
 	if failedPodsArgs.Namespaces != nil {
@@ -71,7 +73,7 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 
 	podFilter = podutil.WrapFilterFuncs(podFilter, func(pod *v1.Pod) bool {
 		if err := validateCanEvict(pod, failedPodsArgs); err != nil {
-			klog.V(4).InfoS(fmt.Sprintf("ignoring pod for eviction due to: %s", err.Error()), "pod", klog.KObj(pod))
+			logger.Error(fmt.Errorf("ignoring pod for eviction due to: %s", err.Error()), "pod", klog.KObj(pod))
 			return false
 		}
 
@@ -79,6 +81,7 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 	})
 
 	return &RemoveFailedPods{
+		logger:    logger,
 		handle:    handle,
 		podFilter: podFilter,
 		args:      failedPodsArgs,
@@ -92,8 +95,9 @@ func (d *RemoveFailedPods) Name() string {
 
 // Deschedule extension point implementation for the plugin
 func (d *RemoveFailedPods) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
+	logger := klog.FromContext(klog.NewContext(ctx, d.logger)).WithValues("ExtensionPoint", frameworktypes.DescheduleExtensionPoint)
 	for _, node := range nodes {
-		klog.V(2).InfoS("Processing node", "node", klog.KObj(node))
+		logger.V(2).Info("Processing node", "node", klog.KObj(node))
 		pods, err := podutil.ListAllPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			// no pods evicted as error encountered retrieving evictable Pods
@@ -114,7 +118,7 @@ func (d *RemoveFailedPods) Deschedule(ctx context.Context, nodes []*v1.Node) *fr
 			case *evictions.EvictionTotalLimitError:
 				return nil
 			default:
-				klog.Errorf("eviction failed: %v", err)
+				logger.Error(err, "eviction failed")
 			}
 		}
 	}
