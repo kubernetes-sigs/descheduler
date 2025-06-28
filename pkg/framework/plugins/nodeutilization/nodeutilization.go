@@ -175,6 +175,7 @@ func evictPodsFromSourceNodes(
 	continueEviction continueEvictionCond,
 	usageClient usageClient,
 	maxNoOfPodsToEvictPerNode *uint,
+	nodeIndexer podutil.GetPodsAssignedToNodeFunc,
 ) {
 	logger := klog.FromContext(ctx)
 	available, err := assessAvailableResourceInNodes(destinationNodes, resourceNames)
@@ -188,6 +189,12 @@ func evictPodsFromSourceNodes(
 	destinationTaints := make(map[string][]v1.Taint, len(destinationNodes))
 	for _, node := range destinationNodes {
 		destinationTaints[node.node.Name] = node.node.Spec.Taints
+	}
+
+	// Build a slice with plain *v1.Node objects representing potential destination nodes.
+	candidateDestNodes := make([]*v1.Node, 0, len(destinationNodes))
+	for _, n := range destinationNodes {
+		candidateDestNodes = append(candidateDestNodes, n.node)
 	}
 
 	for _, node := range sourceNodes {
@@ -235,6 +242,8 @@ func evictPodsFromSourceNodes(
 			continueEviction,
 			usageClient,
 			maxNoOfPodsToEvictPerNode,
+			nodeIndexer,
+			candidateDestNodes,
 		); err != nil {
 			switch err.(type) {
 			case *evictions.EvictionTotalLimitError:
@@ -260,6 +269,8 @@ func evictPods(
 	continueEviction continueEvictionCond,
 	usageClient usageClient,
 	maxNoOfPodsToEvictPerNode *uint,
+	nodeIndexer podutil.GetPodsAssignedToNodeFunc,
+	candidateNodes []*v1.Node,
 ) error {
 	logger := klog.FromContext(ctx)
 	// preemptive check to see if we should continue evicting pods.
@@ -281,6 +292,14 @@ func evictPods(
 				"limit", *maxNoOfPodsToEvictPerNode,
 			)
 			break
+		}
+
+		if !nodeutil.PodFitsAnyNode(nodeIndexer, pod, candidateNodes) {
+			logger.V(3).Info(
+				"Skipping eviction for pod, does not fit any destination node",
+				"pod", klog.KObj(pod),
+			)
+			continue
 		}
 
 		if !utils.PodToleratesTaints(pod, destinationTaints) {
