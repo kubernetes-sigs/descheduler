@@ -29,6 +29,9 @@ spec:
       {{- if .Values.ttlSecondsAfterFinished }}
       ttlSecondsAfterFinished: {{ .Values.ttlSecondsAfterFinished }}
       {{- end }}
+      {{- if .Values.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ .Values.activeDeadlineSeconds }}
+      {{- end }}
       template:
         metadata:
           name: {{ template "descheduler.fullname" . }}
