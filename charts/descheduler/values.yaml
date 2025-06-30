@@ -55,7 +55,8 @@ suspend: false
 # startingDeadlineSeconds: 200
 # successfulJobsHistoryLimit: 3
 # failedJobsHistoryLimit: 1
-# ttlSecondsAfterFinished 600
+# ttlSecondsAfterFinished: 600
+# activeDeadlineSeconds: 60 # Make sure this value is SHORTER than the cron interval.
 # timeZone: Etc/UTC
 
 # Required when running as a Deployment
