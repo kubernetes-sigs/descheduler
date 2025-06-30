@@ -97,10 +97,14 @@ func Run(rootCtx context.Context, rs *options.DeschedulerServer) error {
 
 	healthz.InstallHandler(pathRecorderMux, healthz.NamedCheck("Descheduler", healthz.PingHealthz.Check))
 
-	stoppedCh, _, err := rs.SecureServingInfo.Serve(pathRecorderMux, 0, ctx.Done())
-	if err != nil {
-		klog.Fatalf("failed to start secure server: %v", err)
-		return err
+	var stoppedCh <-chan struct{}
+	var err error
+	if rs.SecureServingInfo != nil {
+		stoppedCh, _, err = rs.SecureServingInfo.Serve(pathRecorderMux, 0, ctx.Done())
+		if err != nil {
+			klog.Fatalf("failed to start secure server: %v", err)
+			return err
+		}
 	}
 
 	err = tracing.NewTracerProvider(ctx, rs.Tracing.CollectorEndpoint, rs.Tracing.TransportCert, rs.Tracing.ServiceName, rs.Tracing.ServiceNamespace, rs.Tracing.SampleRate, rs.Tracing.FallbackToNoOpProviderOnError)
@@ -118,8 +122,10 @@ func Run(rootCtx context.Context, rs *options.DeschedulerServer) error {
 	}
 
 	done()
-	// wait for metrics server to close
-	<-stoppedCh
+	if stoppedCh != nil {
+		// wait for metrics server to close
+		<-stoppedCh
+	}
 
 	return nil
 }
