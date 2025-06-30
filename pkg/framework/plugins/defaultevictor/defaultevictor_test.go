@@ -379,7 +379,18 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Normal pod eviction with normal ownerRefs and descheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p2", 400, 0, n1.Name, func(pod *v1.Pod) {
-					pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+					pod.Annotations = map[string]string{evictPodAnnotationKeyAlpha: ""}
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+				}),
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, {
+			description: "Normal pod eviction with normal ownerRefs and descheduler.beta.kubernetes.io/evict=true annotation",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p2", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.Annotations = map[string]string{evictPodAnnotationKeyBeta: "true"}
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 				}),
 			},
@@ -397,10 +408,10 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			result:                  true,
 		}, {
-			description: "Normal pod eviction with replicaSet ownerRefs and descheduler.alpha.kubernetes.io/evict annotation",
+			description: "Normal pod eviction with replicaSet ownerRefs and descheduler.beta.kubernetes.io/evict=true annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p4", 400, 0, n1.Name, func(pod *v1.Pod) {
-					pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+					pod.Annotations = map[string]string{evictPodAnnotationKeyBeta: "true"}
 					pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 				}),
 			},
@@ -418,16 +429,41 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			result:                  true,
 		}, {
-			description: "Normal pod eviction with statefulSet ownerRefs and descheduler.alpha.kubernetes.io/evict annotation",
+			description: "Normal pod eviction with statefulSet ownerRefs and descheduler.beta.kubernetes.io/evict=true annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p19", 400, 0, n1.Name, func(pod *v1.Pod) {
-					pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+					pod.Annotations = map[string]string{evictPodAnnotationKeyBeta: "true"}
 					pod.ObjectMeta.OwnerReferences = test.GetStatefulSetOwnerRefList()
 				}),
 			},
 			evictLocalStoragePods:   false,
 			evictSystemCriticalPods: false,
 			result:                  true,
+		}, {
+			description: "Pod not evicted because it has descheduler.beta.kubernetes.io/evict=false annotation",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p2", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.Annotations = map[string]string{evictPodAnnotationKeyBeta: "false"}
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+				}),
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  false,
+		}, {
+			description: "Pod not evicted because it has descheduler.alpha.kubernetes.io/evict but also descheduler.beta.kubernetes.io/evict=false annotation",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p2", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.Annotations = map[string]string{
+						evictPodAnnotationKeyAlpha: "",
+						evictPodAnnotationKeyBeta:  "false",
+					}
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+				}),
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  false,
 		}, {
 			description: "Pod not evicted because it is bound to a PV and evictLocalStoragePods = false",
 			pods: []*v1.Pod{
@@ -471,10 +507,32 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			result:                  true,
 		}, {
-			description: "Pod is evicted because it is bound to a PV and evictLocalStoragePods = false, but it has scheduler.alpha.kubernetes.io/evict annotation",
+			description: "Pod is evicted because it is bound to a PV and evictLocalStoragePods = false, but it has descheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p7", 400, 0, n1.Name, func(pod *v1.Pod) {
-					pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+					pod.Annotations = map[string]string{evictPodAnnotationKeyAlpha: ""}
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "sample",
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+								EmptyDir: &v1.EmptyDirVolumeSource{
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
+							},
+						},
+					}
+				}),
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, {
+			description: "Pod is evicted because it is bound to a PV and evictLocalStoragePods = false, but it has descheduler.beta.kubernetes.io/evict=true annotation",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p7", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.Annotations = map[string]string{evictPodAnnotationKeyBeta: "true"}
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 					pod.Spec.Volumes = []v1.Volume{
 						{
@@ -504,10 +562,10 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			result:                  false,
 		}, {
-			description: "Pod is evicted because it is part of a daemonSet, but it has scheduler.alpha.kubernetes.io/evict annotation",
+			description: "Pod is evicted because it is part of a daemonSet, but it has descheduler.beta.kubernetes.io/evict=true annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p9", 400, 0, n1.Name, func(pod *v1.Pod) {
-					pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+					pod.Annotations = map[string]string{evictPodAnnotationKeyBeta: "true"}
 					pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 				}),
 			},
@@ -526,12 +584,12 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			result:                  false,
 		}, {
-			description: "Pod is evicted because it is a mirror pod, but it has scheduler.alpha.kubernetes.io/evict annotation",
+			description: "Pod is evicted because it is a mirror pod, but it has descheduler.beta.kubernetes.io/evict=true annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p11", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 					pod.Annotations = test.GetMirrorPodAnnotation()
-					pod.Annotations["descheduler.alpha.kubernetes.io/evict"] = "true"
+					pod.Annotations[evictPodAnnotationKeyBeta] = "true"
 				}),
 			},
 			evictLocalStoragePods:   false,
@@ -550,14 +608,14 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: false,
 			result:                  false,
 		}, {
-			description: "Pod is evicted because it has system critical priority, but it has scheduler.alpha.kubernetes.io/evict annotation",
+			description: "Pod is evicted because it has system critical priority, but it has descheduler.beta.kubernetes.io/evict=true annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p13", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
 					pod.Annotations = map[string]string{
-						"descheduler.alpha.kubernetes.io/evict": "true",
+						evictPodAnnotationKeyBeta: "true",
 					}
 				}),
 			},
@@ -577,11 +635,11 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			priorityThreshold:       &lowPriority,
 			result:                  false,
 		}, {
-			description: "Pod is evicted because it has a priority higher than the configured priority threshold, but it has scheduler.alpha.kubernetes.io/evict annotation",
+			description: "Pod is evicted because it has a priority higher than the configured priority threshold, but it has descheduler.beta.kubernetes.io/evict=true annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p15", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-					pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+					pod.Annotations = map[string]string{evictPodAnnotationKeyBeta: "true"}
 					pod.Spec.Priority = &highPriority
 				}),
 			},
@@ -602,11 +660,11 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			evictSystemCriticalPods: true,
 			result:                  true,
 		}, {
-			description: "Pod is evicted because it has system critical priority, but evictSystemCriticalPods = true and it has scheduler.alpha.kubernetes.io/evict annotation",
+			description: "Pod is evicted because it has system critical priority, but evictSystemCriticalPods = true and it has descheduler.beta.kubernetes.io/evict=true annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p16", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-					pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+					pod.Annotations = map[string]string{evictPodAnnotationKeyBeta: "true"}
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
 				}),
@@ -627,11 +685,11 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			priorityThreshold:       &lowPriority,
 			result:                  true,
 		}, {
-			description: "Pod is evicted because it has a priority higher than the configured priority threshold, but evictSystemCriticalPods = true and it has scheduler.alpha.kubernetes.io/evict annotation",
+			description: "Pod is evicted because it has a priority higher than the configured priority threshold, but evictSystemCriticalPods = true and it has descheduler.beta.kubernetes.io/evict=true annotation",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p17", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-					pod.Annotations = map[string]string{"descheduler.alpha.kubernetes.io/evict": "true"}
+					pod.Annotations = map[string]string{evictPodAnnotationKeyBeta: "true"}
 					pod.Spec.Priority = &highPriority
 				}),
 			},
