@@ -21,35 +21,7 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
-// SetDefaults_DefaultEvictorArgs
-// TODO: the final default values would be discussed in community
+// SetDefaults_DefaultEvictorArgs sets the default values for the
+// DefaultEvictorArgs configuration.
 func SetDefaults_DefaultEvictorArgs(obj runtime.Object) {
-	args := obj.(*DefaultEvictorArgs)
-	if args.NodeSelector == "" {
-		args.NodeSelector = ""
-	}
-	if !args.EvictLocalStoragePods {
-		args.EvictLocalStoragePods = false
-	}
-	if !args.EvictDaemonSetPods {
-		args.EvictDaemonSetPods = false
-	}
-	if !args.EvictSystemCriticalPods {
-		args.EvictSystemCriticalPods = false
-	}
-	if !args.IgnorePvcPods {
-		args.IgnorePvcPods = false
-	}
-	if !args.EvictFailedBarePods {
-		args.EvictFailedBarePods = false
-	}
-	if args.LabelSelector == nil {
-		args.LabelSelector = nil
-	}
-	if args.PriorityThreshold == nil {
-		args.PriorityThreshold = nil
-	}
-	if !args.NodeFit {
-		args.NodeFit = false
-	}
 }
