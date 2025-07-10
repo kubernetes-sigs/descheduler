@@ -42,6 +42,13 @@ type LowNodeUtilizationArgs struct {
 	NumberOfNodes          int                    `json:"numberOfNodes,omitempty"`
 	MetricsUtilization     *MetricsUtilization    `json:"metricsUtilization,omitempty"`
 
+	// EvictionModes is a set of modes to be taken into account when the
+	// descheduler evicts pods. For example the mode
+	// `OnlyThresholdingResources` can be used to make sure the descheduler
+	// only evicts pods who have resource requests for the defined
+	// thresholds.
+	EvictionModes []EvictionMode `json:"evictionModes,omitempty"`
+
 	// Naming this one differently since namespaces are still
 	// considered while considering resources used by pods
 	// but then filtered out before eviction

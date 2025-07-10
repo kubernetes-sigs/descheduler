@@ -1,0 +1,100 @@
+# Example configuration demonstrating the fix for Issue #1695
+# This configuration prevents cyclic eviction of large pods without resource requests
+
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+
+# Eviction policy configuration
+evictLocalStoragePods: true
+evictSystemCriticalPods: false
+ignorePvcPods: false
+evictFailedBarePods: false
+evictDaemonSetPods: false
+evictTerminatingPods: false
+
+# Strategies configuration
+strategies:
+  # LowNodeUtilization strategy with the fix for cyclic eviction
+  "LowNodeUtilization":
+    enabled: true
+    params:
+      nodeResourceUtilizationThresholds:
+        # Thresholds below which a node is considered underutilized
+        thresholds:
+          "cpu" : 20
+          "memory": 20
+          "pods": 20
+        
+        # Thresholds above which a node is considered overutilized
+        targetThresholds:
+          "cpu" : 70
+          "memory": 70
+          "pods": 70
+        
+        # FIX: Add eviction modes to prevent cyclic eviction
+        # This ensures only pods with resource requests are considered for eviction
+        evictionModes:
+          - "OnlyThresholdingResources"
+        
+        # Optional: Limit the number of nodes to process
+        numberOfNodes: 3
+        
+        # Optional: Exclude specific namespaces from eviction
+        evictableNamespaces:
+          exclude:
+            - "kube-system"
+            - "kube-public"
+            - "default"
+        
+        # Optional: Use deviation thresholds instead of absolute thresholds
+        # useDeviationThresholds: false
+
+# Alternative configuration without the fix (for comparison)
+# This would cause the cyclic eviction issue described in #1695
+---
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "LowNodeUtilization":
+    enabled: true
+    params:
+      nodeResourceUtilizationThresholds:
+        thresholds:
+          "cpu" : 20
+          "memory": 20
+        targetThresholds:
+          "cpu" : 70
+          "memory": 70
+        # WARNING: No evictionModes specified - may cause cyclic eviction of large pods
+        # without resource requests
+
+# Example with additional strategies
+---
+apiVersion: "descheduler/v1alpha1"
+kind: "DeschedulerPolicy"
+strategies:
+  "LowNodeUtilization":
+    enabled: true
+    params:
+      nodeResourceUtilizationThresholds:
+        thresholds:
+          "cpu" : 20
+          "memory": 20
+        targetThresholds:
+          "cpu" : 70
+          "memory": 70
+        evictionModes:
+          - "OnlyThresholdingResources"
+  
+  # Other strategies can be combined
+  "RemoveDuplicates":
+    enabled: true
+    params:
+      removeDuplicates:
+        excludeOwnerKinds:
+          - "ReplicaSet"
+  
+  "RemoveFailedPods":
+    enabled: true
+    params:
+      removeFailedPods: {} 

@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 
+	"slices"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -97,6 +99,27 @@ func NewLowNodeUtilization(
 	podFilter, err := podutil.
 		NewOptions().
 		WithFilter(handle.Evictor().Filter).
+		BuildFilterFunc()
+	if err != nil {
+		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
+	}
+
+	// by default we evict pods from the overutilized nodes even if they
+	// don't define a request for a given threshold. this works most of the
+	// times and there is an use case for it. When using the restrict mode
+	// we evaluate if the pod has a request for any of the resources the
+	// user has provided as threshold.
+	filters := []podutil.FilterFunc{handle.Evictor().Filter}
+	if slices.Contains(args.EvictionModes, EvictionModeOnlyThresholdingResources) {
+		filters = append(
+			filters,
+			withResourceRequestForAny(resourceNames...),
+		)
+	}
+
+	podFilter, err = podutil.
+		NewOptions().
+		WithFilter(podutil.WrapFilterFuncs(filters...)).
 		BuildFilterFunc()
 	if err != nil {
 		return nil, fmt.Errorf("error initializing pod filter function: %v", err)

@@ -62,6 +62,10 @@ func ValidateLowNodeUtilizationArgs(obj runtime.Object) error {
 	if err != nil {
 		return err
 	}
+	// make sure we know about the eviction modes defined by the user.
+	if err := validateEvictionModes(args.EvictionModes); err != nil {
+		return err
+	}
 	if args.MetricsUtilization != nil {
 		if args.MetricsUtilization.Source == api.KubernetesMetrics && args.MetricsUtilization.MetricsServer {
 			return fmt.Errorf("it is not allowed to set both %q source and metricsServer", api.KubernetesMetrics)
