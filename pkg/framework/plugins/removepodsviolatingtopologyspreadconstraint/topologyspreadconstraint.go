@@ -539,16 +539,16 @@ func newTopologySpreadConstraint(constraint v1.TopologySpreadConstraint, pod *v1
 		MaxSkew:            constraint.MaxSkew,
 		TopologyKey:        constraint.TopologyKey,
 		Selector:           selector,
-		NodeAffinityPolicy: v1.NodeInclusionPolicyHonor,  // If NodeAffinityPolicy is nil, we treat NodeAffinityPolicy as "Honor".
-		NodeTaintsPolicy:   v1.NodeInclusionPolicyIgnore, // If NodeTaintsPolicy is nil, we treat NodeTaintsPolicy as "Ignore".
-		PodNodeAffinity:    nodeaffinity.GetRequiredNodeAffinity(pod),
-		PodTolerations:     pod.Spec.Tolerations,
+		NodeAffinityPolicy: utilptr.Deref(constraint.NodeAffinityPolicy, v1.NodeInclusionPolicyHonor), // If NodeAffinityPolicy is nil, we treat NodeAffinityPolicy as "Honor".
+		NodeTaintsPolicy:   utilptr.Deref(constraint.NodeTaintsPolicy, v1.NodeInclusionPolicyIgnore),  // If NodeTaintsPolicy is nil, we treat NodeTaintsPolicy as "Ignore".
 	}
-	if constraint.NodeAffinityPolicy != nil {
-		tsc.NodeAffinityPolicy = *constraint.NodeAffinityPolicy
+
+	if tsc.NodeAffinityPolicy == v1.NodeInclusionPolicyHonor {
+		tsc.PodNodeAffinity = nodeaffinity.GetRequiredNodeAffinity(pod)
 	}
-	if constraint.NodeTaintsPolicy != nil {
-		tsc.NodeTaintsPolicy = *constraint.NodeTaintsPolicy
+
+	if tsc.NodeTaintsPolicy == v1.NodeInclusionPolicyHonor {
+		tsc.PodTolerations = pod.Spec.Tolerations
 	}
 
 	return tsc, nil
