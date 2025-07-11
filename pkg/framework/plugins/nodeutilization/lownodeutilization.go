@@ -96,14 +96,6 @@ func NewLowNodeUtilization(
 		)
 	}
 
-	podFilter, err := podutil.
-		NewOptions().
-		WithFilter(handle.Evictor().Filter).
-		BuildFilterFunc()
-	if err != nil {
-		return nil, fmt.Errorf("error initializing pod filter function: %v", err)
-	}
-
 	// by default we evict pods from the overutilized nodes even if they
 	// don't define a request for a given threshold. this works most of the
 	// times and there is an use case for it. When using the restrict mode
@@ -117,7 +109,7 @@ func NewLowNodeUtilization(
 		)
 	}
 
-	podFilter, err = podutil.
+	podFilter, err := podutil.
 		NewOptions().
 		WithFilter(podutil.WrapFilterFuncs(filters...)).
 		BuildFilterFunc()
