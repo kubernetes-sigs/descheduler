@@ -1399,6 +1399,63 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
 			nodeFit:              true,
 		},
+		{
+			name: "3 domains, sizes [2, 1, 0] with selectors, maxSkew=1, nodeTaintsPolicy=Ignore, should move 1 for [1, 1, 1]",
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 1000, 2000, 9, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneA"
+					n.Labels[v1.LabelArchStable] = "arm64"
+				}),
+				test.BuildTestNode("B1", 1000, 2000, 9, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneB"
+					n.Labels[v1.LabelArchStable] = "arm64"
+				}),
+				test.BuildTestNode("C1", 1000, 2000, 9, func(n *v1.Node) {
+					n.Labels["zone"] = "zoneC"
+					n.Labels[v1.LabelArchStable] = "arm64"
+				}),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:  1,
+					node:   "A1",
+					labels: map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1, func(constraint *v1.TopologySpreadConstraint) {
+						constraint.NodeAffinityPolicy = utilptr.To(v1.NodeInclusionPolicyIgnore)
+					}),
+					nodeSelector: map[string]string{
+						v1.LabelArchStable: "arm64",
+					},
+				},
+				{
+					count:  1,
+					node:   "A1",
+					labels: map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1, func(constraint *v1.TopologySpreadConstraint) {
+						constraint.NodeAffinityPolicy = utilptr.To(v1.NodeInclusionPolicyIgnore)
+					}),
+					nodeSelector: map[string]string{
+						"zone":             "zoneA",
+						v1.LabelArchStable: "arm64",
+					},
+				},
+				{
+					count:  1,
+					node:   "B1",
+					labels: map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1, func(constraint *v1.TopologySpreadConstraint) {
+						constraint.NodeAffinityPolicy = utilptr.To(v1.NodeInclusionPolicyIgnore)
+					}),
+					nodeSelector: map[string]string{
+						v1.LabelArchStable: "arm64",
+					},
+				},
+			}),
+			expectedEvictedCount: 1,
+			expectedEvictedPods:  []string{"pod-0"},
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1747,38 +1804,31 @@ func getLabelSelector(key string, values []string, operator metav1.LabelSelector
 	}
 }
 
-func getDefaultTopologyConstraints(maxSkew int32) []v1.TopologySpreadConstraint {
-	return []v1.TopologySpreadConstraint{
-		{
-			MaxSkew:           maxSkew,
-			TopologyKey:       "zone",
-			WhenUnsatisfiable: v1.DoNotSchedule,
-			LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-		},
-	}
-}
-
 func getDefaultNodeTopologyConstraints(maxSkew int32) []v1.TopologySpreadConstraint {
-	return []v1.TopologySpreadConstraint{
-		{
-			MaxSkew:           maxSkew,
-			TopologyKey:       "node",
-			WhenUnsatisfiable: v1.DoNotSchedule,
-			LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-		},
-	}
+	return getDefaultTopologyConstraints(maxSkew, func(constraint *v1.TopologySpreadConstraint) {
+		constraint.TopologyKey = "node"
+	})
 }
 
 func getDefaultTopologyConstraintsWithPodTemplateHashMatch(maxSkew int32) []v1.TopologySpreadConstraint {
-	return []v1.TopologySpreadConstraint{
-		{
-			MaxSkew:           maxSkew,
-			TopologyKey:       "zone",
-			WhenUnsatisfiable: v1.DoNotSchedule,
-			LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
-			MatchLabelKeys:    []string{appsv1.DefaultDeploymentUniqueLabelKey},
-		},
+	return getDefaultTopologyConstraints(maxSkew, func(constraint *v1.TopologySpreadConstraint) {
+		constraint.MatchLabelKeys = []string{appsv1.DefaultDeploymentUniqueLabelKey}
+	})
+}
+
+func getDefaultTopologyConstraints(maxSkew int32, edits ...func(*v1.TopologySpreadConstraint)) []v1.TopologySpreadConstraint {
+	constraint := v1.TopologySpreadConstraint{
+		MaxSkew:           maxSkew,
+		TopologyKey:       "zone",
+		WhenUnsatisfiable: v1.DoNotSchedule,
+		LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
 	}
+
+	for _, edit := range edits {
+		edit(&constraint)
+	}
+
+	return []v1.TopologySpreadConstraint{constraint}
 }
 
 func TestCheckIdenticalConstraints(t *testing.T) {

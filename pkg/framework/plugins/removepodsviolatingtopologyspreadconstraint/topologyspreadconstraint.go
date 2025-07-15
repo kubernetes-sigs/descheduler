@@ -356,9 +356,17 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(
 			continue
 		}
 
+		// prefer pods above the ideal average to be those that fit on nodes that are below ideal avg (need more pods)
+		sort.SliceStable(sortedDomains[j].pods, func(a, b int) bool {
+			canEvictA := node.PodFitsAnyOtherNode(getPodsAssignedToNode, sortedDomains[j].pods[a], nodesBelowIdealAvg)
+			canEvictB := node.PodFitsAnyOtherNode(getPodsAssignedToNode, sortedDomains[j].pods[b], nodesBelowIdealAvg)
+			return !canEvictA && canEvictB
+		})
+
 		// remove pods from the higher topology and add them to the list of pods to be evicted
 		// also (just for tracking), add them to the list of pods in the lower topology
 		aboveToEvict := sortedDomains[j].pods[len(sortedDomains[j].pods)-movePods:]
+
 		for k := range aboveToEvict {
 			// PodFitsAnyOtherNode excludes the current node because, for the sake of domain balancing only, we care about if there is any other
 			// place it could theoretically fit.
@@ -429,6 +437,7 @@ func sortDomains(constraintTopologyPairs map[topologyPair][]*v1.Pod, isEvictable
 				// if true and both and non-evictable, order doesn't matter
 				return !(evictableI && !evictableJ)
 			}
+
 			hasSelectorOrAffinityI := hasSelectorOrAffinity(*list[i])
 			hasSelectorOrAffinityJ := hasSelectorOrAffinity(*list[j])
 			// if both pods have selectors/affinity, compare them by their priority
@@ -530,16 +539,16 @@ func newTopologySpreadConstraint(constraint v1.TopologySpreadConstraint, pod *v1
 		MaxSkew:            constraint.MaxSkew,
 		TopologyKey:        constraint.TopologyKey,
 		Selector:           selector,
-		NodeAffinityPolicy: v1.NodeInclusionPolicyHonor,  // If NodeAffinityPolicy is nil, we treat NodeAffinityPolicy as "Honor".
-		NodeTaintsPolicy:   v1.NodeInclusionPolicyIgnore, // If NodeTaintsPolicy is nil, we treat NodeTaintsPolicy as "Ignore".
-		PodNodeAffinity:    nodeaffinity.GetRequiredNodeAffinity(pod),
-		PodTolerations:     pod.Spec.Tolerations,
+		NodeAffinityPolicy: utilptr.Deref(constraint.NodeAffinityPolicy, v1.NodeInclusionPolicyHonor), // If NodeAffinityPolicy is nil, we treat NodeAffinityPolicy as "Honor".
+		NodeTaintsPolicy:   utilptr.Deref(constraint.NodeTaintsPolicy, v1.NodeInclusionPolicyIgnore),  // If NodeTaintsPolicy is nil, we treat NodeTaintsPolicy as "Ignore".
 	}
-	if constraint.NodeAffinityPolicy != nil {
-		tsc.NodeAffinityPolicy = *constraint.NodeAffinityPolicy
+
+	if tsc.NodeAffinityPolicy == v1.NodeInclusionPolicyHonor {
+		tsc.PodNodeAffinity = nodeaffinity.GetRequiredNodeAffinity(pod)
 	}
-	if constraint.NodeTaintsPolicy != nil {
-		tsc.NodeTaintsPolicy = *constraint.NodeTaintsPolicy
+
+	if tsc.NodeTaintsPolicy == v1.NodeInclusionPolicyHonor {
+		tsc.PodTolerations = pod.Spec.Tolerations
 	}
 
 	return tsc, nil
