@@ -89,18 +89,12 @@ cmdOptions:
 deschedulerPolicyAPIVersion: "descheduler/v1alpha2"
 
 # deschedulerPolicy contains the policies the descheduler will execute.
-# To use policies stored in an existing configMap use:
-# NOTE: The name of the cm should comply to {{ template "descheduler.fullname" . }}
-# deschedulerPolicy: {}
 deschedulerPolicy:
   # nodeSelector: "key1=value1,key2=value2"
   # maxNoOfPodsToEvictPerNode: 10
   # maxNoOfPodsToEvictPerNamespace: 10
   # metricsProviders:
   # - source: KubernetesMetrics
-  # ignorePvcPods: true
-  # evictLocalStoragePods: true
-  # evictDaemonSetPods: true
   # tracing:
   #   collectorEndpoint: otel-collector.observability.svc.cluster.local:4317
   #   transportCert: ""

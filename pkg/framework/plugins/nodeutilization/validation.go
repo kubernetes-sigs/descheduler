@@ -30,7 +30,25 @@ func ValidateHighNodeUtilizationArgs(obj runtime.Object) error {
 	if err != nil {
 		return err
 	}
+	// make sure we know about the eviction modes defined by the user.
+	return validateEvictionModes(args.EvictionModes)
+}
 
+// validateEvictionModes checks if the eviction modes are valid/known
+// to the descheduler.
+func validateEvictionModes(modes []EvictionMode) error {
+	// we are using this approach to make the code more extensible
+	// in the future.
+	validModes := map[EvictionMode]bool{
+		EvictionModeOnlyThresholdingResources: true,
+	}
+
+	for _, mode := range modes {
+		if validModes[mode] {
+			continue
+		}
+		return fmt.Errorf("invalid eviction mode %s", mode)
+	}
 	return nil
 }
 

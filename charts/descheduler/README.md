@@ -11,7 +11,7 @@ helm install my-release --namespace kube-system descheduler/descheduler
 
 ## Introduction
 
-This chart bootstraps a [descheduler](https://github.com/kubernetes-sigs/descheduler/) cron job on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager.
+This chart bootstraps a [descheduler](https://github.com/kubernetes-sigs/descheduler/) cron job with a default DeschedulerPolicy on a [Kubernetes](http://kubernetes.io) cluster using the [Helm](https://helm.sh) package manager. To preview what changes descheduler would make without actually going forward with the changes, you can install descheduler in dry run mode by providing the flag `--set cmdOptions.dry-run=true` to the `helm install` command below.
 
 ## Prerequisites
 

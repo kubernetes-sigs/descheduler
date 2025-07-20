@@ -9,7 +9,7 @@
     <img src="assets/logo/descheduler-stacked-color.png" width="40%" align="center" alt="descheduler">
 </p>
 
-# Descheduler for Kubernetes 
+# Descheduler for Kubernetes
 
 Scheduling in Kubernetes is the process of binding pending pods to nodes, and is performed by
 a component of Kubernetes called kube-scheduler. The scheduler's decisions, whether or where a
@@ -33,15 +33,15 @@ but relies on the default scheduler for that.
 ## ⚠️  Documentation Versions by Release
 
 If you are using a published release of Descheduler (such as
-`registry.k8s.io/descheduler/descheduler:v0.31.0`), follow the documentation in
+`registry.k8s.io/descheduler/descheduler:v0.33.0`), follow the documentation in
 that version's release branch, as listed below:
 
 |Descheduler Version|Docs link|
 |---|---|
+|v0.33.x|[`release-1.33`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.33/README.md)|
 |v0.32.x|[`release-1.32`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.32/README.md)|
 |v0.31.x|[`release-1.31`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.31/README.md)|
 |v0.30.x|[`release-1.30`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.30/README.md)|
-|v0.29.x|[`release-1.29`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.29/README.md)|
 
 The
 [`master`](https://github.com/kubernetes-sigs/descheduler/blob/master/README.md)
@@ -93,17 +93,17 @@ See the [resources | Kustomize](https://kubectl.docs.kubernetes.io/references/ku
 
 Run As A Job
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=release-1.32' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/job?ref=release-1.33' | kubectl apply -f -
 ```
 
 Run As A CronJob
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=release-1.32' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/cronjob?ref=release-1.33' | kubectl apply -f -
 ```
 
 Run As A Deployment
 ```
-kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=release-1.32' | kubectl apply -f -
+kustomize build 'github.com/kubernetes-sigs/descheduler/kubernetes/deployment?ref=release-1.33' | kubectl apply -f -
 ```
 
 ## User Guide
@@ -152,6 +152,7 @@ The Default Evictor Plugin is used by default for filtering pods before processi
 |---------------------------|----|---------------|-----------------------------------------------------------------------------------------------------------------------------|
 | `nodeSelector`            |`string`| `nil` | limiting the nodes which are processed                                                                                      |
 | `evictLocalStoragePods`   |`bool`| `false` | allows eviction of pods with local storage                                                                                  |
+| `evictDaemonSetPods`      | bool | false   | allows eviction of DaemonSet managed Pods.                                                                                  |
 | `evictSystemCriticalPods` |`bool`| `false` | [Warning: Will evict Kubernetes system pods] allows eviction of pods with any priority, including system pods like kube-dns |
 | `ignorePvcPods`           |`bool`| `false` | set whether PVC pods should be evicted or ignored                                                                           |
 | `evictFailedBarePods`     |`bool`| `false` | allow eviction of pods without owner references and in failed phase                                                         |
@@ -405,6 +406,12 @@ strategy evicts pods from `underutilized nodes` (those with usage below `thresho
 so that they can be recreated in appropriately utilized nodes.
 The strategy will abort if any number of `underutilized nodes` or `appropriately utilized nodes` is zero.
 
+To control pod eviction from underutilized nodes, use the `evictionModes`
+array. A lenient policy, which evicts pods regardless of their resource
+requests, is the default. To enable a stricter policy that only evicts pods
+with resource requests defined for the provided threshold resources, add the
+option `OnlyThresholdingResources` to the `evictionModes` configuration.
+
 **NOTE:** Node resource consumption is determined by the requests and limits of pods, not actual usage.
 This approach is chosen in order to maintain consistency with the kube-scheduler, which follows the same
 design for scheduling pods onto nodes. This means that resource usage as reported by Kubelet (or commands
@@ -417,7 +424,14 @@ actual usage metrics. Implementing metrics-based descheduling is currently TODO 
 |---|---|
 |`thresholds`|map(string:int)|
 |`numberOfNodes`|int|
+|`evictionModes`|list(string)|
 |`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
+
+**Supported Eviction Modes:**
+
+|Name|Description|
+|---|---|
+|`OnlyThresholdingResources`|Evict only pods that have resource requests defined for the provided threshold resources.|
 
 **Example:**
 
@@ -437,6 +451,8 @@ profiles:
           exclude:
           - "kube-system"
           - "namespace1"
+        evictionModes:
+          - "OnlyThresholdingResources"
     plugins:
       balance:
         enabled:
@@ -909,7 +925,7 @@ does not exist, descheduler won't create it and will throw an error.
 
 ### Label filtering
 
-The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#labelselector-v1-meta)
+The following strategies can configure a [standard kubernetes labelSelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.33/#labelselector-v1-meta)
 to filter pods by their labels:
 
 * `PodLifeTime`
@@ -1029,10 +1045,12 @@ To get best results from HA mode some additional configurations might require:
 
 ## Metrics
 
-| name	| type	| description |
-|-------|-------|----------------|
-| build_info |	gauge |	constant 1 |
-| pods_evicted | CounterVec | total number of pods evicted |
+| name	                                 | type	        | description                                                                       |
+|---------------------------------------|--------------|-----------------------------------------------------------------------------------|
+| build_info                            | 	gauge       | 	constant 1                                                                       |
+| pods_evicted                          | CounterVec   | total number of pods evicted                                                      |
+| descheduler_loop_duration_seconds     | HistogramVec | time taken to complete a whole descheduling cycle (support _bucket, _sum, _count) |
+| descheduler_strategy_duration_seconds | HistogramVec | time taken to complete each stragtegy of descheduling operation (support _bucket, _sum, _count) |
 
 The metrics are served through https://localhost:10258/metrics by default.
 The address and port can be changed by setting `--binding-address` and `--secure-port` flags.
@@ -1048,6 +1066,7 @@ packages that it is compiled with.
 
 | Descheduler | Supported Kubernetes Version |
 |-------------|------------------------------|
+| v0.33       | v1.33                        |
 | v0.32       | v1.32                        |
 | v0.31       | v1.31                        |
 | v0.30       | v1.30                        |

@@ -8,8 +8,7 @@ include $(addprefix $(dir $(lastword $(MAKEFILE_LIST))), \
 
 YQ_VERSION ?=2.4.0
 YQ ?=$(PERMANENT_TMP_GOPATH)/bin/yq-$(YQ_VERSION)
-yq_dir :=$(dir $(YQ))
-
+yq_dir =$(dir $(YQ))
 
 ensure-yq:
 ifeq "" "$(wildcard $(YQ))"

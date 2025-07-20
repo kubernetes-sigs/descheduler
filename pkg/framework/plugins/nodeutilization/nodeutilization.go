@@ -32,6 +32,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
+	"sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization/normalizer"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -128,6 +129,16 @@ func getNodeUsageSnapshot(
 	}
 
 	return nodesMap, nodesUsageMap, podListMap
+}
+
+// thresholdsToKeysAndValues converts a ResourceThresholds into a list of keys
+// and values. this is useful for logging.
+func thresholdsToKeysAndValues(thresholds api.ResourceThresholds) []any {
+	result := []any{}
+	for name, value := range thresholds {
+		result = append(result, name, fmt.Sprintf("%.2f%%", value))
+	}
+	return result
 }
 
 // usageToKeysAndValues converts a ReferencedResourceList into a list of
@@ -487,25 +498,37 @@ func assessNodesUsagesAndRelativeThresholds(
 		rawUsages, rawCapacities, ResourceUsageToResourceThreshold,
 	)
 
-	// calculate the average usage and then deviate it according to the
-	// user provided thresholds.
+	// calculate the average usage.
 	average := normalizer.Average(usage)
+	klog.V(3).InfoS(
+		"Assessed average usage",
+		thresholdsToKeysAndValues(average)...,
+	)
 
-	// calculate the average usage and then deviate it according to the
-	// user provided thresholds. We also ensure that the value after the
-	// deviation is at least 1%. this call also replicates the thresholds
-	// across all nodes.
+	// decrease the provided threshold from the average to get the low
+	// span. also make sure the resulting values are between 0 and 100.
+	lowerThresholds := normalizer.Clamp(
+		normalizer.Sum(average, normalizer.Negate(lowSpan)), 0, 100,
+	)
+	klog.V(3).InfoS(
+		"Assessed thresholds for underutilized nodes",
+		thresholdsToKeysAndValues(lowerThresholds)...,
+	)
+
+	// increase the provided threshold from the average to get the high
+	// span. also make sure the resulting values are between 0 and 100.
+	higherThresholds := normalizer.Clamp(
+		normalizer.Sum(average, highSpan), 0, 100,
+	)
+	klog.V(3).InfoS(
+		"Assessed thresholds for overutilized nodes",
+		thresholdsToKeysAndValues(higherThresholds)...,
+	)
+
+	// replicate the same assessed thresholds to all nodes.
 	thresholds := normalizer.Replicate(
 		slices.Collect(maps.Keys(usage)),
-		normalizer.Map(
-			[]api.ResourceThresholds{
-				normalizer.Sum(average, normalizer.Negate(lowSpan)),
-				normalizer.Sum(average, highSpan),
-			},
-			func(thresholds api.ResourceThresholds) api.ResourceThresholds {
-				return normalizer.Clamp(thresholds, 0, 100)
-			},
-		),
+		[]api.ResourceThresholds{lowerThresholds, higherThresholds},
 	)
 
 	return usage, thresholds
@@ -729,4 +752,20 @@ func assessAvailableResourceInNodes(
 	}
 
 	return available, nil
+}
+
+// withResourceRequestForAny returns a filter function that checks if a pod
+// has a resource request specified for any of the given resources names.
+func withResourceRequestForAny(names ...v1.ResourceName) pod.FilterFunc {
+	return func(pod *v1.Pod) bool {
+		all := append(pod.Spec.Containers, pod.Spec.InitContainers...)
+		for _, name := range names {
+			for _, container := range all {
+				if _, ok := container.Resources.Requests[name]; ok {
+					return true
+				}
+			}
+		}
+		return false
+	}
 }
