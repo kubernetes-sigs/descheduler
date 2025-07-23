@@ -27,6 +27,8 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+
+	evictionutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -238,6 +240,10 @@ func (d *DefaultEvictor) Filter(pod *v1.Pod) bool {
 
 	if HaveEvictAnnotation(pod) {
 		return true
+	}
+
+	if d.args.NoEvictionPolicy == MandatoryNoEvictionPolicy && evictionutils.HaveNoEvictionAnnotation(pod) {
+		return false
 	}
 
 	if utils.IsMirrorPod(pod) {

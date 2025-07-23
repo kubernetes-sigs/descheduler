@@ -25,11 +25,17 @@ func ValidateDefaultEvictorArgs(obj runtime.Object) error {
 	args := obj.(*DefaultEvictorArgs)
 
 	if args.PriorityThreshold != nil && args.PriorityThreshold.Value != nil && len(args.PriorityThreshold.Name) > 0 {
-		return fmt.Errorf("priority threshold misconfigured, only one of priorityThreshold fields can be set, got %v", args)
+		return fmt.Errorf("priority threshold misconfigured, only one of priorityThreshold fields can be set")
 	}
 
 	if args.MinReplicas == 1 {
 		klog.V(4).Info("DefaultEvictor minReplicas must be greater than 1 to check for min pods during eviction. This check will be ignored during eviction.")
+	}
+
+	if args.NoEvictionPolicy != "" {
+		if args.NoEvictionPolicy != PreferredNoEvictionPolicy && args.NoEvictionPolicy != MandatoryNoEvictionPolicy {
+			return fmt.Errorf("noEvictionPolicy accepts only %q values", []NoEvictionPolicy{PreferredNoEvictionPolicy, MandatoryNoEvictionPolicy})
+		}
 	}
 
 	return nil

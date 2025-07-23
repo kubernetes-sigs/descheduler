@@ -162,6 +162,7 @@ The Default Evictor Plugin is used by default for filtering pods before processi
 | `minReplicas`             |`uint`|`0`| ignore eviction of pods where owner (e.g. `ReplicaSet`) replicas is below this threshold                                    |
 | `minPodAge`               |`metav1.Duration`|`0`| ignore eviction of pods with a creation time within this threshold                                                          |
 | `ignorePodsWithoutPDB`    |`bool`|`false`| set whether pods without PodDisruptionBudget should be evicted or ignored                                                   |
+| `noEvictionPolicy`        |`enum`|``| sets whether a `descheduler.alpha.kubernetes.io/prefer-no-eviction` pod annotation is considered preferred or mandatory. Accepted values: "", "Preferred", "Mandatory". Defaults to "Preferred". |
 
 ### Example policy
 
@@ -1011,12 +1012,16 @@ never evicted because these pods won't be recreated. (Standalone pods in failed 
 * Pods with PVCs are evicted (unless `ignorePvcPods: true` is set).
 * In `LowNodeUtilization` and `RemovePodsViolatingInterPodAntiAffinity`, pods are evicted by their priority from low to high, and if they have same priority,
 best effort pods are evicted before burstable and guaranteed pods.
-* All types of pods with the annotation `descheduler.alpha.kubernetes.io/evict` are eligible for eviction. This
+* All types of pods with the `descheduler.alpha.kubernetes.io/evict` annotation are eligible for eviction. This
   annotation is used to override checks which prevent eviction and users can select which pod is evicted.
   Users should know how and if the pod will be recreated.
   The annotation only affects internal descheduler checks.
   The anti-disruption protection provided by the [/eviction](https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/)
   subresource is still respected.
+* Pods with the `descheduler.alpha.kubernetes.io/prefer-no-eviction` annotation voice their preference not to be evicted.
+  Each plugin decides whether the annotation gets respected or not. When the `DefaultEvictor` plugin sets `noEvictionPolicy`
+  to `Mandatory` all such pods are excluded from eviction. Needs to be used with caution as some plugins may enfore
+  various policies that are expected to be always met.
 * Pods with a non-nil DeletionTimestamp are not evicted by default.
 
 Setting `--v=4` or greater on the Descheduler will log all reasons why any pod is not evictable.

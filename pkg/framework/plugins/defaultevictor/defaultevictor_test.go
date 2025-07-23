@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/descheduler/pkg/api"
+	evictionutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworkfake "sigs.k8s.io/descheduler/pkg/framework/fake"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -51,6 +52,7 @@ type testCase struct {
 	minPodAge               *metav1.Duration
 	result                  bool
 	ignorePodsWithoutPDB    bool
+	noEvictionPolicy        NoEvictionPolicy
 }
 
 func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
@@ -358,6 +360,29 @@ func TestDefaultEvictorFilter(t *testing.T) {
 				}),
 			},
 			result: true,
+		}, {
+			description: "Normal pod eviction with normal ownerRefs and " + evictionutils.SoftNoEvictionAnnotationKey + " annotation (preference)",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p2", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.Annotations = map[string]string{evictionutils.SoftNoEvictionAnnotationKey: ""}
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+				}),
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			result:                  true,
+		}, {
+			description: "Normal pod eviction with normal ownerRefs and " + evictionutils.SoftNoEvictionAnnotationKey + " annotation (mandatory)",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p2", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.Annotations = map[string]string{evictionutils.SoftNoEvictionAnnotationKey: ""}
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+				}),
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			noEvictionPolicy:        MandatoryNoEvictionPolicy,
+			result:                  false,
 		}, {
 			description: "Normal pod eviction with replicaSet ownerRefs",
 			pods: []*v1.Pod{
@@ -831,6 +856,7 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 		MinReplicas:          test.minReplicas,
 		MinPodAge:            test.minPodAge,
 		IgnorePodsWithoutPDB: test.ignorePodsWithoutPDB,
+		NoEvictionPolicy:     test.noEvictionPolicy,
 	}
 
 	evictorPlugin, err := New(
