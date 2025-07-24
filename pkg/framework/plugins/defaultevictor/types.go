@@ -37,4 +37,23 @@ type DefaultEvictorArgs struct {
 	MinReplicas             uint                   `json:"minReplicas,omitempty"`
 	MinPodAge               *metav1.Duration       `json:"minPodAge,omitempty"`
 	IgnorePodsWithoutPDB    bool                   `json:"ignorePodsWithoutPDB,omitempty"`
+	NoEvictionPolicy        NoEvictionPolicy       `json:"noEvictionPolicy,omitempty"`
 }
+
+// NoEvictionPolicy dictates whether a no-eviction policy is preferred or mandatory.
+// Needs to be used with caution as this will give users ability to protect their pods
+// from eviction. Which might work against enfored policies. E.g. plugins evicting pods
+// violating security policies.
+type NoEvictionPolicy string
+
+const (
+	// PreferredNoEvictionPolicy interprets the no-eviction policy as a preference.
+	// Meaning the annotation will get ignored by the DefaultEvictor plugin.
+	// Yet, plugins may optionally sort their pods based on the annotation
+	// and focus on evicting pods that do not set the annotation.
+	PreferredNoEvictionPolicy NoEvictionPolicy = "Preferred"
+
+	// MandatoryNoEvictionPolicy interprets the no-eviction policy as mandatory.
+	// Every pod carying the annotation will get excluded from eviction.
+	MandatoryNoEvictionPolicy NoEvictionPolicy = "Mandatory"
+)

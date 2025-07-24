@@ -157,8 +157,66 @@ func TestSortPodsBasedOnPriorityLowToHigh(t *testing.T) {
 	p6 := test.BuildTestPod("p6", 400, 100, n1.Name, test.MakeGuaranteedPod)
 	p6.Spec.Priority = nil
 
-	podList := []*v1.Pod{p4, p3, p2, p1, p6, p5}
-	expectedPodList := []*v1.Pod{p5, p6, p1, p2, p3, p4}
+	p7 := test.BuildTestPod("p7", 400, 0, n1.Name, func(pod *v1.Pod) {
+		test.SetPodPriority(pod, lowPriority)
+		pod.Annotations = map[string]string{
+			"descheduler.alpha.kubernetes.io/prefer-no-eviction": "",
+		}
+	})
+
+	// BestEffort
+	p8 := test.BuildTestPod("p8", 400, 0, n1.Name, func(pod *v1.Pod) {
+		test.SetPodPriority(pod, highPriority)
+		test.MakeBestEffortPod(pod)
+		pod.Annotations = map[string]string{
+			"descheduler.alpha.kubernetes.io/prefer-no-eviction": "",
+		}
+	})
+
+	// Burstable
+	p9 := test.BuildTestPod("p9", 400, 0, n1.Name, func(pod *v1.Pod) {
+		test.SetPodPriority(pod, highPriority)
+		test.MakeBurstablePod(pod)
+		pod.Annotations = map[string]string{
+			"descheduler.alpha.kubernetes.io/prefer-no-eviction": "",
+		}
+	})
+
+	// Guaranteed
+	p10 := test.BuildTestPod("p10", 400, 100, n1.Name, func(pod *v1.Pod) {
+		test.SetPodPriority(pod, highPriority)
+		test.MakeGuaranteedPod(pod)
+		pod.Annotations = map[string]string{
+			"descheduler.alpha.kubernetes.io/prefer-no-eviction": "",
+		}
+	})
+
+	// Burstable
+	p11 := test.BuildTestPod("p11", 400, 0, n1.Name, func(pod *v1.Pod) {
+		test.MakeBurstablePod(pod)
+	})
+
+	// Burstable
+	p12 := test.BuildTestPod("p12", 400, 0, n1.Name, func(pod *v1.Pod) {
+		test.MakeBurstablePod(pod)
+		pod.Annotations = map[string]string{
+			"descheduler.alpha.kubernetes.io/prefer-no-eviction": "",
+		}
+	})
+
+	podList := []*v1.Pod{p1, p8, p9, p10, p2, p3, p4, p5, p6, p7, p11, p12}
+	// p5: no priority, best effort
+	// p11: no priority, burstable
+	// p6: no priority, guaranteed
+	// p1: low priority
+	// p7: low priority, prefer-no-eviction
+	// p2: high priority, best effort
+	// p8: high priority, best effort, prefer-no-eviction
+	// p3: high priority, burstable
+	// p9: high priority, burstable, prefer-no-eviction
+	// p4: high priority, guaranteed
+	// p10: high priority, guaranteed, prefer-no-eviction
+	expectedPodList := []*v1.Pod{p5, p11, p12, p6, p1, p7, p2, p8, p3, p9, p4, p10}
 
 	SortPodsBasedOnPriorityLowToHigh(podList)
 	if !reflect.DeepEqual(getPodListNames(podList), getPodListNames(expectedPodList)) {
