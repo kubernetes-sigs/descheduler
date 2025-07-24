@@ -117,6 +117,14 @@ func TestListPodsOnANode(t *testing.T) {
 	}
 }
 
+func getPodListNames(pods []*v1.Pod) []string {
+	names := []string{}
+	for _, pod := range pods {
+		names = append(names, pod.Name)
+	}
+	return names
+}
+
 func TestSortPodsBasedOnPriorityLowToHigh(t *testing.T) {
 	n1 := test.BuildTestNode("n1", 4000, 3000, 9, nil)
 
@@ -150,10 +158,11 @@ func TestSortPodsBasedOnPriorityLowToHigh(t *testing.T) {
 	p6.Spec.Priority = nil
 
 	podList := []*v1.Pod{p4, p3, p2, p1, p6, p5}
+	expectedPodList := []*v1.Pod{p5, p6, p1, p2, p3, p4}
 
 	SortPodsBasedOnPriorityLowToHigh(podList)
-	if !reflect.DeepEqual(podList[len(podList)-1], p4) {
-		t.Errorf("Expected last pod in sorted list to be %v which of highest priority and guaranteed but got %v", p4, podList[len(podList)-1])
+	if !reflect.DeepEqual(getPodListNames(podList), getPodListNames(expectedPodList)) {
+		t.Errorf("Pods were sorted in an unexpected order: %v, expected %v", getPodListNames(podList), getPodListNames(expectedPodList))
 	}
 }
 
