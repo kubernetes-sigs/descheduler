@@ -17,12 +17,17 @@ limitations under the License.
 package utils
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 )
 
 const (
 	EvictionKind        = "Eviction"
 	EvictionSubresource = "pods/eviction"
+	// A new experimental feature for soft no-eviction preference.
+	// Each plugin will decide whether the soft preference will be respected.
+	// If configured the soft preference turns into a mandatory no-eviction policy for the DefaultEvictor plugin.
+	SoftNoEvictionAnnotationKey = "descheduler.alpha.kubernetes.io/prefer-no-eviction"
 )
 
 // SupportEviction uses Discovery API to find out if the server support eviction subresource
@@ -55,4 +60,10 @@ func SupportEviction(client clientset.Interface) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// HaveEvictAnnotation checks if the pod have evict annotation
+func HaveNoEvictionAnnotation(pod *corev1.Pod) bool {
+	_, found := pod.ObjectMeta.Annotations[SoftNoEvictionAnnotationKey]
+	return found
 }

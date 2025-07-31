@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 
+	evictionutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
@@ -254,14 +255,32 @@ func SortPodsBasedOnPriorityLowToHigh(pods []*v1.Pod) {
 			return false
 		}
 		if (pods[j].Spec.Priority == nil && pods[i].Spec.Priority == nil) || (*pods[i].Spec.Priority == *pods[j].Spec.Priority) {
-			if IsBestEffortPod(pods[i]) {
+			iIsBestEffortPod := IsBestEffortPod(pods[i])
+			jIsBestEffortPod := IsBestEffortPod(pods[j])
+			iIsBurstablePod := IsBurstablePod(pods[i])
+			jIsBurstablePod := IsBurstablePod(pods[j])
+			iIsGuaranteedPod := IsGuaranteedPod(pods[i])
+			jIsGuaranteedPod := IsGuaranteedPod(pods[j])
+			if (iIsBestEffortPod && jIsBestEffortPod) || (iIsBurstablePod && jIsBurstablePod) || (iIsGuaranteedPod && jIsGuaranteedPod) {
+				iHasNoEvictonPolicy := evictionutils.HaveNoEvictionAnnotation(pods[i])
+				jHasNoEvictonPolicy := evictionutils.HaveNoEvictionAnnotation(pods[j])
+				if !iHasNoEvictonPolicy {
+					return true
+				}
+				if !jHasNoEvictonPolicy {
+					return false
+				}
 				return true
 			}
-			if IsBurstablePod(pods[i]) && IsGuaranteedPod(pods[j]) {
+			if iIsBestEffortPod {
+				return true
+			}
+			if iIsBurstablePod && jIsGuaranteedPod {
 				return true
 			}
 			return false
 		}
+
 		return *pods[i].Spec.Priority < *pods[j].Spec.Priority
 	})
 }
