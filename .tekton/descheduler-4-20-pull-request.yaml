@@ -606,8 +606,7 @@ spec:
       optional: true
     - name: netrc
       optional: true
-  taskRunTemplate:
-    serviceAccountName: build-pipeline-descheduler-4-20
+  taskRunTemplate: {}
   workspaces:
   - name: git-auth
     secret:
