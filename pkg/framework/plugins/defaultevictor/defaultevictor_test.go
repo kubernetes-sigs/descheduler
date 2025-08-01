@@ -793,7 +793,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			result: true,
 		},
 		{
-			description: "Pod with local storage is evicted because 'withLocalStorage' is in disabledDefaultPodProtections",
+			description: "Pod with local storage is evicted because 'PodsWithLocalStorage' is in DefaultDisabled",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p18", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -812,7 +812,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			result: true,
 		},
 		{
-			description: "DaemonSet pod is evicted because 'daemonSetPods' is in disabledDefaultPodProtections",
+			description: "DaemonSet pod is evicted because 'DaemonSetPods' is in DefaultDisabled",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p19", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
@@ -830,7 +830,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			result: true,
 		},
 		{
-			description: "Pod with PVC is not evicted because 'withPVC' is in extraPodProtections",
+			description: "Pod with PVC is not evicted because 'PodsWithPVC' is in ExtraEnabled",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p20", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -849,7 +849,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			result: false,
 		},
 		{
-			description: "Pod without PDB is not evicted because 'withoutPDB' is in extraPodProtections",
+			description: "Pod without PDB is not evicted because 'PodsWithoutPDB' is in ExtraEnabled",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p21", 400, 0, n1.Name, func(pod *v1.Pod) {
 					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
