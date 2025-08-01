@@ -29,14 +29,13 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
-func evictionConstraintsForFailedBarePods(logger klog.Logger, evictFailedBarePods bool) []constraint {
-	if evictFailedBarePods {
+func evictionConstraintsForFailedBarePods(logger klog.Logger, protectionEnabled bool) []constraint {
+	if protectionEnabled {
 		logger.V(1).Info("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
 		return []constraint{
 			func(pod *v1.Pod) error {
-				ownerRefList := podutil.OwnerRef(pod)
-				if len(ownerRefList) == 0 && pod.Status.Phase != v1.PodFailed {
-					return fmt.Errorf("pod does not have any ownerRefs and is not in failed phase")
+				if len(podutil.OwnerRef(pod)) == 0 {
+					return fmt.Errorf("pod does not have any ownerRefs")
 				}
 				return nil
 			},
@@ -44,18 +43,19 @@ func evictionConstraintsForFailedBarePods(logger klog.Logger, evictFailedBarePod
 	}
 	return []constraint{
 		func(pod *v1.Pod) error {
-			if len(podutil.OwnerRef(pod)) == 0 {
-				return fmt.Errorf("pod does not have any ownerRefs")
+			ownerRefList := podutil.OwnerRef(pod)
+			if len(ownerRefList) == 0 && pod.Status.Phase != v1.PodFailed {
+				return fmt.Errorf("pod does not have any ownerRefs and is not in failed phase")
 			}
 			return nil
 		},
 	}
 }
 
-func evictionConstraintsForSystemCriticalPods(logger klog.Logger, evictSystemCriticalPods bool, priorityThreshold *api.PriorityThreshold, handle frameworktypes.Handle) ([]constraint, error) {
+func evictionConstraintsForSystemCriticalPods(logger klog.Logger, protectionEnabled bool, priorityThreshold *api.PriorityThreshold, handle frameworktypes.Handle) ([]constraint, error) {
 	var constraints []constraint
 
-	if !evictSystemCriticalPods {
+	if protectionEnabled {
 		constraints = append(constraints, func(pod *v1.Pod) error {
 			if utils.IsCriticalPriorityPod(pod) {
 				return fmt.Errorf("pod has system critical priority")
@@ -83,8 +83,8 @@ func evictionConstraintsForSystemCriticalPods(logger klog.Logger, evictSystemCri
 	return constraints, nil
 }
 
-func evictionConstraintsForLocalStoragePods(evictLocalStoragePods bool) []constraint {
-	if !evictLocalStoragePods {
+func evictionConstraintsForLocalStoragePods(protectionEnabled bool) []constraint {
+	if protectionEnabled {
 		return []constraint{
 			func(pod *v1.Pod) error {
 				if utils.IsPodWithLocalStorage(pod) {
@@ -97,8 +97,8 @@ func evictionConstraintsForLocalStoragePods(evictLocalStoragePods bool) []constr
 	return nil
 }
 
-func evictionConstraintsForDaemonSetPods(evictDaemonSetPods bool) []constraint {
-	if !evictDaemonSetPods {
+func evictionConstraintsForDaemonSetPods(protectionEnabled bool) []constraint {
+	if protectionEnabled {
 		return []constraint{
 			func(pod *v1.Pod) error {
 				ownerRefList := podutil.OwnerRef(pod)
@@ -112,8 +112,8 @@ func evictionConstraintsForDaemonSetPods(evictDaemonSetPods bool) []constraint {
 	return nil
 }
 
-func evictionConstraintsForPvcPods(ignorePvcPods bool) []constraint {
-	if ignorePvcPods {
+func evictionConstraintsForPvcPods(protectionEnabled bool) []constraint {
+	if protectionEnabled {
 		return []constraint{
 			func(pod *v1.Pod) error {
 				if utils.IsPodWithPVC(pod) {
@@ -194,8 +194,8 @@ func evictionConstraintsForMinPodAge(minPodAge *metav1.Duration) []constraint {
 	return nil
 }
 
-func evictionConstraintsForIgnorePodsWithoutPDB(ignorePodsWithoutPDB bool, handle frameworktypes.Handle) []constraint {
-	if ignorePodsWithoutPDB {
+func evictionConstraintsForIgnorePodsWithoutPDB(protectionEnabled bool, handle frameworktypes.Handle) []constraint {
+	if protectionEnabled {
 		return []constraint{
 			func(pod *v1.Pod) error {
 				hasPdb, err := utils.IsPodCoveredByPDB(pod, handle.SharedInformerFactory().Policy().V1().PodDisruptionBudgets().Lister())

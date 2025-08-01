@@ -87,14 +87,14 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 
 func (d *DefaultEvictor) addAllConstraints(logger klog.Logger, handle frameworktypes.Handle) error {
 	args := d.args
-	d.constraints = append(d.constraints, evictionConstraintsForFailedBarePods(logger, args.EvictFailedBarePods)...)
-	if constraints, err := evictionConstraintsForSystemCriticalPods(logger, args.EvictSystemCriticalPods, args.PriorityThreshold, handle); err != nil {
+	d.constraints = append(d.constraints, evictionConstraintsForFailedBarePods(logger, !args.EvictFailedBarePods)...)
+	if constraints, err := evictionConstraintsForSystemCriticalPods(logger, !args.EvictSystemCriticalPods, args.PriorityThreshold, handle); err != nil {
 		return err
 	} else {
 		d.constraints = append(d.constraints, constraints...)
 	}
-	d.constraints = append(d.constraints, evictionConstraintsForLocalStoragePods(args.EvictLocalStoragePods)...)
-	d.constraints = append(d.constraints, evictionConstraintsForDaemonSetPods(args.EvictDaemonSetPods)...)
+	d.constraints = append(d.constraints, evictionConstraintsForLocalStoragePods(!args.EvictLocalStoragePods)...)
+	d.constraints = append(d.constraints, evictionConstraintsForDaemonSetPods(!args.EvictDaemonSetPods)...)
 	d.constraints = append(d.constraints, evictionConstraintsForPvcPods(args.IgnorePvcPods)...)
 	if constraints, err := evictionConstraintsForLabelSelector(logger, args.LabelSelector); err != nil {
 		return err
