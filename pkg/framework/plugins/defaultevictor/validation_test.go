@@ -40,12 +40,152 @@ func TestValidateDefaultEvictorArgs(t *testing.T) {
 				},
 			},
 			errInfo: fmt.Errorf("priority threshold misconfigured, only one of priorityThreshold fields can be set"),
-		}, {
+		},
+		{
 			name: "passing invalid no eviction policy",
 			args: &DefaultEvictorArgs{
 				NoEvictionPolicy: "invalid-no-eviction-policy",
 			},
 			errInfo: fmt.Errorf("noEvictionPolicy accepts only %q values", []NoEvictionPolicy{PreferredNoEvictionPolicy, MandatoryNoEvictionPolicy}),
+		},
+		{
+			name: "Valid configuration with no deprecated fields",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					DefaultDisabled: []PodProtection{},
+					ExtraEnabled:    []PodProtection{},
+				},
+			},
+			errInfo: nil,
+		},
+		{
+			name: "Valid configuration: both Disabled and ExtraEnabled",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					DefaultDisabled: []PodProtection{
+						DaemonSetPods,
+						PodsWithLocalStorage,
+					},
+					ExtraEnabled: []PodProtection{
+						PodsWithPVC,
+					},
+				},
+			},
+			errInfo: nil,
+		},
+		{
+			name: "Valid configuration with ExtraEnabled",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					ExtraEnabled: []PodProtection{
+						PodsWithPVC,
+					},
+				},
+			},
+			errInfo: nil,
+		},
+		{
+			name: "Invalid configuration: Deprecated field used with Disabled",
+			args: &DefaultEvictorArgs{
+				EvictLocalStoragePods: true,
+				PodProtections: PodProtections{
+					DefaultDisabled: []PodProtection{
+						DaemonSetPods,
+					},
+				},
+			},
+			errInfo: fmt.Errorf("cannot use Deprecated fields alongside PodProtections.ExtraEnabled or PodProtections.DefaultDisabled"),
+		},
+		{
+			name: "Invalid configuration: Deprecated field used with ExtraPodProtections",
+			args: &DefaultEvictorArgs{
+				EvictDaemonSetPods: true,
+				PodProtections: PodProtections{
+					ExtraEnabled: []PodProtection{
+						PodsWithPVC,
+					},
+				},
+			},
+			errInfo: fmt.Errorf("cannot use Deprecated fields alongside PodProtections.ExtraEnabled or PodProtections.DefaultDisabled"),
+		},
+		{
+			name: "MinReplicas warning logged but no error",
+			args: &DefaultEvictorArgs{
+				MinReplicas: 1,
+			},
+			errInfo: nil,
+		},
+		{
+			name: "Invalid ExtraEnabled: Unknown policy",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					ExtraEnabled: []PodProtection{"InvalidPolicy"},
+				},
+			},
+			errInfo: fmt.Errorf(`invalid pod protection policy in ExtraEnabled: "InvalidPolicy". Valid options are: [PodsWithPVC PodsWithoutPDB]`),
+		},
+		{
+			name: "Invalid ExtraEnabled: Misspelled policy",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					ExtraEnabled: []PodProtection{"PodsWithPVCC"},
+				},
+			},
+			errInfo: fmt.Errorf(`invalid pod protection policy in ExtraEnabled: "PodsWithPVCC". Valid options are: [PodsWithPVC PodsWithoutPDB]`),
+		},
+		{
+			name: "Invalid ExtraEnabled: Policy from DefaultDisabled list",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					ExtraEnabled: []PodProtection{DaemonSetPods},
+				},
+			},
+			errInfo: fmt.Errorf(`invalid pod protection policy in ExtraEnabled: "DaemonSetPods". Valid options are: [PodsWithPVC PodsWithoutPDB]`),
+		},
+		{
+			name: "Invalid DefaultDisabled: Unknown policy",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					DefaultDisabled: []PodProtection{"InvalidPolicy"},
+				},
+			},
+			errInfo: fmt.Errorf(`invalid pod protection policy in DefaultDisabled: "InvalidPolicy". Valid options are: [PodsWithLocalStorage SystemCriticalPods FailedBarePods DaemonSetPods]`),
+		},
+		{
+			name: "Invalid DefaultDisabled: Misspelled policy",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					DefaultDisabled: []PodProtection{"PodsWithLocalStorag"},
+				},
+			},
+			errInfo: fmt.Errorf(`invalid pod protection policy in DefaultDisabled: "PodsWithLocalStorag". Valid options are: [PodsWithLocalStorage SystemCriticalPods FailedBarePods DaemonSetPods]`),
+		},
+		{
+			name: "Invalid DefaultDisabled: Policy from ExtraEnabled list",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					DefaultDisabled: []PodProtection{PodsWithPVC},
+				},
+			},
+			errInfo: fmt.Errorf(`invalid pod protection policy in DefaultDisabled: "PodsWithPVC". Valid options are: [PodsWithLocalStorage SystemCriticalPods FailedBarePods DaemonSetPods]`),
+		},
+		{
+			name: "Invalid ExtraEnabled duplicate",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					ExtraEnabled: []PodProtection{PodsWithPVC, PodsWithPVC},
+				},
+			},
+			errInfo: fmt.Errorf(`PodProtections.ExtraEnabled contains duplicate entries`),
+		},
+		{
+			name: "Invalid DefaultDisabled duplicate",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					DefaultDisabled: []PodProtection{PodsWithLocalStorage, PodsWithLocalStorage},
+				},
+			},
+			errInfo: fmt.Errorf(`PodProtections.DefaultDisabled contains duplicate entries`),
 		},
 	}
 

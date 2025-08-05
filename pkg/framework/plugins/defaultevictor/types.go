@@ -25,19 +25,82 @@ import (
 type DefaultEvictorArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	NodeSelector            string                 `json:"nodeSelector,omitempty"`
-	EvictLocalStoragePods   bool                   `json:"evictLocalStoragePods,omitempty"`
-	EvictDaemonSetPods      bool                   `json:"evictDaemonSetPods,omitempty"`
-	EvictSystemCriticalPods bool                   `json:"evictSystemCriticalPods,omitempty"`
-	IgnorePvcPods           bool                   `json:"ignorePvcPods,omitempty"`
-	EvictFailedBarePods     bool                   `json:"evictFailedBarePods,omitempty"`
-	LabelSelector           *metav1.LabelSelector  `json:"labelSelector,omitempty"`
-	PriorityThreshold       *api.PriorityThreshold `json:"priorityThreshold,omitempty"`
-	NodeFit                 bool                   `json:"nodeFit,omitempty"`
-	MinReplicas             uint                   `json:"minReplicas,omitempty"`
-	MinPodAge               *metav1.Duration       `json:"minPodAge,omitempty"`
-	IgnorePodsWithoutPDB    bool                   `json:"ignorePodsWithoutPDB,omitempty"`
-	NoEvictionPolicy        NoEvictionPolicy       `json:"noEvictionPolicy,omitempty"`
+	NodeSelector      string                 `json:"nodeSelector,omitempty"`
+	LabelSelector     *metav1.LabelSelector  `json:"labelSelector,omitempty"`
+	PriorityThreshold *api.PriorityThreshold `json:"priorityThreshold,omitempty"`
+	NodeFit           bool                   `json:"nodeFit,omitempty"`
+	MinReplicas       uint                   `json:"minReplicas,omitempty"`
+	MinPodAge         *metav1.Duration       `json:"minPodAge,omitempty"`
+	NoEvictionPolicy  NoEvictionPolicy       `json:"noEvictionPolicy,omitempty"`
+
+	// PodProtections holds the list of enabled and disabled protection policies.
+	// Users can selectively disable certain default protection rules or enable extra ones.
+	PodProtections PodProtections `json:"podProtections,omitempty"`
+
+	// Deprecated: Use DisabledDefaultPodProtection with "PodsWithLocalStorage" instead.
+	EvictLocalStoragePods bool `json:"evictLocalStoragePods,omitempty"`
+	// Deprecated: Use DisabledDefaultPodProtection with "DaemonSetPods" instead.
+	EvictDaemonSetPods bool `json:"evictDaemonSetPods,omitempty"`
+	// Deprecated: Use DisabledDefaultPodProtection with "SystemCriticalPods" instead.
+	EvictSystemCriticalPods bool `json:"evictSystemCriticalPods,omitempty"`
+	// Deprecated: Use ExtraPodProtection with "PodsWithPVC" instead.
+	IgnorePvcPods bool `json:"ignorePvcPods,omitempty"`
+	// Deprecated: Use ExtraPodProtection with "PodsWithoutPDB" instead.
+	IgnorePodsWithoutPDB bool `json:"ignorePodsWithoutPDB,omitempty"`
+	// Deprecated: Use DisabledDefaultPodProtection with "FailedBarePods" instead.
+	EvictFailedBarePods bool `json:"evictFailedBarePods,omitempty"`
+}
+
+// PodProtection defines the protection policy for a pod.
+type PodProtection string
+
+const (
+	PodsWithLocalStorage PodProtection = "PodsWithLocalStorage"
+	DaemonSetPods        PodProtection = "DaemonSetPods"
+	SystemCriticalPods   PodProtection = "SystemCriticalPods"
+	FailedBarePods       PodProtection = "FailedBarePods"
+	PodsWithPVC          PodProtection = "PodsWithPVC"
+	PodsWithoutPDB       PodProtection = "PodsWithoutPDB"
+)
+
+// PodProtections holds the list of enabled and disabled protection policies.
+// NOTE: The list of default enabled pod protection policies is subject to change in future versions.
+// +k8s:deepcopy-gen=true
+type PodProtections struct {
+	// ExtraEnabled specifies additional protection policies that should be enabled.
+	// Supports: PodsWithPVC, PodsWithoutPDB
+	ExtraEnabled []PodProtection `json:"extraEnabled,omitempty"`
+
+	// DefaultDisabled specifies which default protection policies should be disabled.
+	// Supports: PodsWithLocalStorage, DaemonSetPods, SystemCriticalPods, FailedBarePods
+	DefaultDisabled []PodProtection `json:"defaultDisabled,omitempty"`
+}
+
+// defaultPodProtections holds the list of protection policies that are enabled by default.
+// User can use the 'disabledDefaultPodProtections' evictor arguments (via PodProtections.DefaultDisabled)
+// to disable any of these default protections.
+//
+// The following four policies are included by default:
+//   - PodsWithLocalStorage: Protects pods with local storage.
+//   - DaemonSetPods: Protects DaemonSet managed pods.
+//   - SystemCriticalPods: Protects system-critical pods.
+//   - FailedBarePods: Protects failed bare pods (not part of any controller).
+var defaultPodProtections = []PodProtection{
+	PodsWithLocalStorage,
+	SystemCriticalPods,
+	FailedBarePods,
+	DaemonSetPods,
+}
+
+// extraPodProtections holds a list of protection policies that the user can optionally enable
+// through the configuration (via PodProtections.ExtraEnabled). These policies are not enabled by default.
+//
+// Currently supported extra policies:
+//   - PodsWithPVC: Protects pods using PersistentVolumeClaims.
+//   - PodsWithoutPDB: Protects pods lacking a PodDisruptionBudget.
+var extraPodProtections = []PodProtection{
+	PodsWithPVC,
+	PodsWithoutPDB,
 }
 
 // NoEvictionPolicy dictates whether a no-eviction policy is preferred or mandatory.

@@ -15,6 +15,7 @@ package defaultevictor
 
 import (
 	"fmt"
+	"slices"
 
 	"k8s.io/klog/v2"
 
@@ -38,5 +39,51 @@ func ValidateDefaultEvictorArgs(obj runtime.Object) error {
 		}
 	}
 
+	// check if any deprecated fields are set to true
+	hasDeprecatedFields := args.EvictLocalStoragePods || args.EvictDaemonSetPods ||
+		args.EvictSystemCriticalPods || args.IgnorePvcPods ||
+		args.EvictFailedBarePods || args.IgnorePodsWithoutPDB
+
+	// disallow mixing deprecated fields with PodProtections.ExtraEnabled and PodProtections.DefaultDisabled
+	if hasDeprecatedFields && (len(args.PodProtections.ExtraEnabled) > 0 || len(args.PodProtections.DefaultDisabled) > 0) {
+		return fmt.Errorf("cannot use Deprecated fields alongside PodProtections.ExtraEnabled or PodProtections.DefaultDisabled")
+	}
+
+	if len(args.PodProtections.ExtraEnabled) > 0 || len(args.PodProtections.DefaultDisabled) > 0 {
+
+		for _, policy := range args.PodProtections.ExtraEnabled {
+			if !slices.Contains(extraPodProtections, policy) {
+				return fmt.Errorf("invalid pod protection policy in ExtraEnabled: %q. Valid options are: %v",
+					string(policy), extraPodProtections)
+			}
+		}
+
+		for _, policy := range args.PodProtections.DefaultDisabled {
+			if !slices.Contains(defaultPodProtections, policy) {
+				return fmt.Errorf("invalid pod protection policy in DefaultDisabled: %q. Valid options are: %v",
+					string(policy), defaultPodProtections)
+			}
+		}
+
+		if hasDuplicates(args.PodProtections.DefaultDisabled) {
+			return fmt.Errorf("PodProtections.DefaultDisabled contains duplicate entries")
+		}
+
+		if hasDuplicates(args.PodProtections.ExtraEnabled) {
+			return fmt.Errorf("PodProtections.ExtraEnabled contains duplicate entries")
+		}
+	}
+
 	return nil
+}
+
+func hasDuplicates(slice []PodProtection) bool {
+	seen := make(map[PodProtection]struct{}, len(slice))
+	for _, item := range slice {
+		if _, exists := seen[item]; exists {
+			return true
+		}
+		seen[item] = struct{}{}
+	}
+	return false
 }
