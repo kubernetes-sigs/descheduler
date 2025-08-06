@@ -17,6 +17,7 @@ limitations under the License.
 package removepodshavingtoomanyrestarts
 
 import (
+	"fmt"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -26,7 +27,7 @@ func TestValidateRemovePodsHavingTooManyRestartsArgs(t *testing.T) {
 	testCases := []struct {
 		description string
 		args        *RemovePodsHavingTooManyRestartsArgs
-		expectError bool
+		errInfo     error
 	}{
 		{
 			description: "valid arg, no errors",
@@ -34,14 +35,13 @@ func TestValidateRemovePodsHavingTooManyRestartsArgs(t *testing.T) {
 				PodRestartThreshold: 1,
 				States:              []string{string(v1.PodRunning)},
 			},
-			expectError: false,
 		},
 		{
 			description: "invalid PodRestartThreshold arg, expects errors",
 			args: &RemovePodsHavingTooManyRestartsArgs{
 				PodRestartThreshold: 0,
 			},
-			expectError: true,
+			errInfo: fmt.Errorf(`invalid PodsHavingTooManyRestarts threshold`),
 		},
 		{
 			description: "invalid States arg, expects errors",
@@ -49,7 +49,7 @@ func TestValidateRemovePodsHavingTooManyRestartsArgs(t *testing.T) {
 				PodRestartThreshold: 1,
 				States:              []string{string(v1.PodFailed)},
 			},
-			expectError: true,
+			errInfo: fmt.Errorf(`states must be one of [CrashLoopBackOff Running]`),
 		},
 		{
 			description: "allows CrashLoopBackOff state",
@@ -57,17 +57,26 @@ func TestValidateRemovePodsHavingTooManyRestartsArgs(t *testing.T) {
 				PodRestartThreshold: 1,
 				States:              []string{"CrashLoopBackOff"},
 			},
-			expectError: false,
+		},
+		{
+			description: "invalid PodRestartThreshold arg and invalid States arg, expects errors",
+			args: &RemovePodsHavingTooManyRestartsArgs{
+				PodRestartThreshold: 0,
+				States:              []string{string(v1.PodFailed)},
+			},
+			errInfo: fmt.Errorf(`[invalid PodsHavingTooManyRestarts threshold, states must be one of [CrashLoopBackOff Running]]`),
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.description, func(t *testing.T) {
-			err := ValidateRemovePodsHavingTooManyRestartsArgs(tc.args)
-
-			hasError := err != nil
-			if tc.expectError != hasError {
-				t.Error("unexpected arg validation behavior")
+	for _, testCase := range testCases {
+		t.Run(testCase.description, func(t *testing.T) {
+			validateErr := ValidateRemovePodsHavingTooManyRestartsArgs(testCase.args)
+			if validateErr == nil || testCase.errInfo == nil {
+				if validateErr != testCase.errInfo {
+					t.Errorf("expected validity of plugin config: %q but got %q instead", testCase.errInfo, validateErr)
+				}
+			} else if validateErr.Error() != testCase.errInfo.Error() {
+				t.Errorf("expected validity of plugin config: %q but got %q instead", testCase.errInfo, validateErr)
 			}
 		})
 	}

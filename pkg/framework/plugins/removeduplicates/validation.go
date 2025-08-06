@@ -17,14 +17,16 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
 func ValidateRemoveDuplicatesArgs(obj runtime.Object) error {
 	args := obj.(*RemoveDuplicatesArgs)
+	var allErrs []error
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
-		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+		allErrs = append(allErrs, fmt.Errorf("only one of Include/Exclude namespaces can be set"))
 	}
 
-	return nil
+	return utilerrors.NewAggregate(allErrs)
 }
