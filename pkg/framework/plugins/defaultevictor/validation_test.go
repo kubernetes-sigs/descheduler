@@ -187,6 +187,17 @@ func TestValidateDefaultEvictorArgs(t *testing.T) {
 			},
 			errInfo: fmt.Errorf(`PodProtections.DefaultDisabled contains duplicate entries`),
 		},
+		{
+			name: "Invalid DefaultDisabled duplicate and Invalid ExtraEnabled duplicate and passing invalid no eviction policy",
+			args: &DefaultEvictorArgs{
+				NoEvictionPolicy: "invalid-no-eviction-policy",
+				PodProtections: PodProtections{
+					ExtraEnabled:    []PodProtection{PodsWithPVC, PodsWithPVC},
+					DefaultDisabled: []PodProtection{PodsWithLocalStorage, PodsWithLocalStorage, PodsWithoutPDB},
+				},
+			},
+			errInfo: fmt.Errorf(`[noEvictionPolicy accepts only ["Preferred" "Mandatory"] values, invalid pod protection policy in DefaultDisabled: "PodsWithoutPDB". Valid options are: [PodsWithLocalStorage SystemCriticalPods FailedBarePods DaemonSetPods], PodProtections.DefaultDisabled contains duplicate entries, PodProtections.ExtraEnabled contains duplicate entries]`),
+		},
 	}
 
 	for _, testCase := range tests {

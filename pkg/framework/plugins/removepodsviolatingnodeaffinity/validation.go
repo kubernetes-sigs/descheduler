@@ -21,25 +21,27 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
 // ValidateRemovePodsViolatingNodeAffinityArgs validates RemovePodsViolatingNodeAffinity arguments
 func ValidateRemovePodsViolatingNodeAffinityArgs(obj runtime.Object) error {
 	args := obj.(*RemovePodsViolatingNodeAffinityArgs)
+	var allErrs []error
 	if args == nil || len(args.NodeAffinityType) == 0 {
-		return fmt.Errorf("nodeAffinityType needs to be set")
+		allErrs = append(allErrs, fmt.Errorf("nodeAffinityType needs to be set"))
 	}
 
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
-		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+		allErrs = append(allErrs, fmt.Errorf("only one of Include/Exclude namespaces can be set"))
 	}
 
 	if args.LabelSelector != nil {
 		if _, err := metav1.LabelSelectorAsSelector(args.LabelSelector); err != nil {
-			return fmt.Errorf("failed to get label selectors from strategy's params: %+v", err)
+			allErrs = append(allErrs, fmt.Errorf("failed to get label selectors from strategy's params: %+v", err))
 		}
 	}
 
-	return nil
+	return utilerrors.NewAggregate(allErrs)
 }

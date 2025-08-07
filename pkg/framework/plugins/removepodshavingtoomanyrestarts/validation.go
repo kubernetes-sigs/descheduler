@@ -15,29 +15,32 @@ package removepodshavingtoomanyrestarts
 
 import (
 	"fmt"
+	"sort"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 // ValidateRemovePodsHavingTooManyRestartsArgs validates RemovePodsHavingTooManyRestarts arguments
 func ValidateRemovePodsHavingTooManyRestartsArgs(obj runtime.Object) error {
 	args := obj.(*RemovePodsHavingTooManyRestartsArgs)
+	var allErrs []error
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
-		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+		allErrs = append(allErrs, fmt.Errorf("only one of Include/Exclude namespaces can be set"))
 	}
 
 	if args.LabelSelector != nil {
 		if _, err := metav1.LabelSelectorAsSelector(args.LabelSelector); err != nil {
-			return fmt.Errorf("failed to get label selectors from strategy's params: %+v", err)
+			allErrs = append(allErrs, fmt.Errorf("failed to get label selectors from strategy's params: %+v", err))
 		}
 	}
 
 	if args.PodRestartThreshold < 1 {
-		return fmt.Errorf("invalid PodsHavingTooManyRestarts threshold")
+		allErrs = append(allErrs, fmt.Errorf("invalid PodsHavingTooManyRestarts threshold"))
 	}
 
 	allowedStates := sets.New(
@@ -49,8 +52,10 @@ func ValidateRemovePodsHavingTooManyRestartsArgs(obj runtime.Object) error {
 	)
 
 	if !allowedStates.HasAll(args.States...) {
-		return fmt.Errorf("states must be one of %v", allowedStates.UnsortedList())
+		allowed := allowedStates.UnsortedList()
+		sort.Strings(allowed)
+		allErrs = append(allErrs, fmt.Errorf("states must be one of %v", allowed))
 	}
 
-	return nil
+	return utilerrors.NewAggregate(allErrs)
 }

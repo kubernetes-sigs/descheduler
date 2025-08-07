@@ -1,6 +1,7 @@
 package removeduplicates
 
 import (
+	"fmt"
 	"testing"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -11,6 +12,7 @@ func TestValidateRemovePodsViolatingNodeTaintsArgs(t *testing.T) {
 		description string
 		args        *RemoveDuplicatesArgs
 		expectError bool
+		errInfo     error
 	}{
 		{
 			description: "valid namespace args, no errors",
@@ -20,7 +22,6 @@ func TestValidateRemovePodsViolatingNodeTaintsArgs(t *testing.T) {
 					Include: []string{"default"},
 				},
 			},
-			expectError: false,
 		},
 		{
 			description: "invalid namespaces args, expects error",
@@ -31,17 +32,19 @@ func TestValidateRemovePodsViolatingNodeTaintsArgs(t *testing.T) {
 					Exclude: []string{"kube-system"},
 				},
 			},
-			expectError: true,
+			errInfo: fmt.Errorf("only one of Include/Exclude namespaces can be set"),
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.description, func(t *testing.T) {
-			err := ValidateRemoveDuplicatesArgs(tc.args)
-
-			hasError := err != nil
-			if tc.expectError != hasError {
-				t.Error("unexpected arg validation behavior")
+	for _, testCase := range testCases {
+		t.Run(testCase.description, func(t *testing.T) {
+			validateErr := ValidateRemoveDuplicatesArgs(testCase.args)
+			if validateErr == nil || testCase.errInfo == nil {
+				if validateErr != testCase.errInfo {
+					t.Errorf("expected validity of plugin config: %q but got %q instead", testCase.errInfo, validateErr)
+				}
+			} else if validateErr.Error() != testCase.errInfo.Error() {
+				t.Errorf("expected validity of plugin config: %q but got %q instead", testCase.errInfo, validateErr)
 			}
 		})
 	}

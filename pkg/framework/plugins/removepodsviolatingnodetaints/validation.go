@@ -21,25 +21,27 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
 // ValidateRemovePodsViolatingNodeTaintsArgs validates RemovePodsViolatingNodeTaints arguments
 func ValidateRemovePodsViolatingNodeTaintsArgs(obj runtime.Object) error {
 	args := obj.(*RemovePodsViolatingNodeTaintsArgs)
+	var allErrs []error
 	// At most one of include/exclude can be set
 	if args.Namespaces != nil && len(args.Namespaces.Include) > 0 && len(args.Namespaces.Exclude) > 0 {
-		return fmt.Errorf("only one of Include/Exclude namespaces can be set")
+		allErrs = append(allErrs, fmt.Errorf("only one of Include/Exclude namespaces can be set"))
 	}
 
 	if args.LabelSelector != nil {
 		if _, err := metav1.LabelSelectorAsSelector(args.LabelSelector); err != nil {
-			return fmt.Errorf("failed to get label selectors from strategy's params: %+v", err)
+			allErrs = append(allErrs, fmt.Errorf("failed to get label selectors from strategy's params: %+v", err))
 		}
 	}
 
 	if len(args.ExcludedTaints) > 0 && len(args.IncludedTaints) > 0 {
-		return fmt.Errorf("either includedTaints or excludedTaints can be set, but not both")
+		allErrs = append(allErrs, fmt.Errorf("either includedTaints or excludedTaints can be set, but not both"))
 	}
 
-	return nil
+	return utilerrors.NewAggregate(allErrs)
 }
