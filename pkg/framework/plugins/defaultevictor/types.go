@@ -55,12 +55,13 @@ type DefaultEvictorArgs struct {
 type PodProtection string
 
 const (
-	PodsWithLocalStorage PodProtection = "PodsWithLocalStorage"
-	DaemonSetPods        PodProtection = "DaemonSetPods"
-	SystemCriticalPods   PodProtection = "SystemCriticalPods"
-	FailedBarePods       PodProtection = "FailedBarePods"
-	PodsWithPVC          PodProtection = "PodsWithPVC"
-	PodsWithoutPDB       PodProtection = "PodsWithoutPDB"
+	PodsWithLocalStorage   PodProtection = "PodsWithLocalStorage"
+	DaemonSetPods          PodProtection = "DaemonSetPods"
+	SystemCriticalPods     PodProtection = "SystemCriticalPods"
+	FailedBarePods         PodProtection = "FailedBarePods"
+	PodsWithPVC            PodProtection = "PodsWithPVC"
+	PodsWithoutPDB         PodProtection = "PodsWithoutPDB"
+	PodsWithResourceClaims PodProtection = "PodsWithResourceClaims"
 )
 
 // PodProtections holds the list of enabled and disabled protection policies.
@@ -98,9 +99,11 @@ var defaultPodProtections = []PodProtection{
 // Currently supported extra policies:
 //   - PodsWithPVC: Protects pods using PersistentVolumeClaims.
 //   - PodsWithoutPDB: Protects pods lacking a PodDisruptionBudget.
+//   - PodsWithResourceClaims: Protects pods using ResourceClaims.
 var extraPodProtections = []PodProtection{
 	PodsWithPVC,
 	PodsWithoutPDB,
+	PodsWithResourceClaims,
 }
 
 // NoEvictionPolicy dictates whether a no-eviction policy is preferred or mandatory.
