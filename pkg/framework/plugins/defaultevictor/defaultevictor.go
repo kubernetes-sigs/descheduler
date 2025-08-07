@@ -130,14 +130,14 @@ func applyEffectivePodProtections(d *DefaultEvictor, podProtections []PodProtect
 
 func applyFailedBarePodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
 	isProtectionEnabled := protectionMap[FailedBarePods]
-	d.constraints = append(d.constraints, evictionConstraintsForFailedBarePods(d.logger, !isProtectionEnabled)...)
+	d.constraints = append(d.constraints, evictionConstraintsForFailedBarePods(d.logger, isProtectionEnabled)...)
 }
 
 func applySystemCriticalPodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool, handle frameworktypes.Handle) error {
 	isProtectionEnabled := protectionMap[SystemCriticalPods]
 	constraints, err := evictionConstraintsForSystemCriticalPods(
 		d.logger,
-		!isProtectionEnabled,
+		isProtectionEnabled,
 		d.args.PriorityThreshold,
 		handle,
 	)
@@ -150,12 +150,12 @@ func applySystemCriticalPodsProtection(d *DefaultEvictor, protectionMap map[PodP
 
 func applyLocalStoragePodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
 	isProtectionEnabled := protectionMap[PodsWithLocalStorage]
-	d.constraints = append(d.constraints, evictionConstraintsForLocalStoragePods(!isProtectionEnabled)...)
+	d.constraints = append(d.constraints, evictionConstraintsForLocalStoragePods(isProtectionEnabled)...)
 }
 
 func applyDaemonSetPodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
 	isProtectionEnabled := protectionMap[DaemonSetPods]
-	d.constraints = append(d.constraints, evictionConstraintsForDaemonSetPods(!isProtectionEnabled)...)
+	d.constraints = append(d.constraints, evictionConstraintsForDaemonSetPods(isProtectionEnabled)...)
 }
 
 func applyPvcPodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
