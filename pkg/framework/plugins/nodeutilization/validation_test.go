@@ -257,3 +257,138 @@ func TestValidateLowNodeUtilizationPluginConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateHighNodeUtilizationPluginConfig(t *testing.T) {
+	extendedResource := v1.ResourceName("example.com/foo")
+
+	tests := []struct {
+		name    string
+		args    *HighNodeUtilizationArgs
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid configuration with CPU and memory",
+			args: &HighNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    80,
+					v1.ResourceMemory: 90,
+				},
+				EvictionModes: []EvictionMode{EvictionModeOnlyThresholdingResources},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid configuration with extended resource",
+			args: &HighNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU:   85,
+					extendedResource: 95,
+				},
+				EvictionModes: []EvictionMode{EvictionModeOnlyThresholdingResources},
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty thresholds",
+			args: &HighNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{},
+			},
+			wantErr: true,
+			errMsg:  "no resource threshold is configured",
+		},
+		{
+			name: "threshold below minimum (0%)",
+			args: &HighNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU: -1,
+				},
+			},
+			wantErr: true,
+			errMsg:  "cpu threshold not in [0, 100] range",
+		},
+		{
+			name: "threshold above maximum (100%)",
+			args: &HighNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceMemory: 101,
+				},
+			},
+			wantErr: true,
+			errMsg:  "memory threshold not in [0, 100] range",
+		},
+		{
+			name: "multiple thresholds with one out of range",
+			args: &HighNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    50,
+					v1.ResourceMemory: 150,
+				},
+			},
+			wantErr: true,
+			errMsg:  "memory threshold not in [0, 100] range",
+		},
+		{
+			name: "evictableNamespaces with Exclude (allowed)",
+			args: &HighNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU: 80,
+				},
+				EvictableNamespaces: &api.Namespaces{
+					Exclude: []string{"ns1", "ns2"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid eviction mode",
+			args: &HighNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU: 80,
+				},
+				EvictionModes: []EvictionMode{"InvalidMode"},
+			},
+			wantErr: true,
+			errMsg:  "invalid eviction mode InvalidMode",
+		},
+		{
+			name: "missing eviction modes (nil) - should be allowed (treated as empty)",
+			args: &HighNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU: 80,
+				},
+				EvictionModes: nil,
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty eviction modes slice - should be allowed",
+			args: &HighNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU: 80,
+				},
+				EvictionModes: []EvictionMode{},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateHighNodeUtilizationArgs(runtime.Object(tc.args))
+
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, but got nil")
+				}
+				if tc.errMsg != "" && err.Error() != tc.errMsg {
+					t.Errorf("expected error message: %q, but got: %q", tc.errMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
