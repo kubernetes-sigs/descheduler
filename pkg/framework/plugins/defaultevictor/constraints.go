@@ -211,3 +211,17 @@ func evictionConstraintsForIgnorePodsWithoutPDB(ignorePodsWithoutPDB bool, handl
 	}
 	return nil
 }
+
+func evictionConstraintsForResourceClaimsPods(protectionEnabled bool) []constraint {
+	if protectionEnabled {
+		return []constraint{
+			func(pod *v1.Pod) error {
+				if utils.IsPodWithResourceClaims(pod) {
+					return fmt.Errorf("pod has ResourceClaims and descheduler is configured to protect ResourceClaims pods")
+				}
+				return nil
+			},
+		}
+	}
+	return nil
+}

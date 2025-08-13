@@ -122,7 +122,7 @@ func TestValidateDefaultEvictorArgs(t *testing.T) {
 					ExtraEnabled: []PodProtection{"InvalidPolicy"},
 				},
 			},
-			errInfo: fmt.Errorf(`invalid pod protection policy in ExtraEnabled: "InvalidPolicy". Valid options are: [PodsWithPVC PodsWithoutPDB]`),
+			errInfo: fmt.Errorf(`invalid pod protection policy in ExtraEnabled: "InvalidPolicy". Valid options are: [PodsWithPVC PodsWithoutPDB PodsWithResourceClaims]`),
 		},
 		{
 			name: "Invalid ExtraEnabled: Misspelled policy",
@@ -131,7 +131,7 @@ func TestValidateDefaultEvictorArgs(t *testing.T) {
 					ExtraEnabled: []PodProtection{"PodsWithPVCC"},
 				},
 			},
-			errInfo: fmt.Errorf(`invalid pod protection policy in ExtraEnabled: "PodsWithPVCC". Valid options are: [PodsWithPVC PodsWithoutPDB]`),
+			errInfo: fmt.Errorf(`invalid pod protection policy in ExtraEnabled: "PodsWithPVCC". Valid options are: [PodsWithPVC PodsWithoutPDB PodsWithResourceClaims]`),
 		},
 		{
 			name: "Invalid ExtraEnabled: Policy from DefaultDisabled list",
@@ -140,7 +140,7 @@ func TestValidateDefaultEvictorArgs(t *testing.T) {
 					ExtraEnabled: []PodProtection{DaemonSetPods},
 				},
 			},
-			errInfo: fmt.Errorf(`invalid pod protection policy in ExtraEnabled: "DaemonSetPods". Valid options are: [PodsWithPVC PodsWithoutPDB]`),
+			errInfo: fmt.Errorf(`invalid pod protection policy in ExtraEnabled: "DaemonSetPods". Valid options are: [PodsWithPVC PodsWithoutPDB PodsWithResourceClaims]`),
 		},
 		{
 			name: "Invalid DefaultDisabled: Unknown policy",
