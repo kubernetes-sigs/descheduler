@@ -70,6 +70,9 @@ spec:
           priorityClassName: {{ .Values.priorityClassName }}
           {{- end }}
           serviceAccountName: {{ template "descheduler.serviceAccountName" . }}
+          {{- if kindIs "bool" .Values.automountServiceAccountToken }}
+          automountServiceAccountToken: {{ .Values.automountServiceAccountToken }}
+          {{- end }}
           restartPolicy: "Never"
           {{- with .Values.imagePullSecrets }}
           imagePullSecrets:
@@ -103,6 +106,9 @@ spec:
               volumeMounts:
                 - mountPath: /policy-dir
                   name: policy-volume
+                {{- if and .Values.extraServiceAccountVolumeMounts (not .Values.automountServiceAccountToken) }}
+                  {{ toYaml .Values.extraServiceAccountVolumeMounts | nindent 16 }}
+                {{- end }}
           {{- if .Values.podSecurityContext }}
           securityContext:
             {{- toYaml .Values.podSecurityContext | nindent 12 }}
@@ -111,4 +117,7 @@ spec:
           - name: policy-volume
             configMap:
               name: {{ template "descheduler.fullname" . }}
+          {{- if and .Values.extraServiceAccountVolumes (not .Values.automountServiceAccountToken) }}
+            {{ toYaml .Values.extraServiceAccountVolumes | nindent 10 }}
+          {{- end }}
 {{- end }}
