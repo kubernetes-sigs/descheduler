@@ -131,47 +131,119 @@ func applyEffectivePodProtections(d *DefaultEvictor, podProtections []PodProtect
 
 func applyFailedBarePodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
 	isProtectionEnabled := protectionMap[FailedBarePods]
-	d.constraints = append(d.constraints, evictionConstraintsForFailedBarePods(d.logger, !isProtectionEnabled)...)
+	if !isProtectionEnabled {
+		d.logger.V(1).Info("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
+		d.constraints = append(d.constraints, func(pod *v1.Pod) error {
+			ownerRefList := podutil.OwnerRef(pod)
+			if len(ownerRefList) == 0 && pod.Status.Phase != v1.PodFailed {
+				return fmt.Errorf("pod does not have any ownerRefs and is not in failed phase")
+			}
+			return nil
+		})
+	} else {
+		d.constraints = append(d.constraints, func(pod *v1.Pod) error {
+			if len(podutil.OwnerRef(pod)) == 0 {
+				return fmt.Errorf("pod does not have any ownerRefs")
+			}
+			return nil
+		})
+	}
 }
 
 func applySystemCriticalPodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool, handle frameworktypes.Handle) error {
 	isProtectionEnabled := protectionMap[SystemCriticalPods]
-	constraints, err := evictionConstraintsForSystemCriticalPods(
-		d.logger,
-		!isProtectionEnabled,
-		d.args.PriorityThreshold,
-		handle,
-	)
-	if err != nil {
-		return err
+	if !isProtectionEnabled {
+		d.logger.V(1).Info("Warning: System critical pod protection is disabled. This could cause eviction of Kubernetes system pods.")
+		return nil
 	}
-	d.constraints = append(d.constraints, constraints...)
+
+	d.constraints = append(d.constraints, func(pod *v1.Pod) error {
+		if utils.IsCriticalPriorityPod(pod) {
+			return fmt.Errorf("pod has system critical priority and is protected against eviction")
+		}
+		return nil
+	})
+
+	priorityThreshold := d.args.PriorityThreshold
+	if priorityThreshold != nil && (priorityThreshold.Value != nil || len(priorityThreshold.Name) > 0) {
+		thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), priorityThreshold)
+		if err != nil {
+			d.logger.Error(err, "failed to get priority threshold")
+			return err
+		}
+		d.constraints = append(d.constraints, func(pod *v1.Pod) error {
+			if !IsPodEvictableBasedOnPriority(pod, thresholdPriority) {
+				return fmt.Errorf("pod has higher priority than specified priority class threshold")
+			}
+			return nil
+		})
+	}
 	return nil
 }
 
 func applyLocalStoragePodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
 	isProtectionEnabled := protectionMap[PodsWithLocalStorage]
-	d.constraints = append(d.constraints, evictionConstraintsForLocalStoragePods(!isProtectionEnabled)...)
+	if isProtectionEnabled {
+		d.constraints = append(d.constraints, func(pod *v1.Pod) error {
+			if utils.IsPodWithLocalStorage(pod) {
+				return fmt.Errorf("pod has local storage and is protected against eviction")
+			}
+			return nil
+		})
+	}
 }
 
 func applyDaemonSetPodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
 	isProtectionEnabled := protectionMap[DaemonSetPods]
-	d.constraints = append(d.constraints, evictionConstraintsForDaemonSetPods(!isProtectionEnabled)...)
+	if isProtectionEnabled {
+		d.constraints = append(d.constraints, func(pod *v1.Pod) error {
+			ownerRefList := podutil.OwnerRef(pod)
+			if utils.IsDaemonsetPod(ownerRefList) {
+				return fmt.Errorf("daemonset pods are protected against eviction")
+			}
+			return nil
+		})
+	}
 }
 
 func applyPvcPodsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
 	isProtectionEnabled := protectionMap[PodsWithPVC]
-	d.constraints = append(d.constraints, evictionConstraintsForPvcPods(isProtectionEnabled)...)
+	if isProtectionEnabled {
+		d.constraints = append(d.constraints, func(pod *v1.Pod) error {
+			if utils.IsPodWithPVC(pod) {
+				return fmt.Errorf("pod with PVC is protected against eviction")
+			}
+			return nil
+		})
+	}
 }
 
 func applyPodsWithoutPDBProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool, handle frameworktypes.Handle) {
 	isProtectionEnabled := protectionMap[PodsWithoutPDB]
-	d.constraints = append(d.constraints, evictionConstraintsForIgnorePodsWithoutPDB(isProtectionEnabled, handle)...)
+	if isProtectionEnabled {
+		d.constraints = append(d.constraints, func(pod *v1.Pod) error {
+			hasPdb, err := utils.IsPodCoveredByPDB(pod, handle.SharedInformerFactory().Policy().V1().PodDisruptionBudgets().Lister())
+			if err != nil {
+				return fmt.Errorf("unable to check if pod is covered by PodDisruptionBudget: %w", err)
+			}
+			if !hasPdb {
+				return fmt.Errorf("pod does not have a PodDisruptionBudget and is protected against eviction")
+			}
+			return nil
+		})
+	}
 }
 
 func applyPodsWithResourceClaimsProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool) {
 	isProtectionEnabled := protectionMap[PodsWithResourceClaims]
-	d.constraints = append(d.constraints, evictionConstraintsForResourceClaimsPods(isProtectionEnabled)...)
+	if isProtectionEnabled {
+		d.constraints = append(d.constraints, func(pod *v1.Pod) error {
+			if utils.IsPodWithResourceClaims(pod) {
+				return fmt.Errorf("pod has ResourceClaims and descheduler is configured to protect ResourceClaims pods")
+			}
+			return nil
+		})
+	}
 }
 
 // getEffectivePodProtections determines which policies are currently active.
