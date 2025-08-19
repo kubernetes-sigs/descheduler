@@ -14,7 +14,6 @@ limitations under the License.
 package defaultevictor
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -23,108 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/descheduler/pkg/api"
-	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
-	"sigs.k8s.io/descheduler/pkg/utils"
 )
-
-func evictionConstraintsForFailedBarePods(logger klog.Logger, evictFailedBarePods bool) []constraint {
-	if evictFailedBarePods {
-		logger.V(1).Info("Warning: EvictFailedBarePods is set to True. This could cause eviction of pods without ownerReferences.")
-		return []constraint{
-			func(pod *v1.Pod) error {
-				ownerRefList := podutil.OwnerRef(pod)
-				if len(ownerRefList) == 0 && pod.Status.Phase != v1.PodFailed {
-					return fmt.Errorf("pod does not have any ownerRefs and is not in failed phase")
-				}
-				return nil
-			},
-		}
-	}
-	return []constraint{
-		func(pod *v1.Pod) error {
-			if len(podutil.OwnerRef(pod)) == 0 {
-				return fmt.Errorf("pod does not have any ownerRefs")
-			}
-			return nil
-		},
-	}
-}
-
-func evictionConstraintsForSystemCriticalPods(logger klog.Logger, evictSystemCriticalPods bool, priorityThreshold *api.PriorityThreshold, handle frameworktypes.Handle) ([]constraint, error) {
-	var constraints []constraint
-
-	if !evictSystemCriticalPods {
-		constraints = append(constraints, func(pod *v1.Pod) error {
-			if utils.IsCriticalPriorityPod(pod) {
-				return fmt.Errorf("pod has system critical priority")
-			}
-			return nil
-		})
-
-		if priorityThreshold != nil && (priorityThreshold.Value != nil || len(priorityThreshold.Name) > 0) {
-			thresholdPriority, err := utils.GetPriorityValueFromPriorityThreshold(context.TODO(), handle.ClientSet(), priorityThreshold)
-			if err != nil {
-				logger.Error(err, "failed to get priority threshold")
-				return nil, err
-			}
-			constraints = append(constraints, func(pod *v1.Pod) error {
-				if !IsPodEvictableBasedOnPriority(pod, thresholdPriority) {
-					return fmt.Errorf("pod has higher priority than specified priority class threshold")
-				}
-				return nil
-			})
-		}
-	} else {
-		logger.V(1).Info("Warning: EvictSystemCriticalPods is set to True. This could cause eviction of Kubernetes system pods.")
-	}
-
-	return constraints, nil
-}
-
-func evictionConstraintsForLocalStoragePods(evictLocalStoragePods bool) []constraint {
-	if !evictLocalStoragePods {
-		return []constraint{
-			func(pod *v1.Pod) error {
-				if utils.IsPodWithLocalStorage(pod) {
-					return fmt.Errorf("pod has local storage and descheduler is not configured with evictLocalStoragePods")
-				}
-				return nil
-			},
-		}
-	}
-	return nil
-}
-
-func evictionConstraintsForDaemonSetPods(evictDaemonSetPods bool) []constraint {
-	if !evictDaemonSetPods {
-		return []constraint{
-			func(pod *v1.Pod) error {
-				ownerRefList := podutil.OwnerRef(pod)
-				if utils.IsDaemonsetPod(ownerRefList) {
-					return fmt.Errorf("pod is related to daemonset and descheduler is not configured with evictDaemonSetPods")
-				}
-				return nil
-			},
-		}
-	}
-	return nil
-}
-
-func evictionConstraintsForPvcPods(ignorePvcPods bool) []constraint {
-	if ignorePvcPods {
-		return []constraint{
-			func(pod *v1.Pod) error {
-				if utils.IsPodWithPVC(pod) {
-					return fmt.Errorf("pod has a PVC and descheduler is configured to ignore PVC pods")
-				}
-				return nil
-			},
-		}
-	}
-	return nil
-}
 
 func evictionConstraintsForLabelSelector(logger klog.Logger, labelSelector *metav1.LabelSelector) ([]constraint, error) {
 	if labelSelector != nil {
@@ -186,38 +85,6 @@ func evictionConstraintsForMinPodAge(minPodAge *metav1.Duration) []constraint {
 			func(pod *v1.Pod) error {
 				if pod.Status.StartTime == nil || time.Since(pod.Status.StartTime.Time) < minPodAge.Duration {
 					return fmt.Errorf("pod age is not older than MinPodAge: %s seconds", minPodAge.String())
-				}
-				return nil
-			},
-		}
-	}
-	return nil
-}
-
-func evictionConstraintsForIgnorePodsWithoutPDB(ignorePodsWithoutPDB bool, handle frameworktypes.Handle) []constraint {
-	if ignorePodsWithoutPDB {
-		return []constraint{
-			func(pod *v1.Pod) error {
-				hasPdb, err := utils.IsPodCoveredByPDB(pod, handle.SharedInformerFactory().Policy().V1().PodDisruptionBudgets().Lister())
-				if err != nil {
-					return fmt.Errorf("unable to check if pod is covered by PodDisruptionBudget: %w", err)
-				}
-				if !hasPdb {
-					return fmt.Errorf("no PodDisruptionBudget found for pod")
-				}
-				return nil
-			},
-		}
-	}
-	return nil
-}
-
-func evictionConstraintsForResourceClaimsPods(protectionEnabled bool) []constraint {
-	if protectionEnabled {
-		return []constraint{
-			func(pod *v1.Pod) error {
-				if utils.IsPodWithResourceClaims(pod) {
-					return fmt.Errorf("pod has ResourceClaims and descheduler is configured to protect ResourceClaims pods")
 				}
 				return nil
 			},
