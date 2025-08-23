@@ -70,6 +70,10 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `serviceAccount.create`             | If `true`, create a service account for the cron job                                                                  | `true`                                    |
 | `serviceAccount.name`               | The name of the service account to use, if not set and create is true a name is generated using the fullname template | `nil`                                     |
 | `serviceAccount.annotations`        | Specifies custom annotations for the serviceAccount                                                                   | `{}`                                      |
+| `cronJobAnnotations`                | Annotations to add to the descheduler CronJob                                                                         | `{}`                                      |
+| `cronJobLabels`                     | Labels to add to the descheduler CronJob                                                                              | `{}`                                      |
+| `jobAnnotations`                    | Annotations to add to the descheduler Job resources (created by CronJob)                                              | `{}`                                      |
+| `jobLabels`                         | Labels to add to the descheduler Job resources (created by CronJob)                                                   | `{}`                                      |
 | `podAnnotations`                    | Annotations to add to the descheduler Pods                                                                            | `{}`                                      |
 | `podLabels`                         | Labels to add to the descheduler Pods                                                                                 | `{}`                                      |
 | `nodeSelector`                      | Node selectors to run the descheduler cronjob/deployment on specific nodes                                            | `nil`                                     |
