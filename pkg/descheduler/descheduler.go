@@ -34,7 +34,6 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -151,6 +150,60 @@ func metricsProviderListToMap(providersList []api.MetricsProvider) map[api.Metri
 		providersMap[provider.Source] = &provider
 	}
 	return providersMap
+}
+
+// preserveNeeded returns the obj preserving fields needed for memory efficiency.
+// Only keep scheduler related fields
+func preserveNeeded(obj interface{}) (interface{}, error) {
+	if pod, ok := obj.(*v1.Pod); ok {
+		preserveContainer := func(c *v1.Container) {
+			c.Command = nil
+			c.Args = nil
+			c.WorkingDir = ""
+			c.Ports = nil
+			c.EnvFrom = nil
+			c.Env = nil
+			c.ResizePolicy = nil
+			c.VolumeMounts = nil
+			c.VolumeDevices = nil
+			c.LivenessProbe = nil
+			c.ReadinessProbe = nil
+			c.StartupProbe = nil
+			c.Lifecycle = nil
+			c.TerminationMessagePath = ""
+			c.TerminationMessagePolicy = ""
+			c.ImagePullPolicy = ""
+			c.SecurityContext = nil
+		}
+
+		// metadata related
+		pod.ManagedFields = nil
+		pod.Finalizers = nil
+
+		// spec related
+		for i := 0; i < len(pod.Spec.InitContainers); i++ {
+			preserveContainer(&pod.Spec.InitContainers[i])
+		}
+		for i := 0; i < len(pod.Spec.Containers); i++ {
+			preserveContainer(&pod.Spec.Containers[i])
+		}
+		pod.Spec.EphemeralContainers = nil
+		pod.Spec.SecurityContext = nil
+		pod.Spec.ImagePullSecrets = nil
+		pod.Spec.Hostname = ""
+		pod.Spec.Subdomain = ""
+		pod.Spec.HostAliases = nil
+		pod.Spec.PriorityClassName = ""
+		pod.Spec.DNSConfig = nil
+		pod.Spec.ReadinessGates = nil
+		pod.Spec.RuntimeClassName = nil
+		pod.Spec.PreemptionPolicy = nil
+	}
+	if node, ok := obj.(*v1.Node); ok {
+		node.ManagedFields = nil
+		node.Status.Images = nil
+	}
+	return obj, nil
 }
 
 func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory, namespacedSharedInformerFactory informers.SharedInformerFactory) (*descheduler, error) {
@@ -585,7 +638,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	ctx, span = tracing.Tracer().Start(ctx, "RunDeschedulerStrategies")
 	defer span.End()
 
-	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
+	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(preserveNeeded))
 
 	var nodeSelector string
 	if deschedulerPolicy.NodeSelector != nil {
@@ -608,7 +661,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	if prometheusProvider != nil && prometheusProvider.Prometheus != nil && prometheusProvider.Prometheus.URL != "" {
 		if prometheusProvider.Prometheus.AuthToken != nil {
 			// Will get reconciled
-			namespacedSharedInformerFactory = informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields), informers.WithNamespace(prometheusProvider.Prometheus.AuthToken.SecretReference.Namespace))
+			namespacedSharedInformerFactory = informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(preserveNeeded), informers.WithNamespace(prometheusProvider.Prometheus.AuthToken.SecretReference.Namespace))
 			metricProviderTokenReconciliation = secretReconciliation
 		} else {
 			// Use the sa token and assume it has the sufficient permissions to authenticate
@@ -710,11 +763,4 @@ func createClients(clientConnection componentbaseconfig.ClientConnectionConfigur
 	}
 
 	return kClient, eventClient, nil
-}
-
-func trimManagedFields(obj interface{}) (interface{}, error) {
-	if accessor, err := meta.Accessor(obj); err == nil {
-		accessor.SetManagedFields(nil)
-	}
-	return obj, nil
 }
