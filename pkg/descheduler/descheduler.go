@@ -34,6 +34,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -155,6 +156,12 @@ func metricsProviderListToMap(providersList []api.MetricsProvider) map[api.Metri
 // preserveNeeded returns the obj preserving fields needed for memory efficiency.
 // Only keep scheduler related fields
 func preserveNeeded(obj interface{}) (interface{}, error) {
+	// metadata related
+	if accessor, err := meta.Accessor(obj); err == nil {
+		accessor.SetManagedFields(nil)
+		accessor.SetFinalizers(nil)
+	}
+
 	if pod, ok := obj.(*v1.Pod); ok {
 		preserveContainer := func(c *v1.Container) {
 			c.Command = nil
@@ -176,10 +183,6 @@ func preserveNeeded(obj interface{}) (interface{}, error) {
 			c.SecurityContext = nil
 		}
 
-		// metadata related
-		pod.ManagedFields = nil
-		pod.Finalizers = nil
-
 		// spec related
 		for i := 0; i < len(pod.Spec.InitContainers); i++ {
 			preserveContainer(&pod.Spec.InitContainers[i])
@@ -200,7 +203,6 @@ func preserveNeeded(obj interface{}) (interface{}, error) {
 		pod.Spec.PreemptionPolicy = nil
 	}
 	if node, ok := obj.(*v1.Node); ok {
-		node.ManagedFields = nil
 		node.Status.Images = nil
 	}
 	return obj, nil
