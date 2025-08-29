@@ -4,8 +4,15 @@ kind: CronJob
 metadata:
   name: {{ template "descheduler.fullname" . }}
   namespace: {{ include "descheduler.namespace" . }}
+  {{- if .Values.cronJobAnnotations }}
+  annotations:
+    {{- .Values.cronJobAnnotations | toYaml | nindent 4 }}
+  {{- end }}
   labels:
     {{- include "descheduler.labels" . | nindent 4 }}
+    {{- if .Values.cronJobLabels }}
+    {{- .Values.cronJobLabels | toYaml | nindent 4 }}
+    {{- end }}
 spec:
   schedule: {{ .Values.schedule | quote }}
   {{- if .Values.suspend }}
@@ -25,6 +32,17 @@ spec:
   timeZone: {{ .Values.timeZone }}
   {{- end }}
   jobTemplate:
+    {{- if or .Values.jobAnnotations .Values.jobLabels }}
+    metadata:
+      {{- if .Values.jobAnnotations }}
+      annotations:
+        {{- .Values.jobAnnotations | toYaml | nindent 8 }}
+      {{- end }}
+      {{- if .Values.jobLabels }}
+      labels:
+        {{- .Values.jobLabels | toYaml | nindent 8 }}
+      {{- end }}
+    {{- end }}
     spec:
       {{- if .Values.ttlSecondsAfterFinished }}
       ttlSecondsAfterFinished: {{ .Values.ttlSecondsAfterFinished }}

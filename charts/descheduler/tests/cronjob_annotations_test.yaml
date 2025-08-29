@@ -1,0 +1,109 @@
+suite: Test Descheduler CronJob and Job Annotations and Labels
+
+templates:
+  - "*.yaml"
+
+release:
+  name: descheduler
+
+set:
+  kind: CronJob
+
+tests:
+  - it: adds cronJob and job annotations and labels when set
+    template: templates/cronjob.yaml
+    set:
+      cronJobAnnotations:
+        monitoring.company.com/scrape: "true"
+        description: "test cronjob"
+      cronJobLabels:
+        environment: "test"
+        team: "platform"
+      jobAnnotations:
+        sidecar.istio.io/inject: "false"
+        job.company.com/retry-limit: "3"
+      jobLabels:
+        job-type: "maintenance"
+        priority: "high"
+    asserts:
+      - equal:
+          path: metadata.annotations["monitoring.company.com/scrape"]
+          value: "true"
+      - equal:
+          path: metadata.annotations.description
+          value: "test cronjob"
+      - equal:
+          path: metadata.labels.environment
+          value: "test"
+      - equal:
+          path: metadata.labels.team
+          value: "platform"
+      - equal:
+          path: spec.jobTemplate.metadata.annotations["sidecar.istio.io/inject"]
+          value: "false"
+      - equal:
+          path: spec.jobTemplate.metadata.annotations["job.company.com/retry-limit"]
+          value: "3"
+      - equal:
+          path: spec.jobTemplate.metadata.labels.job-type
+          value: "maintenance"
+      - equal:
+          path: spec.jobTemplate.metadata.labels.priority
+          value: "high"
+
+  - it: does not add cronJob and job metadata when not set
+    template: templates/cronjob.yaml
+    asserts:
+      - isNull:
+          path: metadata.annotations
+      - isNotNull:
+          path: metadata.labels
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: descheduler
+      - isNull:
+          path: spec.jobTemplate.metadata
+
+  - it: does not add job metadata when job annotations and labels are empty
+    template: templates/cronjob.yaml
+    set:
+      jobAnnotations: {}
+      jobLabels: {}
+    asserts:
+      - isNull:
+          path: spec.jobTemplate.metadata
+
+  - it: works with all annotation and label types together
+    template: templates/cronjob.yaml
+    set:
+      cronJobAnnotations:
+        cron-annotation: "cron-value"
+      cronJobLabels:
+        cron-label: "cron-value"
+      jobAnnotations:
+        job-annotation: "job-value"
+      jobLabels:
+        job-label: "job-value"
+      podAnnotations:
+        pod-annotation: "pod-value"
+      podLabels:
+        pod-label: "pod-value"
+    asserts:
+      - equal:
+          path: metadata.annotations.cron-annotation
+          value: "cron-value"
+      - equal:
+          path: metadata.labels.cron-label
+          value: "cron-value"
+      - equal:
+          path: spec.jobTemplate.metadata.annotations.job-annotation
+          value: "job-value"
+      - equal:
+          path: spec.jobTemplate.metadata.labels.job-label
+          value: "job-value"
+      - equal:
+          path: spec.jobTemplate.spec.template.metadata.annotations.pod-annotation
+          value: "pod-value"
+      - equal:
+          path: spec.jobTemplate.spec.template.metadata.labels.pod-label
+          value: "pod-value"

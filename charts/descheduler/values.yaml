@@ -204,6 +204,14 @@ serviceAccount:
 # Default is not set - but only implied by the ServiceAccount
 # automountServiceAccountToken: true
 
+cronJobAnnotations: {}
+
+cronJobLabels: {}
+
+jobAnnotations: {}
+
+jobLabels: {}
+
 podAnnotations: {}
 
 podLabels: {}
