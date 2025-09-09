@@ -22,7 +22,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
-
+	"k8s.io/component-base/metrics"
+	deschedulermetrics "sigs.k8s.io/descheduler/metrics"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/descheduler/metricscollector"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
@@ -41,6 +42,20 @@ type Handle interface {
 	GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc
 	SharedInformerFactory() informers.SharedInformerFactory
 	MetricsCollector() *metricscollector.MetricsCollector
+}
+
+type MetricsRegistry interface {
+	RegisterNamedPluginMetrics(pluginName string, namedMetrics map[string]metrics.Registerable)
+	GetPluginSubsystem(profileName, pluginName string) string
+}
+
+// Metrics is an optional interface that plugins can implement to register and expose their own metrics
+type Metrics interface {
+	Plugin
+	// HandleMetric returns a metrics handler for the specified metric, by name
+	HandleMetric(metricName string) deschedulermetrics.MetricsHandler
+	// RegisterMetrics registers the plugin's metrics for the given profile
+	RegisterMetrics(profileName string)
 }
 
 // Evictor defines an interface for filtering and evicting pods

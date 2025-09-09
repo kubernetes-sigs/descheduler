@@ -23,6 +23,7 @@ type HandleImpl struct {
 	PodEvictorImpl                *evictions.PodEvictor
 	MetricsCollectorImpl          *metricscollector.MetricsCollector
 	PrometheusClientImpl          promapi.Client
+	ShouldExportMetricsImpl       bool
 }
 
 var _ frameworktypes.Handle = &HandleImpl{}

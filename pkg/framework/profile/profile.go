@@ -74,6 +74,7 @@ type handleImpl struct {
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	sharedInformerFactory     informers.SharedInformerFactory
 	evictor                   *evictorImpl
+	shouldExportMetrics       bool
 }
 
 var _ frameworktypes.Handle = &handleImpl{}
@@ -142,6 +143,7 @@ type handleImplOpts struct {
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	podEvictor                *evictions.PodEvictor
 	metricsCollector          *metricscollector.MetricsCollector
+	shouldExportMetrics       bool
 }
 
 // WithClientSet sets clientSet for the scheduling frameworkImpl.
@@ -182,6 +184,12 @@ func WithMetricsCollector(metricsCollector *metricscollector.MetricsCollector) O
 	}
 }
 
+func WithShouldExportMetrics(shouldExportMetrics bool) Option {
+	return func(o *handleImplOpts) {
+		o.shouldExportMetrics = shouldExportMetrics
+	}
+}
+
 func getPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) (*api.PluginConfig, int) {
 	for idx, pluginConfig := range pluginConfigs {
 		if pluginConfig.Name == pluginName {
@@ -208,6 +216,13 @@ func buildPlugin(ctx context.Context, config api.DeschedulerProfile, pluginName 
 		klog.ErrorS(err, "unable to initialize a plugin", "pluginName", pluginName)
 		return nil, fmt.Errorf("unable to initialize %q plugin: %v", pluginName, err)
 	}
+
+	// If the plugin implements Metrics, register its metrics
+	if metricsPlugin, ok := pg.(frameworktypes.Metrics); ok {
+		metrics.PluginRegistry.SetShouldExport(handle.shouldExportMetrics)
+		metricsPlugin.RegisterMetrics(config.Name)
+	}
+
 	return pg, nil
 }
 
@@ -280,8 +295,9 @@ func NewProfile(ctx context.Context, config api.DeschedulerProfile, reg pluginre
 			profileName: config.Name,
 			podEvictor:  hOpts.podEvictor,
 		},
-		metricsCollector: hOpts.metricsCollector,
-		prometheusClient: hOpts.prometheusClient,
+		metricsCollector:    hOpts.metricsCollector,
+		prometheusClient:    hOpts.prometheusClient,
+		shouldExportMetrics: hOpts.shouldExportMetrics,
 	}
 
 	pluginNames := append(config.Plugins.Deschedule.Enabled, config.Plugins.Balance.Enabled...)
