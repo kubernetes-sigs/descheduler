@@ -204,6 +204,9 @@ serviceAccount:
 # Default is not set - but only implied by the ServiceAccount
 # automountServiceAccountToken: true
 
+# Annotations that'll be applied to deployment
+deploymentAnnotations: {}
+
 cronJobAnnotations: {}
 
 cronJobLabels: {}
