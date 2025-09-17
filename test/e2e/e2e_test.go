@@ -19,6 +19,7 @@ package e2e
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"math"
 	"os"
@@ -66,6 +67,23 @@ import (
 	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
+var (
+	deschedulerImage = flag.String("descheduler-image", "", "descheduler image to set in the pod spec")
+	podRunAsUserId   = flag.Int64("pod-run-as-user-id", 0, ".spec.securityContext.runAsUser setting, not set if 0")
+	podRunAsGroupId  = flag.Int64("pod-run-as-group-id", 0, ".spec.securityContext.runAsGroup setting, not set if 0")
+)
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+
+	if *deschedulerImage == "" {
+		klog.Errorf("--descheduler-image is unset")
+		os.Exit(1)
+	}
+
+	os.Exit(m.Run())
+}
+
 func isClientRateLimiterError(err error) bool {
 	return strings.Contains(err.Error(), "client rate limiter")
 }
@@ -96,7 +114,7 @@ func deschedulerPolicyConfigMap(policy *deschedulerapiv1alpha2.DeschedulerPolicy
 }
 
 func deschedulerDeployment(testName string) *appsv1.Deployment {
-	return &appsv1.Deployment{
+	deploymentObject := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "descheduler",
 			Namespace: "kube-system",
@@ -116,8 +134,6 @@ func deschedulerDeployment(testName string) *appsv1.Deployment {
 					ServiceAccountName: "descheduler-sa",
 					SecurityContext: &v1.PodSecurityContext{
 						RunAsNonRoot: utilptr.To(true),
-						RunAsUser:    utilptr.To[int64](1000),
-						RunAsGroup:   utilptr.To[int64](1000),
 						SeccompProfile: &v1.SeccompProfile{
 							Type: v1.SeccompProfileTypeRuntimeDefault,
 						},
@@ -125,7 +141,7 @@ func deschedulerDeployment(testName string) *appsv1.Deployment {
 					Containers: []v1.Container{
 						{
 							Name:            "descheduler",
-							Image:           os.Getenv("DESCHEDULER_IMAGE"),
+							Image:           *deschedulerImage,
 							ImagePullPolicy: "IfNotPresent",
 							Command:         []string{"/bin/descheduler"},
 							Args:            []string{"--policy-config-file", "/policy-dir/policy.yaml", "--descheduling-interval", "100m", "--v", "4"},
@@ -183,6 +199,14 @@ func deschedulerDeployment(testName string) *appsv1.Deployment {
 			},
 		},
 	}
+	if *podRunAsUserId != 0 {
+		deploymentObject.Spec.Template.Spec.SecurityContext.RunAsUser = podRunAsUserId
+	}
+	if *podRunAsGroupId != 0 {
+		deploymentObject.Spec.Template.Spec.SecurityContext.RunAsGroup = podRunAsGroupId
+	}
+
+	return deploymentObject
 }
 
 func printPodLogs(ctx context.Context, t *testing.T, kubeClient clientset.Interface, podName string) {
@@ -201,15 +225,6 @@ func printPodLogs(ctx context.Context, t *testing.T, kubeClient clientset.Interf
 	if err := scanner.Err(); err != nil {
 		t.Logf("Unable to scan bytes: %v\n", err)
 	}
-}
-
-func TestMain(m *testing.M) {
-	if os.Getenv("DESCHEDULER_IMAGE") == "" {
-		klog.Errorf("DESCHEDULER_IMAGE env is not set")
-		os.Exit(1)
-	}
-
-	os.Exit(m.Run())
 }
 
 func initPluginRegistry() {
@@ -315,11 +330,9 @@ func buildTestDeployment(name, namespace string, replicas int32, testLabel map[s
 }
 
 func makePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
-	return v1.PodSpec{
+	podSpec := v1.PodSpec{
 		SecurityContext: &v1.PodSecurityContext{
 			RunAsNonRoot: utilptr.To(true),
-			RunAsUser:    utilptr.To[int64](1000),
-			RunAsGroup:   utilptr.To[int64](1000),
 			SeccompProfile: &v1.SeccompProfile{
 				Type: v1.SeccompProfileTypeRuntimeDefault,
 			},
@@ -351,6 +364,13 @@ func makePodSpec(priorityClassName string, gracePeriod *int64) v1.PodSpec {
 		PriorityClassName:             priorityClassName,
 		TerminationGracePeriodSeconds: gracePeriod,
 	}
+	if *podRunAsUserId != 0 {
+		podSpec.SecurityContext.RunAsUser = podRunAsUserId
+	}
+	if *podRunAsGroupId != 0 {
+		podSpec.SecurityContext.RunAsGroup = podRunAsGroupId
+	}
+	return podSpec
 }
 
 func initializeClient(ctx context.Context, t *testing.T) (clientset.Interface, informers.SharedInformerFactory, listersv1.NodeLister, podutil.GetPodsAssignedToNodeFunc) {
@@ -527,8 +547,6 @@ func TestLowNodeUtilization(t *testing.T) {
 			Spec: v1.PodSpec{
 				SecurityContext: &v1.PodSecurityContext{
 					RunAsNonRoot: utilptr.To(true),
-					RunAsUser:    utilptr.To[int64](1000),
-					RunAsGroup:   utilptr.To[int64](1000),
 					SeccompProfile: &v1.SeccompProfile{
 						Type: v1.SeccompProfileTypeRuntimeDefault,
 					},
@@ -561,6 +579,12 @@ func TestLowNodeUtilization(t *testing.T) {
 					},
 				},
 			},
+		}
+		if *podRunAsUserId != 0 {
+			pod.Spec.SecurityContext.RunAsUser = podRunAsUserId
+		}
+		if *podRunAsGroupId != 0 {
+			pod.Spec.SecurityContext.RunAsGroup = podRunAsGroupId
 		}
 
 		t.Logf("Creating pod %v in %v namespace for node %v", pod.Name, pod.Namespace, workerNodes[0].Name)
@@ -1610,8 +1634,6 @@ func createBalancedPodForNodes(
 			Spec: v1.PodSpec{
 				SecurityContext: &v1.PodSecurityContext{
 					RunAsNonRoot: utilptr.To(true),
-					RunAsUser:    utilptr.To[int64](1000),
-					RunAsGroup:   utilptr.To[int64](1000),
 					SeccompProfile: &v1.SeccompProfile{
 						Type: v1.SeccompProfileTypeRuntimeDefault,
 					},
@@ -1642,6 +1664,12 @@ func createBalancedPodForNodes(
 				// PriorityClassName:             conf.PriorityClassName,
 				TerminationGracePeriodSeconds: &gracePeriod,
 			},
+		}
+		if *podRunAsUserId != 0 {
+			pod.Spec.SecurityContext.RunAsUser = podRunAsUserId
+		}
+		if *podRunAsGroupId != 0 {
+			pod.Spec.SecurityContext.RunAsGroup = podRunAsGroupId
 		}
 
 		t.Logf("Creating pod %v in %v namespace for node %v", pod.Name, pod.Namespace, node.Name)

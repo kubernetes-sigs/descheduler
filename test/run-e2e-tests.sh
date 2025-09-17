@@ -105,4 +105,4 @@ kubectl patch -n kube-system deployment metrics-server --type=json \
   -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
 
 PRJ_PREFIX="sigs.k8s.io/descheduler"
-go test ${PRJ_PREFIX}/test/e2e/ -v -timeout 0
+go test ${PRJ_PREFIX}/test/e2e/ -v -timeout 0 --args --descheduler-image ${DESCHEDULER_IMAGE} --pod-run-as-user-id 1000 --pod-run-as-group-id 1000
