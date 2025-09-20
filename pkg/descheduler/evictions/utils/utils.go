@@ -62,7 +62,7 @@ func SupportEviction(client clientset.Interface) (string, error) {
 	return "", nil
 }
 
-// HaveEvictAnnotation checks if the pod have evict annotation
+// HaveNoEvictionAnnotation checks if the pod have soft no-eviction annotation
 func HaveNoEvictionAnnotation(pod *corev1.Pod) bool {
 	_, found := pod.ObjectMeta.Annotations[SoftNoEvictionAnnotationKey]
 	return found
