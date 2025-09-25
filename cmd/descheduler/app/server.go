@@ -22,6 +22,7 @@ import (
 	"io"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -111,7 +112,14 @@ func Run(rootCtx context.Context, rs *options.DeschedulerServer) error {
 	if err != nil {
 		klog.ErrorS(err, "failed to create tracer provider")
 	}
-	defer tracing.Shutdown(ctx)
+	defer func() {
+		// we give the tracing.Shutdown() its own context as the
+		// original context may have been cancelled already. we
+		// have arbitrarily chosen the timeout duration.
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		tracing.Shutdown(ctx)
+	}()
 
 	// increase the fake watch channel so the dry-run mode can be run
 	// over a cluster with thousands of pods
