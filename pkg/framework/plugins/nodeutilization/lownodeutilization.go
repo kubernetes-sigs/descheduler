@@ -19,11 +19,13 @@ package nodeutilization
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 
+	"sigs.k8s.io/descheduler/metrics"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
@@ -35,9 +37,10 @@ import (
 
 const LowNodeUtilizationPluginName = "LowNodeUtilization"
 
-// this lines makes sure that HighNodeUtilization implements the BalancePlugin
-// interface.
+// this lines makes sure that LowNodeUtilization implements the BalancePlugin
+// and Metrics interfaces.
 var _ frameworktypes.BalancePlugin = &LowNodeUtilization{}
+var _ frameworktypes.Metrics = &LowNodeUtilization{}
 
 // LowNodeUtilization evicts pods from overutilized nodes to underutilized
 // nodes. Note that CPU/Memory requests are used to calculate nodes'
@@ -134,6 +137,16 @@ func (l *LowNodeUtilization) Name() string {
 	return LowNodeUtilizationPluginName
 }
 
+// HandleMetric returns a metrics handler for the specified metric name
+func (l *LowNodeUtilization) HandleMetric(metricName string) metrics.MetricsHandler {
+	return metrics.PluginRegistry.HandlePluginMetric(LowNodeUtilizationPluginName, metricName)
+}
+
+// RegisterMetrics registers the plugin's metrics
+func (l *LowNodeUtilization) RegisterMetrics(profileName string) {
+	RegisterMetrics(metrics.PluginRegistry, profileName)
+}
+
 // Balance holds the main logic of the plugin. It evicts pods from over
 // utilized nodes to under utilized nodes. The goal here is to evenly
 // distribute pods across nodes.
@@ -177,6 +190,14 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 			l.args.Thresholds,
 			l.args.TargetThresholds,
 		)
+	}
+
+	for key, rt := range thresholds {
+		for i, t := range rt {
+			for resource, value := range t {
+				l.HandleMetric("thresholds").WithLabelValues(key, strconv.Itoa(i), resource.String()).Set(float64(value))
+			}
+		}
 	}
 
 	// classify nodes in under and over utilized. we will later try to move
@@ -254,6 +275,10 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 	logger.V(1).Info("Number of underutilized nodes", "totalNumber", len(lowNodes))
 	logger.V(1).Info("Criteria for a node above target utilization", l.overCriteria...)
 	logger.V(1).Info("Number of overutilized nodes", "totalNumber", len(highNodes))
+
+	// Export classification metrics
+	l.HandleMetric("classification").WithLabelValues("underutilized").Set(float64(len(lowNodes)))
+	l.HandleMetric("classification").WithLabelValues("overutilized").Set(float64(len(highNodes)))
 
 	if len(lowNodes) == 0 {
 		logger.V(1).Info(
