@@ -227,8 +227,9 @@ livenessProbe:
     path: /healthz
     port: 10258
     scheme: HTTPS
-  initialDelaySeconds: 3
-  periodSeconds: 10
+  initialDelaySeconds: 5
+  periodSeconds: 20
+  timeoutSeconds: 5
 
 service:
   enabled: false
