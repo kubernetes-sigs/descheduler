@@ -89,6 +89,25 @@ func BuildTestPDB(name, appLabel string) *policyv1.PodDisruptionBudget {
 	return pdb
 }
 
+func BuildTestPVC(name, storageClass string) *v1.PersistentVolumeClaim {
+	pvc := &v1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      name,
+		},
+		Spec: v1.PersistentVolumeClaimSpec{
+			AccessModes:      []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
+			StorageClassName: &storageClass,
+			Resources: v1.VolumeResourceRequirements{
+				Requests: v1.ResourceList{
+					v1.ResourceStorage: resource.MustParse("1Gi"),
+				},
+			},
+		},
+	}
+	return pvc
+}
+
 // BuildPodMetrics creates a test podmetrics with given parameters.
 func BuildPodMetrics(name string, millicpu, mem int64) *v1beta1.PodMetrics {
 	return &v1beta1.PodMetrics{
