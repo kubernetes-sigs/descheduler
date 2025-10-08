@@ -16,6 +16,7 @@ package defaultevictor
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/api"
 	evictionutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
@@ -55,6 +57,7 @@ type testCase struct {
 	ignorePodsWithoutPDB    bool
 	podProtections          PodProtections
 	noEvictionPolicy        NoEvictionPolicy
+	pvcs                    []*v1.PersistentVolumeClaim
 }
 
 func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
@@ -879,6 +882,144 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			},
 			result: false,
 		},
+		{
+			description: "Pod using StorageClass is not evicted because 'PodsWithPVC' is in ExtraEnabled",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p23", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "pvc", VolumeSource: v1.VolumeSource{
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "foo",
+								},
+							},
+						},
+					}
+				}),
+			},
+			podProtections: PodProtections{
+				ExtraEnabled: []PodProtection{PodsWithPVC},
+				Config: &PodProtectionsConfig{
+					PodsWithPVC: &PodsWithPVCConfig{
+						ProtectedStorageClasses: []ProtectedStorageClass{
+							{
+								Name: "standard",
+							},
+						},
+					},
+				},
+			},
+			pvcs: []*v1.PersistentVolumeClaim{
+				test.BuildTestPVC("foo", "standard"),
+			},
+			result: false,
+		},
+		{
+			description: "Pod using unprotected StorageClass is evicted even though 'PodsWithPVC' is in ExtraEnabled",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p24", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "pvc", VolumeSource: v1.VolumeSource{
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "foo",
+								},
+							},
+						},
+					}
+				}),
+			},
+			podProtections: PodProtections{
+				ExtraEnabled: []PodProtection{PodsWithPVC},
+				Config: &PodProtectionsConfig{
+					PodsWithPVC: &PodsWithPVCConfig{
+						ProtectedStorageClasses: []ProtectedStorageClass{
+							{
+								Name: "protected",
+							},
+						},
+					},
+				},
+			},
+			pvcs: []*v1.PersistentVolumeClaim{
+				test.BuildTestPVC("foo", "unprotected"),
+			},
+			result: true,
+		},
+		{
+			description: "Pod using unexisting PVC is not evicted because we cannot determine if storage class is protected or not",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p25", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "pvc", VolumeSource: v1.VolumeSource{
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "foo",
+								},
+							},
+						},
+					}
+				}),
+			},
+			podProtections: PodProtections{
+				ExtraEnabled: []PodProtection{PodsWithPVC},
+				Config: &PodProtectionsConfig{
+					PodsWithPVC: &PodsWithPVCConfig{
+						ProtectedStorageClasses: []ProtectedStorageClass{
+							{
+								Name: "protected",
+							},
+						},
+					},
+				},
+			},
+			pvcs:   []*v1.PersistentVolumeClaim{},
+			result: false,
+		},
+		{
+			description: "Pod using protected and unprotected StorageClasses is not evicted",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p26", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "protected-pvc", VolumeSource: v1.VolumeSource{
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "protected",
+								},
+							},
+						},
+						{
+							Name: "unprotected-pvc", VolumeSource: v1.VolumeSource{
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "unprotected",
+								},
+							},
+						},
+					}
+				}),
+			},
+			podProtections: PodProtections{
+				ExtraEnabled: []PodProtection{PodsWithPVC},
+				Config: &PodProtectionsConfig{
+					PodsWithPVC: &PodsWithPVCConfig{
+						ProtectedStorageClasses: []ProtectedStorageClass{
+							{
+								Name: "protected",
+							},
+						},
+					},
+				},
+			},
+			pvcs: []*v1.PersistentVolumeClaim{
+				test.BuildTestPVC("protected", "protected"),
+				test.BuildTestPVC("unprotected", "unprotected"),
+			},
+			result: false,
+		},
 	}
 
 	for _, test := range testCases {
@@ -953,12 +1094,16 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 	for _, pdb := range test.pdbs {
 		objs = append(objs, pdb)
 	}
+	for _, pvc := range test.pvcs {
+		objs = append(objs, pvc)
+	}
 
 	fakeClient := fake.NewSimpleClientset(objs...)
 
 	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 	_ = sharedInformerFactory.Policy().V1().PodDisruptionBudgets().Lister()
+	_ = sharedInformerFactory.Core().V1().PersistentVolumeClaims().Lister()
 
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
@@ -1116,4 +1261,59 @@ func slicesEqualUnordered(expected, actual []PodProtection) bool {
 		}
 	}
 	return true
+}
+
+func Test_protectedPVCStorageClasses(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     *DefaultEvictorArgs
+		expected []ProtectedStorageClass
+	}{
+		{
+			name:     "no PodProtections config",
+			args:     &DefaultEvictorArgs{},
+			expected: nil,
+		},
+		{
+			name: "no PodsWithPVC config",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					Config: &PodProtectionsConfig{},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "storage classes specified",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					Config: &PodProtectionsConfig{
+						PodsWithPVC: &PodsWithPVCConfig{
+							ProtectedStorageClasses: []ProtectedStorageClass{
+								{Name: "sc1"},
+								{Name: "sc2"},
+							},
+						},
+					},
+				},
+			},
+			expected: []ProtectedStorageClass{
+				{Name: "sc1"},
+				{Name: "sc2"},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ev := &DefaultEvictor{
+				logger: klog.NewKlogr(),
+				args:   test.args,
+			}
+			result := protectedPVCStorageClasses(ev)
+			if !reflect.DeepEqual(result, test.expected) {
+				t.Errorf("Expected %v, got %v", test.expected, result)
+			}
+		})
+	}
 }

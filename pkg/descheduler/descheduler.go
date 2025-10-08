@@ -164,7 +164,7 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 		v1.SchemeGroupVersion.WithResource("namespaces"),                 // Used by the defaultevictor plugin
 		schedulingv1.SchemeGroupVersion.WithResource("priorityclasses"),  // Used by the defaultevictor plugin
 		policyv1.SchemeGroupVersion.WithResource("poddisruptionbudgets"), // Used by the defaultevictor plugin
-
+		v1.SchemeGroupVersion.WithResource("persistentvolumeclaims"),     // Used by the defaultevictor plugin
 	) // Used by the defaultevictor plugin
 
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
