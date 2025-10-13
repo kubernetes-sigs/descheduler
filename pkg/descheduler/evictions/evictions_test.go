@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,7 +115,7 @@ func TestEvictPod(t *testing.T) {
 				t.Fatalf("Unexpected error when creating a pod evictor: %v", err)
 			}
 
-			_, got := podEvictor.evictPod(ctx, test.evictedPod)
+			_, got := podEvictor.evictPod(ctx, test.evictedPod, EvictOptions{})
 			if got != test.wantErr {
 				t.Errorf("Test error for Desc: %s. Expected %v pod eviction to be %v, got %v", test.description, test.evictedPod.Name, test.wantErr, got)
 			}
@@ -418,7 +419,11 @@ func TestEvictionRequestsCacheCleanup(t *testing.T) {
 			}
 			if eviction, matched := createAct.Object.(*policy.Eviction); matched {
 				podName := eviction.GetName()
-				if podName == "p1" || podName == "p2" {
+				annotations := eviction.GetAnnotations()
+				if (podName == "p1" || podName == "p2") && annotations[requestedByAnnotationKey] == deschedulerGlobalName && strings.HasPrefix(
+					annotations[reasonAnnotationKey],
+					"triggered by",
+				) {
 					return true, nil, &apierrors.StatusError{
 						ErrStatus: metav1.Status{
 							Reason:  metav1.StatusReasonTooManyRequests,

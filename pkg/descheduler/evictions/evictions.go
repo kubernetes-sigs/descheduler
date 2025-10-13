@@ -42,6 +42,12 @@ import (
 	"sigs.k8s.io/descheduler/pkg/tracing"
 )
 
+const (
+	deschedulerGlobalName    = "sigs.k8s.io/descheduler"
+	reasonAnnotationKey      = "reason"
+	requestedByAnnotationKey = "requested-by"
+)
+
 var (
 	assumedEvictionRequestTimeoutSeconds uint          = 10 * 60 // 10 minutes
 	evictionRequestsCacheResyncPeriod    time.Duration = 10 * time.Minute
@@ -522,7 +528,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		return err
 	}
 
-	ignore, err := pe.evictPod(ctx, pod)
+	ignore, err := pe.evictPod(ctx, pod, opts)
 	if err != nil {
 		// err is used only for logging purposes
 		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
@@ -569,7 +575,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 }
 
 // return (ignore, err)
-func (pe *PodEvictor) evictPod(ctx context.Context, pod *v1.Pod) (bool, error) {
+func (pe *PodEvictor) evictPod(ctx context.Context, pod *v1.Pod, opts EvictOptions) (bool, error) {
 	deleteOptions := &metav1.DeleteOptions{
 		GracePeriodSeconds: pe.gracePeriodSeconds,
 	}
@@ -582,6 +588,10 @@ func (pe *PodEvictor) evictPod(ctx context.Context, pod *v1.Pod) (bool, error) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pod.Name,
 			Namespace: pod.Namespace,
+			Annotations: map[string]string{
+				"reason":       fmt.Sprintf("triggered by %v/%v: %v", opts.ProfileName, opts.StrategyName, opts.Reason),
+				"requested-by": deschedulerGlobalName,
+			},
 		},
 		DeleteOptions: deleteOptions,
 	}
