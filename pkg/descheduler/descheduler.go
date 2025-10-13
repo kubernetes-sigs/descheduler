@@ -357,7 +357,7 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 	// if len is still <= 1 error out
 	if len(nodes) <= 1 {
 		klog.InfoS("Skipping descheduling cycle: requires >=2 nodes", "found", len(nodes))
-        return nil // gracefully skip this cycle instead of aborting
+		return nil // gracefully skip this cycle instead of aborting
 	}
 
 	var client clientset.Interface
