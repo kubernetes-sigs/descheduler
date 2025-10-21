@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -259,7 +260,7 @@ func kVirtRunningPodNames(t *testing.T, ctx context.Context, kubeClient clientse
 	return names
 }
 
-func observeLiveMigration(t *testing.T, ctx context.Context, kubeClient clientset.Interface, usedRunningPodNames map[string]struct{}) {
+func observeLiveMigration(t *testing.T, ctx context.Context, kubeClient clientset.Interface, usedRunningPodNames map[string]struct{}, kvClient generatedclient.Interface) {
 	prevTotal := uint(0)
 	jumps := 0
 	// keep running the descheduling cycle until the migration is triggered and completed few times or times out
@@ -315,6 +316,18 @@ func observeLiveMigration(t *testing.T, ctx context.Context, kubeClient clientse
 		} else {
 			for _, item := range podList.Items {
 				klog.Infof("pod(%v): %#v", item.Name, item)
+			}
+		}
+
+		vmiList, err := kvClient.KubevirtV1().VirtualMachineInstances("default").List(ctx, metav1.ListOptions{})
+		if err != nil {
+			klog.Infof("Unable to list VMIs: %v", err)
+		} else {
+			for _, item := range vmiList.Items {
+				klog.Info("---")
+				klog.Infof("vmi %s:", item.Name)
+				data, _ := json.MarshalIndent(item, "", "  ")
+				klog.Info(string(data))
 			}
 		}
 
@@ -497,7 +510,7 @@ func TestLiveMigrationInBackground(t *testing.T) {
 
 	deschedulerPodName = createAndWaitForDeschedulerRunning(t, ctx, kubeClient, deschedulerDeploymentObj)
 
-	observeLiveMigration(t, ctx, kubeClient, usedRunningPodNames)
+	observeLiveMigration(t, ctx, kubeClient, usedRunningPodNames, kvClient)
 
 	printPodLogs(ctx, t, kubeClient, deschedulerPodName)
 
