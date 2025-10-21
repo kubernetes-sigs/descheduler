@@ -23,10 +23,11 @@ SKIP_INSTALL=${SKIP_INSTALL:-}
 KIND_E2E=${KIND_E2E:-}
 CONTAINER_ENGINE=${CONTAINER_ENGINE:-docker}
 KIND_SUDO=${KIND_SUDO:-}
+KIND_VERSION=${KIND_VERSION:-v0.30.0}
 SKIP_KUBECTL_INSTALL=${SKIP_KUBECTL_INSTALL:-}
 SKIP_KIND_INSTALL=${SKIP_KIND_INSTALL:-}
 SKIP_KUBEVIRT_INSTALL=${SKIP_KUBEVIRT_INSTALL:-}
-KUBEVIRT_VERSION=${KUBEVIRT_VERSION:-v1.3.0-rc.1}
+KUBEVIRT_VERSION=${KUBEVIRT_VERSION:-v1.6.2}
 
 # Build a descheduler image
 IMAGE_TAG=v$(date +%Y%m%d)-$(git describe --tags)
@@ -43,7 +44,7 @@ if [ -n "$KIND_E2E" ]; then
         curl -Lo kubectl https://dl.k8s.io/release/${K8S_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/
     fi
     if [ -z "${SKIP_KIND_INSTALL}" ]; then
-        wget https://github.com/kubernetes-sigs/kind/releases/download/v0.27.0/kind-linux-amd64
+        wget https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64
         chmod +x kind-linux-amd64
         mv kind-linux-amd64 kind
         export PATH=$PATH:$PWD
