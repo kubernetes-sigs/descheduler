@@ -425,6 +425,7 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 			frameworkprofile.WithGetPodsAssignedToNodeFnc(d.getPodsAssignedToNode),
 			frameworkprofile.WithMetricsCollector(d.metricsCollector),
 			frameworkprofile.WithPrometheusClient(d.prometheusClient),
+			frameworkprofile.WithShouldExportMetrics(!d.rs.DisableMetrics),
 		)
 		if err != nil {
 			klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)

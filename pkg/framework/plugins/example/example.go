@@ -184,3 +184,6 @@ func (d *Example) Deschedule(ctx context.Context, nodes []*v1.Node) *fwtypes.Sta
 	logger.Info("Example plugin finished descheduling")
 	return nil
 }
+
+// TODO: add an example metric
+// document how to register metrics in README.md
