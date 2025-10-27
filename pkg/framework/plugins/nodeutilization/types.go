@@ -49,6 +49,11 @@ type LowNodeUtilizationArgs struct {
 
 	// evictionLimits limits the number of evictions per domain. E.g. node, namespace, total.
 	EvictionLimits *api.EvictionLimits `json:"evictionLimits,omitempty"`
+
+	// NodeSelector filters which nodes are considered for eviction.
+	// Only nodes matching all specified labels will be processed by this plugin.
+	// If not set, all nodes are considered.
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 }
 
 // +k8s:deepcopy-gen=true
@@ -71,6 +76,11 @@ type HighNodeUtilizationArgs struct {
 	// considered while considering resources used by pods
 	// but then filtered out before eviction
 	EvictableNamespaces *api.Namespaces `json:"evictableNamespaces,omitempty"`
+
+	// NodeSelector filters which nodes are considered for eviction.
+	// Only nodes matching all specified labels will be processed by this plugin.
+	// If not set, all nodes are considered.
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 }
 
 // MetricsUtilization allow to consume actual resource utilization from metrics
