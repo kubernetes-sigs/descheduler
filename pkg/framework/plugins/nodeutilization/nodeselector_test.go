@@ -110,7 +110,7 @@ func TestNodeMatchesSelector(t *testing.T) {
 					Name: "test-node",
 					Labels: map[string]string{
 						"cluster-autoscaler.kubernetes.io/scale-down-disabled": "true",
-						"node.kubernetes.io/instance-type":                    "m5.large",
+						"node.kubernetes.io/instance-type":                     "m5.large",
 					},
 				},
 			},
