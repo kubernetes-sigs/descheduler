@@ -108,8 +108,11 @@ deschedulerPolicy:
       pluginConfig:
         - name: DefaultEvictor
           args:
-            ignorePvcPods: true
-            evictLocalStoragePods: true
+            podProtections:
+              defaultDisabled:
+              - "PodsWithLocalStorage"
+              extraEnabled:
+              - "PodsWithPVC"
         - name: RemoveDuplicates
         - name: RemovePodsHavingTooManyRestarts
           args:
@@ -195,12 +198,11 @@ serviceAccount:
   # Specifies custom annotations for the serviceAccount
   annotations: {}
   # Opt out of API credential automounting
-  # 
-  # automountServiceAccountToken Default is not set 
+  #
+  # automountServiceAccountToken Default is not set
   # automountServiceAccountToken: true
-  
 
-# Mount the ServiceAccountToken in the Pod of a CronJob or Deployment 
+# Mount the ServiceAccountToken in the Pod of a CronJob or Deployment
 # Default is not set - but only implied by the ServiceAccount
 # automountServiceAccountToken: true
 
@@ -268,7 +270,7 @@ serviceMonitor:
     #   action: replace
 
 ## Additional Volume mounts when automountServiceAccountToken is false
-# extraServiceAccountVolumeMounts: 
+# extraServiceAccountVolumeMounts:
 # - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
 #   name: kube-api-access
 #   readOnly: true
