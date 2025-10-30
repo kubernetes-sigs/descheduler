@@ -75,6 +75,37 @@ type PodProtections struct {
 	// DefaultDisabled specifies which default protection policies should be disabled.
 	// Supports: PodsWithLocalStorage, DaemonSetPods, SystemCriticalPods, FailedBarePods
 	DefaultDisabled []PodProtection `json:"defaultDisabled,omitempty"`
+
+	// Config holds configuration for pod protection policies. Depending on
+	// the enabled policies this may be required. For instance, when
+	// enabling the PodsWithPVC policy the user may specify which storage
+	// classes should be protected.
+	Config *PodProtectionsConfig `json:"config,omitempty"`
+}
+
+// PodProtectionsConfig holds configuration for pod protection policies. The
+// name of the fields here must be equal to a protection name. This struct is
+// meant to be extended as more protection policies are added.
+// +k8s:deepcopy-gen=true
+type PodProtectionsConfig struct {
+	PodsWithPVC *PodsWithPVCConfig `json:"PodsWithPVC,omitempty"`
+}
+
+// PodsWithPVCConfig holds configuration for the PodsWithPVC protection.
+// +k8s:deepcopy-gen=true
+type PodsWithPVCConfig struct {
+	// ProtectedStorageClasses is a list of storage classes that we want to
+	// protect. i.e. if a pod refers to one of these storage classes it is
+	// protected from being evicted. If none is provided then all pods with
+	// PVCs are protected from eviction.
+	ProtectedStorageClasses []ProtectedStorageClass `json:"protectedStorageClasses,omitempty"`
+}
+
+// ProtectedStorageClass is used to determine what storage classes are
+// protected when the PodsWithPVC protection is enabled. This object exists
+// so we can later on extend it with more configuration if needed.
+type ProtectedStorageClass struct {
+	Name string `json:"name"`
 }
 
 // defaultPodProtections holds the list of protection policies that are enabled by default.

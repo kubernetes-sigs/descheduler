@@ -198,6 +198,33 @@ func TestValidateDefaultEvictorArgs(t *testing.T) {
 			},
 			errInfo: fmt.Errorf(`[noEvictionPolicy accepts only ["Preferred" "Mandatory"] values, invalid pod protection policy in DefaultDisabled: "PodsWithoutPDB". Valid options are: [PodsWithLocalStorage SystemCriticalPods FailedBarePods DaemonSetPods], PodProtections.DefaultDisabled contains duplicate entries, PodProtections.ExtraEnabled contains duplicate entries]`),
 		},
+		{
+			name: "Protected storage classes without storage class name",
+			args: &DefaultEvictorArgs{
+				PodProtections: PodProtections{
+					ExtraEnabled: []PodProtection{PodsWithPVC},
+					Config: &PodProtectionsConfig{
+						PodsWithPVC: &PodsWithPVCConfig{
+							ProtectedStorageClasses: []ProtectedStorageClass{
+								{
+									Name: "",
+								},
+								{
+									Name: "protected-storage-class-0",
+								},
+								{
+									Name: "",
+								},
+								{
+									Name: "protected-storage-class-1",
+								},
+							},
+						},
+					},
+				},
+			},
+			errInfo: fmt.Errorf(`[PodProtections.Config.PodsWithPVC.ProtectedStorageClasses[0] name cannot be empty, PodProtections.Config.PodsWithPVC.ProtectedStorageClasses[2] name cannot be empty]`),
+		},
 	}
 
 	for _, testCase := range tests {

@@ -189,6 +189,31 @@ The Default Evictor Plugin is used by default for filtering pods before processi
 | `"PodsWithoutPDB"`         | Prevents eviction of Pods without a PodDisruptionBudget (PDB).   |
 | `"PodsWithResourceClaims"` | Prevents eviction of Pods using ResourceClaims.                  |
 
+
+#### Protecting pods using specific Storage Classes
+
+With the `PodsWithPVC` protection enabled all pods using PVCs are protected from eviction by default, if needed you can restrict the protection by filtering by PVC storage class. When filtering out by storage class, only pods using PVCs with the specified storage classes are protected from eviction. For example:
+
+```yaml
+apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+- name: ProfileName
+  pluginConfig:
+  - name: "DefaultEvictor"
+    args:
+      podProtections:
+        extraEnabled:
+        - PodsWithPVC
+        config:
+          PodsWithPVC:
+            protectedStorageClasses:
+            - name: storage-class-0
+            - name: storage-class-1
+
+```
+This example will protect pods using PVCs with storage classes `storage-class-0` and `storage-class-1` from eviction.
+
 ### Example policy
 
 As part of the policy, you will start deciding which top level configuration to use, then which Evictor plugin to use (if you have your own, the Default Evictor if not), followed by deciding the configuration passed to the Evictor Plugin. By default, the Default Evictor is enabled for both `filter` and `preEvictionFilter` extension points.  After that you will enable/disable eviction strategies plugins and configure them properly.
@@ -229,6 +254,7 @@ profiles:
             #- "PodsWithPVC"
             #- "PodsWithoutPDB"
             #- "PodsWithResourceClaims"
+          config: {}
         nodeFit: true
         minReplicas: 2
     plugins:

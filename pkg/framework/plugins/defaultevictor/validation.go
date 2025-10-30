@@ -72,6 +72,17 @@ func ValidateDefaultEvictorArgs(obj runtime.Object) error {
 		if hasDuplicates(args.PodProtections.ExtraEnabled) {
 			allErrs = append(allErrs, fmt.Errorf("PodProtections.ExtraEnabled contains duplicate entries"))
 		}
+
+		if slices.Contains(args.PodProtections.ExtraEnabled, PodsWithPVC) {
+			if args.PodProtections.Config != nil && args.PodProtections.Config.PodsWithPVC != nil {
+				protectedsc := args.PodProtections.Config.PodsWithPVC.ProtectedStorageClasses
+				for i, sc := range protectedsc {
+					if sc.Name == "" {
+						allErrs = append(allErrs, fmt.Errorf("PodProtections.Config.PodsWithPVC.ProtectedStorageClasses[%d] name cannot be empty", i))
+					}
+				}
+			}
+		}
 	}
 
 	return utilerrors.NewAggregate(allErrs)
