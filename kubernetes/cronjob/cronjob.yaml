@@ -16,7 +16,7 @@ spec:
           priorityClassName: system-cluster-critical
           containers:
           - name: descheduler
-            image: registry.k8s.io/descheduler/descheduler:v0.33.0
+            image: registry.k8s.io/descheduler/descheduler:v0.34.0
             volumeMounts:
             - mountPath: /policy-dir
               name: policy-volume
