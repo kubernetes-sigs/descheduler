@@ -27,6 +27,9 @@ spec:
               - "/policy-dir/policy.yaml"
               - "--v"
               - "3"
+            env:
+              - name: USER
+                value: nobody
             resources:
               requests:
                 cpu: "500m"

@@ -30,6 +30,9 @@ spec:
             - "5m"
             - "--v"
             - "3"
+          env:
+            - name: USER
+              value: nobody
           ports:
           - containerPort: 10258
             protocol: TCP
