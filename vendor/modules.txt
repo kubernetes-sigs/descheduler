@@ -1300,6 +1300,7 @@ k8s.io/component-base/zpages/httputil
 k8s.io/component-base/zpages/statusz
 # k8s.io/component-helpers v0.34.0
 ## explicit; go 1.24.0
+k8s.io/component-helpers/resource
 k8s.io/component-helpers/scheduling/corev1
 k8s.io/component-helpers/scheduling/corev1/nodeaffinity
 # k8s.io/gengo/v2 v2.0.0-20250604051438-85fd79dbfd9f
