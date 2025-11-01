@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/ptr"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/test"
 )
@@ -1019,6 +1020,64 @@ func TestNodeFit(t *testing.T) {
 			pod:         test.BuildTestPod("p1", 1000, 1000, "", func(pod *v1.Pod) {}),
 			node:        node,
 			podsOnNode:  []*v1.Pod{},
+		},
+		{
+			description: "Pod with native sidecars with too much cpu does not fit on node",
+			pod: test.BuildTestPod("p1", 1, 100, "", func(pod *v1.Pod) {
+				pod.Spec.InitContainers = append(pod.Spec.InitContainers, v1.Container{
+					RestartPolicy: ptr.To(v1.ContainerRestartPolicyAlways), // native sidecar
+					Resources: v1.ResourceRequirements{
+						Requests: createResourceList(100000, 100*1000*1000, 0),
+					},
+				})
+			}),
+			node:       node,
+			podsOnNode: []*v1.Pod{},
+			err:        errors.New("insufficient cpu"),
+		},
+		{
+			description: "Pod with native sidecars with too much memory does not fit on node",
+			pod: test.BuildTestPod("p1", 1, 100, "", func(pod *v1.Pod) {
+				pod.Spec.InitContainers = append(pod.Spec.InitContainers, v1.Container{
+					RestartPolicy: ptr.To(v1.ContainerRestartPolicyAlways), // native sidecar
+					Resources: v1.ResourceRequirements{
+						Requests: createResourceList(100, 1000*1000*1000*1000, 0),
+					},
+				})
+			}),
+			node:       node,
+			podsOnNode: []*v1.Pod{},
+			err:        errors.New("insufficient memory"),
+		},
+		{
+			description: "Pod with small native sidecars fits on node",
+			pod: test.BuildTestPod("p1", 1, 100, "", func(pod *v1.Pod) {
+				pod.Spec.InitContainers = append(pod.Spec.InitContainers, v1.Container{
+					RestartPolicy: ptr.To(v1.ContainerRestartPolicyAlways), // native sidecar
+					Resources: v1.ResourceRequirements{
+						Requests: createResourceList(100, 100*1000*1000, 0),
+					},
+				})
+			}),
+			node:       node,
+			podsOnNode: []*v1.Pod{},
+		},
+		{
+			description: "Pod with large overhead does not fit on node",
+			pod: test.BuildTestPod("p1", 1, 100, "", func(pod *v1.Pod) {
+				pod.Spec.Overhead = createResourceList(100000, 100*1000*1000, 0)
+			}),
+			node:       node,
+			podsOnNode: []*v1.Pod{},
+			err:        errors.New("insufficient cpu"),
+		},
+		{
+			description: "Pod with small overhead fits on node",
+			pod: test.BuildTestPod("p1", 1, 100, "", func(pod *v1.Pod) {
+				pod.Spec.Overhead = createResourceList(1, 1*1000*1000, 0)
+			}),
+			node:       node,
+			podsOnNode: []*v1.Pod{},
 		},
 	}
 

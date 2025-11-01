@@ -11,23 +11,9 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	resourcehelper "k8s.io/component-helpers/resource"
 	"k8s.io/klog/v2"
 )
-
-// GetResourceRequest finds and returns the request value for a specific resource.
-func GetResourceRequest(pod *v1.Pod, resource v1.ResourceName) int64 {
-	if resource == v1.ResourcePods {
-		return 1
-	}
-
-	requestQuantity := GetResourceRequestQuantity(pod, resource)
-
-	if resource == v1.ResourceCPU {
-		return requestQuantity.MilliValue()
-	}
-
-	return requestQuantity.Value()
-}
 
 // GetResourceRequestQuantity finds and returns the request quantity for a specific resource.
 func GetResourceRequestQuantity(pod *v1.Pod, resourceName v1.ResourceName) resource.Quantity {
@@ -42,26 +28,8 @@ func GetResourceRequestQuantity(pod *v1.Pod, resourceName v1.ResourceName) resou
 		requestQuantity = resource.Quantity{Format: resource.DecimalSI}
 	}
 
-	for _, container := range pod.Spec.Containers {
-		if rQuantity, ok := container.Resources.Requests[resourceName]; ok {
-			requestQuantity.Add(rQuantity)
-		}
-	}
-
-	for _, container := range pod.Spec.InitContainers {
-		if rQuantity, ok := container.Resources.Requests[resourceName]; ok {
-			if requestQuantity.Cmp(rQuantity) < 0 {
-				requestQuantity = rQuantity.DeepCopy()
-			}
-		}
-	}
-
-	// We assume pod overhead feature gate is enabled.
-	// We can't import the scheduler settings so we will inherit the default.
-	if pod.Spec.Overhead != nil {
-		if podOverhead, ok := pod.Spec.Overhead[resourceName]; ok && !requestQuantity.IsZero() {
-			requestQuantity.Add(podOverhead)
-		}
+	if rQuantity, ok := resourcehelper.PodRequests(pod, resourcehelper.PodResourcesOptions{})[resourceName]; ok {
+		requestQuantity.Add(rQuantity)
 	}
 
 	return requestQuantity
@@ -171,59 +139,9 @@ func GetPodSource(pod *v1.Pod) (string, error) {
 // containers of the pod. If PodOverhead feature is enabled, pod overhead is added to the
 // total container resource requests and to the total container limits which have a
 // non-zero quantity.
-func PodRequestsAndLimits(pod *v1.Pod) (reqs, limits v1.ResourceList) {
-	reqs, limits = v1.ResourceList{}, v1.ResourceList{}
-	for _, container := range pod.Spec.Containers {
-		addResourceList(reqs, container.Resources.Requests)
-		addResourceList(limits, container.Resources.Limits)
-	}
-	// init containers define the minimum of any resource
-	for _, container := range pod.Spec.InitContainers {
-		maxResourceList(reqs, container.Resources.Requests)
-		maxResourceList(limits, container.Resources.Limits)
-	}
-
-	// We assume pod overhead feature gate is enabled.
-	// We can't import the scheduler settings so we will inherit the default.
-	if pod.Spec.Overhead != nil {
-		addResourceList(reqs, pod.Spec.Overhead)
-
-		for name, quantity := range pod.Spec.Overhead {
-			if value, ok := limits[name]; ok && !value.IsZero() {
-				value.Add(quantity)
-				limits[name] = value
-			}
-		}
-	}
-
-	return
-}
-
-// addResourceList adds the resources in newList to list
-func addResourceList(list, newList v1.ResourceList) {
-	for name, quantity := range newList {
-		if value, ok := list[name]; !ok {
-			list[name] = quantity.DeepCopy()
-		} else {
-			value.Add(quantity)
-			list[name] = value
-		}
-	}
-}
-
-// maxResourceList sets list to the greater of list/newList for every resource
-// either list
-func maxResourceList(list, new v1.ResourceList) {
-	for name, quantity := range new {
-		if value, ok := list[name]; !ok {
-			list[name] = quantity.DeepCopy()
-			continue
-		} else {
-			if quantity.Cmp(value) > 0 {
-				list[name] = quantity.DeepCopy()
-			}
-		}
-	}
+func PodRequestsAndLimits(pod *v1.Pod) (v1.ResourceList, v1.ResourceList) {
+	opts := resourcehelper.PodResourcesOptions{}
+	return resourcehelper.PodRequests(pod, opts), resourcehelper.PodLimits(pod, opts)
 }
 
 // PodToleratesTaints returns true if a pod tolerates one node's taints

@@ -241,7 +241,7 @@ func fitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nod
 			return false, fmt.Errorf("insufficient %v", resource)
 		}
 	}
-	// check pod num, at least one pod number is avaibalbe
+	// check pod num, at least one pod number is available
 	if quantity, ok := availableResources[v1.ResourcePods]; ok && quantity.MilliValue() <= 0 {
 		return false, fmt.Errorf("insufficient %v", v1.ResourcePods)
 	}
