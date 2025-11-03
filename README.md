@@ -1178,7 +1178,7 @@ that the only people who can get things done around here are the "maintainers".
 We also would love to add more "official" maintainers, so show us what you can
 do!
 
-This repository uses the Kubernetes bots. See a full list of the commands [here][prow].
+This repository uses the Kubernetes bots. See a full list of the commands [here](https://go.k8s.io/bot-commands).
 
 ### Communicating With Contributors
 
