@@ -129,7 +129,7 @@ These are top level keys in the Descheduler Policy that you can use to configure
 | `metricsCollector.enabled`         | `bool`   | `false`       | Enables Kubernetes [Metrics Server](https://kubernetes-sigs.github.io/metrics-server/) collection.                         |
 | `metricsProviders`                 | `[]object` | `nil`       | Enables various metrics providers like Kubernetes [Metrics Server](https://kubernetes-sigs.github.io/metrics-server/)      |
 | `evictionFailureEventNotification` | `bool`   | `false`       | Enables eviction failure event notification.                                                                               |
-| `gracePeriodSeconds`               | `int`    | `0`           | The duration in seconds before the object should be deleted. The value zero indicates delete immediately.                  |
+| `gracePeriodSeconds`               | `int`    | `nil`           | The duration in seconds before the object should be deleted. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used.            |
 | `prometheus` |`object`| `nil` | Configures collection of Prometheus metrics for actual resource utilization |
 | `prometheus.url` |`string`| `nil` | Points to a Prometheus server url |
 | `prometheus.authToken` |`object`| `nil` | Sets Prometheus server authentication token. If not specified in cluster authentication token from the container's file system is read. |
