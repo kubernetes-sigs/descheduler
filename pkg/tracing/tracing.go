@@ -110,6 +110,12 @@ func NewTracerProvider(ctx context.Context, endpoint, caCert, name, namespace st
 		opts = append(opts, otlptracegrpc.WithInsecure())
 	}
 
+	if os.Getenv("USER") == "" {
+		if err := os.Setenv("USER", "descheduler"); err != nil {
+			klog.ErrorS(err, "failed to set USER environment variable")
+		}
+	}
+
 	client := otlptracegrpc.NewClient(opts...)
 
 	exporter, err := otlptrace.New(ctx, client)
