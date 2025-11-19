@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	clientset "k8s.io/client-go/kubernetes"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/util/workqueue"
@@ -399,4 +400,27 @@ func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFun
 	}
 
 	return false, nil
+}
+
+// UncordonNode removes the Unschedulable flag from a node to allow new pods to be scheduled on it.
+// This is useful when eviction has failed and we want to allow the node to receive new workloads again.
+func UncordonNode(ctx context.Context, client clientset.Interface, node *v1.Node) error {
+	if !node.Spec.Unschedulable {
+		// Node is already uncordoned, nothing to do
+		return nil
+	}
+
+	logger := klog.FromContext(ctx)
+	logger.V(2).InfoS("Uncordoning node", "node", klog.KObj(node))
+
+	// Create a JSON patch to set Unschedulable to false
+	patch := []byte(`[{"op": "replace", "path": "/spec/unschedulable", "value": false}]`)
+	_, err := client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, patch, metav1.PatchOptions{})
+	if err != nil {
+		logger.Error(err, "Failed to uncordon node", "node", klog.KObj(node))
+		return fmt.Errorf("failed to uncordon node %s: %w", node.Name, err)
+	}
+
+	logger.V(1).InfoS("Successfully uncordoned node", "node", klog.KObj(node))
+	return nil
 }
