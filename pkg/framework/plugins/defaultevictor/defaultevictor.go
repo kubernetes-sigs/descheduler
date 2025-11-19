@@ -126,6 +126,7 @@ func applyEffectivePodProtections(d *DefaultEvictor, podProtections []PodProtect
 	applyDaemonSetPodsProtection(d, protectionMap)
 	applyPVCPodsProtection(d, protectionMap)
 	applyPodsWithoutPDBProtection(d, protectionMap, handle)
+	applyPodsWithPDBBlockingSingleReplicaOwnerProtection(d, protectionMap, handle)
 	applyPodsWithResourceClaimsProtection(d, protectionMap)
 
 	return nil
@@ -321,6 +322,73 @@ func applyPodsWithoutPDBProtection(d *DefaultEvictor, protectionMap map[PodProte
 			}
 			return nil
 		})
+	}
+}
+
+func applyPodsWithPDBBlockingSingleReplicaOwnerProtection(d *DefaultEvictor, protectionMap map[PodProtection]bool, handle frameworktypes.Handle) {
+	// This setting causes pods with PDBs to be evictable when their owner has only 1 replica.
+	// When this protection is in ExtraEnabled, pods from single-replica deployments with PDBs
+	// are treated as candidates for eviction (not protected).
+	// When not enabled, the PDB still acts as a barrier at the API server level.
+	isSettingEnabled := protectionMap[PodsWithPDBBlockingSingleReplicaOwner]
+	if !isSettingEnabled {
+		return
+	}
+
+	// Add constraint that allows eviction of single-replica PDB-protected pods
+	d.constraints = append(d.constraints, func(pod *v1.Pod) error {
+		// Check if pod is covered by a PDB
+		hasPdb, err := utils.IsPodCoveredByPDB(pod, handle.SharedInformerFactory().Policy().V1().PodDisruptionBudgets().Lister())
+		if err != nil {
+			return fmt.Errorf("unable to check if pod is covered by PodDisruptionBudget: %w", err)
+		}
+
+		if !hasPdb {
+			// No PDB, pass through
+			return nil
+		}
+
+		// Pod has a PDB. Check if its owner has only 1 replica.
+		ownerRefs := podutil.OwnerRef(pod)
+		if len(ownerRefs) == 0 {
+			// Pod has no owner, protect it from eviction due to PDB
+			return fmt.Errorf("pod is covered by PodDisruptionBudget")
+		}
+
+		// For each owner, check if it's a single-replica workload
+		for _, ownerRef := range ownerRefs {
+			ownerObj, err := getOwnerObject(ownerRef, pod.Namespace, handle)
+			if err != nil {
+				// Unable to get owner, protect the pod
+				return fmt.Errorf("unable to determine if pod's owner is single-replica, protecting due to PDB: %w", err)
+			}
+
+			// If owner has single replica, allow eviction (return nil)
+			if ownerObj != nil && utils.OwnerHasSingleReplica(ownerRefs, ownerObj) {
+				// Single replica owner with PDB - we allow eviction
+				return nil
+			}
+		}
+
+		// Multi-replica owner with PDB - protect from eviction
+		return fmt.Errorf("pod is covered by PodDisruptionBudget")
+	})
+}
+
+// getOwnerObject retrieves the owner object from the appropriate informer based on the owner kind
+func getOwnerObject(ownerRef metav1.OwnerReference, namespace string, handle frameworktypes.Handle) (interface{}, error) {
+	switch ownerRef.Kind {
+	case "Deployment":
+		return handle.SharedInformerFactory().Apps().V1().Deployments().Lister().Deployments(namespace).Get(ownerRef.Name)
+	case "StatefulSet":
+		return handle.SharedInformerFactory().Apps().V1().StatefulSets().Lister().StatefulSets(namespace).Get(ownerRef.Name)
+	case "ReplicaSet":
+		return handle.SharedInformerFactory().Apps().V1().ReplicaSets().Lister().ReplicaSets(namespace).Get(ownerRef.Name)
+	case "DaemonSet":
+		// DaemonSets are never single-replica in the traditional sense
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("unsupported owner kind: %s", ownerRef.Kind)
 	}
 }
 

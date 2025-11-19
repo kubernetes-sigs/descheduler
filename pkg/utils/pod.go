@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
 	policy "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -123,6 +124,43 @@ func IsPodCoveredByPDB(pod *v1.Pod, lister policyv1.PodDisruptionBudgetLister) (
 	}
 
 	return len(pdbList) > 0, nil
+}
+
+// OwnerHasSingleReplica checks if the pod's owner (Deployment, StatefulSet, or ReplicaSet)
+// has only 1 replica. Returns true if the owner is single-replica, false otherwise.
+// For DaemonSets, always returns false since they manage one pod per node.
+func OwnerHasSingleReplica(ownerRefs []metav1.OwnerReference, ownerObj interface{}) bool {
+	if ownerObj == nil {
+		return false
+	}
+
+	// Check Deployment
+	if deployment, ok := ownerObj.(*appsv1.Deployment); ok {
+		if deployment.Spec.Replicas != nil && *deployment.Spec.Replicas == 1 {
+			return true
+		}
+		return false
+	}
+
+	// Check StatefulSet
+	if statefulSet, ok := ownerObj.(*appsv1.StatefulSet); ok {
+		if statefulSet.Spec.Replicas != nil && *statefulSet.Spec.Replicas == 1 {
+			return true
+		}
+		return false
+	}
+
+	// Check ReplicaSet
+	if replicaSet, ok := ownerObj.(*appsv1.ReplicaSet); ok {
+		if replicaSet.Spec.Replicas != nil && *replicaSet.Spec.Replicas == 1 {
+			return true
+		}
+		return false
+	}
+
+	// DaemonSet and other workload types are not considered single-replica
+	// because DaemonSet manages one pod per node (by design)
+	return false
 }
 
 // GetPodSource returns the source of the pod based on the annotation.
