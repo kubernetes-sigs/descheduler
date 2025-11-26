@@ -8,7 +8,7 @@ keywords:
 - descheduler
 - kube-scheduler
 home: https://github.com/kubernetes-sigs/descheduler
-icon: https://kubernetes.io/images/favicon.png
+icon: https://raw.githubusercontent.com/kubernetes-sigs/descheduler/master/assets/logo/descheduler-stacked-color.png
 sources:
 - https://github.com/kubernetes-sigs/descheduler
 maintainers:
