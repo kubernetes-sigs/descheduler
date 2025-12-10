@@ -62,7 +62,6 @@ func TestPodLifeTime(t *testing.T) {
 	}
 
 	// Setup pods, one should be evicted
-	p1 := buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil)
 	p2 := buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil)
 
 	// Setup pods, zero should be evicted
@@ -132,7 +131,10 @@ func TestPodLifeTime(t *testing.T) {
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
-			pods:                    []*v1.Pod{p1, p2},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
+				p2,
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 		},
@@ -267,7 +269,11 @@ func TestPodLifeTime(t *testing.T) {
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
-			pods:                       []*v1.Pod{p1, p2, p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
+				p2,
+				p9,
+			},
 			nodes:                      []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount:    2,
 			maxPodsToEvictPerNode:      nil,
@@ -278,7 +284,11 @@ func TestPodLifeTime(t *testing.T) {
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
-			pods:                       []*v1.Pod{p1, p2, p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
+				p2,
+				p9,
+			},
 			nodes:                      []*v1.Node{buildTestNode1()},
 			maxPodsToEvictPerNamespace: utilptr.To[uint](1),
 			expectedEvictedPodCount:    1,
@@ -288,7 +298,11 @@ func TestPodLifeTime(t *testing.T) {
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
-			pods:                       []*v1.Pod{p1, p2, p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
+				p2,
+				p9,
+			},
 			nodes:                      []*v1.Node{buildTestNode1()},
 			maxPodsToEvictPerNamespace: utilptr.To[uint](2),
 			maxPodsToEvictTotal:        utilptr.To[uint](1),
@@ -299,7 +313,11 @@ func TestPodLifeTime(t *testing.T) {
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
-			pods:                    []*v1.Pod{p1, p2, p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
+				p2,
+				p9,
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			maxPodsToEvictPerNode:   utilptr.To[uint](1),
 			expectedEvictedPodCount: 1,
