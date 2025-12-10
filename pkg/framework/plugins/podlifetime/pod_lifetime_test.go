@@ -61,10 +61,16 @@ func TestPodLifeTime(t *testing.T) {
 		})
 	}
 
+	buildTestPodWithRSOwnerRefWithPendingPhaseForNode1 := func(name string, creationTime metav1.Time, apply func(*v1.Pod)) *v1.Pod {
+		return buildTestPodWithRSOwnerRefForNode1(name, creationTime, func(pod *v1.Pod) {
+			pod.Status.Phase = "Pending"
+			if apply != nil {
+				apply(pod)
+			}
+		})
+	}
+
 	// Setup two old pods with different status phases
-	p9 := buildTestPodWithRSOwnerRefForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
-		pod.Status.Phase = "Pending"
-	})
 	p10 := buildTestPodWithRSOwnerRefForNode1("p10", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.Status.Phase = "Running"
 	})
@@ -166,7 +172,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"ContainerCreating"},
 			},
 			pods: []*v1.Pod{
-				p9,
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
 				test.BuildTestPod("container-creating-stuck", 0, 0, nodeName1, func(pod *v1.Pod) {
 					pod.Status.ContainerStatuses = []v1.ContainerStatus{
 						{
@@ -189,7 +195,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"PodInitializing"},
 			},
 			pods: []*v1.Pod{
-				p9,
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
 				test.BuildTestPod("pod-initializing-stuck", 0, 0, nodeName1, func(pod *v1.Pod) {
 					pod.Status.ContainerStatuses = []v1.ContainerStatus{
 						{
@@ -211,7 +217,10 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"Pending"},
 			},
-			pods:                    []*v1.Pod{p9, p10},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+				p10,
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 		},
@@ -266,7 +275,7 @@ func TestPodLifeTime(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
 				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
-				p9,
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
 			},
 			nodes:                      []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount:    2,
@@ -281,7 +290,7 @@ func TestPodLifeTime(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
 				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
-				p9,
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
 			},
 			nodes:                      []*v1.Node{buildTestNode1()},
 			maxPodsToEvictPerNamespace: utilptr.To[uint](1),
@@ -295,7 +304,7 @@ func TestPodLifeTime(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
 				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
-				p9,
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
 			},
 			nodes:                      []*v1.Node{buildTestNode1()},
 			maxPodsToEvictPerNamespace: utilptr.To[uint](2),
@@ -310,7 +319,7 @@ func TestPodLifeTime(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
 				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
-				p9,
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			maxPodsToEvictPerNode:   utilptr.To[uint](1),
@@ -322,7 +331,9 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"ImagePullBackOff"},
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -341,7 +352,9 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"CrashLoopBackOff"},
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -360,7 +373,9 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"CreateContainerConfigError"},
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -379,7 +394,9 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"ErrImagePull"},
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -398,7 +415,9 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"CreateContainerError"},
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -418,7 +437,9 @@ func TestPodLifeTime(t *testing.T) {
 				States:                  []string{"CreateContainerError"},
 				IncludingInitContainers: true,
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -437,7 +458,9 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"CreateContainerError"},
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -457,7 +480,9 @@ func TestPodLifeTime(t *testing.T) {
 				States:                       []string{"CreateContainerError"},
 				IncludingEphemeralContainers: true,
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -476,7 +501,9 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"CreateContainerError"},
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -495,7 +522,9 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"InvalidImageName"},
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -514,7 +543,9 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"NodeLost"},
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -527,7 +558,9 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"NodeAffinity"},
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -540,7 +573,9 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"Shutdown"},
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -553,7 +588,9 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"UnexpectedAdmissionError"},
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -605,7 +642,9 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"ContainerCreating"},
 			},
-			pods:                    []*v1.Pod{p9},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
 			applyPodsFunc: func(pods []*v1.Pod) {
