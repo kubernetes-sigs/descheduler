@@ -70,10 +70,6 @@ func TestPodLifeTime(t *testing.T) {
 		})
 	}
 
-	p16 := buildTestPodWithRSOwnerRefForNode1("p16", olderPodCreationTime, func(pod *v1.Pod) {
-		pod.Status.Phase = v1.PodUnknown
-	})
-
 	var maxLifeTime uint = 600
 	testCases := []struct {
 		description                string
@@ -609,7 +605,11 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{string(v1.PodSucceeded)},
 			},
-			pods:                    []*v1.Pod{p16},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p16", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Phase = v1.PodUnknown
+				}),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -622,7 +622,11 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{string(v1.PodFailed)},
 			},
-			pods:                    []*v1.Pod{p16},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p16", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Phase = v1.PodUnknown
+				}),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
@@ -635,7 +639,11 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{string(v1.PodUnknown)},
 			},
-			pods:                    []*v1.Pod{p16},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p16", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Phase = v1.PodUnknown
+				}),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
