@@ -70,9 +70,6 @@ func TestPodLifeTime(t *testing.T) {
 		})
 	}
 
-	p14 := buildTestPodWithRSOwnerRefForNode1("p14", olderPodCreationTime, func(pod *v1.Pod) {
-		pod.DeletionTimestamp = &metav1.Time{}
-	})
 	p15 := buildTestPodWithRSOwnerRefForNode1("p15", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.DeletionTimestamp = &metav1.Time{}
 	})
@@ -269,7 +266,12 @@ func TestPodLifeTime(t *testing.T) {
 					MatchLabels: map[string]string{"foo": "bar"},
 				},
 			},
-			pods:                    []*v1.Pod{p14, p15},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p14", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.DeletionTimestamp = &metav1.Time{}
+				}),
+				p15,
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
 		},
