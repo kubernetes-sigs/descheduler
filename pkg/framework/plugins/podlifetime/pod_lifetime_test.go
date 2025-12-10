@@ -35,77 +35,57 @@ import (
 )
 
 func TestPodLifeTime(t *testing.T) {
-	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	const nodeName1 = "n1"
+	buildTestNode1 := func() *v1.Node {
+		return test.BuildTestNode(nodeName1, 2000, 3000, 10, nil)
+	}
+
 	olderPodCreationTime := metav1.NewTime(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
 	newerPodCreationTime := metav1.NewTime(time.Now())
 
-	ownerRef1 := test.GetReplicaSetOwnerRefList()
+	buildTestPodForNode1 := func(name string, creationTime metav1.Time, apply func(*v1.Pod)) *v1.Pod {
+		return test.BuildTestPod(name, 100, 0, nodeName1, func(pod *v1.Pod) {
+			pod.ObjectMeta.CreationTimestamp = creationTime
+			if apply != nil {
+				apply(pod)
+			}
+		})
+	}
+
+	buildTestPodWithRSOwnerRefForNode1 := func(name string, creationTime metav1.Time, apply func(*v1.Pod)) *v1.Pod {
+		return buildTestPodForNode1(name, creationTime, func(pod *v1.Pod) {
+			test.SetRSOwnerRef(pod)
+			if apply != nil {
+				apply(pod)
+			}
+		})
+	}
 
 	// Setup pods, one should be evicted
-	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef1
-	})
-	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef1
-	})
-
-	ownerRef2 := test.GetReplicaSetOwnerRefList()
+	p1 := buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil)
+	p2 := buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil)
 
 	// Setup pods, zero should be evicted
-	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef2
-	})
-	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef2
-	})
-
-	ownerRef3 := test.GetReplicaSetOwnerRefList()
+	p3 := buildTestPodWithRSOwnerRefForNode1("p3", newerPodCreationTime, nil)
+	p4 := buildTestPodWithRSOwnerRefForNode1("p4", newerPodCreationTime, nil)
 
 	// Setup pods, one should be evicted
-	p5 := test.BuildTestPod("p5", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef3
-	})
-	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Second * 605))
-		pod.ObjectMeta.OwnerReferences = ownerRef3
-	})
+	p5 := buildTestPodWithRSOwnerRefForNode1("p5", newerPodCreationTime, nil)
+	p6 := buildTestPodWithRSOwnerRefForNode1("p6", metav1.NewTime(time.Now().Add(-time.Second*605)), nil)
 
 	// Setup pods, zero should be evicted
-	p7 := test.BuildTestPod("p7", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
-	})
-	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Second * 595))
-	})
+	p7 := buildTestPodForNode1("p7", newerPodCreationTime, nil)
+	p8 := buildTestPodForNode1("p8", metav1.NewTime(time.Now().Add(-time.Second*595)), nil)
 
 	// Setup two old pods with different status phases
-	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p9 := buildTestPodWithRSOwnerRefForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.Status.Phase = "Pending"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
 	})
-	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p10 := buildTestPodWithRSOwnerRefForNode1("p10", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.Status.Phase = "Running"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
 	})
 
-	p11 := test.BuildTestPod("p11", 100, 0, node1.Name, func(pod *v1.Pod) {
+	p11 := buildTestPodWithRSOwnerRefForNode1("p11", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.Spec.Volumes = []v1.Volume{
 			{
 				Name: "pvc", VolumeSource: v1.VolumeSource{
@@ -113,43 +93,25 @@ func TestPodLifeTime(t *testing.T) {
 				},
 			},
 		}
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef1
 	})
 
 	// Setup two old pods with different labels
-	p12 := test.BuildTestPod("p12", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p12 := buildTestPodWithRSOwnerRefForNode1("p12", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.ObjectMeta.Labels = map[string]string{"foo": "bar"}
-		pod.ObjectMeta.OwnerReferences = ownerRef1
 	})
-	p13 := test.BuildTestPod("p13", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p13 := buildTestPodWithRSOwnerRefForNode1("p13", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.ObjectMeta.Labels = map[string]string{"foo": "bar1"}
-		pod.ObjectMeta.OwnerReferences = ownerRef1
 	})
 
-	p14 := test.BuildTestPod("p14", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef1
+	p14 := buildTestPodWithRSOwnerRefForNode1("p14", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.DeletionTimestamp = &metav1.Time{}
 	})
-	p15 := test.BuildTestPod("p15", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef1
+	p15 := buildTestPodWithRSOwnerRefForNode1("p15", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.DeletionTimestamp = &metav1.Time{}
 	})
 
-	p16 := test.BuildTestPod("p16", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p16 := buildTestPodWithRSOwnerRefForNode1("p16", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.Status.Phase = v1.PodUnknown
-		pod.ObjectMeta.OwnerReferences = ownerRef1
 	})
 
 	var maxLifeTime uint = 600
@@ -171,7 +133,7 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p1, p2},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 		},
 		{
@@ -180,7 +142,7 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p3, p4},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
 		},
 		{
@@ -189,7 +151,7 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p5, p6},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 		},
 		{
@@ -198,7 +160,7 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p7, p8},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
 		},
 		{
@@ -209,7 +171,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				p9,
-				test.BuildTestPod("container-creating-stuck", 0, 0, node1.Name, func(pod *v1.Pod) {
+				test.BuildTestPod("container-creating-stuck", 0, 0, nodeName1, func(pod *v1.Pod) {
 					pod.Status.ContainerStatuses = []v1.ContainerStatus{
 						{
 							State: v1.ContainerState{
@@ -217,11 +179,11 @@ func TestPodLifeTime(t *testing.T) {
 							},
 						},
 					}
-					pod.OwnerReferences = ownerRef1
+					test.SetRSOwnerRef(pod)
 					pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 				}),
 			},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 		},
 		{
@@ -232,7 +194,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				p9,
-				test.BuildTestPod("pod-initializing-stuck", 0, 0, node1.Name, func(pod *v1.Pod) {
+				test.BuildTestPod("pod-initializing-stuck", 0, 0, nodeName1, func(pod *v1.Pod) {
 					pod.Status.ContainerStatuses = []v1.ContainerStatus{
 						{
 							State: v1.ContainerState{
@@ -240,11 +202,11 @@ func TestPodLifeTime(t *testing.T) {
 							},
 						},
 					}
-					pod.OwnerReferences = ownerRef1
+					test.SetRSOwnerRef(pod)
 					pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 				}),
 			},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 		},
 		{
@@ -254,7 +216,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"Pending"},
 			},
 			pods:                    []*v1.Pod{p9, p10},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 		},
 		{
@@ -263,7 +225,7 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p11},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
 			ignorePvcPods:           true,
 		},
@@ -273,7 +235,7 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p11},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 		},
 		{
@@ -285,7 +247,7 @@ func TestPodLifeTime(t *testing.T) {
 				},
 			},
 			pods:                    []*v1.Pod{p12, p13},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 		},
 		{
@@ -297,7 +259,7 @@ func TestPodLifeTime(t *testing.T) {
 				},
 			},
 			pods:                    []*v1.Pod{p14, p15},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
 		},
 		{
@@ -306,7 +268,7 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                       []*v1.Pod{p1, p2, p9},
-			nodes:                      []*v1.Node{node1},
+			nodes:                      []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount:    2,
 			maxPodsToEvictPerNode:      nil,
 			maxPodsToEvictPerNamespace: nil,
@@ -317,7 +279,7 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                       []*v1.Pod{p1, p2, p9},
-			nodes:                      []*v1.Node{node1},
+			nodes:                      []*v1.Node{buildTestNode1()},
 			maxPodsToEvictPerNamespace: utilptr.To[uint](1),
 			expectedEvictedPodCount:    1,
 		},
@@ -327,7 +289,7 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                       []*v1.Pod{p1, p2, p9},
-			nodes:                      []*v1.Node{node1},
+			nodes:                      []*v1.Node{buildTestNode1()},
 			maxPodsToEvictPerNamespace: utilptr.To[uint](2),
 			maxPodsToEvictTotal:        utilptr.To[uint](1),
 			expectedEvictedPodCount:    1,
@@ -338,7 +300,7 @@ func TestPodLifeTime(t *testing.T) {
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
 			pods:                    []*v1.Pod{p1, p2, p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			maxPodsToEvictPerNode:   utilptr.To[uint](1),
 			expectedEvictedPodCount: 1,
 		},
@@ -349,7 +311,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"ImagePullBackOff"},
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
@@ -368,7 +330,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"CrashLoopBackOff"},
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
@@ -387,7 +349,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"CreateContainerConfigError"},
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
@@ -406,7 +368,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"ErrImagePull"},
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
@@ -425,7 +387,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"CreateContainerError"},
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.InitContainerStatuses = []v1.ContainerStatus{
@@ -445,7 +407,7 @@ func TestPodLifeTime(t *testing.T) {
 				IncludingInitContainers: true,
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.InitContainerStatuses = []v1.ContainerStatus{
@@ -464,7 +426,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"CreateContainerError"},
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.InitContainerStatuses = []v1.ContainerStatus{
@@ -484,7 +446,7 @@ func TestPodLifeTime(t *testing.T) {
 				IncludingEphemeralContainers: true,
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.EphemeralContainerStatuses = []v1.ContainerStatus{
@@ -503,7 +465,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"CreateContainerError"},
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
@@ -522,7 +484,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"InvalidImageName"},
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
@@ -541,7 +503,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"NodeLost"},
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.Reason = "NodeLost"
@@ -554,7 +516,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"NodeAffinity"},
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.Reason = "NodeAffinity"
@@ -567,7 +529,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"Shutdown"},
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.Reason = "Shutdown"
@@ -580,7 +542,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"UnexpectedAdmissionError"},
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.Reason = "UnexpectedAdmissionError"
@@ -593,7 +555,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{string(v1.PodSucceeded)},
 			},
 			pods:                    []*v1.Pod{p16},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.Phase = v1.PodSucceeded
@@ -606,7 +568,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{string(v1.PodFailed)},
 			},
 			pods:                    []*v1.Pod{p16},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.Phase = v1.PodFailed
@@ -619,7 +581,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{string(v1.PodUnknown)},
 			},
 			pods:                    []*v1.Pod{p16},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.Phase = v1.PodUnknown
@@ -632,7 +594,7 @@ func TestPodLifeTime(t *testing.T) {
 				States:                []string{"ContainerCreating"},
 			},
 			pods:                    []*v1.Pod{p9},
-			nodes:                   []*v1.Node{node1},
+			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
 			applyPodsFunc: func(pods []*v1.Pod) {
 				pods[0].Status.ContainerStatuses = []v1.ContainerStatus{
