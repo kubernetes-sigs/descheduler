@@ -70,11 +70,6 @@ func TestPodLifeTime(t *testing.T) {
 		})
 	}
 
-	// Setup two old pods with different labels
-	p13 := buildTestPodWithRSOwnerRefForNode1("p13", olderPodCreationTime, func(pod *v1.Pod) {
-		pod.ObjectMeta.Labels = map[string]string{"foo": "bar1"}
-	})
-
 	p14 := buildTestPodWithRSOwnerRefForNode1("p14", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.DeletionTimestamp = &metav1.Time{}
 	})
@@ -259,7 +254,9 @@ func TestPodLifeTime(t *testing.T) {
 				buildTestPodWithRSOwnerRefForNode1("p12", olderPodCreationTime, func(pod *v1.Pod) {
 					pod.ObjectMeta.Labels = map[string]string{"foo": "bar"}
 				}),
-				p13,
+				buildTestPodWithRSOwnerRefForNode1("p13", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.ObjectMeta.Labels = map[string]string{"foo": "bar1"}
+				}),
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
