@@ -125,11 +125,12 @@ func TestPodLifeTime(t *testing.T) {
 		pod.ObjectMeta.Labels = map[string]string{"foo": "bar"}
 		pod.ObjectMeta.OwnerReferences = ownerRef1
 	})
-	p13 := test.BuildTestPod("p13", 100, 0, node1.Name, nil)
-	p13.Namespace = "dev"
-	p13.ObjectMeta.CreationTimestamp = olderPodCreationTime
-	p13.ObjectMeta.Labels = map[string]string{"foo": "bar1"}
-	p13.ObjectMeta.OwnerReferences = ownerRef1
+	p13 := test.BuildTestPod("p13", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+		pod.ObjectMeta.Labels = map[string]string{"foo": "bar1"}
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
 
 	p14 := test.BuildTestPod("p14", 100, 0, node1.Name, nil)
 	p15 := test.BuildTestPod("p15", 100, 0, node1.Name, nil)
