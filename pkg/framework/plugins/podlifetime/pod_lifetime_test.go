@@ -61,9 +61,6 @@ func TestPodLifeTime(t *testing.T) {
 		})
 	}
 
-	// Setup pods, one should be evicted
-	p6 := buildTestPodWithRSOwnerRefForNode1("p6", metav1.NewTime(time.Now().Add(-time.Second*605)), nil)
-
 	// Setup pods, zero should be evicted
 	p7 := buildTestPodForNode1("p7", newerPodCreationTime, nil)
 	p8 := buildTestPodForNode1("p8", metav1.NewTime(time.Now().Add(-time.Second*595)), nil)
@@ -149,7 +146,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefForNode1("p5", newerPodCreationTime, nil),
-				p6,
+				buildTestPodWithRSOwnerRefForNode1("p6", metav1.NewTime(time.Now().Add(-time.Second*605)), nil),
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
