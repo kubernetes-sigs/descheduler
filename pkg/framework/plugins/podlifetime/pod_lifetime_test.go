@@ -61,9 +61,6 @@ func TestPodLifeTime(t *testing.T) {
 		})
 	}
 
-	// Setup pods, zero should be evicted
-	p8 := buildTestPodForNode1("p8", metav1.NewTime(time.Now().Add(-time.Second*595)), nil)
-
 	// Setup two old pods with different status phases
 	p9 := buildTestPodWithRSOwnerRefForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.Status.Phase = "Pending"
@@ -157,7 +154,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				buildTestPodForNode1("p7", newerPodCreationTime, nil),
-				p8,
+				buildTestPodForNode1("p8", metav1.NewTime(time.Now().Add(-time.Second*595)), nil),
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
