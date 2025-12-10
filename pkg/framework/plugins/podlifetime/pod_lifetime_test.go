@@ -98,11 +98,12 @@ func TestPodLifeTime(t *testing.T) {
 		pod.Status.Phase = "Pending"
 		pod.ObjectMeta.OwnerReferences = ownerRef1
 	})
-	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, nil)
-	p10.Namespace = "dev"
-	p10.ObjectMeta.CreationTimestamp = olderPodCreationTime
-	p10.Status.Phase = "Running"
-	p10.ObjectMeta.OwnerReferences = ownerRef1
+	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+		pod.Status.Phase = "Running"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
 
 	p11 := test.BuildTestPod("p11", 100, 0, node1.Name, func(pod *v1.Pod) {
 		pod.Spec.Volumes = []v1.Volume{
