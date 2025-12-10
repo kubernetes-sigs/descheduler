@@ -43,57 +43,54 @@ func TestPodLifeTime(t *testing.T) {
 	olderPodCreationTime := metav1.NewTime(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
 	newerPodCreationTime := metav1.NewTime(time.Now())
 
+	buildTestPodForNode1 := func(name string, creationTime metav1.Time, apply func(*v1.Pod)) *v1.Pod {
+		return test.BuildTestPod(name, 100, 0, nodeName1, func(pod *v1.Pod) {
+			pod.ObjectMeta.CreationTimestamp = creationTime
+			if apply != nil {
+				apply(pod)
+			}
+		})
+	}
+
 	// Setup pods, one should be evicted
-	p1 := test.BuildTestPod("p1", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
+	p1 := buildTestPodForNode1("p1", newerPodCreationTime, func(pod *v1.Pod) {
 		test.SetRSOwnerRef(pod)
 	})
-	p2 := test.BuildTestPod("p2", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p2 := buildTestPodForNode1("p2", olderPodCreationTime, func(pod *v1.Pod) {
 		test.SetRSOwnerRef(pod)
 	})
 
 	// Setup pods, zero should be evicted
-	p3 := test.BuildTestPod("p3", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
+	p3 := buildTestPodForNode1("p3", newerPodCreationTime, func(pod *v1.Pod) {
 		test.SetRSOwnerRef(pod)
 	})
-	p4 := test.BuildTestPod("p4", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
+	p4 := buildTestPodForNode1("p4", newerPodCreationTime, func(pod *v1.Pod) {
 		test.SetRSOwnerRef(pod)
 	})
 
 	// Setup pods, one should be evicted
-	p5 := test.BuildTestPod("p5", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
+	p5 := buildTestPodForNode1("p5", newerPodCreationTime, func(pod *v1.Pod) {
 		test.SetRSOwnerRef(pod)
 	})
-	p6 := test.BuildTestPod("p6", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Second * 605))
+	p6 := buildTestPodForNode1("p6", metav1.NewTime(time.Now().Add(-time.Second*605)), func(pod *v1.Pod) {
 		test.SetRSOwnerRef(pod)
 	})
 
 	// Setup pods, zero should be evicted
-	p7 := test.BuildTestPod("p7", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
-	})
-	p8 := test.BuildTestPod("p8", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Second * 595))
-	})
+	p7 := buildTestPodForNode1("p7", newerPodCreationTime, nil)
+	p8 := buildTestPodForNode1("p8", metav1.NewTime(time.Now().Add(-time.Second*595)), nil)
 
 	// Setup two old pods with different status phases
-	p9 := test.BuildTestPod("p9", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p9 := buildTestPodForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.Status.Phase = "Pending"
 		test.SetRSOwnerRef(pod)
 	})
-	p10 := test.BuildTestPod("p10", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p10 := buildTestPodForNode1("p10", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.Status.Phase = "Running"
 		test.SetRSOwnerRef(pod)
 	})
 
-	p11 := test.BuildTestPod("p11", 100, 0, nodeName1, func(pod *v1.Pod) {
+	p11 := buildTestPodForNode1("p11", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.Spec.Volumes = []v1.Volume{
 			{
 				Name: "pvc", VolumeSource: v1.VolumeSource{
@@ -101,35 +98,29 @@ func TestPodLifeTime(t *testing.T) {
 				},
 			},
 		}
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 		test.SetRSOwnerRef(pod)
 	})
 
 	// Setup two old pods with different labels
-	p12 := test.BuildTestPod("p12", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p12 := buildTestPodForNode1("p12", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.ObjectMeta.Labels = map[string]string{"foo": "bar"}
 		test.SetRSOwnerRef(pod)
 	})
-	p13 := test.BuildTestPod("p13", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p13 := buildTestPodForNode1("p13", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.ObjectMeta.Labels = map[string]string{"foo": "bar1"}
 		test.SetRSOwnerRef(pod)
 	})
 
-	p14 := test.BuildTestPod("p14", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p14 := buildTestPodForNode1("p14", olderPodCreationTime, func(pod *v1.Pod) {
 		test.SetRSOwnerRef(pod)
 		pod.DeletionTimestamp = &metav1.Time{}
 	})
-	p15 := test.BuildTestPod("p15", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p15 := buildTestPodForNode1("p15", olderPodCreationTime, func(pod *v1.Pod) {
 		test.SetRSOwnerRef(pod)
 		pod.DeletionTimestamp = &metav1.Time{}
 	})
 
-	p16 := test.BuildTestPod("p16", 100, 0, nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p16 := buildTestPodForNode1("p16", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.Status.Phase = v1.PodUnknown
 		test.SetRSOwnerRef(pod)
 	})
