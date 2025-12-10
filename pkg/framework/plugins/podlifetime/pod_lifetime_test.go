@@ -92,16 +92,16 @@ func TestPodLifeTime(t *testing.T) {
 	})
 
 	// Setup two old pods with different status phases
-	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, nil)
-	p9.Namespace = "dev"
-	p9.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+		pod.Status.Phase = "Pending"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
 	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, nil)
 	p10.Namespace = "dev"
 	p10.ObjectMeta.CreationTimestamp = olderPodCreationTime
-
-	p9.Status.Phase = "Pending"
 	p10.Status.Phase = "Running"
-	p9.ObjectMeta.OwnerReferences = ownerRef1
 	p10.ObjectMeta.OwnerReferences = ownerRef1
 
 	p11 := test.BuildTestPod("p11", 100, 0, node1.Name, func(pod *v1.Pod) {
