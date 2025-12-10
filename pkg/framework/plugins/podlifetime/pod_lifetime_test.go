@@ -53,16 +53,17 @@ func TestPodLifeTime(t *testing.T) {
 		pod.ObjectMeta.OwnerReferences = ownerRef1
 	})
 
+	ownerRef2 := test.GetReplicaSetOwnerRefList()
+
 	// Setup pods, zero should be evicted
-	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, nil)
-	p3.Namespace = "dev"
-	p3.ObjectMeta.CreationTimestamp = newerPodCreationTime
+	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
+		pod.ObjectMeta.OwnerReferences = ownerRef2
+	})
 	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, nil)
 	p4.Namespace = "dev"
 	p4.ObjectMeta.CreationTimestamp = newerPodCreationTime
-
-	ownerRef2 := test.GetReplicaSetOwnerRefList()
-	p3.ObjectMeta.OwnerReferences = ownerRef2
 	p4.ObjectMeta.OwnerReferences = ownerRef2
 
 	// Setup pods, one should be evicted
