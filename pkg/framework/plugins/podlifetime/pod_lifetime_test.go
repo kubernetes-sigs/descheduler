@@ -86,9 +86,10 @@ func TestPodLifeTime(t *testing.T) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
 	})
-	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, nil)
-	p8.Namespace = "dev"
-	p8.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Second * 595))
+	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Second * 595))
+	})
 
 	// Setup two old pods with different status phases
 	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, nil)
