@@ -138,11 +138,12 @@ func TestPodLifeTime(t *testing.T) {
 		pod.ObjectMeta.OwnerReferences = ownerRef1
 		pod.DeletionTimestamp = &metav1.Time{}
 	})
-	p15 := test.BuildTestPod("p15", 100, 0, node1.Name, nil)
-	p15.Namespace = "dev"
-	p15.ObjectMeta.CreationTimestamp = olderPodCreationTime
-	p15.ObjectMeta.OwnerReferences = ownerRef1
-	p15.DeletionTimestamp = &metav1.Time{}
+	p15 := test.BuildTestPod("p15", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+		pod.DeletionTimestamp = &metav1.Time{}
+	})
 
 	p16 := test.BuildTestPod("p16", 100, 0, node1.Name, nil)
 	p16.Namespace = "dev"
