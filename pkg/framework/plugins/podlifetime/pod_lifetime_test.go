@@ -61,9 +61,6 @@ func TestPodLifeTime(t *testing.T) {
 		})
 	}
 
-	// Setup pods, one should be evicted
-	p2 := buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil)
-
 	// Setup pods, zero should be evicted
 	p3 := buildTestPodWithRSOwnerRefForNode1("p3", newerPodCreationTime, nil)
 	p4 := buildTestPodWithRSOwnerRefForNode1("p4", newerPodCreationTime, nil)
@@ -133,7 +130,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
-				p2,
+				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
@@ -271,7 +268,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
-				p2,
+				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
 				p9,
 			},
 			nodes:                      []*v1.Node{buildTestNode1()},
@@ -286,7 +283,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
-				p2,
+				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
 				p9,
 			},
 			nodes:                      []*v1.Node{buildTestNode1()},
@@ -300,7 +297,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
-				p2,
+				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
 				p9,
 			},
 			nodes:                      []*v1.Node{buildTestNode1()},
@@ -315,7 +312,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
-				p2,
+				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
 				p9,
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
