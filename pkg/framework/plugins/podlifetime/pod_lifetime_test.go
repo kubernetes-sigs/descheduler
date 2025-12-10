@@ -83,10 +83,6 @@ func TestPodLifeTime(t *testing.T) {
 	p8.Namespace = "dev"
 	p8.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Second * 595))
 
-	ownerRef4 := test.GetReplicaSetOwnerRefList()
-	p5.ObjectMeta.OwnerReferences = ownerRef4
-	p6.ObjectMeta.OwnerReferences = ownerRef4
-
 	// Setup two old pods with different status phases
 	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, nil)
 	p9.Namespace = "dev"
