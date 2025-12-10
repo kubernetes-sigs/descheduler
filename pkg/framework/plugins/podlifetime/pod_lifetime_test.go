@@ -145,11 +145,12 @@ func TestPodLifeTime(t *testing.T) {
 		pod.DeletionTimestamp = &metav1.Time{}
 	})
 
-	p16 := test.BuildTestPod("p16", 100, 0, node1.Name, nil)
-	p16.Namespace = "dev"
-	p16.ObjectMeta.CreationTimestamp = olderPodCreationTime
-	p16.Status.Phase = v1.PodUnknown
-	p16.ObjectMeta.OwnerReferences = ownerRef1
+	p16 := test.BuildTestPod("p16", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+		pod.Status.Phase = v1.PodUnknown
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
 
 	var maxLifeTime uint = 600
 	testCases := []struct {
