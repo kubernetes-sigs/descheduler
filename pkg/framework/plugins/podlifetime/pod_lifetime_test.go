@@ -84,7 +84,7 @@ func TestPodLifeTime(t *testing.T) {
 		applyPodsFunc              func(pods []*v1.Pod)
 	}{
 		{
-			description: "Two pods in the `dev` Namespace, 1 is new and 1 very is old. 1 should be evicted.",
+			description: "Two pods in the default namespace, 1 is new and 1 very is old. 1 should be evicted.",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
@@ -96,7 +96,7 @@ func TestPodLifeTime(t *testing.T) {
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description: "Two pods in the `dev` Namespace, 2 are new and 0 are old. 0 should be evicted.",
+			description: "Two pods in the default namespace, 2 are new and 0 are old. 0 should be evicted.",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
@@ -108,7 +108,7 @@ func TestPodLifeTime(t *testing.T) {
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description: "Two pods in the `dev` Namespace, 1 created 605 seconds ago. 1 should be evicted.",
+			description: "Two pods in the default namespace, 1 created 605 seconds ago. 1 should be evicted.",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
@@ -120,7 +120,7 @@ func TestPodLifeTime(t *testing.T) {
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description: "Two pods in the `dev` Namespace, 1 created 595 seconds ago. 0 should be evicted.",
+			description: "Two pods in the default namespace, 1 created 595 seconds ago. 0 should be evicted.",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
