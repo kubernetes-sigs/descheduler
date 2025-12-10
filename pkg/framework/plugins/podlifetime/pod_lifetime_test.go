@@ -70,10 +70,6 @@ func TestPodLifeTime(t *testing.T) {
 		})
 	}
 
-	p15 := buildTestPodWithRSOwnerRefForNode1("p15", olderPodCreationTime, func(pod *v1.Pod) {
-		pod.DeletionTimestamp = &metav1.Time{}
-	})
-
 	p16 := buildTestPodWithRSOwnerRefForNode1("p16", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.Status.Phase = v1.PodUnknown
 	})
@@ -270,7 +266,9 @@ func TestPodLifeTime(t *testing.T) {
 				buildTestPodWithRSOwnerRefForNode1("p14", olderPodCreationTime, func(pod *v1.Pod) {
 					pod.DeletionTimestamp = &metav1.Time{}
 				}),
-				p15,
+				buildTestPodWithRSOwnerRefForNode1("p15", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.DeletionTimestamp = &metav1.Time{}
+				}),
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
