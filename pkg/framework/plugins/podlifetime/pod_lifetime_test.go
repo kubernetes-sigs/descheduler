@@ -70,11 +70,6 @@ func TestPodLifeTime(t *testing.T) {
 		})
 	}
 
-	// Setup two old pods with different status phases
-	p10 := buildTestPodWithRSOwnerRefForNode1("p10", olderPodCreationTime, func(pod *v1.Pod) {
-		pod.Status.Phase = "Running"
-	})
-
 	p11 := buildTestPodWithRSOwnerRefForNode1("p11", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.Spec.Volumes = []v1.Volume{
 			{
@@ -219,7 +214,9 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
-				p10,
+				buildTestPodWithRSOwnerRefForNode1("p10", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Phase = "Running"
+				}),
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
