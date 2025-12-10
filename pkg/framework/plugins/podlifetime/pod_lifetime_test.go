@@ -82,9 +82,10 @@ func TestPodLifeTime(t *testing.T) {
 	})
 
 	// Setup pods, zero should be evicted
-	p7 := test.BuildTestPod("p7", 100, 0, node1.Name, nil)
-	p7.Namespace = "dev"
-	p7.ObjectMeta.CreationTimestamp = newerPodCreationTime
+	p7 := test.BuildTestPod("p7", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
+	})
 	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, nil)
 	p8.Namespace = "dev"
 	p8.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Second * 595))
