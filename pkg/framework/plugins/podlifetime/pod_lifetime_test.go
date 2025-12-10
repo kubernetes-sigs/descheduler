@@ -39,42 +39,40 @@ func TestPodLifeTime(t *testing.T) {
 	olderPodCreationTime := metav1.NewTime(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
 	newerPodCreationTime := metav1.NewTime(time.Now())
 
-	ownerRef := test.GetReplicaSetOwnerRefList()
-
 	// Setup pods, one should be evicted
 	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, func(pod *v1.Pod) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 	})
 	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, func(pod *v1.Pod) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 	})
 
 	// Setup pods, zero should be evicted
 	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, func(pod *v1.Pod) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 	})
 	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, func(pod *v1.Pod) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 	})
 
 	// Setup pods, one should be evicted
 	p5 := test.BuildTestPod("p5", 100, 0, node1.Name, func(pod *v1.Pod) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 	})
 	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, func(pod *v1.Pod) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Second * 605))
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 	})
 
 	// Setup pods, zero should be evicted
@@ -92,13 +90,13 @@ func TestPodLifeTime(t *testing.T) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 		pod.Status.Phase = "Pending"
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 	})
 	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, func(pod *v1.Pod) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 		pod.Status.Phase = "Running"
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 	})
 
 	p11 := test.BuildTestPod("p11", 100, 0, node1.Name, func(pod *v1.Pod) {
@@ -111,7 +109,7 @@ func TestPodLifeTime(t *testing.T) {
 		}
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 	})
 
 	// Setup two old pods with different labels
@@ -119,25 +117,25 @@ func TestPodLifeTime(t *testing.T) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 		pod.ObjectMeta.Labels = map[string]string{"foo": "bar"}
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 	})
 	p13 := test.BuildTestPod("p13", 100, 0, node1.Name, func(pod *v1.Pod) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 		pod.ObjectMeta.Labels = map[string]string{"foo": "bar1"}
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 	})
 
 	p14 := test.BuildTestPod("p14", 100, 0, node1.Name, func(pod *v1.Pod) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 		pod.DeletionTimestamp = &metav1.Time{}
 	})
 	p15 := test.BuildTestPod("p15", 100, 0, node1.Name, func(pod *v1.Pod) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 		pod.DeletionTimestamp = &metav1.Time{}
 	})
 
@@ -145,7 +143,7 @@ func TestPodLifeTime(t *testing.T) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 		pod.Status.Phase = v1.PodUnknown
-		pod.ObjectMeta.OwnerReferences = ownerRef
+		test.SetRSOwnerRef(pod)
 	})
 
 	var maxLifeTime uint = 600
@@ -213,7 +211,7 @@ func TestPodLifeTime(t *testing.T) {
 							},
 						},
 					}
-					pod.OwnerReferences = ownerRef
+					test.SetRSOwnerRef(pod)
 					pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 				}),
 			},
@@ -236,7 +234,7 @@ func TestPodLifeTime(t *testing.T) {
 							},
 						},
 					}
-					pod.OwnerReferences = ownerRef
+					test.SetRSOwnerRef(pod)
 					pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
 				}),
 			},
