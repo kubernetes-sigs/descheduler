@@ -119,16 +119,16 @@ func TestPodLifeTime(t *testing.T) {
 	})
 
 	// Setup two old pods with different labels
-	p12 := test.BuildTestPod("p12", 100, 0, node1.Name, nil)
-	p12.Namespace = "dev"
-	p12.ObjectMeta.CreationTimestamp = olderPodCreationTime
+	p12 := test.BuildTestPod("p12", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+		pod.ObjectMeta.Labels = map[string]string{"foo": "bar"}
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
 	p13 := test.BuildTestPod("p13", 100, 0, node1.Name, nil)
 	p13.Namespace = "dev"
 	p13.ObjectMeta.CreationTimestamp = olderPodCreationTime
-
-	p12.ObjectMeta.Labels = map[string]string{"foo": "bar"}
 	p13.ObjectMeta.Labels = map[string]string{"foo": "bar1"}
-	p12.ObjectMeta.OwnerReferences = ownerRef1
 	p13.ObjectMeta.OwnerReferences = ownerRef1
 
 	p14 := test.BuildTestPod("p14", 100, 0, node1.Name, nil)
