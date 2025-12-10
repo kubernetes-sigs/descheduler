@@ -70,16 +70,6 @@ func TestPodLifeTime(t *testing.T) {
 		})
 	}
 
-	p11 := buildTestPodWithRSOwnerRefForNode1("p11", olderPodCreationTime, func(pod *v1.Pod) {
-		pod.Spec.Volumes = []v1.Volume{
-			{
-				Name: "pvc", VolumeSource: v1.VolumeSource{
-					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
-				},
-			},
-		}
-	})
-
 	// Setup two old pods with different labels
 	p12 := buildTestPodWithRSOwnerRefForNode1("p12", olderPodCreationTime, func(pod *v1.Pod) {
 		pod.ObjectMeta.Labels = map[string]string{"foo": "bar"}
@@ -226,7 +216,17 @@ func TestPodLifeTime(t *testing.T) {
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
-			pods:                    []*v1.Pod{p11},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p11", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "pvc", VolumeSource: v1.VolumeSource{
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
+							},
+						},
+					}
+				}),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
 			ignorePvcPods:           true,
@@ -236,7 +236,17 @@ func TestPodLifeTime(t *testing.T) {
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
-			pods:                    []*v1.Pod{p11},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p11", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "pvc", VolumeSource: v1.VolumeSource{
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
+							},
+						},
+					}
+				}),
+			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
 		},
