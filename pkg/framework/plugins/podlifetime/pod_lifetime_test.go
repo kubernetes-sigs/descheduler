@@ -39,16 +39,17 @@ func TestPodLifeTime(t *testing.T) {
 	olderPodCreationTime := metav1.NewTime(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
 	newerPodCreationTime := metav1.NewTime(time.Now())
 
+	ownerRef1 := test.GetReplicaSetOwnerRefList()
+
 	// Setup pods, one should be evicted
-	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
-	p1.Namespace = "dev"
-	p1.ObjectMeta.CreationTimestamp = newerPodCreationTime
+	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.CreationTimestamp = newerPodCreationTime
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
 	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, nil)
 	p2.Namespace = "dev"
 	p2.ObjectMeta.CreationTimestamp = olderPodCreationTime
-
-	ownerRef1 := test.GetReplicaSetOwnerRefList()
-	p1.ObjectMeta.OwnerReferences = ownerRef1
 	p2.ObjectMeta.OwnerReferences = ownerRef1
 
 	// Setup pods, zero should be evicted
