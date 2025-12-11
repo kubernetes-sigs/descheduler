@@ -39,10 +39,20 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+var (
+	namespace         = "test"
+	namespaceSelector = &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"kubernetes.io/metadata.name": namespace,
+		},
+	}
+)
+
 type testCase struct {
 	description             string
 	pods                    []*v1.Pod
 	nodes                   []*v1.Node
+	namespaces              []*v1.Namespace
 	pdbs                    []*policyv1.PodDisruptionBudget
 	evictFailedBarePods     bool
 	evictLocalStoragePods   bool
@@ -50,6 +60,7 @@ type testCase struct {
 	ignorePvcPods           bool
 	priorityThreshold       *int32
 	nodeFit                 bool
+	useNamespaceSelector    bool
 	minReplicas             uint
 	minPodAge               *metav1.Duration
 	result                  bool
@@ -121,7 +132,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				buildTestNode("node3", setNodeTaint),
 			},
 			nodeFit: true,
-		}, {
+		},
+		{
 			description: "Pod with correct tolerations running on normal node, all other nodes tainted",
 			pods: []*v1.Pod{
 				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
@@ -141,7 +153,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			},
 			nodeFit: true,
 			result:  true,
-		}, {
+		},
+		{
 			description: "Pod with incorrect node selector",
 			pods: []*v1.Pod{
 				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
@@ -156,7 +169,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				buildTestNode("node3", setNodeLabel),
 			},
 			nodeFit: true,
-		}, {
+		},
+		{
 			description: "Pod with correct node selector",
 			pods: []*v1.Pod{
 				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
@@ -170,7 +184,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			},
 			nodeFit: true,
 			result:  true,
-		}, {
+		},
+		{
 			description: "Pod with correct node selector, but only available node doesn't have enough CPU",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
@@ -183,7 +198,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				test.BuildTestNode("node3-TEST", 10, 16, 10, setNodeLabel),
 			},
 			nodeFit: true,
-		}, {
+		},
+		{
 			description: "Pod with correct node selector, and one node has enough memory",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
@@ -207,7 +223,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			},
 			nodeFit: true,
 			result:  true,
-		}, {
+		},
+		{
 			description: "Pod with correct node selector, but both nodes don't have enough memory",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
@@ -230,7 +247,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				test.BuildTestNode("node3", 100, 16, 10, setNodeLabel),
 			},
 			nodeFit: true,
-		}, {
+		},
+		{
 			description: "Pod with incorrect node selector, but nodefit false, should still be evicted",
 			pods: []*v1.Pod{
 				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
@@ -245,6 +263,71 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				buildTestNode("node3", setNodeLabel),
 			},
 			result: true,
+		},
+		{
+			description: "Pod with namespace matched namespace selector, should be evicted",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.Namespace = namespace
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.NodeSelector = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+				}),
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode("node2", 1000, 2000, 13, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+				}),
+				test.BuildTestNode("node3", 1000, 2000, 13, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+				}),
+			},
+			namespaces: []*v1.Namespace{
+				test.BuildTestNamespace("default"),
+				test.BuildTestNamespace(namespace),
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			nodeFit:                 true,
+			useNamespaceSelector:    true,
+			result:                  true,
+		},
+		{
+			description: "Pod with namespace does not matched namespace selector, should not be evicted",
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, n1.Name, func(pod *v1.Pod) {
+					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					pod.Spec.NodeSelector = map[string]string{
+						nodeLabelKey: "fail",
+					}
+				}),
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode("node2", 1000, 2000, 13, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+				}),
+				test.BuildTestNode("node3", 1000, 2000, 13, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						nodeLabelKey: nodeLabelValue,
+					}
+				}),
+			},
+			namespaces: []*v1.Namespace{
+				test.BuildTestNamespace("default"),
+				test.BuildTestNamespace(namespace),
+			},
+			evictLocalStoragePods:   false,
+			evictSystemCriticalPods: false,
+			nodeFit:                 true,
+			useNamespaceSelector:    true,
+			result:                  false,
 		},
 	}
 
@@ -928,9 +1011,11 @@ func TestReinitialization(t *testing.T) {
 
 func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin, error) {
 	var objs []runtime.Object
+
 	for _, node := range test.nodes {
 		objs = append(objs, node)
 	}
+
 	for _, pod := range test.pods {
 		objs = append(objs, pod)
 	}
@@ -941,13 +1026,17 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 		objs = append(objs, pvc)
 	}
 
+	for _, ns := range test.namespaces {
+		objs = append(objs, ns)
+	}
+
 	fakeClient := fake.NewSimpleClientset(objs...)
 
 	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 	_ = sharedInformerFactory.Policy().V1().PodDisruptionBudgets().Lister()
 	_ = sharedInformerFactory.Core().V1().PersistentVolumeClaims().Lister()
-
+	_ = sharedInformerFactory.Core().V1().Namespaces().Lister()
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
 		return nil, fmt.Errorf("build get pods assigned to node function error: %v", err)
@@ -970,6 +1059,10 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 		IgnorePodsWithoutPDB: test.ignorePodsWithoutPDB,
 		NoEvictionPolicy:     test.noEvictionPolicy,
 		PodProtections:       test.podProtections,
+	}
+
+	if test.useNamespaceSelector {
+		defaultEvictorArgs.NamespaceLabelSelector = namespaceSelector
 	}
 
 	evictorPlugin, err := New(
@@ -1152,4 +1245,120 @@ func Test_protectedPVCStorageClasses(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMultipleProfilesWithDifferentNamespaceLabelSelectors(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	node := test.BuildTestNode("node1", 1000, 2000, 10, nil)
+	const (
+		nsProdName    = "ns-prod"
+		nsTestName    = "ns-test"
+		nsBackendName = "ns-backend"
+	)
+	nsProd := test.BuildTestNamespace(nsProdName)
+	nsProd.Labels["env"] = "prod"
+
+	nsTest := test.BuildTestNamespace(nsTestName)
+	nsTest.Labels["env"] = "test"
+
+	nsBackend := test.BuildTestNamespace(nsBackendName)
+	nsBackend.Labels["team"] = "backend"
+
+	podInProd := test.BuildTestPod("pod-in-prod", 100, 100, node.Name, func(pod *v1.Pod) {
+		pod.Namespace = nsProdName
+		test.SetNormalOwnerRef(pod)
+	})
+
+	podInTest := test.BuildTestPod("pod-in-test", 100, 100, node.Name, func(pod *v1.Pod) {
+		pod.Namespace = nsTestName
+		test.SetNormalOwnerRef(pod)
+	})
+
+	podInBackend := test.BuildTestPod("pod-in-backend", 100, 100, node.Name, func(pod *v1.Pod) {
+		pod.Namespace = nsBackendName
+		test.SetNormalOwnerRef(pod)
+	})
+
+	fakeClient := fake.NewClientset(node, nsProd, nsBackend, nsTest, podInProd, podInBackend, podInTest)
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+
+	_ = sharedInformerFactory.Core().V1().Namespaces().Lister()
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	// Create Profile 1: targets namespaces with env=prod
+	profile1Args := &DefaultEvictorArgs{
+		NamespaceLabelSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"env": "prod",
+			},
+		},
+	}
+
+	getPodAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(sharedInformerFactory.Core().V1().Pods().Informer())
+	if err != nil {
+		t.Fatalf("build get pods assigned to node function error: %v", err)
+	}
+
+	profile1Plugin, err := New(ctx, profile1Args, &frameworkfake.HandleImpl{
+		ClientsetImpl:                 fakeClient,
+		GetPodsAssignedToNodeFuncImpl: getPodAssignedToNode,
+		SharedInformerFactoryImpl:     sharedInformerFactory,
+		PluginInstanceIDImpl:          nsProdName,
+	})
+	if err != nil {
+		t.Fatalf("unable to initialize profile1 plugin: %v", err)
+	}
+
+	profile2Args := &DefaultEvictorArgs{
+		NamespaceLabelSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"team": "backend",
+			},
+		},
+	}
+	profile2Plugin, err := New(ctx, profile2Args, &frameworkfake.HandleImpl{
+		ClientsetImpl:                 fakeClient,
+		GetPodsAssignedToNodeFuncImpl: getPodAssignedToNode,
+		SharedInformerFactoryImpl:     sharedInformerFactory,
+		PluginInstanceIDImpl:          nsBackendName,
+	})
+	if err != nil {
+		t.Fatalf("unable to initialize profile2 plugin: %v", err)
+	}
+
+	// Test Profile 1: evicts pods in ns-prod, reject others
+	t.Run("profile1", func(t *testing.T) {
+		profile1 := profile1Plugin.(*DefaultEvictor)
+
+		if profile1.PreEvictionFilter(podInBackend) {
+			t.Errorf("podInBackend should be rejected by profile1")
+		}
+
+		if profile1.PreEvictionFilter(podInTest) {
+			t.Errorf("podInTest should be rejected by profile1")
+		}
+
+		if !profile1.PreEvictionFilter(podInProd) {
+			t.Errorf("podInProd should not be rejected by profile1")
+		}
+	})
+
+	// Test Profile 2: evicts pods in ns-backend, reject others
+	t.Run("profile2", func(t *testing.T) {
+		profile2 := profile2Plugin.(*DefaultEvictor)
+
+		if profile2.PreEvictionFilter(podInProd) {
+			t.Errorf("podInProd should be rejected by profile2")
+		}
+
+		if profile2.PreEvictionFilter(podInTest) {
+			t.Errorf("podInTest should be rejected by profile2")
+		}
+
+		if !profile2.PreEvictionFilter(podInBackend) {
+			t.Errorf("podInBackend should not be rejected by profile2")
+		}
+	})
 }

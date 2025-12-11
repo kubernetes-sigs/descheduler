@@ -23,5 +23,4 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 
 // SetDefaults_DefaultEvictorArgs sets the default values for the
 // DefaultEvictorArgs configuration.
-func SetDefaults_DefaultEvictorArgs(obj runtime.Object) {
-}
+func SetDefaults_DefaultEvictorArgs(obj runtime.Object) {}
