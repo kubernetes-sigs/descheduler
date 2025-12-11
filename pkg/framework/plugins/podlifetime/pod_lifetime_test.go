@@ -192,7 +192,7 @@ func TestPodLifeTime(t *testing.T) {
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description: "does not evict pvc pods with ignorePvcPods set to true",
+			description: "Does not evict pvc pods with ignorePvcPods set to true",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
@@ -212,7 +212,7 @@ func TestPodLifeTime(t *testing.T) {
 			ignorePvcPods:           true,
 		},
 		{
-			description: "evicts pvc pods with ignorePvcPods set to false (or unset)",
+			description: "Evicts pvc pods with ignorePvcPods set to false (or unset)",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 			},
@@ -231,7 +231,7 @@ func TestPodLifeTime(t *testing.T) {
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description: "No pod to evicted since all pod terminating",
+			description: "1 pod matching label selector should be evicted",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				LabelSelector: &metav1.LabelSelector{
@@ -455,7 +455,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Status.InitContainerStatuses = []v1.ContainerStatus{
+					pod.Status.EphemeralContainerStatuses = []v1.ContainerStatus{
 						{
 							State: v1.ContainerState{
 								Waiting: &v1.ContainerStateWaiting{Reason: "CreateContainerError"},
@@ -599,7 +599,7 @@ func TestPodLifeTime(t *testing.T) {
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description: "1 pod with pod status phase v1.PodUnknown should be evicted",
+			description: "1 pod with pod status phase v1.PodFailed should be evicted",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{string(v1.PodFailed)},
@@ -627,7 +627,7 @@ func TestPodLifeTime(t *testing.T) {
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description: "1 pod without ImagePullBackOff States should be ignored",
+			description: "1 pod with ImagePullBackOff status should be ignored when States filter is ContainerCreating",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
 				States:                []string{"ContainerCreating"},
