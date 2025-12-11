@@ -29,10 +29,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/fake"
+	clientgotesting "k8s.io/client-go/testing"
 	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	utilptr "k8s.io/utils/ptr"
 )
@@ -340,4 +343,19 @@ func PodWithPodAntiAffinity(inputPod *v1.Pod, labelKey, labelValue string) *v1.P
 	SetPodAntiAffinity(inputPod, labelKey, labelValue)
 	inputPod.Labels = map[string]string{labelKey: labelValue}
 	return inputPod
+}
+
+func RegisterEvictedPodsCollector(fakeClient *fake.Clientset, evictedPods *[]string) {
+	fakeClient.PrependReactor("create", "pods", func(action clientgotesting.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() == "eviction" {
+			createAct, matched := action.(clientgotesting.CreateActionImpl)
+			if !matched {
+				return false, nil, fmt.Errorf("unable to convert action to core.CreateActionImpl")
+			}
+			if eviction, matched := createAct.Object.(*policyv1.Eviction); matched {
+				*evictedPods = append(*evictedPods, eviction.GetName())
+			}
+		}
+		return false, nil, nil // fallback to the default reactor
+	})
 }

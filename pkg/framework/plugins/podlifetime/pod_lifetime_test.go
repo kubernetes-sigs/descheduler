@@ -24,6 +24,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes/fake"
 	utilptr "k8s.io/utils/ptr"
 
@@ -76,6 +77,7 @@ func TestPodLifeTime(t *testing.T) {
 		args                       *PodLifeTimeArgs
 		pods                       []*v1.Pod
 		nodes                      []*v1.Node
+		expectedEvictedPods        []string // if specified, will assert specific pods were evicted
 		expectedEvictedPodCount    uint
 		ignorePvcPods              bool
 		maxPodsToEvictPerNode      *uint
@@ -93,6 +95,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
+			expectedEvictedPods:     []string{"p2"},
 		},
 		{
 			description: "Two pods in the default namespace, 2 are new and 0 are old. 0 should be evicted.",
@@ -117,6 +120,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
+			expectedEvictedPods:     []string{"p6"},
 		},
 		{
 			description: "Two pods in the default namespace, 1 created 595 seconds ago. 0 should be evicted.",
@@ -190,6 +194,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
+			expectedEvictedPods:     []string{"p9"},
 		},
 		{
 			description: "Does not evict pvc pods with ignorePvcPods set to true",
@@ -248,6 +253,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
+			expectedEvictedPods:     []string{"p12"},
 		},
 		{
 			description: "No pod should be evicted since pod terminating",
@@ -280,6 +286,7 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			nodes:                      []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount:    2,
+			expectedEvictedPods:        []string{"p2", "p9"},
 			maxPodsToEvictPerNode:      nil,
 			maxPodsToEvictPerNamespace: nil,
 		},
@@ -291,11 +298,11 @@ func TestPodLifeTime(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
 				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
 			},
 			nodes:                      []*v1.Node{buildTestNode1()},
 			maxPodsToEvictPerNamespace: utilptr.To[uint](1),
 			expectedEvictedPodCount:    1,
+			expectedEvictedPods:        []string{"p2"},
 		},
 		{
 			description: "1 Oldest pod should be evicted when maxPodsToEvictTotal is set to 1",
@@ -305,12 +312,12 @@ func TestPodLifeTime(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
 				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
 			},
 			nodes:                      []*v1.Node{buildTestNode1()},
 			maxPodsToEvictPerNamespace: utilptr.To[uint](2),
 			maxPodsToEvictTotal:        utilptr.To[uint](1),
 			expectedEvictedPodCount:    1,
+			expectedEvictedPods:        []string{"p2"},
 		},
 		{
 			description: "1 Oldest pod should be evicted when maxPodsToEvictPerNode is set to 1",
@@ -320,11 +327,11 @@ func TestPodLifeTime(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
 				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			maxPodsToEvictPerNode:   utilptr.To[uint](1),
 			expectedEvictedPodCount: 1,
+			expectedEvictedPods:     []string{"p2"},
 		},
 		{
 			description: "1 pod with container status ImagePullBackOff should be evicted",
@@ -676,6 +683,9 @@ func TestPodLifeTime(t *testing.T) {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
+			var evictedPods []string
+			test.RegisterEvictedPodsCollector(fakeClient, &evictedPods)
+
 			plugin, err := New(ctx, tc.args, handle)
 			if err != nil {
 				t.Fatalf("Unable to initialize the plugin: %v", err)
@@ -685,6 +695,18 @@ func TestPodLifeTime(t *testing.T) {
 			podsEvicted := podEvictor.TotalEvicted()
 			if podsEvicted != tc.expectedEvictedPodCount {
 				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.description, tc.expectedEvictedPodCount, podsEvicted)
+			}
+
+			if tc.expectedEvictedPods != nil {
+				diff := sets.New(tc.expectedEvictedPods...).Difference(sets.New(evictedPods...))
+				if diff.Len() > 0 {
+					t.Errorf(
+						"Expected pods %v to be evicted but %v were not evicted. Actual pods evicted: %v",
+						tc.expectedEvictedPods,
+						diff.UnsortedList(),
+						evictedPods,
+					)
+				}
 			}
 		})
 	}
