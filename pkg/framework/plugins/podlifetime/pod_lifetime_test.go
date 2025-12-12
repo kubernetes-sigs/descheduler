@@ -35,42 +35,45 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const nodeName1 = "n1"
+
+var (
+	olderPodCreationTime = metav1.NewTime(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
+	newerPodCreationTime = metav1.NewTime(time.Now())
+)
+
+func buildTestNode1() *v1.Node {
+	return test.BuildTestNode(nodeName1, 2000, 3000, 10, nil)
+}
+
+func buildTestPodForNode1(name string, creationTime metav1.Time, apply func(*v1.Pod)) *v1.Pod {
+	return test.BuildTestPod(name, 100, 0, nodeName1, func(pod *v1.Pod) {
+		pod.ObjectMeta.CreationTimestamp = creationTime
+		if apply != nil {
+			apply(pod)
+		}
+	})
+}
+
+func buildTestPodWithRSOwnerRefForNode1(name string, creationTime metav1.Time, apply func(*v1.Pod)) *v1.Pod {
+	return buildTestPodForNode1(name, creationTime, func(pod *v1.Pod) {
+		test.SetRSOwnerRef(pod)
+		if apply != nil {
+			apply(pod)
+		}
+	})
+}
+
+func buildTestPodWithRSOwnerRefWithPendingPhaseForNode1(name string, creationTime metav1.Time, apply func(*v1.Pod)) *v1.Pod {
+	return buildTestPodWithRSOwnerRefForNode1(name, creationTime, func(pod *v1.Pod) {
+		pod.Status.Phase = "Pending"
+		if apply != nil {
+			apply(pod)
+		}
+	})
+}
+
 func TestPodLifeTime(t *testing.T) {
-	const nodeName1 = "n1"
-	buildTestNode1 := func() *v1.Node {
-		return test.BuildTestNode(nodeName1, 2000, 3000, 10, nil)
-	}
-
-	olderPodCreationTime := metav1.NewTime(time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC))
-	newerPodCreationTime := metav1.NewTime(time.Now())
-
-	buildTestPodForNode1 := func(name string, creationTime metav1.Time, apply func(*v1.Pod)) *v1.Pod {
-		return test.BuildTestPod(name, 100, 0, nodeName1, func(pod *v1.Pod) {
-			pod.ObjectMeta.CreationTimestamp = creationTime
-			if apply != nil {
-				apply(pod)
-			}
-		})
-	}
-
-	buildTestPodWithRSOwnerRefForNode1 := func(name string, creationTime metav1.Time, apply func(*v1.Pod)) *v1.Pod {
-		return buildTestPodForNode1(name, creationTime, func(pod *v1.Pod) {
-			test.SetRSOwnerRef(pod)
-			if apply != nil {
-				apply(pod)
-			}
-		})
-	}
-
-	buildTestPodWithRSOwnerRefWithPendingPhaseForNode1 := func(name string, creationTime metav1.Time, apply func(*v1.Pod)) *v1.Pod {
-		return buildTestPodWithRSOwnerRefForNode1(name, creationTime, func(pod *v1.Pod) {
-			pod.Status.Phase = "Pending"
-			if apply != nil {
-				apply(pod)
-			}
-		})
-	}
-
 	var maxLifeTime uint = 600
 	testCases := []struct {
 		description                string
