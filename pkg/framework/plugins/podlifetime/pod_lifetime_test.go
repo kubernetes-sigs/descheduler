@@ -144,56 +144,6 @@ func TestPodLifeTime(t *testing.T) {
 	var maxLifeTime uint = 600
 	testCases := []podLifeTimeTestCase{
 		{
-			description: "Two pods in the default namespace, 1 is new and 1 very is old. 1 should be evicted.",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
-				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-			expectedEvictedPods:     []string{"p2"},
-		},
-		{
-			description: "Two pods in the default namespace, 2 are new and 0 are old. 0 should be evicted.",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefForNode1("p3", newerPodCreationTime, nil),
-				buildTestPodWithRSOwnerRefForNode1("p4", newerPodCreationTime, nil),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 0,
-		},
-		{
-			description: "Two pods in the default namespace, 1 created 605 seconds ago. 1 should be evicted.",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefForNode1("p5", newerPodCreationTime, nil),
-				buildTestPodWithRSOwnerRefForNode1("p6", metav1.NewTime(time.Now().Add(-time.Second*605)), nil),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-			expectedEvictedPods:     []string{"p6"},
-		},
-		{
-			description: "Two pods in the default namespace, 1 created 595 seconds ago. 0 should be evicted.",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-			},
-			pods: []*v1.Pod{
-				buildTestPodForNode1("p7", newerPodCreationTime, nil),
-				buildTestPodForNode1("p8", metav1.NewTime(time.Now().Add(-time.Second*595)), nil),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 0,
-		},
-		{
 			description: "Two pods, one with ContainerCreating state. 1 should be evicted.",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
@@ -708,6 +658,68 @@ func TestPodLifeTime(t *testing.T) {
 						},
 					}
 				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			runPodLifeTimeTest(t, tc)
+		})
+	}
+}
+
+func TestPodLifeTime_AgeThreshold(t *testing.T) {
+	var maxLifeTime uint = 600
+	testCases := []podLifeTimeTestCase{
+		{
+			description: "Two pods in the default namespace, 1 is new and 1 very is old. 1 should be evicted.",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p1", newerPodCreationTime, nil),
+				buildTestPodWithRSOwnerRefForNode1("p2", olderPodCreationTime, nil),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+			expectedEvictedPods:     []string{"p2"},
+		},
+		{
+			description: "Two pods in the default namespace, 2 are new and 0 are old. 0 should be evicted.",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p3", newerPodCreationTime, nil),
+				buildTestPodWithRSOwnerRefForNode1("p4", newerPodCreationTime, nil),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 0,
+		},
+		{
+			description: "Two pods in the default namespace, 1 created 605 seconds ago. 1 should be evicted.",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p5", newerPodCreationTime, nil),
+				buildTestPodWithRSOwnerRefForNode1("p6", metav1.NewTime(time.Now().Add(-time.Second*605)), nil),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+			expectedEvictedPods:     []string{"p6"},
+		},
+		{
+			description: "Two pods in the default namespace, 1 created 595 seconds ago. 0 should be evicted.",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+			},
+			pods: []*v1.Pod{
+				buildTestPodForNode1("p7", newerPodCreationTime, nil),
+				buildTestPodForNode1("p8", metav1.NewTime(time.Now().Add(-time.Second*595)), nil),
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
