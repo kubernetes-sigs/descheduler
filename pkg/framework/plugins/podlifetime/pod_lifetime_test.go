@@ -73,20 +73,76 @@ func buildTestPodWithRSOwnerRefWithPendingPhaseForNode1(name string, creationTim
 	})
 }
 
+type podLifeTimeTestCase struct {
+	description                string
+	args                       *PodLifeTimeArgs
+	pods                       []*v1.Pod
+	nodes                      []*v1.Node
+	expectedEvictedPods        []string // if specified, will assert specific pods were evicted
+	expectedEvictedPodCount    uint
+	ignorePvcPods              bool
+	maxPodsToEvictPerNode      *uint
+	maxPodsToEvictPerNamespace *uint
+	maxPodsToEvictTotal        *uint
+}
+
+func runPodLifeTimeTest(t *testing.T, tc podLifeTimeTestCase) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var objs []runtime.Object
+	for _, node := range tc.nodes {
+		objs = append(objs, node)
+	}
+	for _, pod := range tc.pods {
+		objs = append(objs, pod)
+	}
+	fakeClient := fake.NewSimpleClientset(objs...)
+
+	handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+		ctx,
+		fakeClient,
+		evictions.NewOptions().
+			WithMaxPodsToEvictPerNode(tc.maxPodsToEvictPerNode).
+			WithMaxPodsToEvictPerNamespace(tc.maxPodsToEvictPerNamespace).
+			WithMaxPodsToEvictTotal(tc.maxPodsToEvictTotal),
+		defaultevictor.DefaultEvictorArgs{IgnorePvcPods: tc.ignorePvcPods},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Unable to initialize a framework handle: %v", err)
+	}
+
+	var evictedPods []string
+	test.RegisterEvictedPodsCollector(fakeClient, &evictedPods)
+
+	plugin, err := New(ctx, tc.args, handle)
+	if err != nil {
+		t.Fatalf("Unable to initialize the plugin: %v", err)
+	}
+
+	plugin.(frameworktypes.DeschedulePlugin).Deschedule(ctx, tc.nodes)
+	podsEvicted := podEvictor.TotalEvicted()
+	if podsEvicted != tc.expectedEvictedPodCount {
+		t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.description, tc.expectedEvictedPodCount, podsEvicted)
+	}
+
+	if tc.expectedEvictedPods != nil {
+		diff := sets.New(tc.expectedEvictedPods...).Difference(sets.New(evictedPods...))
+		if diff.Len() > 0 {
+			t.Errorf(
+				"Expected pods %v to be evicted but %v were not evicted. Actual pods evicted: %v",
+				tc.expectedEvictedPods,
+				diff.UnsortedList(),
+				evictedPods,
+			)
+		}
+	}
+}
+
 func TestPodLifeTime(t *testing.T) {
 	var maxLifeTime uint = 600
-	testCases := []struct {
-		description                string
-		args                       *PodLifeTimeArgs
-		pods                       []*v1.Pod
-		nodes                      []*v1.Node
-		expectedEvictedPods        []string // if specified, will assert specific pods were evicted
-		expectedEvictedPodCount    uint
-		ignorePvcPods              bool
-		maxPodsToEvictPerNode      *uint
-		maxPodsToEvictPerNamespace *uint
-		maxPodsToEvictTotal        *uint
-	}{
+	testCases := []podLifeTimeTestCase{
 		{
 			description: "Two pods in the default namespace, 1 is new and 1 very is old. 1 should be evicted.",
 			args: &PodLifeTimeArgs{
@@ -660,57 +716,7 @@ func TestPodLifeTime(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-
-			var objs []runtime.Object
-			for _, node := range tc.nodes {
-				objs = append(objs, node)
-			}
-			for _, pod := range tc.pods {
-				objs = append(objs, pod)
-			}
-			fakeClient := fake.NewSimpleClientset(objs...)
-
-			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
-				ctx,
-				fakeClient,
-				evictions.NewOptions().
-					WithMaxPodsToEvictPerNode(tc.maxPodsToEvictPerNode).
-					WithMaxPodsToEvictPerNamespace(tc.maxPodsToEvictPerNamespace).
-					WithMaxPodsToEvictTotal(tc.maxPodsToEvictTotal),
-				defaultevictor.DefaultEvictorArgs{IgnorePvcPods: tc.ignorePvcPods},
-				nil,
-			)
-			if err != nil {
-				t.Fatalf("Unable to initialize a framework handle: %v", err)
-			}
-
-			var evictedPods []string
-			test.RegisterEvictedPodsCollector(fakeClient, &evictedPods)
-
-			plugin, err := New(ctx, tc.args, handle)
-			if err != nil {
-				t.Fatalf("Unable to initialize the plugin: %v", err)
-			}
-
-			plugin.(frameworktypes.DeschedulePlugin).Deschedule(ctx, tc.nodes)
-			podsEvicted := podEvictor.TotalEvicted()
-			if podsEvicted != tc.expectedEvictedPodCount {
-				t.Errorf("Test error for description: %s. Expected evicted pods count %v, got %v", tc.description, tc.expectedEvictedPodCount, podsEvicted)
-			}
-
-			if tc.expectedEvictedPods != nil {
-				diff := sets.New(tc.expectedEvictedPods...).Difference(sets.New(evictedPods...))
-				if diff.Len() > 0 {
-					t.Errorf(
-						"Expected pods %v to be evicted but %v were not evicted. Actual pods evicted: %v",
-						tc.expectedEvictedPods,
-						diff.UnsortedList(),
-						evictedPods,
-					)
-				}
-			}
+			runPodLifeTimeTest(t, tc)
 		})
 	}
 }
