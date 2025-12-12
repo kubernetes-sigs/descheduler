@@ -190,22 +190,6 @@ func TestPodLifeTime(t *testing.T) {
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description: "Two old pods with different states. 1 should be evicted.",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{"Pending"},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
-				buildTestPodWithRSOwnerRefForNode1("p10", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Status.Phase = "Running"
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-			expectedEvictedPods:     []string{"p9"},
-		},
-		{
 			description: "Does not evict pvc pods with ignorePvcPods set to true",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
@@ -601,48 +585,6 @@ func TestPodLifeTime(t *testing.T) {
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description: "1 pod with pod status phase v1.PodSucceeded should be evicted",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{string(v1.PodSucceeded)},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefForNode1("p16", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Status.Phase = v1.PodSucceeded
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
-		{
-			description: "1 pod with pod status phase v1.PodFailed should be evicted",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{string(v1.PodFailed)},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefForNode1("p16", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Status.Phase = v1.PodFailed
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
-		{
-			description: "1 pod with pod status phase v1.PodUnknown should be evicted",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{string(v1.PodUnknown)},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefForNode1("p16", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Status.Phase = v1.PodUnknown
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
-		{
 			description: "1 pod with ImagePullBackOff status should be ignored when States filter is ContainerCreating",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
@@ -723,6 +665,76 @@ func TestPodLifeTime_AgeThreshold(t *testing.T) {
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			runPodLifeTimeTest(t, tc)
+		})
+	}
+}
+
+func TestPodLifeTime_PodPhaseStates(t *testing.T) {
+	var maxLifeTime uint = 600
+	testCases := []podLifeTimeTestCase{
+		{
+			description: "Two old pods with different states. 1 should be evicted.",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"Pending"},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+				buildTestPodWithRSOwnerRefForNode1("p10", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Phase = "Running"
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+			expectedEvictedPods:     []string{"p9"},
+		},
+		{
+			description: "1 pod with pod status phase v1.PodSucceeded should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{string(v1.PodSucceeded)},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p16", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Phase = v1.PodSucceeded
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "1 pod with pod status phase v1.PodFailed should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{string(v1.PodFailed)},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p16", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Phase = v1.PodFailed
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "1 pod with pod status phase v1.PodUnknown should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{string(v1.PodUnknown)},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p16", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Phase = v1.PodUnknown
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
 		},
 	}
 
