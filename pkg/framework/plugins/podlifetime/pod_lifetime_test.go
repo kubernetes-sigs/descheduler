@@ -144,52 +144,6 @@ func TestPodLifeTime(t *testing.T) {
 	var maxLifeTime uint = 600
 	testCases := []podLifeTimeTestCase{
 		{
-			description: "Two pods, one with ContainerCreating state. 1 should be evicted.",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{"ContainerCreating"},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
-				test.BuildTestPod("container-creating-stuck", 0, 0, nodeName1, func(pod *v1.Pod) {
-					pod.Status.ContainerStatuses = []v1.ContainerStatus{
-						{
-							State: v1.ContainerState{
-								Waiting: &v1.ContainerStateWaiting{Reason: "ContainerCreating"},
-							},
-						},
-					}
-					test.SetRSOwnerRef(pod)
-					pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
-		{
-			description: "Two pods, one with PodInitializing state. 1 should be evicted.",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{"PodInitializing"},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
-				test.BuildTestPod("pod-initializing-stuck", 0, 0, nodeName1, func(pod *v1.Pod) {
-					pod.Status.ContainerStatuses = []v1.ContainerStatus{
-						{
-							State: v1.ContainerState{
-								Waiting: &v1.ContainerStateWaiting{Reason: "PodInitializing"},
-							},
-						},
-					}
-					test.SetRSOwnerRef(pod)
-					pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
-		{
 			description: "Does not evict pvc pods with ignorePvcPods set to true",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
@@ -325,6 +279,120 @@ func TestPodLifeTime(t *testing.T) {
 			maxPodsToEvictPerNode:   utilptr.To[uint](1),
 			expectedEvictedPodCount: 1,
 			expectedEvictedPods:     []string{"p2"},
+		},
+		{
+			description: "1 pod with pod status reason NodeLost should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"NodeLost"},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Reason = "NodeLost"
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "1 pod with pod status reason NodeAffinity should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"NodeAffinity"},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Reason = "NodeAffinity"
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "1 pod with pod status reason Shutdown should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"Shutdown"},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Reason = "Shutdown"
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "1 pod with pod status reason UnexpectedAdmissionError should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"UnexpectedAdmissionError"},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Reason = "UnexpectedAdmissionError"
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			runPodLifeTimeTest(t, tc)
+		})
+	}
+}
+
+func TestPodLifeTime_ContainerWaitingReasons(t *testing.T) {
+	var maxLifeTime uint = 600
+	testCases := []podLifeTimeTestCase{
+		{
+			description: "Two pods, one with ContainerCreating state. 1 should be evicted.",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"ContainerCreating"},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+				test.BuildTestPod("container-creating-stuck", 0, 0, nodeName1, func(pod *v1.Pod) {
+					pod.Status.ContainerStatuses = []v1.ContainerStatus{
+						{
+							State: v1.ContainerState{
+								Waiting: &v1.ContainerStateWaiting{Reason: "ContainerCreating"},
+							},
+						},
+					}
+					test.SetRSOwnerRef(pod)
+					pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "Two pods, one with PodInitializing state. 1 should be evicted.",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"PodInitializing"},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, nil),
+				test.BuildTestPod("pod-initializing-stuck", 0, 0, nodeName1, func(pod *v1.Pod) {
+					pod.Status.ContainerStatuses = []v1.ContainerStatus{
+						{
+							State: v1.ContainerState{
+								Waiting: &v1.ContainerStateWaiting{Reason: "PodInitializing"},
+							},
+						},
+					}
+					test.SetRSOwnerRef(pod)
+					pod.ObjectMeta.CreationTimestamp = olderPodCreationTime
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
 		},
 		{
 			description: "1 pod with container status ImagePullBackOff should be evicted",
@@ -523,62 +591,6 @@ func TestPodLifeTime(t *testing.T) {
 							},
 						},
 					}
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
-		{
-			description: "1 pod with pod status reason NodeLost should be evicted",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{"NodeLost"},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Status.Reason = "NodeLost"
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
-		{
-			description: "1 pod with pod status reason NodeAffinity should be evicted",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{"NodeAffinity"},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Status.Reason = "NodeAffinity"
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
-		{
-			description: "1 pod with pod status reason Shutdown should be evicted",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{"Shutdown"},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Status.Reason = "Shutdown"
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
-		{
-			description: "1 pod with pod status reason UnexpectedAdmissionError should be evicted",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{"UnexpectedAdmissionError"},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Status.Reason = "UnexpectedAdmissionError"
 				}),
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
