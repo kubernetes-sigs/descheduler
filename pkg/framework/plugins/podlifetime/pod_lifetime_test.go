@@ -280,62 +280,6 @@ func TestPodLifeTime(t *testing.T) {
 			expectedEvictedPodCount: 1,
 			expectedEvictedPods:     []string{"p2"},
 		},
-		{
-			description: "1 pod with pod status reason NodeLost should be evicted",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{"NodeLost"},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Status.Reason = "NodeLost"
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
-		{
-			description: "1 pod with pod status reason NodeAffinity should be evicted",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{"NodeAffinity"},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Status.Reason = "NodeAffinity"
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
-		{
-			description: "1 pod with pod status reason Shutdown should be evicted",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{"Shutdown"},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Status.Reason = "Shutdown"
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
-		{
-			description: "1 pod with pod status reason UnexpectedAdmissionError should be evicted",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				States:                []string{"UnexpectedAdmissionError"},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Status.Reason = "UnexpectedAdmissionError"
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
 	}
 
 	for _, tc := range testCases {
@@ -615,6 +559,74 @@ func TestPodLifeTime_ContainerWaitingReasons(t *testing.T) {
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			runPodLifeTimeTest(t, tc)
+		})
+	}
+}
+
+func TestPodLifeTime_PodStatusReasons(t *testing.T) {
+	var maxLifeTime uint = 600
+	testCases := []podLifeTimeTestCase{
+		{
+			description: "1 pod with pod status reason NodeLost should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"NodeLost"},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Reason = "NodeLost"
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "1 pod with pod status reason NodeAffinity should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"NodeAffinity"},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Reason = "NodeAffinity"
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "1 pod with pod status reason Shutdown should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"Shutdown"},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Reason = "Shutdown"
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description: "1 pod with pod status reason UnexpectedAdmissionError should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				States:                []string{"UnexpectedAdmissionError"},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithPendingPhaseForNode1("p9", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Status.Reason = "UnexpectedAdmissionError"
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
 		},
 	}
 
