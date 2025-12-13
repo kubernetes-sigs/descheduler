@@ -144,26 +144,6 @@ func TestPodLifeTime(t *testing.T) {
 	var maxLifeTime uint = 600
 	testCases := []podLifeTimeTestCase{
 		{
-			description: "1 pod matching label selector should be evicted",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-				LabelSelector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{"foo": "bar"},
-				},
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefForNode1("p12", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.ObjectMeta.Labels = map[string]string{"foo": "bar"}
-				}),
-				buildTestPodWithRSOwnerRefForNode1("p13", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.ObjectMeta.Labels = map[string]string{"foo": "bar1"}
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-			expectedEvictedPods:     []string{"p12"},
-		},
-		{
 			description: "No pod should be evicted since pod terminating",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
@@ -232,6 +212,38 @@ func TestPodLifeTime_EvictorConfiguration(t *testing.T) {
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			runPodLifeTimeTest(t, tc)
+		})
+	}
+}
+
+func TestPodLifeTime_GenericFiltering(t *testing.T) {
+	var maxLifeTime uint = 600
+	testCases := []podLifeTimeTestCase{
+		{
+			description: "1 pod matching label selector should be evicted",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"foo": "bar"},
+				},
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p12", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.ObjectMeta.Labels = map[string]string{"foo": "bar"}
+				}),
+				buildTestPodWithRSOwnerRefForNode1("p13", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.ObjectMeta.Labels = map[string]string{"foo": "bar1"}
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
+			expectedEvictedPods:     []string{"p12"},
 		},
 	}
 
