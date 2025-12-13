@@ -221,6 +221,18 @@ func TestPodLifeTime(t *testing.T) {
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
 		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			runPodLifeTimeTest(t, tc)
+		})
+	}
+}
+
+func TestPodLifeTime_EvictionLimits(t *testing.T) {
+	var maxLifeTime uint = 600
+	testCases := []podLifeTimeTestCase{
 		{
 			description: "2 Oldest pods should be evicted when maxPodsToEvictPerNode and maxPodsToEvictPerNamespace are not set",
 			args: &PodLifeTimeArgs{
