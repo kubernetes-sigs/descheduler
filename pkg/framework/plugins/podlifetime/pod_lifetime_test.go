@@ -144,45 +144,6 @@ func TestPodLifeTime(t *testing.T) {
 	var maxLifeTime uint = 600
 	testCases := []podLifeTimeTestCase{
 		{
-			description: "Does not evict pvc pods with ignorePvcPods set to true",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefForNode1("p11", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
-							},
-						},
-					}
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 0,
-			ignorePvcPods:           true,
-		},
-		{
-			description: "Evicts pvc pods with ignorePvcPods set to false (or unset)",
-			args: &PodLifeTimeArgs{
-				MaxPodLifeTimeSeconds: &maxLifeTime,
-			},
-			pods: []*v1.Pod{
-				buildTestPodWithRSOwnerRefForNode1("p11", olderPodCreationTime, func(pod *v1.Pod) {
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
-							},
-						},
-					}
-				}),
-			},
-			nodes:                   []*v1.Node{buildTestNode1()},
-			expectedEvictedPodCount: 1,
-		},
-		{
 			description: "1 pod matching label selector should be evicted",
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: &maxLifeTime,
@@ -220,6 +181,57 @@ func TestPodLifeTime(t *testing.T) {
 			},
 			nodes:                   []*v1.Node{buildTestNode1()},
 			expectedEvictedPodCount: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			runPodLifeTimeTest(t, tc)
+		})
+	}
+}
+
+func TestPodLifeTime_EvictorConfiguration(t *testing.T) {
+	var maxLifeTime uint = 600
+	testCases := []podLifeTimeTestCase{
+		{
+			description: "Does not evict pvc pods with ignorePvcPods set to true",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p11", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "pvc", VolumeSource: v1.VolumeSource{
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
+							},
+						},
+					}
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 0,
+			ignorePvcPods:           true,
+		},
+		{
+			description: "Evicts pvc pods with ignorePvcPods set to false (or unset)",
+			args: &PodLifeTimeArgs{
+				MaxPodLifeTimeSeconds: &maxLifeTime,
+			},
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefForNode1("p11", olderPodCreationTime, func(pod *v1.Pod) {
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "pvc", VolumeSource: v1.VolumeSource{
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
+							},
+						},
+					}
+				}),
+			},
+			nodes:                   []*v1.Node{buildTestNode1()},
+			expectedEvictedPodCount: 1,
 		},
 	}
 
