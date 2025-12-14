@@ -169,8 +169,9 @@ func TestFindDuplicatePods(t *testing.T) {
 	})
 
 	// This pod sits on node6 and is used to take up CPU requests on the node
-	p19 := test.BuildTestPod("CPU-eater", 150, 150, node6.Name, nil)
-	p19.Namespace = "test"
+	p19 := test.BuildTestPod("CPU-eater", 150, 150, node6.Name, func(pod *v1.Pod) {
+		pod.Namespace = "test"
+	})
 
 	// Dummy pod for node6 used to do the opposite of p19
 	p20 := test.BuildTestPod("CPU-saver", 100, 150, node6.Name, nil)
