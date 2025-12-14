@@ -498,20 +498,14 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 		}
 	}
 
-	setWorkerLabelSelectorK1 := func(pod *v1.Pod) {
-		test.SetRSOwnerRef(pod)
-		if pod.Spec.NodeSelector == nil {
-			pod.Spec.NodeSelector = map[string]string{}
+	setWorkerLabelSelector := func(value string) func(*v1.Pod) {
+		return func(pod *v1.Pod) {
+			test.SetRSOwnerRef(pod)
+			if pod.Spec.NodeSelector == nil {
+				pod.Spec.NodeSelector = map[string]string{}
+			}
+			pod.Spec.NodeSelector["node-role.kubernetes.io/worker"] = value
 		}
-		pod.Spec.NodeSelector["node-role.kubernetes.io/worker"] = "k1"
-	}
-
-	setWorkerLabelSelectorK2 := func(pod *v1.Pod) {
-		test.SetRSOwnerRef(pod)
-		if pod.Spec.NodeSelector == nil {
-			pod.Spec.NodeSelector = map[string]string{}
-		}
-		pod.Spec.NodeSelector["node-role.kubernetes.io/worker"] = "k2"
 	}
 
 	testCases := []struct {
@@ -710,15 +704,15 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			description: "Evict pods uniformly respecting node selector",
 			pods: []*v1.Pod{
 				// (5,3,1,0,0,0) -> (3,3,3,0,0,0) -> 2 evictions
-				buildTestPodForNode("p1", "worker1", setWorkerLabelSelectorK1),
-				buildTestPodForNode("p2", "worker1", setWorkerLabelSelectorK2),
-				buildTestPodForNode("p3", "worker1", setWorkerLabelSelectorK1),
-				buildTestPodForNode("p4", "worker1", setWorkerLabelSelectorK2),
-				buildTestPodForNode("p5", "worker1", setWorkerLabelSelectorK1),
-				buildTestPodForNode("p6", "worker2", setWorkerLabelSelectorK2),
-				buildTestPodForNode("p7", "worker2", setWorkerLabelSelectorK1),
-				buildTestPodForNode("p8", "worker2", setWorkerLabelSelectorK2),
-				buildTestPodForNode("p9", "worker3", setWorkerLabelSelectorK1),
+				buildTestPodForNode("p1", "worker1", setWorkerLabelSelector("k1")),
+				buildTestPodForNode("p2", "worker1", setWorkerLabelSelector("k2")),
+				buildTestPodForNode("p3", "worker1", setWorkerLabelSelector("k1")),
+				buildTestPodForNode("p4", "worker1", setWorkerLabelSelector("k2")),
+				buildTestPodForNode("p5", "worker1", setWorkerLabelSelector("k1")),
+				buildTestPodForNode("p6", "worker2", setWorkerLabelSelector("k2")),
+				buildTestPodForNode("p7", "worker2", setWorkerLabelSelector("k1")),
+				buildTestPodForNode("p8", "worker2", setWorkerLabelSelector("k2")),
+				buildTestPodForNode("p9", "worker3", setWorkerLabelSelector("k1")),
 			},
 			expectedEvictedPodCount: 2,
 			nodes: []*v1.Node{
@@ -734,15 +728,15 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			description: "Evict pods uniformly respecting node selector with zero target nodes",
 			pods: []*v1.Pod{
 				// (5,3,1,0,0,0) -> (3,3,3,0,0,0) -> 2 evictions
-				buildTestPodForNode("p1", "worker1", setWorkerLabelSelectorK1),
-				buildTestPodForNode("p2", "worker1", setWorkerLabelSelectorK2),
-				buildTestPodForNode("p3", "worker1", setWorkerLabelSelectorK1),
-				buildTestPodForNode("p4", "worker1", setWorkerLabelSelectorK2),
-				buildTestPodForNode("p5", "worker1", setWorkerLabelSelectorK1),
-				buildTestPodForNode("p6", "worker2", setWorkerLabelSelectorK2),
-				buildTestPodForNode("p7", "worker2", setWorkerLabelSelectorK1),
-				buildTestPodForNode("p8", "worker2", setWorkerLabelSelectorK2),
-				buildTestPodForNode("p9", "worker3", setWorkerLabelSelectorK1),
+				buildTestPodForNode("p1", "worker1", setWorkerLabelSelector("k1")),
+				buildTestPodForNode("p2", "worker1", setWorkerLabelSelector("k2")),
+				buildTestPodForNode("p3", "worker1", setWorkerLabelSelector("k1")),
+				buildTestPodForNode("p4", "worker1", setWorkerLabelSelector("k2")),
+				buildTestPodForNode("p5", "worker1", setWorkerLabelSelector("k1")),
+				buildTestPodForNode("p6", "worker2", setWorkerLabelSelector("k2")),
+				buildTestPodForNode("p7", "worker2", setWorkerLabelSelector("k1")),
+				buildTestPodForNode("p8", "worker2", setWorkerLabelSelector("k2")),
+				buildTestPodForNode("p9", "worker3", setWorkerLabelSelector("k1")),
 			},
 			expectedEvictedPodCount: 0,
 			nodes: []*v1.Node{
