@@ -167,8 +167,6 @@ func TestFindDuplicatePods(t *testing.T) {
 			"datacenter": "west",
 		}
 	})
-	p18 := test.BuildTestPod("TARGET", 100, 0, node1.Name, nil)
-	p18.Namespace = "node-fit"
 
 	// This pod sits on node6 and is used to take up CPU requests on the node
 	p19 := test.BuildTestPod("CPU-eater", 150, 150, node6.Name, nil)
@@ -181,8 +179,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	// ### Evictable Pods ###
 
 	// ### Non-evictable Pods ###
-
-	p18.ObjectMeta.OwnerReferences = ownerRef3
 
 	testCases := []struct {
 		description             string
