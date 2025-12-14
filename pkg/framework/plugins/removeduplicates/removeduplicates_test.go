@@ -92,7 +92,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	node6 := test.BuildTestNode("n6", 200, 200, 10, nil)
 
 	// Three Pods in the "dev" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	p1 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil)
 	p2 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil)
 	p3 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil)
 	// A DaemonSet.
@@ -182,14 +181,20 @@ func TestFindDuplicatePods(t *testing.T) {
 		nodefit                 bool
 	}{
 		{
-			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet. 1 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3},
+			description: "Three pods in the `dev` Namespace, bound to same ReplicaSet. 1 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				p2, p3,
+			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet, but ReplicaSet kind is excluded. 0 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3},
+			description: "Three pods in the `dev` Namespace, bound to same ReplicaSet, but ReplicaSet kind is excluded. 0 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				p2, p3,
+			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
 			excludeOwnerKinds:       []string{"ReplicaSet"},
@@ -201,8 +206,11 @@ func TestFindDuplicatePods(t *testing.T) {
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description:             "Three Pods in the `dev` Namespace, three Pods in the `test` Namespace. Bound to ReplicaSet with same name. 4 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3, p8, p9, p10},
+			description: "Three Pods in the `dev` Namespace, three Pods in the `test` Namespace. Bound to ReplicaSet with same name. 4 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				p2, p3, p8, p9, p10,
+			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
 		},
@@ -213,8 +221,11 @@ func TestFindDuplicatePods(t *testing.T) {
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description:             "Test all Pods: 4 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3, p4, p5, p6, p7, p8, p9, p10},
+			description: "Test all Pods: 4 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				p2, p3, p4, p5, p6, p7, p8, p9, p10,
+			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
 		},
@@ -237,8 +248,11 @@ func TestFindDuplicatePods(t *testing.T) {
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet. Only node available has a taint, and nodeFit set to true. 0 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3},
+			description: "Three pods in the `dev` Namespace, bound to same ReplicaSet. Only node available has a taint, and nodeFit set to true. 0 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				p2, p3,
+			},
 			nodes:                   []*v1.Node{node1, node3},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
@@ -251,22 +265,31 @@ func TestFindDuplicatePods(t *testing.T) {
 			nodefit:                 true,
 		},
 		{
-			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available is not schedulable, and nodeFit set to true. 0 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3},
+			description: "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available is not schedulable, and nodeFit set to true. 0 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				p2, p3,
+			},
 			nodes:                   []*v1.Node{node1, node5},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
 		},
 		{
-			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available does not have enough CPU, and nodeFit set to true. 0 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3, p19},
+			description: "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available does not have enough CPU, and nodeFit set to true. 0 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				p2, p3, p19,
+			},
 			nodes:                   []*v1.Node{node1, node6},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
 		},
 		{
-			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available has enough CPU, and nodeFit set to true. 1 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3, p20},
+			description: "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available has enough CPU, and nodeFit set to true. 1 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				p2, p3, p20,
+			},
 			nodes:                   []*v1.Node{node1, node6},
 			expectedEvictedPodCount: 1,
 			nodefit:                 true,
