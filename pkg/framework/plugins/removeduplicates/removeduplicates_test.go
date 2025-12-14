@@ -98,9 +98,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	// A Critical Pod.
 	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
 	// Same owners, but different images
-	p12 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p12", "different-images", func(pod *v1.Pod) {
-		pod.Spec.Containers[0].Image = "bar"
-	})
 	// Multiple containers
 	p13 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p13", "different-images", func(pod *v1.Pod) {
 		pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
@@ -266,7 +263,11 @@ func TestFindDuplicatePods(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p11", "different-images", func(pod *v1.Pod) {
 					pod.Spec.Containers[0].Image = "foo"
-				}), p12},
+				}),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p12", "different-images", func(pod *v1.Pod) {
+					pod.Spec.Containers[0].Image = "bar"
+				}),
+			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
 		},
