@@ -94,20 +94,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	// Three Pods in the "dev" Namespace, bound to same ReplicaSet. 2 should be evicted.
 	// A DaemonSet.
 	// A Pod with local storage.
-	p5 := buildTestPodForNode1("p5", func(pod *v1.Pod) {
-		test.SetNormalOwnerRef(pod)
-		pod.Spec.Volumes = []v1.Volume{
-			{
-				Name: "sample",
-				VolumeSource: v1.VolumeSource{
-					HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-					EmptyDir: &v1.EmptyDirVolumeSource{
-						SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-					},
-				},
-			},
-		}
-	})
 	// A Mirror Pod.
 	p6 := buildTestPodForNode1("p6", func(pod *v1.Pod) {
 		pod.Annotations = test.GetMirrorPodAnnotation()
@@ -219,7 +205,20 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodForNode1("p4", func(pod *v1.Pod) {
 					test.SetDSOwnerRef(pod)
 				}),
-				p5, p6, p7,
+				buildTestPodForNode1("p5", func(pod *v1.Pod) {
+					test.SetNormalOwnerRef(pod)
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "sample",
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+								EmptyDir: &v1.EmptyDirVolumeSource{
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
+							},
+						},
+					}
+				}), p6, p7,
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
@@ -233,7 +232,20 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodForNode1("p4", func(pod *v1.Pod) {
 					test.SetDSOwnerRef(pod)
 				}),
-				p5, p6, p7, p8, p9, p10,
+				buildTestPodForNode1("p5", func(pod *v1.Pod) {
+					test.SetNormalOwnerRef(pod)
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "sample",
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+								EmptyDir: &v1.EmptyDirVolumeSource{
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
+							},
+						},
+					}
+				}), p6, p7, p8, p9, p10,
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
