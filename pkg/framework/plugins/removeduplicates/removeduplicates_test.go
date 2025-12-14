@@ -79,11 +79,6 @@ func buildTestPodWithRSOwnerRefWithNamespaceForNode1(name, namespace string, app
 
 func TestFindDuplicatePods(t *testing.T) {
 	// first setup pods
-	node5 := buildTestNode(nodeName5, func(node *v1.Node) {
-		node.Spec = v1.NodeSpec{
-			Unschedulable: true,
-		}
-	})
 	node6 := test.BuildTestNode(nodeName6, 200, 200, 10, nil)
 
 	// Three Pods in the "dev" Namespace, bound to same ReplicaSet. 2 should be evicted.
@@ -356,7 +351,11 @@ func TestFindDuplicatePods(t *testing.T) {
 			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, nil),
-				node5,
+				buildTestNode(nodeName5, func(node *v1.Node) {
+					node.Spec = v1.NodeSpec{
+						Unschedulable: true,
+					}
+				}),
 			},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
