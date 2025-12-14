@@ -100,11 +100,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	// Same owners, but different images
 	// Multiple containers
 	// ### Pods Evictable Based On Node Fit ###
-	p15 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p15", "node-fit", func(pod *v1.Pod) {
-		pod.Spec.NodeSelector = map[string]string{
-			"datacenter": "west",
-		}
-	})
 	p16 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("NOT1", "node-fit", func(pod *v1.Pod) {
 		pod.Spec.NodeSelector = map[string]string{
 			"datacenter": "west",
@@ -306,8 +301,16 @@ func TestFindDuplicatePods(t *testing.T) {
 			nodefit:                 true,
 		},
 		{
-			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet, all with a nodeSelector. Only node available has an incorrect node label, and nodeFit set to true. 0 should be evicted.",
-			pods:                    []*v1.Pod{p15, p16, p17},
+			description: "Three pods in the `node-fit` Namespace, bound to same ReplicaSet, all with a nodeSelector. Only node available has an incorrect node label, and nodeFit set to true. 0 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p15", "node-fit", func(pod *v1.Pod) {
+					pod.Spec.NodeSelector = map[string]string{
+						"datacenter": "west",
+					}
+				}),
+				p16,
+				p17,
+			},
 			nodes:                   []*v1.Node{node1, node4},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
