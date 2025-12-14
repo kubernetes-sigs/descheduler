@@ -144,8 +144,15 @@ func TestFindDuplicatePods(t *testing.T) {
 			Image: "foo",
 		})
 	})
-	p15 := test.BuildTestPod("p15", 100, 0, node1.Name, nil)
-	p15.Namespace = "node-fit"
+	// ### Pods Evictable Based On Node Fit ###
+	ownerRef3 := test.GetReplicaSetOwnerRefList()
+	p15 := test.BuildTestPod("p15", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "node-fit"
+		pod.ObjectMeta.OwnerReferences = ownerRef3
+		pod.Spec.NodeSelector = map[string]string{
+			"datacenter": "west",
+		}
+	})
 	p16 := test.BuildTestPod("NOT1", 100, 0, node1.Name, nil)
 	p16.Namespace = "node-fit"
 	p17 := test.BuildTestPod("NOT2", 100, 0, node1.Name, nil)
@@ -165,17 +172,10 @@ func TestFindDuplicatePods(t *testing.T) {
 
 	// ### Non-evictable Pods ###
 
-	// ### Pods Evictable Based On Node Fit ###
-
-	ownerRef3 := test.GetReplicaSetOwnerRefList()
-	p15.ObjectMeta.OwnerReferences = ownerRef3
 	p16.ObjectMeta.OwnerReferences = ownerRef3
 	p17.ObjectMeta.OwnerReferences = ownerRef3
 	p18.ObjectMeta.OwnerReferences = ownerRef3
 
-	p15.Spec.NodeSelector = map[string]string{
-		"datacenter": "west",
-	}
 	p16.Spec.NodeSelector = map[string]string{
 		"datacenter": "west",
 	}
