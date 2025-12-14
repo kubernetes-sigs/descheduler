@@ -100,7 +100,10 @@ func TestFindDuplicatePods(t *testing.T) {
 			},
 		}
 	})
-	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, nil)
+	// A Mirror Pod.
+	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Annotations = test.GetMirrorPodAnnotation()
+	})
 	p7 := test.BuildTestPod("p7", 100, 0, node1.Name, nil)
 	p7.Namespace = "kube-system"
 	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, nil)
@@ -143,9 +146,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	p10.ObjectMeta.OwnerReferences = ownerRef2
 
 	// ### Non-evictable Pods ###
-
-	// A Mirror Pod.
-	p6.Annotations = test.GetMirrorPodAnnotation()
 
 	// A Critical Pod.
 	priority := utils.SystemCriticalPriority
