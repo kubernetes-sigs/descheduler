@@ -79,7 +79,6 @@ func buildTestPodWithRSOwnerRefWithNamespaceForNode1(name, namespace string, app
 
 func TestFindDuplicatePods(t *testing.T) {
 	// first setup pods
-	node1 := buildTestNode(nodeName1, nil)
 	node2 := buildTestNode(nodeName2, nil)
 	node3 := buildTestNode(nodeName3, func(node *v1.Node) {
 		node.Spec.Taints = []v1.Taint{
@@ -135,7 +134,10 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
 			},
-			nodes:                   []*v1.Node{node1, node2},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node2,
+			},
 			expectedEvictedPodCount: 1,
 		},
 		{
@@ -145,7 +147,10 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
 			},
-			nodes:                   []*v1.Node{node1, node2},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node2,
+			},
 			expectedEvictedPodCount: 0,
 			excludeOwnerKinds:       []string{"ReplicaSet"},
 		},
@@ -156,7 +161,10 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p10", "test", nil),
 			},
-			nodes:                   []*v1.Node{node1, node2},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node2,
+			},
 			expectedEvictedPodCount: 1,
 		},
 		{
@@ -169,7 +177,10 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p10", "test", nil),
 			},
-			nodes:                   []*v1.Node{node1, node2},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node2,
+			},
 			expectedEvictedPodCount: 2,
 		},
 		{
@@ -201,7 +212,10 @@ func TestFindDuplicatePods(t *testing.T) {
 					pod.Spec.Priority = &priority
 				}),
 			},
-			nodes:                   []*v1.Node{node1, node2},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node2,
+			},
 			expectedEvictedPodCount: 0,
 		},
 		{
@@ -239,7 +253,10 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p10", "test", nil),
 			},
-			nodes:                   []*v1.Node{node1, node2},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node2,
+			},
 			expectedEvictedPodCount: 2,
 		},
 		{
@@ -252,7 +269,10 @@ func TestFindDuplicatePods(t *testing.T) {
 					pod.Spec.Containers[0].Image = "bar"
 				}),
 			},
-			nodes:                   []*v1.Node{node1, node2},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node2,
+			},
 			expectedEvictedPodCount: 0,
 		},
 		{
@@ -265,7 +285,10 @@ func TestFindDuplicatePods(t *testing.T) {
 					})
 				}),
 			},
-			nodes:                   []*v1.Node{node1, node2},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node2,
+			},
 			expectedEvictedPodCount: 0,
 		},
 		{
@@ -281,7 +304,10 @@ func TestFindDuplicatePods(t *testing.T) {
 					})
 				}),
 			},
-			nodes:                   []*v1.Node{node1, node2},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node2,
+			},
 			expectedEvictedPodCount: 0,
 		},
 		{
@@ -291,7 +317,10 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
 			},
-			nodes:                   []*v1.Node{node1, node3},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node3,
+			},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
 		},
@@ -314,7 +343,10 @@ func TestFindDuplicatePods(t *testing.T) {
 					}
 				}),
 			},
-			nodes:                   []*v1.Node{node1, node4},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node4,
+			},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
 		},
@@ -325,7 +357,10 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
 			},
-			nodes:                   []*v1.Node{node1, node5},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node5,
+			},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
 		},
@@ -339,7 +374,10 @@ func TestFindDuplicatePods(t *testing.T) {
 					pod.Namespace = "test"
 				}),
 			},
-			nodes:                   []*v1.Node{node1, node6},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node6,
+			},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
 		},
@@ -353,7 +391,10 @@ func TestFindDuplicatePods(t *testing.T) {
 					pod.Namespace = "test"
 				}),
 			},
-			nodes:                   []*v1.Node{node1, node6},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node6,
+			},
 			expectedEvictedPodCount: 1,
 			nodefit:                 true,
 		},
