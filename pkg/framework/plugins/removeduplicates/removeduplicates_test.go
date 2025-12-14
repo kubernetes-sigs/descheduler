@@ -85,7 +85,21 @@ func TestFindDuplicatePods(t *testing.T) {
 	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, func(pod *v1.Pod) {
 		pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 	})
-	p5 := test.BuildTestPod("p5", 100, 0, node1.Name, nil)
+	// A Pod with local storage.
+	p5 := test.BuildTestPod("p5", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		pod.Spec.Volumes = []v1.Volume{
+			{
+				Name: "sample",
+				VolumeSource: v1.VolumeSource{
+					HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+					EmptyDir: &v1.EmptyDirVolumeSource{
+						SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+					},
+				},
+			},
+		}
+	})
 	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, nil)
 	p7 := test.BuildTestPod("p7", 100, 0, node1.Name, nil)
 	p7.Namespace = "kube-system"
@@ -129,20 +143,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	p10.ObjectMeta.OwnerReferences = ownerRef2
 
 	// ### Non-evictable Pods ###
-
-	// A Pod with local storage.
-	p5.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p5.Spec.Volumes = []v1.Volume{
-		{
-			Name: "sample",
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-				},
-			},
-		},
-	}
 
 	// A Mirror Pod.
 	p6.Annotations = test.GetMirrorPodAnnotation()
