@@ -160,8 +160,13 @@ func TestFindDuplicatePods(t *testing.T) {
 			"datacenter": "west",
 		}
 	})
-	p17 := test.BuildTestPod("NOT2", 100, 0, node1.Name, nil)
-	p17.Namespace = "node-fit"
+	p17 := test.BuildTestPod("NOT2", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "node-fit"
+		pod.ObjectMeta.OwnerReferences = ownerRef3
+		pod.Spec.NodeSelector = map[string]string{
+			"datacenter": "west",
+		}
+	})
 	p18 := test.BuildTestPod("TARGET", 100, 0, node1.Name, nil)
 	p18.Namespace = "node-fit"
 
@@ -177,12 +182,7 @@ func TestFindDuplicatePods(t *testing.T) {
 
 	// ### Non-evictable Pods ###
 
-	p17.ObjectMeta.OwnerReferences = ownerRef3
 	p18.ObjectMeta.OwnerReferences = ownerRef3
-
-	p17.Spec.NodeSelector = map[string]string{
-		"datacenter": "west",
-	}
 
 	testCases := []struct {
 		description             string
