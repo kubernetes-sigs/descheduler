@@ -96,11 +96,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	// A Pod with local storage.
 	// A Mirror Pod.
 	// A Critical Pod.
-	p7 := buildTestPodForNode1("p7", func(pod *v1.Pod) {
-		pod.Namespace = "kube-system"
-		priority := utils.SystemCriticalPriority
-		pod.Spec.Priority = &priority
-	})
 	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
 	p8 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p8", "test", nil)
 	p9 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil)
@@ -218,7 +213,12 @@ func TestFindDuplicatePods(t *testing.T) {
 				}),
 				buildTestPodForNode1("p6", func(pod *v1.Pod) {
 					pod.Annotations = test.GetMirrorPodAnnotation()
-				}), p7,
+				}),
+				buildTestPodForNode1("p7", func(pod *v1.Pod) {
+					pod.Namespace = "kube-system"
+					priority := utils.SystemCriticalPriority
+					pod.Spec.Priority = &priority
+				}),
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
@@ -248,7 +248,12 @@ func TestFindDuplicatePods(t *testing.T) {
 				}),
 				buildTestPodForNode1("p6", func(pod *v1.Pod) {
 					pod.Annotations = test.GetMirrorPodAnnotation()
-				}), p7, p8, p9, p10,
+				}),
+				buildTestPodForNode1("p7", func(pod *v1.Pod) {
+					pod.Namespace = "kube-system"
+					priority := utils.SystemCriticalPriority
+					pod.Spec.Priority = &priority
+				}), p8, p9, p10,
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
