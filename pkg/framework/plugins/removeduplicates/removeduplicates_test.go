@@ -78,26 +78,6 @@ func buildTestPodWithRSOwnerRefWithNamespaceForNode1(name, namespace string, app
 }
 
 func TestFindDuplicatePods(t *testing.T) {
-	// first setup pods
-
-	// Three Pods in the "dev" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	// A DaemonSet.
-	// A Pod with local storage.
-	// A Mirror Pod.
-	// A Critical Pod.
-	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	// Same owners, but different images
-	// Multiple containers
-	// ### Pods Evictable Based On Node Fit ###
-
-	// This pod sits on node6 and is used to take up CPU requests on the node
-
-	// Dummy pod for node6 used to do the opposite of p19
-
-	// ### Evictable Pods ###
-
-	// ### Non-evictable Pods ###
-
 	testCases := []struct {
 		description             string
 		pods                    []*v1.Pod
