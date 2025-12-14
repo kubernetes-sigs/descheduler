@@ -33,8 +33,25 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
-func buildTestPodWithImage(podName, node, image string) *v1.Pod {
-	pod := test.BuildTestPod(podName, 100, 0, node, test.SetRSOwnerRef)
+const (
+	nodeName1 = "n1"
+	nodeName2 = "n2"
+	nodeName3 = "n3"
+	nodeName4 = "n4"
+	nodeName5 = "n5"
+	nodeName6 = "n6"
+)
+
+func buildTestNode(nodeName string, apply func(*v1.Node)) *v1.Node {
+	return test.BuildTestNode(nodeName, 2000, 3000, 10, apply)
+}
+
+func buildTestPodForNode1(name string, apply func(*v1.Pod)) *v1.Pod {
+	return test.BuildTestPod(name, 100, 0, nodeName1, apply)
+}
+
+func buildTestPodWithImage(podName, image string) *v1.Pod {
+	pod := buildTestPodForNode1(podName, test.SetRSOwnerRef)
 	pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
 		Name:  image,
 		Image: image,
@@ -42,146 +59,25 @@ func buildTestPodWithImage(podName, node, image string) *v1.Pod {
 	return pod
 }
 
+func buildTestPodWithRSOwnerRefForNode1(name string, apply func(*v1.Pod)) *v1.Pod {
+	return buildTestPodForNode1(name, func(pod *v1.Pod) {
+		test.SetRSOwnerRef(pod)
+		if apply != nil {
+			apply(pod)
+		}
+	})
+}
+
+func buildTestPodWithRSOwnerRefWithNamespaceForNode1(name, namespace string, apply func(*v1.Pod)) *v1.Pod {
+	return buildTestPodWithRSOwnerRefForNode1(name, func(pod *v1.Pod) {
+		pod.Namespace = namespace
+		if apply != nil {
+			apply(pod)
+		}
+	})
+}
+
 func TestFindDuplicatePods(t *testing.T) {
-	// first setup pods
-	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
-	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
-	node3 := test.BuildTestNode("n3", 2000, 3000, 10, func(node *v1.Node) {
-		node.Spec.Taints = []v1.Taint{
-			{
-				Key:    "hardware",
-				Value:  "gpu",
-				Effect: v1.TaintEffectNoSchedule,
-			},
-		}
-	})
-	node4 := test.BuildTestNode("n4", 2000, 3000, 10, func(node *v1.Node) {
-		node.ObjectMeta.Labels = map[string]string{
-			"datacenter": "east",
-		}
-	})
-	node5 := test.BuildTestNode("n5", 2000, 3000, 10, func(node *v1.Node) {
-		node.Spec = v1.NodeSpec{
-			Unschedulable: true,
-		}
-	})
-	node6 := test.BuildTestNode("n6", 200, 200, 10, nil)
-
-	// Three Pods in the "dev" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	ownerRef1 := test.GetReplicaSetOwnerRefList()
-	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
-	})
-	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
-	})
-	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
-	})
-	// A DaemonSet.
-	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
-	})
-	// A Pod with local storage.
-	p5 := test.BuildTestPod("p5", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-		pod.Spec.Volumes = []v1.Volume{
-			{
-				Name: "sample",
-				VolumeSource: v1.VolumeSource{
-					HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-					EmptyDir: &v1.EmptyDirVolumeSource{
-						SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-					},
-				},
-			},
-		}
-	})
-	// A Mirror Pod.
-	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Annotations = test.GetMirrorPodAnnotation()
-	})
-	// A Critical Pod.
-	p7 := test.BuildTestPod("p7", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "kube-system"
-		priority := utils.SystemCriticalPriority
-		pod.Spec.Priority = &priority
-	})
-	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	ownerRef2 := test.GetReplicaSetOwnerRefList()
-	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "test"
-		pod.ObjectMeta.OwnerReferences = ownerRef2
-	})
-	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "test"
-		pod.ObjectMeta.OwnerReferences = ownerRef2
-	})
-	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "test"
-		pod.ObjectMeta.OwnerReferences = ownerRef2
-	})
-	// Same owners, but different images
-	p11 := test.BuildTestPod("p11", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "different-images"
-		pod.Spec.Containers[0].Image = "foo"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
-	})
-	p12 := test.BuildTestPod("p12", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "different-images"
-		pod.Spec.Containers[0].Image = "bar"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
-	})
-	// Multiple containers
-	p13 := test.BuildTestPod("p13", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "different-images"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
-		pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
-			Name:  "foo",
-			Image: "foo",
-		})
-	})
-	// ### Pods Evictable Based On Node Fit ###
-	ownerRef3 := test.GetReplicaSetOwnerRefList()
-	p15 := test.BuildTestPod("p15", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "node-fit"
-		pod.ObjectMeta.OwnerReferences = ownerRef3
-		pod.Spec.NodeSelector = map[string]string{
-			"datacenter": "west",
-		}
-	})
-	p16 := test.BuildTestPod("NOT1", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "node-fit"
-		pod.ObjectMeta.OwnerReferences = ownerRef3
-		pod.Spec.NodeSelector = map[string]string{
-			"datacenter": "west",
-		}
-	})
-	p17 := test.BuildTestPod("NOT2", 100, 0, node1.Name, func(pod *v1.Pod) {
-		pod.Namespace = "node-fit"
-		pod.ObjectMeta.OwnerReferences = ownerRef3
-		pod.Spec.NodeSelector = map[string]string{
-			"datacenter": "west",
-		}
-	})
-
-	// This pod sits on node6 and is used to take up CPU requests on the node
-	p19 := test.BuildTestPod("CPU-eater", 150, 150, node6.Name, func(pod *v1.Pod) {
-		pod.Namespace = "test"
-	})
-
-	// Dummy pod for node6 used to do the opposite of p19
-	p20 := test.BuildTestPod("CPU-saver", 100, 150, node6.Name, func(pod *v1.Pod) {
-		pod.Namespace = "test"
-	})
-
-	// ### Evictable Pods ###
-
-	// ### Non-evictable Pods ###
-
 	testCases := []struct {
 		description             string
 		pods                    []*v1.Pod
@@ -191,92 +87,289 @@ func TestFindDuplicatePods(t *testing.T) {
 		nodefit                 bool
 	}{
 		{
-			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet. 1 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3},
-			nodes:                   []*v1.Node{node1, node2},
+			description: "Three pods in the `dev` Namespace, bound to same ReplicaSet. 1 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+			},
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet, but ReplicaSet kind is excluded. 0 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3},
-			nodes:                   []*v1.Node{node1, node2},
+			description: "Three pods in the `dev` Namespace, bound to same ReplicaSet, but ReplicaSet kind is excluded. 0 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+			},
 			expectedEvictedPodCount: 0,
 			excludeOwnerKinds:       []string{"ReplicaSet"},
 		},
 		{
-			description:             "Three Pods in the `test` Namespace, bound to same ReplicaSet. 1 should be evicted.",
-			pods:                    []*v1.Pod{p8, p9, p10},
-			nodes:                   []*v1.Node{node1, node2},
+			description: "Three Pods in the `test` Namespace, bound to same ReplicaSet. 1 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p8", "test", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p10", "test", nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+			},
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description:             "Three Pods in the `dev` Namespace, three Pods in the `test` Namespace. Bound to ReplicaSet with same name. 4 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3, p8, p9, p10},
-			nodes:                   []*v1.Node{node1, node2},
+			description: "Three Pods in the `dev` Namespace, three Pods in the `test` Namespace. Bound to ReplicaSet with same name. 4 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p8", "test", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p10", "test", nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+			},
 			expectedEvictedPodCount: 2,
 		},
 		{
-			description:             "Pods are: part of DaemonSet, with local storage, mirror pod annotation, critical pod annotation - none should be evicted.",
-			pods:                    []*v1.Pod{p4, p5, p6, p7},
-			nodes:                   []*v1.Node{node1, node2},
+			description: "Pods are: part of DaemonSet, with local storage, mirror pod annotation, critical pod annotation - none should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodForNode1("p4", func(pod *v1.Pod) {
+					test.SetDSOwnerRef(pod)
+				}),
+				buildTestPodForNode1("p5", func(pod *v1.Pod) {
+					test.SetNormalOwnerRef(pod)
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "sample",
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+								EmptyDir: &v1.EmptyDirVolumeSource{
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
+							},
+						},
+					}
+				}),
+				buildTestPodForNode1("p6", func(pod *v1.Pod) {
+					pod.Annotations = test.GetMirrorPodAnnotation()
+				}),
+				buildTestPodForNode1("p7", func(pod *v1.Pod) {
+					pod.Namespace = "kube-system"
+					priority := utils.SystemCriticalPriority
+					pod.Spec.Priority = &priority
+				}),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+			},
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description:             "Test all Pods: 4 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3, p4, p5, p6, p7, p8, p9, p10},
-			nodes:                   []*v1.Node{node1, node2},
+			description: "Test all Pods: 4 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
+				buildTestPodForNode1("p4", func(pod *v1.Pod) {
+					test.SetDSOwnerRef(pod)
+				}),
+				buildTestPodForNode1("p5", func(pod *v1.Pod) {
+					test.SetNormalOwnerRef(pod)
+					pod.Spec.Volumes = []v1.Volume{
+						{
+							Name: "sample",
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+								EmptyDir: &v1.EmptyDirVolumeSource{
+									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+								},
+							},
+						},
+					}
+				}),
+				buildTestPodForNode1("p6", func(pod *v1.Pod) {
+					pod.Annotations = test.GetMirrorPodAnnotation()
+				}),
+				buildTestPodForNode1("p7", func(pod *v1.Pod) {
+					pod.Namespace = "kube-system"
+					priority := utils.SystemCriticalPriority
+					pod.Spec.Priority = &priority
+				}),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p8", "test", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p10", "test", nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+			},
 			expectedEvictedPodCount: 2,
 		},
 		{
-			description:             "Pods with the same owner but different images should not be evicted",
-			pods:                    []*v1.Pod{p11, p12},
-			nodes:                   []*v1.Node{node1, node2},
+			description: "Pods with the same owner but different images should not be evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p11", "different-images", func(pod *v1.Pod) {
+					pod.Spec.Containers[0].Image = "foo"
+				}),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p12", "different-images", func(pod *v1.Pod) {
+					pod.Spec.Containers[0].Image = "bar"
+				}),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+			},
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description:             "Pods with multiple containers should not match themselves",
-			pods:                    []*v1.Pod{p13},
-			nodes:                   []*v1.Node{node1, node2},
+			description: "Pods with multiple containers should not match themselves",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p13", "different-images", func(pod *v1.Pod) {
+					pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
+						Name:  "foo",
+						Image: "foo",
+					})
+				}),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+			},
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description:             "Pods with matching ownerrefs and at not all matching image should not trigger an eviction",
-			pods:                    []*v1.Pod{p11, p13},
-			nodes:                   []*v1.Node{node1, node2},
+			description: "Pods with matching ownerrefs and at not all matching image should not trigger an eviction",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p11", "different-images", func(pod *v1.Pod) {
+					pod.Spec.Containers[0].Image = "foo"
+				}),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p13", "different-images", func(pod *v1.Pod) {
+					pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
+						Name:  "foo",
+						Image: "foo",
+					})
+				}),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+			},
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description:             "Three pods in the `dev` Namespace, bound to same ReplicaSet. Only node available has a taint, and nodeFit set to true. 0 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3},
-			nodes:                   []*v1.Node{node1, node3},
+			description: "Three pods in the `dev` Namespace, bound to same ReplicaSet. Only node available has a taint, and nodeFit set to true. 0 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName3, func(node *v1.Node) {
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    "hardware",
+							Value:  "gpu",
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
+			},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
 		},
 		{
-			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet, all with a nodeSelector. Only node available has an incorrect node label, and nodeFit set to true. 0 should be evicted.",
-			pods:                    []*v1.Pod{p15, p16, p17},
-			nodes:                   []*v1.Node{node1, node4},
+			description: "Three pods in the `node-fit` Namespace, bound to same ReplicaSet, all with a nodeSelector. Only node available has an incorrect node label, and nodeFit set to true. 0 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p15", "node-fit", func(pod *v1.Pod) {
+					pod.Spec.NodeSelector = map[string]string{
+						"datacenter": "west",
+					}
+				}),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("NOT1", "node-fit", func(pod *v1.Pod) {
+					pod.Spec.NodeSelector = map[string]string{
+						"datacenter": "west",
+					}
+				}),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("NOT2", "node-fit", func(pod *v1.Pod) {
+					pod.Spec.NodeSelector = map[string]string{
+						"datacenter": "west",
+					}
+				}),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName4, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						"datacenter": "east",
+					}
+				}),
+			},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
 		},
 		{
-			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available is not schedulable, and nodeFit set to true. 0 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3},
-			nodes:                   []*v1.Node{node1, node5},
+			description: "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available is not schedulable, and nodeFit set to true. 0 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName5, func(node *v1.Node) {
+					node.Spec = v1.NodeSpec{
+						Unschedulable: true,
+					}
+				}),
+			},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
 		},
 		{
-			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available does not have enough CPU, and nodeFit set to true. 0 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3, p19},
-			nodes:                   []*v1.Node{node1, node6},
+			description: "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available does not have enough CPU, and nodeFit set to true. 0 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
+				test.BuildTestPod("CPU-eater", 150, 150, nodeName6, func(pod *v1.Pod) {
+					pod.Namespace = "test"
+				}),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				test.BuildTestNode(nodeName6, 200, 200, 10, nil),
+			},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
 		},
 		{
-			description:             "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available has enough CPU, and nodeFit set to true. 1 should be evicted.",
-			pods:                    []*v1.Pod{p1, p2, p3, p20},
-			nodes:                   []*v1.Node{node1, node6},
+			description: "Three pods in the `node-fit` Namespace, bound to same ReplicaSet. Only node available has enough CPU, and nodeFit set to true. 1 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
+				test.BuildTestPod("CPU-saver", 100, 150, nodeName6, func(pod *v1.Pod) {
+					pod.Namespace = "test"
+				}),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				test.BuildTestNode(nodeName6, 200, 200, 10, nil),
+			},
 			expectedEvictedPodCount: 1,
 			nodefit:                 true,
 		},
@@ -465,9 +558,9 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 2,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
-				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+				buildTestNode(nodeName3, nil),
 			},
 		},
 		{
@@ -486,8 +579,8 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 1,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
 			},
 		},
 		{
@@ -506,9 +599,9 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 4,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
-				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+				buildTestNode(nodeName3, nil),
 			},
 		},
 		{
@@ -537,9 +630,9 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 4,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
-				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+				buildTestNode(nodeName3, nil),
 			},
 		},
 		{
@@ -551,9 +644,9 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 1,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
-				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+				buildTestNode(nodeName3, nil),
 			},
 		},
 		{
@@ -562,16 +655,16 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 				// (1, 0, 0) for "bar","baz" images -> no eviction, even with a matching ownerKey
 				// (2, 0, 0) for "foo" image -> (1,1,0) - 1 eviction
 				// In this case the only "real" duplicates are p1 and p4, so one of those should be evicted
-				buildTestPodWithImage("p1", "n1", "foo"),
-				buildTestPodWithImage("p2", "n1", "bar"),
-				buildTestPodWithImage("p3", "n1", "baz"),
-				buildTestPodWithImage("p4", "n1", "foo"),
+				buildTestPodWithImage("p1", "foo"),
+				buildTestPodWithImage("p2", "bar"),
+				buildTestPodWithImage("p3", "baz"),
+				buildTestPodWithImage("p4", "foo"),
 			},
 			expectedEvictedPodCount: 1,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
-				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+				buildTestNode(nodeName3, nil),
 			},
 		},
 		{
@@ -582,9 +675,9 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 0,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
-				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+				buildTestNode(nodeName3, nil),
 			},
 		},
 		{
@@ -603,12 +696,12 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 2,
 			nodes: []*v1.Node{
-				test.BuildTestNode("worker1", 2000, 3000, 10, nil),
-				test.BuildTestNode("worker2", 2000, 3000, 10, nil),
-				test.BuildTestNode("worker3", 2000, 3000, 10, nil),
-				test.BuildTestNode("master1", 2000, 3000, 10, setMasterNoScheduleTaint),
-				test.BuildTestNode("master2", 2000, 3000, 10, setMasterNoScheduleTaint),
-				test.BuildTestNode("master3", 2000, 3000, 10, setMasterNoScheduleTaint),
+				buildTestNode("worker1", nil),
+				buildTestNode("worker2", nil),
+				buildTestNode("worker3", nil),
+				buildTestNode("master1", setMasterNoScheduleTaint),
+				buildTestNode("master2", setMasterNoScheduleTaint),
+				buildTestNode("master3", setMasterNoScheduleTaint),
 			},
 		},
 		{
@@ -627,12 +720,12 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 2,
 			nodes: []*v1.Node{
-				test.BuildTestNode("worker1", 2000, 3000, 10, nil),
-				test.BuildTestNode("worker2", 2000, 3000, 10, nil),
-				test.BuildTestNode("worker3", 2000, 3000, 10, nil),
-				test.BuildTestNode("master1", 2000, 3000, 10, setMasterNoScheduleLabel),
-				test.BuildTestNode("master2", 2000, 3000, 10, setMasterNoScheduleLabel),
-				test.BuildTestNode("master3", 2000, 3000, 10, setMasterNoScheduleLabel),
+				buildTestNode("worker1", nil),
+				buildTestNode("worker2", nil),
+				buildTestNode("worker3", nil),
+				buildTestNode("master1", setMasterNoScheduleLabel),
+				buildTestNode("master2", setMasterNoScheduleLabel),
+				buildTestNode("master3", setMasterNoScheduleLabel),
 			},
 		},
 		{
@@ -651,12 +744,12 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 2,
 			nodes: []*v1.Node{
-				test.BuildTestNode("worker1", 2000, 3000, 10, setWorkerLabel),
-				test.BuildTestNode("worker2", 2000, 3000, 10, setWorkerLabel),
-				test.BuildTestNode("worker3", 2000, 3000, 10, setWorkerLabel),
-				test.BuildTestNode("master1", 2000, 3000, 10, nil),
-				test.BuildTestNode("master2", 2000, 3000, 10, nil),
-				test.BuildTestNode("master3", 2000, 3000, 10, nil),
+				buildTestNode("worker1", setWorkerLabel),
+				buildTestNode("worker2", setWorkerLabel),
+				buildTestNode("worker3", setWorkerLabel),
+				buildTestNode("master1", nil),
+				buildTestNode("master2", nil),
+				buildTestNode("master3", nil),
 			},
 		},
 		{
@@ -675,12 +768,12 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 0,
 			nodes: []*v1.Node{
-				test.BuildTestNode("worker1", 2000, 3000, 10, nil),
-				test.BuildTestNode("worker2", 2000, 3000, 10, nil),
-				test.BuildTestNode("worker3", 2000, 3000, 10, nil),
-				test.BuildTestNode("master1", 2000, 3000, 10, nil),
-				test.BuildTestNode("master2", 2000, 3000, 10, nil),
-				test.BuildTestNode("master3", 2000, 3000, 10, nil),
+				buildTestNode("worker1", nil),
+				buildTestNode("worker2", nil),
+				buildTestNode("worker3", nil),
+				buildTestNode("master1", nil),
+				buildTestNode("master2", nil),
+				buildTestNode("master3", nil),
 			},
 		},
 	}
