@@ -174,8 +174,9 @@ func TestFindDuplicatePods(t *testing.T) {
 	})
 
 	// Dummy pod for node6 used to do the opposite of p19
-	p20 := test.BuildTestPod("CPU-saver", 100, 150, node6.Name, nil)
-	p20.Namespace = "test"
+	p20 := test.BuildTestPod("CPU-saver", 100, 150, node6.Name, func(pod *v1.Pod) {
+		pod.Namespace = "test"
+	})
 
 	// ### Evictable Pods ###
 
