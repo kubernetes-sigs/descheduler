@@ -97,7 +97,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	// A Mirror Pod.
 	// A Critical Pod.
 	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	p8 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p8", "test", nil)
 	p9 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil)
 	p10 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p10", "test", nil)
 	// Same owners, but different images
@@ -175,8 +174,11 @@ func TestFindDuplicatePods(t *testing.T) {
 			excludeOwnerKinds:       []string{"ReplicaSet"},
 		},
 		{
-			description:             "Three Pods in the `test` Namespace, bound to same ReplicaSet. 1 should be evicted.",
-			pods:                    []*v1.Pod{p8, p9, p10},
+			description: "Three Pods in the `test` Namespace, bound to same ReplicaSet. 1 should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p8", "test", nil),
+				p9, p10,
+			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 1,
 		},
@@ -186,7 +188,8 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
-				p8, p9, p10,
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p8", "test", nil),
+				p9, p10,
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
@@ -253,7 +256,9 @@ func TestFindDuplicatePods(t *testing.T) {
 					pod.Namespace = "kube-system"
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
-				}), p8, p9, p10,
+				}),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p8", "test", nil),
+				p9, p10,
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
