@@ -48,6 +48,15 @@ func buildTestPodWithImage(podName, image string) *v1.Pod {
 	return pod
 }
 
+func buildTestPodWithRSOwnerRefForNode1(name string, apply func(*v1.Pod)) *v1.Pod {
+	return buildTestPodForNode1(name, func(pod *v1.Pod) {
+		test.SetRSOwnerRef(pod)
+		if apply != nil {
+			apply(pod)
+		}
+	})
+}
+
 func TestFindDuplicatePods(t *testing.T) {
 	// first setup pods
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
@@ -74,17 +83,14 @@ func TestFindDuplicatePods(t *testing.T) {
 	node6 := test.BuildTestNode("n6", 200, 200, 10, nil)
 
 	// Three Pods in the "dev" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	p1 := buildTestPodForNode1("p1", func(pod *v1.Pod) {
+	p1 := buildTestPodWithRSOwnerRefForNode1("p1", func(pod *v1.Pod) {
 		pod.Namespace = "dev"
-		test.SetRSOwnerRef(pod)
 	})
-	p2 := buildTestPodForNode1("p2", func(pod *v1.Pod) {
+	p2 := buildTestPodWithRSOwnerRefForNode1("p2", func(pod *v1.Pod) {
 		pod.Namespace = "dev"
-		test.SetRSOwnerRef(pod)
 	})
-	p3 := buildTestPodForNode1("p3", func(pod *v1.Pod) {
+	p3 := buildTestPodWithRSOwnerRefForNode1("p3", func(pod *v1.Pod) {
 		pod.Namespace = "dev"
-		test.SetRSOwnerRef(pod)
 	})
 	// A DaemonSet.
 	p4 := buildTestPodForNode1("p4", func(pod *v1.Pod) {
@@ -116,56 +122,47 @@ func TestFindDuplicatePods(t *testing.T) {
 		pod.Spec.Priority = &priority
 	})
 	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	p8 := buildTestPodForNode1("p8", func(pod *v1.Pod) {
+	p8 := buildTestPodWithRSOwnerRefForNode1("p8", func(pod *v1.Pod) {
 		pod.Namespace = "test"
-		test.SetRSOwnerRef(pod)
 	})
-	p9 := buildTestPodForNode1("p9", func(pod *v1.Pod) {
+	p9 := buildTestPodWithRSOwnerRefForNode1("p9", func(pod *v1.Pod) {
 		pod.Namespace = "test"
-		test.SetRSOwnerRef(pod)
 	})
-	p10 := buildTestPodForNode1("p10", func(pod *v1.Pod) {
+	p10 := buildTestPodWithRSOwnerRefForNode1("p10", func(pod *v1.Pod) {
 		pod.Namespace = "test"
-		test.SetRSOwnerRef(pod)
 	})
 	// Same owners, but different images
-	p11 := buildTestPodForNode1("p11", func(pod *v1.Pod) {
+	p11 := buildTestPodWithRSOwnerRefForNode1("p11", func(pod *v1.Pod) {
 		pod.Namespace = "different-images"
 		pod.Spec.Containers[0].Image = "foo"
-		test.SetRSOwnerRef(pod)
 	})
-	p12 := buildTestPodForNode1("p12", func(pod *v1.Pod) {
+	p12 := buildTestPodWithRSOwnerRefForNode1("p12", func(pod *v1.Pod) {
 		pod.Namespace = "different-images"
 		pod.Spec.Containers[0].Image = "bar"
-		test.SetRSOwnerRef(pod)
 	})
 	// Multiple containers
-	p13 := buildTestPodForNode1("p13", func(pod *v1.Pod) {
+	p13 := buildTestPodWithRSOwnerRefForNode1("p13", func(pod *v1.Pod) {
 		pod.Namespace = "different-images"
-		test.SetRSOwnerRef(pod)
 		pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
 			Name:  "foo",
 			Image: "foo",
 		})
 	})
 	// ### Pods Evictable Based On Node Fit ###
-	p15 := buildTestPodForNode1("p15", func(pod *v1.Pod) {
+	p15 := buildTestPodWithRSOwnerRefForNode1("p15", func(pod *v1.Pod) {
 		pod.Namespace = "node-fit"
-		test.SetRSOwnerRef(pod)
 		pod.Spec.NodeSelector = map[string]string{
 			"datacenter": "west",
 		}
 	})
-	p16 := buildTestPodForNode1("NOT1", func(pod *v1.Pod) {
+	p16 := buildTestPodWithRSOwnerRefForNode1("NOT1", func(pod *v1.Pod) {
 		pod.Namespace = "node-fit"
-		test.SetRSOwnerRef(pod)
 		pod.Spec.NodeSelector = map[string]string{
 			"datacenter": "west",
 		}
 	})
-	p17 := buildTestPodForNode1("NOT2", func(pod *v1.Pod) {
+	p17 := buildTestPodWithRSOwnerRefForNode1("NOT2", func(pod *v1.Pod) {
 		pod.Namespace = "node-fit"
-		test.SetRSOwnerRef(pod)
 		pod.Spec.NodeSelector = map[string]string{
 			"datacenter": "west",
 		}
