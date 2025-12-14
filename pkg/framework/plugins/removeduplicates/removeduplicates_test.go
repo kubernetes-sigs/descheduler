@@ -67,118 +67,120 @@ func TestFindDuplicatePods(t *testing.T) {
 	})
 	node6 := test.BuildTestNode("n6", 200, 200, 10, nil)
 
-	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
-	p1.Namespace = "dev"
-	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, nil)
-	p2.Namespace = "dev"
-	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, nil)
-	p3.Namespace = "dev"
-	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, nil)
-	p5 := test.BuildTestPod("p5", 100, 0, node1.Name, nil)
-	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, nil)
-	p7 := test.BuildTestPod("p7", 100, 0, node1.Name, nil)
-	p7.Namespace = "kube-system"
-	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, nil)
-	p8.Namespace = "test"
-	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, nil)
-	p9.Namespace = "test"
-	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, nil)
-	p10.Namespace = "test"
-	p11 := test.BuildTestPod("p11", 100, 0, node1.Name, nil)
-	p11.Namespace = "different-images"
-	p12 := test.BuildTestPod("p12", 100, 0, node1.Name, nil)
-	p12.Namespace = "different-images"
-	p13 := test.BuildTestPod("p13", 100, 0, node1.Name, nil)
-	p13.Namespace = "different-images"
-	p14 := test.BuildTestPod("p14", 100, 0, node1.Name, nil)
-	p14.Namespace = "different-images"
-	p15 := test.BuildTestPod("p15", 100, 0, node1.Name, nil)
-	p15.Namespace = "node-fit"
-	p16 := test.BuildTestPod("NOT1", 100, 0, node1.Name, nil)
-	p16.Namespace = "node-fit"
-	p17 := test.BuildTestPod("NOT2", 100, 0, node1.Name, nil)
-	p17.Namespace = "node-fit"
-	p18 := test.BuildTestPod("TARGET", 100, 0, node1.Name, nil)
-	p18.Namespace = "node-fit"
+	// Three Pods in the "dev" Namespace, bound to same ReplicaSet. 2 should be evicted.
+	ownerRef1 := test.GetReplicaSetOwnerRefList()
+	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
+	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
+	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
+	// A DaemonSet.
+	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
+	})
+	// A Pod with local storage.
+	p5 := test.BuildTestPod("p5", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		pod.Spec.Volumes = []v1.Volume{
+			{
+				Name: "sample",
+				VolumeSource: v1.VolumeSource{
+					HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+					EmptyDir: &v1.EmptyDirVolumeSource{
+						SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+					},
+				},
+			},
+		}
+	})
+	// A Mirror Pod.
+	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Annotations = test.GetMirrorPodAnnotation()
+	})
+	// A Critical Pod.
+	p7 := test.BuildTestPod("p7", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "kube-system"
+		priority := utils.SystemCriticalPriority
+		pod.Spec.Priority = &priority
+	})
+	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
+	ownerRef2 := test.GetReplicaSetOwnerRefList()
+	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "test"
+		pod.ObjectMeta.OwnerReferences = ownerRef2
+	})
+	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "test"
+		pod.ObjectMeta.OwnerReferences = ownerRef2
+	})
+	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "test"
+		pod.ObjectMeta.OwnerReferences = ownerRef2
+	})
+	// Same owners, but different images
+	p11 := test.BuildTestPod("p11", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "different-images"
+		pod.Spec.Containers[0].Image = "foo"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
+	p12 := test.BuildTestPod("p12", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "different-images"
+		pod.Spec.Containers[0].Image = "bar"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
+	// Multiple containers
+	p13 := test.BuildTestPod("p13", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "different-images"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+		pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
+			Name:  "foo",
+			Image: "foo",
+		})
+	})
+	// ### Pods Evictable Based On Node Fit ###
+	ownerRef3 := test.GetReplicaSetOwnerRefList()
+	p15 := test.BuildTestPod("p15", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "node-fit"
+		pod.ObjectMeta.OwnerReferences = ownerRef3
+		pod.Spec.NodeSelector = map[string]string{
+			"datacenter": "west",
+		}
+	})
+	p16 := test.BuildTestPod("NOT1", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "node-fit"
+		pod.ObjectMeta.OwnerReferences = ownerRef3
+		pod.Spec.NodeSelector = map[string]string{
+			"datacenter": "west",
+		}
+	})
+	p17 := test.BuildTestPod("NOT2", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "node-fit"
+		pod.ObjectMeta.OwnerReferences = ownerRef3
+		pod.Spec.NodeSelector = map[string]string{
+			"datacenter": "west",
+		}
+	})
 
 	// This pod sits on node6 and is used to take up CPU requests on the node
-	p19 := test.BuildTestPod("CPU-eater", 150, 150, node6.Name, nil)
-	p19.Namespace = "test"
+	p19 := test.BuildTestPod("CPU-eater", 150, 150, node6.Name, func(pod *v1.Pod) {
+		pod.Namespace = "test"
+	})
 
 	// Dummy pod for node6 used to do the opposite of p19
-	p20 := test.BuildTestPod("CPU-saver", 100, 150, node6.Name, nil)
-	p20.Namespace = "test"
+	p20 := test.BuildTestPod("CPU-saver", 100, 150, node6.Name, func(pod *v1.Pod) {
+		pod.Namespace = "test"
+	})
 
 	// ### Evictable Pods ###
 
-	// Three Pods in the "default" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	ownerRef1 := test.GetReplicaSetOwnerRefList()
-	p1.ObjectMeta.OwnerReferences = ownerRef1
-	p2.ObjectMeta.OwnerReferences = ownerRef1
-	p3.ObjectMeta.OwnerReferences = ownerRef1
-
-	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	ownerRef2 := test.GetReplicaSetOwnerRefList()
-	p8.ObjectMeta.OwnerReferences = ownerRef2
-	p9.ObjectMeta.OwnerReferences = ownerRef2
-	p10.ObjectMeta.OwnerReferences = ownerRef2
-
 	// ### Non-evictable Pods ###
-
-	// A DaemonSet.
-	p4.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
-
-	// A Pod with local storage.
-	p5.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p5.Spec.Volumes = []v1.Volume{
-		{
-			Name: "sample",
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-				},
-			},
-		},
-	}
-
-	// A Mirror Pod.
-	p6.Annotations = test.GetMirrorPodAnnotation()
-
-	// A Critical Pod.
-	priority := utils.SystemCriticalPriority
-	p7.Spec.Priority = &priority
-
-	// Same owners, but different images
-	p11.Spec.Containers[0].Image = "foo"
-	p11.ObjectMeta.OwnerReferences = ownerRef1
-	p12.Spec.Containers[0].Image = "bar"
-	p12.ObjectMeta.OwnerReferences = ownerRef1
-
-	// Multiple containers
-	p13.ObjectMeta.OwnerReferences = ownerRef1
-	p13.Spec.Containers = append(p13.Spec.Containers, v1.Container{
-		Name:  "foo",
-		Image: "foo",
-	})
-
-	// ### Pods Evictable Based On Node Fit ###
-
-	ownerRef3 := test.GetReplicaSetOwnerRefList()
-	p15.ObjectMeta.OwnerReferences = ownerRef3
-	p16.ObjectMeta.OwnerReferences = ownerRef3
-	p17.ObjectMeta.OwnerReferences = ownerRef3
-	p18.ObjectMeta.OwnerReferences = ownerRef3
-
-	p15.Spec.NodeSelector = map[string]string{
-		"datacenter": "west",
-	}
-	p16.Spec.NodeSelector = map[string]string{
-		"datacenter": "west",
-	}
-	p17.Spec.NodeSelector = map[string]string{
-		"datacenter": "west",
-	}
 
 	testCases := []struct {
 		description             string
