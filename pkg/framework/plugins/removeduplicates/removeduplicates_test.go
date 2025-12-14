@@ -79,11 +79,6 @@ func buildTestPodWithRSOwnerRefWithNamespaceForNode1(name, namespace string, app
 
 func TestFindDuplicatePods(t *testing.T) {
 	// first setup pods
-	node4 := buildTestNode(nodeName4, func(node *v1.Node) {
-		node.ObjectMeta.Labels = map[string]string{
-			"datacenter": "east",
-		}
-	})
 	node5 := buildTestNode(nodeName5, func(node *v1.Node) {
 		node.Spec = v1.NodeSpec{
 			Unschedulable: true,
@@ -343,7 +338,11 @@ func TestFindDuplicatePods(t *testing.T) {
 			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, nil),
-				node4,
+				buildTestNode(nodeName4, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						"datacenter": "east",
+					}
+				}),
 			},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
