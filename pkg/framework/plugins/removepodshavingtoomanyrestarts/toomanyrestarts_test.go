@@ -33,6 +33,24 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+func setPodContainerStatusRestartCount(pod *v1.Pod, base int32) {
+	pod.Status = v1.PodStatus{
+		InitContainerStatuses: []v1.ContainerStatus{
+			{
+				RestartCount: 5 * base,
+			},
+		},
+		ContainerStatuses: []v1.ContainerStatus{
+			{
+				RestartCount: 10 * base,
+			},
+			{
+				RestartCount: 10 * base,
+			},
+		},
+	}
+}
+
 func initPods(node *v1.Node) []*v1.Pod {
 	pods := make([]*v1.Pod, 0)
 
@@ -41,21 +59,7 @@ func initPods(node *v1.Node) []*v1.Pod {
 		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
 		// pod at index i will have 25 * i restarts.
-		pod.Status = v1.PodStatus{
-			InitContainerStatuses: []v1.ContainerStatus{
-				{
-					RestartCount: 5 * i,
-				},
-			},
-			ContainerStatuses: []v1.ContainerStatus{
-				{
-					RestartCount: 10 * i,
-				},
-				{
-					RestartCount: 10 * i,
-				},
-			},
-		}
+		setPodContainerStatusRestartCount(pod, i)
 		pods = append(pods, pod)
 	}
 
