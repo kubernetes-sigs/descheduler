@@ -472,51 +472,29 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 		node.ObjectMeta.Labels["node-role.kubernetes.io/worker"] = "k2"
 	}
 
-	setNotMasterNodeSelectorK1 := func(pod *v1.Pod) {
-		test.SetRSOwnerRef(pod)
-		pod.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: &v1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-					NodeSelectorTerms: []v1.NodeSelectorTerm{
-						{
-							MatchExpressions: []v1.NodeSelectorRequirement{
-								{
-									Key:      "node-role.kubernetes.io/control-plane",
-									Operator: v1.NodeSelectorOpDoesNotExist,
-								},
-								{
-									Key:      "k1",
-									Operator: v1.NodeSelectorOpDoesNotExist,
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-	}
-
-	setNotMasterNodeSelectorK2 := func(pod *v1.Pod) {
-		test.SetRSOwnerRef(pod)
-		pod.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: &v1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-					NodeSelectorTerms: []v1.NodeSelectorTerm{
-						{
-							MatchExpressions: []v1.NodeSelectorRequirement{
-								{
-									Key:      "node-role.kubernetes.io/control-plane",
-									Operator: v1.NodeSelectorOpDoesNotExist,
-								},
-								{
-									Key:      "k2",
-									Operator: v1.NodeSelectorOpDoesNotExist,
+	setNotMasterNodeSelector := func(key string) func(*v1.Pod) {
+		return func(pod *v1.Pod) {
+			test.SetRSOwnerRef(pod)
+			pod.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: &v1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{
+							{
+								MatchExpressions: []v1.NodeSelectorRequirement{
+									{
+										Key:      "node-role.kubernetes.io/control-plane",
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
+									{
+										Key:      key,
+										Operator: v1.NodeSelectorOpDoesNotExist,
+									},
 								},
 							},
 						},
 					},
 				},
-			},
+			}
 		}
 	}
 
@@ -708,15 +686,15 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			description: "Evict pods uniformly respecting RequiredDuringSchedulingIgnoredDuringExecution node affinity",
 			pods: []*v1.Pod{
 				// (5,3,1,0,0,0) -> (3,3,3,0,0,0) -> 2 evictions
-				buildTestPodForNode("p1", "worker1", setNotMasterNodeSelectorK1),
-				buildTestPodForNode("p2", "worker1", setNotMasterNodeSelectorK2),
-				buildTestPodForNode("p3", "worker1", setNotMasterNodeSelectorK1),
-				buildTestPodForNode("p4", "worker1", setNotMasterNodeSelectorK2),
-				buildTestPodForNode("p5", "worker1", setNotMasterNodeSelectorK1),
-				buildTestPodForNode("p6", "worker2", setNotMasterNodeSelectorK2),
-				buildTestPodForNode("p7", "worker2", setNotMasterNodeSelectorK1),
-				buildTestPodForNode("p8", "worker2", setNotMasterNodeSelectorK2),
-				buildTestPodForNode("p9", "worker3", setNotMasterNodeSelectorK1),
+				buildTestPodForNode("p1", "worker1", setNotMasterNodeSelector("k1")),
+				buildTestPodForNode("p2", "worker1", setNotMasterNodeSelector("k2")),
+				buildTestPodForNode("p3", "worker1", setNotMasterNodeSelector("k1")),
+				buildTestPodForNode("p4", "worker1", setNotMasterNodeSelector("k2")),
+				buildTestPodForNode("p5", "worker1", setNotMasterNodeSelector("k1")),
+				buildTestPodForNode("p6", "worker2", setNotMasterNodeSelector("k2")),
+				buildTestPodForNode("p7", "worker2", setNotMasterNodeSelector("k1")),
+				buildTestPodForNode("p8", "worker2", setNotMasterNodeSelector("k2")),
+				buildTestPodForNode("p9", "worker3", setNotMasterNodeSelector("k1")),
 			},
 			expectedEvictedPodCount: 2,
 			nodes: []*v1.Node{
