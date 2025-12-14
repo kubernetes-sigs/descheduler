@@ -95,9 +95,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	// A DaemonSet.
 	// A Pod with local storage.
 	// A Mirror Pod.
-	p6 := buildTestPodForNode1("p6", func(pod *v1.Pod) {
-		pod.Annotations = test.GetMirrorPodAnnotation()
-	})
 	// A Critical Pod.
 	p7 := buildTestPodForNode1("p7", func(pod *v1.Pod) {
 		pod.Namespace = "kube-system"
@@ -218,7 +215,10 @@ func TestFindDuplicatePods(t *testing.T) {
 							},
 						},
 					}
-				}), p6, p7,
+				}),
+				buildTestPodForNode1("p6", func(pod *v1.Pod) {
+					pod.Annotations = test.GetMirrorPodAnnotation()
+				}), p7,
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
@@ -245,7 +245,10 @@ func TestFindDuplicatePods(t *testing.T) {
 							},
 						},
 					}
-				}), p6, p7, p8, p9, p10,
+				}),
+				buildTestPodForNode1("p6", func(pod *v1.Pod) {
+					pod.Annotations = test.GetMirrorPodAnnotation()
+				}), p7, p8, p9, p10,
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
