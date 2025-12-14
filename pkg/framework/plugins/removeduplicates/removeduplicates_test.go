@@ -104,9 +104,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	// This pod sits on node6 and is used to take up CPU requests on the node
 
 	// Dummy pod for node6 used to do the opposite of p19
-	p20 := test.BuildTestPod("CPU-saver", 100, 150, node6.Name, func(pod *v1.Pod) {
-		pod.Namespace = "test"
-	})
 
 	// ### Evictable Pods ###
 
@@ -341,7 +338,9 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
-				p20,
+				test.BuildTestPod("CPU-saver", 100, 150, node6.Name, func(pod *v1.Pod) {
+					pod.Namespace = "test"
+				}),
 			},
 			nodes:                   []*v1.Node{node1, node6},
 			expectedEvictedPodCount: 1,
