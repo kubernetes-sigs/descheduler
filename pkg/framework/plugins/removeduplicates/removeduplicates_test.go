@@ -110,8 +110,12 @@ func TestFindDuplicatePods(t *testing.T) {
 		priority := utils.SystemCriticalPriority
 		pod.Spec.Priority = &priority
 	})
-	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, nil)
-	p8.Namespace = "test"
+	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
+	ownerRef2 := test.GetReplicaSetOwnerRefList()
+	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "test"
+		pod.ObjectMeta.OwnerReferences = ownerRef2
+	})
 	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, nil)
 	p9.Namespace = "test"
 	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, nil)
@@ -143,9 +147,6 @@ func TestFindDuplicatePods(t *testing.T) {
 
 	// ### Evictable Pods ###
 
-	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	ownerRef2 := test.GetReplicaSetOwnerRefList()
-	p8.ObjectMeta.OwnerReferences = ownerRef2
 	p9.ObjectMeta.OwnerReferences = ownerRef2
 	p10.ObjectMeta.OwnerReferences = ownerRef2
 
