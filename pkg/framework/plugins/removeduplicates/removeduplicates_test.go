@@ -73,19 +73,19 @@ func TestFindDuplicatePods(t *testing.T) {
 	})
 	node6 := test.BuildTestNode("n6", 200, 200, 10, nil)
 
+	ownerRef := test.GetReplicaSetOwnerRefList()
 	// Three Pods in the "dev" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	ownerRef1 := test.GetReplicaSetOwnerRefList()
 	p1 := buildTestPodForNode1("p1", func(pod *v1.Pod) {
 		pod.Namespace = "dev"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
+		pod.ObjectMeta.OwnerReferences = ownerRef
 	})
 	p2 := buildTestPodForNode1("p2", func(pod *v1.Pod) {
 		pod.Namespace = "dev"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
+		pod.ObjectMeta.OwnerReferences = ownerRef
 	})
 	p3 := buildTestPodForNode1("p3", func(pod *v1.Pod) {
 		pod.Namespace = "dev"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
+		pod.ObjectMeta.OwnerReferences = ownerRef
 	})
 	// A DaemonSet.
 	p4 := buildTestPodForNode1("p4", func(pod *v1.Pod) {
@@ -117,58 +117,56 @@ func TestFindDuplicatePods(t *testing.T) {
 		pod.Spec.Priority = &priority
 	})
 	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	ownerRef2 := test.GetReplicaSetOwnerRefList()
 	p8 := buildTestPodForNode1("p8", func(pod *v1.Pod) {
 		pod.Namespace = "test"
-		pod.ObjectMeta.OwnerReferences = ownerRef2
+		pod.ObjectMeta.OwnerReferences = ownerRef
 	})
 	p9 := buildTestPodForNode1("p9", func(pod *v1.Pod) {
 		pod.Namespace = "test"
-		pod.ObjectMeta.OwnerReferences = ownerRef2
+		pod.ObjectMeta.OwnerReferences = ownerRef
 	})
 	p10 := buildTestPodForNode1("p10", func(pod *v1.Pod) {
 		pod.Namespace = "test"
-		pod.ObjectMeta.OwnerReferences = ownerRef2
+		pod.ObjectMeta.OwnerReferences = ownerRef
 	})
 	// Same owners, but different images
 	p11 := buildTestPodForNode1("p11", func(pod *v1.Pod) {
 		pod.Namespace = "different-images"
 		pod.Spec.Containers[0].Image = "foo"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
+		pod.ObjectMeta.OwnerReferences = ownerRef
 	})
 	p12 := buildTestPodForNode1("p12", func(pod *v1.Pod) {
 		pod.Namespace = "different-images"
 		pod.Spec.Containers[0].Image = "bar"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
+		pod.ObjectMeta.OwnerReferences = ownerRef
 	})
 	// Multiple containers
 	p13 := buildTestPodForNode1("p13", func(pod *v1.Pod) {
 		pod.Namespace = "different-images"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
+		pod.ObjectMeta.OwnerReferences = ownerRef
 		pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
 			Name:  "foo",
 			Image: "foo",
 		})
 	})
 	// ### Pods Evictable Based On Node Fit ###
-	ownerRef3 := test.GetReplicaSetOwnerRefList()
 	p15 := buildTestPodForNode1("p15", func(pod *v1.Pod) {
 		pod.Namespace = "node-fit"
-		pod.ObjectMeta.OwnerReferences = ownerRef3
+		pod.ObjectMeta.OwnerReferences = ownerRef
 		pod.Spec.NodeSelector = map[string]string{
 			"datacenter": "west",
 		}
 	})
 	p16 := buildTestPodForNode1("NOT1", func(pod *v1.Pod) {
 		pod.Namespace = "node-fit"
-		pod.ObjectMeta.OwnerReferences = ownerRef3
+		pod.ObjectMeta.OwnerReferences = ownerRef
 		pod.Spec.NodeSelector = map[string]string{
 			"datacenter": "west",
 		}
 	})
 	p17 := buildTestPodForNode1("NOT2", func(pod *v1.Pod) {
 		pod.Namespace = "node-fit"
-		pod.ObjectMeta.OwnerReferences = ownerRef3
+		pod.ObjectMeta.OwnerReferences = ownerRef
 		pod.Spec.NodeSelector = map[string]string{
 			"datacenter": "west",
 		}
