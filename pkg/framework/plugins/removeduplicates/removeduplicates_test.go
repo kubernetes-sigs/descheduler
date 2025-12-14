@@ -144,8 +144,6 @@ func TestFindDuplicatePods(t *testing.T) {
 			Image: "foo",
 		})
 	})
-	p14 := test.BuildTestPod("p14", 100, 0, node1.Name, nil)
-	p14.Namespace = "different-images"
 	p15 := test.BuildTestPod("p15", 100, 0, node1.Name, nil)
 	p15.Namespace = "node-fit"
 	p16 := test.BuildTestPod("NOT1", 100, 0, node1.Name, nil)
