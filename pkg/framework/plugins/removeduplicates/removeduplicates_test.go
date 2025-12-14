@@ -93,9 +93,6 @@ func TestFindDuplicatePods(t *testing.T) {
 
 	// Three Pods in the "dev" Namespace, bound to same ReplicaSet. 2 should be evicted.
 	// A DaemonSet.
-	p4 := buildTestPodForNode1("p4", func(pod *v1.Pod) {
-		test.SetDSOwnerRef(pod)
-	})
 	// A Pod with local storage.
 	p5 := buildTestPodForNode1("p5", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
@@ -217,8 +214,13 @@ func TestFindDuplicatePods(t *testing.T) {
 			expectedEvictedPodCount: 2,
 		},
 		{
-			description:             "Pods are: part of DaemonSet, with local storage, mirror pod annotation, critical pod annotation - none should be evicted.",
-			pods:                    []*v1.Pod{p4, p5, p6, p7},
+			description: "Pods are: part of DaemonSet, with local storage, mirror pod annotation, critical pod annotation - none should be evicted.",
+			pods: []*v1.Pod{
+				buildTestPodForNode1("p4", func(pod *v1.Pod) {
+					test.SetDSOwnerRef(pod)
+				}),
+				p5, p6, p7,
+			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
 		},
@@ -228,7 +230,10 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
-				p4, p5, p6, p7, p8, p9, p10,
+				buildTestPodForNode1("p4", func(pod *v1.Pod) {
+					test.SetDSOwnerRef(pod)
+				}),
+				p5, p6, p7, p8, p9, p10,
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
