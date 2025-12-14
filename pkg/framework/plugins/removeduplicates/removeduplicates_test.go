@@ -98,9 +98,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	// A Critical Pod.
 	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
 	// Same owners, but different images
-	p11 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p11", "different-images", func(pod *v1.Pod) {
-		pod.Spec.Containers[0].Image = "foo"
-	})
 	p12 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p12", "different-images", func(pod *v1.Pod) {
 		pod.Spec.Containers[0].Image = "bar"
 	})
@@ -265,8 +262,11 @@ func TestFindDuplicatePods(t *testing.T) {
 			expectedEvictedPodCount: 2,
 		},
 		{
-			description:             "Pods with the same owner but different images should not be evicted",
-			pods:                    []*v1.Pod{p11, p12},
+			description: "Pods with the same owner but different images should not be evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p11", "different-images", func(pod *v1.Pod) {
+					pod.Spec.Containers[0].Image = "foo"
+				}), p12},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
 		},
@@ -277,8 +277,11 @@ func TestFindDuplicatePods(t *testing.T) {
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description:             "Pods with matching ownerrefs and at not all matching image should not trigger an eviction",
-			pods:                    []*v1.Pod{p11, p13},
+			description: "Pods with matching ownerrefs and at not all matching image should not trigger an eviction",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p11", "different-images", func(pod *v1.Pod) {
+					pod.Spec.Containers[0].Image = "foo"
+				}), p13},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
 		},
