@@ -88,11 +88,11 @@ func TestFindDuplicatePods(t *testing.T) {
 	})
 	// A DaemonSet.
 	p4 := buildTestPodForNode1("p4", func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
+		test.SetDSOwnerRef(pod)
 	})
 	// A Pod with local storage.
 	p5 := buildTestPodForNode1("p5", func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 		pod.Spec.Volumes = []v1.Volume{
 			{
 				Name: "sample",
