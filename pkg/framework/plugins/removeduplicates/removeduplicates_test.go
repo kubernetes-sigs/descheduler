@@ -116,8 +116,10 @@ func TestFindDuplicatePods(t *testing.T) {
 		pod.Namespace = "test"
 		pod.ObjectMeta.OwnerReferences = ownerRef2
 	})
-	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, nil)
-	p9.Namespace = "test"
+	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "test"
+		pod.ObjectMeta.OwnerReferences = ownerRef2
+	})
 	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, nil)
 	p10.Namespace = "test"
 	p11 := test.BuildTestPod("p11", 100, 0, node1.Name, nil)
@@ -147,7 +149,6 @@ func TestFindDuplicatePods(t *testing.T) {
 
 	// ### Evictable Pods ###
 
-	p9.ObjectMeta.OwnerReferences = ownerRef2
 	p10.ObjectMeta.OwnerReferences = ownerRef2
 
 	// ### Non-evictable Pods ###
