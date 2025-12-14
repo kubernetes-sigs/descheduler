@@ -130,8 +130,11 @@ func TestFindDuplicatePods(t *testing.T) {
 		pod.Spec.Containers[0].Image = "foo"
 		pod.ObjectMeta.OwnerReferences = ownerRef1
 	})
-	p12 := test.BuildTestPod("p12", 100, 0, node1.Name, nil)
-	p12.Namespace = "different-images"
+	p12 := test.BuildTestPod("p12", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "different-images"
+		pod.Spec.Containers[0].Image = "bar"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	})
 	p13 := test.BuildTestPod("p13", 100, 0, node1.Name, nil)
 	p13.Namespace = "different-images"
 	p14 := test.BuildTestPod("p14", 100, 0, node1.Name, nil)
@@ -156,9 +159,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	// ### Evictable Pods ###
 
 	// ### Non-evictable Pods ###
-
-	p12.Spec.Containers[0].Image = "bar"
-	p12.ObjectMeta.OwnerReferences = ownerRef1
 
 	// Multiple containers
 	p13.ObjectMeta.OwnerReferences = ownerRef1
