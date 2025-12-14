@@ -33,7 +33,18 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
-const nodeName1 = "n1"
+const (
+	nodeName1 = "n1"
+	nodeName2 = "n2"
+	nodeName3 = "n3"
+	nodeName4 = "n4"
+	nodeName5 = "n5"
+	nodeName6 = "n6"
+)
+
+func buildTestNode(nodeName string, apply func(*v1.Node)) *v1.Node {
+	return test.BuildTestNode(nodeName, 2000, 3000, 10, apply)
+}
 
 func buildTestPodForNode1(name string, apply func(*v1.Pod)) *v1.Pod {
 	return test.BuildTestPod(name, 100, 0, nodeName1, apply)
@@ -68,9 +79,9 @@ func buildTestPodWithRSOwnerRefWithNamespaceForNode1(name, namespace string, app
 
 func TestFindDuplicatePods(t *testing.T) {
 	// first setup pods
-	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
-	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
-	node3 := test.BuildTestNode("n3", 2000, 3000, 10, func(node *v1.Node) {
+	node1 := buildTestNode(nodeName1, nil)
+	node2 := buildTestNode(nodeName2, nil)
+	node3 := buildTestNode(nodeName3, func(node *v1.Node) {
 		node.Spec.Taints = []v1.Taint{
 			{
 				Key:    "hardware",
@@ -79,17 +90,17 @@ func TestFindDuplicatePods(t *testing.T) {
 			},
 		}
 	})
-	node4 := test.BuildTestNode("n4", 2000, 3000, 10, func(node *v1.Node) {
+	node4 := buildTestNode(nodeName4, func(node *v1.Node) {
 		node.ObjectMeta.Labels = map[string]string{
 			"datacenter": "east",
 		}
 	})
-	node5 := test.BuildTestNode("n5", 2000, 3000, 10, func(node *v1.Node) {
+	node5 := buildTestNode(nodeName5, func(node *v1.Node) {
 		node.Spec = v1.NodeSpec{
 			Unschedulable: true,
 		}
 	})
-	node6 := test.BuildTestNode("n6", 200, 200, 10, nil)
+	node6 := test.BuildTestNode(nodeName6, 200, 200, 10, nil)
 
 	// Three Pods in the "dev" Namespace, bound to same ReplicaSet. 2 should be evicted.
 	// A DaemonSet.
@@ -531,9 +542,9 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 2,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
-				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+				buildTestNode(nodeName3, nil),
 			},
 		},
 		{
@@ -552,8 +563,8 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 1,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
 			},
 		},
 		{
@@ -572,9 +583,9 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 4,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
-				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+				buildTestNode(nodeName3, nil),
 			},
 		},
 		{
@@ -603,9 +614,9 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 4,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
-				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+				buildTestNode(nodeName3, nil),
 			},
 		},
 		{
@@ -617,9 +628,9 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 1,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
-				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+				buildTestNode(nodeName3, nil),
 			},
 		},
 		{
@@ -635,9 +646,9 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 1,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
-				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+				buildTestNode(nodeName3, nil),
 			},
 		},
 		{
@@ -648,9 +659,9 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 0,
 			nodes: []*v1.Node{
-				test.BuildTestNode("n1", 2000, 3000, 10, nil),
-				test.BuildTestNode("n2", 2000, 3000, 10, nil),
-				test.BuildTestNode("n3", 2000, 3000, 10, nil),
+				buildTestNode(nodeName1, nil),
+				buildTestNode(nodeName2, nil),
+				buildTestNode(nodeName3, nil),
 			},
 		},
 		{
@@ -669,12 +680,12 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 2,
 			nodes: []*v1.Node{
-				test.BuildTestNode("worker1", 2000, 3000, 10, nil),
-				test.BuildTestNode("worker2", 2000, 3000, 10, nil),
-				test.BuildTestNode("worker3", 2000, 3000, 10, nil),
-				test.BuildTestNode("master1", 2000, 3000, 10, setMasterNoScheduleTaint),
-				test.BuildTestNode("master2", 2000, 3000, 10, setMasterNoScheduleTaint),
-				test.BuildTestNode("master3", 2000, 3000, 10, setMasterNoScheduleTaint),
+				buildTestNode("worker1", nil),
+				buildTestNode("worker2", nil),
+				buildTestNode("worker3", nil),
+				buildTestNode("master1", setMasterNoScheduleTaint),
+				buildTestNode("master2", setMasterNoScheduleTaint),
+				buildTestNode("master3", setMasterNoScheduleTaint),
 			},
 		},
 		{
@@ -693,12 +704,12 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 2,
 			nodes: []*v1.Node{
-				test.BuildTestNode("worker1", 2000, 3000, 10, nil),
-				test.BuildTestNode("worker2", 2000, 3000, 10, nil),
-				test.BuildTestNode("worker3", 2000, 3000, 10, nil),
-				test.BuildTestNode("master1", 2000, 3000, 10, setMasterNoScheduleLabel),
-				test.BuildTestNode("master2", 2000, 3000, 10, setMasterNoScheduleLabel),
-				test.BuildTestNode("master3", 2000, 3000, 10, setMasterNoScheduleLabel),
+				buildTestNode("worker1", nil),
+				buildTestNode("worker2", nil),
+				buildTestNode("worker3", nil),
+				buildTestNode("master1", setMasterNoScheduleLabel),
+				buildTestNode("master2", setMasterNoScheduleLabel),
+				buildTestNode("master3", setMasterNoScheduleLabel),
 			},
 		},
 		{
@@ -717,12 +728,12 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 2,
 			nodes: []*v1.Node{
-				test.BuildTestNode("worker1", 2000, 3000, 10, setWorkerLabel),
-				test.BuildTestNode("worker2", 2000, 3000, 10, setWorkerLabel),
-				test.BuildTestNode("worker3", 2000, 3000, 10, setWorkerLabel),
-				test.BuildTestNode("master1", 2000, 3000, 10, nil),
-				test.BuildTestNode("master2", 2000, 3000, 10, nil),
-				test.BuildTestNode("master3", 2000, 3000, 10, nil),
+				buildTestNode("worker1", setWorkerLabel),
+				buildTestNode("worker2", setWorkerLabel),
+				buildTestNode("worker3", setWorkerLabel),
+				buildTestNode("master1", nil),
+				buildTestNode("master2", nil),
+				buildTestNode("master3", nil),
 			},
 		},
 		{
@@ -741,12 +752,12 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			},
 			expectedEvictedPodCount: 0,
 			nodes: []*v1.Node{
-				test.BuildTestNode("worker1", 2000, 3000, 10, nil),
-				test.BuildTestNode("worker2", 2000, 3000, 10, nil),
-				test.BuildTestNode("worker3", 2000, 3000, 10, nil),
-				test.BuildTestNode("master1", 2000, 3000, 10, nil),
-				test.BuildTestNode("master2", 2000, 3000, 10, nil),
-				test.BuildTestNode("master3", 2000, 3000, 10, nil),
+				buildTestNode("worker1", nil),
+				buildTestNode("worker2", nil),
+				buildTestNode("worker3", nil),
+				buildTestNode("master1", nil),
+				buildTestNode("master2", nil),
+				buildTestNode("master3", nil),
 			},
 		},
 	}
