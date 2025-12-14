@@ -97,7 +97,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	// A Mirror Pod.
 	// A Critical Pod.
 	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	p9 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil)
 	p10 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p10", "test", nil)
 	// Same owners, but different images
 	p11 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p11", "different-images", func(pod *v1.Pod) {
@@ -177,7 +176,8 @@ func TestFindDuplicatePods(t *testing.T) {
 			description: "Three Pods in the `test` Namespace, bound to same ReplicaSet. 1 should be evicted.",
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p8", "test", nil),
-				p9, p10,
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil),
+				p10,
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 1,
@@ -189,7 +189,8 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p8", "test", nil),
-				p9, p10,
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil),
+				p10,
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
@@ -258,7 +259,8 @@ func TestFindDuplicatePods(t *testing.T) {
 					pod.Spec.Priority = &priority
 				}),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p8", "test", nil),
-				p9, p10,
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil),
+				p10,
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
