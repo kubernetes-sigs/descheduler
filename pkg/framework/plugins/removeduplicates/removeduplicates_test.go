@@ -92,7 +92,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	node6 := test.BuildTestNode("n6", 200, 200, 10, nil)
 
 	// Three Pods in the "dev" Namespace, bound to same ReplicaSet. 2 should be evicted.
-	p3 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil)
 	// A DaemonSet.
 	p4 := buildTestPodForNode1("p4", func(pod *v1.Pod) {
 		test.SetDSOwnerRef(pod)
@@ -184,7 +183,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
-				p3,
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 1,
@@ -194,7 +193,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
-				p3,
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
@@ -211,7 +210,8 @@ func TestFindDuplicatePods(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
-				p3, p8, p9, p10,
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
+				p8, p9, p10,
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
@@ -227,7 +227,8 @@ func TestFindDuplicatePods(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
-				p3, p4, p5, p6, p7, p8, p9, p10,
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
+				p4, p5, p6, p7, p8, p9, p10,
 			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 2,
@@ -255,7 +256,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
-				p3,
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
 			},
 			nodes:                   []*v1.Node{node1, node3},
 			expectedEvictedPodCount: 0,
@@ -273,7 +274,7 @@ func TestFindDuplicatePods(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
-				p3,
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
 			},
 			nodes:                   []*v1.Node{node1, node5},
 			expectedEvictedPodCount: 0,
@@ -284,7 +285,8 @@ func TestFindDuplicatePods(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
-				p3, p19,
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
+				p19,
 			},
 			nodes:                   []*v1.Node{node1, node6},
 			expectedEvictedPodCount: 0,
@@ -295,7 +297,8 @@ func TestFindDuplicatePods(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
-				p3, p20,
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
+				p20,
 			},
 			nodes:                   []*v1.Node{node1, node6},
 			expectedEvictedPodCount: 1,
