@@ -425,26 +425,17 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 		}
 	}
 
-	setTolerationsK1 := func(pod *v1.Pod) {
-		test.SetRSOwnerRef(pod)
-		pod.Spec.Tolerations = []v1.Toleration{
-			{
-				Key:      "k1",
-				Value:    "v1",
-				Operator: v1.TolerationOpEqual,
-				Effect:   v1.TaintEffectNoSchedule,
-			},
-		}
-	}
-	setTolerationsK2 := func(pod *v1.Pod) {
-		test.SetRSOwnerRef(pod)
-		pod.Spec.Tolerations = []v1.Toleration{
-			{
-				Key:      "k2",
-				Value:    "v2",
-				Operator: v1.TolerationOpEqual,
-				Effect:   v1.TaintEffectNoSchedule,
-			},
+	setNoScheduleTolerations := func(key, value string) func(*v1.Pod) {
+		return func(pod *v1.Pod) {
+			test.SetRSOwnerRef(pod)
+			pod.Spec.Tolerations = []v1.Toleration{
+				{
+					Key:      key,
+					Value:    value,
+					Operator: v1.TolerationOpEqual,
+					Effect:   v1.TaintEffectNoSchedule,
+				},
+			}
 		}
 	}
 
@@ -656,15 +647,15 @@ func TestRemoveDuplicatesUniformly(t *testing.T) {
 			description: "Evict pods uniformly respecting taints",
 			pods: []*v1.Pod{
 				// (5,3,1,0,0,0) -> (3,3,3,0,0,0) -> 2 evictions
-				buildTestPodForNode("p1", "worker1", setTolerationsK1),
-				buildTestPodForNode("p2", "worker1", setTolerationsK2),
-				buildTestPodForNode("p3", "worker1", setTolerationsK1),
-				buildTestPodForNode("p4", "worker1", setTolerationsK2),
-				buildTestPodForNode("p5", "worker1", setTolerationsK1),
-				buildTestPodForNode("p6", "worker2", setTolerationsK2),
-				buildTestPodForNode("p7", "worker2", setTolerationsK1),
-				buildTestPodForNode("p8", "worker2", setTolerationsK2),
-				buildTestPodForNode("p9", "worker3", setTolerationsK1),
+				buildTestPodForNode("p1", "worker1", setNoScheduleTolerations("k1", "v1")),
+				buildTestPodForNode("p2", "worker1", setNoScheduleTolerations("k2", "v2")),
+				buildTestPodForNode("p3", "worker1", setNoScheduleTolerations("k1", "v1")),
+				buildTestPodForNode("p4", "worker1", setNoScheduleTolerations("k2", "v2")),
+				buildTestPodForNode("p5", "worker1", setNoScheduleTolerations("k1", "v1")),
+				buildTestPodForNode("p6", "worker2", setNoScheduleTolerations("k2", "v2")),
+				buildTestPodForNode("p7", "worker2", setNoScheduleTolerations("k1", "v1")),
+				buildTestPodForNode("p8", "worker2", setNoScheduleTolerations("k2", "v2")),
+				buildTestPodForNode("p9", "worker3", setNoScheduleTolerations("k1", "v1")),
 			},
 			expectedEvictedPodCount: 2,
 			nodes: []*v1.Node{
