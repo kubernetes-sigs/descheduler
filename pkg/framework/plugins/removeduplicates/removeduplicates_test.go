@@ -79,7 +79,6 @@ func buildTestPodWithRSOwnerRefWithNamespaceForNode1(name, namespace string, app
 
 func TestFindDuplicatePods(t *testing.T) {
 	// first setup pods
-	node6 := test.BuildTestNode(nodeName6, 200, 200, 10, nil)
 
 	// Three Pods in the "dev" Namespace, bound to same ReplicaSet. 2 should be evicted.
 	// A DaemonSet.
@@ -366,13 +365,13 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
-				test.BuildTestPod("CPU-eater", 150, 150, node6.Name, func(pod *v1.Pod) {
+				test.BuildTestPod("CPU-eater", 150, 150, nodeName6, func(pod *v1.Pod) {
 					pod.Namespace = "test"
 				}),
 			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, nil),
-				node6,
+				test.BuildTestNode(nodeName6, 200, 200, 10, nil),
 			},
 			expectedEvictedPodCount: 0,
 			nodefit:                 true,
@@ -383,13 +382,13 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
-				test.BuildTestPod("CPU-saver", 100, 150, node6.Name, func(pod *v1.Pod) {
+				test.BuildTestPod("CPU-saver", 100, 150, nodeName6, func(pod *v1.Pod) {
 					pod.Namespace = "test"
 				}),
 			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, nil),
-				node6,
+				test.BuildTestNode(nodeName6, 200, 200, 10, nil),
 			},
 			expectedEvictedPodCount: 1,
 			nodefit:                 true,
