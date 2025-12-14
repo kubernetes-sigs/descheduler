@@ -99,12 +99,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	// Three Pods in the "test" Namespace, bound to same ReplicaSet. 2 should be evicted.
 	// Same owners, but different images
 	// Multiple containers
-	p13 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p13", "different-images", func(pod *v1.Pod) {
-		pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
-			Name:  "foo",
-			Image: "foo",
-		})
-	})
 	// ### Pods Evictable Based On Node Fit ###
 	p15 := buildTestPodWithRSOwnerRefWithNamespaceForNode1("p15", "node-fit", func(pod *v1.Pod) {
 		pod.Spec.NodeSelector = map[string]string{
@@ -272,8 +266,15 @@ func TestFindDuplicatePods(t *testing.T) {
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description:             "Pods with multiple containers should not match themselves",
-			pods:                    []*v1.Pod{p13},
+			description: "Pods with multiple containers should not match themselves",
+			pods: []*v1.Pod{
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p13", "different-images", func(pod *v1.Pod) {
+					pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
+						Name:  "foo",
+						Image: "foo",
+					})
+				}),
+			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
 		},
@@ -282,7 +283,14 @@ func TestFindDuplicatePods(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p11", "different-images", func(pod *v1.Pod) {
 					pod.Spec.Containers[0].Image = "foo"
-				}), p13},
+				}),
+				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p13", "different-images", func(pod *v1.Pod) {
+					pod.Spec.Containers = append(pod.Spec.Containers, v1.Container{
+						Name:  "foo",
+						Image: "foo",
+					})
+				}),
+			},
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
 		},
