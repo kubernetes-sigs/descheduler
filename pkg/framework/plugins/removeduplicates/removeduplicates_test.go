@@ -81,7 +81,10 @@ func TestFindDuplicatePods(t *testing.T) {
 		pod.Namespace = "dev"
 		pod.ObjectMeta.OwnerReferences = ownerRef1
 	})
-	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, nil)
+	// A DaemonSet.
+	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
+	})
 	p5 := test.BuildTestPod("p5", 100, 0, node1.Name, nil)
 	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, nil)
 	p7 := test.BuildTestPod("p7", 100, 0, node1.Name, nil)
@@ -126,9 +129,6 @@ func TestFindDuplicatePods(t *testing.T) {
 	p10.ObjectMeta.OwnerReferences = ownerRef2
 
 	// ### Non-evictable Pods ###
-
-	// A DaemonSet.
-	p4.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 
 	// A Pod with local storage.
 	p5.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
