@@ -55,24 +55,28 @@ func buildTestNode1() *v1.Node {
 	return buildTestNode(nodeName1, setNodeMainRegionLabel)
 }
 
+func buildTestPod(name, nodeName string, apply func(*v1.Pod)) *v1.Pod {
+	return test.BuildTestPod(name, 100, 0, nodeName, apply)
+}
+
 func TestPodAntiAffinity(t *testing.T) {
 
-	p1 := test.BuildTestPod("p1", 100, 0, nodeName1, nil)
-	p2 := test.BuildTestPod("p2", 100, 0, nodeName1, nil)
-	p3 := test.BuildTestPod("p3", 100, 0, nodeName1, nil)
-	p4 := test.BuildTestPod("p4", 100, 0, nodeName1, nil)
-	p5 := test.BuildTestPod("p5", 100, 0, nodeName1, nil)
-	p6 := test.BuildTestPod("p6", 100, 0, nodeName1, nil)
-	p7 := test.BuildTestPod("p7", 100, 0, nodeName1, nil)
-	p8 := test.BuildTestPod("p8", 100, 0, nodeName1, nil)
-	p9 := test.BuildTestPod("p9", 100, 0, nodeName1, nil)
-	p10 := test.BuildTestPod("p10", 100, 0, nodeName1, nil)
-	p11 := test.BuildTestPod("p11", 100, 0, nodeName5, nil)
+	p1 := buildTestPod("p1", nodeName1, nil)
+	p2 := buildTestPod("p2", nodeName1, nil)
+	p3 := buildTestPod("p3", nodeName1, nil)
+	p4 := buildTestPod("p4", nodeName1, nil)
+	p5 := buildTestPod("p5", nodeName1, nil)
+	p6 := buildTestPod("p6", nodeName1, nil)
+	p7 := buildTestPod("p7", nodeName1, nil)
+	p8 := buildTestPod("p8", nodeName1, nil)
+	p9 := buildTestPod("p9", nodeName1, nil)
+	p10 := buildTestPod("p10", nodeName1, nil)
+	p11 := buildTestPod("p11", nodeName5, nil)
 	p9.DeletionTimestamp = &metav1.Time{}
 	p10.DeletionTimestamp = &metav1.Time{}
 
 	criticalPriority := utils.SystemCriticalPriority
-	nonEvictablePod := test.BuildTestPod("non-evict", 100, 0, nodeName1, func(pod *v1.Pod) {
+	nonEvictablePod := buildTestPod("non-evict", nodeName1, func(pod *v1.Pod) {
 		pod.Spec.Priority = &criticalPriority
 	})
 	p2.Labels = map[string]string{"foo": "bar"}
