@@ -63,11 +63,15 @@ func buildTestPodForNode1(name string, apply func(*v1.Pod)) *v1.Pod {
 	return buildTestPod(name, nodeName1, apply)
 }
 
+func setPodAntiAffinityFooBar(pod *v1.Pod) {
+	test.SetPodAntiAffinity(pod, "foo", "bar")
+}
+
 func TestPodAntiAffinity(t *testing.T) {
 
 	p1 := buildTestPodForNode1("p1", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
-		test.SetPodAntiAffinity(pod, "foo", "bar")
+		setPodAntiAffinityFooBar(pod)
 	})
 	p2 := buildTestPodForNode1("p2", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
@@ -75,11 +79,11 @@ func TestPodAntiAffinity(t *testing.T) {
 	})
 	p3 := buildTestPodForNode1("p3", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
-		test.SetPodAntiAffinity(pod, "foo", "bar")
+		setPodAntiAffinityFooBar(pod)
 	})
 	p4 := buildTestPodForNode1("p4", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
-		test.SetPodAntiAffinity(pod, "foo", "bar")
+		setPodAntiAffinityFooBar(pod)
 	})
 	p5 := buildTestPodForNode1("p5", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
@@ -96,7 +100,7 @@ func TestPodAntiAffinity(t *testing.T) {
 	p7 := buildTestPodForNode1("p7", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
 		pod.Labels = map[string]string{"foo1": "bar1"}
-		test.SetPodAntiAffinity(pod, "foo", "bar")
+		setPodAntiAffinityFooBar(pod)
 		test.SetPodPriority(pod, 0)
 	})
 	p8 := buildTestPodForNode1("p8", func(pod *v1.Pod) {
@@ -106,12 +110,12 @@ func TestPodAntiAffinity(t *testing.T) {
 	})
 	p9 := buildTestPodForNode1("p9", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
-		test.SetPodAntiAffinity(pod, "foo", "bar")
+		setPodAntiAffinityFooBar(pod)
 		pod.DeletionTimestamp = &metav1.Time{}
 	})
 	p10 := buildTestPodForNode1("p10", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
-		test.SetPodAntiAffinity(pod, "foo", "bar")
+		setPodAntiAffinityFooBar(pod)
 		pod.DeletionTimestamp = &metav1.Time{}
 	})
 	p11 := buildTestPod("p11", nodeName5, func(pod *v1.Pod) {
