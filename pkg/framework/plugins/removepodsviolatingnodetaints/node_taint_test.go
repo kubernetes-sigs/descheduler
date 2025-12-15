@@ -154,7 +154,6 @@ func withKubeSystemCriticalPod(pod *v1.Pod) {
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	p3 := buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1)
 	p4 := buildTestPodWithNormalOwnerRef("p4", nodeName1, withTestTaintXToleration1)
 	p5 := buildTestPodWithNormalOwnerRef("p5", nodeName1, nil)
 	p6 := buildTestPodWithNormalOwnerRef("p6", nodeName1, nil)
@@ -210,7 +209,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
 				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
-				p3,
+				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
 			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
@@ -221,7 +220,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			description: "Pods with tolerations but not tolerating node taint should be evicted",
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
-				p3,
+				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
 				p4,
 			},
 			nodes: []*v1.Node{
@@ -327,7 +326,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
 				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
-				p3,
+				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
 			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
@@ -340,7 +339,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			description: "Pod p12 doesn't tolerate taint on it's node, but other nodes don't match it's selector",
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
-				p3,
+				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
 				p12,
 			},
 			nodes: []*v1.Node{
@@ -355,7 +354,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
 				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
-				p3,
+				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
 			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
@@ -459,7 +458,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
 				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
-				p3,
+				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
 			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
