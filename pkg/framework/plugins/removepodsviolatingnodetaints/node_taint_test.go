@@ -106,10 +106,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		}
 	})
 
-	node5 := buildTestNode(nodeName5, nil)
-	node5.Spec.Taints = []v1.Taint{
-		createPreferNoScheduleTaint("testTaint", "test", 1),
-	}
+	node5 := buildTestNode(nodeName5, func(node *v1.Node) {
+		node.Spec.Taints = []v1.Taint{
+			createPreferNoScheduleTaint("testTaint", "test", 1),
+		}
+	})
 
 	node6 := test.BuildTestNode(nodeName6, 1, 1, 1, nil)
 	node6.Spec.Taints = []v1.Taint{
