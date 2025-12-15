@@ -114,7 +114,6 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.Tai
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	node1 := buildTestNode(nodeName1, withTestTaint1)
 	node2 := buildTestNode(nodeName2, withTestingTaint1)
 
 	node3 := buildTestNode(nodeName3, withDatacenterEastLabel)
@@ -226,43 +225,55 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		includedTaints                 []string
 	}{
 		{
-			description:             "Pods not tolerating node taint should be evicted",
-			pods:                    []*v1.Pod{p1, p2, p3},
-			nodes:                   []*v1.Node{node1},
+			description: "Pods not tolerating node taint should be evicted",
+			pods:        []*v1.Pod{p1, p2, p3},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			expectedEvictedPodCount: 1, // p2 gets evicted
 		},
 		{
-			description:             "Pods with tolerations but not tolerating node taint should be evicted",
-			pods:                    []*v1.Pod{p1, p3, p4},
-			nodes:                   []*v1.Node{node1},
+			description: "Pods with tolerations but not tolerating node taint should be evicted",
+			pods:        []*v1.Pod{p1, p3, p4},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			expectedEvictedPodCount: 1, // p4 gets evicted
 		},
 		{
-			description:             "Only <maxNoOfPodsToEvictTotal> number of Pods not tolerating node taint should be evicted",
-			pods:                    []*v1.Pod{p1, p5, p6},
-			nodes:                   []*v1.Node{node1},
+			description: "Only <maxNoOfPodsToEvictTotal> number of Pods not tolerating node taint should be evicted",
+			pods:        []*v1.Pod{p1, p5, p6},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			maxPodsToEvictPerNode:   &uint2,
 			maxNoOfPodsToEvictTotal: &uint1,
 			expectedEvictedPodCount: 1, // p5 or p6 gets evicted
 		},
 		{
-			description:             "Only <maxPodsToEvictPerNode> number of Pods not tolerating node taint should be evicted",
-			pods:                    []*v1.Pod{p1, p5, p6},
-			nodes:                   []*v1.Node{node1},
+			description: "Only <maxPodsToEvictPerNode> number of Pods not tolerating node taint should be evicted",
+			pods:        []*v1.Pod{p1, p5, p6},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			maxPodsToEvictPerNode:   &uint1,
 			expectedEvictedPodCount: 1, // p5 or p6 gets evicted
 		},
 		{
 			description:                    "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
 			pods:                           []*v1.Pod{p1, p5, p6},
-			nodes:                          []*v1.Node{node1},
+			nodes:                          []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			maxNoOfPodsToEvictPerNamespace: &uint1,
 			expectedEvictedPodCount:        1, // p5 or p6 gets evicted
 		},
 		{
 			description:                    "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
 			pods:                           []*v1.Pod{p1, p5, p6},
-			nodes:                          []*v1.Node{node1},
+			nodes:                          []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			maxNoOfPodsToEvictPerNamespace: &uint1,
 			expectedEvictedPodCount:        1, // p5 or p6 gets evicted
 		},
@@ -286,30 +297,42 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			expectedEvictedPodCount: 1, // p11 gets evicted
 		},
 		{
-			description:             "Critical and non critical pods, pods not tolerating node taint should be evicted even if they are critical",
-			pods:                    []*v1.Pod{p2, p7, p9, p10},
-			nodes:                   []*v1.Node{node1, node2},
+			description: "Critical and non critical pods, pods not tolerating node taint should be evicted even if they are critical",
+			pods:        []*v1.Pod{p2, p7, p9, p10},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+				node2,
+			},
 			evictSystemCriticalPods: true,
 			expectedEvictedPodCount: 2, // p2 and p7 are evicted
 		},
 		{
-			description:             "Pod p2 doesn't tolerate taint on it's node, but also doesn't tolerate taints on other nodes",
-			pods:                    []*v1.Pod{p1, p2, p3},
-			nodes:                   []*v1.Node{node1, node2},
+			description: "Pod p2 doesn't tolerate taint on it's node, but also doesn't tolerate taints on other nodes",
+			pods:        []*v1.Pod{p1, p2, p3},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+				node2,
+			},
 			expectedEvictedPodCount: 0, // p2 gets evicted
 			nodeFit:                 true,
 		},
 		{
-			description:             "Pod p12 doesn't tolerate taint on it's node, but other nodes don't match it's selector",
-			pods:                    []*v1.Pod{p1, p3, p12},
-			nodes:                   []*v1.Node{node1, node3},
+			description: "Pod p12 doesn't tolerate taint on it's node, but other nodes don't match it's selector",
+			pods:        []*v1.Pod{p1, p3, p12},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+				node3,
+			},
 			expectedEvictedPodCount: 0, // p2 gets evicted
 			nodeFit:                 true,
 		},
 		{
-			description:             "Pod p2 doesn't tolerate taint on it's node, but other nodes are unschedulable",
-			pods:                    []*v1.Pod{p1, p2, p3},
-			nodes:                   []*v1.Node{node1, node4},
+			description: "Pod p2 doesn't tolerate taint on it's node, but other nodes are unschedulable",
+			pods:        []*v1.Pod{p1, p2, p3},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+				node4,
+			},
 			expectedEvictedPodCount: 0, // p2 gets evicted
 			nodeFit:                 true,
 		},
@@ -327,30 +350,39 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			expectedEvictedPodCount: 1, // p13 gets evicted
 		},
 		{
-			description:             "Pods not tolerating excluded node taints (by key) should not be evicted",
-			pods:                    []*v1.Pod{p2},
-			nodes:                   []*v1.Node{node1},
+			description: "Pods not tolerating excluded node taints (by key) should not be evicted",
+			pods:        []*v1.Pod{p2},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			excludedTaints:          []string{"excludedTaint1", "testTaint1"},
 			expectedEvictedPodCount: 0, // nothing gets evicted, as one of the specified excludedTaints matches the key of node1's taint
 		},
 		{
-			description:             "Pods not tolerating excluded node taints (by key and value) should not be evicted",
-			pods:                    []*v1.Pod{p2},
-			nodes:                   []*v1.Node{node1},
+			description: "Pods not tolerating excluded node taints (by key and value) should not be evicted",
+			pods:        []*v1.Pod{p2},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			excludedTaints:          []string{"testTaint1=test1"},
 			expectedEvictedPodCount: 0, // nothing gets evicted, as both the key and value of the excluded taint match node1's taint
 		},
 		{
-			description:             "The excluded taint matches the key of node1's taint, but does not match the value",
-			pods:                    []*v1.Pod{p2},
-			nodes:                   []*v1.Node{node1},
+			description: "The excluded taint matches the key of node1's taint, but does not match the value",
+			pods:        []*v1.Pod{p2},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			excludedTaints:          []string{"testTaint1=test2"},
 			expectedEvictedPodCount: 1, // pod gets evicted, as excluded taint value does not match node1's taint value
 		},
 		{
-			description:             "Critical and non critical pods, pods not tolerating node taint can't be evicted because the only available node does not have enough resources.",
-			pods:                    []*v1.Pod{p2, p7, p9, p10},
-			nodes:                   []*v1.Node{node1, node6},
+			description: "Critical and non critical pods, pods not tolerating node taint can't be evicted because the only available node does not have enough resources.",
+			pods:        []*v1.Pod{p2, p7, p9, p10},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+				node6,
+			},
 			evictSystemCriticalPods: true,
 			expectedEvictedPodCount: 0, // p2 and p7 can't be evicted
 			nodeFit:                 true,
@@ -363,16 +395,20 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			expectedEvictedPodCount: 0, // nothing gets evicted, as p1 tolerates the included taint, and taint "testingTaint1=testing1" is not included
 		},
 		{
-			description:             "Pods not tolerating not included taints should not get evicted",
-			pods:                    []*v1.Pod{p1, p2, p4},
-			nodes:                   []*v1.Node{node1},
+			description: "Pods not tolerating not included taints should not get evicted",
+			pods:        []*v1.Pod{p1, p2, p4},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			includedTaints:          []string{"testTaint2=test2"},
 			expectedEvictedPodCount: 0, // nothing gets evicted, as taint is not included, even though the pods' p2 and p4 tolerations do not match node1's taint
 		},
 		{
-			description:             "Pods tolerating includedTaint should not get evicted. Pods not tolerating includedTaints should get evicted",
-			pods:                    []*v1.Pod{p1, p2, p3},
-			nodes:                   []*v1.Node{node1},
+			description: "Pods tolerating includedTaint should not get evicted. Pods not tolerating includedTaints should get evicted",
+			pods:        []*v1.Pod{p1, p2, p3},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			includedTaints:          []string{"testTaint1=test1"},
 			expectedEvictedPodCount: 1, // node1 taint is included. p1 and p3 tolerate the included taint, p2 gets evicted
 		},
