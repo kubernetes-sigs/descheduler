@@ -36,6 +36,7 @@ import (
 const (
 	nodeName1 = "node1"
 	nodeName2 = "node2"
+	nodeName3 = "node3"
 	nodeName4 = "node4"
 	nodeName5 = "node5"
 )
@@ -139,7 +140,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			},
 		}
 	})
-	node3 := buildTestNode("node3", func(node *v1.Node) {
+	node3 := buildTestNode(nodeName3, func(node *v1.Node) {
 		node.Spec = v1.NodeSpec{
 			Unschedulable: true,
 		}
