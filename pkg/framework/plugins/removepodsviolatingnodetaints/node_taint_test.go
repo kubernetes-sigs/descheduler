@@ -34,6 +34,37 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	nodeName1 = "n1"
+	nodeName2 = "n2"
+	nodeName3 = "n3"
+	nodeName4 = "n4"
+	nodeName5 = "n5"
+	nodeName6 = "n6"
+	nodeName7 = "n7"
+
+	datacenterLabel = "datacenter"
+	datacenterEast  = "east"
+	datacenterWest  = "west"
+)
+
+func buildTestNode(name string, apply func(*v1.Node)) *v1.Node {
+	return test.BuildTestNode(name, 2000, 3000, 10, apply)
+}
+
+func buildTestPod(name, nodeName string, apply func(*v1.Pod)) *v1.Pod {
+	return test.BuildTestPod(name, 100, 0, nodeName, apply)
+}
+
+func buildTestPodWithNormalOwnerRef(name, nodeName string, apply func(*v1.Pod)) *v1.Pod {
+	return buildTestPod(name, nodeName, func(pod *v1.Pod) {
+		test.SetNormalOwnerRef(pod)
+		if apply != nil {
+			apply(pod)
+		}
+	})
+}
+
 func createNoScheduleTaint(key, value string, index int) v1.Taint {
 	return v1.Taint{
 		Key:    "testTaint" + fmt.Sprintf("%v", index),
@@ -50,13 +81,39 @@ func createPreferNoScheduleTaint(key, value string, index int) v1.Taint {
 	}
 }
 
-func addTaintsToNode(node *v1.Node, key, value string, indices []int) *v1.Node {
-	taints := []v1.Taint{}
-	for _, index := range indices {
-		taints = append(taints, createNoScheduleTaint(key, value, index))
+func withTestTaint1(node *v1.Node) {
+	node.Spec.Taints = []v1.Taint{
+		createNoScheduleTaint("testTaint", "test", 1),
 	}
-	node.Spec.Taints = taints
-	return node
+}
+
+func withTestingTaint1(node *v1.Node) {
+	node.Spec.Taints = []v1.Taint{
+		createNoScheduleTaint("testingTaint", "testing", 1),
+	}
+}
+
+func withBothTaints1(node *v1.Node) {
+	node.Spec.Taints = []v1.Taint{
+		createNoScheduleTaint("testTaint", "test", 1),
+		createNoScheduleTaint("testingTaint", "testing", 1),
+	}
+}
+
+func withDatacenterEastLabel(node *v1.Node) {
+	node.ObjectMeta.Labels = map[string]string{
+		datacenterLabel: datacenterEast,
+	}
+}
+
+func withUnschedulable(node *v1.Node) {
+	node.Spec.Unschedulable = true
+}
+
+func withPreferNoScheduleTestTaint1(node *v1.Node) {
+	node.Spec.Taints = []v1.Taint{
+		createPreferNoScheduleTaint("testTaint", "test", 1),
+	}
 }
 
 func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.TaintEffect) *v1.Pod {
@@ -69,75 +126,16 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.Tai
 	return pod
 }
 
-func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
-	node1 = addTaintsToNode(node1, "testTaint", "test", []int{1})
-	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
-	node2 = addTaintsToNode(node2, "testingTaint", "testing", []int{1})
+func withTestTaintToleration1(pod *v1.Pod) {
+	addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
+}
 
-	node3 := test.BuildTestNode("n3", 2000, 3000, 10, func(node *v1.Node) {
-		node.ObjectMeta.Labels = map[string]string{
-			"datacenter": "east",
-		}
-	})
-	node4 := test.BuildTestNode("n4", 2000, 3000, 10, func(node *v1.Node) {
-		node.Spec = v1.NodeSpec{
-			Unschedulable: true,
-		}
-	})
+func withTestTaintXToleration1(pod *v1.Pod) {
+	addTolerationToPod(pod, "testTaintX", "testX", 1, v1.TaintEffectNoSchedule)
+}
 
-	node5 := test.BuildTestNode("n5", 2000, 3000, 10, nil)
-	node5.Spec.Taints = []v1.Taint{
-		createPreferNoScheduleTaint("testTaint", "test", 1),
-	}
-
-	node6 := test.BuildTestNode("n6", 1, 1, 1, nil)
-	node6.Spec.Taints = []v1.Taint{
-		createPreferNoScheduleTaint("testTaint", "test", 1),
-	}
-
-	node7 := test.BuildTestNode("n7", 2000, 3000, 10, nil)
-	node7 = addTaintsToNode(node7, "testTaint", "test", []int{1})
-	node7 = addTaintsToNode(node7, "testingTaint", "testing", []int{1})
-
-	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
-	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, nil)
-	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, nil)
-	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, nil)
-	p5 := test.BuildTestPod("p5", 100, 0, node1.Name, nil)
-	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, nil)
-	p7 := test.BuildTestPod("p7", 100, 0, node2.Name, nil)
-	p8 := test.BuildTestPod("p8", 100, 0, node2.Name, nil)
-	p9 := test.BuildTestPod("p9", 100, 0, node2.Name, nil)
-	p10 := test.BuildTestPod("p10", 100, 0, node2.Name, nil)
-	p11 := test.BuildTestPod("p11", 100, 0, node2.Name, nil)
-	p12 := test.BuildTestPod("p11", 100, 0, node2.Name, nil)
-
-	p1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p3.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p4.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p5.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p7.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p8.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p9.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p10.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p11.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p12.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-
-	// The following 4 pods won't get evicted.
-	// A Critical Pod.
-	p7.Namespace = "kube-system"
-	priority := utils.SystemCriticalPriority
-	p7.Spec.Priority = &priority
-	p7.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-
-	// A daemonset.
-	p8.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
-	// A pod with local storage.
-	p9.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p9.Spec.Volumes = []v1.Volume{
+func withLocalStorageVolume(pod *v1.Pod) {
+	pod.Spec.Volumes = []v1.Volume{
 		{
 			Name: "sample",
 			VolumeSource: v1.VolumeSource{
@@ -148,32 +146,14 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			},
 		},
 	}
-	// A Mirror Pod.
-	p10.Annotations = test.GetMirrorPodAnnotation()
+}
 
-	p1 = addTolerationToPod(p1, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
-	p3 = addTolerationToPod(p3, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
-	p4 = addTolerationToPod(p4, "testTaintX", "testX", 1, v1.TaintEffectNoSchedule)
+func withKubeSystemCriticalPod(pod *v1.Pod) {
+	pod.Namespace = "kube-system"
+	test.SetPodPriority(pod, utils.SystemCriticalPriority)
+}
 
-	p12.Spec.NodeSelector = map[string]string{
-		"datacenter": "west",
-	}
-
-	p13 := test.BuildTestPod("p13", 100, 0, node5.Name, nil)
-	p13.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	// node5 has PreferNoSchedule:testTaint1=test1, so the p13 has to have
-	// PreferNoSchedule:testTaint0=test0 so the pod is not tolarated
-	p13 = addTolerationToPod(p13, "testTaint", "test", 0, v1.TaintEffectPreferNoSchedule)
-
-	p14 := test.BuildTestPod("p14", 100, 0, node7.Name, nil)
-	p14.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p14 = addTolerationToPod(p14, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
-
-	p15 := test.BuildTestPod("p15", 100, 0, node7.Name, nil)
-	p15.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p15 = addTolerationToPod(p15, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
-	p15 = addTolerationToPod(p15, "testingTaint", "testing", 1, v1.TaintEffectNoSchedule)
-
+func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	var uint1, uint2 uint = 1, 2
 
 	tests := []struct {
@@ -192,203 +172,306 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		includedTaints                 []string
 	}{
 		{
-			description:             "Pods not tolerating node taint should be evicted",
-			pods:                    []*v1.Pod{p1, p2, p3},
-			nodes:                   []*v1.Node{node1},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Pods not tolerating node taint should be evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			expectedEvictedPodCount: 1, // p2 gets evicted
 		},
 		{
-			description:             "Pods with tolerations but not tolerating node taint should be evicted",
-			pods:                    []*v1.Pod{p1, p3, p4},
-			nodes:                   []*v1.Node{node1},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Pods with tolerations but not tolerating node taint should be evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p4", nodeName1, withTestTaintXToleration1),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			expectedEvictedPodCount: 1, // p4 gets evicted
 		},
 		{
-			description:             "Only <maxNoOfPodsToEvictTotal> number of Pods not tolerating node taint should be evicted",
-			pods:                    []*v1.Pod{p1, p5, p6},
-			nodes:                   []*v1.Node{node1},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Only <maxNoOfPodsToEvictTotal> number of Pods not tolerating node taint should be evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p5", nodeName1, nil),
+				buildTestPodWithNormalOwnerRef("p6", nodeName1, nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			maxPodsToEvictPerNode:   &uint2,
 			maxNoOfPodsToEvictTotal: &uint1,
 			expectedEvictedPodCount: 1, // p5 or p6 gets evicted
 		},
 		{
-			description:             "Only <maxPodsToEvictPerNode> number of Pods not tolerating node taint should be evicted",
-			pods:                    []*v1.Pod{p1, p5, p6},
-			nodes:                   []*v1.Node{node1},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Only <maxPodsToEvictPerNode> number of Pods not tolerating node taint should be evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p5", nodeName1, nil),
+				buildTestPodWithNormalOwnerRef("p6", nodeName1, nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			maxPodsToEvictPerNode:   &uint1,
 			expectedEvictedPodCount: 1, // p5 or p6 gets evicted
 		},
 		{
-			description:                    "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
-			pods:                           []*v1.Pod{p1, p5, p6},
-			nodes:                          []*v1.Node{node1},
-			evictLocalStoragePods:          false,
-			evictSystemCriticalPods:        false,
+			description: "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p5", nodeName1, nil),
+				buildTestPodWithNormalOwnerRef("p6", nodeName1, nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			maxNoOfPodsToEvictPerNamespace: &uint1,
 			expectedEvictedPodCount:        1, // p5 or p6 gets evicted
 		},
 		{
-			description:                    "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
-			pods:                           []*v1.Pod{p1, p5, p6},
-			nodes:                          []*v1.Node{node1},
-			evictLocalStoragePods:          false,
-			evictSystemCriticalPods:        false,
+			description: "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p5", nodeName1, nil),
+				buildTestPodWithNormalOwnerRef("p6", nodeName1, nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			maxNoOfPodsToEvictPerNamespace: &uint1,
 			expectedEvictedPodCount:        1, // p5 or p6 gets evicted
 		},
 		{
-			description:             "Critical pods not tolerating node taint should not be evicted",
-			pods:                    []*v1.Pod{p7, p8, p9, p10},
-			nodes:                   []*v1.Node{node2},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Critical pods not tolerating node taint should not be evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
+				buildTestPod("p8", nodeName2, test.SetDSOwnerRef),
+				buildTestPodWithNormalOwnerRef("p9", nodeName2, withLocalStorageVolume),
+				buildTestPodWithNormalOwnerRef("p10", nodeName2, test.SetMirrorPodAnnotation),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName2, withTestingTaint1),
+			},
 			expectedEvictedPodCount: 0, // nothing is evicted
 		},
 		{
-			description:             "Critical pods except storage pods not tolerating node taint should not be evicted",
-			pods:                    []*v1.Pod{p7, p8, p9, p10},
-			nodes:                   []*v1.Node{node2},
+			description: "Critical pods except storage pods not tolerating node taint should not be evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
+				buildTestPod("p8", nodeName2, test.SetDSOwnerRef),
+				buildTestPodWithNormalOwnerRef("p9", nodeName2, withLocalStorageVolume),
+				buildTestPodWithNormalOwnerRef("p10", nodeName2, test.SetMirrorPodAnnotation),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName2, withTestingTaint1),
+			},
 			evictLocalStoragePods:   true,
-			evictSystemCriticalPods: false,
 			expectedEvictedPodCount: 1, // p9 gets evicted
 		},
 		{
-			description:             "Critical and non critical pods, only non critical pods not tolerating node taint should be evicted",
-			pods:                    []*v1.Pod{p7, p8, p10, p11},
-			nodes:                   []*v1.Node{node2},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Critical and non critical pods, only non critical pods not tolerating node taint should be evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
+				buildTestPod("p8", nodeName2, test.SetDSOwnerRef),
+				buildTestPodWithNormalOwnerRef("p10", nodeName2, test.SetMirrorPodAnnotation),
+				buildTestPodWithNormalOwnerRef("p11", nodeName2, nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName2, withTestingTaint1),
+			},
 			expectedEvictedPodCount: 1, // p11 gets evicted
 		},
 		{
-			description:             "Critical and non critical pods, pods not tolerating node taint should be evicted even if they are critical",
-			pods:                    []*v1.Pod{p2, p7, p9, p10},
-			nodes:                   []*v1.Node{node1, node2},
-			evictLocalStoragePods:   false,
+			description: "Critical and non critical pods, pods not tolerating node taint should be evicted even if they are critical",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
+				buildTestPodWithNormalOwnerRef("p9", nodeName2, withLocalStorageVolume),
+				buildTestPodWithNormalOwnerRef("p10", nodeName2, test.SetMirrorPodAnnotation),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+				buildTestNode(nodeName2, withTestingTaint1),
+			},
 			evictSystemCriticalPods: true,
 			expectedEvictedPodCount: 2, // p2 and p7 are evicted
 		},
 		{
-			description:             "Pod p2 doesn't tolerate taint on it's node, but also doesn't tolerate taints on other nodes",
-			pods:                    []*v1.Pod{p1, p2, p3},
-			nodes:                   []*v1.Node{node1, node2},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Pod p2 doesn't tolerate taint on it's node, but also doesn't tolerate taints on other nodes",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+				buildTestNode(nodeName2, withTestingTaint1),
+			},
 			expectedEvictedPodCount: 0, // p2 gets evicted
 			nodeFit:                 true,
 		},
 		{
-			description:             "Pod p12 doesn't tolerate taint on it's node, but other nodes don't match it's selector",
-			pods:                    []*v1.Pod{p1, p3, p12},
-			nodes:                   []*v1.Node{node1, node3},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Pod p12 doesn't tolerate taint on it's node, but other nodes don't match it's selector",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p11", nodeName2, func(pod *v1.Pod) {
+					pod.Spec.NodeSelector = map[string]string{
+						datacenterLabel: datacenterWest,
+					}
+				}),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+				buildTestNode(nodeName3, withDatacenterEastLabel),
+			},
 			expectedEvictedPodCount: 0, // p2 gets evicted
 			nodeFit:                 true,
 		},
 		{
-			description:             "Pod p2 doesn't tolerate taint on it's node, but other nodes are unschedulable",
-			pods:                    []*v1.Pod{p1, p2, p3},
-			nodes:                   []*v1.Node{node1, node4},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Pod p2 doesn't tolerate taint on it's node, but other nodes are unschedulable",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+				buildTestNode(nodeName4, withUnschedulable),
+			},
 			expectedEvictedPodCount: 0, // p2 gets evicted
 			nodeFit:                 true,
 		},
 		{
-			description:             "Pods not tolerating PreferNoSchedule node taint should not be evicted when not enabled",
-			pods:                    []*v1.Pod{p13},
-			nodes:                   []*v1.Node{node5},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Pods not tolerating PreferNoSchedule node taint should not be evicted when not enabled",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p13", nodeName5, func(pod *v1.Pod) {
+					addTolerationToPod(pod, "testTaint", "test", 0, v1.TaintEffectPreferNoSchedule)
+				}),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName5, withPreferNoScheduleTestTaint1),
+			},
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description:             "Pods not tolerating PreferNoSchedule node taint should be evicted when enabled",
-			pods:                    []*v1.Pod{p13},
-			nodes:                   []*v1.Node{node5},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Pods not tolerating PreferNoSchedule node taint should be evicted when enabled",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p13", nodeName5, func(pod *v1.Pod) {
+					addTolerationToPod(pod, "testTaint", "test", 0, v1.TaintEffectPreferNoSchedule)
+				}),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName5, withPreferNoScheduleTestTaint1),
+			},
 			includePreferNoSchedule: true,
 			expectedEvictedPodCount: 1, // p13 gets evicted
 		},
 		{
-			description:             "Pods not tolerating excluded node taints (by key) should not be evicted",
-			pods:                    []*v1.Pod{p2},
-			nodes:                   []*v1.Node{node1},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Pods not tolerating excluded node taints (by key) should not be evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			excludedTaints:          []string{"excludedTaint1", "testTaint1"},
 			expectedEvictedPodCount: 0, // nothing gets evicted, as one of the specified excludedTaints matches the key of node1's taint
 		},
 		{
-			description:             "Pods not tolerating excluded node taints (by key and value) should not be evicted",
-			pods:                    []*v1.Pod{p2},
-			nodes:                   []*v1.Node{node1},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Pods not tolerating excluded node taints (by key and value) should not be evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			excludedTaints:          []string{"testTaint1=test1"},
 			expectedEvictedPodCount: 0, // nothing gets evicted, as both the key and value of the excluded taint match node1's taint
 		},
 		{
-			description:             "The excluded taint matches the key of node1's taint, but does not match the value",
-			pods:                    []*v1.Pod{p2},
-			nodes:                   []*v1.Node{node1},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "The excluded taint matches the key of node1's taint, but does not match the value",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			excludedTaints:          []string{"testTaint1=test2"},
 			expectedEvictedPodCount: 1, // pod gets evicted, as excluded taint value does not match node1's taint value
 		},
 		{
-			description:             "Critical and non critical pods, pods not tolerating node taint can't be evicted because the only available node does not have enough resources.",
-			pods:                    []*v1.Pod{p2, p7, p9, p10},
-			nodes:                   []*v1.Node{node1, node6},
-			evictLocalStoragePods:   false,
+			description: "Critical and non critical pods, pods not tolerating node taint can't be evicted because the only available node does not have enough resources.",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
+				buildTestPodWithNormalOwnerRef("p9", nodeName2, withLocalStorageVolume),
+				buildTestPodWithNormalOwnerRef("p10", nodeName2, test.SetMirrorPodAnnotation),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+				test.BuildTestNode(nodeName6, 1, 1, 1, withPreferNoScheduleTestTaint1),
+			},
 			evictSystemCriticalPods: true,
 			expectedEvictedPodCount: 0, // p2 and p7 can't be evicted
 			nodeFit:                 true,
 		},
 		{
-			description:             "Pods tolerating included taints should not get evicted even with other taints present",
-			pods:                    []*v1.Pod{p1},
-			nodes:                   []*v1.Node{node7},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Pods tolerating included taints should not get evicted even with other taints present",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName7, withBothTaints1),
+			},
 			includedTaints:          []string{"testTaint1=test1"},
 			expectedEvictedPodCount: 0, // nothing gets evicted, as p1 tolerates the included taint, and taint "testingTaint1=testing1" is not included
 		},
 		{
-			description:             "Pods not tolerating not included taints should not get evicted",
-			pods:                    []*v1.Pod{p1, p2, p4},
-			nodes:                   []*v1.Node{node1},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Pods not tolerating not included taints should not get evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+				buildTestPodWithNormalOwnerRef("p4", nodeName1, withTestTaintXToleration1),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			includedTaints:          []string{"testTaint2=test2"},
 			expectedEvictedPodCount: 0, // nothing gets evicted, as taint is not included, even though the pods' p2 and p4 tolerations do not match node1's taint
 		},
 		{
-			description:             "Pods tolerating includedTaint should not get evicted. Pods not tolerating includedTaints should get evicted",
-			pods:                    []*v1.Pod{p1, p2, p3},
-			nodes:                   []*v1.Node{node1},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Pods tolerating includedTaint should not get evicted. Pods not tolerating includedTaints should get evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
 			includedTaints:          []string{"testTaint1=test1"},
 			expectedEvictedPodCount: 1, // node1 taint is included. p1 and p3 tolerate the included taint, p2 gets evicted
 		},
 		{
-			description:             "Pods not tolerating all taints are evicted when includedTaints is empty",
-			pods:                    []*v1.Pod{p14, p15},
-			nodes:                   []*v1.Node{node7},
-			evictLocalStoragePods:   false,
-			evictSystemCriticalPods: false,
+			description: "Pods not tolerating all taints are evicted when includedTaints is empty",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p14", nodeName7, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p15", nodeName7, func(pod *v1.Pod) {
+					withTestTaintToleration1(pod)
+					addTolerationToPod(pod, "testingTaint", "testing", 1, v1.TaintEffectNoSchedule)
+				}),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName7, withBothTaints1),
+			},
 			expectedEvictedPodCount: 1, // includedTaints is empty so all taints are included. p15 tolerates both node taints and does not get evicted. p14 tolerate only one and gets evicted
 		},
 	}
