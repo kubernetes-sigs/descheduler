@@ -124,28 +124,28 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	})
 
 	p1 := buildTestPod("p1", nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 		addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
 	})
 	p2 := buildTestPod("p2", nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 	})
 	p3 := buildTestPod("p3", nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 		addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
 	})
 	p4 := buildTestPod("p4", nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 		addTolerationToPod(pod, "testTaintX", "testX", 1, v1.TaintEffectNoSchedule)
 	})
 	p5 := buildTestPod("p5", nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 	})
 	p6 := buildTestPod("p6", nodeName1, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 	})
 	p7 := buildTestPod("p7", nodeName2, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 		pod.Namespace = "kube-system"
 		priority := utils.SystemCriticalPriority
 		pod.Spec.Priority = &priority
@@ -154,7 +154,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 	})
 	p9 := buildTestPod("p9", nodeName2, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 		pod.Spec.Volumes = []v1.Volume{
 			{
 				Name: "sample",
@@ -168,14 +168,14 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		}
 	})
 	p10 := buildTestPod("p10", nodeName2, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 		pod.Annotations = test.GetMirrorPodAnnotation()
 	})
 	p11 := buildTestPod("p11", nodeName2, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 	})
 	p12 := buildTestPod("p11", nodeName2, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 		pod.Spec.NodeSelector = map[string]string{
 			"datacenter": "west",
 		}
@@ -188,17 +188,17 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	// A Mirror Pod.
 
 	p13 := buildTestPod("p13", nodeName5, nil)
-	p13.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	test.SetNormalOwnerRef(p13)
 	// node5 has PreferNoSchedule:testTaint1=test1, so the p13 has to have
 	// PreferNoSchedule:testTaint0=test0 so the pod is not tolarated
 	p13 = addTolerationToPod(p13, "testTaint", "test", 0, v1.TaintEffectPreferNoSchedule)
 
 	p14 := buildTestPod("p14", nodeName7, nil)
-	p14.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	test.SetNormalOwnerRef(p14)
 	p14 = addTolerationToPod(p14, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
 
 	p15 := buildTestPod("p15", nodeName7, nil)
-	p15.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	test.SetNormalOwnerRef(p15)
 	p15 = addTolerationToPod(p15, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
 	p15 = addTolerationToPod(p15, "testingTaint", "testing", 1, v1.TaintEffectNoSchedule)
 
