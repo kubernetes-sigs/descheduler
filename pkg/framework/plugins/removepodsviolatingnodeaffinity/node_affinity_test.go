@@ -48,7 +48,7 @@ func setNodeDesiredNodeLabel(node *v1.Node) {
 	node.Labels[nodeLabelKey] = nodeLabelValue
 }
 
-func buildTestPod(name string, nodeName string, apply func(*v1.Pod)) *v1.Pod {
+func buildTestPod(name, nodeName string, apply func(*v1.Pod)) *v1.Pod {
 	return test.BuildTestPod(name, 100, 0, nodeName, apply)
 }
 
