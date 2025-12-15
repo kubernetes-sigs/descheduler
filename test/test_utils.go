@@ -252,6 +252,11 @@ func SetNormalOwnerRef(pod *v1.Pod) {
 	pod.ObjectMeta.OwnerReferences = GetNormalPodOwnerRefList()
 }
 
+// SetMirrorPodAnnotation sets the given pod's annotations to mirror pod annotations
+func SetMirrorPodAnnotation(pod *v1.Pod) {
+	pod.Annotations = GetMirrorPodAnnotation()
+}
+
 // SetPodPriority sets the given pod's priority
 func SetPodPriority(pod *v1.Pod, priority int32) {
 	pod.Spec.Priority = &priority

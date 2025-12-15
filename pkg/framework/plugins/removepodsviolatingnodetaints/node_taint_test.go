@@ -156,9 +156,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			},
 		}
 	})
-	p10 := buildTestPodWithNormalOwnerRef("p10", nodeName2, func(pod *v1.Pod) {
-		pod.Annotations = test.GetMirrorPodAnnotation()
-	})
+	p10 := buildTestPodWithNormalOwnerRef("p10", nodeName2, test.SetMirrorPodAnnotation)
 	p11 := buildTestPodWithNormalOwnerRef("p11", nodeName2, nil)
 	p12 := buildTestPodWithNormalOwnerRef("p11", nodeName2, func(pod *v1.Pod) {
 		pod.Spec.NodeSelector = map[string]string{
