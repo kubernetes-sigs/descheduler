@@ -130,6 +130,10 @@ func withTestTaintToleration1(pod *v1.Pod) {
 	addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
 }
 
+func withTestTaintXToleration1(pod *v1.Pod) {
+	addTolerationToPod(pod, "testTaintX", "testX", 1, v1.TaintEffectNoSchedule)
+}
+
 func withLocalStorageVolume(pod *v1.Pod) {
 	pod.Spec.Volumes = []v1.Volume{
 		{
@@ -148,9 +152,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p1 := buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1)
 	p2 := buildTestPodWithNormalOwnerRef("p2", nodeName1, nil)
 	p3 := buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1)
-	p4 := buildTestPodWithNormalOwnerRef("p4", nodeName1, func(pod *v1.Pod) {
-		addTolerationToPod(pod, "testTaintX", "testX", 1, v1.TaintEffectNoSchedule)
-	})
+	p4 := buildTestPodWithNormalOwnerRef("p4", nodeName1, withTestTaintXToleration1)
 	p5 := buildTestPodWithNormalOwnerRef("p5", nodeName1, nil)
 	p6 := buildTestPodWithNormalOwnerRef("p6", nodeName1, nil)
 	p7 := buildTestPodWithNormalOwnerRef("p7", nodeName2, func(pod *v1.Pod) {
