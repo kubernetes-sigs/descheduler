@@ -174,18 +174,18 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p11 := buildTestPod("p11", nodeName2, func(pod *v1.Pod) {
 		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	})
-	p12 := buildTestPod("p11", nodeName2, nil)
-	p12.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	p12 := buildTestPod("p11", nodeName2, func(pod *v1.Pod) {
+		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		pod.Spec.NodeSelector = map[string]string{
+			"datacenter": "west",
+		}
+	})
 
 	// The following 4 pods won't get evicted.
 	// A Critical Pod.
 	// A daemonset.
 	// A pod with local storage.
 	// A Mirror Pod.
-
-	p12.Spec.NodeSelector = map[string]string{
-		"datacenter": "west",
-	}
 
 	p13 := buildTestPod("p13", nodeName5, nil)
 	p13.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
