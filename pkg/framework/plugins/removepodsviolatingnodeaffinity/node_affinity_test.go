@@ -36,6 +36,10 @@ func buildTestNode(name string, apply func(*v1.Node)) *v1.Node {
 	return test.BuildTestNode(name, 2000, 3000, 10, apply)
 }
 
+func buildTestPod(name string, nodeName string, apply func(*v1.Pod)) *v1.Pod {
+	return test.BuildTestPod(name, 100, 0, nodeName, apply)
+}
+
 func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	nodeLabelKey := "kubernetes.io/desiredNode"
 	nodeLabelValue := "yes"
@@ -51,7 +55,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	})
 
 	addPodsToNode := func(node *v1.Node, deletionTimestamp *metav1.Time, affinityType string) []*v1.Pod {
-		podWithNodeAffinity := test.BuildTestPod("podWithNodeAffinity", 100, 0, node.Name, nil)
+		podWithNodeAffinity := buildTestPod("podWithNodeAffinity", node.Name, nil)
 		podWithNodeAffinity.Spec.Affinity = &v1.Affinity{
 			NodeAffinity: &v1.NodeAffinity{},
 		}
@@ -95,8 +99,8 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			t.Fatalf("Invalid affinity type %s", affinityType)
 		}
 
-		pod1 := test.BuildTestPod("pod1", 100, 0, node.Name, nil)
-		pod2 := test.BuildTestPod("pod2", 100, 0, node.Name, nil)
+		pod1 := buildTestPod("pod1", node.Name, nil)
+		pod2 := buildTestPod("pod2", node.Name, nil)
 
 		podWithNodeAffinity.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 		pod1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
