@@ -117,11 +117,6 @@ func buildTestPodNonEvictableForNode1() *v1.Pod {
 
 func TestPodAntiAffinity(t *testing.T) {
 
-	p8 := buildTestPodForNode1("p8", func(pod *v1.Pod) {
-		pod.Spec.NodeSelector = map[string]string{
-			"datacenter": "west",
-		}
-	})
 	p9 := buildTestPodForNode1("p9", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
 		setPodAntiAffinityFooBar(pod)
@@ -255,7 +250,13 @@ func TestPodAntiAffinity(t *testing.T) {
 		{
 			description:           "Won't evict pods because node selectors don't match available nodes",
 			maxPodsToEvictPerNode: &uint1,
-			pods:                  []*v1.Pod{p8, nonEvictablePod},
+			pods: []*v1.Pod{
+				buildTestPodForNode1("p8", func(pod *v1.Pod) {
+					pod.Spec.NodeSelector = map[string]string{
+						"datacenter": "west",
+					}
+				}),
+				nonEvictablePod},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 				buildTestNode(nodeName2, func(node *v1.Node) {
@@ -270,7 +271,13 @@ func TestPodAntiAffinity(t *testing.T) {
 		{
 			description:           "Won't evict pods because only other node is not schedulable",
 			maxPodsToEvictPerNode: &uint1,
-			pods:                  []*v1.Pod{p8, nonEvictablePod},
+			pods: []*v1.Pod{
+				buildTestPodForNode1("p8", func(pod *v1.Pod) {
+					pod.Spec.NodeSelector = map[string]string{
+						"datacenter": "west",
+					}
+				}),
+				nonEvictablePod},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 				buildTestNode(nodeName3, func(node *v1.Node) {
