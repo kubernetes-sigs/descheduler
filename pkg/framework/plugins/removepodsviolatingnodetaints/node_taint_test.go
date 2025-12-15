@@ -134,7 +134,10 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 		addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
 	})
-	p4 := buildTestPod("p4", nodeName1, nil)
+	p4 := buildTestPod("p4", nodeName1, func(pod *v1.Pod) {
+		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		addTolerationToPod(pod, "testTaintX", "testX", 1, v1.TaintEffectNoSchedule)
+	})
 	p5 := buildTestPod("p5", nodeName1, nil)
 	p6 := buildTestPod("p6", nodeName1, nil)
 	p7 := buildTestPod("p7", nodeName2, nil)
@@ -143,7 +146,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p10 := buildTestPod("p10", nodeName2, nil)
 	p11 := buildTestPod("p11", nodeName2, nil)
 	p12 := buildTestPod("p11", nodeName2, nil)
-	p4.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p5.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p7.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -177,8 +179,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	}
 	// A Mirror Pod.
 	p10.Annotations = test.GetMirrorPodAnnotation()
-
-	p4 = addTolerationToPod(p4, "testTaintX", "testX", 1, v1.TaintEffectNoSchedule)
 
 	p12.Spec.NodeSelector = map[string]string{
 		"datacenter": "west",
