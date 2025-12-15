@@ -154,7 +154,6 @@ func withKubeSystemCriticalPod(pod *v1.Pod) {
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	p11 := buildTestPodWithNormalOwnerRef("p11", nodeName2, nil)
 	p12 := buildTestPodWithNormalOwnerRef("p11", nodeName2, func(pod *v1.Pod) {
 		pod.Spec.NodeSelector = map[string]string{
 			datacenterLabel: datacenterWest,
@@ -307,7 +306,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
 				buildTestPod("p8", nodeName2, test.SetDSOwnerRef),
 				buildTestPodWithNormalOwnerRef("p10", nodeName2, test.SetMirrorPodAnnotation),
-				p11,
+				buildTestPodWithNormalOwnerRef("p11", nodeName2, nil),
 			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName2, withTestingTaint1),
