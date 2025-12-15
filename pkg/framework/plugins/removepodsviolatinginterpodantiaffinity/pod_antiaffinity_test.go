@@ -33,49 +33,57 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	nodeName1 = "n1"
+	nodeName2 = "n2"
+	nodeName3 = "n3"
+	nodeName4 = "n4"
+	nodeName5 = "n5"
+)
+
 func buildTestNode(name string, apply func(*v1.Node)) *v1.Node {
 	return test.BuildTestNode(name, 2000, 3000, 10, apply)
 }
 
 func TestPodAntiAffinity(t *testing.T) {
-	node1 := buildTestNode("n1", func(node *v1.Node) {
+	node1 := buildTestNode(nodeName1, func(node *v1.Node) {
 		node.ObjectMeta.Labels = map[string]string{
 			"region": "main-region",
 		}
 	})
-	node2 := buildTestNode("n2", func(node *v1.Node) {
+	node2 := buildTestNode(nodeName2, func(node *v1.Node) {
 		node.ObjectMeta.Labels = map[string]string{
 			"datacenter": "east",
 		}
 	})
-	node3 := buildTestNode("n3", func(node *v1.Node) {
+	node3 := buildTestNode(nodeName3, func(node *v1.Node) {
 		node.Spec = v1.NodeSpec{
 			Unschedulable: true,
 		}
 	})
-	node4 := test.BuildTestNode("n4", 2, 2, 1, nil)
-	node5 := test.BuildTestNode("n5", 200, 3000, 10, func(node *v1.Node) {
+	node4 := test.BuildTestNode(nodeName4, 2, 2, 1, nil)
+	node5 := test.BuildTestNode(nodeName5, 200, 3000, 10, func(node *v1.Node) {
 		node.ObjectMeta.Labels = map[string]string{
 			"region": "main-region",
 		}
 	})
 
-	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, nil)
-	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, nil)
-	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, nil)
-	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, nil)
-	p5 := test.BuildTestPod("p5", 100, 0, node1.Name, nil)
-	p6 := test.BuildTestPod("p6", 100, 0, node1.Name, nil)
-	p7 := test.BuildTestPod("p7", 100, 0, node1.Name, nil)
-	p8 := test.BuildTestPod("p8", 100, 0, node1.Name, nil)
-	p9 := test.BuildTestPod("p9", 100, 0, node1.Name, nil)
-	p10 := test.BuildTestPod("p10", 100, 0, node1.Name, nil)
-	p11 := test.BuildTestPod("p11", 100, 0, node5.Name, nil)
+	p1 := test.BuildTestPod("p1", 100, 0, nodeName1, nil)
+	p2 := test.BuildTestPod("p2", 100, 0, nodeName1, nil)
+	p3 := test.BuildTestPod("p3", 100, 0, nodeName1, nil)
+	p4 := test.BuildTestPod("p4", 100, 0, nodeName1, nil)
+	p5 := test.BuildTestPod("p5", 100, 0, nodeName1, nil)
+	p6 := test.BuildTestPod("p6", 100, 0, nodeName1, nil)
+	p7 := test.BuildTestPod("p7", 100, 0, nodeName1, nil)
+	p8 := test.BuildTestPod("p8", 100, 0, nodeName1, nil)
+	p9 := test.BuildTestPod("p9", 100, 0, nodeName1, nil)
+	p10 := test.BuildTestPod("p10", 100, 0, nodeName1, nil)
+	p11 := test.BuildTestPod("p11", 100, 0, nodeName5, nil)
 	p9.DeletionTimestamp = &metav1.Time{}
 	p10.DeletionTimestamp = &metav1.Time{}
 
 	criticalPriority := utils.SystemCriticalPriority
-	nonEvictablePod := test.BuildTestPod("non-evict", 100, 0, node1.Name, func(pod *v1.Pod) {
+	nonEvictablePod := test.BuildTestPod("non-evict", 100, 0, nodeName1, func(pod *v1.Pod) {
 		pod.Spec.Priority = &criticalPriority
 	})
 	p2.Labels = map[string]string{"foo": "bar"}
