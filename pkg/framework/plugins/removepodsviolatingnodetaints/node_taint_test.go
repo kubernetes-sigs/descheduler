@@ -162,9 +162,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 
 	// node5 has PreferNoSchedule:testTaint1=test1, so the p13 has to have
 	// PreferNoSchedule:testTaint0=test0 so the pod is not tolarated
-	p13 := buildTestPodWithNormalOwnerRef("p13", nodeName5, func(pod *v1.Pod) {
-		addTolerationToPod(pod, "testTaint", "test", 0, v1.TaintEffectPreferNoSchedule)
-	})
 
 	p14 := buildTestPodWithNormalOwnerRef("p14", nodeName7, withTestTaintToleration1)
 
@@ -370,7 +367,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Pods not tolerating PreferNoSchedule node taint should not be evicted when not enabled",
-			pods:        []*v1.Pod{p13},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p13", nodeName5, func(pod *v1.Pod) {
+					addTolerationToPod(pod, "testTaint", "test", 0, v1.TaintEffectPreferNoSchedule)
+				}),
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName5, withPreferNoScheduleTestTaint1),
 			},
@@ -378,7 +379,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Pods not tolerating PreferNoSchedule node taint should be evicted when enabled",
-			pods:        []*v1.Pod{p13},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p13", nodeName5, func(pod *v1.Pod) {
+					addTolerationToPod(pod, "testTaint", "test", 0, v1.TaintEffectPreferNoSchedule)
+				}),
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName5, withPreferNoScheduleTestTaint1),
 			},
