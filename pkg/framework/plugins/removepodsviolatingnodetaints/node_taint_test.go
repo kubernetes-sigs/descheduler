@@ -122,14 +122,14 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.Tai
 	return pod
 }
 
+func withTestTaintToleration1(pod *v1.Pod) {
+	addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
+}
+
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	p1 := buildTestPodWithNormalOwnerRef("p1", nodeName1, func(pod *v1.Pod) {
-		addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
-	})
+	p1 := buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1)
 	p2 := buildTestPodWithNormalOwnerRef("p2", nodeName1, nil)
-	p3 := buildTestPodWithNormalOwnerRef("p3", nodeName1, func(pod *v1.Pod) {
-		addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
-	})
+	p3 := buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1)
 	p4 := buildTestPodWithNormalOwnerRef("p4", nodeName1, func(pod *v1.Pod) {
 		addTolerationToPod(pod, "testTaintX", "testX", 1, v1.TaintEffectNoSchedule)
 	})
@@ -178,12 +178,10 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		addTolerationToPod(pod, "testTaint", "test", 0, v1.TaintEffectPreferNoSchedule)
 	})
 
-	p14 := buildTestPodWithNormalOwnerRef("p14", nodeName7, func(pod *v1.Pod) {
-		addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
-	})
+	p14 := buildTestPodWithNormalOwnerRef("p14", nodeName7, withTestTaintToleration1)
 
 	p15 := buildTestPodWithNormalOwnerRef("p15", nodeName7, func(pod *v1.Pod) {
-		addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
+		withTestTaintToleration1(pod)
 		addTolerationToPod(pod, "testingTaint", "testing", 1, v1.TaintEffectNoSchedule)
 	})
 
