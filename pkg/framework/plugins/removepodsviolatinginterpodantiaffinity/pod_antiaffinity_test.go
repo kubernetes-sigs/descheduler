@@ -65,7 +65,10 @@ func buildTestPodForNode1(name string, apply func(*v1.Pod)) *v1.Pod {
 
 func TestPodAntiAffinity(t *testing.T) {
 
-	p1 := buildTestPodForNode1("p1", nil)
+	p1 := buildTestPodForNode1("p1", func(pod *v1.Pod) {
+		test.SetNormalOwnerRef(pod)
+		test.SetPodAntiAffinity(pod, "foo", "bar")
+	})
 	p2 := buildTestPodForNode1("p2", nil)
 	p3 := buildTestPodForNode1("p3", nil)
 	p4 := buildTestPodForNode1("p4", nil)
@@ -89,7 +92,6 @@ func TestPodAntiAffinity(t *testing.T) {
 	p7.Labels = map[string]string{"foo1": "bar1"}
 	p11.Labels = map[string]string{"foo": "bar"}
 	nonEvictablePod.Labels = map[string]string{"foo": "bar"}
-	test.SetNormalOwnerRef(p1)
 	test.SetNormalOwnerRef(p2)
 	test.SetNormalOwnerRef(p3)
 	test.SetNormalOwnerRef(p4)
@@ -101,7 +103,6 @@ func TestPodAntiAffinity(t *testing.T) {
 	test.SetNormalOwnerRef(p11)
 
 	// set pod anti affinity
-	test.SetPodAntiAffinity(p1, "foo", "bar")
 	test.SetPodAntiAffinity(p3, "foo", "bar")
 	test.SetPodAntiAffinity(p4, "foo", "bar")
 	test.SetPodAntiAffinity(p5, "foo1", "bar1")
