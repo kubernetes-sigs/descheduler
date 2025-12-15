@@ -70,27 +70,36 @@ func initPods(node *v1.Node) []*v1.Pod {
 	pods := make([]*v1.Pod, 0)
 
 	for i := int32(0); i <= 9; i++ {
-		pods = append(pods, initPodContainersWithStatusRestartCount(fmt.Sprintf("pod-%d", i), i, nil))
+		switch i {
+		default:
+			pods = append(pods, initPodContainersWithStatusRestartCount(fmt.Sprintf("pod-%d", i), i, nil))
+		// The following 3 pods won't get evicted.
+		// A daemonset.
+		case 6:
+			pods = append(pods, initPodContainersWithStatusRestartCount(fmt.Sprintf("pod-%d", i), i, test.SetDSOwnerRef))
+		// A pod with local storage.
+		case 7:
+			pods = append(pods, initPodContainersWithStatusRestartCount(fmt.Sprintf("pod-%d", i), i, func(pod *v1.Pod) {
+				test.SetNormalOwnerRef(pod)
+				pod.Spec.Volumes = []v1.Volume{
+					{
+						Name: "sample",
+						VolumeSource: v1.VolumeSource{
+							HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+							EmptyDir: &v1.EmptyDirVolumeSource{
+								SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+							},
+						},
+					},
+				}
+			}))
+		// A Mirror Pod.
+		case 8:
+			pods = append(pods, initPodContainersWithStatusRestartCount(fmt.Sprintf("pod-%d", i), i, func(pod *v1.Pod) {
+				pod.Annotations = test.GetMirrorPodAnnotation()
+			}))
+		}
 	}
-
-	// The following 3 pods won't get evicted.
-	// A daemonset.
-	test.SetDSOwnerRef(pods[6])
-	// A pod with local storage.
-	test.SetNormalOwnerRef(pods[7])
-	pods[7].Spec.Volumes = []v1.Volume{
-		{
-			Name: "sample",
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-				},
-			},
-		},
-	}
-	// A Mirror Pod.
-	pods[8].Annotations = test.GetMirrorPodAnnotation()
 
 	return pods
 }
