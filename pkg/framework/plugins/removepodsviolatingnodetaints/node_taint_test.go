@@ -137,12 +137,9 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p6 := buildTestPodWithNormalOwnerRef("p6", nodeName1, nil)
 	p7 := buildTestPodWithNormalOwnerRef("p7", nodeName2, func(pod *v1.Pod) {
 		pod.Namespace = "kube-system"
-		priority := utils.SystemCriticalPriority
-		pod.Spec.Priority = &priority
+		test.SetPodPriority(pod, utils.SystemCriticalPriority)
 	})
-	p8 := buildTestPod("p8", nodeName2, func(pod *v1.Pod) {
-		pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
-	})
+	p8 := buildTestPod("p8", nodeName2, test.SetDSOwnerRef)
 	p9 := buildTestPodWithNormalOwnerRef("p9", nodeName2, func(pod *v1.Pod) {
 		pod.Spec.Volumes = []v1.Volume{
 			{
