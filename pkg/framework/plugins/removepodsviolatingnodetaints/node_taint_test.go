@@ -114,8 +114,6 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.Tai
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	node2 := buildTestNode(nodeName2, withTestingTaint1)
-
 	node3 := buildTestNode(nodeName3, withDatacenterEastLabel)
 	node4 := buildTestNode(nodeName4, withUnschedulable)
 
@@ -260,40 +258,46 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			expectedEvictedPodCount: 1, // p5 or p6 gets evicted
 		},
 		{
-			description:                    "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
-			pods:                           []*v1.Pod{p1, p5, p6},
-			nodes:                          []*v1.Node{
+			description: "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
+			pods:        []*v1.Pod{p1, p5, p6},
+			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 			},
 			maxNoOfPodsToEvictPerNamespace: &uint1,
 			expectedEvictedPodCount:        1, // p5 or p6 gets evicted
 		},
 		{
-			description:                    "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
-			pods:                           []*v1.Pod{p1, p5, p6},
-			nodes:                          []*v1.Node{
+			description: "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
+			pods:        []*v1.Pod{p1, p5, p6},
+			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 			},
 			maxNoOfPodsToEvictPerNamespace: &uint1,
 			expectedEvictedPodCount:        1, // p5 or p6 gets evicted
 		},
 		{
-			description:             "Critical pods not tolerating node taint should not be evicted",
-			pods:                    []*v1.Pod{p7, p8, p9, p10},
-			nodes:                   []*v1.Node{node2},
+			description: "Critical pods not tolerating node taint should not be evicted",
+			pods:        []*v1.Pod{p7, p8, p9, p10},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName2, withTestingTaint1),
+			},
 			expectedEvictedPodCount: 0, // nothing is evicted
 		},
 		{
-			description:             "Critical pods except storage pods not tolerating node taint should not be evicted",
-			pods:                    []*v1.Pod{p7, p8, p9, p10},
-			nodes:                   []*v1.Node{node2},
+			description: "Critical pods except storage pods not tolerating node taint should not be evicted",
+			pods:        []*v1.Pod{p7, p8, p9, p10},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName2, withTestingTaint1),
+			},
 			evictLocalStoragePods:   true,
 			expectedEvictedPodCount: 1, // p9 gets evicted
 		},
 		{
-			description:             "Critical and non critical pods, only non critical pods not tolerating node taint should be evicted",
-			pods:                    []*v1.Pod{p7, p8, p10, p11},
-			nodes:                   []*v1.Node{node2},
+			description: "Critical and non critical pods, only non critical pods not tolerating node taint should be evicted",
+			pods:        []*v1.Pod{p7, p8, p10, p11},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName2, withTestingTaint1),
+			},
 			expectedEvictedPodCount: 1, // p11 gets evicted
 		},
 		{
@@ -301,7 +305,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:        []*v1.Pod{p2, p7, p9, p10},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
-				node2,
+				buildTestNode(nodeName2, withTestingTaint1),
 			},
 			evictSystemCriticalPods: true,
 			expectedEvictedPodCount: 2, // p2 and p7 are evicted
@@ -311,7 +315,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:        []*v1.Pod{p1, p2, p3},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
-				node2,
+				buildTestNode(nodeName2, withTestingTaint1),
 			},
 			expectedEvictedPodCount: 0, // p2 gets evicted
 			nodeFit:                 true,
