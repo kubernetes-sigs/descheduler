@@ -114,8 +114,6 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.Tai
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	node4 := buildTestNode(nodeName4, withUnschedulable)
-
 	node5 := buildTestNode(nodeName5, withPreferNoScheduleTestTaint1)
 
 	node6 := test.BuildTestNode(nodeName6, 1, 1, 1, withPreferNoScheduleTestTaint1)
@@ -334,7 +332,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods:        []*v1.Pod{p1, p2, p3},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
-				node4,
+				buildTestNode(nodeName4, withUnschedulable),
 			},
 			expectedEvictedPodCount: 0, // p2 gets evicted
 			nodeFit:                 true,
