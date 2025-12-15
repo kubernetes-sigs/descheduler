@@ -35,6 +35,8 @@ import (
 
 const (
 	nodeName1 = "node1"
+	nodeName4 = "node4"
+	nodeName5 = "node5"
 )
 
 func setPodContainerStatusRestartCount(pod *v1.Pod, base int32) {
@@ -101,6 +103,12 @@ func initPods(node *v1.Node) []*v1.Pod {
 		}
 	}
 
+	pods = append(
+		pods,
+		test.BuildTestPod("CPU-consumer-1", 150, 100, nodeName4, test.SetNormalOwnerRef),
+		test.BuildTestPod("CPU-consumer-2", 150, 100, nodeName5, test.SetNormalOwnerRef),
+	)
+
 	return pods
 }
 
@@ -120,8 +128,8 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			Unschedulable: true,
 		}
 	})
-	node4 := test.BuildTestNode("node4", 200, 3000, 10, nil)
-	node5 := test.BuildTestNode("node5", 2000, 3000, 10, nil)
+	node4 := test.BuildTestNode(nodeName4, 200, 3000, 10, nil)
+	node5 := test.BuildTestNode(nodeName5, 2000, 3000, 10, nil)
 
 	createRemovePodsHavingTooManyRestartsAgrs := func(
 		podRestartThresholds int32,
@@ -331,8 +339,6 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			pods := append(
 				initPods(node1),
-				test.BuildTestPod("CPU-consumer-1", 150, 100, node4.Name, test.SetNormalOwnerRef),
-				test.BuildTestPod("CPU-consumer-2", 150, 100, node5.Name, test.SetNormalOwnerRef),
 			)
 			if tc.applyFunc != nil {
 				tc.applyFunc(pods)
