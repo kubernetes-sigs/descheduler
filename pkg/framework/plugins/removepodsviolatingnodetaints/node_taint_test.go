@@ -154,7 +154,6 @@ func withKubeSystemCriticalPod(pod *v1.Pod) {
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	p5 := buildTestPodWithNormalOwnerRef("p5", nodeName1, nil)
 	p6 := buildTestPodWithNormalOwnerRef("p6", nodeName1, nil)
 	p7 := buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod)
 	p8 := buildTestPod("p8", nodeName2, test.SetDSOwnerRef)
@@ -231,7 +230,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			description: "Only <maxNoOfPodsToEvictTotal> number of Pods not tolerating node taint should be evicted",
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
-				p5,
+				buildTestPodWithNormalOwnerRef("p5", nodeName1, nil),
 				p6,
 			},
 			nodes: []*v1.Node{
@@ -245,7 +244,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			description: "Only <maxPodsToEvictPerNode> number of Pods not tolerating node taint should be evicted",
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
-				p5,
+				buildTestPodWithNormalOwnerRef("p5", nodeName1, nil),
 				p6,
 			},
 			nodes: []*v1.Node{
@@ -258,7 +257,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			description: "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
-				p5,
+				buildTestPodWithNormalOwnerRef("p5", nodeName1, nil),
 				p6,
 			},
 			nodes: []*v1.Node{
@@ -271,7 +270,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			description: "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
-				p5,
+				buildTestPodWithNormalOwnerRef("p5", nodeName1, nil),
 				p6,
 			},
 			nodes: []*v1.Node{
