@@ -130,15 +130,6 @@ func initPods(apply func(pod *v1.Pod)) []*v1.Pod {
 }
 
 func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
-	node2 := buildTestNode(nodeName2, func(node *v1.Node) {
-		node.Spec.Taints = []v1.Taint{
-			{
-				Key:    "hardware",
-				Value:  "gpu",
-				Effect: v1.TaintEffectNoSchedule,
-			},
-		}
-	})
 	node3 := buildTestNode(nodeName3, func(node *v1.Node) {
 		node.Spec = v1.NodeSpec{
 			Unschedulable: true,
@@ -268,7 +259,15 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			pods:        initPods(nil),
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, nil),
-				node2,
+				buildTestNode(nodeName2, func(node *v1.Node) {
+					node.Spec.Taints = []v1.Taint{
+						{
+							Key:    "hardware",
+							Value:  "gpu",
+							Effect: v1.TaintEffectNoSchedule,
+						},
+					}
+				}),
 			},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
