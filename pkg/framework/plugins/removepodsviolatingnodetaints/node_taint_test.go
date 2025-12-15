@@ -171,9 +171,10 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 		pod.Annotations = test.GetMirrorPodAnnotation()
 	})
-	p11 := buildTestPod("p11", nodeName2, nil)
+	p11 := buildTestPod("p11", nodeName2, func(pod *v1.Pod) {
+		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	})
 	p12 := buildTestPod("p11", nodeName2, nil)
-	p11.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p12.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
 	// The following 4 pods won't get evicted.
