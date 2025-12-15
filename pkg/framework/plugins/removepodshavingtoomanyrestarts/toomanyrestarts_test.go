@@ -130,7 +130,6 @@ func initPods(apply func(pod *v1.Pod)) []*v1.Pod {
 }
 
 func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
-	node4 := test.BuildTestNode(nodeName4, 200, 3000, 10, nil)
 	node5 := buildTestNode(nodeName5, nil)
 
 	createRemovePodsHavingTooManyRestartsAgrs := func(
@@ -290,7 +289,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			pods:        initPods(nil),
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, nil),
-				node4,
+				test.BuildTestNode(nodeName4, 200, 3000, 10, nil),
 			},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
