@@ -3,7 +3,7 @@ Copyright 2022 The Kubernetes Authors.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
+   http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -412,24 +412,27 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 		}
 	}
 
-	if d.args.NamespaceLabelSelector == nil {
+	if d.args.NamespaceLabelSelector == nil || len(d.args.NamespaceLabelSelector.MatchLabels) == 0 {
 		return true
 	}
-
-	// check pod by namespace label filter
-	indexName := "namespaceWithLabelSelector"
-	indexer, err := getNamespacesListByLabelSelector(indexName, d.args.NamespaceLabelSelector, d.handle)
+	selector, err := metav1.LabelSelectorAsSelector(d.args.NamespaceLabelSelector)
 	if err != nil {
-		klog.ErrorS(err, "unable to list namespaces", "pod", klog.KObj(pod))
+		logger.Error(err, "unable to convert namespaceLabelSelector to label selector", "pod", klog.KObj(pod))
+		return false
+	}
+	indexName := "namespaceWithLabelSelector-" + selector.String()
+	indexer, err := getNamespacesListByLabelSelector(indexName, selector, d.handle)
+	if err != nil {
+		logger.Error(err, "unable to list namespaces", "pod", klog.KObj(pod))
 		return false
 	}
 	objs, err := indexer.ByIndex(indexName, pod.Namespace)
 	if err != nil {
-		klog.ErrorS(err, "unable to list namespaces for namespaceLabelSelector filter in the policy parameter", "pod", klog.KObj(pod))
+		logger.Error(err, "unable to list namespaces for namespaceLabelSelector filter in the policy parameter", "pod", klog.KObj(pod))
 		return false
 	}
 	if len(objs) == 0 {
-		klog.InfoS("pod namespace do not match the namespaceLabelSelector filter in the policy parameter", "pod", klog.KObj(pod))
+		logger.Info("pod namespace do not match the namespaceLabelSelector filter in the policy parameter", "pod", klog.KObj(pod))
 		return false
 	}
 	return true
@@ -499,10 +502,10 @@ func getPodIndexerByOwnerRefs(indexName string, handle frameworktypes.Handle) (c
 	return indexer, nil
 }
 
-func getNamespacesListByLabelSelector(indexName string, labelSelector *metav1.LabelSelector, handle frameworktypes.Handle) (cache.Indexer, error) {
+// labelSelector *metav1.LabelSelector
+func getNamespacesListByLabelSelector(indexName string, selector labels.Selector, handle frameworktypes.Handle) (cache.Indexer, error) {
 	nsInformer := handle.SharedInformerFactory().Core().V1().Namespaces().Informer()
 	indexer := nsInformer.GetIndexer()
-
 	// do not reinitialize the indexer, if it's been defined already
 	for name := range indexer.GetIndexers() {
 		if name == indexName {
@@ -516,12 +519,7 @@ func getNamespacesListByLabelSelector(indexName string, labelSelector *metav1.La
 			if !ok {
 				return []string{}, errors.New("unexpected object")
 			}
-
-			selector, err := metav1.LabelSelectorAsSelector(labelSelector)
-			if err != nil {
-				return []string{}, errors.New("could not get selector from label selector")
-			}
-			if labelSelector != nil && !selector.Empty() {
+			if !selector.Empty() {
 				if !selector.Matches(labels.Set(ns.Labels)) {
 					return []string{}, nil
 				}
