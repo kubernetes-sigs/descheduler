@@ -187,11 +187,12 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	// A pod with local storage.
 	// A Mirror Pod.
 
-	p13 := buildTestPod("p13", nodeName5, nil)
-	test.SetNormalOwnerRef(p13)
 	// node5 has PreferNoSchedule:testTaint1=test1, so the p13 has to have
 	// PreferNoSchedule:testTaint0=test0 so the pod is not tolarated
-	p13 = addTolerationToPod(p13, "testTaint", "test", 0, v1.TaintEffectPreferNoSchedule)
+	p13 := buildTestPod("p13", nodeName5, func(pod *v1.Pod) {
+		test.SetNormalOwnerRef(pod)
+		addTolerationToPod(pod, "testTaint", "test", 0, v1.TaintEffectPreferNoSchedule)
+	})
 
 	p14 := buildTestPod("p14", nodeName7, nil)
 	test.SetNormalOwnerRef(p14)
