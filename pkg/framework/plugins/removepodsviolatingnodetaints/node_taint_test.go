@@ -126,6 +126,20 @@ func withTestTaintToleration1(pod *v1.Pod) {
 	addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
 }
 
+func withLocalStorageVolume(pod *v1.Pod) {
+	pod.Spec.Volumes = []v1.Volume{
+		{
+			Name: "sample",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+				EmptyDir: &v1.EmptyDirVolumeSource{
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+				},
+			},
+		},
+	}
+}
+
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p1 := buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1)
 	p2 := buildTestPodWithNormalOwnerRef("p2", nodeName1, nil)
@@ -140,19 +154,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		test.SetPodPriority(pod, utils.SystemCriticalPriority)
 	})
 	p8 := buildTestPod("p8", nodeName2, test.SetDSOwnerRef)
-	p9 := buildTestPodWithNormalOwnerRef("p9", nodeName2, func(pod *v1.Pod) {
-		pod.Spec.Volumes = []v1.Volume{
-			{
-				Name: "sample",
-				VolumeSource: v1.VolumeSource{
-					HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-					EmptyDir: &v1.EmptyDirVolumeSource{
-						SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-					},
-				},
-			},
-		}
-	})
+	p9 := buildTestPodWithNormalOwnerRef("p9", nodeName2, withLocalStorageVolume)
 	p10 := buildTestPodWithNormalOwnerRef("p10", nodeName2, test.SetMirrorPodAnnotation)
 	p11 := buildTestPodWithNormalOwnerRef("p11", nodeName2, nil)
 	p12 := buildTestPodWithNormalOwnerRef("p11", nodeName2, func(pod *v1.Pod) {
