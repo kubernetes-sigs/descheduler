@@ -79,24 +79,48 @@ func setLabelsFoo1Bar1(pod *v1.Pod) {
 	pod.Labels = map[string]string{"foo1": "bar1"}
 }
 
-func TestPodAntiAffinity(t *testing.T) {
-
-	p1 := buildTestPodForNode1("p1", func(pod *v1.Pod) {
+func buildTestPodP1ForNode1() *v1.Pod {
+	return buildTestPodForNode1("p1", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
 		setPodAntiAffinityFooBar(pod)
 	})
-	p2 := buildTestPodForNode1("p2", func(pod *v1.Pod) {
+}
+
+func buildTestPodP2ForNode1() *v1.Pod {
+	return buildTestPodForNode1("p2", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
 		setLabelsFooBar(pod)
 	})
-	p3 := buildTestPodForNode1("p3", func(pod *v1.Pod) {
+}
+
+func buildTestPodP3ForNode1() *v1.Pod {
+	return buildTestPodForNode1("p3", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
 		setPodAntiAffinityFooBar(pod)
 	})
-	p4 := buildTestPodForNode1("p4", func(pod *v1.Pod) {
+}
+
+func buildTestPodP4ForNode1() *v1.Pod {
+	return buildTestPodForNode1("p4", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
 		setPodAntiAffinityFooBar(pod)
 	})
+}
+
+func buildTestPodNonEvictableForNode1() *v1.Pod {
+	criticalPriority := utils.SystemCriticalPriority
+	return buildTestPodForNode1("non-evict", func(pod *v1.Pod) {
+		pod.Spec.Priority = &criticalPriority
+		setLabelsFooBar(pod)
+	})
+}
+
+func TestPodAntiAffinity(t *testing.T) {
+
+	p1 := buildTestPodP1ForNode1()
+	p2 := buildTestPodP2ForNode1()
+	p3 := buildTestPodP3ForNode1()
+	p4 := buildTestPodP4ForNode1()
 	p5 := buildTestPodForNode1("p5", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
 		setLabelsFooBar(pod)
@@ -135,11 +159,7 @@ func TestPodAntiAffinity(t *testing.T) {
 		setLabelsFooBar(pod)
 	})
 
-	nonEvictablePod := buildTestPodForNode1("non-evict", func(pod *v1.Pod) {
-		criticalPriority := utils.SystemCriticalPriority
-		pod.Spec.Priority = &criticalPriority
-		setLabelsFooBar(pod)
-	})
+	nonEvictablePod := buildTestPodNonEvictableForNode1()
 
 	var uint1 uint = 1
 	var uint3 uint = 3
