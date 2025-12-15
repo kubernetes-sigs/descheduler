@@ -154,15 +154,6 @@ func withKubeSystemCriticalPod(pod *v1.Pod) {
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	// The following 4 pods won't get evicted.
-	// A Critical Pod.
-	// A daemonset.
-	// A pod with local storage.
-	// A Mirror Pod.
-
-	// node5 has PreferNoSchedule:testTaint1=test1, so the p13 has to have
-	// PreferNoSchedule:testTaint0=test0 so the pod is not tolarated
-
 	var uint1, uint2 uint = 1, 2
 
 	tests := []struct {
