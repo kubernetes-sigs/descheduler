@@ -68,17 +68,22 @@ func initPodContainersWithStatusRestartCount(name string, base int32, apply func
 	})
 }
 
-func initPods(node *v1.Node) []*v1.Pod {
+func initPods(apply func(pod *v1.Pod)) []*v1.Pod {
 	pods := make([]*v1.Pod, 0)
 
 	for i := int32(0); i <= 9; i++ {
 		switch i {
 		default:
-			pods = append(pods, initPodContainersWithStatusRestartCount(fmt.Sprintf("pod-%d", i), i, nil))
+			pods = append(pods, initPodContainersWithStatusRestartCount(fmt.Sprintf("pod-%d", i), i, apply))
 		// The following 3 pods won't get evicted.
 		// A daemonset.
 		case 6:
-			pods = append(pods, initPodContainersWithStatusRestartCount(fmt.Sprintf("pod-%d", i), i, test.SetDSOwnerRef))
+			pods = append(pods, initPodContainersWithStatusRestartCount(fmt.Sprintf("pod-%d", i), i, func(pod *v1.Pod) {
+				test.SetDSOwnerRef(pod)
+				if apply != nil {
+					apply(pod)
+				}
+			}))
 		// A pod with local storage.
 		case 7:
 			pods = append(pods, initPodContainersWithStatusRestartCount(fmt.Sprintf("pod-%d", i), i, func(pod *v1.Pod) {
@@ -94,11 +99,17 @@ func initPods(node *v1.Node) []*v1.Pod {
 						},
 					},
 				}
+				if apply != nil {
+					apply(pod)
+				}
 			}))
 		// A Mirror Pod.
 		case 8:
 			pods = append(pods, initPodContainersWithStatusRestartCount(fmt.Sprintf("pod-%d", i), i, func(pod *v1.Pod) {
 				pod.Annotations = test.GetMirrorPodAnnotation()
+				if apply != nil {
+					apply(pod)
+				}
 			}))
 		}
 	}
@@ -145,6 +156,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 
 	tests := []struct {
 		description                    string
+		pods                           []*v1.Pod
 		nodes                          []*v1.Node
 		args                           RemovePodsHavingTooManyRestartsArgs
 		expectedEvictedPodCount        uint
@@ -156,48 +168,56 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		{
 			description:             "All pods have total restarts under threshold, no pod evictions",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(10000, true),
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
 		},
 		{
 			description:             "Some pods have total restarts bigger than threshold",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 6,
 		},
 		{
 			description:             "Nine pods have total restarts equals threshold(includingInitContainers=true), 6 pod evictions",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(1*25, true),
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 6,
 		},
 		{
 			description:             "Nine pods have total restarts equals threshold(includingInitContainers=false), 5 pod evictions",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(1*25, false),
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 5,
 		},
 		{
 			description:             "All pods have total restarts equals threshold(includingInitContainers=true), 6 pod evictions",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(1*20, true),
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 6,
 		},
 		{
 			description:             "Nine pods have total restarts equals threshold(includingInitContainers=false), 6 pod evictions",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(1*20, false),
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 6,
 		},
 		{
 			description:             "Five pods have total restarts bigger than threshold(includingInitContainers=true), but only 1 pod eviction",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(5*25+1, true),
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
 		},
 		{
 			description:             "Five pods have total restarts bigger than threshold(includingInitContainers=false), but only 1 pod eviction",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(5*20+1, false),
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 1,
 			nodeFit:                 false,
@@ -205,6 +225,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		{
 			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3), 3 pod evictions",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 3,
 			maxPodsToEvictPerNode:   &uint3,
@@ -212,6 +233,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		{
 			description:                    "All pods have total restarts equals threshold(maxNoOfPodsToEvictPerNamespace=3), 3 pod evictions",
 			args:                           createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:                           initPods(nil),
 			nodes:                          []*v1.Node{node1},
 			expectedEvictedPodCount:        3,
 			maxNoOfPodsToEvictPerNamespace: &uint3,
@@ -219,6 +241,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		{
 			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node is tainted, 0 pod evictions",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1, node2},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
@@ -227,6 +250,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		{
 			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node is not schedulable, 0 pod evictions",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1, node3},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
@@ -235,6 +259,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		{
 			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node does not have enough CPU, 0 pod evictions",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1, node4},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
@@ -243,6 +268,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		{
 			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node has enough CPU, 3 pod evictions",
 			args:                    createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1, node5},
 			expectedEvictedPodCount: 3,
 			maxPodsToEvictPerNode:   &uint3,
@@ -251,6 +277,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		{
 			description:             "pods are in CrashLoopBackOff with states=CrashLoopBackOff, 3 pod evictions",
 			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}},
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1, node5},
 			expectedEvictedPodCount: 3,
 			maxPodsToEvictPerNode:   &uint3,
@@ -268,6 +295,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		{
 			description:             "pods without CrashLoopBackOff with states=CrashLoopBackOff, 0 pod evictions",
 			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}},
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1, node5},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
@@ -276,6 +304,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		{
 			description:             "pods running with state=Running, 3 pod evictions",
 			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{string(v1.PodRunning)}},
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 3,
 			maxPodsToEvictPerNode:   &uint3,
@@ -288,6 +317,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		{
 			description:             "pods pending with state=Running, 0 pod evictions",
 			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{string(v1.PodRunning)}},
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
@@ -300,6 +330,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		{
 			description:             "pods pending with initContainer with states=CrashLoopBackOff threshold(includingInitContainers=true), 3 pod evictions",
 			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}, IncludingInitContainers: true},
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 3,
 			maxPodsToEvictPerNode:   &uint3,
@@ -318,6 +349,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		{
 			description:             "pods pending with initContainer with states=CrashLoopBackOff threshold(includingInitContainers=false), 0 pod evictions",
 			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}, IncludingInitContainers: false},
+			pods:                    initPods(nil),
 			nodes:                   []*v1.Node{node1},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
@@ -337,11 +369,8 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.description, func(t *testing.T) {
-			pods := append(
-				initPods(node1),
-			)
 			if tc.applyFunc != nil {
-				tc.applyFunc(pods)
+				tc.applyFunc(tc.pods)
 			}
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -351,7 +380,7 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			for _, node := range tc.nodes {
 				objs = append(objs, node)
 			}
-			for _, pod := range pods {
+			for _, pod := range tc.pods {
 				objs = append(objs, pod)
 			}
 			fakeClient := fake.NewSimpleClientset(objs...)
