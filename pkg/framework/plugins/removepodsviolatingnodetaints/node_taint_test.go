@@ -199,10 +199,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
 	})
 
-	p15 := buildTestPod("p15", nodeName7, nil)
-	test.SetNormalOwnerRef(p15)
-	p15 = addTolerationToPod(p15, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
-	p15 = addTolerationToPod(p15, "testingTaint", "testing", 1, v1.TaintEffectNoSchedule)
+	p15 := buildTestPod("p15", nodeName7, func(pod *v1.Pod) {
+		test.SetNormalOwnerRef(pod)
+		addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
+		addTolerationToPod(pod, "testingTaint", "testing", 1, v1.TaintEffectNoSchedule)
+	})
 
 	var uint1, uint2 uint = 1, 2
 
