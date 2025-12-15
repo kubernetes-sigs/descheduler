@@ -99,7 +99,11 @@ func TestPodAntiAffinity(t *testing.T) {
 		test.SetPodAntiAffinity(pod, "foo", "bar")
 		test.SetPodPriority(pod, 0)
 	})
-	p8 := buildTestPodForNode1("p8", nil)
+	p8 := buildTestPodForNode1("p8", func(pod *v1.Pod) {
+		pod.Spec.NodeSelector = map[string]string{
+			"datacenter": "west",
+		}
+	})
 	p9 := buildTestPodForNode1("p9", nil)
 	p10 := buildTestPodForNode1("p10", nil)
 	p11 := buildTestPod("p11", nodeName5, nil)
@@ -119,11 +123,6 @@ func TestPodAntiAffinity(t *testing.T) {
 	// set pod anti affinity
 	test.SetPodAntiAffinity(p9, "foo", "bar")
 	test.SetPodAntiAffinity(p10, "foo", "bar")
-
-	// Set pod node selectors
-	p8.Spec.NodeSelector = map[string]string{
-		"datacenter": "west",
-	}
 
 	var uint1 uint = 1
 	var uint3 uint = 3
