@@ -154,12 +154,6 @@ func withKubeSystemCriticalPod(pod *v1.Pod) {
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	p12 := buildTestPodWithNormalOwnerRef("p11", nodeName2, func(pod *v1.Pod) {
-		pod.Spec.NodeSelector = map[string]string{
-			datacenterLabel: datacenterWest,
-		}
-	})
-
 	// The following 4 pods won't get evicted.
 	// A Critical Pod.
 	// A daemonset.
@@ -347,7 +341,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
 				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
-				p12,
+				buildTestPodWithNormalOwnerRef("p11", nodeName2, func(pod *v1.Pod) {
+					pod.Spec.NodeSelector = map[string]string{
+						datacenterLabel: datacenterWest,
+					}
+				}),
 			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
