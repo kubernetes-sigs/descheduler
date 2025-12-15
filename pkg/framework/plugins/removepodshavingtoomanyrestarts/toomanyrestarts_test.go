@@ -35,9 +35,14 @@ import (
 
 const (
 	nodeName1 = "node1"
+	nodeName2 = "node2"
 	nodeName4 = "node4"
 	nodeName5 = "node5"
 )
+
+func buildTestNode(nodeName string, apply func(*v1.Node)) *v1.Node {
+	return test.BuildTestNode(nodeName, 2000, 3000, 10, apply)
+}
 
 func setPodContainerStatusRestartCount(pod *v1.Pod, base int32) {
 	pod.Status = v1.PodStatus{
@@ -124,8 +129,8 @@ func initPods(apply func(pod *v1.Pod)) []*v1.Pod {
 }
 
 func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
-	node1 := test.BuildTestNode(nodeName1, 2000, 3000, 10, nil)
-	node2 := test.BuildTestNode("node2", 2000, 3000, 10, func(node *v1.Node) {
+	node1 := buildTestNode(nodeName1, nil)
+	node2 := buildTestNode(nodeName2, func(node *v1.Node) {
 		node.Spec.Taints = []v1.Taint{
 			{
 				Key:    "hardware",
@@ -134,13 +139,13 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			},
 		}
 	})
-	node3 := test.BuildTestNode("node3", 2000, 3000, 10, func(node *v1.Node) {
+	node3 := buildTestNode("node3", func(node *v1.Node) {
 		node.Spec = v1.NodeSpec{
 			Unschedulable: true,
 		}
 	})
 	node4 := test.BuildTestNode(nodeName4, 200, 3000, 10, nil)
-	node5 := test.BuildTestNode(nodeName5, 2000, 3000, 10, nil)
+	node5 := buildTestNode(nodeName5, nil)
 
 	createRemovePodsHavingTooManyRestartsAgrs := func(
 		podRestartThresholds int32,
@@ -274,9 +279,9 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			nodeFit:                 true,
 		},
 		{
-			description:             "pods are in CrashLoopBackOff with states=CrashLoopBackOff, 3 pod evictions",
-			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}},
-			pods:                    initPods(func(pod *v1.Pod) {
+			description: "pods are in CrashLoopBackOff with states=CrashLoopBackOff, 3 pod evictions",
+			args:        RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}},
+			pods: initPods(func(pod *v1.Pod) {
 				if len(pod.Status.ContainerStatuses) > 0 {
 					pod.Status.ContainerStatuses[0].State = v1.ContainerState{
 						Waiting: &v1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
@@ -298,9 +303,9 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			nodeFit:                 true,
 		},
 		{
-			description:             "pods running with state=Running, 3 pod evictions",
-			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{string(v1.PodRunning)}},
-			pods:                    initPods(func(pod *v1.Pod) {
+			description: "pods running with state=Running, 3 pod evictions",
+			args:        RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{string(v1.PodRunning)}},
+			pods: initPods(func(pod *v1.Pod) {
 				pod.Status.Phase = v1.PodRunning
 			}),
 			nodes:                   []*v1.Node{node1},
@@ -308,9 +313,9 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			maxPodsToEvictPerNode:   &uint3,
 		},
 		{
-			description:             "pods pending with state=Running, 0 pod evictions",
-			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{string(v1.PodRunning)}},
-			pods:                    initPods(func(pod *v1.Pod) {
+			description: "pods pending with state=Running, 0 pod evictions",
+			args:        RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{string(v1.PodRunning)}},
+			pods: initPods(func(pod *v1.Pod) {
 				pod.Status.Phase = v1.PodPending
 			}),
 			nodes:                   []*v1.Node{node1},
@@ -318,9 +323,9 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			maxPodsToEvictPerNode:   &uint3,
 		},
 		{
-			description:             "pods pending with initContainer with states=CrashLoopBackOff threshold(includingInitContainers=true), 3 pod evictions",
-			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}, IncludingInitContainers: true},
-			pods:                    initPods(func(pod *v1.Pod) {
+			description: "pods pending with initContainer with states=CrashLoopBackOff threshold(includingInitContainers=true), 3 pod evictions",
+			args:        RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}, IncludingInitContainers: true},
+			pods: initPods(func(pod *v1.Pod) {
 				pod.Status.InitContainerStatuses = []v1.ContainerStatus{
 					{
 						State: v1.ContainerState{
@@ -334,9 +339,9 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			maxPodsToEvictPerNode:   &uint3,
 		},
 		{
-			description:             "pods pending with initContainer with states=CrashLoopBackOff threshold(includingInitContainers=false), 0 pod evictions",
-			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}, IncludingInitContainers: false},
-			pods:                    initPods(func(pod *v1.Pod) {
+			description: "pods pending with initContainer with states=CrashLoopBackOff threshold(includingInitContainers=false), 0 pod evictions",
+			args:        RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}, IncludingInitContainers: false},
+			pods: initPods(func(pod *v1.Pod) {
 				pod.Status.InitContainerStatuses = []v1.ContainerStatus{
 					{
 						State: v1.ContainerState{
