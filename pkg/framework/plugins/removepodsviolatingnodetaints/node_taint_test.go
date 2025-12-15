@@ -154,7 +154,6 @@ func withKubeSystemCriticalPod(pod *v1.Pod) {
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	p1 := buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1)
 	p2 := buildTestPodWithNormalOwnerRef("p2", nodeName1, nil)
 	p3 := buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1)
 	p4 := buildTestPodWithNormalOwnerRef("p4", nodeName1, withTestTaintXToleration1)
@@ -209,7 +208,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	}{
 		{
 			description: "Pods not tolerating node taint should be evicted",
-			pods:        []*v1.Pod{p1, p2, p3},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				p2,
+				p3,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 			},
@@ -217,7 +220,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Pods with tolerations but not tolerating node taint should be evicted",
-			pods:        []*v1.Pod{p1, p3, p4},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				p3,
+				p4,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 			},
@@ -225,7 +232,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Only <maxNoOfPodsToEvictTotal> number of Pods not tolerating node taint should be evicted",
-			pods:        []*v1.Pod{p1, p5, p6},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				p5,
+				p6,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 			},
@@ -235,7 +246,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Only <maxPodsToEvictPerNode> number of Pods not tolerating node taint should be evicted",
-			pods:        []*v1.Pod{p1, p5, p6},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				p5,
+				p6,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 			},
@@ -244,7 +259,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
-			pods:        []*v1.Pod{p1, p5, p6},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				p5,
+				p6,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 			},
@@ -253,7 +272,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Only <maxNoOfPodsToEvictPerNamespace> number of Pods not tolerating node taint should be evicted",
-			pods:        []*v1.Pod{p1, p5, p6},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				p5,
+				p6,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 			},
@@ -297,7 +320,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Pod p2 doesn't tolerate taint on it's node, but also doesn't tolerate taints on other nodes",
-			pods:        []*v1.Pod{p1, p2, p3},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				p2,
+				p3,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 				buildTestNode(nodeName2, withTestingTaint1),
@@ -307,7 +334,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Pod p12 doesn't tolerate taint on it's node, but other nodes don't match it's selector",
-			pods:        []*v1.Pod{p1, p3, p12},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				p3,
+				p12,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 				buildTestNode(nodeName3, withDatacenterEastLabel),
@@ -317,7 +348,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Pod p2 doesn't tolerate taint on it's node, but other nodes are unschedulable",
-			pods:        []*v1.Pod{p1, p2, p3},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				p2,
+				p3,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 				buildTestNode(nodeName4, withUnschedulable),
@@ -382,7 +417,9 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Pods tolerating included taints should not get evicted even with other taints present",
-			pods:        []*v1.Pod{p1},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName7, withBothTaints1),
 			},
@@ -391,7 +428,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Pods not tolerating not included taints should not get evicted",
-			pods:        []*v1.Pod{p1, p2, p4},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				p2,
+				p4,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 			},
@@ -400,7 +441,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Pods tolerating includedTaint should not get evicted. Pods not tolerating includedTaints should get evicted",
-			pods:        []*v1.Pod{p1, p2, p3},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				p2,
+				p3,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 			},
