@@ -32,6 +32,12 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	nodeWithLabelsName              = "nodeWithLabels"
+	nodeWithoutLabelsName           = "nodeWithoutLabels"
+	unschedulableNodeWithLabelsName = "unschedulableNodeWithLabels"
+)
+
 func buildTestNode(name string, apply func(*v1.Node)) *v1.Node {
 	return test.BuildTestNode(name, 2000, 3000, 10, apply)
 }
@@ -43,13 +49,13 @@ func buildTestPod(name string, nodeName string, apply func(*v1.Pod)) *v1.Pod {
 func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	nodeLabelKey := "kubernetes.io/desiredNode"
 	nodeLabelValue := "yes"
-	nodeWithLabels := buildTestNode("nodeWithLabels", func(node *v1.Node) {
+	nodeWithLabels := buildTestNode(nodeWithLabelsName, func(node *v1.Node) {
 		node.Labels[nodeLabelKey] = nodeLabelValue
 	})
 
-	nodeWithoutLabels := buildTestNode("nodeWithoutLabels", nil)
+	nodeWithoutLabels := buildTestNode(nodeWithoutLabelsName, nil)
 
-	unschedulableNodeWithLabels := buildTestNode("unschedulableNodeWithLabels", func(node *v1.Node) {
+	unschedulableNodeWithLabels := buildTestNode(unschedulableNodeWithLabelsName, func(node *v1.Node) {
 		node.Labels[nodeLabelKey] = nodeLabelValue
 		node.Spec.Unschedulable = true
 	})
