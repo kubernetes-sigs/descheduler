@@ -117,12 +117,6 @@ func buildTestPodNonEvictableForNode1() *v1.Pod {
 
 func TestPodAntiAffinity(t *testing.T) {
 
-	p5 := buildTestPodForNode1("p5", func(pod *v1.Pod) {
-		test.SetNormalOwnerRef(pod)
-		setLabelsFooBar(pod)
-		setPodAntiAffinityFoo1Bar1(pod)
-		test.SetPodPriority(pod, 100)
-	})
 	p6 := buildTestPodForNode1("p6", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
 		setLabelsFooBar(pod)
@@ -224,7 +218,14 @@ func TestPodAntiAffinity(t *testing.T) {
 		},
 		{
 			description: "Evict only 1 pod after sorting",
-			pods:        []*v1.Pod{p5, p6, p7},
+			pods: []*v1.Pod{
+				buildTestPodForNode1("p5", func(pod *v1.Pod) {
+					test.SetNormalOwnerRef(pod)
+					setLabelsFooBar(pod)
+					setPodAntiAffinityFoo1Bar1(pod)
+					test.SetPodPriority(pod, 100)
+				}),
+				p6, p7},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
