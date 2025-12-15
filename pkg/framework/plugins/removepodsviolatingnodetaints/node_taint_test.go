@@ -141,14 +141,15 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p5 := buildTestPod("p5", nodeName1, func(pod *v1.Pod) {
 		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	})
-	p6 := buildTestPod("p6", nodeName1, nil)
+	p6 := buildTestPod("p6", nodeName1, func(pod *v1.Pod) {
+		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	})
 	p7 := buildTestPod("p7", nodeName2, nil)
 	p8 := buildTestPod("p8", nodeName2, nil)
 	p9 := buildTestPod("p9", nodeName2, nil)
 	p10 := buildTestPod("p10", nodeName2, nil)
 	p11 := buildTestPod("p11", nodeName2, nil)
 	p12 := buildTestPod("p11", nodeName2, nil)
-	p6.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p7.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p8.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p9.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
