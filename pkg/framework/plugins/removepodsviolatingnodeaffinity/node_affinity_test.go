@@ -109,14 +109,14 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			pod.DeletionTimestamp = deletionTimestamp
 		})
 
-		pod1 := buildTestPod("pod1", nodeName, nil)
-		pod2 := buildTestPod("pod2", nodeName, nil)
-
-		pod1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-		pod2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-
-		pod1.DeletionTimestamp = deletionTimestamp
-		pod2.DeletionTimestamp = deletionTimestamp
+		pod1 := buildTestPod("pod1", nodeName, func(pod *v1.Pod) {
+			pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+			pod.DeletionTimestamp = deletionTimestamp
+		})
+		pod2 := buildTestPod("pod2", nodeName, func(pod *v1.Pod) {
+			pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+			pod.DeletionTimestamp = deletionTimestamp
+		})
 
 		return []*v1.Pod{
 			podWithNodeAffinity,
