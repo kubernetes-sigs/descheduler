@@ -117,8 +117,6 @@ func buildTestPodNonEvictableForNode1() *v1.Pod {
 
 func TestPodAntiAffinity(t *testing.T) {
 
-	nonEvictablePod := buildTestPodNonEvictableForNode1()
-
 	var uint1 uint = 1
 	var uint3 uint = 3
 
@@ -215,7 +213,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			maxPodsToEvictPerNode: &uint1,
 			pods: []*v1.Pod{
 				buildTestPodP1ForNode1(),
-				nonEvictablePod},
+				buildTestPodNonEvictableForNode1()},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -226,7 +224,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			maxPodsToEvictPerNode: &uint1,
 			pods: []*v1.Pod{
 				buildTestPodP1ForNode1(),
-				nonEvictablePod},
+				buildTestPodNonEvictableForNode1()},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -241,7 +239,7 @@ func TestPodAntiAffinity(t *testing.T) {
 						"datacenter": "west",
 					}
 				}),
-				nonEvictablePod},
+				buildTestPodNonEvictableForNode1()},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 				buildTestNode(nodeName2, func(node *v1.Node) {
@@ -262,7 +260,7 @@ func TestPodAntiAffinity(t *testing.T) {
 						"datacenter": "west",
 					}
 				}),
-				nonEvictablePod},
+				buildTestPodNonEvictableForNode1()},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 				buildTestNode(nodeName3, func(node *v1.Node) {
