@@ -34,6 +34,10 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+func buildTestNode(name string, apply func(*v1.Node)) *v1.Node {
+	return test.BuildTestNode(name, 2000, 3000, 10, apply)
+}
+
 func createNoScheduleTaint(key, value string, index int) v1.Taint {
 	return v1.Taint{
 		Key:    "testTaint" + fmt.Sprintf("%v", index),
@@ -70,23 +74,23 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.Tai
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	node1 := buildTestNode("n1", nil)
 	node1 = addTaintsToNode(node1, "testTaint", "test", []int{1})
-	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
+	node2 := buildTestNode("n2", nil)
 	node2 = addTaintsToNode(node2, "testingTaint", "testing", []int{1})
 
-	node3 := test.BuildTestNode("n3", 2000, 3000, 10, func(node *v1.Node) {
+	node3 := buildTestNode("n3", func(node *v1.Node) {
 		node.ObjectMeta.Labels = map[string]string{
 			"datacenter": "east",
 		}
 	})
-	node4 := test.BuildTestNode("n4", 2000, 3000, 10, func(node *v1.Node) {
+	node4 := buildTestNode("n4", func(node *v1.Node) {
 		node.Spec = v1.NodeSpec{
 			Unschedulable: true,
 		}
 	})
 
-	node5 := test.BuildTestNode("n5", 2000, 3000, 10, nil)
+	node5 := buildTestNode("n5", nil)
 	node5.Spec.Taints = []v1.Taint{
 		createPreferNoScheduleTaint("testTaint", "test", 1),
 	}
@@ -96,7 +100,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		createPreferNoScheduleTaint("testTaint", "test", 1),
 	}
 
-	node7 := test.BuildTestNode("n7", 2000, 3000, 10, nil)
+	node7 := buildTestNode("n7", nil)
 	node7 = addTaintsToNode(node7, "testTaint", "test", []int{1})
 	node7 = addTaintsToNode(node7, "testingTaint", "testing", []int{1})
 
