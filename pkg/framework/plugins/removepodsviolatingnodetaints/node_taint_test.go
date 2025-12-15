@@ -34,6 +34,16 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	nodeName1 = "n1"
+	nodeName2 = "n2"
+	nodeName3 = "n3"
+	nodeName4 = "n4"
+	nodeName5 = "n5"
+	nodeName6 = "n6"
+	nodeName7 = "n7"
+)
+
 func buildTestNode(name string, apply func(*v1.Node)) *v1.Node {
 	return test.BuildTestNode(name, 2000, 3000, 10, apply)
 }
@@ -78,48 +88,48 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.Tai
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	node1 := buildTestNode("n1", nil)
+	node1 := buildTestNode(nodeName1, nil)
 	node1 = addTaintsToNode(node1, "testTaint", "test", []int{1})
-	node2 := buildTestNode("n2", nil)
+	node2 := buildTestNode(nodeName2, nil)
 	node2 = addTaintsToNode(node2, "testingTaint", "testing", []int{1})
 
-	node3 := buildTestNode("n3", func(node *v1.Node) {
+	node3 := buildTestNode(nodeName3, func(node *v1.Node) {
 		node.ObjectMeta.Labels = map[string]string{
 			"datacenter": "east",
 		}
 	})
-	node4 := buildTestNode("n4", func(node *v1.Node) {
+	node4 := buildTestNode(nodeName4, func(node *v1.Node) {
 		node.Spec = v1.NodeSpec{
 			Unschedulable: true,
 		}
 	})
 
-	node5 := buildTestNode("n5", nil)
+	node5 := buildTestNode(nodeName5, nil)
 	node5.Spec.Taints = []v1.Taint{
 		createPreferNoScheduleTaint("testTaint", "test", 1),
 	}
 
-	node6 := test.BuildTestNode("n6", 1, 1, 1, nil)
+	node6 := test.BuildTestNode(nodeName6, 1, 1, 1, nil)
 	node6.Spec.Taints = []v1.Taint{
 		createPreferNoScheduleTaint("testTaint", "test", 1),
 	}
 
-	node7 := buildTestNode("n7", nil)
+	node7 := buildTestNode(nodeName7, nil)
 	node7 = addTaintsToNode(node7, "testTaint", "test", []int{1})
 	node7 = addTaintsToNode(node7, "testingTaint", "testing", []int{1})
 
-	p1 := buildTestPod("p1", node1.Name, nil)
-	p2 := buildTestPod("p2", node1.Name, nil)
-	p3 := buildTestPod("p3", node1.Name, nil)
-	p4 := buildTestPod("p4", node1.Name, nil)
-	p5 := buildTestPod("p5", node1.Name, nil)
-	p6 := buildTestPod("p6", node1.Name, nil)
-	p7 := buildTestPod("p7", node2.Name, nil)
-	p8 := buildTestPod("p8", node2.Name, nil)
-	p9 := buildTestPod("p9", node2.Name, nil)
-	p10 := buildTestPod("p10", node2.Name, nil)
-	p11 := buildTestPod("p11", node2.Name, nil)
-	p12 := buildTestPod("p11", node2.Name, nil)
+	p1 := buildTestPod("p1", nodeName1, nil)
+	p2 := buildTestPod("p2", nodeName1, nil)
+	p3 := buildTestPod("p3", nodeName1, nil)
+	p4 := buildTestPod("p4", nodeName1, nil)
+	p5 := buildTestPod("p5", nodeName1, nil)
+	p6 := buildTestPod("p6", nodeName1, nil)
+	p7 := buildTestPod("p7", nodeName2, nil)
+	p8 := buildTestPod("p8", nodeName2, nil)
+	p9 := buildTestPod("p9", nodeName2, nil)
+	p10 := buildTestPod("p10", nodeName2, nil)
+	p11 := buildTestPod("p11", nodeName2, nil)
+	p12 := buildTestPod("p11", nodeName2, nil)
 
 	p1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -167,17 +177,17 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		"datacenter": "west",
 	}
 
-	p13 := buildTestPod("p13", node5.Name, nil)
+	p13 := buildTestPod("p13", nodeName5, nil)
 	p13.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	// node5 has PreferNoSchedule:testTaint1=test1, so the p13 has to have
 	// PreferNoSchedule:testTaint0=test0 so the pod is not tolarated
 	p13 = addTolerationToPod(p13, "testTaint", "test", 0, v1.TaintEffectPreferNoSchedule)
 
-	p14 := buildTestPod("p14", node7.Name, nil)
+	p14 := buildTestPod("p14", nodeName7, nil)
 	p14.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p14 = addTolerationToPod(p14, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
 
-	p15 := buildTestPod("p15", node7.Name, nil)
+	p15 := buildTestPod("p15", nodeName7, nil)
 	p15.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p15 = addTolerationToPod(p15, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
 	p15 = addTolerationToPod(p15, "testingTaint", "testing", 1, v1.TaintEffectNoSchedule)
