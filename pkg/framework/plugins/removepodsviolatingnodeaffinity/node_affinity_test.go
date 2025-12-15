@@ -39,8 +39,9 @@ func buildTestNode(name string, apply func(*v1.Node)) *v1.Node {
 func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	nodeLabelKey := "kubernetes.io/desiredNode"
 	nodeLabelValue := "yes"
-	nodeWithLabels := buildTestNode("nodeWithLabels", nil)
-	nodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
+	nodeWithLabels := buildTestNode("nodeWithLabels", func(node *v1.Node) {
+		node.Labels[nodeLabelKey] = nodeLabelValue
+	})
 
 	nodeWithoutLabels := buildTestNode("nodeWithoutLabels", nil)
 
