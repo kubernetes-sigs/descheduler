@@ -130,7 +130,6 @@ func initPods(apply func(pod *v1.Pod)) []*v1.Pod {
 }
 
 func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
-	node1 := buildTestNode(nodeName1, nil)
 	node2 := buildTestNode(nodeName2, func(node *v1.Node) {
 		node.Spec.Taints = []v1.Taint{
 			{
@@ -171,110 +170,142 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 		nodeFit                        bool
 	}{
 		{
-			description:             "All pods have total restarts under threshold, no pod evictions",
-			args:                    createRemovePodsHavingTooManyRestartsAgrs(10000, true),
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1},
+			description: "All pods have total restarts under threshold, no pod evictions",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(10000, true),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description:             "Some pods have total restarts bigger than threshold",
-			args:                    createRemovePodsHavingTooManyRestartsAgrs(1, true),
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1},
+			description: "Some pods have total restarts bigger than threshold",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount: 6,
 		},
 		{
-			description:             "Nine pods have total restarts equals threshold(includingInitContainers=true), 6 pod evictions",
-			args:                    createRemovePodsHavingTooManyRestartsAgrs(1*25, true),
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1},
+			description: "Nine pods have total restarts equals threshold(includingInitContainers=true), 6 pod evictions",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(1*25, true),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount: 6,
 		},
 		{
-			description:             "Nine pods have total restarts equals threshold(includingInitContainers=false), 5 pod evictions",
-			args:                    createRemovePodsHavingTooManyRestartsAgrs(1*25, false),
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1},
+			description: "Nine pods have total restarts equals threshold(includingInitContainers=false), 5 pod evictions",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(1*25, false),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount: 5,
 		},
 		{
-			description:             "All pods have total restarts equals threshold(includingInitContainers=true), 6 pod evictions",
-			args:                    createRemovePodsHavingTooManyRestartsAgrs(1*20, true),
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1},
+			description: "All pods have total restarts equals threshold(includingInitContainers=true), 6 pod evictions",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(1*20, true),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount: 6,
 		},
 		{
-			description:             "Nine pods have total restarts equals threshold(includingInitContainers=false), 6 pod evictions",
-			args:                    createRemovePodsHavingTooManyRestartsAgrs(1*20, false),
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1},
+			description: "Nine pods have total restarts equals threshold(includingInitContainers=false), 6 pod evictions",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(1*20, false),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount: 6,
 		},
 		{
-			description:             "Five pods have total restarts bigger than threshold(includingInitContainers=true), but only 1 pod eviction",
-			args:                    createRemovePodsHavingTooManyRestartsAgrs(5*25+1, true),
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1},
+			description: "Five pods have total restarts bigger than threshold(includingInitContainers=true), but only 1 pod eviction",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(5*25+1, true),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description:             "Five pods have total restarts bigger than threshold(includingInitContainers=false), but only 1 pod eviction",
-			args:                    createRemovePodsHavingTooManyRestartsAgrs(5*20+1, false),
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1},
+			description: "Five pods have total restarts bigger than threshold(includingInitContainers=false), but only 1 pod eviction",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(5*20+1, false),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount: 1,
 			nodeFit:                 false,
 		},
 		{
-			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3), 3 pod evictions",
-			args:                    createRemovePodsHavingTooManyRestartsAgrs(1, true),
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1},
+			description: "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3), 3 pod evictions",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount: 3,
 			maxPodsToEvictPerNode:   &uint3,
 		},
 		{
-			description:                    "All pods have total restarts equals threshold(maxNoOfPodsToEvictPerNamespace=3), 3 pod evictions",
-			args:                           createRemovePodsHavingTooManyRestartsAgrs(1, true),
-			pods:                           initPods(nil),
-			nodes:                          []*v1.Node{node1},
+			description: "All pods have total restarts equals threshold(maxNoOfPodsToEvictPerNamespace=3), 3 pod evictions",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount:        3,
 			maxNoOfPodsToEvictPerNamespace: &uint3,
 		},
 		{
-			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node is tainted, 0 pod evictions",
-			args:                    createRemovePodsHavingTooManyRestartsAgrs(1, true),
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1, node2},
+			description: "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node is tainted, 0 pod evictions",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node2,
+			},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
 			nodeFit:                 true,
 		},
 		{
-			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node is not schedulable, 0 pod evictions",
-			args:                    createRemovePodsHavingTooManyRestartsAgrs(1, true),
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1, node3},
+			description: "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node is not schedulable, 0 pod evictions",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node3,
+			},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
 			nodeFit:                 true,
 		},
 		{
-			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node does not have enough CPU, 0 pod evictions",
-			args:                    createRemovePodsHavingTooManyRestartsAgrs(1, true),
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1, node4},
+			description: "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node does not have enough CPU, 0 pod evictions",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node4,
+			},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
 			nodeFit:                 true,
 		},
 		{
-			description:             "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node has enough CPU, 3 pod evictions",
-			args:                    createRemovePodsHavingTooManyRestartsAgrs(1, true),
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1, node5},
+			description: "All pods have total restarts equals threshold(maxPodsToEvictPerNode=3) but the only other node has enough CPU, 3 pod evictions",
+			args:        createRemovePodsHavingTooManyRestartsAgrs(1, true),
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node5,
+			},
 			expectedEvictedPodCount: 3,
 			maxPodsToEvictPerNode:   &uint3,
 			nodeFit:                 true,
@@ -289,16 +320,22 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 					}
 				}
 			}),
-			nodes:                   []*v1.Node{node1, node5},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node5,
+			},
 			expectedEvictedPodCount: 3,
 			maxPodsToEvictPerNode:   &uint3,
 			nodeFit:                 true,
 		},
 		{
-			description:             "pods without CrashLoopBackOff with states=CrashLoopBackOff, 0 pod evictions",
-			args:                    RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}},
-			pods:                    initPods(nil),
-			nodes:                   []*v1.Node{node1, node5},
+			description: "pods without CrashLoopBackOff with states=CrashLoopBackOff, 0 pod evictions",
+			args:        RemovePodsHavingTooManyRestartsArgs{PodRestartThreshold: 1, States: []string{"CrashLoopBackOff"}},
+			pods:        initPods(nil),
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+				node5,
+			},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
 			nodeFit:                 true,
@@ -309,7 +346,9 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			pods: initPods(func(pod *v1.Pod) {
 				pod.Status.Phase = v1.PodRunning
 			}),
-			nodes:                   []*v1.Node{node1},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount: 3,
 			maxPodsToEvictPerNode:   &uint3,
 		},
@@ -319,7 +358,9 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 			pods: initPods(func(pod *v1.Pod) {
 				pod.Status.Phase = v1.PodPending
 			}),
-			nodes:                   []*v1.Node{node1},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
 		},
@@ -335,7 +376,9 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 					},
 				}
 			}),
-			nodes:                   []*v1.Node{node1},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount: 3,
 			maxPodsToEvictPerNode:   &uint3,
 		},
@@ -351,7 +394,9 @@ func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
 					},
 				}
 			}),
-			nodes:                   []*v1.Node{node1},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, nil),
+			},
 			expectedEvictedPodCount: 0,
 			maxPodsToEvictPerNode:   &uint3,
 		},
