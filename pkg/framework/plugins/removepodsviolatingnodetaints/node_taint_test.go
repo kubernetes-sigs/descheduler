@@ -88,8 +88,9 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.Tai
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	node1 := buildTestNode(nodeName1, nil)
-	node1 = addTaintsToNode(node1, "testTaint", "test", []int{1})
+	node1 := buildTestNode(nodeName1, func(node *v1.Node) {
+		addTaintsToNode(node, "testTaint", "test", []int{1})
+	})
 	node2 := buildTestNode(nodeName2, nil)
 	node2 = addTaintsToNode(node2, "testingTaint", "testing", []int{1})
 
