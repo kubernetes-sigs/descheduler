@@ -144,13 +144,17 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p6 := buildTestPod("p6", nodeName1, func(pod *v1.Pod) {
 		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	})
-	p7 := buildTestPod("p7", nodeName2, nil)
+	p7 := buildTestPod("p7", nodeName2, func(pod *v1.Pod) {
+		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		pod.Namespace = "kube-system"
+		priority := utils.SystemCriticalPriority
+		pod.Spec.Priority = &priority
+	})
 	p8 := buildTestPod("p8", nodeName2, nil)
 	p9 := buildTestPod("p9", nodeName2, nil)
 	p10 := buildTestPod("p10", nodeName2, nil)
 	p11 := buildTestPod("p11", nodeName2, nil)
 	p12 := buildTestPod("p11", nodeName2, nil)
-	p7.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p8.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p9.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p10.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -159,11 +163,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 
 	// The following 4 pods won't get evicted.
 	// A Critical Pod.
-	p7.Namespace = "kube-system"
-	priority := utils.SystemCriticalPriority
-	p7.Spec.Priority = &priority
-	p7.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-
 	// A daemonset.
 	p8.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 	// A pod with local storage.
