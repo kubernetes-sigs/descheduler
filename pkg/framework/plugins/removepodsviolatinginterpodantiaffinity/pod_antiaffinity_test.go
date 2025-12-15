@@ -117,7 +117,6 @@ func buildTestPodNonEvictableForNode1() *v1.Pod {
 
 func TestPodAntiAffinity(t *testing.T) {
 
-	p3 := buildTestPodP3ForNode1()
 	p4 := buildTestPodP4ForNode1()
 	p5 := buildTestPodForNode1("p5", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
@@ -177,7 +176,8 @@ func TestPodAntiAffinity(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodP1ForNode1(),
 				buildTestPodP2ForNode1(),
-				p3, p4},
+				buildTestPodP3ForNode1(),
+				p4},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -189,7 +189,8 @@ func TestPodAntiAffinity(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodP1ForNode1(),
 				buildTestPodP2ForNode1(),
-				p3, p4},
+				buildTestPodP3ForNode1(),
+				p4},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -201,7 +202,8 @@ func TestPodAntiAffinity(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodP1ForNode1(),
 				buildTestPodP2ForNode1(),
-				p3, p4},
+				buildTestPodP3ForNode1(),
+				p4},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -214,7 +216,8 @@ func TestPodAntiAffinity(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodP1ForNode1(),
 				buildTestPodP2ForNode1(),
-				p3, p4},
+				buildTestPodP3ForNode1(),
+				p4},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -294,7 +297,8 @@ func TestPodAntiAffinity(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodP1ForNode1(),
 				buildTestPodP2ForNode1(),
-				p3, p4},
+				buildTestPodP3ForNode1(),
+				p4},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 				test.BuildTestNode(nodeName4, 2, 2, 1, nil),
