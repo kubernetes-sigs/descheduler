@@ -33,6 +33,10 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+const (
+	nodeName1 = "node1"
+)
+
 func setPodContainerStatusRestartCount(pod *v1.Pod, base int32) {
 	pod.Status = v1.PodStatus{
 		InitContainerStatuses: []v1.ContainerStatus{
@@ -51,16 +55,22 @@ func setPodContainerStatusRestartCount(pod *v1.Pod, base int32) {
 	}
 }
 
+func initPodContainersWithStatusRestartCount(name string, base int32, apply func(pod *v1.Pod)) *v1.Pod {
+	return test.BuildTestPod(name, 100, 0, nodeName1, func(pod *v1.Pod) {
+		test.SetNormalOwnerRef(pod)
+		// pod at index i will have 25 * i restarts, 5 for init container, 20 for other two containers
+		setPodContainerStatusRestartCount(pod, base)
+		if apply != nil {
+			apply(pod)
+		}
+	})
+}
+
 func initPods(node *v1.Node) []*v1.Pod {
 	pods := make([]*v1.Pod, 0)
 
 	for i := int32(0); i <= 9; i++ {
-		pod := test.BuildTestPod(fmt.Sprintf("pod-%d", i), 100, 0, node.Name, func(pod *v1.Pod) {
-			test.SetNormalOwnerRef(pod)
-			// pod at index i will have 25 * i restarts, 5 for init container, 20 for other two containers
-			setPodContainerStatusRestartCount(pod, i)
-		})
-		pods = append(pods, pod)
+		pods = append(pods, initPodContainersWithStatusRestartCount(fmt.Sprintf("pod-%d", i), i, nil))
 	}
 
 	// The following 3 pods won't get evicted.
@@ -86,7 +96,7 @@ func initPods(node *v1.Node) []*v1.Pod {
 }
 
 func TestRemovePodsHavingTooManyRestarts(t *testing.T) {
-	node1 := test.BuildTestNode("node1", 2000, 3000, 10, nil)
+	node1 := test.BuildTestNode(nodeName1, 2000, 3000, 10, nil)
 	node2 := test.BuildTestNode("node2", 2000, 3000, 10, func(node *v1.Node) {
 		node.Spec.Taints = []v1.Taint{
 			{
