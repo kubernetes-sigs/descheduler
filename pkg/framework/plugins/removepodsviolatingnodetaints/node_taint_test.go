@@ -154,7 +154,6 @@ func withKubeSystemCriticalPod(pod *v1.Pod) {
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	p7 := buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod)
 	p8 := buildTestPod("p8", nodeName2, test.SetDSOwnerRef)
 	p9 := buildTestPodWithNormalOwnerRef("p9", nodeName2, withLocalStorageVolume)
 	p10 := buildTestPodWithNormalOwnerRef("p10", nodeName2, test.SetMirrorPodAnnotation)
@@ -280,7 +279,12 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Critical pods not tolerating node taint should not be evicted",
-			pods:        []*v1.Pod{p7, p8, p9, p10},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
+				p8,
+				p9,
+				p10,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName2, withTestingTaint1),
 			},
@@ -288,7 +292,12 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Critical pods except storage pods not tolerating node taint should not be evicted",
-			pods:        []*v1.Pod{p7, p8, p9, p10},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
+				p8,
+				p9,
+				p10,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName2, withTestingTaint1),
 			},
@@ -297,7 +306,12 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		},
 		{
 			description: "Critical and non critical pods, only non critical pods not tolerating node taint should be evicted",
-			pods:        []*v1.Pod{p7, p8, p10, p11},
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
+				p8,
+				p10,
+				p11,
+			},
 			nodes: []*v1.Node{
 				buildTestNode(nodeName2, withTestingTaint1),
 			},
@@ -307,7 +321,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			description: "Critical and non critical pods, pods not tolerating node taint should be evicted even if they are critical",
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
-				p7,
+				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
 				p9,
 				p10,
 			},
@@ -414,7 +428,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			description: "Critical and non critical pods, pods not tolerating node taint can't be evicted because the only available node does not have enough resources.",
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
-				p7,
+				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
 				p9,
 				p10,
 			},
