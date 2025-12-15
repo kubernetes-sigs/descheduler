@@ -114,8 +114,6 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.Tai
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	node7 := buildTestNode(nodeName7, withBothTaints1)
-
 	p1 := buildTestPod("p1", nodeName1, func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
 		addTolerationToPod(pod, "testTaint", "test", 1, v1.TaintEffectNoSchedule)
@@ -389,9 +387,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			nodeFit:                 true,
 		},
 		{
-			description:             "Pods tolerating included taints should not get evicted even with other taints present",
-			pods:                    []*v1.Pod{p1},
-			nodes:                   []*v1.Node{node7},
+			description: "Pods tolerating included taints should not get evicted even with other taints present",
+			pods:        []*v1.Pod{p1},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName7, withBothTaints1),
+			},
 			includedTaints:          []string{"testTaint1=test1"},
 			expectedEvictedPodCount: 0, // nothing gets evicted, as p1 tolerates the included taint, and taint "testingTaint1=testing1" is not included
 		},
@@ -414,9 +414,11 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			expectedEvictedPodCount: 1, // node1 taint is included. p1 and p3 tolerate the included taint, p2 gets evicted
 		},
 		{
-			description:             "Pods not tolerating all taints are evicted when includedTaints is empty",
-			pods:                    []*v1.Pod{p14, p15},
-			nodes:                   []*v1.Node{node7},
+			description: "Pods not tolerating all taints are evicted when includedTaints is empty",
+			pods:        []*v1.Pod{p14, p15},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName7, withBothTaints1),
+			},
 			expectedEvictedPodCount: 1, // includedTaints is empty so all taints are included. p15 tolerates both node taints and does not get evicted. p14 tolerate only one and gets evicted
 		},
 	}
