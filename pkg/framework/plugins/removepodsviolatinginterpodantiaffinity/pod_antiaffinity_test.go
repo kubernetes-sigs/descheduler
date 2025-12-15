@@ -114,15 +114,16 @@ func TestPodAntiAffinity(t *testing.T) {
 		test.SetPodAntiAffinity(pod, "foo", "bar")
 		pod.DeletionTimestamp = &metav1.Time{}
 	})
-	p11 := buildTestPod("p11", nodeName5, nil)
+	p11 := buildTestPod("p11", nodeName5, func(pod *v1.Pod) {
+		test.SetNormalOwnerRef(pod)
+		pod.Labels = map[string]string{"foo": "bar"}
+	})
 
 	criticalPriority := utils.SystemCriticalPriority
 	nonEvictablePod := buildTestPodForNode1("non-evict", func(pod *v1.Pod) {
 		pod.Spec.Priority = &criticalPriority
 	})
-	p11.Labels = map[string]string{"foo": "bar"}
 	nonEvictablePod.Labels = map[string]string{"foo": "bar"}
-	test.SetNormalOwnerRef(p11)
 
 	var uint1 uint = 1
 	var uint3 uint = 3
