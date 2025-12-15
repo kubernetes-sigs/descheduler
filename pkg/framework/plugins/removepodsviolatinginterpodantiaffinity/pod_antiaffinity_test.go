@@ -117,12 +117,6 @@ func buildTestPodNonEvictableForNode1() *v1.Pod {
 
 func TestPodAntiAffinity(t *testing.T) {
 
-	p7 := buildTestPodForNode1("p7", func(pod *v1.Pod) {
-		test.SetNormalOwnerRef(pod)
-		setLabelsFoo1Bar1(pod)
-		setPodAntiAffinityFooBar(pod)
-		test.SetPodPriority(pod, 0)
-	})
 	p8 := buildTestPodForNode1("p8", func(pod *v1.Pod) {
 		pod.Spec.NodeSelector = map[string]string{
 			"datacenter": "west",
@@ -225,7 +219,12 @@ func TestPodAntiAffinity(t *testing.T) {
 					setPodAntiAffinityFoo1Bar1(pod)
 					test.SetPodPriority(pod, 50)
 				}),
-				p7},
+				buildTestPodForNode1("p7", func(pod *v1.Pod) {
+					test.SetNormalOwnerRef(pod)
+					setLabelsFoo1Bar1(pod)
+					setPodAntiAffinityFooBar(pod)
+					test.SetPodPriority(pod, 0)
+				})},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
