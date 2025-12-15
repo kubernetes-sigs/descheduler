@@ -117,7 +117,6 @@ func buildTestPodNonEvictableForNode1() *v1.Pod {
 
 func TestPodAntiAffinity(t *testing.T) {
 
-	p2 := buildTestPodP2ForNode1()
 	p3 := buildTestPodP3ForNode1()
 	p4 := buildTestPodP4ForNode1()
 	p5 := buildTestPodForNode1("p5", func(pod *v1.Pod) {
@@ -177,7 +176,8 @@ func TestPodAntiAffinity(t *testing.T) {
 			description: "Maximum pods to evict - 0",
 			pods: []*v1.Pod{
 				buildTestPodP1ForNode1(),
-				p2, p3, p4},
+				buildTestPodP2ForNode1(),
+				p3, p4},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -188,7 +188,8 @@ func TestPodAntiAffinity(t *testing.T) {
 			maxPodsToEvictPerNode: &uint3,
 			pods: []*v1.Pod{
 				buildTestPodP1ForNode1(),
-				p2, p3, p4},
+				buildTestPodP2ForNode1(),
+				p3, p4},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -199,7 +200,8 @@ func TestPodAntiAffinity(t *testing.T) {
 			maxNoOfPodsToEvictPerNamespace: &uint3,
 			pods: []*v1.Pod{
 				buildTestPodP1ForNode1(),
-				p2, p3, p4},
+				buildTestPodP2ForNode1(),
+				p3, p4},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -211,7 +213,8 @@ func TestPodAntiAffinity(t *testing.T) {
 			maxNoOfPodsToEvictTotal:        &uint1,
 			pods: []*v1.Pod{
 				buildTestPodP1ForNode1(),
-				p2, p3, p4},
+				buildTestPodP2ForNode1(),
+				p3, p4},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -290,7 +293,8 @@ func TestPodAntiAffinity(t *testing.T) {
 			maxPodsToEvictPerNode: &uint3,
 			pods: []*v1.Pod{
 				buildTestPodP1ForNode1(),
-				p2, p3, p4},
+				buildTestPodP2ForNode1(),
+				p3, p4},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 				test.BuildTestNode(nodeName4, 2, 2, 1, nil),
