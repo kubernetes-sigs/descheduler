@@ -56,18 +56,6 @@ func buildTestNode1() *v1.Node {
 }
 
 func TestPodAntiAffinity(t *testing.T) {
-	node2 := buildTestNode(nodeName2, func(node *v1.Node) {
-		node.ObjectMeta.Labels = map[string]string{
-			"datacenter": "east",
-		}
-	})
-	node3 := buildTestNode(nodeName3, func(node *v1.Node) {
-		node.Spec = v1.NodeSpec{
-			Unschedulable: true,
-		}
-	})
-	node4 := test.BuildTestNode(nodeName4, 2, 2, 1, nil)
-	node5 := test.BuildTestNode(nodeName5, 200, 3000, 10, setNodeMainRegionLabel)
 
 	p1 := test.BuildTestPod("p1", 100, 0, nodeName1, nil)
 	p2 := test.BuildTestPod("p2", 100, 0, nodeName1, nil)
@@ -205,7 +193,11 @@ func TestPodAntiAffinity(t *testing.T) {
 			pods:                  []*v1.Pod{p8, nonEvictablePod},
 			nodes: []*v1.Node{
 				buildTestNode1(),
-				node2,
+				buildTestNode(nodeName2, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{
+						"datacenter": "east",
+					}
+				}),
 			},
 			expectedEvictedPodCount: 0,
 			nodeFit:                 true,
@@ -216,7 +208,11 @@ func TestPodAntiAffinity(t *testing.T) {
 			pods:                  []*v1.Pod{p8, nonEvictablePod},
 			nodes: []*v1.Node{
 				buildTestNode1(),
-				node3,
+				buildTestNode(nodeName3, func(node *v1.Node) {
+					node.Spec = v1.NodeSpec{
+						Unschedulable: true,
+					}
+				}),
 			},
 			expectedEvictedPodCount: 0,
 			nodeFit:                 true,
@@ -235,7 +231,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			pods:                  []*v1.Pod{p1, p2, p3, p4},
 			nodes: []*v1.Node{
 				buildTestNode1(),
-				node4,
+				test.BuildTestNode(nodeName4, 2, 2, 1, nil),
 			},
 			expectedEvictedPodCount: 0,
 			nodeFit:                 true,
@@ -245,7 +241,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			pods:        []*v1.Pod{p1, p11},
 			nodes: []*v1.Node{
 				buildTestNode1(),
-				node5,
+				test.BuildTestNode(nodeName5, 200, 3000, 10, setNodeMainRegionLabel),
 			},
 			expectedEvictedPodCount: 1,
 			nodeFit:                 false,
