@@ -42,6 +42,10 @@ const (
 	nodeName5 = "n5"
 	nodeName6 = "n6"
 	nodeName7 = "n7"
+
+	datacenterLabel = "datacenter"
+	datacenterEast  = "east"
+	datacenterWest  = "west"
 )
 
 func buildTestNode(name string, apply func(*v1.Node)) *v1.Node {
@@ -98,7 +102,7 @@ func withBothTaints1(node *v1.Node) {
 
 func withDatacenterEastLabel(node *v1.Node) {
 	node.ObjectMeta.Labels = map[string]string{
-		"datacenter": "east",
+		datacenterLabel: datacenterEast,
 	}
 }
 
@@ -159,7 +163,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p11 := buildTestPodWithNormalOwnerRef("p11", nodeName2, nil)
 	p12 := buildTestPodWithNormalOwnerRef("p11", nodeName2, func(pod *v1.Pod) {
 		pod.Spec.NodeSelector = map[string]string{
-			"datacenter": "west",
+			datacenterLabel: datacenterWest,
 		}
 	})
 
