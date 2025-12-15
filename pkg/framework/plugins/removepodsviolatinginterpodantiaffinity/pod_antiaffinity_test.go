@@ -79,11 +79,15 @@ func setLabelsFoo1Bar1(pod *v1.Pod) {
 	pod.Labels = map[string]string{"foo1": "bar1"}
 }
 
-func buildTestPodP1ForNode1() *v1.Pod {
-	return buildTestPodForNode1("p1", func(pod *v1.Pod) {
+func buildTestPodWithAntiAffinityForNode1(name string) *v1.Pod {
+	return buildTestPodForNode1(name, func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
 		setPodAntiAffinityFooBar(pod)
 	})
+}
+
+func buildTestPodP1ForNode1() *v1.Pod {
+	return buildTestPodWithAntiAffinityForNode1("p1")
 }
 
 func buildTestPodP2ForNode1() *v1.Pod {
@@ -94,17 +98,11 @@ func buildTestPodP2ForNode1() *v1.Pod {
 }
 
 func buildTestPodP3ForNode1() *v1.Pod {
-	return buildTestPodForNode1("p3", func(pod *v1.Pod) {
-		test.SetNormalOwnerRef(pod)
-		setPodAntiAffinityFooBar(pod)
-	})
+	return buildTestPodWithAntiAffinityForNode1("p3")
 }
 
 func buildTestPodP4ForNode1() *v1.Pod {
-	return buildTestPodForNode1("p4", func(pod *v1.Pod) {
-		test.SetNormalOwnerRef(pod)
-		setPodAntiAffinityFooBar(pod)
-	})
+	return buildTestPodWithAntiAffinityForNode1("p4")
 }
 
 func buildTestPodNonEvictableForNode1() *v1.Pod {
