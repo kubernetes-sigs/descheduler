@@ -52,12 +52,14 @@ func buildTestPod(name string, nodeName string, apply func(*v1.Pod)) *v1.Pod {
 	return test.BuildTestPod(name, 100, 0, nodeName, apply)
 }
 
-func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
-	unschedulableNodeWithLabels := buildTestNode(unschedulableNodeWithLabelsName, func(node *v1.Node) {
+func buildUnschedulableNodeWithLabels() *v1.Node {
+	return buildTestNode(unschedulableNodeWithLabelsName, func(node *v1.Node) {
 		setNodeDesiredNodeLabel(node)
 		node.Spec.Unschedulable = true
 	})
+}
 
+func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	addPodsToNode := func(nodeName string, deletionTimestamp *metav1.Time, affinityType string) []*v1.Pod {
 		podWithNodeAffinity := buildTestPod("podWithNodeAffinity", nodeName, func(pod *v1.Pod) {
 			pod.Spec.Affinity = &v1.Affinity{
@@ -373,7 +375,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			pods: addPodsToNode(nodeWithoutLabelsName, nil, "requiredDuringSchedulingIgnoredDuringExecution"),
 			nodes: []*v1.Node{
 				buildTestNode(nodeWithoutLabelsName, nil),
-				unschedulableNodeWithLabels,
+				buildUnschedulableNodeWithLabels(),
 			},
 			nodefit: true,
 		},
@@ -386,7 +388,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			pods: addPodsToNode(nodeWithoutLabelsName, nil, "preferredDuringSchedulingIgnoredDuringExecution"),
 			nodes: []*v1.Node{
 				buildTestNode(nodeWithoutLabelsName, nil),
-				unschedulableNodeWithLabels,
+				buildUnschedulableNodeWithLabels(),
 			},
 			nodefit: true,
 		},
@@ -399,7 +401,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			pods: addPodsToNode(nodeWithoutLabelsName, nil, "requiredDuringSchedulingIgnoredDuringExecution"),
 			nodes: []*v1.Node{
 				buildTestNode(nodeWithLabelsName, setNodeDesiredNodeLabel),
-				unschedulableNodeWithLabels,
+				buildUnschedulableNodeWithLabels(),
 			},
 			maxPodsToEvictPerNode: &uint1,
 			nodefit:               true,
@@ -413,7 +415,7 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 			pods: addPodsToNode(nodeWithoutLabelsName, nil, "preferredDuringSchedulingIgnoredDuringExecution"),
 			nodes: []*v1.Node{
 				buildTestNode(nodeWithLabelsName, setNodeDesiredNodeLabel),
-				unschedulableNodeWithLabels,
+				buildUnschedulableNodeWithLabels(),
 			},
 			maxPodsToEvictPerNode: &uint1,
 			nodefit:               true,
