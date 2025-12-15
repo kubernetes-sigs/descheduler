@@ -154,7 +154,6 @@ func withKubeSystemCriticalPod(pod *v1.Pod) {
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	p9 := buildTestPodWithNormalOwnerRef("p9", nodeName2, withLocalStorageVolume)
 	p10 := buildTestPodWithNormalOwnerRef("p10", nodeName2, test.SetMirrorPodAnnotation)
 	p11 := buildTestPodWithNormalOwnerRef("p11", nodeName2, nil)
 	p12 := buildTestPodWithNormalOwnerRef("p11", nodeName2, func(pod *v1.Pod) {
@@ -281,7 +280,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
 				buildTestPod("p8", nodeName2, test.SetDSOwnerRef),
-				p9,
+				buildTestPodWithNormalOwnerRef("p9", nodeName2, withLocalStorageVolume),
 				p10,
 			},
 			nodes: []*v1.Node{
@@ -294,7 +293,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
 				buildTestPod("p8", nodeName2, test.SetDSOwnerRef),
-				p9,
+				buildTestPodWithNormalOwnerRef("p9", nodeName2, withLocalStorageVolume),
 				p10,
 			},
 			nodes: []*v1.Node{
@@ -321,7 +320,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
 				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
-				p9,
+				buildTestPodWithNormalOwnerRef("p9", nodeName2, withLocalStorageVolume),
 				p10,
 			},
 			nodes: []*v1.Node{
@@ -428,7 +427,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
 				buildTestPodWithNormalOwnerRef("p7", nodeName2, withKubeSystemCriticalPod),
-				p9,
+				buildTestPodWithNormalOwnerRef("p9", nodeName2, withLocalStorageVolume),
 				p10,
 			},
 			nodes: []*v1.Node{
