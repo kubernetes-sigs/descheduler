@@ -68,15 +68,6 @@ func createPreferNoScheduleTaint(key, value string, index int) v1.Taint {
 	}
 }
 
-func addTaintsToNode(node *v1.Node, key, value string, indices []int) *v1.Node {
-	taints := []v1.Taint{}
-	for _, index := range indices {
-		taints = append(taints, createNoScheduleTaint(key, value, index))
-	}
-	node.Spec.Taints = taints
-	return node
-}
-
 func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.TaintEffect) *v1.Pod {
 	if pod.Annotations == nil {
 		pod.Annotations = map[string]string{}
@@ -89,10 +80,14 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.Tai
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	node1 := buildTestNode(nodeName1, func(node *v1.Node) {
-		addTaintsToNode(node, "testTaint", "test", []int{1})
+		node.Spec.Taints = []v1.Taint{
+			createNoScheduleTaint("testTaint", "test", 1),
+		}
 	})
 	node2 := buildTestNode(nodeName2, func(node *v1.Node) {
-		addTaintsToNode(node, "testingTaint", "testing", []int{1})
+		node.Spec.Taints = []v1.Taint{
+			createNoScheduleTaint("testingTaint", "testing", 1),
+		}
 	})
 
 	node3 := buildTestNode(nodeName3, func(node *v1.Node) {
@@ -119,8 +114,10 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	})
 
 	node7 := buildTestNode(nodeName7, func(node *v1.Node) {
-		addTaintsToNode(node, "testTaint", "test", []int{1})
-		addTaintsToNode(node, "testingTaint", "testing", []int{1})
+		node.Spec.Taints = []v1.Taint{
+			createNoScheduleTaint("testTaint", "test", 1),
+			createNoScheduleTaint("testingTaint", "testing", 1),
+		}
 	})
 
 	p1 := buildTestPod("p1", nodeName1, func(pod *v1.Pod) {
