@@ -119,11 +119,11 @@ func TestPodAntiAffinity(t *testing.T) {
 		pod.Labels = map[string]string{"foo": "bar"}
 	})
 
-	criticalPriority := utils.SystemCriticalPriority
 	nonEvictablePod := buildTestPodForNode1("non-evict", func(pod *v1.Pod) {
+		criticalPriority := utils.SystemCriticalPriority
 		pod.Spec.Priority = &criticalPriority
+		pod.Labels = map[string]string{"foo": "bar"}
 	})
-	nonEvictablePod.Labels = map[string]string{"foo": "bar"}
 
 	var uint1 uint = 1
 	var uint3 uint = 3
