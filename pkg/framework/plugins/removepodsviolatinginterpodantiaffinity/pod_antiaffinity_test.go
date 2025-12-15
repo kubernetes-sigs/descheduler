@@ -51,8 +51,11 @@ func setNodeMainRegionLabel(node *v1.Node) {
 	}
 }
 
+func buildTestNode1() *v1.Node {
+	return buildTestNode(nodeName1, setNodeMainRegionLabel)
+}
+
 func TestPodAntiAffinity(t *testing.T) {
-	node1 := buildTestNode(nodeName1, setNodeMainRegionLabel)
 	node2 := buildTestNode(nodeName2, func(node *v1.Node) {
 		node.ObjectMeta.Labels = map[string]string{
 			"datacenter": "east",
@@ -135,87 +138,115 @@ func TestPodAntiAffinity(t *testing.T) {
 		nodes                          []*v1.Node
 	}{
 		{
-			description:             "Maximum pods to evict - 0",
-			pods:                    []*v1.Pod{p1, p2, p3, p4},
-			nodes:                   []*v1.Node{node1},
+			description: "Maximum pods to evict - 0",
+			pods:        []*v1.Pod{p1, p2, p3, p4},
+			nodes: []*v1.Node{
+				buildTestNode1(),
+			},
 			expectedEvictedPodCount: 3,
 		},
 		{
-			description:             "Maximum pods to evict - 3",
-			maxPodsToEvictPerNode:   &uint3,
-			pods:                    []*v1.Pod{p1, p2, p3, p4},
-			nodes:                   []*v1.Node{node1},
+			description:           "Maximum pods to evict - 3",
+			maxPodsToEvictPerNode: &uint3,
+			pods:                  []*v1.Pod{p1, p2, p3, p4},
+			nodes: []*v1.Node{
+				buildTestNode1(),
+			},
 			expectedEvictedPodCount: 3,
 		},
 		{
 			description:                    "Maximum pods to evict (maxPodsToEvictPerNamespace=3) - 3",
 			maxNoOfPodsToEvictPerNamespace: &uint3,
 			pods:                           []*v1.Pod{p1, p2, p3, p4},
-			nodes:                          []*v1.Node{node1},
-			expectedEvictedPodCount:        3,
+			nodes: []*v1.Node{
+				buildTestNode1(),
+			},
+			expectedEvictedPodCount: 3,
 		},
 		{
 			description:                    "Maximum pods to evict (maxNoOfPodsToEvictTotal)",
 			maxNoOfPodsToEvictPerNamespace: &uint3,
 			maxNoOfPodsToEvictTotal:        &uint1,
 			pods:                           []*v1.Pod{p1, p2, p3, p4},
-			nodes:                          []*v1.Node{node1},
-			expectedEvictedPodCount:        1,
-		},
-		{
-			description:             "Evict only 1 pod after sorting",
-			pods:                    []*v1.Pod{p5, p6, p7},
-			nodes:                   []*v1.Node{node1},
+			nodes: []*v1.Node{
+				buildTestNode1(),
+			},
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description:             "Evicts pod that conflicts with critical pod (but does not evict critical pod)",
-			maxPodsToEvictPerNode:   &uint1,
-			pods:                    []*v1.Pod{p1, nonEvictablePod},
-			nodes:                   []*v1.Node{node1},
+			description: "Evict only 1 pod after sorting",
+			pods:        []*v1.Pod{p5, p6, p7},
+			nodes: []*v1.Node{
+				buildTestNode1(),
+			},
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description:             "Evicts pod that conflicts with critical pod (but does not evict critical pod)",
-			maxPodsToEvictPerNode:   &uint1,
-			pods:                    []*v1.Pod{p1, nonEvictablePod},
-			nodes:                   []*v1.Node{node1},
+			description:           "Evicts pod that conflicts with critical pod (but does not evict critical pod)",
+			maxPodsToEvictPerNode: &uint1,
+			pods:                  []*v1.Pod{p1, nonEvictablePod},
+			nodes: []*v1.Node{
+				buildTestNode1(),
+			},
 			expectedEvictedPodCount: 1,
 		},
 		{
-			description:             "Won't evict pods because node selectors don't match available nodes",
-			maxPodsToEvictPerNode:   &uint1,
-			pods:                    []*v1.Pod{p8, nonEvictablePod},
-			nodes:                   []*v1.Node{node1, node2},
+			description:           "Evicts pod that conflicts with critical pod (but does not evict critical pod)",
+			maxPodsToEvictPerNode: &uint1,
+			pods:                  []*v1.Pod{p1, nonEvictablePod},
+			nodes: []*v1.Node{
+				buildTestNode1(),
+			},
+			expectedEvictedPodCount: 1,
+		},
+		{
+			description:           "Won't evict pods because node selectors don't match available nodes",
+			maxPodsToEvictPerNode: &uint1,
+			pods:                  []*v1.Pod{p8, nonEvictablePod},
+			nodes: []*v1.Node{
+				buildTestNode1(),
+				node2,
+			},
 			expectedEvictedPodCount: 0,
 			nodeFit:                 true,
 		},
 		{
-			description:             "Won't evict pods because only other node is not schedulable",
-			maxPodsToEvictPerNode:   &uint1,
-			pods:                    []*v1.Pod{p8, nonEvictablePod},
-			nodes:                   []*v1.Node{node1, node3},
+			description:           "Won't evict pods because only other node is not schedulable",
+			maxPodsToEvictPerNode: &uint1,
+			pods:                  []*v1.Pod{p8, nonEvictablePod},
+			nodes: []*v1.Node{
+				buildTestNode1(),
+				node3,
+			},
 			expectedEvictedPodCount: 0,
 			nodeFit:                 true,
 		},
 		{
-			description:             "No pod to evicted since all pod terminating",
-			pods:                    []*v1.Pod{p9, p10},
-			nodes:                   []*v1.Node{node1},
+			description: "No pod to evicted since all pod terminating",
+			pods:        []*v1.Pod{p9, p10},
+			nodes: []*v1.Node{
+				buildTestNode1(),
+			},
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description:             "Won't evict pods because only other node doesn't have enough resources",
-			maxPodsToEvictPerNode:   &uint3,
-			pods:                    []*v1.Pod{p1, p2, p3, p4},
-			nodes:                   []*v1.Node{node1, node4},
+			description:           "Won't evict pods because only other node doesn't have enough resources",
+			maxPodsToEvictPerNode: &uint3,
+			pods:                  []*v1.Pod{p1, p2, p3, p4},
+			nodes: []*v1.Node{
+				buildTestNode1(),
+				node4,
+			},
 			expectedEvictedPodCount: 0,
 			nodeFit:                 true,
 		},
 		{
-			description:             "Evict pod violating anti-affinity among different node (all pods have anti-affinity)",
-			pods:                    []*v1.Pod{p1, p11},
-			nodes:                   []*v1.Node{node1, node5},
+			description: "Evict pod violating anti-affinity among different node (all pods have anti-affinity)",
+			pods:        []*v1.Pod{p1, p11},
+			nodes: []*v1.Node{
+				buildTestNode1(),
+				node5,
+			},
 			expectedEvictedPodCount: 1,
 			nodeFit:                 false,
 		},
