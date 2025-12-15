@@ -86,23 +86,11 @@ func buildTestPodWithAntiAffinityForNode1(name string) *v1.Pod {
 	})
 }
 
-func buildTestPodP1ForNode1() *v1.Pod {
-	return buildTestPodWithAntiAffinityForNode1("p1")
-}
-
 func buildTestPodP2ForNode1() *v1.Pod {
 	return buildTestPodForNode1("p2", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
 		setLabelsFooBar(pod)
 	})
-}
-
-func buildTestPodP3ForNode1() *v1.Pod {
-	return buildTestPodWithAntiAffinityForNode1("p3")
-}
-
-func buildTestPodP4ForNode1() *v1.Pod {
-	return buildTestPodWithAntiAffinityForNode1("p4")
 }
 
 func buildTestPodNonEvictableForNode1() *v1.Pod {
@@ -131,10 +119,10 @@ func TestPodAntiAffinity(t *testing.T) {
 		{
 			description: "Maximum pods to evict - 0",
 			pods: []*v1.Pod{
-				buildTestPodP1ForNode1(),
+				buildTestPodWithAntiAffinityForNode1("p1"),
 				buildTestPodP2ForNode1(),
-				buildTestPodP3ForNode1(),
-				buildTestPodP4ForNode1()},
+				buildTestPodWithAntiAffinityForNode1("p3"),
+				buildTestPodWithAntiAffinityForNode1("p4")},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -144,10 +132,10 @@ func TestPodAntiAffinity(t *testing.T) {
 			description:           "Maximum pods to evict - 3",
 			maxPodsToEvictPerNode: &uint3,
 			pods: []*v1.Pod{
-				buildTestPodP1ForNode1(),
+				buildTestPodWithAntiAffinityForNode1("p1"),
 				buildTestPodP2ForNode1(),
-				buildTestPodP3ForNode1(),
-				buildTestPodP4ForNode1()},
+				buildTestPodWithAntiAffinityForNode1("p3"),
+				buildTestPodWithAntiAffinityForNode1("p4")},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -157,10 +145,10 @@ func TestPodAntiAffinity(t *testing.T) {
 			description:                    "Maximum pods to evict (maxPodsToEvictPerNamespace=3) - 3",
 			maxNoOfPodsToEvictPerNamespace: &uint3,
 			pods: []*v1.Pod{
-				buildTestPodP1ForNode1(),
+				buildTestPodWithAntiAffinityForNode1("p1"),
 				buildTestPodP2ForNode1(),
-				buildTestPodP3ForNode1(),
-				buildTestPodP4ForNode1()},
+				buildTestPodWithAntiAffinityForNode1("p3"),
+				buildTestPodWithAntiAffinityForNode1("p4")},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -171,10 +159,10 @@ func TestPodAntiAffinity(t *testing.T) {
 			maxNoOfPodsToEvictPerNamespace: &uint3,
 			maxNoOfPodsToEvictTotal:        &uint1,
 			pods: []*v1.Pod{
-				buildTestPodP1ForNode1(),
+				buildTestPodWithAntiAffinityForNode1("p1"),
 				buildTestPodP2ForNode1(),
-				buildTestPodP3ForNode1(),
-				buildTestPodP4ForNode1()},
+				buildTestPodWithAntiAffinityForNode1("p3"),
+				buildTestPodWithAntiAffinityForNode1("p4")},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -210,7 +198,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			description:           "Evicts pod that conflicts with critical pod (but does not evict critical pod)",
 			maxPodsToEvictPerNode: &uint1,
 			pods: []*v1.Pod{
-				buildTestPodP1ForNode1(),
+				buildTestPodWithAntiAffinityForNode1("p1"),
 				buildTestPodNonEvictableForNode1()},
 			nodes: []*v1.Node{
 				buildTestNode1(),
@@ -221,7 +209,7 @@ func TestPodAntiAffinity(t *testing.T) {
 			description:           "Evicts pod that conflicts with critical pod (but does not evict critical pod)",
 			maxPodsToEvictPerNode: &uint1,
 			pods: []*v1.Pod{
-				buildTestPodP1ForNode1(),
+				buildTestPodWithAntiAffinityForNode1("p1"),
 				buildTestPodNonEvictableForNode1()},
 			nodes: []*v1.Node{
 				buildTestNode1(),
@@ -292,10 +280,10 @@ func TestPodAntiAffinity(t *testing.T) {
 			description:           "Won't evict pods because only other node doesn't have enough resources",
 			maxPodsToEvictPerNode: &uint3,
 			pods: []*v1.Pod{
-				buildTestPodP1ForNode1(),
+				buildTestPodWithAntiAffinityForNode1("p1"),
 				buildTestPodP2ForNode1(),
-				buildTestPodP3ForNode1(),
-				buildTestPodP4ForNode1()},
+				buildTestPodWithAntiAffinityForNode1("p3"),
+				buildTestPodWithAntiAffinityForNode1("p4")},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 				test.BuildTestNode(nodeName4, 2, 2, 1, nil),
@@ -306,7 +294,7 @@ func TestPodAntiAffinity(t *testing.T) {
 		{
 			description: "Evict pod violating anti-affinity among different node (all pods have anti-affinity)",
 			pods: []*v1.Pod{
-				buildTestPodP1ForNode1(),
+				buildTestPodWithAntiAffinityForNode1("p1"),
 				buildTestPod("p11", nodeName5, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
 					setLabelsFooBar(pod)
