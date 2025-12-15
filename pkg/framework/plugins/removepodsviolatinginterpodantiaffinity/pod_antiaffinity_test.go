@@ -93,7 +93,12 @@ func TestPodAntiAffinity(t *testing.T) {
 		test.SetPodAntiAffinity(pod, "foo1", "bar1")
 		test.SetPodPriority(pod, 50)
 	})
-	p7 := buildTestPodForNode1("p7", nil)
+	p7 := buildTestPodForNode1("p7", func(pod *v1.Pod) {
+		test.SetNormalOwnerRef(pod)
+		pod.Labels = map[string]string{"foo1": "bar1"}
+		test.SetPodAntiAffinity(pod, "foo", "bar")
+		test.SetPodPriority(pod, 0)
+	})
 	p8 := buildTestPodForNode1("p8", nil)
 	p9 := buildTestPodForNode1("p9", nil)
 	p10 := buildTestPodForNode1("p10", nil)
@@ -105,21 +110,15 @@ func TestPodAntiAffinity(t *testing.T) {
 	nonEvictablePod := buildTestPodForNode1("non-evict", func(pod *v1.Pod) {
 		pod.Spec.Priority = &criticalPriority
 	})
-	p7.Labels = map[string]string{"foo1": "bar1"}
 	p11.Labels = map[string]string{"foo": "bar"}
 	nonEvictablePod.Labels = map[string]string{"foo": "bar"}
-	test.SetNormalOwnerRef(p7)
 	test.SetNormalOwnerRef(p9)
 	test.SetNormalOwnerRef(p10)
 	test.SetNormalOwnerRef(p11)
 
 	// set pod anti affinity
-	test.SetPodAntiAffinity(p7, "foo", "bar")
 	test.SetPodAntiAffinity(p9, "foo", "bar")
 	test.SetPodAntiAffinity(p10, "foo", "bar")
-
-	// set pod priority
-	test.SetPodPriority(p7, 0)
 
 	// Set pod node selectors
 	p8.Spec.NodeSelector = map[string]string{
