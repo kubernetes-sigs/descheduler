@@ -102,7 +102,6 @@ func buildTestPodNonEvictableForNode1() *v1.Pod {
 }
 
 func TestPodAntiAffinity(t *testing.T) {
-
 	var uint1 uint = 1
 	var uint3 uint = 3
 
@@ -122,7 +121,8 @@ func TestPodAntiAffinity(t *testing.T) {
 				buildTestPodWithAntiAffinityForNode1("p1"),
 				buildTestPodP2ForNode1(),
 				buildTestPodWithAntiAffinityForNode1("p3"),
-				buildTestPodWithAntiAffinityForNode1("p4")},
+				buildTestPodWithAntiAffinityForNode1("p4"),
+			},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -135,7 +135,8 @@ func TestPodAntiAffinity(t *testing.T) {
 				buildTestPodWithAntiAffinityForNode1("p1"),
 				buildTestPodP2ForNode1(),
 				buildTestPodWithAntiAffinityForNode1("p3"),
-				buildTestPodWithAntiAffinityForNode1("p4")},
+				buildTestPodWithAntiAffinityForNode1("p4"),
+			},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -148,7 +149,8 @@ func TestPodAntiAffinity(t *testing.T) {
 				buildTestPodWithAntiAffinityForNode1("p1"),
 				buildTestPodP2ForNode1(),
 				buildTestPodWithAntiAffinityForNode1("p3"),
-				buildTestPodWithAntiAffinityForNode1("p4")},
+				buildTestPodWithAntiAffinityForNode1("p4"),
+			},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -162,7 +164,8 @@ func TestPodAntiAffinity(t *testing.T) {
 				buildTestPodWithAntiAffinityForNode1("p1"),
 				buildTestPodP2ForNode1(),
 				buildTestPodWithAntiAffinityForNode1("p3"),
-				buildTestPodWithAntiAffinityForNode1("p4")},
+				buildTestPodWithAntiAffinityForNode1("p4"),
+			},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -188,7 +191,8 @@ func TestPodAntiAffinity(t *testing.T) {
 					setLabelsFoo1Bar1(pod)
 					setPodAntiAffinityFooBar(pod)
 					test.SetPodPriority(pod, 0)
-				})},
+				}),
+			},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -199,7 +203,8 @@ func TestPodAntiAffinity(t *testing.T) {
 			maxPodsToEvictPerNode: &uint1,
 			pods: []*v1.Pod{
 				buildTestPodWithAntiAffinityForNode1("p1"),
-				buildTestPodNonEvictableForNode1()},
+				buildTestPodNonEvictableForNode1(),
+			},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -210,7 +215,8 @@ func TestPodAntiAffinity(t *testing.T) {
 			maxPodsToEvictPerNode: &uint1,
 			pods: []*v1.Pod{
 				buildTestPodWithAntiAffinityForNode1("p1"),
-				buildTestPodNonEvictableForNode1()},
+				buildTestPodNonEvictableForNode1(),
+			},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -225,7 +231,8 @@ func TestPodAntiAffinity(t *testing.T) {
 						"datacenter": "west",
 					}
 				}),
-				buildTestPodNonEvictableForNode1()},
+				buildTestPodNonEvictableForNode1(),
+			},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 				buildTestNode(nodeName2, func(node *v1.Node) {
@@ -246,7 +253,8 @@ func TestPodAntiAffinity(t *testing.T) {
 						"datacenter": "west",
 					}
 				}),
-				buildTestPodNonEvictableForNode1()},
+				buildTestPodNonEvictableForNode1(),
+			},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 				buildTestNode(nodeName3, func(node *v1.Node) {
@@ -270,7 +278,8 @@ func TestPodAntiAffinity(t *testing.T) {
 					test.SetNormalOwnerRef(pod)
 					setPodAntiAffinityFooBar(pod)
 					pod.DeletionTimestamp = &metav1.Time{}
-				})},
+				}),
+			},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
@@ -283,7 +292,8 @@ func TestPodAntiAffinity(t *testing.T) {
 				buildTestPodWithAntiAffinityForNode1("p1"),
 				buildTestPodP2ForNode1(),
 				buildTestPodWithAntiAffinityForNode1("p3"),
-				buildTestPodWithAntiAffinityForNode1("p4")},
+				buildTestPodWithAntiAffinityForNode1("p4"),
+			},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 				test.BuildTestNode(nodeName4, 2, 2, 1, nil),
@@ -298,7 +308,8 @@ func TestPodAntiAffinity(t *testing.T) {
 				buildTestPod("p11", nodeName5, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
 					setLabelsFooBar(pod)
-				})},
+				}),
+			},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 				test.BuildTestNode(nodeName5, 200, 3000, 10, setNodeMainRegionLabel),
