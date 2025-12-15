@@ -117,11 +117,6 @@ func buildTestPodNonEvictableForNode1() *v1.Pod {
 
 func TestPodAntiAffinity(t *testing.T) {
 
-	p9 := buildTestPodForNode1("p9", func(pod *v1.Pod) {
-		test.SetNormalOwnerRef(pod)
-		setPodAntiAffinityFooBar(pod)
-		pod.DeletionTimestamp = &metav1.Time{}
-	})
 	p10 := buildTestPodForNode1("p10", func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
 		setPodAntiAffinityFooBar(pod)
@@ -291,7 +286,13 @@ func TestPodAntiAffinity(t *testing.T) {
 		},
 		{
 			description: "No pod to evicted since all pod terminating",
-			pods:        []*v1.Pod{p9, p10},
+			pods: []*v1.Pod{
+				buildTestPodForNode1("p9", func(pod *v1.Pod) {
+					test.SetNormalOwnerRef(pod)
+					setPodAntiAffinityFooBar(pod)
+					pod.DeletionTimestamp = &metav1.Time{}
+				}),
+				p10},
 			nodes: []*v1.Node{
 				buildTestNode1(),
 			},
