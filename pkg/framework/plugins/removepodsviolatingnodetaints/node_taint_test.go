@@ -68,6 +68,25 @@ func createPreferNoScheduleTaint(key, value string, index int) v1.Taint {
 	}
 }
 
+func withTestTaint1(node *v1.Node) {
+	node.Spec.Taints = []v1.Taint{
+		createNoScheduleTaint("testTaint", "test", 1),
+	}
+}
+
+func withTestingTaint1(node *v1.Node) {
+	node.Spec.Taints = []v1.Taint{
+		createNoScheduleTaint("testingTaint", "testing", 1),
+	}
+}
+
+func withBothTaints1(node *v1.Node) {
+	node.Spec.Taints = []v1.Taint{
+		createNoScheduleTaint("testTaint", "test", 1),
+		createNoScheduleTaint("testingTaint", "testing", 1),
+	}
+}
+
 func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.TaintEffect) *v1.Pod {
 	if pod.Annotations == nil {
 		pod.Annotations = map[string]string{}
@@ -79,16 +98,8 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.Tai
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	node1 := buildTestNode(nodeName1, func(node *v1.Node) {
-		node.Spec.Taints = []v1.Taint{
-			createNoScheduleTaint("testTaint", "test", 1),
-		}
-	})
-	node2 := buildTestNode(nodeName2, func(node *v1.Node) {
-		node.Spec.Taints = []v1.Taint{
-			createNoScheduleTaint("testingTaint", "testing", 1),
-		}
-	})
+	node1 := buildTestNode(nodeName1, withTestTaint1)
+	node2 := buildTestNode(nodeName2, withTestingTaint1)
 
 	node3 := buildTestNode(nodeName3, func(node *v1.Node) {
 		node.ObjectMeta.Labels = map[string]string{
@@ -113,12 +124,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		}
 	})
 
-	node7 := buildTestNode(nodeName7, func(node *v1.Node) {
-		node.Spec.Taints = []v1.Taint{
-			createNoScheduleTaint("testTaint", "test", 1),
-			createNoScheduleTaint("testingTaint", "testing", 1),
-		}
-	})
+	node7 := buildTestNode(nodeName7, withBothTaints1)
 
 	p1 := buildTestPod("p1", nodeName1, func(pod *v1.Pod) {
 		test.SetNormalOwnerRef(pod)
