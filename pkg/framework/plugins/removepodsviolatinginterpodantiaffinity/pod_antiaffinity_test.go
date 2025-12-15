@@ -45,12 +45,14 @@ func buildTestNode(name string, apply func(*v1.Node)) *v1.Node {
 	return test.BuildTestNode(name, 2000, 3000, 10, apply)
 }
 
+func setNodeMainRegionLabel(node *v1.Node) {
+	node.ObjectMeta.Labels = map[string]string{
+		"region": "main-region",
+	}
+}
+
 func TestPodAntiAffinity(t *testing.T) {
-	node1 := buildTestNode(nodeName1, func(node *v1.Node) {
-		node.ObjectMeta.Labels = map[string]string{
-			"region": "main-region",
-		}
-	})
+	node1 := buildTestNode(nodeName1, setNodeMainRegionLabel)
 	node2 := buildTestNode(nodeName2, func(node *v1.Node) {
 		node.ObjectMeta.Labels = map[string]string{
 			"datacenter": "east",
@@ -62,11 +64,7 @@ func TestPodAntiAffinity(t *testing.T) {
 		}
 	})
 	node4 := test.BuildTestNode(nodeName4, 2, 2, 1, nil)
-	node5 := test.BuildTestNode(nodeName5, 200, 3000, 10, func(node *v1.Node) {
-		node.ObjectMeta.Labels = map[string]string{
-			"region": "main-region",
-		}
-	})
+	node5 := test.BuildTestNode(nodeName5, 200, 3000, 10, setNodeMainRegionLabel)
 
 	p1 := test.BuildTestPod("p1", 100, 0, nodeName1, nil)
 	p2 := test.BuildTestPod("p2", 100, 0, nodeName1, nil)
