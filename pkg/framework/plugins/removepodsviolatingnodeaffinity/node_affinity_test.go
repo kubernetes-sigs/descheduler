@@ -45,9 +45,10 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 
 	nodeWithoutLabels := buildTestNode("nodeWithoutLabels", nil)
 
-	unschedulableNodeWithLabels := buildTestNode("unschedulableNodeWithLabels", nil)
-	unschedulableNodeWithLabels.Labels[nodeLabelKey] = nodeLabelValue
-	unschedulableNodeWithLabels.Spec.Unschedulable = true
+	unschedulableNodeWithLabels := buildTestNode("unschedulableNodeWithLabels", func(node *v1.Node) {
+		node.Labels[nodeLabelKey] = nodeLabelValue
+		node.Spec.Unschedulable = true
+	})
 
 	addPodsToNode := func(node *v1.Node, deletionTimestamp *metav1.Time, affinityType string) []*v1.Pod {
 		podWithNodeAffinity := test.BuildTestPod("podWithNodeAffinity", 100, 0, node.Name, nil)
