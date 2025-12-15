@@ -153,11 +153,23 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	p8 := buildTestPod("p8", nodeName2, func(pod *v1.Pod) {
 		pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 	})
-	p9 := buildTestPod("p9", nodeName2, nil)
+	p9 := buildTestPod("p9", nodeName2, func(pod *v1.Pod) {
+		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		pod.Spec.Volumes = []v1.Volume{
+			{
+				Name: "sample",
+				VolumeSource: v1.VolumeSource{
+					HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+					EmptyDir: &v1.EmptyDirVolumeSource{
+						SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+					},
+				},
+			},
+		}
+	})
 	p10 := buildTestPod("p10", nodeName2, nil)
 	p11 := buildTestPod("p11", nodeName2, nil)
 	p12 := buildTestPod("p11", nodeName2, nil)
-	p9.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p10.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p11.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p12.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
@@ -166,18 +178,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	// A Critical Pod.
 	// A daemonset.
 	// A pod with local storage.
-	p9.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-	p9.Spec.Volumes = []v1.Volume{
-		{
-			Name: "sample",
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-				},
-			},
-		},
-	}
 	// A Mirror Pod.
 	p10.Annotations = test.GetMirrorPodAnnotation()
 
