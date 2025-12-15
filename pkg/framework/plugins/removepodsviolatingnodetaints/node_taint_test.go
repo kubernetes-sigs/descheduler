@@ -114,8 +114,6 @@ func addTolerationToPod(pod *v1.Pod, key, value string, index int, effect v1.Tai
 }
 
 func TestDeletePodsViolatingNodeTaints(t *testing.T) {
-	node5 := buildTestNode(nodeName5, withPreferNoScheduleTestTaint1)
-
 	node6 := test.BuildTestNode(nodeName6, 1, 1, 1, withPreferNoScheduleTestTaint1)
 
 	node7 := buildTestNode(nodeName7, withBothTaints1)
@@ -338,15 +336,19 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			nodeFit:                 true,
 		},
 		{
-			description:             "Pods not tolerating PreferNoSchedule node taint should not be evicted when not enabled",
-			pods:                    []*v1.Pod{p13},
-			nodes:                   []*v1.Node{node5},
+			description: "Pods not tolerating PreferNoSchedule node taint should not be evicted when not enabled",
+			pods:        []*v1.Pod{p13},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName5, withPreferNoScheduleTestTaint1),
+			},
 			expectedEvictedPodCount: 0,
 		},
 		{
-			description:             "Pods not tolerating PreferNoSchedule node taint should be evicted when enabled",
-			pods:                    []*v1.Pod{p13},
-			nodes:                   []*v1.Node{node5},
+			description: "Pods not tolerating PreferNoSchedule node taint should be evicted when enabled",
+			pods:        []*v1.Pod{p13},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName5, withPreferNoScheduleTestTaint1),
+			},
 			includePreferNoSchedule: true,
 			expectedEvictedPodCount: 1, // p13 gets evicted
 		},
