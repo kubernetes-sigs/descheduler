@@ -118,9 +118,10 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		}
 	})
 
-	node7 := buildTestNode(nodeName7, nil)
-	node7 = addTaintsToNode(node7, "testTaint", "test", []int{1})
-	node7 = addTaintsToNode(node7, "testingTaint", "testing", []int{1})
+	node7 := buildTestNode(nodeName7, func(node *v1.Node) {
+		addTaintsToNode(node, "testTaint", "test", []int{1})
+		addTaintsToNode(node, "testingTaint", "testing", []int{1})
+	})
 
 	p1 := buildTestPod("p1", nodeName1, nil)
 	p2 := buildTestPod("p2", nodeName1, nil)
