@@ -167,10 +167,12 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			},
 		}
 	})
-	p10 := buildTestPod("p10", nodeName2, nil)
+	p10 := buildTestPod("p10", nodeName2, func(pod *v1.Pod) {
+		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		pod.Annotations = test.GetMirrorPodAnnotation()
+	})
 	p11 := buildTestPod("p11", nodeName2, nil)
 	p12 := buildTestPod("p11", nodeName2, nil)
-	p10.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p11.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 	p12.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
@@ -179,7 +181,6 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 	// A daemonset.
 	// A pod with local storage.
 	// A Mirror Pod.
-	p10.Annotations = test.GetMirrorPodAnnotation()
 
 	p12.Spec.NodeSelector = map[string]string{
 		"datacenter": "west",
