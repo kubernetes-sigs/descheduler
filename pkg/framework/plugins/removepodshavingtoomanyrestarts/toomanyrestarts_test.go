@@ -55,19 +55,19 @@ func initPods(node *v1.Node) []*v1.Pod {
 	pods := make([]*v1.Pod, 0)
 
 	for i := int32(0); i <= 9; i++ {
-		pod := test.BuildTestPod(fmt.Sprintf("pod-%d", i), 100, 0, node.Name, nil)
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-
-		// pod at index i will have 25 * i restarts.
-		setPodContainerStatusRestartCount(pod, i)
+		pod := test.BuildTestPod(fmt.Sprintf("pod-%d", i), 100, 0, node.Name, func(pod *v1.Pod) {
+			test.SetNormalOwnerRef(pod)
+			// pod at index i will have 25 * i restarts, 5 for init container, 20 for other two containers
+			setPodContainerStatusRestartCount(pod, i)
+		})
 		pods = append(pods, pod)
 	}
 
 	// The following 3 pods won't get evicted.
 	// A daemonset.
-	pods[6].ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
+	test.SetDSOwnerRef(pods[6])
 	// A pod with local storage.
-	pods[7].ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	test.SetNormalOwnerRef(pods[7])
 	pods[7].Spec.Volumes = []v1.Volume{
 		{
 			Name: "sample",
