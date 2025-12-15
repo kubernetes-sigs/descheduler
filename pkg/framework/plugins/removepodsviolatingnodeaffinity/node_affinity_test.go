@@ -55,58 +55,60 @@ func TestRemovePodsViolatingNodeAffinity(t *testing.T) {
 	})
 
 	addPodsToNode := func(node *v1.Node, deletionTimestamp *metav1.Time, affinityType string) []*v1.Pod {
-		podWithNodeAffinity := buildTestPod("podWithNodeAffinity", node.Name, nil)
-		podWithNodeAffinity.Spec.Affinity = &v1.Affinity{
-			NodeAffinity: &v1.NodeAffinity{},
-		}
+		podWithNodeAffinity := buildTestPod("podWithNodeAffinity", node.Name, func(pod *v1.Pod) {
+			pod.Spec.Affinity = &v1.Affinity{
+				NodeAffinity: &v1.NodeAffinity{},
+			}
 
-		switch affinityType {
-		case "requiredDuringSchedulingIgnoredDuringExecution":
-			podWithNodeAffinity.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &v1.NodeSelector{
-				NodeSelectorTerms: []v1.NodeSelectorTerm{
+			switch affinityType {
+			case "requiredDuringSchedulingIgnoredDuringExecution":
+				pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{
+						{
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      nodeLabelKey,
+									Operator: "In",
+									Values: []string{
+										nodeLabelValue,
+									},
+								},
+							},
+						},
+					},
+				}
+			case "preferredDuringSchedulingIgnoredDuringExecution":
+				pod.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = []v1.PreferredSchedulingTerm{
 					{
-						MatchExpressions: []v1.NodeSelectorRequirement{
-							{
-								Key:      nodeLabelKey,
-								Operator: "In",
-								Values: []string{
-									nodeLabelValue,
+						Weight: 10,
+						Preference: v1.NodeSelectorTerm{
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      nodeLabelKey,
+									Operator: "In",
+									Values: []string{
+										nodeLabelValue,
+									},
 								},
 							},
 						},
 					},
-				},
+				}
+			case "requiredDuringSchedulingRequiredDuringExecution":
+			default:
+				t.Fatalf("Invalid affinity type %s", affinityType)
 			}
-		case "preferredDuringSchedulingIgnoredDuringExecution":
-			podWithNodeAffinity.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = []v1.PreferredSchedulingTerm{
-				{
-					Weight: 10,
-					Preference: v1.NodeSelectorTerm{
-						MatchExpressions: []v1.NodeSelectorRequirement{
-							{
-								Key:      nodeLabelKey,
-								Operator: "In",
-								Values: []string{
-									nodeLabelValue,
-								},
-							},
-						},
-					},
-				},
-			}
-		case "requiredDuringSchedulingRequiredDuringExecution":
-		default:
-			t.Fatalf("Invalid affinity type %s", affinityType)
-		}
+
+			pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+			pod.DeletionTimestamp = deletionTimestamp
+		})
 
 		pod1 := buildTestPod("pod1", node.Name, nil)
 		pod2 := buildTestPod("pod2", node.Name, nil)
 
-		podWithNodeAffinity.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 		pod1.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 		pod2.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
 
-		podWithNodeAffinity.DeletionTimestamp = deletionTimestamp
 		pod1.DeletionTimestamp = deletionTimestamp
 		pod2.DeletionTimestamp = deletionTimestamp
 
