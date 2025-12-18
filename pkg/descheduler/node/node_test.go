@@ -25,6 +25,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
@@ -79,9 +80,24 @@ func TestReadyNodesWithNodeSelector(t *testing.T) {
 	sharedInformerFactory.WaitForCacheSync(stopChannel)
 	defer close(stopChannel)
 
+	// First verify nodeLister returns non-empty list
+	allNodes, err := nodeLister.List(labels.Everything())
+	if err != nil {
+		t.Fatalf("Failed to list nodes from nodeLister: %v", err)
+	}
+	if len(allNodes) == 0 {
+		t.Fatal("Expected nodeLister to return non-empty list of nodes")
+	}
+	if len(allNodes) != 2 {
+		t.Errorf("Expected nodeLister to return 2 nodes, got %d", len(allNodes))
+	}
+
+	// Now test ReadyNodes
 	nodes, _ := ReadyNodes(ctx, fakeClient, nodeLister, nodeSelector)
 
-	if nodes[0].Name != "node1" {
+	if len(nodes) != 1 {
+		t.Errorf("Expected 1 node, got %d", len(nodes))
+	} else if nodes[0].Name != "node1" {
 		t.Errorf("Expected node1, got %s", nodes[0].Name)
 	}
 }
