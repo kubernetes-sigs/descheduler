@@ -846,8 +846,8 @@ func TestDefaultEvictorFilter(t *testing.T) {
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
-							},
+							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
+						},
 						},
 					}
 				}),
@@ -862,8 +862,8 @@ func TestDefaultEvictorFilter(t *testing.T) {
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
-							},
+							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
+						},
 						},
 					}
 				}),
@@ -878,8 +878,8 @@ func TestDefaultEvictorFilter(t *testing.T) {
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "local-storage", VolumeSource: v1.VolumeSource{
-								EmptyDir: &v1.EmptyDirVolumeSource{},
-							},
+							EmptyDir: &v1.EmptyDirVolumeSource{},
+						},
 						},
 					}
 				}),
@@ -915,8 +915,8 @@ func TestDefaultEvictorFilter(t *testing.T) {
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
-							},
+							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
+						},
 						},
 					}
 				}),
@@ -964,10 +964,10 @@ func TestDefaultEvictorFilter(t *testing.T) {
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "foo",
-								},
+							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+								ClaimName: "foo",
 							},
+						},
 						},
 					}
 				}),
@@ -997,10 +997,10 @@ func TestDefaultEvictorFilter(t *testing.T) {
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "foo",
-								},
+							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+								ClaimName: "foo",
 							},
+						},
 						},
 					}
 				}),
@@ -1030,10 +1030,10 @@ func TestDefaultEvictorFilter(t *testing.T) {
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "foo",
-								},
+							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+								ClaimName: "foo",
 							},
+						},
 						},
 					}
 				}),
@@ -1061,17 +1061,17 @@ func TestDefaultEvictorFilter(t *testing.T) {
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "protected-pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "protected",
-								},
+							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+								ClaimName: "protected",
 							},
+						},
 						},
 						{
 							Name: "unprotected-pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "unprotected",
-								},
+							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+								ClaimName: "unprotected",
 							},
+						},
 						},
 					}
 				}),
@@ -1400,4 +1400,119 @@ func Test_protectedPVCStorageClasses(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMultipleProfilesWithDifferentNamespaceLabelSelectors(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	node := test.BuildTestNode("node1", 1000, 2000, 10, nil)
+	const (
+		nsProdName    = "ns-prod"
+		nsTestName    = "ns-test"
+		nsBackendName = "ns-backend"
+	)
+	nsProd := test.BuildTestNamespace(nsProdName)
+	nsProd.Labels["env"] = "prod"
+
+	nsTest := test.BuildTestNamespace(nsTestName)
+	nsTest.Labels["env"] = "test"
+
+	nsBackend := test.BuildTestNamespace(nsBackendName)
+	nsBackend.Labels["team"] = "backend"
+
+	podInProd := test.BuildTestPod("pod-in-prod", 100, 100, node.Name, func(pod *v1.Pod) {
+		pod.Namespace = nsProdName
+		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	})
+
+	podInTest := test.BuildTestPod("pod-in-test", 100, 100, node.Name, func(pod *v1.Pod) {
+		pod.Namespace = nsTestName
+		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	})
+
+	podInBackend := test.BuildTestPod("pod-in-backend", 100, 100, node.Name, func(pod *v1.Pod) {
+		pod.Namespace = nsBackendName
+		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+	})
+
+	fakeClient := fake.NewClientset(node, nsProd, nsBackend, nsTest, podInProd, podInBackend, podInTest)
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+
+	_ = sharedInformerFactory.Core().V1().Namespaces().Lister()
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	// Create Profile 1: targets namespaces with env=prod
+	profile1Args := &DefaultEvictorArgs{
+		NamespaceLabelSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"env": "prod",
+			},
+		},
+	}
+
+	getPodAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(sharedInformerFactory.Core().V1().Pods().Informer())
+	if err != nil {
+		t.Fatalf("build get pods assigned to node function error: %v", err)
+	}
+
+	profile1Plugin, err := New(ctx, profile1Args, &frameworkfake.HandleImpl{
+		ClientsetImpl:                 fakeClient,
+		GetPodsAssignedToNodeFuncImpl: getPodAssignedToNode,
+		SharedInformerFactoryImpl:     sharedInformerFactory,
+	})
+	if err != nil {
+		t.Fatalf("unable to initialize profile1 plugin: %v", err)
+	}
+
+	profile2Args := &DefaultEvictorArgs{
+		NamespaceLabelSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"team": "backend",
+			},
+		},
+	}
+	profile2Plugin, err := New(ctx, profile2Args, &frameworkfake.HandleImpl{
+		ClientsetImpl:                 fakeClient,
+		GetPodsAssignedToNodeFuncImpl: getPodAssignedToNode,
+		SharedInformerFactoryImpl:     sharedInformerFactory,
+	})
+	if err != nil {
+		t.Fatalf("unable to initialize profile2 plugin: %v", err)
+	}
+
+	// Test Profile 1: evicts pods in ns-prod, reject others
+	t.Run("profile1", func(t *testing.T) {
+		profile1 := profile1Plugin.(*DefaultEvictor)
+
+		if profile1.PreEvictionFilter(podInBackend) {
+			t.Errorf("podInBackend should be rejected by profile1")
+		}
+
+		if profile1.PreEvictionFilter(podInTest) {
+			t.Errorf("podInTest should be rejected by profile1")
+		}
+
+		if !profile1.PreEvictionFilter(podInProd) {
+			t.Errorf("podInProd should not be rejected by profile1")
+		}
+	})
+
+	// Test Profile 2: evicts pods in ns-backend, reject others
+	t.Run("profile2", func(t *testing.T) {
+		profile2 := profile2Plugin.(*DefaultEvictor)
+
+		if profile2.PreEvictionFilter(podInProd) {
+			t.Errorf("podInProd should be rejected by profile2")
+		}
+
+		if profile2.PreEvictionFilter(podInTest) {
+			t.Errorf("podInTest should be rejected by profile2")
+		}
+
+		if !profile2.PreEvictionFilter(podInBackend) {
+			t.Errorf("podInBackend should not be rejected by profile2")
+		}
+	})
+
 }
