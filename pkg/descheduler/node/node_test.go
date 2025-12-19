@@ -19,12 +19,16 @@ package node
 import (
 	"context"
 	"errors"
+	"sort"
+	"strings"
 	"sync"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
@@ -83,6 +87,183 @@ func TestReadyNodesWithNodeSelector(t *testing.T) {
 
 	if nodes[0].Name != "node1" {
 		t.Errorf("Expected node1, got %s", nodes[0].Name)
+	}
+}
+
+func TestReadyNodesFromInterfaces(t *testing.T) {
+	node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
+	node2 := test.BuildTestNode("node2", 1000, 2000, 9, nil)
+	node2.Status.Conditions = []v1.NodeCondition{{Type: v1.NodeReady, Status: v1.ConditionFalse}}
+	node3 := test.BuildTestNode("node3", 1000, 2000, 9, nil)
+
+	tests := []struct {
+		description    string
+		nodeInterfaces []interface{}
+		expectedCount  int
+		expectedNames  []string
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			description:    "All nodes are ready",
+			nodeInterfaces: []interface{}{node1, node3},
+			expectedCount:  2,
+			expectedNames:  []string{"node1", "node3"},
+			expectError:    false,
+		},
+		{
+			description:    "One node is not ready",
+			nodeInterfaces: []interface{}{node1, node2, node3},
+			expectedCount:  2,
+			expectedNames:  []string{"node1", "node3"},
+			expectError:    false,
+		},
+		{
+			description:    "Empty list",
+			nodeInterfaces: []interface{}{},
+			expectedCount:  0,
+			expectedNames:  []string{},
+			expectError:    false,
+		},
+		{
+			description:    "Invalid type in list",
+			nodeInterfaces: []interface{}{node1, "not a node", node3},
+			expectedCount:  0,
+			expectError:    true,
+			errorContains:  "item at index 1 is not a *v1.Node",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			nodes, err := ReadyNodesFromInterfaces(tc.nodeInterfaces)
+
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				} else if tc.errorContains != "" && !strings.Contains(err.Error(), tc.errorContains) {
+					t.Errorf("Expected error to contain '%s', got '%s'", tc.errorContains, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+
+			if len(nodes) != tc.expectedCount {
+				t.Errorf("Expected %d nodes, got %d", tc.expectedCount, len(nodes))
+			}
+
+			for i, expectedName := range tc.expectedNames {
+				if i >= len(nodes) {
+					t.Errorf("Missing node at index %d, expected %s", i, expectedName)
+					continue
+				}
+				if nodes[i].Name != expectedName {
+					t.Errorf("Expected node at index %d to be %s, got %s", i, expectedName, nodes[i].Name)
+				}
+			}
+		})
+	}
+}
+
+func TestAddNodeSelectorIndexer(t *testing.T) {
+	node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
+	node1.Labels = map[string]string{"type": "compute", "zone": "us-east-1"}
+	node2 := test.BuildTestNode("node2", 1000, 2000, 9, nil)
+	node2.Labels = map[string]string{"type": "infra", "zone": "us-west-1"}
+	node3 := test.BuildTestNode("node3", 1000, 2000, 9, nil)
+	node3.Labels = map[string]string{"type": "compute", "zone": "us-west-1"}
+
+	tests := []struct {
+		description     string
+		indexerName     string
+		selectorString  string
+		expectedMatches []string
+	}{
+		{
+			description:     "Index nodes by type=compute",
+			indexerName:     "computeNodes",
+			selectorString:  "type=compute",
+			expectedMatches: []string{"node1", "node3"},
+		},
+		{
+			description:     "Index nodes by type=infra",
+			indexerName:     "infraNodes",
+			selectorString:  "type=infra",
+			expectedMatches: []string{"node2"},
+		},
+		{
+			description:     "Index nodes by zone=us-west-1",
+			indexerName:     "westZoneNodes",
+			selectorString:  "zone=us-west-1",
+			expectedMatches: []string{"node2", "node3"},
+		},
+		{
+			description:     "Index nodes with multiple labels",
+			indexerName:     "computeEastNodes",
+			selectorString:  "type=compute,zone=us-east-1",
+			expectedMatches: []string{"node1"},
+		},
+		{
+			description:     "No matching nodes",
+			indexerName:     "noMatchNodes",
+			selectorString:  "type=storage",
+			expectedMatches: []string{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			fakeClient := fake.NewSimpleClientset(node1, node2, node3)
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			nodeInformer := sharedInformerFactory.Core().V1().Nodes().Informer()
+
+			selector, err := labels.Parse(tc.selectorString)
+			if err != nil {
+				t.Fatalf("Failed to parse selector: %v", err)
+			}
+
+			err = AddNodeSelectorIndexer(nodeInformer, tc.indexerName, selector)
+			if err != nil {
+				t.Fatalf("AddNodeSelectorIndexer failed: %v", err)
+			}
+
+			stopChannel := make(chan struct{})
+			sharedInformerFactory.Start(stopChannel)
+			sharedInformerFactory.WaitForCacheSync(stopChannel)
+			defer close(stopChannel)
+
+			indexer := nodeInformer.GetIndexer()
+			objs, err := indexer.ByIndex(tc.indexerName, tc.indexerName)
+			if err != nil {
+				t.Errorf("Failed to query indexer: %v", err)
+				return
+			}
+
+			// Extract node names from the results
+			actualMatches := make([]string, 0, len(objs))
+			for _, obj := range objs {
+				node, ok := obj.(*v1.Node)
+				if !ok {
+					t.Errorf("Expected *v1.Node, got %T", obj)
+					continue
+				}
+				actualMatches = append(actualMatches, node.Name)
+			}
+
+			// Sort both slices for consistent comparison
+			sort.Strings(actualMatches)
+			expectedMatches := make([]string, len(tc.expectedMatches))
+			copy(expectedMatches, tc.expectedMatches)
+			sort.Strings(expectedMatches)
+
+			// Compare using cmp.Diff
+			if diff := cmp.Diff(expectedMatches, actualMatches); diff != "" {
+				t.Errorf("Node matches mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 

@@ -480,7 +480,6 @@ func TestPodEvictorReset(t *testing.T) {
 	ctx := context.Background()
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, taintNodeNoSchedule)
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
-	nodes := []*v1.Node{node1, node2}
 
 	ownerRef1 := test.GetReplicaSetOwnerRefList()
 	updatePod := func(pod *v1.Pod) {
@@ -506,7 +505,7 @@ func TestPodEvictorReset(t *testing.T) {
 
 	// a single pod eviction expected
 	klog.Infof("2 pod eviction expected per a descheduling cycle, 2 real evictions in total")
-	if err := descheduler.runDeschedulerLoop(ctx, nodes); err != nil {
+	if err := descheduler.runDeschedulerLoop(ctx); err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
 	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 2 || len(fakeEvictedPods) != 0 {
@@ -515,7 +514,7 @@ func TestPodEvictorReset(t *testing.T) {
 
 	// a single pod eviction expected
 	klog.Infof("2 pod eviction expected per a descheduling cycle, 4 real evictions in total")
-	if err := descheduler.runDeschedulerLoop(ctx, nodes); err != nil {
+	if err := descheduler.runDeschedulerLoop(ctx); err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
 	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 4 || len(fakeEvictedPods) != 0 {
@@ -528,7 +527,7 @@ func TestPodEvictorReset(t *testing.T) {
 	evictedPods = []string{}
 
 	klog.Infof("2 pod eviction expected per a descheduling cycle, 2 fake evictions in total")
-	if err := descheduler.runDeschedulerLoop(ctx, nodes); err != nil {
+	if err := descheduler.runDeschedulerLoop(ctx); err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
 	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 0 || len(fakeEvictedPods) != 2 {
@@ -536,7 +535,7 @@ func TestPodEvictorReset(t *testing.T) {
 	}
 
 	klog.Infof("2 pod eviction expected per a descheduling cycle, 4 fake evictions in total")
-	if err := descheduler.runDeschedulerLoop(ctx, nodes); err != nil {
+	if err := descheduler.runDeschedulerLoop(ctx); err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
 	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 0 || len(fakeEvictedPods) != 4 {
@@ -555,7 +554,7 @@ func checkTotals(t *testing.T, ctx context.Context, descheduler *descheduler, to
 }
 
 func runDeschedulingCycleAndCheckTotals(t *testing.T, ctx context.Context, nodes []*v1.Node, descheduler *descheduler, totalEvictionRequests, totalEvicted uint) {
-	err := descheduler.runDeschedulerLoop(ctx, nodes)
+	err := descheduler.runDeschedulerLoop(ctx)
 	if err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
@@ -731,7 +730,6 @@ func TestDeschedulingLimits(t *testing.T) {
 			ctx := context.Background()
 			node1 := test.BuildTestNode("n1", 2000, 3000, 10, taintNodeNoSchedule)
 			node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
-			nodes := []*v1.Node{node1, node2}
 			ctxCancel, cancel := context.WithCancel(ctx)
 			featureGates := featuregate.NewFeatureGate()
 			featureGates.Add(map[featuregate.Feature]featuregate.FeatureSpec{
@@ -774,7 +772,7 @@ func TestDeschedulingLimits(t *testing.T) {
 					time.Sleep(100 * time.Millisecond)
 
 					klog.Infof("2 evictions in background expected, 2 normal evictions")
-					err := descheduler.runDeschedulerLoop(ctx, nodes)
+					err := descheduler.runDeschedulerLoop(ctx)
 					if err != nil {
 						t.Fatalf("Unable to run a descheduling loop: %v", err)
 					}
@@ -790,6 +788,222 @@ func TestDeschedulingLimits(t *testing.T) {
 	}
 }
 
+func TestNodeLabelSelectorBasedEviction(t *testing.T) {
+	initPluginRegistry()
+
+	// createNodes creates 4 nodes with different labels and applies a taint to all of them
+	createNodes := func() (*v1.Node, *v1.Node, *v1.Node, *v1.Node) {
+		taint := []v1.Taint{
+			{
+				Key:    "test-taint",
+				Value:  "test-value",
+				Effect: v1.TaintEffectNoSchedule,
+			},
+		}
+		node1 := test.BuildTestNode("n1", 2000, 3000, 10, func(node *v1.Node) {
+			node.Labels = map[string]string{
+				"zone":        "us-east-1a",
+				"node-type":   "compute",
+				"environment": "production",
+			}
+			node.Spec.Taints = taint
+		})
+		node2 := test.BuildTestNode("n2", 2000, 3000, 10, func(node *v1.Node) {
+			node.Labels = map[string]string{
+				"zone":        "us-east-1b",
+				"node-type":   "compute",
+				"environment": "production",
+			}
+			node.Spec.Taints = taint
+		})
+		node3 := test.BuildTestNode("n3", 2000, 3000, 10, func(node *v1.Node) {
+			node.Labels = map[string]string{
+				"zone":        "us-west-1a",
+				"node-type":   "storage",
+				"environment": "staging",
+			}
+			node.Spec.Taints = taint
+		})
+		node4 := test.BuildTestNode("n4", 2000, 3000, 10, func(node *v1.Node) {
+			node.Labels = map[string]string{
+				"zone":        "us-west-1b",
+				"node-type":   "storage",
+				"environment": "staging",
+			}
+			node.Spec.Taints = taint
+		})
+		return node1, node2, node3, node4
+	}
+
+	tests := []struct {
+		description              string
+		nodeSelector             string
+		dryRun                   bool
+		expectedEvictedFromNodes []string
+	}{
+		{
+			description:              "Evict from n1, n2",
+			nodeSelector:             "environment=production",
+			dryRun:                   false,
+			expectedEvictedFromNodes: []string{"n1", "n2"},
+		},
+		{
+			description:              "Evict from n1, n2 in dry run mode",
+			nodeSelector:             "environment=production",
+			dryRun:                   true,
+			expectedEvictedFromNodes: []string{"n1", "n2"},
+		},
+		{
+			description:              "Evict from n3, n4",
+			nodeSelector:             "environment=staging",
+			dryRun:                   false,
+			expectedEvictedFromNodes: []string{"n3", "n4"},
+		},
+		{
+			description:              "Evict from n3, n4 in dry run mode",
+			nodeSelector:             "environment=staging",
+			dryRun:                   true,
+			expectedEvictedFromNodes: []string{"n3", "n4"},
+		},
+		{
+			description:              "Evict from n1, n4",
+			nodeSelector:             "zone in (us-east-1a, us-west-1b)",
+			dryRun:                   false,
+			expectedEvictedFromNodes: []string{"n1", "n4"},
+		},
+		{
+			description:              "Evict from n1, n4 in dry run mode",
+			nodeSelector:             "zone in (us-east-1a, us-west-1b)",
+			dryRun:                   true,
+			expectedEvictedFromNodes: []string{"n1", "n4"},
+		},
+		{
+			description:              "Evict from n2, n3",
+			nodeSelector:             "zone in (us-east-1b, us-west-1a)",
+			dryRun:                   false,
+			expectedEvictedFromNodes: []string{"n2", "n3"},
+		},
+		{
+			description:              "Evict from n2, n3 in dry run mode",
+			nodeSelector:             "zone in (us-east-1b, us-west-1a)",
+			dryRun:                   true,
+			expectedEvictedFromNodes: []string{"n2", "n3"},
+		},
+		{
+			description:              "Evict from all nodes",
+			nodeSelector:             "",
+			dryRun:                   false,
+			expectedEvictedFromNodes: []string{"n1", "n2", "n3", "n4"},
+		},
+		{
+			description:              "Evict from all nodes in dry run mode",
+			nodeSelector:             "",
+			dryRun:                   true,
+			expectedEvictedFromNodes: []string{"n1", "n2", "n3", "n4"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			ctx := context.Background()
+
+			// Create nodes with different labels and taints
+			node1, node2, node3, node4 := createNodes()
+
+			ownerRef := test.GetReplicaSetOwnerRefList()
+			updatePod := func(pod *v1.Pod) {
+				pod.ObjectMeta.OwnerReferences = ownerRef
+				pod.Status.Phase = v1.PodRunning
+			}
+
+			// Create one pod per node
+			p1 := test.BuildTestPod("p1", 200, 0, node1.Name, updatePod)
+			p2 := test.BuildTestPod("p2", 200, 0, node2.Name, updatePod)
+			p3 := test.BuildTestPod("p3", 200, 0, node3.Name, updatePod)
+			p4 := test.BuildTestPod("p4", 200, 0, node4.Name, updatePod)
+
+			// Map pod names to their node names for validation
+			podToNode := map[string]string{
+				"p1": "n1",
+				"p2": "n2",
+				"p3": "n3",
+				"p4": "n4",
+			}
+
+			policy := removePodsViolatingNodeTaintsPolicy()
+			if tc.nodeSelector != "" {
+				policy.NodeSelector = &tc.nodeSelector
+			}
+
+			ctxCancel, cancel := context.WithCancel(ctx)
+			rs, deschedulerInstance, client := initDescheduler(t, ctxCancel, initFeatureGates(), policy, nil, node1, node2, node3, node4, p1, p2, p3, p4)
+			defer cancel()
+
+			// Set dry run mode if specified
+			rs.DryRun = tc.dryRun
+
+			// Verify all pods are created initially
+			pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
+			if err != nil {
+				t.Fatalf("Unable to list pods: %v", err)
+			}
+			if len(pods.Items) != 4 {
+				t.Errorf("Expected 4 pods initially, got %d", len(pods.Items))
+			}
+
+			var evictedPods []string
+			if !tc.dryRun {
+				client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, nil, nil))
+			} else {
+				deschedulerInstance.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
+					return podEvictionReactionTestingFnc(&evictedPods, nil, nil)
+				}
+			}
+
+			// Run descheduler
+			if err := deschedulerInstance.runDeschedulerLoop(ctx); err != nil {
+				t.Fatalf("Unable to run descheduler loop: %v", err)
+			}
+
+			// Collect which nodes had pods evicted from them
+			nodesWithEvictedPods := make(map[string]bool)
+			for _, podName := range evictedPods {
+				if nodeName, ok := podToNode[podName]; ok {
+					nodesWithEvictedPods[nodeName] = true
+				}
+			}
+
+			// Verify the correct number of nodes had pods evicted
+			if len(nodesWithEvictedPods) != len(tc.expectedEvictedFromNodes) {
+				t.Errorf("Expected pods to be evicted from %d nodes, got %d nodes: %v", len(tc.expectedEvictedFromNodes), len(nodesWithEvictedPods), nodesWithEvictedPods)
+			}
+
+			// Verify pods were evicted from the correct nodes
+			for _, nodeName := range tc.expectedEvictedFromNodes {
+				if !nodesWithEvictedPods[nodeName] {
+					t.Errorf("Expected pod to be evicted from node %s, but it was not", nodeName)
+				}
+			}
+
+			// Verify no unexpected nodes had pods evicted
+			for nodeName := range nodesWithEvictedPods {
+				found := false
+				for _, expectedNode := range tc.expectedEvictedFromNodes {
+					if nodeName == expectedNode {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Unexpected eviction from node %s", nodeName)
+				}
+			}
+
+			t.Logf("Successfully evicted pods from nodes: %v", tc.expectedEvictedFromNodes)
+		})
+	}
+}
+
 func TestLoadAwareDescheduling(t *testing.T) {
 	initPluginRegistry()
 
@@ -801,7 +1015,6 @@ func TestLoadAwareDescheduling(t *testing.T) {
 	ctx := context.Background()
 	node1 := test.BuildTestNode("n1", 2000, 3000, 10, taintNodeNoSchedule)
 	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
-	nodes := []*v1.Node{node1, node2}
 
 	p1 := test.BuildTestPod("p1", 300, 0, node1.Name, updatePod)
 	p2 := test.BuildTestPod("p2", 300, 0, node1.Name, updatePod)
@@ -857,7 +1070,7 @@ func TestLoadAwareDescheduling(t *testing.T) {
 	// after newDescheduler in RunDeschedulerStrategies.
 	descheduler.metricsCollector.Collect(ctx)
 
-	err := descheduler.runDeschedulerLoop(ctx, nodes)
+	err := descheduler.runDeschedulerLoop(ctx)
 	if err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}

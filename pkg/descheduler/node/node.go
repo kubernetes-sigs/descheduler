@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	clientset "k8s.io/client-go/kubernetes"
 	listersv1 "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -71,6 +72,22 @@ func ReadyNodes(ctx context.Context, client clientset.Interface, nodeLister list
 
 	readyNodes := make([]*v1.Node, 0, len(nodes))
 	for _, node := range nodes {
+		if IsReady(node) {
+			readyNodes = append(readyNodes, node)
+		}
+	}
+	return readyNodes, nil
+}
+
+// ReadyNodesFromInterfaces converts a list of interface{} items to ready nodes.
+// Each interface{} item is expected to be a *v1.Node. Only ready nodes are returned.
+func ReadyNodesFromInterfaces(nodeInterfaces []interface{}) ([]*v1.Node, error) {
+	readyNodes := make([]*v1.Node, 0, len(nodeInterfaces))
+	for i, nodeInterface := range nodeInterfaces {
+		node, ok := nodeInterface.(*v1.Node)
+		if !ok {
+			return nil, fmt.Errorf("item at index %d is not a *v1.Node", i)
+		}
 		if IsReady(node) {
 			readyNodes = append(readyNodes, node)
 		}
@@ -399,4 +416,23 @@ func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFun
 	}
 
 	return false, nil
+}
+
+// BuildGetPodsAssignedToNodeFunc establishes an indexer to map the pods and their assigned nodes.
+// It returns a function to help us get all the pods that assigned to a node based on the indexer.
+func AddNodeSelectorIndexer(nodeInformer cache.SharedIndexInformer, indexerName string, nodeSelector labels.Selector) error {
+	return nodeInformer.AddIndexers(cache.Indexers{
+		indexerName: func(obj interface{}) ([]string, error) {
+			node, ok := obj.(*v1.Node)
+			if !ok {
+				return []string{}, errors.New("unexpected object")
+			}
+
+			if nodeSelector.Matches(labels.Set(node.Labels)) {
+				return []string{indexerName}, nil
+			}
+
+			return []string{}, nil
+		},
+	})
 }
