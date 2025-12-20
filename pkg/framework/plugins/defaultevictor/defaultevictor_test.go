@@ -356,7 +356,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p4", n1.Name, func(pod *v1.Pod) {
 					setPodEvictAnnotation(pod)
-					pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
+					test.SetRSOwnerRef(pod)
 				}),
 			},
 			result: true,
@@ -373,7 +373,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p19", n1.Name, func(pod *v1.Pod) {
 					setPodEvictAnnotation(pod)
-					pod.ObjectMeta.OwnerReferences = test.GetStatefulSetOwnerRefList()
+					test.SetSSOwnerRef(pod)
 				}),
 			},
 			result: true,
