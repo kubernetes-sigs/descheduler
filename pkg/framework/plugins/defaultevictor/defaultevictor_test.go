@@ -87,6 +87,12 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 		}
 	}
 
+	setNodeLabel := func(node *v1.Node) {
+		node.ObjectMeta.Labels = map[string]string{
+			nodeLabelKey: nodeLabelValue,
+		}
+	}
+
 	testCases := []testCase{
 		{
 			description: "Pod with no tolerations running on normal node, all other nodes tainted",
@@ -129,16 +135,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				buildTestNode("node2", func(node *v1.Node) {
-					node.ObjectMeta.Labels = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
-				}),
-				buildTestNode("node3", func(node *v1.Node) {
-					node.ObjectMeta.Labels = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
-				}),
+				buildTestNode("node2", setNodeLabel),
+				buildTestNode("node3", setNodeLabel),
 			},
 			nodeFit: true,
 		}, {
@@ -152,16 +150,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				buildTestNode("node2", func(node *v1.Node) {
-					node.ObjectMeta.Labels = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
-				}),
-				buildTestNode("node3", func(node *v1.Node) {
-					node.ObjectMeta.Labels = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
-				}),
+				buildTestNode("node2", setNodeLabel),
+				buildTestNode("node3", setNodeLabel),
 			},
 			nodeFit: true,
 			result:  true,
@@ -176,16 +166,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				test.BuildTestNode("node2-TEST", 10, 16, 10, func(node *v1.Node) {
-					node.ObjectMeta.Labels = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
-				}),
-				test.BuildTestNode("node3-TEST", 10, 16, 10, func(node *v1.Node) {
-					node.ObjectMeta.Labels = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
-				}),
+				test.BuildTestNode("node2-TEST", 10, 16, 10, setNodeLabel),
+				test.BuildTestNode("node3-TEST", 10, 16, 10, setNodeLabel),
 			},
 			nodeFit: true,
 		}, {
@@ -209,16 +191,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				test.BuildTestNode("node2", 100, 16, 10, func(node *v1.Node) {
-					node.ObjectMeta.Labels = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
-				}),
-				test.BuildTestNode("node3", 100, 20, 10, func(node *v1.Node) {
-					node.ObjectMeta.Labels = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
-				}),
+				test.BuildTestNode("node2", 100, 16, 10, setNodeLabel),
+				test.BuildTestNode("node3", 100, 20, 10, setNodeLabel),
 			},
 			nodeFit: true,
 			result:  true,
@@ -243,16 +217,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				test.BuildTestNode("node2", 100, 16, 10, func(node *v1.Node) {
-					node.ObjectMeta.Labels = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
-				}),
-				test.BuildTestNode("node3", 100, 16, 10, func(node *v1.Node) {
-					node.ObjectMeta.Labels = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
-				}),
+				test.BuildTestNode("node2", 100, 16, 10, setNodeLabel),
+				test.BuildTestNode("node3", 100, 16, 10, setNodeLabel),
 			},
 			nodeFit: true,
 		}, {
@@ -266,16 +232,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				buildTestNode("node2", func(node *v1.Node) {
-					node.ObjectMeta.Labels = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
-				}),
-				buildTestNode("node3", func(node *v1.Node) {
-					node.ObjectMeta.Labels = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
-				}),
+				buildTestNode("node2", setNodeLabel),
+				buildTestNode("node3", setNodeLabel),
 			},
 			result: true,
 		},
