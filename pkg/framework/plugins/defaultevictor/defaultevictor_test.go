@@ -463,7 +463,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p10", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Annotations = test.GetMirrorPodAnnotation()
+					test.SetMirrorPodAnnotation(pod)
 				}),
 			},
 		},
@@ -472,7 +472,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p11", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Annotations = test.GetMirrorPodAnnotation()
+					test.SetMirrorPodAnnotation(pod)
 					pod.Annotations[evictPodAnnotationKey] = "true"
 				}),
 			},
