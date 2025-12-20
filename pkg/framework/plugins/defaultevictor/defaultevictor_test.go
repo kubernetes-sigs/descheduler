@@ -91,9 +91,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 		{
 			description: "Pod with no tolerations running on normal node, all other nodes tainted",
 			pods: []*v1.Pod{
-				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-				}),
+				buildTestPod("p1", n1.Name, test.SetNormalOwnerRef),
 			},
 			nodes: []*v1.Node{
 				buildTestNode("node2", setNodeTaint),
@@ -104,7 +102,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			description: "Pod with correct tolerations running on normal node, all other nodes tainted",
 			pods: []*v1.Pod{
 				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Tolerations = []v1.Toleration{
 						{
 							Key:    nodeTaintKey,
@@ -124,7 +122,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			description: "Pod with incorrect node selector",
 			pods: []*v1.Pod{
 				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.NodeSelector = map[string]string{
 						nodeLabelKey: "fail",
 					}
@@ -147,7 +145,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			description: "Pod with correct node selector",
 			pods: []*v1.Pod{
 				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.NodeSelector = map[string]string{
 						nodeLabelKey: nodeLabelValue,
 					}
@@ -171,7 +169,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			description: "Pod with correct node selector, but only available node doesn't have enough CPU",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.NodeSelector = map[string]string{
 						nodeLabelKey: nodeLabelValue,
 					}
@@ -194,7 +192,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			description: "Pod with correct node selector, and one node has enough memory",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.NodeSelector = map[string]string{
 						nodeLabelKey: nodeLabelValue,
 					}
@@ -228,7 +226,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			description: "Pod with correct node selector, but both nodes don't have enough memory",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.NodeSelector = map[string]string{
 						nodeLabelKey: nodeLabelValue,
 					}
@@ -261,7 +259,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			description: "Pod with incorrect node selector, but nodefit false, should still be evicted",
 			pods: []*v1.Pod{
 				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.NodeSelector = map[string]string{
 						nodeLabelKey: "fail",
 					}
@@ -347,9 +345,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 		{
 			description: "Normal pod eviction with normal ownerRefs",
 			pods: []*v1.Pod{
-				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-				}),
+				buildTestPod("p1", n1.Name, test.SetNormalOwnerRef),
 			},
 			result: true,
 		},
@@ -358,7 +354,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p2", n1.Name, func(pod *v1.Pod) {
 					pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 				}),
 			},
 			result: true,
@@ -368,7 +364,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p2", n1.Name, func(pod *v1.Pod) {
 					pod.Annotations = map[string]string{evictionutils.SoftNoEvictionAnnotationKey: ""}
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 				}),
 			},
 			evictLocalStoragePods:   false,
@@ -380,7 +376,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p2", n1.Name, func(pod *v1.Pod) {
 					pod.Annotations = map[string]string{evictionutils.SoftNoEvictionAnnotationKey: ""}
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 				}),
 			},
 			evictLocalStoragePods:   false,
@@ -391,9 +387,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 		{
 			description: "Normal pod eviction with replicaSet ownerRefs",
 			pods: []*v1.Pod{
-				buildTestPod("p3", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-				}),
+				buildTestPod("p3", n1.Name, test.SetNormalOwnerRef),
 			},
 			result: true,
 		},
@@ -410,9 +404,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 		{
 			description: "Normal pod eviction with statefulSet ownerRefs",
 			pods: []*v1.Pod{
-				buildTestPod("p18", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-				}),
+				buildTestPod("p18", n1.Name, test.SetNormalOwnerRef),
 			},
 			result: true,
 		},
@@ -430,7 +422,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod not evicted because it is bound to a PV and evictLocalStoragePods = false",
 			pods: []*v1.Pod{
 				buildTestPod("p5", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "sample",
@@ -449,7 +441,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod is evicted because it is bound to a PV and evictLocalStoragePods = true",
 			pods: []*v1.Pod{
 				buildTestPod("p6", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "sample",
@@ -471,7 +463,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p7", n1.Name, func(pod *v1.Pod) {
 					pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "sample",
@@ -491,7 +483,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod not evicted because it is part of a daemonSet",
 			pods: []*v1.Pod{
 				buildTestPod("p8", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 				}),
 			},
@@ -510,7 +502,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod not evicted because it is a mirror poddsa",
 			pods: []*v1.Pod{
 				buildTestPod("p10", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
 			},
@@ -519,7 +511,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod is evicted because it is a mirror pod, but it has scheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				buildTestPod("p11", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Annotations = test.GetMirrorPodAnnotation()
 					pod.Annotations[evictPodAnnotationKey] = "true"
 				}),
@@ -530,7 +522,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod not evicted because it has system critical priority",
 			pods: []*v1.Pod{
 				buildTestPod("p12", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
 				}),
@@ -540,7 +532,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod is evicted because it has system critical priority, but it has scheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				buildTestPod("p13", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
 					pod.Annotations = map[string]string{
@@ -554,7 +546,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod not evicted because it has a priority higher than the configured priority threshold",
 			pods: []*v1.Pod{
 				buildTestPod("p14", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Priority = &highPriority
 				}),
 			},
@@ -564,7 +556,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod is evicted because it has a priority higher than the configured priority threshold, but it has scheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				buildTestPod("p15", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
 					pod.Spec.Priority = &highPriority
 				}),
@@ -576,7 +568,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod is evicted because it has system critical priority, but evictSystemCriticalPods = true",
 			pods: []*v1.Pod{
 				buildTestPod("p16", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
 				}),
@@ -588,7 +580,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod is evicted because it has system critical priority, but evictSystemCriticalPods = true and it has scheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				buildTestPod("p16", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
@@ -601,7 +593,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod is evicted because it has a priority higher than the configured priority threshold, but evictSystemCriticalPods = true",
 			pods: []*v1.Pod{
 				buildTestPod("p17", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Priority = &highPriority
 				}),
 			},
@@ -613,7 +605,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod is evicted because it has a priority higher than the configured priority threshold, but evictSystemCriticalPods = true and it has scheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				buildTestPod("p17", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
 					pod.Spec.Priority = &highPriority
 				}),
@@ -625,9 +617,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 		{
 			description: "Pod with no tolerations running on normal node, all other nodes tainted, no PreEvictionFilter, should ignore nodeFit",
 			pods: []*v1.Pod{
-				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-				}),
+				buildTestPod("p1", n1.Name, test.SetNormalOwnerRef),
 			},
 			nodes: []*v1.Node{
 				buildTestNode("node2", setNodeTaint),
@@ -640,11 +630,11 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "minReplicas of 2, owner with 2 replicas, evicts",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.ObjectMeta.OwnerReferences[0].UID = ownerRefUUID
 				}),
 				test.BuildTestPod("p2", 1, 1, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.ObjectMeta.OwnerReferences[0].UID = ownerRefUUID
 				}),
 			},
@@ -655,11 +645,11 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "minReplicas of 3, owner with 2 replicas, no eviction",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.ObjectMeta.OwnerReferences[0].UID = ownerRefUUID
 				}),
 				test.BuildTestPod("p2", 1, 1, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.ObjectMeta.OwnerReferences[0].UID = ownerRefUUID
 				}),
 			},
@@ -673,7 +663,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 					pod.ObjectMeta.OwnerReferences[0].UID = ownerRefUUID
 				}),
 				test.BuildTestPod("p2", 1, 1, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 				}),
 			},
 			minReplicas: 2,
@@ -683,7 +673,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "minPodAge of 50, pod created 10 minutes ago, no eviction",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					podStartTime := metav1.Now().Add(time.Minute * time.Duration(-10))
 					pod.Status.StartTime = &metav1.Time{Time: podStartTime}
 				}),
@@ -694,7 +684,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "minPodAge of 50, pod created 60 minutes ago, evicts",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					podStartTime := metav1.Now().Add(time.Minute * time.Duration(-60))
 					pod.Status.StartTime = &metav1.Time{Time: podStartTime}
 				}),
@@ -706,7 +696,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "nil minPodAge, pod created 60 minutes ago, evicts",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					podStartTime := metav1.Now().Add(time.Minute * time.Duration(-60))
 					pod.Status.StartTime = &metav1.Time{Time: podStartTime}
 				}),
@@ -717,7 +707,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "ignorePodsWithoutPDB, pod with no PDBs, no eviction",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Labels = map[string]string{
 						"app": "foo",
 					}
@@ -729,7 +719,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "ignorePodsWithoutPDB, pod with PDBs, evicts",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 1, 1, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Labels = map[string]string{
 						"app": "foo",
 					}
@@ -745,7 +735,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "ignorePvcPods is set, pod with PVC, not evicts",
 			pods: []*v1.Pod{
 				buildTestPod("p15", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "pvc", VolumeSource: v1.VolumeSource{
@@ -761,7 +751,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "ignorePvcPods is not set, pod with PVC, evicts",
 			pods: []*v1.Pod{
 				buildTestPod("p15", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "pvc", VolumeSource: v1.VolumeSource{
@@ -777,7 +767,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod with local storage is evicted because 'PodsWithLocalStorage' is in DefaultDisabled",
 			pods: []*v1.Pod{
 				buildTestPod("p18", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "local-storage", VolumeSource: v1.VolumeSource{
@@ -814,7 +804,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod with PVC is not evicted because 'PodsWithPVC' is in ExtraEnabled",
 			pods: []*v1.Pod{
 				buildTestPod("p20", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "pvc", VolumeSource: v1.VolumeSource{
@@ -832,9 +822,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 		{
 			description: "Pod without PDB is not evicted because 'PodsWithoutPDB' is in ExtraEnabled",
 			pods: []*v1.Pod{
-				buildTestPod("p21", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
-				}),
+				buildTestPod("p21", n1.Name, test.SetNormalOwnerRef),
 			},
 			podProtections: PodProtections{
 				ExtraEnabled: []PodProtection{PodsWithoutPDB},
@@ -845,7 +833,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod with ResourceClaims is not evicted because 'PodsWithResourceClaims' is in ExtraEnabled",
 			pods: []*v1.Pod{
 				buildTestPod("p20", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.ResourceClaims = []v1.PodResourceClaim{
 						{
 							Name:              "test-claim",
@@ -863,7 +851,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod using StorageClass is not evicted because 'PodsWithPVC' is in ExtraEnabled",
 			pods: []*v1.Pod{
 				buildTestPod("p23", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "pvc", VolumeSource: v1.VolumeSource{
@@ -896,7 +884,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod using unprotected StorageClass is evicted even though 'PodsWithPVC' is in ExtraEnabled",
 			pods: []*v1.Pod{
 				buildTestPod("p24", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "pvc", VolumeSource: v1.VolumeSource{
@@ -929,7 +917,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod using unexisting PVC is not evicted because we cannot determine if storage class is protected or not",
 			pods: []*v1.Pod{
 				buildTestPod("p25", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "pvc", VolumeSource: v1.VolumeSource{
@@ -960,7 +948,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod using protected and unprotected StorageClasses is not evicted",
 			pods: []*v1.Pod{
 				buildTestPod("p26", n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "protected-pvc", VolumeSource: v1.VolumeSource{
@@ -1030,7 +1018,7 @@ func TestReinitialization(t *testing.T) {
 					pod.ObjectMeta.OwnerReferences[0].UID = ownerRefUUID
 				}),
 				test.BuildTestPod("p2", 1, 1, n1.Name, func(pod *v1.Pod) {
-					pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+					test.SetNormalOwnerRef(pod)
 				}),
 			},
 			minReplicas: 2,
