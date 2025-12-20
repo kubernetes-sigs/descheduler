@@ -77,6 +77,16 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 	nodeLabelKey := "datacenter"
 	nodeLabelValue := "east"
 
+	setNodeTaint := func(node *v1.Node) {
+		node.Spec.Taints = []v1.Taint{
+			{
+				Key:    nodeTaintKey,
+				Value:  nodeTaintValue,
+				Effect: v1.TaintEffectNoSchedule,
+			},
+		}
+	}
+
 	testCases := []testCase{
 		{
 			description: "Pod with no tolerations running on normal node, all other nodes tainted",
@@ -86,24 +96,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				buildTestNode("node2", func(node *v1.Node) {
-					node.Spec.Taints = []v1.Taint{
-						{
-							Key:    nodeTaintKey,
-							Value:  nodeTaintValue,
-							Effect: v1.TaintEffectNoSchedule,
-						},
-					}
-				}),
-				buildTestNode("node3", func(node *v1.Node) {
-					node.Spec.Taints = []v1.Taint{
-						{
-							Key:    nodeTaintKey,
-							Value:  nodeTaintValue,
-							Effect: v1.TaintEffectNoSchedule,
-						},
-					}
-				}),
+				buildTestNode("node2", setNodeTaint),
+				buildTestNode("node3", setNodeTaint),
 			},
 			nodeFit: true,
 		}, {
@@ -121,24 +115,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				buildTestNode("node2", func(node *v1.Node) {
-					node.Spec.Taints = []v1.Taint{
-						{
-							Key:    nodeTaintKey,
-							Value:  nodeTaintValue,
-							Effect: v1.TaintEffectNoSchedule,
-						},
-					}
-				}),
-				buildTestNode("node3", func(node *v1.Node) {
-					node.Spec.Taints = []v1.Taint{
-						{
-							Key:    nodeTaintKey,
-							Value:  nodeTaintValue,
-							Effect: v1.TaintEffectNoSchedule,
-						},
-					}
-				}),
+				buildTestNode("node2", setNodeTaint),
+				buildTestNode("node3", setNodeTaint),
 			},
 			nodeFit: true,
 			result:  true,
@@ -330,8 +308,15 @@ func TestDefaultEvictorFilter(t *testing.T) {
 
 	minPodAge := metav1.Duration{Duration: 50 * time.Minute}
 
-	nodeTaintKey := "hardware"
-	nodeTaintValue := "gpu"
+	setNodeTaint := func(node *v1.Node) {
+		node.Spec.Taints = []v1.Taint{
+			{
+				Key:    "hardware",
+				Value:  "gpu",
+				Effect: v1.TaintEffectNoSchedule,
+			},
+		}
+	}
 
 	ownerRefUUID := uuid.NewUUID()
 
@@ -645,24 +630,8 @@ func TestDefaultEvictorFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				buildTestNode("node2", func(node *v1.Node) {
-					node.Spec.Taints = []v1.Taint{
-						{
-							Key:    nodeTaintKey,
-							Value:  nodeTaintValue,
-							Effect: v1.TaintEffectNoSchedule,
-						},
-					}
-				}),
-				buildTestNode("node3", func(node *v1.Node) {
-					node.Spec.Taints = []v1.Taint{
-						{
-							Key:    nodeTaintKey,
-							Value:  nodeTaintValue,
-							Effect: v1.TaintEffectNoSchedule,
-						},
-					}
-				}),
+				buildTestNode("node2", setNodeTaint),
+				buildTestNode("node3", setNodeTaint),
 			},
 			nodeFit: true,
 			result:  true,
