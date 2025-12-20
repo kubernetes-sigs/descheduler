@@ -276,6 +276,20 @@ func TestDefaultEvictorFilter(t *testing.T) {
 		pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
 	}
 
+	setPodLocalStorage := func(pod *v1.Pod) {
+		pod.Spec.Volumes = []v1.Volume{
+			{
+				Name: "sample",
+				VolumeSource: v1.VolumeSource{
+					HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+					EmptyDir: &v1.EmptyDirVolumeSource{
+						SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+					},
+				},
+			},
+		}
+	}
+
 	ownerRefUUID := uuid.NewUUID()
 
 	testCases := []testCase{
@@ -383,17 +397,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p5", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					setPodLocalStorage(pod)
 				}),
 			},
 		},
@@ -402,17 +406,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p6", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					setPodLocalStorage(pod)
 				}),
 			},
 			evictLocalStoragePods: true,
@@ -424,17 +418,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 				buildTestPod("p7", n1.Name, func(pod *v1.Pod) {
 					setPodEvictAnnotation(pod)
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					setPodLocalStorage(pod)
 				}),
 			},
 			result: true,
