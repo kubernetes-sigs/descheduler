@@ -64,7 +64,7 @@ func buildTestNode(name string, apply func(*v1.Node)) *v1.Node {
 	return test.BuildTestNode(name, 1000, 2000, 13, apply)
 }
 
-func buildTestPod(name string, nodeName string, apply func(*v1.Pod)) *v1.Pod {
+func buildTestPod(name, nodeName string, apply func(*v1.Pod)) *v1.Pod {
 	return test.BuildTestPod(name, 400, 0, nodeName, apply)
 }
 
