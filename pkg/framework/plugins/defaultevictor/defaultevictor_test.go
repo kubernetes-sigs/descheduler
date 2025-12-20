@@ -60,8 +60,12 @@ type testCase struct {
 	pvcs                    []*v1.PersistentVolumeClaim
 }
 
+func buildTestNode(name string, apply func(*v1.Node)) *v1.Node {
+	return test.BuildTestNode(name, 1000, 2000, 13, apply)
+}
+
 func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
-	n1 := test.BuildTestNode("node1", 1000, 2000, 13, nil)
+	n1 := buildTestNode("node1", nil)
 
 	nodeTaintKey := "hardware"
 	nodeTaintValue := "gpu"
@@ -78,7 +82,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				test.BuildTestNode("node2", 1000, 2000, 13, func(node *v1.Node) {
+				buildTestNode("node2", func(node *v1.Node) {
 					node.Spec.Taints = []v1.Taint{
 						{
 							Key:    nodeTaintKey,
@@ -87,7 +91,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 						},
 					}
 				}),
-				test.BuildTestNode("node3", 1000, 2000, 13, func(node *v1.Node) {
+				buildTestNode("node3", func(node *v1.Node) {
 					node.Spec.Taints = []v1.Taint{
 						{
 							Key:    nodeTaintKey,
@@ -113,7 +117,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				test.BuildTestNode("node2", 1000, 2000, 13, func(node *v1.Node) {
+				buildTestNode("node2", func(node *v1.Node) {
 					node.Spec.Taints = []v1.Taint{
 						{
 							Key:    nodeTaintKey,
@@ -122,7 +126,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 						},
 					}
 				}),
-				test.BuildTestNode("node3", 1000, 2000, 13, func(node *v1.Node) {
+				buildTestNode("node3", func(node *v1.Node) {
 					node.Spec.Taints = []v1.Taint{
 						{
 							Key:    nodeTaintKey,
@@ -145,12 +149,12 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				test.BuildTestNode("node2", 1000, 2000, 13, func(node *v1.Node) {
+				buildTestNode("node2", func(node *v1.Node) {
 					node.ObjectMeta.Labels = map[string]string{
 						nodeLabelKey: nodeLabelValue,
 					}
 				}),
-				test.BuildTestNode("node3", 1000, 2000, 13, func(node *v1.Node) {
+				buildTestNode("node3", func(node *v1.Node) {
 					node.ObjectMeta.Labels = map[string]string{
 						nodeLabelKey: nodeLabelValue,
 					}
@@ -168,12 +172,12 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				test.BuildTestNode("node2", 1000, 2000, 13, func(node *v1.Node) {
+				buildTestNode("node2", func(node *v1.Node) {
 					node.ObjectMeta.Labels = map[string]string{
 						nodeLabelKey: nodeLabelValue,
 					}
 				}),
-				test.BuildTestNode("node3", 1000, 2000, 13, func(node *v1.Node) {
+				buildTestNode("node3", func(node *v1.Node) {
 					node.ObjectMeta.Labels = map[string]string{
 						nodeLabelKey: nodeLabelValue,
 					}
@@ -282,12 +286,12 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				test.BuildTestNode("node2", 1000, 2000, 13, func(node *v1.Node) {
+				buildTestNode("node2", func(node *v1.Node) {
 					node.ObjectMeta.Labels = map[string]string{
 						nodeLabelKey: nodeLabelValue,
 					}
 				}),
-				test.BuildTestNode("node3", 1000, 2000, 13, func(node *v1.Node) {
+				buildTestNode("node3", func(node *v1.Node) {
 					node.ObjectMeta.Labels = map[string]string{
 						nodeLabelKey: nodeLabelValue,
 					}
@@ -316,7 +320,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 }
 
 func TestDefaultEvictorFilter(t *testing.T) {
-	n1 := test.BuildTestNode("node1", 1000, 2000, 13, nil)
+	n1 := buildTestNode("node1", nil)
 	lowPriority := int32(800)
 	highPriority := int32(900)
 
@@ -637,7 +641,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 				}),
 			},
 			nodes: []*v1.Node{
-				test.BuildTestNode("node2", 1000, 2000, 13, func(node *v1.Node) {
+				buildTestNode("node2", func(node *v1.Node) {
 					node.Spec.Taints = []v1.Taint{
 						{
 							Key:    nodeTaintKey,
@@ -646,7 +650,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 						},
 					}
 				}),
-				test.BuildTestNode("node3", 1000, 2000, 13, func(node *v1.Node) {
+				buildTestNode("node3", func(node *v1.Node) {
 					node.Spec.Taints = []v1.Taint{
 						{
 							Key:    nodeTaintKey,
@@ -1041,7 +1045,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 }
 
 func TestReinitialization(t *testing.T) {
-	n1 := test.BuildTestNode("node1", 1000, 2000, 13, nil)
+	n1 := buildTestNode("node1", nil)
 	ownerRefUUID := uuid.NewUUID()
 
 	testCases := []testCase{
