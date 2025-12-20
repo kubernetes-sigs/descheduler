@@ -93,6 +93,12 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 		}
 	}
 
+	setPodNodeSelector := func(pod *v1.Pod) {
+		pod.Spec.NodeSelector = map[string]string{
+			nodeLabelKey: nodeLabelValue,
+		}
+	}
+
 	testCases := []testCase{
 		{
 			description: "Pod with no tolerations running on normal node, all other nodes tainted",
@@ -144,9 +150,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.NodeSelector = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
+					setPodNodeSelector(pod)
 				}),
 			},
 			nodes: []*v1.Node{
@@ -160,9 +164,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.NodeSelector = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
+					setPodNodeSelector(pod)
 				}),
 			},
 			nodes: []*v1.Node{
@@ -175,9 +177,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.NodeSelector = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
+					setPodNodeSelector(pod)
 				}),
 				test.BuildTestPod("node2-pod-10GB-mem", 20, 10, "node2", func(pod *v1.Pod) {
 					pod.ObjectMeta.Labels = map[string]string{
@@ -201,9 +201,7 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.NodeSelector = map[string]string{
-						nodeLabelKey: nodeLabelValue,
-					}
+					setPodNodeSelector(pod)
 				}),
 				test.BuildTestPod("node2-pod-10GB-mem", 10, 10, "node2", func(pod *v1.Pod) {
 					pod.ObjectMeta.Labels = map[string]string{
