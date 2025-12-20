@@ -290,6 +290,17 @@ func TestDefaultEvictorFilter(t *testing.T) {
 		}
 	}
 
+	setPodPVCVolumeWithFooClaimName := func(pod *v1.Pod) {
+		pod.Spec.Volumes = []v1.Volume{
+			{
+				Name: "pvc",
+				VolumeSource: v1.VolumeSource{
+					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
+				},
+			},
+		}
+	}
+
 	ownerRefUUID := uuid.NewUUID()
 
 	testCases := []testCase{
@@ -676,13 +687,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p15", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
-							},
-						},
-					}
+					setPodPVCVolumeWithFooClaimName(pod)
 				}),
 			},
 			ignorePvcPods: true,
@@ -692,13 +697,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p15", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
-							},
-						},
-					}
+					setPodPVCVolumeWithFooClaimName(pod)
 				}),
 			},
 			result: true,
@@ -745,13 +744,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p20", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{ClaimName: "foo"},
-							},
-						},
-					}
+					setPodPVCVolumeWithFooClaimName(pod)
 				}),
 			},
 			podProtections: PodProtections{
@@ -792,15 +785,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p23", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "foo",
-								},
-							},
-						},
-					}
+					setPodPVCVolumeWithFooClaimName(pod)
 				}),
 			},
 			podProtections: PodProtections{
@@ -825,15 +810,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p24", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "foo",
-								},
-							},
-						},
-					}
+					setPodPVCVolumeWithFooClaimName(pod)
 				}),
 			},
 			podProtections: PodProtections{
@@ -858,15 +835,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p25", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "pvc", VolumeSource: v1.VolumeSource{
-								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-									ClaimName: "foo",
-								},
-							},
-						},
-					}
+					setPodPVCVolumeWithFooClaimName(pod)
 				}),
 			},
 			podProtections: PodProtections{
