@@ -68,6 +68,18 @@ func buildTestPod(name string, nodeName string, apply func(*v1.Pod)) *v1.Pod {
 	return test.BuildTestPod(name, 400, 0, nodeName, apply)
 }
 
+func newProtectedStorageClassesConfig(storageClassNames ...string) *PodProtectionsConfig {
+	protectedClasses := make([]ProtectedStorageClass, len(storageClassNames))
+	for i, name := range storageClassNames {
+		protectedClasses[i] = ProtectedStorageClass{Name: name}
+	}
+	return &PodProtectionsConfig{
+		PodsWithPVC: &PodsWithPVCConfig{
+			ProtectedStorageClasses: protectedClasses,
+		},
+	}
+}
+
 func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 	n1 := buildTestNode("node1", nil)
 
@@ -790,15 +802,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			},
 			podProtections: PodProtections{
 				ExtraEnabled: []PodProtection{PodsWithPVC},
-				Config: &PodProtectionsConfig{
-					PodsWithPVC: &PodsWithPVCConfig{
-						ProtectedStorageClasses: []ProtectedStorageClass{
-							{
-								Name: "standard",
-							},
-						},
-					},
-				},
+				Config:       newProtectedStorageClassesConfig("standard"),
 			},
 			pvcs: []*v1.PersistentVolumeClaim{
 				test.BuildTestPVC("foo", "standard"),
@@ -815,15 +819,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			},
 			podProtections: PodProtections{
 				ExtraEnabled: []PodProtection{PodsWithPVC},
-				Config: &PodProtectionsConfig{
-					PodsWithPVC: &PodsWithPVCConfig{
-						ProtectedStorageClasses: []ProtectedStorageClass{
-							{
-								Name: "protected",
-							},
-						},
-					},
-				},
+				Config:       newProtectedStorageClassesConfig("protected"),
 			},
 			pvcs: []*v1.PersistentVolumeClaim{
 				test.BuildTestPVC("foo", "unprotected"),
@@ -840,15 +836,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			},
 			podProtections: PodProtections{
 				ExtraEnabled: []PodProtection{PodsWithPVC},
-				Config: &PodProtectionsConfig{
-					PodsWithPVC: &PodsWithPVCConfig{
-						ProtectedStorageClasses: []ProtectedStorageClass{
-							{
-								Name: "protected",
-							},
-						},
-					},
-				},
+				Config:       newProtectedStorageClassesConfig("protected"),
 			},
 			pvcs:   []*v1.PersistentVolumeClaim{},
 			result: false,
@@ -878,15 +866,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			},
 			podProtections: PodProtections{
 				ExtraEnabled: []PodProtection{PodsWithPVC},
-				Config: &PodProtectionsConfig{
-					PodsWithPVC: &PodsWithPVCConfig{
-						ProtectedStorageClasses: []ProtectedStorageClass{
-							{
-								Name: "protected",
-							},
-						},
-					},
-				},
+				Config:       newProtectedStorageClassesConfig("protected"),
 			},
 			pvcs: []*v1.PersistentVolumeClaim{
 				test.BuildTestPVC("protected", "protected"),
@@ -1161,14 +1141,7 @@ func Test_protectedPVCStorageClasses(t *testing.T) {
 			name: "storage classes specified",
 			args: &DefaultEvictorArgs{
 				PodProtections: PodProtections{
-					Config: &PodProtectionsConfig{
-						PodsWithPVC: &PodsWithPVCConfig{
-							ProtectedStorageClasses: []ProtectedStorageClass{
-								{Name: "sc1"},
-								{Name: "sc2"},
-							},
-						},
-					},
+					Config: newProtectedStorageClassesConfig("sc1", "sc2"),
 				},
 			},
 			expected: []ProtectedStorageClass{
