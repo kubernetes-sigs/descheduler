@@ -272,6 +272,10 @@ func TestDefaultEvictorFilter(t *testing.T) {
 		}
 	}
 
+	setPodEvictAnnotation := func(pod *v1.Pod) {
+		pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
+	}
+
 	ownerRefUUID := uuid.NewUUID()
 
 	testCases := []testCase{
@@ -309,7 +313,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Normal pod eviction with normal ownerRefs and " + evictPodAnnotationKey + " annotation",
 			pods: []*v1.Pod{
 				buildTestPod("p2", n1.Name, func(pod *v1.Pod) {
-					pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
+					setPodEvictAnnotation(pod)
 					test.SetNormalOwnerRef(pod)
 				}),
 			},
@@ -351,7 +355,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Normal pod eviction with replicaSet ownerRefs and " + evictPodAnnotationKey + " annotation",
 			pods: []*v1.Pod{
 				buildTestPod("p4", n1.Name, func(pod *v1.Pod) {
-					pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
+					setPodEvictAnnotation(pod)
 					pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 				}),
 			},
@@ -368,7 +372,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Normal pod eviction with statefulSet ownerRefs and " + evictPodAnnotationKey + " annotation",
 			pods: []*v1.Pod{
 				buildTestPod("p19", n1.Name, func(pod *v1.Pod) {
-					pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
+					setPodEvictAnnotation(pod)
 					pod.ObjectMeta.OwnerReferences = test.GetStatefulSetOwnerRefList()
 				}),
 			},
@@ -418,7 +422,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod is evicted because it is bound to a PV and evictLocalStoragePods = false, but it has scheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				buildTestPod("p7", n1.Name, func(pod *v1.Pod) {
-					pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
+					setPodEvictAnnotation(pod)
 					test.SetNormalOwnerRef(pod)
 					pod.Spec.Volumes = []v1.Volume{
 						{
@@ -448,7 +452,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			description: "Pod is evicted because it is part of a daemonSet, but it has scheduler.alpha.kubernetes.io/evict annotation",
 			pods: []*v1.Pod{
 				buildTestPod("p9", n1.Name, func(pod *v1.Pod) {
-					pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
+					setPodEvictAnnotation(pod)
 					pod.ObjectMeta.OwnerReferences = test.GetDaemonSetOwnerRefList()
 				}),
 			},
@@ -513,7 +517,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p15", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
+					setPodEvictAnnotation(pod)
 					pod.Spec.Priority = &highPriority
 				}),
 			},
@@ -537,7 +541,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p16", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
+					setPodEvictAnnotation(pod)
 					priority := utils.SystemCriticalPriority
 					pod.Spec.Priority = &priority
 				}),
@@ -562,7 +566,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p17", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Annotations = map[string]string{evictPodAnnotationKey: "true"}
+					setPodEvictAnnotation(pod)
 					pod.Spec.Priority = &highPriority
 				}),
 			},
