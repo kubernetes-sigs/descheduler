@@ -458,9 +458,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					test.SetRSOwnerRef(pod)
 					test.MakeBestEffortPod(pod)
 				}),
-				test.BuildTestPod("p3", 400, 0, n1NodeName, func(pod *v1.Pod) {
-					test.SetRSOwnerRef(pod)
-				}),
+				test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
 				test.BuildTestPod("p4", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					test.SetRSOwnerRef(pod)
 					test.MakeBestEffortPod(pod)
@@ -470,9 +468,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					test.MakeBestEffortPod(pod)
 				}),
 				// These won't be evicted.
-				test.BuildTestPod("p6", 400, 0, n1NodeName, func(pod *v1.Pod) {
-					test.SetDSOwnerRef(pod)
-				}),
+				test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
@@ -658,12 +654,8 @@ func TestLowNodeUtilization(t *testing.T) {
 					test.SetRSOwnerRef(pod)
 					test.SetPodExtendedResourceRequest(pod, extendedResource, 7)
 				}),
-				test.BuildTestPod("p3", 0, 0, n2NodeName, func(pod *v1.Pod) {
-					test.SetRSOwnerRef(pod)
-				}),
-				test.BuildTestPod("p8", 0, 0, n3NodeName, func(pod *v1.Pod) {
-					test.SetRSOwnerRef(pod)
-				}),
+				test.BuildTestPod("p3", 0, 0, n2NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p8", 0, 0, n3NodeName, test.SetRSOwnerRef),
 				test.BuildTestPod("p9", 0, 0, n3NodeName, test.SetRSOwnerRef),
 			},
 			nodemetricses: []*v1beta1.NodeMetrics{

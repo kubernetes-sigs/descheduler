@@ -144,9 +144,7 @@ func TestFindDuplicatePods(t *testing.T) {
 		{
 			description: "Pods are: part of DaemonSet, with local storage, mirror pod annotation, critical pod annotation - none should be evicted.",
 			pods: []*v1.Pod{
-				buildTestPodForNode("p4", nodeName1, func(pod *v1.Pod) {
-					test.SetDSOwnerRef(pod)
-				}),
+				buildTestPodForNode("p4", nodeName1, test.SetDSOwnerRef),
 				buildTestPodForNode("p5", nodeName1, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
 					test.SetHostPathEmptyDirVolumeSource(pod)
@@ -171,9 +169,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
-				buildTestPodForNode("p4", nodeName1, func(pod *v1.Pod) {
-					test.SetDSOwnerRef(pod)
-				}),
+				buildTestPodForNode("p4", nodeName1, test.SetDSOwnerRef),
 				buildTestPodForNode("p5", nodeName1, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
 					test.SetHostPathEmptyDirVolumeSource(pod)
