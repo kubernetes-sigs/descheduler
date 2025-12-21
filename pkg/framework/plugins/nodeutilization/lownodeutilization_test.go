@@ -23,7 +23,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
@@ -92,17 +91,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -154,17 +143,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -231,17 +210,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -307,17 +276,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -375,17 +334,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -457,17 +406,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
 					test.SetPodPriority(pod, lowPriority)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -537,17 +476,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -625,17 +554,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
 					test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -787,17 +706,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -863,17 +772,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -965,17 +864,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -1026,17 +915,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -1094,17 +973,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 375, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -1205,17 +1074,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -1268,17 +1127,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -1560,17 +1409,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 func withLocalStorage(pod *v1.Pod) {
 	// A pod with local storage.
 	test.SetNormalOwnerRef(pod)
-	pod.Spec.Volumes = []v1.Volume{
-		{
-			Name: "sample",
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-				},
-			},
-		},
-	}
+	test.SetHostPathEmptyDirVolumeSource(pod)
 	// A Mirror Pod.
 	pod.Annotations = test.GetMirrorPodAnnotation()
 }

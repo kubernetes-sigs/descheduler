@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
@@ -150,17 +149,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				}),
 				buildTestPodForNode("p5", nodeName1, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 				}),
 				buildTestPodForNode("p6", nodeName1, func(pod *v1.Pod) {
 					pod.Annotations = test.GetMirrorPodAnnotation()
@@ -187,17 +176,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				}),
 				buildTestPodForNode("p5", nodeName1, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 				}),
 				buildTestPodForNode("p6", nodeName1, func(pod *v1.Pod) {
 					pod.Annotations = test.GetMirrorPodAnnotation()
