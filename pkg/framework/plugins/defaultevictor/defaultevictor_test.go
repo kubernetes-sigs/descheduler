@@ -512,7 +512,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p14", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Priority = &highPriority
+					test.SetPodPriority(pod, highPriority)
 				}),
 			},
 			priorityThreshold: &lowPriority,
@@ -523,7 +523,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 				buildTestPod("p15", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
 					setPodEvictAnnotation(pod)
-					pod.Spec.Priority = &highPriority
+					test.SetPodPriority(pod, highPriority)
 				}),
 			},
 			priorityThreshold: &lowPriority,
@@ -557,7 +557,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 			pods: []*v1.Pod{
 				buildTestPod("p17", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Priority = &highPriority
+					test.SetPodPriority(pod, highPriority)
 				}),
 			},
 			evictSystemCriticalPods: true,
@@ -570,7 +570,7 @@ func TestDefaultEvictorFilter(t *testing.T) {
 				buildTestPod("p17", n1.Name, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
 					setPodEvictAnnotation(pod)
-					pod.Spec.Priority = &highPriority
+					test.SetPodPriority(pod, highPriority)
 				}),
 			},
 			evictSystemCriticalPods: true,

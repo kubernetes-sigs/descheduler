@@ -109,8 +109,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p6", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -172,8 +171,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -250,8 +248,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -328,8 +325,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -397,8 +393,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -480,8 +475,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -561,8 +555,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -651,8 +644,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					test.SetNormalOwnerRef(pod)
 					test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 0, 0, n2NodeName, func(pod *v1.Pod) {
 					test.SetRSOwnerRef(pod)
@@ -813,8 +805,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 			},
 			nodemetricses: []*v1beta1.NodeMetrics{
@@ -890,8 +881,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 			},
 			nodemetricses: []*v1beta1.NodeMetrics{
@@ -993,8 +983,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 0, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -1055,8 +1044,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -1124,8 +1112,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 3000, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -1236,8 +1223,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 0, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -1299,8 +1285,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -1594,8 +1579,7 @@ func withCriticalPod(pod *v1.Pod) {
 	// A Critical Pod.
 	test.SetNormalOwnerRef(pod)
 	pod.Namespace = "kube-system"
-	priority := utils.SystemCriticalPriority
-	pod.Spec.Priority = &priority
+	test.SetPodPriority(pod, utils.SystemCriticalPriority)
 }
 
 func TestLowNodeUtilizationWithPrometheusMetrics(t *testing.T) {

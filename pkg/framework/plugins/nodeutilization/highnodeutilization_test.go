@@ -115,8 +115,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				// These won't be evicted.
 				test.BuildTestPod("p3", 400, 0, n2NodeName, test.SetDSOwnerRef),
@@ -168,8 +167,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				// These won't be evicted.
 				test.BuildTestPod("p3", 400, 0, n2NodeName, test.SetRSOwnerRef),

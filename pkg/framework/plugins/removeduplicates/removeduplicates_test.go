@@ -167,8 +167,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				}),
 				buildTestPodForNode("p7", nodeName1, func(pod *v1.Pod) {
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 			},
 			nodes: []*v1.Node{
@@ -205,8 +204,7 @@ func TestFindDuplicatePods(t *testing.T) {
 				}),
 				buildTestPodForNode("p7", nodeName1, func(pod *v1.Pod) {
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p8", "test", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil),
