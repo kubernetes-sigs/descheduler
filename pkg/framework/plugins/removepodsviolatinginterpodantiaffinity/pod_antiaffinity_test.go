@@ -96,7 +96,7 @@ func buildTestPodP2ForNode1() *v1.Pod {
 func buildTestPodNonEvictableForNode1() *v1.Pod {
 	criticalPriority := utils.SystemCriticalPriority
 	return buildTestPodForNode1("non-evict", func(pod *v1.Pod) {
-		pod.Spec.Priority = &criticalPriority
+		test.SetPodPriority(pod, criticalPriority)
 		setLabelsFooBar(pod)
 	})
 }

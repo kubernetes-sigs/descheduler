@@ -23,7 +23,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
@@ -97,17 +96,7 @@ func TestHighNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p1", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -115,8 +104,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				// These won't be evicted.
 				test.BuildTestPod("p3", 400, 0, n2NodeName, test.SetDSOwnerRef),
@@ -168,8 +156,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				// These won't be evicted.
 				test.BuildTestPod("p3", 400, 0, n2NodeName, test.SetRSOwnerRef),
@@ -249,9 +236,7 @@ func TestHighNodeUtilization(t *testing.T) {
 					test.SetRSOwnerRef(pod)
 					test.MakeBestEffortPod(pod)
 				}),
-				test.BuildTestPod("p2", 400, 0, n1NodeName, func(pod *v1.Pod) {
-					test.SetRSOwnerRef(pod)
-				}),
+				test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
 				// These won't be evicted.
 				test.BuildTestPod("p3", 400, 0, n2NodeName, test.SetRSOwnerRef),
 				test.BuildTestPod("p4", 400, 0, n2NodeName, test.SetRSOwnerRef),
@@ -466,9 +451,7 @@ func TestHighNodeUtilization(t *testing.T) {
 				// pods in the other nodes must not be evicted
 				// because they do not have the extended
 				// resource defined in their requests.
-				test.BuildTestPod("p3", 500, 0, n2NodeName, func(pod *v1.Pod) {
-					test.SetRSOwnerRef(pod)
-				}),
+				test.BuildTestPod("p3", 500, 0, n2NodeName, test.SetRSOwnerRef),
 				test.BuildTestPod("p4", 500, 0, n2NodeName, func(pod *v1.Pod) {
 					test.SetRSOwnerRef(pod)
 				}),

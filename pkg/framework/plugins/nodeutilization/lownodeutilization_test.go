@@ -23,7 +23,6 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
@@ -92,25 +91,14 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p5", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
 				test.BuildTestPod("p6", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -155,25 +143,14 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
 				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -233,25 +210,14 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
 				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -310,17 +276,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -328,8 +284,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -379,17 +334,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -397,8 +342,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -462,17 +406,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
 					test.SetPodPriority(pod, lowPriority)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -480,8 +414,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -525,9 +458,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					test.SetRSOwnerRef(pod)
 					test.MakeBestEffortPod(pod)
 				}),
-				test.BuildTestPod("p3", 400, 0, n1NodeName, func(pod *v1.Pod) {
-					test.SetRSOwnerRef(pod)
-				}),
+				test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
 				test.BuildTestPod("p4", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					test.SetRSOwnerRef(pod)
 					test.MakeBestEffortPod(pod)
@@ -537,23 +468,11 @@ func TestLowNodeUtilization(t *testing.T) {
 					test.MakeBestEffortPod(pod)
 				}),
 				// These won't be evicted.
-				test.BuildTestPod("p6", 400, 0, n1NodeName, func(pod *v1.Pod) {
-					test.SetDSOwnerRef(pod)
-				}),
+				test.BuildTestPod("p6", 400, 0, n1NodeName, test.SetDSOwnerRef),
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -561,8 +480,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -632,17 +550,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
 					test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -651,8 +559,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					test.SetNormalOwnerRef(pod)
 					test.SetPodExtendedResourceRequest(pod, extendedResource, 1)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 0, 0, n2NodeName, func(pod *v1.Pod) {
 					test.SetRSOwnerRef(pod)
@@ -747,12 +654,8 @@ func TestLowNodeUtilization(t *testing.T) {
 					test.SetRSOwnerRef(pod)
 					test.SetPodExtendedResourceRequest(pod, extendedResource, 7)
 				}),
-				test.BuildTestPod("p3", 0, 0, n2NodeName, func(pod *v1.Pod) {
-					test.SetRSOwnerRef(pod)
-				}),
-				test.BuildTestPod("p8", 0, 0, n3NodeName, func(pod *v1.Pod) {
-					test.SetRSOwnerRef(pod)
-				}),
+				test.BuildTestPod("p3", 0, 0, n2NodeName, test.SetRSOwnerRef),
+				test.BuildTestPod("p8", 0, 0, n3NodeName, test.SetRSOwnerRef),
 				test.BuildTestPod("p9", 0, 0, n3NodeName, test.SetRSOwnerRef),
 			},
 			nodemetricses: []*v1beta1.NodeMetrics{
@@ -795,17 +698,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -813,8 +706,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 			},
 			nodemetricses: []*v1beta1.NodeMetrics{
@@ -872,17 +764,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -890,8 +772,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 			},
 			nodemetricses: []*v1beta1.NodeMetrics{
@@ -975,17 +856,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -993,8 +864,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 0, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -1037,17 +907,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -1055,8 +915,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -1106,17 +965,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 375, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -1124,8 +973,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 3000, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -1218,17 +1066,7 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
@@ -1236,8 +1074,7 @@ func TestLowNodeUtilization(t *testing.T) {
 					// A Critical Pod.
 					test.SetNormalOwnerRef(pod)
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 0, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -1282,25 +1119,14 @@ func TestLowNodeUtilization(t *testing.T) {
 				test.BuildTestPod("p7", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A pod with local storage.
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 					// A Mirror Pod.
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
 				test.BuildTestPod("p8", 400, 0, n1NodeName, func(pod *v1.Pod) {
 					// A Critical Pod.
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				test.BuildTestPod("p9", 400, 0, n2NodeName, test.SetRSOwnerRef),
 			},
@@ -1575,17 +1401,7 @@ func TestLowNodeUtilizationWithTaints(t *testing.T) {
 func withLocalStorage(pod *v1.Pod) {
 	// A pod with local storage.
 	test.SetNormalOwnerRef(pod)
-	pod.Spec.Volumes = []v1.Volume{
-		{
-			Name: "sample",
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-				},
-			},
-		},
-	}
+	test.SetHostPathEmptyDirVolumeSource(pod)
 	// A Mirror Pod.
 	pod.Annotations = test.GetMirrorPodAnnotation()
 }
@@ -1594,8 +1410,7 @@ func withCriticalPod(pod *v1.Pod) {
 	// A Critical Pod.
 	test.SetNormalOwnerRef(pod)
 	pod.Namespace = "kube-system"
-	priority := utils.SystemCriticalPriority
-	pod.Spec.Priority = &priority
+	test.SetPodPriority(pod, utils.SystemCriticalPriority)
 }
 
 func TestLowNodeUtilizationWithPrometheusMetrics(t *testing.T) {

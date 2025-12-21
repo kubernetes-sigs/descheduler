@@ -262,6 +262,20 @@ func SetPodPriority(pod *v1.Pod, priority int32) {
 	pod.Spec.Priority = &priority
 }
 
+func SetHostPathEmptyDirVolumeSource(pod *v1.Pod) {
+	pod.Spec.Volumes = []v1.Volume{
+		{
+			Name: "sample",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+				EmptyDir: &v1.EmptyDirVolumeSource{
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+				},
+			},
+		},
+	}
+}
+
 // SetNodeUnschedulable sets the given node unschedulable
 func SetNodeUnschedulable(node *v1.Node) {
 	node.Spec.Unschedulable = true

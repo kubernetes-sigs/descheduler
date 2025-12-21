@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
@@ -145,30 +144,17 @@ func TestFindDuplicatePods(t *testing.T) {
 		{
 			description: "Pods are: part of DaemonSet, with local storage, mirror pod annotation, critical pod annotation - none should be evicted.",
 			pods: []*v1.Pod{
-				buildTestPodForNode("p4", nodeName1, func(pod *v1.Pod) {
-					test.SetDSOwnerRef(pod)
-				}),
+				buildTestPodForNode("p4", nodeName1, test.SetDSOwnerRef),
 				buildTestPodForNode("p5", nodeName1, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 				}),
 				buildTestPodForNode("p6", nodeName1, func(pod *v1.Pod) {
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
 				buildTestPodForNode("p7", nodeName1, func(pod *v1.Pod) {
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 			},
 			nodes: []*v1.Node{
@@ -183,30 +169,17 @@ func TestFindDuplicatePods(t *testing.T) {
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p1", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p2", "dev", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p3", "dev", nil),
-				buildTestPodForNode("p4", nodeName1, func(pod *v1.Pod) {
-					test.SetDSOwnerRef(pod)
-				}),
+				buildTestPodForNode("p4", nodeName1, test.SetDSOwnerRef),
 				buildTestPodForNode("p5", nodeName1, func(pod *v1.Pod) {
 					test.SetNormalOwnerRef(pod)
-					pod.Spec.Volumes = []v1.Volume{
-						{
-							Name: "sample",
-							VolumeSource: v1.VolumeSource{
-								HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-								EmptyDir: &v1.EmptyDirVolumeSource{
-									SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-								},
-							},
-						},
-					}
+					test.SetHostPathEmptyDirVolumeSource(pod)
 				}),
 				buildTestPodForNode("p6", nodeName1, func(pod *v1.Pod) {
 					pod.Annotations = test.GetMirrorPodAnnotation()
 				}),
 				buildTestPodForNode("p7", nodeName1, func(pod *v1.Pod) {
 					pod.Namespace = "kube-system"
-					priority := utils.SystemCriticalPriority
-					pod.Spec.Priority = &priority
+					test.SetPodPriority(pod, utils.SystemCriticalPriority)
 				}),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p8", "test", nil),
 				buildTestPodWithRSOwnerRefWithNamespaceForNode1("p9", "test", nil),

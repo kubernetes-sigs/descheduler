@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -135,17 +134,7 @@ func withTestTaintXToleration1(pod *v1.Pod) {
 }
 
 func withLocalStorageVolume(pod *v1.Pod) {
-	pod.Spec.Volumes = []v1.Volume{
-		{
-			Name: "sample",
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-				EmptyDir: &v1.EmptyDirVolumeSource{
-					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-				},
-			},
-		},
-	}
+	test.SetHostPathEmptyDirVolumeSource(pod)
 }
 
 func withKubeSystemCriticalPod(pod *v1.Pod) {

@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -94,17 +93,7 @@ func initPods(apply func(pod *v1.Pod)) []*v1.Pod {
 		case 7:
 			pods = append(pods, initPodContainersWithStatusRestartCount(fmt.Sprintf("pod-%d", i), i, func(pod *v1.Pod) {
 				test.SetNormalOwnerRef(pod)
-				pod.Spec.Volumes = []v1.Volume{
-					{
-						Name: "sample",
-						VolumeSource: v1.VolumeSource{
-							HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
-							EmptyDir: &v1.EmptyDirVolumeSource{
-								SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
-							},
-						},
-					},
-				}
+				test.SetHostPathEmptyDirVolumeSource(pod)
 				if apply != nil {
 					apply(pod)
 				}
