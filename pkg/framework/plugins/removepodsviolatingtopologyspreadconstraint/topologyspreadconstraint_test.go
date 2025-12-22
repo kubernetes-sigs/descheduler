@@ -9,12 +9,10 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
-	policy "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes/fake"
-	core "k8s.io/client-go/testing"
 	utilptr "k8s.io/utils/ptr"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -1490,18 +1488,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			}
 
 			var evictedPods []string
-			fakeClient.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
-				if action.GetSubresource() == "eviction" {
-					createAct, matched := action.(core.CreateActionImpl)
-					if !matched {
-						return false, nil, fmt.Errorf("unable to convert action to core.CreateActionImpl")
-					}
-					if eviction, matched := createAct.Object.(*policy.Eviction); matched {
-						evictedPods = append(evictedPods, eviction.GetName())
-					}
-				}
-				return false, nil, nil // fallback to the default reactor
-			})
+			test.RegisterEvictedPodsCollector(fakeClient, &evictedPods)
 
 			SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(&tc.args)
 

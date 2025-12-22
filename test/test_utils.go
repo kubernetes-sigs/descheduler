@@ -29,10 +29,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/fake"
+	clientgotesting "k8s.io/client-go/testing"
 	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	utilptr "k8s.io/utils/ptr"
 )
@@ -265,9 +268,28 @@ func SetNormalOwnerRef(pod *v1.Pod) {
 	pod.ObjectMeta.OwnerReferences = GetNormalPodOwnerRefList()
 }
 
+// SetMirrorPodAnnotation sets the given pod's annotations to mirror pod annotations
+func SetMirrorPodAnnotation(pod *v1.Pod) {
+	pod.Annotations = GetMirrorPodAnnotation()
+}
+
 // SetPodPriority sets the given pod's priority
 func SetPodPriority(pod *v1.Pod, priority int32) {
 	pod.Spec.Priority = &priority
+}
+
+func SetHostPathEmptyDirVolumeSource(pod *v1.Pod) {
+	pod.Spec.Volumes = []v1.Volume{
+		{
+			Name: "sample",
+			VolumeSource: v1.VolumeSource{
+				HostPath: &v1.HostPathVolumeSource{Path: "somePath"},
+				EmptyDir: &v1.EmptyDirVolumeSource{
+					SizeLimit: resource.NewQuantity(int64(10), resource.BinarySI),
+				},
+			},
+		},
+	}
 }
 
 // SetNodeUnschedulable sets the given node unschedulable
@@ -356,4 +378,19 @@ func PodWithPodAntiAffinity(inputPod *v1.Pod, labelKey, labelValue string) *v1.P
 	SetPodAntiAffinity(inputPod, labelKey, labelValue)
 	inputPod.Labels = map[string]string{labelKey: labelValue}
 	return inputPod
+}
+
+func RegisterEvictedPodsCollector(fakeClient *fake.Clientset, evictedPods *[]string) {
+	fakeClient.PrependReactor("create", "pods", func(action clientgotesting.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() == "eviction" {
+			createAct, matched := action.(clientgotesting.CreateActionImpl)
+			if !matched {
+				return false, nil, fmt.Errorf("unable to convert action to core.CreateActionImpl")
+			}
+			if eviction, matched := createAct.Object.(*policyv1.Eviction); matched {
+				*evictedPods = append(*evictedPods, eviction.GetName())
+			}
+		}
+		return false, nil, nil // fallback to the default reactor
+	})
 }
