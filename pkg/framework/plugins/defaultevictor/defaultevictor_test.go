@@ -1256,17 +1256,17 @@ func TestMultipleProfilesWithDifferentNamespaceLabelSelectors(t *testing.T) {
 
 	podInProd := test.BuildTestPod("pod-in-prod", 100, 100, node.Name, func(pod *v1.Pod) {
 		pod.Namespace = nsProdName
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 	})
 
 	podInTest := test.BuildTestPod("pod-in-test", 100, 100, node.Name, func(pod *v1.Pod) {
 		pod.Namespace = nsTestName
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 	})
 
 	podInBackend := test.BuildTestPod("pod-in-backend", 100, 100, node.Name, func(pod *v1.Pod) {
 		pod.Namespace = nsBackendName
-		pod.ObjectMeta.OwnerReferences = test.GetNormalPodOwnerRefList()
+		test.SetNormalOwnerRef(pod)
 	})
 
 	fakeClient := fake.NewClientset(node, nsProd, nsBackend, nsTest, podInProd, podInBackend, podInTest)
