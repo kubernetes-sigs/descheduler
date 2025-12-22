@@ -483,6 +483,7 @@ actual usage metrics. Implementing metrics-based descheduling is currently TODO 
 |---|---|
 |`thresholds`|map(string:int)|
 |`numberOfNodes`|int|
+| `maxNodesToProcess` | int    | 0       | Maximum number of nodes to process in each pass (0 means no limit).        |
 |`evictionModes`|list(string)|
 |`evictableNamespaces`|(see [namespace filtering](#namespace-filtering))|
 
@@ -527,7 +528,9 @@ Policy should pass the following validation checks:
 There is another parameter associated with the `HighNodeUtilization` strategy, called `numberOfNodes`.
 This parameter can be configured to activate the strategy only when the number of under utilized nodes
 is above the configured value. This could be helpful in large clusters where a few nodes could go
-under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero.
+under utilized frequently or for a short period of time. By default, `numberOfNodes` is set to zero. The parameter `maxNodesToProcess` is used to limit how many nodes should be processed by the descheduler plugin on each execution.
+
+
 
 ### RemovePodsViolatingInterPodAntiAffinity
 

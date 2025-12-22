@@ -175,6 +175,7 @@ func evictPodsFromSourceNodes(
 	continueEviction continueEvictionCond,
 	usageClient usageClient,
 	maxNoOfPodsToEvictPerNode *uint,
+	handle frameworktypes.Handle,
 ) {
 	logger := klog.FromContext(ctx)
 	available, err := assessAvailableResourceInNodes(destinationNodes, resourceNames)
@@ -240,6 +241,13 @@ func evictPodsFromSourceNodes(
 			case *evictions.EvictionTotalLimitError:
 				return
 			default:
+				// Eviction failed, uncordon the node to allow new pods to be scheduled
+				if node.node.Spec.Unschedulable {
+					logger.V(1).Info("Eviction failed, uncordoning node", "node", klog.KObj(node.node))
+					if uncordonErr := nodeutil.UncordonNode(ctx, handle.ClientSet(), node.node); uncordonErr != nil {
+						logger.Error(uncordonErr, "Failed to uncordon node after eviction failure", "node", klog.KObj(node.node))
+					}
+				}
 			}
 		}
 	}
