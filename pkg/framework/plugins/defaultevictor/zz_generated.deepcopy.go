@@ -36,6 +36,11 @@ func (in *DefaultEvictorArgs) DeepCopyInto(out *DefaultEvictorArgs) {
 		*out = new(v1.LabelSelector)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.NamespaceLabelSelector != nil {
+		in, out := &in.NamespaceLabelSelector, &out.NamespaceLabelSelector
+		*out = new(v1.LabelSelector)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.PriorityThreshold != nil {
 		in, out := &in.PriorityThreshold, &out.PriorityThreshold
 		*out = new(api.PriorityThreshold)
@@ -45,11 +50,6 @@ func (in *DefaultEvictorArgs) DeepCopyInto(out *DefaultEvictorArgs) {
 		in, out := &in.MinPodAge, &out.MinPodAge
 		*out = new(v1.Duration)
 		**out = **in
-	}
-	if in.NamespaceLabelSelector != nil {
-		in, out := &in.NamespaceLabelSelector, &out.NamespaceLabelSelector
-		*out = new(v1.LabelSelector)
-		(*in).DeepCopyInto(*out)
 	}
 	in.PodProtections.DeepCopyInto(&out.PodProtections)
 	return
