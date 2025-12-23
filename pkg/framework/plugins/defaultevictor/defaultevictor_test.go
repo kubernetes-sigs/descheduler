@@ -785,8 +785,8 @@ func TestDefaultEvictorFilter(t *testing.T) {
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "local-storage", VolumeSource: v1.VolumeSource{
-							EmptyDir: &v1.EmptyDirVolumeSource{},
-						},
+								EmptyDir: &v1.EmptyDirVolumeSource{},
+							},
 						},
 					}
 				}),
@@ -912,17 +912,17 @@ func TestDefaultEvictorFilter(t *testing.T) {
 					pod.Spec.Volumes = []v1.Volume{
 						{
 							Name: "protected-pvc", VolumeSource: v1.VolumeSource{
-							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-								ClaimName: "protected",
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "protected",
+								},
 							},
-						},
 						},
 						{
 							Name: "unprotected-pvc", VolumeSource: v1.VolumeSource{
-							PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-								ClaimName: "unprotected",
+								PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+									ClaimName: "unprotected",
+								},
 							},
-						},
 						},
 					}
 				}),
