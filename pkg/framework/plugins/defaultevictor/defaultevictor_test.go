@@ -39,6 +39,15 @@ import (
 	"sigs.k8s.io/descheduler/test"
 )
 
+var (
+	namespace         = "test"
+	namespaceSelector = &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"kubernetes.io/metadata.name": namespace,
+		},
+	}
+)
+
 type testCase struct {
 	description             string
 	pods                    []*v1.Pod
@@ -79,13 +88,6 @@ func newProtectedStorageClassesConfig(storageClassNames ...string) *PodProtectio
 			ProtectedStorageClasses: protectedClasses,
 		},
 	}
-}
-
-var namespace = "test"
-var namespaceSelector = &metav1.LabelSelector{
-	MatchLabels: map[string]string{
-		"kubernetes.io/metadata.name": namespace,
-	},
 }
 
 func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
@@ -130,7 +132,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				buildTestNode("node3", setNodeTaint),
 			},
 			nodeFit: true,
-		}, {
+		},
+		{
 			description: "Pod with correct tolerations running on normal node, all other nodes tainted",
 			pods: []*v1.Pod{
 				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
@@ -150,7 +153,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			},
 			nodeFit: true,
 			result:  true,
-		}, {
+		},
+		{
 			description: "Pod with incorrect node selector",
 			pods: []*v1.Pod{
 				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
@@ -165,7 +169,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				buildTestNode("node3", setNodeLabel),
 			},
 			nodeFit: true,
-		}, {
+		},
+		{
 			description: "Pod with correct node selector",
 			pods: []*v1.Pod{
 				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
@@ -179,7 +184,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			},
 			nodeFit: true,
 			result:  true,
-		}, {
+		},
+		{
 			description: "Pod with correct node selector, but only available node doesn't have enough CPU",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
@@ -192,7 +198,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				test.BuildTestNode("node3-TEST", 10, 16, 10, setNodeLabel),
 			},
 			nodeFit: true,
-		}, {
+		},
+		{
 			description: "Pod with correct node selector, and one node has enough memory",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
@@ -216,7 +223,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 			},
 			nodeFit: true,
 			result:  true,
-		}, {
+		},
+		{
 			description: "Pod with correct node selector, but both nodes don't have enough memory",
 			pods: []*v1.Pod{
 				test.BuildTestPod("p1", 12, 8, n1.Name, func(pod *v1.Pod) {
@@ -239,7 +247,8 @@ func TestDefaultEvictorPreEvictionFilter(t *testing.T) {
 				test.BuildTestNode("node3", 100, 16, 10, setNodeLabel),
 			},
 			nodeFit: true,
-		}, {
+		},
+		{
 			description: "Pod with incorrect node selector, but nodefit false, should still be evicted",
 			pods: []*v1.Pod{
 				buildTestPod("p1", n1.Name, func(pod *v1.Pod) {
