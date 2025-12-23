@@ -1357,5 +1357,4 @@ func TestMultipleProfilesWithDifferentNamespaceLabelSelectors(t *testing.T) {
 			t.Errorf("podInBackend should not be rejected by profile2")
 		}
 	})
-
 }
