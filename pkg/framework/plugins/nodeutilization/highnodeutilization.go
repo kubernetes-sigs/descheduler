@@ -52,6 +52,7 @@ type HighNodeUtilization struct {
 	resourceNames  []v1.ResourceName
 	highThresholds api.ResourceThresholds
 	usageClient    usageClient
+	nodeSelector   map[string]string
 }
 
 // NewHighNodeUtilization builds plugin from its arguments while passing a handle.
@@ -126,6 +127,7 @@ func NewHighNodeUtilization(
 			resourceNames,
 			handle.GetPodsAssignedToNodeFunc(),
 		),
+		nodeSelector: args.NodeSelector,
 	}, nil
 }
 
@@ -139,6 +141,28 @@ func (h *HighNodeUtilization) Name() string {
 // less nodes are used.
 func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	logger := klog.FromContext(klog.NewContext(ctx, h.logger)).WithValues("ExtensionPoint", frameworktypes.BalanceExtensionPoint)
+
+	// Filter nodes by nodeSelector if specified
+	if len(h.nodeSelector) > 0 {
+		filteredNodes := []*v1.Node{}
+		for _, node := range nodes {
+			if nodeMatchesSelector(node, h.nodeSelector) {
+				filteredNodes = append(filteredNodes, node)
+			}
+		}
+
+		if len(filteredNodes) == 0 {
+			logger.V(1).Info("No nodes match the nodeSelector, skipping")
+			return nil
+		}
+
+		logger.V(1).Info(
+			"Filtered nodes by nodeSelector",
+			"totalNodes", len(nodes),
+			"matchedNodes", len(filteredNodes),
+		)
+		nodes = filteredNodes
+	}
 
 	if err := h.usageClient.sync(ctx, nodes); err != nil {
 		return &frameworktypes.Status{
@@ -272,4 +296,14 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 	)
 
 	return nil
+}
+
+// nodeMatchesSelector checks if a node matches all labels in the selector
+func nodeMatchesSelector(node *v1.Node, selector map[string]string) bool {
+	for key, value := range selector {
+		if nodeValue, exists := node.Labels[key]; !exists || nodeValue != value {
+			return false
+		}
+	}
+	return true
 }
