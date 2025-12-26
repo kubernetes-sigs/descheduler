@@ -36,6 +36,11 @@ func (in *DefaultEvictorArgs) DeepCopyInto(out *DefaultEvictorArgs) {
 		*out = new(v1.LabelSelector)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.NamespaceLabelSelector != nil {
+		in, out := &in.NamespaceLabelSelector, &out.NamespaceLabelSelector
+		*out = new(v1.LabelSelector)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.PriorityThreshold != nil {
 		in, out := &in.PriorityThreshold, &out.PriorityThreshold
 		*out = new(api.PriorityThreshold)
