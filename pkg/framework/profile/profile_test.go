@@ -27,6 +27,46 @@ import (
 )
 
 func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
+	// Helper to build profile config with default Filter and PreEvictionFilter
+	buildProfileConfig := func(name string, descheduleEnabled, balanceEnabled bool) api.DeschedulerProfile {
+		config := api.DeschedulerProfile{
+			Name: name,
+			PluginConfigs: []api.PluginConfig{
+				{
+					Name: defaultevictor.PluginName,
+					Args: &defaultevictor.DefaultEvictorArgs{
+						PriorityThreshold: &api.PriorityThreshold{
+							Value: nil,
+						},
+					},
+				},
+				{
+					Name: "FakePlugin",
+					Args: &fakeplugin.FakePluginArgs{},
+				},
+			},
+			Plugins: api.Plugins{
+				Filter: api.PluginSet{
+					Enabled: []string{defaultevictor.PluginName},
+				},
+				PreEvictionFilter: api.PluginSet{
+					Enabled: []string{defaultevictor.PluginName},
+				},
+			},
+		}
+		if descheduleEnabled {
+			config.Plugins.Deschedule = api.PluginSet{
+				Enabled: []string{"FakePlugin"},
+			}
+		}
+		if balanceEnabled {
+			config.Plugins.Balance = api.PluginSet{
+				Enabled: []string{"FakePlugin"},
+			}
+		}
+		return config
+	}
+
 	tests := []struct {
 		name             string
 		config           api.DeschedulerProfile
@@ -34,134 +74,26 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 		expectedEviction bool
 	}{
 		{
-			name: "profile with deschedule extension point enabled single eviction",
-			config: api.DeschedulerProfile{
-				Name: "strategy-test-profile-with-deschedule",
-				PluginConfigs: []api.PluginConfig{
-					{
-						Name: defaultevictor.PluginName,
-						Args: &defaultevictor.DefaultEvictorArgs{
-							PriorityThreshold: &api.PriorityThreshold{
-								Value: nil,
-							},
-						},
-					},
-					{
-						Name: "FakePlugin",
-						Args: &fakeplugin.FakePluginArgs{},
-					},
-				},
-				Plugins: api.Plugins{
-					Deschedule: api.PluginSet{
-						Enabled: []string{"FakePlugin"},
-					},
-					Filter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-					PreEvictionFilter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-				},
-			},
+			name:             "profile with deschedule extension point enabled single eviction",
+			config:           buildProfileConfig("strategy-test-profile-with-deschedule", true, false),
 			extensionPoint:   frameworktypes.DescheduleExtensionPoint,
 			expectedEviction: true,
 		},
 		{
-			name: "profile with balance extension point enabled single eviction",
-			config: api.DeschedulerProfile{
-				Name: "strategy-test-profile-with-balance",
-				PluginConfigs: []api.PluginConfig{
-					{
-						Name: defaultevictor.PluginName,
-						Args: &defaultevictor.DefaultEvictorArgs{
-							PriorityThreshold: &api.PriorityThreshold{
-								Value: nil,
-							},
-						},
-					},
-					{
-						Name: "FakePlugin",
-						Args: &fakeplugin.FakePluginArgs{},
-					},
-				},
-				Plugins: api.Plugins{
-					Balance: api.PluginSet{
-						Enabled: []string{"FakePlugin"},
-					},
-					Filter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-					PreEvictionFilter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-				},
-			},
+			name:             "profile with balance extension point enabled single eviction",
+			config:           buildProfileConfig("strategy-test-profile-with-balance", false, true),
 			extensionPoint:   frameworktypes.BalanceExtensionPoint,
 			expectedEviction: true,
 		},
 		{
-			name: "profile with deschedule extension point balance enabled no eviction",
-			config: api.DeschedulerProfile{
-				Name: "strategy-test-profile-with-deschedule",
-				PluginConfigs: []api.PluginConfig{
-					{
-						Name: defaultevictor.PluginName,
-						Args: &defaultevictor.DefaultEvictorArgs{
-							PriorityThreshold: &api.PriorityThreshold{
-								Value: nil,
-							},
-						},
-					},
-					{
-						Name: "FakePlugin",
-						Args: &fakeplugin.FakePluginArgs{},
-					},
-				},
-				Plugins: api.Plugins{
-					Balance: api.PluginSet{
-						Enabled: []string{"FakePlugin"},
-					},
-					Filter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-					PreEvictionFilter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-				},
-			},
+			name:             "profile with deschedule extension point balance enabled no eviction",
+			config:           buildProfileConfig("strategy-test-profile-with-balance", false, true),
 			extensionPoint:   frameworktypes.DescheduleExtensionPoint,
 			expectedEviction: false,
 		},
 		{
-			name: "profile with balance extension point deschedule enabled no eviction",
-			config: api.DeschedulerProfile{
-				Name: "strategy-test-profile-with-deschedule",
-				PluginConfigs: []api.PluginConfig{
-					{
-						Name: defaultevictor.PluginName,
-						Args: &defaultevictor.DefaultEvictorArgs{
-							PriorityThreshold: &api.PriorityThreshold{
-								Value: nil,
-							},
-						},
-					},
-					{
-						Name: "FakePlugin",
-						Args: &fakeplugin.FakePluginArgs{},
-					},
-				},
-				Plugins: api.Plugins{
-					Deschedule: api.PluginSet{
-						Enabled: []string{"FakePlugin"},
-					},
-					Filter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-					PreEvictionFilter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-				},
-			},
+			name:             "profile with balance extension point deschedule enabled no eviction",
+			config:           buildProfileConfig("strategy-test-profile-with-deschedule", true, false),
 			extensionPoint:   frameworktypes.BalanceExtensionPoint,
 			expectedEviction: false,
 		},
