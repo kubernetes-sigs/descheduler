@@ -414,7 +414,7 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 	ctx, span = tracing.Tracer().Start(ctx, "runProfiles")
 	defer span.End()
 	var profileRunners []profileRunner
-	for _, profile := range d.deschedulerPolicy.Profiles {
+	for idx, profile := range d.deschedulerPolicy.Profiles {
 		currProfile, err := frameworkprofile.NewProfile(
 			ctx,
 			profile,
@@ -425,6 +425,9 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 			frameworkprofile.WithGetPodsAssignedToNodeFnc(d.getPodsAssignedToNode),
 			frameworkprofile.WithMetricsCollector(d.metricsCollector),
 			frameworkprofile.WithPrometheusClient(d.prometheusClient),
+			// Generate a unique instance ID using just the index to avoid long IDs
+			// when profile names are very long
+			frameworkprofile.WithProfileInstanceID(fmt.Sprintf("%d", idx)),
 		)
 		if err != nil {
 			klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)
