@@ -26,6 +26,19 @@ import (
 	testutils "sigs.k8s.io/descheduler/test"
 )
 
+// registerDefaultEvictor registers the DefaultEvictor plugin with the given registry
+func registerDefaultEvictor(registry pluginregistry.Registry) {
+	pluginregistry.Register(
+		defaultevictor.PluginName,
+		defaultevictor.New,
+		&defaultevictor.DefaultEvictor{},
+		&defaultevictor.DefaultEvictorArgs{},
+		defaultevictor.ValidateDefaultEvictorArgs,
+		defaultevictor.SetDefaults_DefaultEvictorArgs,
+		registry,
+	)
+}
+
 func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 	// Helper to build profile config with default Filter and PreEvictionFilter
 	buildProfileConfig := func(name string, descheduleEnabled, balanceEnabled bool) api.DeschedulerProfile {
@@ -140,15 +153,7 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 			pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
 			fakeplugin.RegisterFakePlugin("FakePlugin", &fakePlugin, pluginregistry.PluginRegistry)
 
-			pluginregistry.Register(
-				defaultevictor.PluginName,
-				defaultevictor.New,
-				&defaultevictor.DefaultEvictor{},
-				&defaultevictor.DefaultEvictorArgs{},
-				defaultevictor.ValidateDefaultEvictorArgs,
-				defaultevictor.SetDefaults_DefaultEvictorArgs,
-				pluginregistry.PluginRegistry,
-			)
+			registerDefaultEvictor(pluginregistry.PluginRegistry)
 
 			client := fakeclientset.NewSimpleClientset(n1, n2, p1)
 			var evictedPods []string
@@ -249,15 +254,7 @@ func TestProfileExtensionPoints(t *testing.T) {
 		fakeplugin.RegisterFakeFilterPlugin(filterPluginName, fakeFilterPlugin, pluginregistry.PluginRegistry)
 	}
 
-	pluginregistry.Register(
-		defaultevictor.PluginName,
-		defaultevictor.New,
-		&defaultevictor.DefaultEvictor{},
-		&defaultevictor.DefaultEvictorArgs{},
-		defaultevictor.ValidateDefaultEvictorArgs,
-		defaultevictor.SetDefaults_DefaultEvictorArgs,
-		pluginregistry.PluginRegistry,
-	)
+	registerDefaultEvictor(pluginregistry.PluginRegistry)
 
 	client := fakeclientset.NewSimpleClientset(n1, n2, p1)
 	var evictedPods []string
@@ -441,15 +438,7 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 		fakeplugin.RegisterFakePlugin(fakePluginName, &fakePlugin, pluginregistry.PluginRegistry)
 	}
 
-	pluginregistry.Register(
-		defaultevictor.PluginName,
-		defaultevictor.New,
-		&defaultevictor.DefaultEvictor{},
-		&defaultevictor.DefaultEvictorArgs{},
-		defaultevictor.ValidateDefaultEvictorArgs,
-		defaultevictor.SetDefaults_DefaultEvictorArgs,
-		pluginregistry.PluginRegistry,
-	)
+	registerDefaultEvictor(pluginregistry.PluginRegistry)
 
 	client := fakeclientset.NewSimpleClientset(n1, n2, p1)
 	var evictedPods []string
