@@ -138,15 +138,7 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 			}
 
 			pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
-			pluginregistry.Register(
-				"FakePlugin",
-				fakeplugin.NewPluginFncFromFake(&fakePlugin),
-				&fakeplugin.FakePlugin{},
-				&fakeplugin.FakePluginArgs{},
-				fakeplugin.ValidateFakePluginArgs,
-				fakeplugin.SetDefaults_FakePluginArgs,
-				pluginregistry.PluginRegistry,
-			)
+			fakeplugin.RegisterFakePlugin("FakePlugin", &fakePlugin, pluginregistry.PluginRegistry)
 
 			pluginregistry.Register(
 				defaultevictor.PluginName,
@@ -251,45 +243,10 @@ func TestProfileExtensionPoints(t *testing.T) {
 		fakeBalancePlugin := &fakeplugin.FakeBalancePlugin{PluginName: balancePluginName}
 		fakeFilterPlugin := &fakeplugin.FakeFilterPlugin{PluginName: filterPluginName}
 
-		pluginregistry.Register(
-			fakePluginName,
-			fakeplugin.NewPluginFncFromFake(fakePlugin),
-			&fakeplugin.FakePlugin{},
-			&fakeplugin.FakePluginArgs{},
-			fakeplugin.ValidateFakePluginArgs,
-			fakeplugin.SetDefaults_FakePluginArgs,
-			pluginregistry.PluginRegistry,
-		)
-
-		pluginregistry.Register(
-			deschedulePluginName,
-			fakeplugin.NewFakeDeschedulePluginFncFromFake(fakeDeschedulePlugin),
-			&fakeplugin.FakeDeschedulePlugin{},
-			&fakeplugin.FakeDeschedulePluginArgs{},
-			fakeplugin.ValidateFakePluginArgs,
-			fakeplugin.SetDefaults_FakePluginArgs,
-			pluginregistry.PluginRegistry,
-		)
-
-		pluginregistry.Register(
-			balancePluginName,
-			fakeplugin.NewFakeBalancePluginFncFromFake(fakeBalancePlugin),
-			&fakeplugin.FakeBalancePlugin{},
-			&fakeplugin.FakeBalancePluginArgs{},
-			fakeplugin.ValidateFakePluginArgs,
-			fakeplugin.SetDefaults_FakePluginArgs,
-			pluginregistry.PluginRegistry,
-		)
-
-		pluginregistry.Register(
-			filterPluginName,
-			fakeplugin.NewFakeFilterPluginFncFromFake(fakeFilterPlugin),
-			&fakeplugin.FakeFilterPlugin{},
-			&fakeplugin.FakeFilterPluginArgs{},
-			fakeplugin.ValidateFakePluginArgs,
-			fakeplugin.SetDefaults_FakePluginArgs,
-			pluginregistry.PluginRegistry,
-		)
+		fakeplugin.RegisterFakePlugin(fakePluginName, fakePlugin, pluginregistry.PluginRegistry)
+		fakeplugin.RegisterFakeDeschedulePlugin(deschedulePluginName, fakeDeschedulePlugin, pluginregistry.PluginRegistry)
+		fakeplugin.RegisterFakeBalancePlugin(balancePluginName, fakeBalancePlugin, pluginregistry.PluginRegistry)
+		fakeplugin.RegisterFakeFilterPlugin(filterPluginName, fakeFilterPlugin, pluginregistry.PluginRegistry)
 	}
 
 	pluginregistry.Register(
@@ -456,15 +413,7 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 		})
 
 		// plugin implementing Filter extension point
-		pluginregistry.Register(
-			pluginName,
-			fakeplugin.NewFakeFilterPluginFncFromFake(fakeFilterPlugin),
-			&fakeplugin.FakeFilterPlugin{},
-			&fakeplugin.FakeFilterPluginArgs{},
-			fakeplugin.ValidateFakePluginArgs,
-			fakeplugin.SetDefaults_FakePluginArgs,
-			pluginregistry.PluginRegistry,
-		)
+		fakeplugin.RegisterFakeFilterPlugin(pluginName, fakeFilterPlugin, pluginregistry.PluginRegistry)
 
 		fakePluginName := fmt.Sprintf("FakePlugin_%v", i)
 		fakePlugin := fakeplugin.FakePlugin{}
@@ -489,15 +438,7 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 			return true, false, nil
 		})
 
-		pluginregistry.Register(
-			fakePluginName,
-			fakeplugin.NewPluginFncFromFake(&fakePlugin),
-			&fakeplugin.FakePlugin{},
-			&fakeplugin.FakePluginArgs{},
-			fakeplugin.ValidateFakePluginArgs,
-			fakeplugin.SetDefaults_FakePluginArgs,
-			pluginregistry.PluginRegistry,
-		)
+		fakeplugin.RegisterFakePlugin(fakePluginName, &fakePlugin, pluginregistry.PluginRegistry)
 	}
 
 	pluginregistry.Register(
