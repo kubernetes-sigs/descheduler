@@ -408,3 +408,55 @@ func (d *FakeFilterPlugin) handleBoolAction(action Action) bool {
 	}
 	panic(fmt.Errorf("unhandled %q action", action.GetExtensionPoint()))
 }
+
+// RegisterFakePlugin registers a FakePlugin with the given registry
+func RegisterFakePlugin(name string, plugin *FakePlugin, registry pluginregistry.Registry) {
+	pluginregistry.Register(
+		name,
+		NewPluginFncFromFake(plugin),
+		&FakePlugin{},
+		&FakePluginArgs{},
+		ValidateFakePluginArgs,
+		SetDefaults_FakePluginArgs,
+		registry,
+	)
+}
+
+// RegisterFakeDeschedulePlugin registers a FakeDeschedulePlugin with the given registry
+func RegisterFakeDeschedulePlugin(name string, plugin *FakeDeschedulePlugin, registry pluginregistry.Registry) {
+	pluginregistry.Register(
+		name,
+		NewFakeDeschedulePluginFncFromFake(plugin),
+		&FakeDeschedulePlugin{},
+		&FakeDeschedulePluginArgs{},
+		ValidateFakePluginArgs,
+		SetDefaults_FakePluginArgs,
+		registry,
+	)
+}
+
+// RegisterFakeBalancePlugin registers a FakeBalancePlugin with the given registry
+func RegisterFakeBalancePlugin(name string, plugin *FakeBalancePlugin, registry pluginregistry.Registry) {
+	pluginregistry.Register(
+		name,
+		NewFakeBalancePluginFncFromFake(plugin),
+		&FakeBalancePlugin{},
+		&FakeBalancePluginArgs{},
+		ValidateFakePluginArgs,
+		SetDefaults_FakePluginArgs,
+		registry,
+	)
+}
+
+// RegisterFakeFilterPlugin registers a FakeFilterPlugin with the given registry
+func RegisterFakeFilterPlugin(name string, plugin *FakeFilterPlugin, registry pluginregistry.Registry) {
+	pluginregistry.Register(
+		name,
+		NewFakeFilterPluginFncFromFake(plugin),
+		&FakeFilterPlugin{},
+		&FakeFilterPluginArgs{},
+		ValidateFakePluginArgs,
+		SetDefaults_FakePluginArgs,
+		registry,
+	)
+}

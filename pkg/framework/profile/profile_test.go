@@ -26,7 +26,60 @@ import (
 	testutils "sigs.k8s.io/descheduler/test"
 )
 
+// registerDefaultEvictor registers the DefaultEvictor plugin with the given registry
+func registerDefaultEvictor(registry pluginregistry.Registry) {
+	pluginregistry.Register(
+		defaultevictor.PluginName,
+		defaultevictor.New,
+		&defaultevictor.DefaultEvictor{},
+		&defaultevictor.DefaultEvictorArgs{},
+		defaultevictor.ValidateDefaultEvictorArgs,
+		defaultevictor.SetDefaults_DefaultEvictorArgs,
+		registry,
+	)
+}
+
 func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
+	// Helper to build profile config with default Filter and PreEvictionFilter
+	buildProfileConfig := func(name string, descheduleEnabled, balanceEnabled bool) api.DeschedulerProfile {
+		config := api.DeschedulerProfile{
+			Name: name,
+			PluginConfigs: []api.PluginConfig{
+				{
+					Name: defaultevictor.PluginName,
+					Args: &defaultevictor.DefaultEvictorArgs{
+						PriorityThreshold: &api.PriorityThreshold{
+							Value: nil,
+						},
+					},
+				},
+				{
+					Name: "FakePlugin",
+					Args: &fakeplugin.FakePluginArgs{},
+				},
+			},
+			Plugins: api.Plugins{
+				Filter: api.PluginSet{
+					Enabled: []string{defaultevictor.PluginName},
+				},
+				PreEvictionFilter: api.PluginSet{
+					Enabled: []string{defaultevictor.PluginName},
+				},
+			},
+		}
+		if descheduleEnabled {
+			config.Plugins.Deschedule = api.PluginSet{
+				Enabled: []string{"FakePlugin"},
+			}
+		}
+		if balanceEnabled {
+			config.Plugins.Balance = api.PluginSet{
+				Enabled: []string{"FakePlugin"},
+			}
+		}
+		return config
+	}
+
 	tests := []struct {
 		name             string
 		config           api.DeschedulerProfile
@@ -34,134 +87,26 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 		expectedEviction bool
 	}{
 		{
-			name: "profile with deschedule extension point enabled single eviction",
-			config: api.DeschedulerProfile{
-				Name: "strategy-test-profile-with-deschedule",
-				PluginConfigs: []api.PluginConfig{
-					{
-						Name: defaultevictor.PluginName,
-						Args: &defaultevictor.DefaultEvictorArgs{
-							PriorityThreshold: &api.PriorityThreshold{
-								Value: nil,
-							},
-						},
-					},
-					{
-						Name: "FakePlugin",
-						Args: &fakeplugin.FakePluginArgs{},
-					},
-				},
-				Plugins: api.Plugins{
-					Deschedule: api.PluginSet{
-						Enabled: []string{"FakePlugin"},
-					},
-					Filter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-					PreEvictionFilter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-				},
-			},
+			name:             "profile with deschedule extension point enabled single eviction",
+			config:           buildProfileConfig("strategy-test-profile-with-deschedule", true, false),
 			extensionPoint:   frameworktypes.DescheduleExtensionPoint,
 			expectedEviction: true,
 		},
 		{
-			name: "profile with balance extension point enabled single eviction",
-			config: api.DeschedulerProfile{
-				Name: "strategy-test-profile-with-balance",
-				PluginConfigs: []api.PluginConfig{
-					{
-						Name: defaultevictor.PluginName,
-						Args: &defaultevictor.DefaultEvictorArgs{
-							PriorityThreshold: &api.PriorityThreshold{
-								Value: nil,
-							},
-						},
-					},
-					{
-						Name: "FakePlugin",
-						Args: &fakeplugin.FakePluginArgs{},
-					},
-				},
-				Plugins: api.Plugins{
-					Balance: api.PluginSet{
-						Enabled: []string{"FakePlugin"},
-					},
-					Filter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-					PreEvictionFilter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-				},
-			},
+			name:             "profile with balance extension point enabled single eviction",
+			config:           buildProfileConfig("strategy-test-profile-with-balance", false, true),
 			extensionPoint:   frameworktypes.BalanceExtensionPoint,
 			expectedEviction: true,
 		},
 		{
-			name: "profile with deschedule extension point balance enabled no eviction",
-			config: api.DeschedulerProfile{
-				Name: "strategy-test-profile-with-deschedule",
-				PluginConfigs: []api.PluginConfig{
-					{
-						Name: defaultevictor.PluginName,
-						Args: &defaultevictor.DefaultEvictorArgs{
-							PriorityThreshold: &api.PriorityThreshold{
-								Value: nil,
-							},
-						},
-					},
-					{
-						Name: "FakePlugin",
-						Args: &fakeplugin.FakePluginArgs{},
-					},
-				},
-				Plugins: api.Plugins{
-					Balance: api.PluginSet{
-						Enabled: []string{"FakePlugin"},
-					},
-					Filter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-					PreEvictionFilter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-				},
-			},
+			name:             "profile with deschedule extension point balance enabled no eviction",
+			config:           buildProfileConfig("strategy-test-profile-with-balance", false, true),
 			extensionPoint:   frameworktypes.DescheduleExtensionPoint,
 			expectedEviction: false,
 		},
 		{
-			name: "profile with balance extension point deschedule enabled no eviction",
-			config: api.DeschedulerProfile{
-				Name: "strategy-test-profile-with-deschedule",
-				PluginConfigs: []api.PluginConfig{
-					{
-						Name: defaultevictor.PluginName,
-						Args: &defaultevictor.DefaultEvictorArgs{
-							PriorityThreshold: &api.PriorityThreshold{
-								Value: nil,
-							},
-						},
-					},
-					{
-						Name: "FakePlugin",
-						Args: &fakeplugin.FakePluginArgs{},
-					},
-				},
-				Plugins: api.Plugins{
-					Deschedule: api.PluginSet{
-						Enabled: []string{"FakePlugin"},
-					},
-					Filter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-					PreEvictionFilter: api.PluginSet{
-						Enabled: []string{defaultevictor.PluginName},
-					},
-				},
-			},
+			name:             "profile with balance extension point deschedule enabled no eviction",
+			config:           buildProfileConfig("strategy-test-profile-with-deschedule", true, false),
 			extensionPoint:   frameworktypes.BalanceExtensionPoint,
 			expectedEviction: false,
 		},
@@ -206,25 +151,9 @@ func TestProfileDescheduleBalanceExtensionPointsEviction(t *testing.T) {
 			}
 
 			pluginregistry.PluginRegistry = pluginregistry.NewRegistry()
-			pluginregistry.Register(
-				"FakePlugin",
-				fakeplugin.NewPluginFncFromFake(&fakePlugin),
-				&fakeplugin.FakePlugin{},
-				&fakeplugin.FakePluginArgs{},
-				fakeplugin.ValidateFakePluginArgs,
-				fakeplugin.SetDefaults_FakePluginArgs,
-				pluginregistry.PluginRegistry,
-			)
+			fakeplugin.RegisterFakePlugin("FakePlugin", &fakePlugin, pluginregistry.PluginRegistry)
 
-			pluginregistry.Register(
-				defaultevictor.PluginName,
-				defaultevictor.New,
-				&defaultevictor.DefaultEvictor{},
-				&defaultevictor.DefaultEvictorArgs{},
-				defaultevictor.ValidateDefaultEvictorArgs,
-				defaultevictor.SetDefaults_DefaultEvictorArgs,
-				pluginregistry.PluginRegistry,
-			)
+			registerDefaultEvictor(pluginregistry.PluginRegistry)
 
 			client := fakeclientset.NewSimpleClientset(n1, n2, p1)
 			var evictedPods []string
@@ -319,56 +248,13 @@ func TestProfileExtensionPoints(t *testing.T) {
 		fakeBalancePlugin := &fakeplugin.FakeBalancePlugin{PluginName: balancePluginName}
 		fakeFilterPlugin := &fakeplugin.FakeFilterPlugin{PluginName: filterPluginName}
 
-		pluginregistry.Register(
-			fakePluginName,
-			fakeplugin.NewPluginFncFromFake(fakePlugin),
-			&fakeplugin.FakePlugin{},
-			&fakeplugin.FakePluginArgs{},
-			fakeplugin.ValidateFakePluginArgs,
-			fakeplugin.SetDefaults_FakePluginArgs,
-			pluginregistry.PluginRegistry,
-		)
-
-		pluginregistry.Register(
-			deschedulePluginName,
-			fakeplugin.NewFakeDeschedulePluginFncFromFake(fakeDeschedulePlugin),
-			&fakeplugin.FakeDeschedulePlugin{},
-			&fakeplugin.FakeDeschedulePluginArgs{},
-			fakeplugin.ValidateFakePluginArgs,
-			fakeplugin.SetDefaults_FakePluginArgs,
-			pluginregistry.PluginRegistry,
-		)
-
-		pluginregistry.Register(
-			balancePluginName,
-			fakeplugin.NewFakeBalancePluginFncFromFake(fakeBalancePlugin),
-			&fakeplugin.FakeBalancePlugin{},
-			&fakeplugin.FakeBalancePluginArgs{},
-			fakeplugin.ValidateFakePluginArgs,
-			fakeplugin.SetDefaults_FakePluginArgs,
-			pluginregistry.PluginRegistry,
-		)
-
-		pluginregistry.Register(
-			filterPluginName,
-			fakeplugin.NewFakeFilterPluginFncFromFake(fakeFilterPlugin),
-			&fakeplugin.FakeFilterPlugin{},
-			&fakeplugin.FakeFilterPluginArgs{},
-			fakeplugin.ValidateFakePluginArgs,
-			fakeplugin.SetDefaults_FakePluginArgs,
-			pluginregistry.PluginRegistry,
-		)
+		fakeplugin.RegisterFakePlugin(fakePluginName, fakePlugin, pluginregistry.PluginRegistry)
+		fakeplugin.RegisterFakeDeschedulePlugin(deschedulePluginName, fakeDeschedulePlugin, pluginregistry.PluginRegistry)
+		fakeplugin.RegisterFakeBalancePlugin(balancePluginName, fakeBalancePlugin, pluginregistry.PluginRegistry)
+		fakeplugin.RegisterFakeFilterPlugin(filterPluginName, fakeFilterPlugin, pluginregistry.PluginRegistry)
 	}
 
-	pluginregistry.Register(
-		defaultevictor.PluginName,
-		defaultevictor.New,
-		&defaultevictor.DefaultEvictor{},
-		&defaultevictor.DefaultEvictorArgs{},
-		defaultevictor.ValidateDefaultEvictorArgs,
-		defaultevictor.SetDefaults_DefaultEvictorArgs,
-		pluginregistry.PluginRegistry,
-	)
+	registerDefaultEvictor(pluginregistry.PluginRegistry)
 
 	client := fakeclientset.NewSimpleClientset(n1, n2, p1)
 	var evictedPods []string
@@ -524,15 +410,7 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 		})
 
 		// plugin implementing Filter extension point
-		pluginregistry.Register(
-			pluginName,
-			fakeplugin.NewFakeFilterPluginFncFromFake(fakeFilterPlugin),
-			&fakeplugin.FakeFilterPlugin{},
-			&fakeplugin.FakeFilterPluginArgs{},
-			fakeplugin.ValidateFakePluginArgs,
-			fakeplugin.SetDefaults_FakePluginArgs,
-			pluginregistry.PluginRegistry,
-		)
+		fakeplugin.RegisterFakeFilterPlugin(pluginName, fakeFilterPlugin, pluginregistry.PluginRegistry)
 
 		fakePluginName := fmt.Sprintf("FakePlugin_%v", i)
 		fakePlugin := fakeplugin.FakePlugin{}
@@ -557,26 +435,10 @@ func TestProfileExtensionPointOrdering(t *testing.T) {
 			return true, false, nil
 		})
 
-		pluginregistry.Register(
-			fakePluginName,
-			fakeplugin.NewPluginFncFromFake(&fakePlugin),
-			&fakeplugin.FakePlugin{},
-			&fakeplugin.FakePluginArgs{},
-			fakeplugin.ValidateFakePluginArgs,
-			fakeplugin.SetDefaults_FakePluginArgs,
-			pluginregistry.PluginRegistry,
-		)
+		fakeplugin.RegisterFakePlugin(fakePluginName, &fakePlugin, pluginregistry.PluginRegistry)
 	}
 
-	pluginregistry.Register(
-		defaultevictor.PluginName,
-		defaultevictor.New,
-		&defaultevictor.DefaultEvictor{},
-		&defaultevictor.DefaultEvictorArgs{},
-		defaultevictor.ValidateDefaultEvictorArgs,
-		defaultevictor.SetDefaults_DefaultEvictorArgs,
-		pluginregistry.PluginRegistry,
-	)
+	registerDefaultEvictor(pluginregistry.PluginRegistry)
 
 	client := fakeclientset.NewSimpleClientset(n1, n2, p1)
 	var evictedPods []string
