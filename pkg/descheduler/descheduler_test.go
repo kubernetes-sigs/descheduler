@@ -190,7 +190,7 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 	rs.DefaultFeatureGates = featureGates
 	rs.MetricsClient = metricsClient
 
-	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
+	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(preserveNeeded))
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
 
 	descheduler, err := newDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", eventRecorder, sharedInformerFactory, nil)
