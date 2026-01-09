@@ -52,6 +52,7 @@ type LowNodeUtilization struct {
 	resourceNames         []v1.ResourceName
 	extendedResourceNames []v1.ResourceName
 	usageClient           usageClient
+	nodeSelector          map[string]string
 }
 
 // NewLowNodeUtilization builds plugin from its arguments while passing a
@@ -126,6 +127,7 @@ func NewLowNodeUtilization(
 		extendedResourceNames: extendedResourceNames,
 		podFilter:             podFilter,
 		usageClient:           usageClient,
+		nodeSelector:          args.NodeSelector,
 	}, nil
 }
 
@@ -139,6 +141,28 @@ func (l *LowNodeUtilization) Name() string {
 // distribute pods across nodes.
 func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	logger := klog.FromContext(klog.NewContext(ctx, l.logger)).WithValues("ExtensionPoint", frameworktypes.BalanceExtensionPoint)
+
+	// Filter nodes by nodeSelector if specified
+	if len(l.nodeSelector) > 0 {
+		filteredNodes := []*v1.Node{}
+		for _, node := range nodes {
+			if nodeMatchesSelector(node, l.nodeSelector) {
+				filteredNodes = append(filteredNodes, node)
+			}
+		}
+
+		if len(filteredNodes) == 0 {
+			logger.V(1).Info("No nodes match the nodeSelector, skipping")
+			return nil
+		}
+
+		logger.V(1).Info(
+			"Filtered nodes by nodeSelector",
+			"totalNodes", len(nodes),
+			"matchedNodes", len(filteredNodes),
+		)
+		nodes = filteredNodes
+	}
 
 	if err := l.usageClient.sync(ctx, nodes); err != nil {
 		return &frameworktypes.Status{
