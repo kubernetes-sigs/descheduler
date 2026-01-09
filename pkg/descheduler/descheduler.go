@@ -74,6 +74,7 @@ import (
 const (
 	prometheusAuthTokenSecretKey = "prometheusAuthToken"
 	workQueueKey                 = "key"
+	indexerNodeSelectorGlobal    = "indexer_node_selector_global"
 )
 
 type eprunner func(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status
@@ -206,15 +207,20 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 		metricsProviders:       metricsProviderListToMap(deschedulerPolicy.MetricsProviders),
 	}
 
-	if rs.MetricsClient != nil {
-		nodeSelector := labels.Everything()
-		if deschedulerPolicy.NodeSelector != nil {
-			sel, err := labels.Parse(*deschedulerPolicy.NodeSelector)
-			if err != nil {
-				return nil, err
-			}
-			nodeSelector = sel
+	nodeSelector := labels.Everything()
+	if deschedulerPolicy.NodeSelector != nil {
+		sel, err := labels.Parse(*deschedulerPolicy.NodeSelector)
+		if err != nil {
+			return nil, err
 		}
+		nodeSelector = sel
+	}
+
+	if err := nodeutil.AddNodeSelectorIndexer(sharedInformerFactory.Core().V1().Nodes().Informer(), indexerNodeSelectorGlobal, nodeSelector); err != nil {
+		return nil, err
+	}
+
+	if rs.MetricsClient != nil {
 		desch.metricsCollector = metricscollector.NewMetricsCollector(sharedInformerFactory.Core().V1().Nodes().Lister(), rs.MetricsClient, nodeSelector)
 	}
 
@@ -345,7 +351,7 @@ func (d *descheduler) eventHandler() cache.ResourceEventHandler {
 	}
 }
 
-func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) error {
+func (d *descheduler) runDeschedulerLoop(ctx context.Context) error {
 	var span trace.Span
 	ctx, span = tracing.Tracer().Start(ctx, "runDeschedulerLoop")
 	defer span.End()
@@ -353,12 +359,6 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 		metrics.DeschedulerLoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
 		metrics.LoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
 	}(time.Now())
-
-	// if len is still <= 1 error out
-	if len(nodes) <= 1 {
-		klog.InfoS("Skipping descheduling cycle: requires >=2 nodes", "found", len(nodes))
-		return nil // gracefully skip this cycle instead of aborting
-	}
 
 	var client clientset.Interface
 	// When the dry mode is enable, collect all the relevant objects (mostly pods) under a fake client.
@@ -384,6 +384,22 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 			return fmt.Errorf("build get pods assigned to node function error: %v", err)
 		}
 
+		nodeSelector := labels.Everything()
+		if d.deschedulerPolicy.NodeSelector != nil {
+			sel, err := labels.Parse(*d.deschedulerPolicy.NodeSelector)
+			if err != nil {
+				return err
+			}
+			nodeSelector = sel
+		}
+		// TODO(ingvagabund): copy paste all relevant indexers from the real client to the fake one
+		// TODO(ingvagabund): register one indexer per each profile. Respect the precedence of no profile-level node selector is specified.
+		//                    Also, keep a cache of node label selectors to detect duplicates to avoid creating an extra informer.
+
+		if err := nodeutil.AddNodeSelectorIndexer(fakeSharedInformerFactory.Core().V1().Nodes().Informer(), indexerNodeSelectorGlobal, nodeSelector); err != nil {
+			return err
+		}
+
 		fakeCtx, cncl := context.WithCancel(context.TODO())
 		defer cncl()
 		fakeSharedInformerFactory.Start(fakeCtx.Done())
@@ -399,7 +415,7 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 	d.podEvictor.SetClient(client)
 	d.podEvictor.ResetCounters()
 
-	d.runProfiles(ctx, client, nodes)
+	d.runProfiles(ctx, client)
 
 	klog.V(1).InfoS("Number of evictions/requests", "totalEvicted", d.podEvictor.TotalEvicted(), "evictionRequests", d.podEvictor.TotalEvictionRequests())
 
@@ -409,10 +425,31 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context, nodes []*v1.Node) 
 // runProfiles runs all the deschedule plugins of all profiles and
 // later runs through all balance plugins of all profiles. (All Balance plugins should come after all Deschedule plugins)
 // see https://github.com/kubernetes-sigs/descheduler/issues/979
-func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interface, nodes []*v1.Node) {
+func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interface) {
 	var span trace.Span
 	ctx, span = tracing.Tracer().Start(ctx, "runProfiles")
 	defer span.End()
+
+	nodesAsInterface, err := d.sharedInformerFactory.Core().V1().Nodes().Informer().GetIndexer().ByIndex(indexerNodeSelectorGlobal, indexerNodeSelectorGlobal)
+	if err != nil {
+		span.AddEvent("Failed to list nodes with global node selector", trace.WithAttributes(attribute.String("err", err.Error())))
+		klog.Error(err)
+		return
+	}
+
+	nodes, err := nodeutil.ReadyNodesFromInterfaces(nodesAsInterface)
+	if err != nil {
+		span.AddEvent("Failed to convert node as interfaces into ready nodes", trace.WithAttributes(attribute.String("err", err.Error())))
+		klog.Error(err)
+		return
+	}
+
+	// if len is still <= 1 error out
+	if len(nodes) <= 1 {
+		klog.InfoS("Skipping descheduling cycle: requires >=2 nodes", "found", len(nodes))
+		return // gracefully skip this cycle instead of aborting
+	}
+
 	var profileRunners []profileRunner
 	for idx, profile := range d.deschedulerPolicy.Profiles {
 		currProfile, err := frameworkprofile.NewProfile(
@@ -590,11 +627,6 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
 
-	var nodeSelector string
-	if deschedulerPolicy.NodeSelector != nil {
-		nodeSelector = *deschedulerPolicy.NodeSelector
-	}
-
 	var eventClient clientset.Interface
 	if rs.DryRun {
 		eventClient = fakeclientset.NewSimpleClientset()
@@ -669,14 +701,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		sCtx, sSpan := tracing.Tracer().Start(ctx, "NonSlidingUntil")
 		defer sSpan.End()
 
-		nodes, err := nodeutil.ReadyNodes(sCtx, rs.Client, descheduler.sharedInformerFactory.Core().V1().Nodes().Lister(), nodeSelector)
-		if err != nil {
-			sSpan.AddEvent("Failed to detect ready nodes", trace.WithAttributes(attribute.String("err", err.Error())))
-			klog.Error(err)
-			cancel()
-			return
-		}
-		err = descheduler.runDeschedulerLoop(sCtx, nodes)
+		err = descheduler.runDeschedulerLoop(sCtx)
 		if err != nil {
 			sSpan.AddEvent("Failed to run descheduler loop", trace.WithAttributes(attribute.String("err", err.Error())))
 			klog.Error(err)
