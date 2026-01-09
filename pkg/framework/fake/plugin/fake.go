@@ -73,6 +73,22 @@ func NewPluginFncFromFake(fp *FakePlugin) pluginregistry.PluginBuilder {
 	}
 }
 
+func NewPluginFncFromFakeWithReactor(fp *FakePlugin, callback func(ActionImpl)) pluginregistry.PluginBuilder {
+	return func(ctx context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
+		fakePluginArgs, ok := args.(*FakePluginArgs)
+		if !ok {
+			return nil, fmt.Errorf("want args to be of type FakePluginArgs, got %T", args)
+		}
+
+		fp.handle = handle
+		fp.args = fakePluginArgs
+
+		callback(ActionImpl{handle: fp.handle})
+
+		return fp, nil
+	}
+}
+
 // New builds plugin from its arguments while passing a handle
 func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle) (frameworktypes.Plugin, error) {
 	fakePluginArgs, ok := args.(*FakePluginArgs)

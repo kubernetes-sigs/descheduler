@@ -78,6 +78,14 @@ type handleImpl struct {
 
 var _ frameworktypes.Handle = &handleImpl{}
 
+// pluginHandle wraps a shared handleImpl and adds a plugin-specific instance ID
+type pluginHandle struct {
+	*handleImpl
+	pluginInstanceID string
+}
+
+var _ frameworktypes.Handle = &pluginHandle{}
+
 // ClientSet retrieves kube client set
 func (hi *handleImpl) ClientSet() clientset.Interface {
 	return hi.clientSet
@@ -104,6 +112,17 @@ func (hi *handleImpl) SharedInformerFactory() informers.SharedInformerFactory {
 // Evictor retrieves evictor so plugins can filter and evict pods
 func (hi *handleImpl) Evictor() frameworktypes.Evictor {
 	return hi.evictor
+}
+
+// PluginInstanceID returns an empty string for the base handle.
+// Plugins should receive a pluginHandle which has a specific instance ID.
+func (hi *handleImpl) PluginInstanceID() string {
+	panic(fmt.Errorf("Not implemented"))
+}
+
+// PluginInstanceID returns a unique identifier for this plugin instance.
+func (ph *pluginHandle) PluginInstanceID() string {
+	return ph.pluginInstanceID
 }
 
 type filterPlugin interface {
@@ -142,6 +161,7 @@ type handleImplOpts struct {
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	podEvictor                *evictions.PodEvictor
 	metricsCollector          *metricscollector.MetricsCollector
+	profileInstanceID         string
 }
 
 // WithClientSet sets clientSet for the scheduling frameworkImpl.
@@ -182,6 +202,14 @@ func WithMetricsCollector(metricsCollector *metricscollector.MetricsCollector) O
 	}
 }
 
+// WithProfileInstanceID sets the profile instance ID for the handle.
+// This will be used to construct unique plugin instance IDs.
+func WithProfileInstanceID(profileInstanceID string) Option {
+	return func(o *handleImplOpts) {
+		o.profileInstanceID = profileInstanceID
+	}
+}
+
 func getPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) (*api.PluginConfig, int) {
 	for idx, pluginConfig := range pluginConfigs {
 		if pluginConfig.Name == pluginName {
@@ -191,7 +219,7 @@ func getPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) (*api.
 	return nil, 0
 }
 
-func buildPlugin(ctx context.Context, config api.DeschedulerProfile, pluginName string, handle *handleImpl, reg pluginregistry.Registry) (frameworktypes.Plugin, error) {
+func buildPlugin(ctx context.Context, config api.DeschedulerProfile, pluginName string, handle frameworktypes.Handle, reg pluginregistry.Registry) (frameworktypes.Plugin, error) {
 	pc, _ := getPluginConfig(pluginName, config.PluginConfigs)
 	if pc == nil {
 		klog.ErrorS(fmt.Errorf("unable to get plugin config"), "skipping plugin", "plugin", pluginName, "profile", config.Name)
@@ -272,6 +300,7 @@ func NewProfile(ctx context.Context, config api.DeschedulerProfile, reg pluginre
 		return nil, fmt.Errorf("profile %q configures preEvictionFilter extension point of non-existing plugins: %v", config.Name, sets.New(config.Plugins.PreEvictionFilter.Enabled...).Difference(pi.preEvictionFilter))
 	}
 
+	// Create a base handle that will be used as a template for plugin-specific handles
 	handle := &handleImpl{
 		clientSet:                 hOpts.clientSet,
 		getPodsAssignedToNodeFunc: hOpts.getPodsAssignedToNodeFunc,
@@ -284,20 +313,26 @@ func NewProfile(ctx context.Context, config api.DeschedulerProfile, reg pluginre
 		prometheusClient: hOpts.prometheusClient,
 	}
 
+	// Collect all unique plugin names across all extension points
 	pluginNames := append(config.Plugins.Deschedule.Enabled, config.Plugins.Balance.Enabled...)
 	pluginNames = append(pluginNames, config.Plugins.Filter.Enabled...)
 	pluginNames = append(pluginNames, config.Plugins.PreEvictionFilter.Enabled...)
 
+	// Build each unique plugin only once with a unique plugin instance ID
 	plugins := make(map[string]frameworktypes.Plugin)
-	for _, plugin := range sets.New(pluginNames...).UnsortedList() {
-		pg, err := buildPlugin(ctx, config, plugin, handle, reg)
+	for idx, pluginName := range sets.New(pluginNames...).UnsortedList() {
+		ph := &pluginHandle{
+			handleImpl:       handle,
+			pluginInstanceID: fmt.Sprintf("%s-%d", hOpts.profileInstanceID, idx),
+		}
+		pg, err := buildPlugin(ctx, config, pluginName, ph, reg)
 		if err != nil {
-			return nil, fmt.Errorf("unable to build %v plugin: %v", plugin, err)
+			return nil, fmt.Errorf("unable to build %v plugin: %v", pluginName, err)
 		}
 		if pg == nil {
-			return nil, fmt.Errorf("got empty %v plugin build", plugin)
+			return nil, fmt.Errorf("got empty %v plugin build", pluginName)
 		}
-		plugins[plugin] = pg
+		plugins[pluginName] = pg
 	}
 
 	// Later, when a default list of plugins and their extension points is established,

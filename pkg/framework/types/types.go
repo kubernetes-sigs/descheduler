@@ -41,6 +41,9 @@ type Handle interface {
 	GetPodsAssignedToNodeFunc() podutil.GetPodsAssignedToNodeFunc
 	SharedInformerFactory() informers.SharedInformerFactory
 	MetricsCollector() *metricscollector.MetricsCollector
+	// PluginInstanceID returns a unique identifier for this plugin instance.
+	// The ID is unique across all plugin instances in a configuration.
+	PluginInstanceID() string
 }
 
 // Evictor defines an interface for filtering and evicting pods
