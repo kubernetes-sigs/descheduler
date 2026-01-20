@@ -177,7 +177,7 @@ func lowNodeUtilizationPolicy(thresholds, targetThresholds api.ResourceThreshold
 	}
 }
 
-func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate.FeatureGate, internalDeschedulerPolicy *api.DeschedulerPolicy, metricsClient metricsclient.Interface, objects ...runtime.Object) (*options.DeschedulerServer, *descheduler, *fakeclientset.Clientset) {
+func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate.FeatureGate, internalDeschedulerPolicy *api.DeschedulerPolicy, metricsClient metricsclient.Interface, dryRun bool, objects ...runtime.Object) (*options.DeschedulerServer, *descheduler, *fakeclientset.Clientset) {
 	client := fakeclientset.NewSimpleClientset(objects...)
 	eventClient := fakeclientset.NewSimpleClientset(objects...)
 
@@ -189,6 +189,7 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 	rs.EventClient = eventClient
 	rs.DefaultFeatureGates = featureGates
 	rs.MetricsClient = metricsClient
+	rs.DryRun = dryRun
 
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
@@ -477,69 +478,72 @@ func taintNodeNoSchedule(node *v1.Node) {
 func TestPodEvictorReset(t *testing.T) {
 	initPluginRegistry()
 
-	ctx := context.Background()
-	node1 := test.BuildTestNode("n1", 2000, 3000, 10, taintNodeNoSchedule)
-	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
-
-	ownerRef1 := test.GetReplicaSetOwnerRefList()
-	updatePod := func(pod *v1.Pod) {
-		pod.Namespace = "dev"
-		pod.ObjectMeta.OwnerReferences = ownerRef1
+	tests := []struct {
+		name   string
+		dryRun bool
+		cycles []struct {
+			expectedTotalEvicted  uint
+			expectedRealEvictions int
+			expectedFakeEvictions int
+		}
+	}{
+		{
+			name:   "real mode",
+			dryRun: false,
+			cycles: []struct {
+				expectedTotalEvicted  uint
+				expectedRealEvictions int
+				expectedFakeEvictions int
+			}{
+				{expectedTotalEvicted: 2, expectedRealEvictions: 2, expectedFakeEvictions: 0},
+				{expectedTotalEvicted: 2, expectedRealEvictions: 4, expectedFakeEvictions: 0},
+			},
+		},
+		{
+			name:   "dry mode",
+			dryRun: true,
+			cycles: []struct {
+				expectedTotalEvicted  uint
+				expectedRealEvictions int
+				expectedFakeEvictions int
+			}{
+				{expectedTotalEvicted: 2, expectedRealEvictions: 0, expectedFakeEvictions: 2},
+				{expectedTotalEvicted: 2, expectedRealEvictions: 0, expectedFakeEvictions: 4},
+			},
+		},
 	}
 
-	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, updatePod)
-	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, updatePod)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			node1 := test.BuildTestNode("n1", 2000, 3000, 10, taintNodeNoSchedule)
+			node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
 
-	internalDeschedulerPolicy := removePodsViolatingNodeTaintsPolicy()
-	ctxCancel, cancel := context.WithCancel(ctx)
-	rs, descheduler, client := initDescheduler(t, ctxCancel, initFeatureGates(), internalDeschedulerPolicy, nil, node1, node2, p1, p2)
-	defer cancel()
+			p1 := test.BuildTestPod("p1", 100, 0, node1.Name, test.SetRSOwnerRef)
+			p2 := test.BuildTestPod("p2", 100, 0, node1.Name, test.SetRSOwnerRef)
 
-	var evictedPods []string
-	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, nil, nil))
+			internalDeschedulerPolicy := removePodsViolatingNodeTaintsPolicy()
+			ctxCancel, cancel := context.WithCancel(ctx)
+			_, descheduler, client := initDescheduler(t, ctxCancel, initFeatureGates(), internalDeschedulerPolicy, nil, tc.dryRun, node1, node2, p1, p2)
+			defer cancel()
 
-	var fakeEvictedPods []string
-	descheduler.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
-		return podEvictionReactionTestingFnc(&fakeEvictedPods, nil, nil)
-	}
+			var evictedPods []string
+			client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, nil, nil))
 
-	// a single pod eviction expected
-	klog.Infof("2 pod eviction expected per a descheduling cycle, 2 real evictions in total")
-	if err := descheduler.runDeschedulerLoop(ctx); err != nil {
-		t.Fatalf("Unable to run a descheduling loop: %v", err)
-	}
-	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 2 || len(fakeEvictedPods) != 0 {
-		t.Fatalf("Expected (2,2,0) pods evicted, got (%v, %v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
-	}
+			var fakeEvictedPods []string
+			descheduler.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
+				return podEvictionReactionTestingFnc(&fakeEvictedPods, nil, nil)
+			}
 
-	// a single pod eviction expected
-	klog.Infof("2 pod eviction expected per a descheduling cycle, 4 real evictions in total")
-	if err := descheduler.runDeschedulerLoop(ctx); err != nil {
-		t.Fatalf("Unable to run a descheduling loop: %v", err)
-	}
-	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 4 || len(fakeEvictedPods) != 0 {
-		t.Fatalf("Expected (2,4,0) pods evicted, got (%v, %v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
-	}
-
-	// check the fake client syncing and the right pods evicted
-	klog.Infof("Enabling the dry run mode")
-	rs.DryRun = true
-	evictedPods = []string{}
-
-	klog.Infof("2 pod eviction expected per a descheduling cycle, 2 fake evictions in total")
-	if err := descheduler.runDeschedulerLoop(ctx); err != nil {
-		t.Fatalf("Unable to run a descheduling loop: %v", err)
-	}
-	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 0 || len(fakeEvictedPods) != 2 {
-		t.Fatalf("Expected (2,0,2) pods evicted, got (%v, %v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
-	}
-
-	klog.Infof("2 pod eviction expected per a descheduling cycle, 4 fake evictions in total")
-	if err := descheduler.runDeschedulerLoop(ctx); err != nil {
-		t.Fatalf("Unable to run a descheduling loop: %v", err)
-	}
-	if descheduler.podEvictor.TotalEvicted() != 2 || len(evictedPods) != 0 || len(fakeEvictedPods) != 4 {
-		t.Fatalf("Expected (2,0,4) pods evicted, got (%v, %v, %v) instead", descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
+			for i, cycle := range tc.cycles {
+				if err := descheduler.runDeschedulerLoop(ctx); err != nil {
+					t.Fatalf("Cycle %d: Unable to run a descheduling loop: %v", i+1, err)
+				}
+				if descheduler.podEvictor.TotalEvicted() != cycle.expectedTotalEvicted || len(evictedPods) != cycle.expectedRealEvictions || len(fakeEvictedPods) != cycle.expectedFakeEvictions {
+					t.Fatalf("Cycle %d: Expected (%v,%v,%v) pods evicted, got (%v,%v,%v) instead", i+1, cycle.expectedTotalEvicted, cycle.expectedRealEvictions, cycle.expectedFakeEvictions, descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
+				}
+			}
+		})
 	}
 }
 
@@ -594,7 +598,7 @@ func TestEvictionRequestsCache(t *testing.T) {
 	featureGates.Add(map[featuregate.Feature]featuregate.FeatureSpec{
 		features.EvictionsInBackground: {Default: true, PreRelease: featuregate.Alpha},
 	})
-	_, descheduler, client := initDescheduler(t, ctxCancel, featureGates, internalDeschedulerPolicy, nil, node1, node2, p1, p2, p3, p4)
+	_, descheduler, client := initDescheduler(t, ctxCancel, featureGates, internalDeschedulerPolicy, nil, false, node1, node2, p1, p2, p3, p4)
 	defer cancel()
 
 	var fakeEvictedPods []string
@@ -735,7 +739,7 @@ func TestDeschedulingLimits(t *testing.T) {
 			featureGates.Add(map[featuregate.Feature]featuregate.FeatureSpec{
 				features.EvictionsInBackground: {Default: true, PreRelease: featuregate.Alpha},
 			})
-			_, descheduler, client := initDescheduler(t, ctxCancel, featureGates, tc.policy, nil, node1, node2)
+			_, descheduler, client := initDescheduler(t, ctxCancel, featureGates, tc.policy, nil, false, node1, node2)
 			defer cancel()
 
 			var fakeEvictedPods []string
@@ -936,11 +940,8 @@ func TestNodeLabelSelectorBasedEviction(t *testing.T) {
 			}
 
 			ctxCancel, cancel := context.WithCancel(ctx)
-			rs, deschedulerInstance, client := initDescheduler(t, ctxCancel, initFeatureGates(), policy, nil, node1, node2, node3, node4, p1, p2, p3, p4)
+			_, deschedulerInstance, client := initDescheduler(t, ctxCancel, initFeatureGates(), policy, nil, tc.dryRun, node1, node2, node3, node4, p1, p2, p3, p4)
 			defer cancel()
-
-			// Set dry run mode if specified
-			rs.DryRun = tc.dryRun
 
 			// Verify all pods are created initially
 			pods, err := client.CoreV1().Pods(p1.Namespace).List(ctx, metav1.ListOptions{})
@@ -1063,6 +1064,7 @@ func TestLoadAwareDescheduling(t *testing.T) {
 		initFeatureGates(),
 		policy,
 		metricsClientset,
+		false,
 		node1, node2, p1, p2, p3, p4, p5)
 	defer cancel()
 
