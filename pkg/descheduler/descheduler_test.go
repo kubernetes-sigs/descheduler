@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	apiversion "k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/component-base/featuregate"
@@ -531,20 +533,59 @@ func TestPodEvictorReset(t *testing.T) {
 			client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, nil, nil))
 
 			var fakeEvictedPods []string
-			descheduler.kubeClientSandbox.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
-				return podEvictionReactionTestingFnc(&fakeEvictedPods, nil, nil)
-			}
-
 			for i, cycle := range tc.cycles {
-				if err := descheduler.runDeschedulerLoop(ctx); err != nil {
-					t.Fatalf("Cycle %d: Unable to run a descheduling loop: %v", i+1, err)
-				}
+				evictedPodNames := runDeschedulerLoopAndGetEvictedPods(ctx, t, descheduler, tc.dryRun)
+				fakeEvictedPods = append(fakeEvictedPods, evictedPodNames...)
+
 				if descheduler.podEvictor.TotalEvicted() != cycle.expectedTotalEvicted || len(evictedPods) != cycle.expectedRealEvictions || len(fakeEvictedPods) != cycle.expectedFakeEvictions {
 					t.Fatalf("Cycle %d: Expected (%v,%v,%v) pods evicted, got (%v,%v,%v) instead", i+1, cycle.expectedTotalEvicted, cycle.expectedRealEvictions, cycle.expectedFakeEvictions, descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
 				}
 			}
 		})
 	}
+}
+
+// runDeschedulerLoopAndGetEvictedPods is a temporary duplication from runDeschedulerLoop
+// that will be removed after kubeClientSandbox gets migrated to event handlers.
+func runDeschedulerLoopAndGetEvictedPods(ctx context.Context, t *testing.T, d *descheduler, dryRun bool) []string {
+	var clientSet clientset.Interface
+	if dryRun {
+		if err := d.kubeClientSandbox.buildSandbox(); err != nil {
+			t.Fatalf("Failed to build sandbox: %v", err)
+		}
+
+		getPodsAssignedToNode, err := setupInformerIndexers(d.kubeClientSandbox.fakeSharedInformerFactory(), d.deschedulerPolicy)
+		if err != nil {
+			t.Fatalf("Failed to setup indexers: %v", err)
+		}
+		d.getPodsAssignedToNode = getPodsAssignedToNode
+
+		fakeCtx, cncl := context.WithCancel(context.TODO())
+		defer cncl()
+		d.kubeClientSandbox.fakeSharedInformerFactory().Start(fakeCtx.Done())
+		d.kubeClientSandbox.fakeSharedInformerFactory().WaitForCacheSync(fakeCtx.Done())
+
+		clientSet = d.kubeClientSandbox.fakeClient()
+		d.sharedInformerFactory = d.kubeClientSandbox.fakeSharedInformerFactory()
+	} else {
+		clientSet = d.rs.Client
+	}
+
+	d.podEvictor.SetClient(clientSet)
+	d.podEvictor.ResetCounters()
+
+	d.runProfiles(ctx, clientSet)
+
+	var evictedPodNames []string
+	if dryRun {
+		evictedPodsFromCache := d.kubeClientSandbox.evictedPodsCache.list()
+		for _, pod := range evictedPodsFromCache {
+			evictedPodNames = append(evictedPodNames, pod.Name)
+		}
+		d.kubeClientSandbox.reset()
+	}
+
+	return evictedPodNames
 }
 
 func checkTotals(t *testing.T, ctx context.Context, descheduler *descheduler, totalEvictionRequests, totalEvicted uint) {
@@ -602,7 +643,7 @@ func TestEvictionRequestsCache(t *testing.T) {
 	defer cancel()
 
 	var fakeEvictedPods []string
-	descheduler.kubeClientSandbox.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
+	descheduler.kubeClientSandbox.podEvictionReactionFnc = func(*fakeclientset.Clientset, *evictedPodsCache) func(action core.Action) (bool, runtime.Object, error) {
 		return podEvictionReactionTestingFnc(&fakeEvictedPods, nil, podEvictionError)
 	}
 
@@ -743,7 +784,7 @@ func TestDeschedulingLimits(t *testing.T) {
 			defer cancel()
 
 			var fakeEvictedPods []string
-			descheduler.kubeClientSandbox.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
+			descheduler.kubeClientSandbox.podEvictionReactionFnc = func(*fakeclientset.Clientset, *evictedPodsCache) func(action core.Action) (bool, runtime.Object, error) {
 				return podEvictionReactionTestingFnc(&fakeEvictedPods, nil, podEvictionError)
 			}
 
@@ -955,15 +996,11 @@ func TestNodeLabelSelectorBasedEviction(t *testing.T) {
 			var evictedPods []string
 			if !tc.dryRun {
 				client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, nil, nil))
-			} else {
-				deschedulerInstance.kubeClientSandbox.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
-					return podEvictionReactionTestingFnc(&evictedPods, nil, nil)
-				}
 			}
 
-			// Run descheduler
-			if err := deschedulerInstance.runDeschedulerLoop(ctx); err != nil {
-				t.Fatalf("Unable to run descheduler loop: %v", err)
+			evictedPodNames := runDeschedulerLoopAndGetEvictedPods(ctx, t, deschedulerInstance, tc.dryRun)
+			if tc.dryRun {
+				evictedPods = evictedPodNames
 			}
 
 			// Collect which nodes had pods evicted from them
@@ -1081,4 +1118,376 @@ func TestLoadAwareDescheduling(t *testing.T) {
 		t.Fatalf("Expected %v evictions in total, got %v instead", 2, totalEs)
 	}
 	t.Logf("Total evictions: %v", totalEs)
+}
+
+func TestKubeClientSandboxReset(t *testing.T) {
+	ctx := context.Background()
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, test.SetRSOwnerRef)
+	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, test.SetRSOwnerRef)
+
+	client := fakeclientset.NewSimpleClientset(node1, p1, p2)
+	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(client, 0)
+
+	// Explicitly get the informers to ensure they're registered
+	_ = sharedInformerFactory.Core().V1().Pods().Informer()
+	_ = sharedInformerFactory.Core().V1().Nodes().Informer()
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	sandbox, err := newKubeClientSandbox(client, sharedInformerFactory,
+		v1.SchemeGroupVersion.WithResource("pods"),
+		v1.SchemeGroupVersion.WithResource("nodes"),
+	)
+	if err != nil {
+		t.Fatalf("Failed to create kubeClientSandbox: %v", err)
+	}
+
+	if err := sandbox.buildSandbox(); err != nil {
+		t.Fatalf("Failed to build sandbox: %v", err)
+	}
+
+	eviction1 := &policy.Eviction{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      p1.Name,
+			Namespace: p1.Namespace,
+		},
+	}
+	eviction2 := &policy.Eviction{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      p2.Name,
+			Namespace: p2.Namespace,
+		},
+	}
+
+	if err := sandbox.fakeClient().CoreV1().Pods(p1.Namespace).EvictV1(context.TODO(), eviction1); err != nil {
+		t.Fatalf("Error evicting p1: %v", err)
+	}
+	if err := sandbox.fakeClient().CoreV1().Pods(p2.Namespace).EvictV1(context.TODO(), eviction2); err != nil {
+		t.Fatalf("Error evicting p2: %v", err)
+	}
+
+	evictedPods := sandbox.evictedPodsCache.list()
+	if len(evictedPods) != 2 {
+		t.Fatalf("Expected 2 evicted pods in cache, but got %d", len(evictedPods))
+	}
+	t.Logf("Evicted pods in cache before reset: %d", len(evictedPods))
+
+	for _, evictedPod := range evictedPods {
+		if evictedPod.Namespace == "" || evictedPod.Name == "" || evictedPod.UID == "" {
+			t.Errorf("Evicted pod has empty fields: namespace=%s, name=%s, uid=%s", evictedPod.Namespace, evictedPod.Name, evictedPod.UID)
+		}
+		t.Logf("Evicted pod: %s/%s (UID: %s)", evictedPod.Namespace, evictedPod.Name, evictedPod.UID)
+	}
+
+	sandbox.reset()
+
+	evictedPodsAfterReset := sandbox.evictedPodsCache.list()
+	if len(evictedPodsAfterReset) != 0 {
+		t.Fatalf("Expected cache to be empty after reset, but found %d pods", len(evictedPodsAfterReset))
+	}
+	t.Logf("Successfully verified cache is empty after reset")
+}
+
+func TestEvictedPodsCache(t *testing.T) {
+	t.Run("add single pod", func(t *testing.T) {
+		const (
+			podName      = "pod1"
+			podNamespace = "default"
+			podUID       = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+		)
+		cache := newEvictedPodsCache()
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      podName,
+				Namespace: podNamespace,
+				UID:       podUID,
+			},
+		}
+
+		cache.add(pod)
+
+		pods := cache.list()
+		if len(pods) != 1 {
+			t.Fatalf("Expected 1 pod in cache, got %d", len(pods))
+		}
+		if pods[0].Name != podName || pods[0].Namespace != podNamespace || pods[0].UID != podUID {
+			t.Errorf("Pod data mismatch: got name=%s, namespace=%s, uid=%s", pods[0].Name, pods[0].Namespace, pods[0].UID)
+		}
+	})
+
+	t.Run("add multiple pods", func(t *testing.T) {
+		cache := newEvictedPodsCache()
+		pods := []*v1.Pod{
+			{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default", UID: "11111111-1111-1111-1111-111111111111"}},
+			{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "kube-system", UID: "22222222-2222-2222-2222-222222222222"}},
+			{ObjectMeta: metav1.ObjectMeta{Name: "pod3", Namespace: "default", UID: "33333333-3333-3333-3333-333333333333"}},
+		}
+
+		for _, pod := range pods {
+			cache.add(pod)
+		}
+
+		cachedPods := cache.list()
+		if len(cachedPods) != 3 {
+			t.Fatalf("Expected 3 pods in cache, got %d", len(cachedPods))
+		}
+
+		podMap := make(map[string]*evictedPodInfo)
+		for _, cachedPod := range cachedPods {
+			podMap[cachedPod.UID] = cachedPod
+		}
+
+		for _, pod := range pods {
+			cached, ok := podMap[string(pod.UID)]
+			if !ok {
+				t.Errorf("Pod with UID %s not found in cache", pod.UID)
+				continue
+			}
+			if cached.Name != pod.Name || cached.Namespace != pod.Namespace {
+				t.Errorf("Pod data mismatch for UID %s: got name=%s, namespace=%s", pod.UID, cached.Name, cached.Namespace)
+			}
+		}
+	})
+
+	t.Run("add duplicate pod updates entry", func(t *testing.T) {
+		const (
+			duplicateUID   = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+			updatedPodName = "pod1-new"
+			updatedPodNS   = "kube-system"
+		)
+		cache := newEvictedPodsCache()
+		pod1 := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pod1",
+				Namespace: "default",
+				UID:       duplicateUID,
+			},
+		}
+		pod2 := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      updatedPodName,
+				Namespace: updatedPodNS,
+				UID:       duplicateUID,
+			},
+		}
+
+		cache.add(pod1)
+		cache.add(pod2)
+
+		pods := cache.list()
+		if len(pods) != 1 {
+			t.Fatalf("Expected 1 pod in cache (duplicates should overwrite), got %d", len(pods))
+		}
+		if pods[0].Name != updatedPodName || pods[0].Namespace != updatedPodNS {
+			t.Errorf("Expected pod2 data, got name=%s, namespace=%s", pods[0].Name, pods[0].Namespace)
+		}
+	})
+
+	t.Run("list returns empty array for empty cache", func(t *testing.T) {
+		cache := newEvictedPodsCache()
+		pods := cache.list()
+		if pods == nil {
+			t.Fatal("Expected non-nil slice from list()")
+		}
+		if len(pods) != 0 {
+			t.Fatalf("Expected empty list, got %d pods", len(pods))
+		}
+	})
+
+	t.Run("list returns copies not references", func(t *testing.T) {
+		const originalPodName = "pod1"
+		cache := newEvictedPodsCache()
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      originalPodName,
+				Namespace: "default",
+				UID:       "12345678-1234-1234-1234-123456789abc",
+			},
+		}
+		cache.add(pod)
+
+		pods1 := cache.list()
+		pods2 := cache.list()
+
+		if len(pods1) != 1 || len(pods2) != 1 {
+			t.Fatalf("Expected 1 pod in both lists")
+		}
+
+		pods1[0].Name = "modified"
+
+		if pods2[0].Name == "modified" {
+			t.Error("Modifying list result should not affect other list results (should be copies)")
+		}
+
+		pods3 := cache.list()
+		if pods3[0].Name != originalPodName {
+			t.Error("Cache data was modified, list() should return copies")
+		}
+	})
+
+	t.Run("clear empties the cache", func(t *testing.T) {
+		cache := newEvictedPodsCache()
+		cache.add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default", UID: "aaaa0000-0000-0000-0000-000000000001"}})
+		cache.add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "kube-system", UID: "bbbb0000-0000-0000-0000-000000000002"}})
+
+		if len(cache.list()) != 2 {
+			t.Fatal("Expected 2 pods before clear")
+		}
+
+		cache.clear()
+
+		pods := cache.list()
+		if len(pods) != 0 {
+			t.Fatalf("Expected empty cache after clear, got %d pods", len(pods))
+		}
+	})
+
+	t.Run("clear on empty cache is safe", func(t *testing.T) {
+		cache := newEvictedPodsCache()
+		cache.clear()
+
+		pods := cache.list()
+		if len(pods) != 0 {
+			t.Fatalf("Expected empty cache, got %d pods", len(pods))
+		}
+	})
+
+	t.Run("add after clear works correctly", func(t *testing.T) {
+		cache := newEvictedPodsCache()
+		cache.add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "default", UID: "00000001-0001-0001-0001-000000000001"}})
+		cache.clear()
+		cache.add(&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod2", Namespace: "kube-system", UID: "00000002-0002-0002-0002-000000000002"}})
+
+		pods := cache.list()
+		if len(pods) != 1 {
+			t.Fatalf("Expected 1 pod after clear and add, got %d", len(pods))
+		}
+		if pods[0].Name != "pod2" {
+			t.Errorf("Expected pod2, got %s", pods[0].Name)
+		}
+	})
+}
+
+func TestPodEvictionReactionFncErrorHandling(t *testing.T) {
+	podsGVR := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
+
+	testCases := []struct {
+		name             string
+		setupFnc         func(*fakeclientset.Clientset) (name, namespace string)
+		expectHandled    bool
+		expectError      bool
+		errorContains    string
+		expectedCacheLen int
+	}{
+		{
+			name: "handles pod eviction successfully and adds to cache",
+			setupFnc: func(fakeClient *fakeclientset.Clientset) (string, string) {
+				pod := test.BuildTestPod("pod1", 100, 0, "node1", test.SetRSOwnerRef)
+				err := fakeClient.Tracker().Add(pod)
+				if err != nil {
+					t.Fatalf("Failed to add pod: %v", err)
+				}
+				return pod.Name, pod.Namespace
+			},
+			expectHandled:    true,
+			expectError:      false,
+			expectedCacheLen: 1,
+		},
+		{
+			name: "returns false and error when delete fails allowing other reactors to handle",
+			setupFnc: func(fakeClient *fakeclientset.Clientset) (string, string) {
+				pod := test.BuildTestPod("pod1", 100, 0, "node1", test.SetRSOwnerRef)
+				if err := fakeClient.Tracker().Add(pod); err != nil {
+					t.Fatalf("Failed to add pod: %v", err)
+				}
+				if err := fakeClient.Tracker().Delete(podsGVR, pod.Namespace, pod.Name); err != nil {
+					t.Fatalf("Failed to pre-delete pod: %v", err)
+				}
+				return pod.Name, pod.Namespace
+			},
+			expectHandled:    false,
+			expectError:      true,
+			errorContains:    "unable to delete pod",
+			expectedCacheLen: 0,
+		},
+		{
+			name: "returns error when pod doesn't exist in tracker from the start",
+			setupFnc: func(fakeClient *fakeclientset.Clientset) (string, string) {
+				// Don't add the pod to the tracker at all
+				return "nonexistent-pod", "default"
+			},
+			expectHandled:    false,
+			expectError:      true,
+			errorContains:    "unable to delete pod",
+			expectedCacheLen: 0,
+		},
+		{
+			name: "returns error when object is not a pod",
+			setupFnc: func(fakeClient *fakeclientset.Clientset) (string, string) {
+				configMap := &v1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-config",
+						Namespace: "default",
+					},
+				}
+				if err := fakeClient.Tracker().Create(podsGVR, configMap, "default"); err != nil {
+					t.Fatalf("Failed to add ConfigMap to pods resource: %v", err)
+				}
+				return configMap.Name, configMap.Namespace
+			},
+			expectHandled:    false,
+			expectError:      true,
+			errorContains:    "unable to convert object to *v1.Pod",
+			expectedCacheLen: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeClient := fakeclientset.NewSimpleClientset()
+			cache := newEvictedPodsCache()
+
+			name, namespace := tc.setupFnc(fakeClient)
+
+			reactionFnc := podEvictionReactionFnc(fakeClient, cache)
+
+			handled, _, err := reactionFnc(core.NewCreateSubresourceAction(
+				podsGVR,
+				name,
+				"eviction",
+				namespace,
+				&policy.Eviction{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      name,
+						Namespace: namespace,
+					},
+				},
+			))
+
+			if handled != tc.expectHandled {
+				t.Errorf("Expected handled=%v, got %v", tc.expectHandled, handled)
+			}
+
+			if tc.expectError {
+				if err == nil {
+					t.Fatal("Expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tc.errorContains) {
+					t.Errorf("Expected error message to contain '%s', got: %v", tc.errorContains, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got: %v", err)
+				}
+			}
+
+			if len(cache.list()) != tc.expectedCacheLen {
+				t.Errorf("Expected %d pods in cache, got %d", tc.expectedCacheLen, len(cache.list()))
+			}
+		})
+	}
 }

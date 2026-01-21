@@ -22,6 +22,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	promapi "github.com/prometheus/client_golang/api"
@@ -84,6 +85,52 @@ type profileRunner struct {
 	descheduleEPs, balanceEPs eprunner
 }
 
+// evictedPodInfo stores identifying information about a pod that was evicted during dry-run mode
+type evictedPodInfo struct {
+	Namespace string
+	Name      string
+	UID       string
+}
+
+// evictedPodsCache is a thread-safe cache for tracking pods evicted during dry-run mode
+type evictedPodsCache struct {
+	sync.RWMutex
+	pods map[string]*evictedPodInfo
+}
+
+func newEvictedPodsCache() *evictedPodsCache {
+	return &evictedPodsCache{
+		pods: make(map[string]*evictedPodInfo),
+	}
+}
+
+func (c *evictedPodsCache) add(pod *v1.Pod) {
+	c.Lock()
+	defer c.Unlock()
+	c.pods[string(pod.UID)] = &evictedPodInfo{
+		Namespace: pod.Namespace,
+		Name:      pod.Name,
+		UID:       string(pod.UID),
+	}
+}
+
+func (c *evictedPodsCache) list() []*evictedPodInfo {
+	c.RLock()
+	defer c.RUnlock()
+	pods := make([]*evictedPodInfo, 0, len(c.pods))
+	for _, pod := range c.pods {
+		podCopy := *pod
+		pods = append(pods, &podCopy)
+	}
+	return pods
+}
+
+func (c *evictedPodsCache) clear() {
+	c.Lock()
+	defer c.Unlock()
+	c.pods = make(map[string]*evictedPodInfo)
+}
+
 type descheduler struct {
 	rs                                *options.DeschedulerServer
 	kubeClientSandbox                 *kubeClientSandbox
@@ -109,7 +156,8 @@ type kubeClientSandbox struct {
 	fakeKubeClient         *fakeclientset.Clientset
 	fakeFactory            informers.SharedInformerFactory
 	resourceToInformer     map[schema.GroupVersionResource]informers.GenericInformer
-	podEvictionReactionFnc func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error)
+	evictedPodsCache       *evictedPodsCache
+	podEvictionReactionFnc func(*fakeclientset.Clientset, *evictedPodsCache) func(action core.Action) (bool, runtime.Object, error)
 }
 
 func newKubeClientSandbox(client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory, resources ...schema.GroupVersionResource) (*kubeClientSandbox, error) {
@@ -117,6 +165,7 @@ func newKubeClientSandbox(client clientset.Interface, sharedInformerFactory info
 		client:                 client,
 		sharedInformerFactory:  sharedInformerFactory,
 		resourceToInformer:     make(map[schema.GroupVersionResource]informers.GenericInformer),
+		evictedPodsCache:       newEvictedPodsCache(),
 		podEvictionReactionFnc: podEvictionReactionFnc,
 	}
 
@@ -134,7 +183,7 @@ func newKubeClientSandbox(client clientset.Interface, sharedInformerFactory info
 func (sandbox *kubeClientSandbox) buildSandbox() error {
 	sandbox.fakeKubeClient = fakeclientset.NewSimpleClientset()
 	// simulate a pod eviction by deleting a pod
-	sandbox.fakeKubeClient.PrependReactor("create", "pods", sandbox.podEvictionReactionFnc(sandbox.fakeKubeClient))
+	sandbox.fakeKubeClient.PrependReactor("create", "pods", sandbox.podEvictionReactionFnc(sandbox.fakeKubeClient, sandbox.evictedPodsCache))
 	sandbox.fakeFactory = informers.NewSharedInformerFactory(sandbox.fakeKubeClient, 0)
 
 	for resource, informer := range sandbox.resourceToInformer {
@@ -164,6 +213,10 @@ func (sandbox *kubeClientSandbox) fakeClient() *fakeclientset.Clientset {
 
 func (sandbox *kubeClientSandbox) fakeSharedInformerFactory() informers.SharedInformerFactory {
 	return sandbox.fakeFactory
+}
+
+func (sandbox *kubeClientSandbox) reset() {
+	sandbox.evictedPodsCache.clear()
 }
 
 func nodeSelectorFromPolicy(deschedulerPolicy *api.DeschedulerPolicy) (labels.Selector, error) {
@@ -453,6 +506,10 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context) error {
 
 	d.runProfiles(ctx, client)
 
+	if d.rs.DryRun {
+		d.kubeClientSandbox.reset()
+	}
+
 	klog.V(1).InfoS("Number of evictions/requests", "totalEvicted", d.podEvictor.TotalEvicted(), "evictionRequests", d.podEvictor.TotalEvictionRequests())
 
 	return nil
@@ -627,7 +684,7 @@ func validateVersionCompatibility(discovery discovery.DiscoveryInterface, desche
 	return nil
 }
 
-func podEvictionReactionFnc(fakeClient *fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
+func podEvictionReactionFnc(fakeClient *fakeclientset.Clientset, evictedCache *evictedPodsCache) func(action core.Action) (bool, runtime.Object, error) {
 	return func(action core.Action) (bool, runtime.Object, error) {
 		if action.GetSubresource() == "eviction" {
 			createAct, matched := action.(core.CreateActionImpl)
@@ -637,6 +694,16 @@ func podEvictionReactionFnc(fakeClient *fakeclientset.Clientset) func(action cor
 			eviction, matched := createAct.Object.(*policy.Eviction)
 			if !matched {
 				return false, nil, fmt.Errorf("unable to convert action object into *policy.Eviction")
+			}
+			podObj, err := fakeClient.Tracker().Get(action.GetResource(), eviction.GetNamespace(), eviction.GetName())
+			if err == nil {
+				if pod, ok := podObj.(*v1.Pod); ok {
+					evictedCache.add(pod)
+				} else {
+					return false, nil, fmt.Errorf("unable to convert object to *v1.Pod for %v/%v", eviction.GetNamespace(), eviction.GetName())
+				}
+			} else if !apierrors.IsNotFound(err) {
+				return false, nil, fmt.Errorf("unable to get pod %v/%v: %v", eviction.GetNamespace(), eviction.GetName(), err)
 			}
 			if err := fakeClient.Tracker().Delete(action.GetResource(), eviction.GetNamespace(), eviction.GetName()); err != nil {
 				return false, nil, fmt.Errorf("unable to delete pod %v/%v: %v", eviction.GetNamespace(), eviction.GetName(), err)
