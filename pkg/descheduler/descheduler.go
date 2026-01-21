@@ -182,6 +182,30 @@ func addNodeSelectorIndexer(sharedInformerFactory informers.SharedInformerFactor
 	return nodeutil.AddNodeSelectorIndexer(sharedInformerFactory.Core().V1().Nodes().Informer(), indexerNodeSelectorGlobal, nodeSelector)
 }
 
+func setupInformerIndexers(sharedInformerFactory informers.SharedInformerFactory, deschedulerPolicy *api.DeschedulerPolicy) (podutil.GetPodsAssignedToNodeFunc, error) {
+	// create a new instance of the shared informer factory from the cached client
+	// register the pod informer, otherwise it will not get running
+	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(sharedInformerFactory.Core().V1().Pods().Informer())
+	if err != nil {
+		return nil, fmt.Errorf("build get pods assigned to node function error: %v", err)
+	}
+
+	// TODO(ingvagabund): copy paste all relevant indexers from the real client to the fake one
+	// TODO(ingvagabund): register one indexer per each profile. Respect the precedence of no profile-level node selector is specified.
+	//                    Also, keep a cache of node label selectors to detect duplicates to avoid creating an extra informer.
+
+	nodeSelector, err := nodeSelectorFromPolicy(deschedulerPolicy)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := addNodeSelectorIndexer(sharedInformerFactory, nodeSelector); err != nil {
+		return nil, err
+	}
+
+	return getPodsAssignedToNode, nil
+}
+
 func metricsProviderListToMap(providersList []api.MetricsProvider) map[api.MetricsSource]*api.MetricsProvider {
 	providersMap := make(map[api.MetricsSource]*api.MetricsProvider)
 	for _, provider := range providersList {
@@ -406,25 +430,11 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context) error {
 			return err
 		}
 
-		// create a new instance of the shared informer factor from the cached client
-		// register the pod informer, otherwise it will not get running
-		d.getPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(d.kubeClientSandbox.fakeSharedInformerFactory().Core().V1().Pods().Informer())
-		if err != nil {
-			return fmt.Errorf("build get pods assigned to node function error: %v", err)
-		}
-
-		// TODO(ingvagabund): copy paste all relevant indexers from the real client to the fake one
-		// TODO(ingvagabund): register one indexer per each profile. Respect the precedence of no profile-level node selector is specified.
-		//                    Also, keep a cache of node label selectors to detect duplicates to avoid creating an extra informer.
-
-		nodeSelector, err := nodeSelectorFromPolicy(d.deschedulerPolicy)
+		getPodsAssignedToNode, err := setupInformerIndexers(d.kubeClientSandbox.fakeSharedInformerFactory(), d.deschedulerPolicy)
 		if err != nil {
 			return err
 		}
-
-		if err := addNodeSelectorIndexer(d.kubeClientSandbox.fakeSharedInformerFactory(), nodeSelector); err != nil {
-			return err
-		}
+		d.getPodsAssignedToNode = getPodsAssignedToNode
 
 		fakeCtx, cncl := context.WithCancel(context.TODO())
 		defer cncl()
