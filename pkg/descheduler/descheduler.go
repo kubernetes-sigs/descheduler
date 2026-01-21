@@ -166,6 +166,22 @@ func (sandbox *kubeClientSandbox) fakeSharedInformerFactory() informers.SharedIn
 	return sandbox.fakeFactory
 }
 
+func nodeSelectorFromPolicy(deschedulerPolicy *api.DeschedulerPolicy) (labels.Selector, error) {
+	nodeSelector := labels.Everything()
+	if deschedulerPolicy.NodeSelector != nil {
+		sel, err := labels.Parse(*deschedulerPolicy.NodeSelector)
+		if err != nil {
+			return nil, err
+		}
+		nodeSelector = sel
+	}
+	return nodeSelector, nil
+}
+
+func addNodeSelectorIndexer(sharedInformerFactory informers.SharedInformerFactory, nodeSelector labels.Selector) error {
+	return nodeutil.AddNodeSelectorIndexer(sharedInformerFactory.Core().V1().Nodes().Informer(), indexerNodeSelectorGlobal, nodeSelector)
+}
+
 func metricsProviderListToMap(providersList []api.MetricsProvider) map[api.MetricsSource]*api.MetricsProvider {
 	providersMap := make(map[api.MetricsSource]*api.MetricsProvider)
 	for _, provider := range providersList {
@@ -229,16 +245,12 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 		metricsProviders:      metricsProviderListToMap(deschedulerPolicy.MetricsProviders),
 	}
 
-	nodeSelector := labels.Everything()
-	if deschedulerPolicy.NodeSelector != nil {
-		sel, err := labels.Parse(*deschedulerPolicy.NodeSelector)
-		if err != nil {
-			return nil, err
-		}
-		nodeSelector = sel
+	nodeSelector, err := nodeSelectorFromPolicy(deschedulerPolicy)
+	if err != nil {
+		return nil, err
 	}
 
-	if err := nodeutil.AddNodeSelectorIndexer(sharedInformerFactory.Core().V1().Nodes().Informer(), indexerNodeSelectorGlobal, nodeSelector); err != nil {
+	if err := addNodeSelectorIndexer(sharedInformerFactory, nodeSelector); err != nil {
 		return nil, err
 	}
 
@@ -401,19 +413,16 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context) error {
 			return fmt.Errorf("build get pods assigned to node function error: %v", err)
 		}
 
-		nodeSelector := labels.Everything()
-		if d.deschedulerPolicy.NodeSelector != nil {
-			sel, err := labels.Parse(*d.deschedulerPolicy.NodeSelector)
-			if err != nil {
-				return err
-			}
-			nodeSelector = sel
-		}
 		// TODO(ingvagabund): copy paste all relevant indexers from the real client to the fake one
 		// TODO(ingvagabund): register one indexer per each profile. Respect the precedence of no profile-level node selector is specified.
 		//                    Also, keep a cache of node label selectors to detect duplicates to avoid creating an extra informer.
 
-		if err := nodeutil.AddNodeSelectorIndexer(d.kubeClientSandbox.fakeSharedInformerFactory().Core().V1().Nodes().Informer(), indexerNodeSelectorGlobal, nodeSelector); err != nil {
+		nodeSelector, err := nodeSelectorFromPolicy(d.deschedulerPolicy)
+		if err != nil {
+			return err
+		}
+
+		if err := addNodeSelectorIndexer(d.kubeClientSandbox.fakeSharedInformerFactory(), nodeSelector); err != nil {
 			return err
 		}
 
