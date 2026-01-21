@@ -93,7 +93,6 @@ type descheduler struct {
 	deschedulerPolicy                 *api.DeschedulerPolicy
 	eventRecorder                     events.EventRecorder
 	podEvictor                        *evictions.PodEvictor
-	podEvictionReactionFnc            func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error)
 	metricsCollector                  *metricscollector.MetricsCollector
 	prometheusClient                  promapi.Client
 	previousPrometheusClientTransport *http.Transport
@@ -105,18 +104,20 @@ type descheduler struct {
 // kubeClientSandbox creates a sandbox environment with a fake client and informer factory
 // that mirrors resources from a real client, useful for dry-run testing scenarios
 type kubeClientSandbox struct {
-	client                clientset.Interface
-	sharedInformerFactory informers.SharedInformerFactory
-	fakeKubeClient        *fakeclientset.Clientset
-	fakeFactory           informers.SharedInformerFactory
-	resourceToInformer    map[schema.GroupVersionResource]informers.GenericInformer
+	client                 clientset.Interface
+	sharedInformerFactory  informers.SharedInformerFactory
+	fakeKubeClient         *fakeclientset.Clientset
+	fakeFactory            informers.SharedInformerFactory
+	resourceToInformer     map[schema.GroupVersionResource]informers.GenericInformer
+	podEvictionReactionFnc func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error)
 }
 
 func newKubeClientSandbox(client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory, resources ...schema.GroupVersionResource) (*kubeClientSandbox, error) {
 	sandbox := &kubeClientSandbox{
-		client:                client,
-		sharedInformerFactory: sharedInformerFactory,
-		resourceToInformer:    make(map[schema.GroupVersionResource]informers.GenericInformer),
+		client:                 client,
+		sharedInformerFactory:  sharedInformerFactory,
+		resourceToInformer:     make(map[schema.GroupVersionResource]informers.GenericInformer),
+		podEvictionReactionFnc: podEvictionReactionFnc,
 	}
 
 	for _, resource := range resources {
@@ -132,6 +133,8 @@ func newKubeClientSandbox(client clientset.Interface, sharedInformerFactory info
 
 func (sandbox *kubeClientSandbox) buildSandbox() error {
 	sandbox.fakeKubeClient = fakeclientset.NewSimpleClientset()
+	// simulate a pod eviction by deleting a pod
+	sandbox.fakeKubeClient.PrependReactor("create", "pods", sandbox.podEvictionReactionFnc(sandbox.fakeKubeClient))
 	sandbox.fakeFactory = informers.NewSharedInformerFactory(sandbox.fakeKubeClient, 0)
 
 	for resource, informer := range sandbox.resourceToInformer {
@@ -214,17 +217,16 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 	}
 
 	desch := &descheduler{
-		rs:                     rs,
-		kubeClientSandbox:      kubeClientSandbox,
-		getPodsAssignedToNode:  getPodsAssignedToNode,
-		sharedInformerFactory:  sharedInformerFactory,
-		deschedulerPolicy:      deschedulerPolicy,
-		eventRecorder:          eventRecorder,
-		podEvictor:             podEvictor,
-		podEvictionReactionFnc: podEvictionReactionFnc,
-		prometheusClient:       rs.PrometheusClient,
-		queue:                  workqueue.NewRateLimitingQueueWithConfig(workqueue.DefaultControllerRateLimiter(), workqueue.RateLimitingQueueConfig{Name: "descheduler"}),
-		metricsProviders:       metricsProviderListToMap(deschedulerPolicy.MetricsProviders),
+		rs:                    rs,
+		kubeClientSandbox:     kubeClientSandbox,
+		getPodsAssignedToNode: getPodsAssignedToNode,
+		sharedInformerFactory: sharedInformerFactory,
+		deschedulerPolicy:     deschedulerPolicy,
+		eventRecorder:         eventRecorder,
+		podEvictor:            podEvictor,
+		prometheusClient:      rs.PrometheusClient,
+		queue:                 workqueue.NewRateLimitingQueueWithConfig(workqueue.DefaultControllerRateLimiter(), workqueue.RateLimitingQueueConfig{Name: "descheduler"}),
+		metricsProviders:      metricsProviderListToMap(deschedulerPolicy.MetricsProviders),
 	}
 
 	nodeSelector := labels.Everything()
@@ -392,15 +394,9 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context) error {
 			return err
 		}
 
-		fakeClient := d.kubeClientSandbox.fakeClient()
-		fakeSharedInformerFactory := d.kubeClientSandbox.fakeSharedInformerFactory()
-
-		// simulate a pod eviction by deleting a pod
-		fakeClient.PrependReactor("create", "pods", d.podEvictionReactionFnc(fakeClient))
-
 		// create a new instance of the shared informer factor from the cached client
 		// register the pod informer, otherwise it will not get running
-		d.getPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(fakeSharedInformerFactory.Core().V1().Pods().Informer())
+		d.getPodsAssignedToNode, err = podutil.BuildGetPodsAssignedToNodeFunc(d.kubeClientSandbox.fakeSharedInformerFactory().Core().V1().Pods().Informer())
 		if err != nil {
 			return fmt.Errorf("build get pods assigned to node function error: %v", err)
 		}
@@ -417,17 +413,17 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context) error {
 		// TODO(ingvagabund): register one indexer per each profile. Respect the precedence of no profile-level node selector is specified.
 		//                    Also, keep a cache of node label selectors to detect duplicates to avoid creating an extra informer.
 
-		if err := nodeutil.AddNodeSelectorIndexer(fakeSharedInformerFactory.Core().V1().Nodes().Informer(), indexerNodeSelectorGlobal, nodeSelector); err != nil {
+		if err := nodeutil.AddNodeSelectorIndexer(d.kubeClientSandbox.fakeSharedInformerFactory().Core().V1().Nodes().Informer(), indexerNodeSelectorGlobal, nodeSelector); err != nil {
 			return err
 		}
 
 		fakeCtx, cncl := context.WithCancel(context.TODO())
 		defer cncl()
-		fakeSharedInformerFactory.Start(fakeCtx.Done())
-		fakeSharedInformerFactory.WaitForCacheSync(fakeCtx.Done())
+		d.kubeClientSandbox.fakeSharedInformerFactory().Start(fakeCtx.Done())
+		d.kubeClientSandbox.fakeSharedInformerFactory().WaitForCacheSync(fakeCtx.Done())
 
-		client = fakeClient
-		d.sharedInformerFactory = fakeSharedInformerFactory
+		client = d.kubeClientSandbox.fakeClient()
+		d.sharedInformerFactory = d.kubeClientSandbox.fakeSharedInformerFactory()
 	} else {
 		client = d.rs.Client
 	}

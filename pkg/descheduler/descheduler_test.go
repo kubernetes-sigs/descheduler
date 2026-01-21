@@ -531,7 +531,7 @@ func TestPodEvictorReset(t *testing.T) {
 			client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, nil, nil))
 
 			var fakeEvictedPods []string
-			descheduler.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
+			descheduler.kubeClientSandbox.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
 				return podEvictionReactionTestingFnc(&fakeEvictedPods, nil, nil)
 			}
 
@@ -602,7 +602,7 @@ func TestEvictionRequestsCache(t *testing.T) {
 	defer cancel()
 
 	var fakeEvictedPods []string
-	descheduler.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
+	descheduler.kubeClientSandbox.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
 		return podEvictionReactionTestingFnc(&fakeEvictedPods, nil, podEvictionError)
 	}
 
@@ -743,7 +743,7 @@ func TestDeschedulingLimits(t *testing.T) {
 			defer cancel()
 
 			var fakeEvictedPods []string
-			descheduler.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
+			descheduler.kubeClientSandbox.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
 				return podEvictionReactionTestingFnc(&fakeEvictedPods, nil, podEvictionError)
 			}
 
@@ -956,7 +956,7 @@ func TestNodeLabelSelectorBasedEviction(t *testing.T) {
 			if !tc.dryRun {
 				client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, nil, nil))
 			} else {
-				deschedulerInstance.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
+				deschedulerInstance.kubeClientSandbox.podEvictionReactionFnc = func(*fakeclientset.Clientset) func(action core.Action) (bool, runtime.Object, error) {
 					return podEvictionReactionTestingFnc(&evictedPods, nil, nil)
 				}
 			}
