@@ -160,6 +160,17 @@ type kubeClientSandbox struct {
 	podEvictionReactionFnc func(*fakeclientset.Clientset, *evictedPodsCache) func(action core.Action) (bool, runtime.Object, error)
 }
 
+func newDefaultKubeClientSandbox(client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory) (*kubeClientSandbox, error) {
+	return newKubeClientSandbox(client, sharedInformerFactory,
+		v1.SchemeGroupVersion.WithResource("pods"),
+		v1.SchemeGroupVersion.WithResource("nodes"),
+		v1.SchemeGroupVersion.WithResource("namespaces"),
+		schedulingv1.SchemeGroupVersion.WithResource("priorityclasses"),
+		policyv1.SchemeGroupVersion.WithResource("poddisruptionbudgets"),
+		v1.SchemeGroupVersion.WithResource("persistentvolumeclaims"),
+	)
+}
+
 func newKubeClientSandbox(client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory, resources ...schema.GroupVersionResource) (*kubeClientSandbox, error) {
 	sandbox := &kubeClientSandbox{
 		client:                 client,
@@ -272,14 +283,7 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 
 	// Future work could be to let each plugin declare what type of resources it needs; that way dry runs would stay
 	// consistent with the real runs without having to keep the list here in sync.
-	kubeClientSandbox, err := newKubeClientSandbox(rs.Client, sharedInformerFactory,
-		v1.SchemeGroupVersion.WithResource("pods"),
-		v1.SchemeGroupVersion.WithResource("nodes"),
-		v1.SchemeGroupVersion.WithResource("namespaces"),
-		schedulingv1.SchemeGroupVersion.WithResource("priorityclasses"),
-		policyv1.SchemeGroupVersion.WithResource("poddisruptionbudgets"),
-		v1.SchemeGroupVersion.WithResource("persistentvolumeclaims"),
-	)
+	kubeClientSandbox, err := newDefaultKubeClientSandbox(rs.Client, sharedInformerFactory)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kube client sandbox: %v", err)
 	}
