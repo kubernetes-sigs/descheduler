@@ -36,6 +36,7 @@ import (
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -133,6 +134,7 @@ func (c *evictedPodsCache) clear() {
 
 type descheduler struct {
 	rs                                *options.DeschedulerServer
+	client                            clientset.Interface
 	kubeClientSandbox                 *kubeClientSandbox
 	getPodsAssignedToNode             podutil.GetPodsAssignedToNodeFunc
 	sharedInformerFactory             informers.SharedInformerFactory
@@ -151,8 +153,6 @@ type descheduler struct {
 // kubeClientSandbox creates a sandbox environment with a fake client and informer factory
 // that mirrors resources from a real client, useful for dry-run testing scenarios
 type kubeClientSandbox struct {
-	client                 clientset.Interface
-	sharedInformerFactory  informers.SharedInformerFactory
 	fakeKubeClient         *fakeclientset.Clientset
 	fakeFactory            informers.SharedInformerFactory
 	resourceToInformer     map[schema.GroupVersionResource]informers.GenericInformer
@@ -173,12 +173,15 @@ func newDefaultKubeClientSandbox(client clientset.Interface, sharedInformerFacto
 
 func newKubeClientSandbox(client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory, resources ...schema.GroupVersionResource) (*kubeClientSandbox, error) {
 	sandbox := &kubeClientSandbox{
-		client:                 client,
-		sharedInformerFactory:  sharedInformerFactory,
 		resourceToInformer:     make(map[schema.GroupVersionResource]informers.GenericInformer),
 		evictedPodsCache:       newEvictedPodsCache(),
 		podEvictionReactionFnc: podEvictionReactionFnc,
 	}
+
+	sandbox.fakeKubeClient = fakeclientset.NewSimpleClientset()
+	// simulate a pod eviction by deleting a pod
+	sandbox.fakeKubeClient.PrependReactor("create", "pods", sandbox.podEvictionReactionFnc(sandbox.fakeKubeClient, sandbox.evictedPodsCache))
+	sandbox.fakeFactory = informers.NewSharedInformerFactory(sandbox.fakeKubeClient, 0)
 
 	for _, resource := range resources {
 		informer, err := sharedInformerFactory.ForResource(resource)
@@ -188,33 +191,78 @@ func newKubeClientSandbox(client clientset.Interface, sharedInformerFactory info
 		sandbox.resourceToInformer[resource] = informer
 	}
 
+	// Register event handlers to sync changes from real client to fake client.
+	// These handlers will keep the fake client in sync with ongoing changes.
+	if err := sandbox.registerEventHandlers(); err != nil {
+		return nil, fmt.Errorf("error registering event handlers: %w", err)
+	}
+
 	return sandbox, nil
 }
 
-func (sandbox *kubeClientSandbox) buildSandbox() error {
-	sandbox.fakeKubeClient = fakeclientset.NewSimpleClientset()
-	// simulate a pod eviction by deleting a pod
-	sandbox.fakeKubeClient.PrependReactor("create", "pods", sandbox.podEvictionReactionFnc(sandbox.fakeKubeClient, sandbox.evictedPodsCache))
-	sandbox.fakeFactory = informers.NewSharedInformerFactory(sandbox.fakeKubeClient, 0)
-
+func (sandbox *kubeClientSandbox) registerEventHandlers() error {
 	for resource, informer := range sandbox.resourceToInformer {
+		// Create a local copy to avoid closure capture issue
+		resource := resource
+
 		_, err := sandbox.fakeFactory.ForResource(resource)
 		if err != nil {
-			return fmt.Errorf("error getting resource %s: %w", resource, err)
+			return fmt.Errorf("error getting resource %s for fake factory: %w", resource, err)
 		}
 
-		objects, err := informer.Lister().List(labels.Everything())
+		_, err = informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				runtimeObj, ok := obj.(runtime.Object)
+				if !ok {
+					klog.ErrorS(nil, "object is not a runtime.Object", "resource", resource)
+					return
+				}
+				if err := sandbox.fakeKubeClient.Tracker().Add(runtimeObj); err != nil {
+					if !apierrors.IsAlreadyExists(err) {
+						klog.ErrorS(err, "failed to add object to fake client", "resource", resource)
+					}
+				}
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				runtimeObj, ok := newObj.(runtime.Object)
+				if !ok {
+					klog.ErrorS(nil, "object is not a runtime.Object", "resource", resource)
+					return
+				}
+				metaObj, err := meta.Accessor(runtimeObj)
+				if err != nil {
+					klog.ErrorS(err, "failed to get object metadata", "resource", resource)
+					return
+				}
+				if err := sandbox.fakeKubeClient.Tracker().Update(resource, runtimeObj, metaObj.GetNamespace()); err != nil {
+					klog.ErrorS(err, "failed to update object in fake client", "resource", resource)
+				}
+			},
+			DeleteFunc: func(obj interface{}) {
+				// Handle tombstone case where the object might be wrapped
+				if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+					obj = tombstone.Obj
+				}
+
+				runtimeObj, ok := obj.(runtime.Object)
+				if !ok {
+					klog.ErrorS(nil, "object is not a runtime.Object", "resource", resource)
+					return
+				}
+				metaObj, err := meta.Accessor(runtimeObj)
+				if err != nil {
+					klog.ErrorS(err, "failed to get object metadata", "resource", resource)
+					return
+				}
+				if err := sandbox.fakeKubeClient.Tracker().Delete(resource, metaObj.GetNamespace(), metaObj.GetName()); err != nil {
+					klog.ErrorS(err, "failed to delete object from fake client", "resource", resource)
+				}
+			},
+		})
 		if err != nil {
-			return fmt.Errorf("error listing %s: %w", informer, err)
-		}
-
-		for _, object := range objects {
-			if err := sandbox.fakeKubeClient.Tracker().Add(object); err != nil {
-				return fmt.Errorf("error adding object to tracker: %w", err)
-			}
+			return fmt.Errorf("error adding event handler for resource %s: %w", resource, err)
 		}
 	}
-
 	return nil
 }
 
@@ -228,6 +276,161 @@ func (sandbox *kubeClientSandbox) fakeSharedInformerFactory() informers.SharedIn
 
 func (sandbox *kubeClientSandbox) reset() {
 	sandbox.evictedPodsCache.clear()
+}
+
+// hasObjectInIndexer checks if an object exists in the fake indexer for the specified resource
+func (sandbox *kubeClientSandbox) hasObjectInIndexer(resource schema.GroupVersionResource, namespace, name string) (bool, error) {
+	informer, err := sandbox.fakeFactory.ForResource(resource)
+	if err != nil {
+		return false, fmt.Errorf("error getting informer for resource %s: %w", resource, err)
+	}
+
+	key := cache.MetaObjectToName(&metav1.ObjectMeta{Namespace: namespace, Name: name}).String()
+	_, exists, err := informer.Informer().GetIndexer().GetByKey(key)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+// hasRuntimeObjectInIndexer checks if a runtime.Object exists in the fake indexer by detecting its resource type
+func (sandbox *kubeClientSandbox) hasRuntimeObjectInIndexer(obj runtime.Object) (bool, error) {
+	// Get metadata accessor to extract namespace and name
+	metaObj, err := meta.Accessor(obj)
+	if err != nil {
+		return false, fmt.Errorf("failed to get object metadata: %w", err)
+	}
+
+	// Get the GVK from the object using TypeMeta
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if gvk.Empty() {
+		return false, fmt.Errorf("no GroupVersionKind found for object")
+	}
+
+	// Use the GVK to construct the GVR by pluralizing the kind
+	plural, _ := meta.UnsafeGuessKindToResource(gvk)
+	gvr := schema.GroupVersionResource{
+		Group:    gvk.Group,
+		Version:  gvk.Version,
+		Resource: plural.Resource,
+	}
+
+	return sandbox.hasObjectInIndexer(gvr, metaObj.GetNamespace(), metaObj.GetName())
+}
+
+func waitForPodsCondition(ctx context.Context, pods []*evictedPodInfo, checkFn func(*evictedPodInfo) (bool, error), successMsg string) error {
+	if len(pods) == 0 {
+		return nil
+	}
+
+	err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
+		for _, pod := range pods {
+			satisfied, err := checkFn(pod)
+			if err != nil {
+				return false, err
+			}
+			if !satisfied {
+				return false, nil
+			}
+		}
+		return true, nil
+	})
+	if err != nil {
+		return err
+	}
+
+	klog.V(4).InfoS(successMsg)
+	return nil
+}
+
+// restoreEvictedPods restores pods from the evicted pods cache back to the fake client
+func (sandbox *kubeClientSandbox) restoreEvictedPods(ctx context.Context) error {
+	podInformer, ok := sandbox.resourceToInformer[v1.SchemeGroupVersion.WithResource("pods")]
+	if !ok {
+		return fmt.Errorf("pod informer not found in resourceToInformer")
+	}
+
+	evictedPods := sandbox.evictedPodsCache.list()
+
+	// First wait loop: Check that all evicted pods are cleared from the indexers.
+	// This ensures the eviction has fully propagated through the fake informer's indexer.
+	if err := waitForPodsCondition(ctx, evictedPods, func(pod *evictedPodInfo) (bool, error) {
+		exists, err := sandbox.hasObjectInIndexer(v1.SchemeGroupVersion.WithResource("pods"), pod.Namespace, pod.Name)
+		if err != nil {
+			klog.V(4).InfoS("Error checking indexer for pod", "namespace", pod.Namespace, "name", pod.Name, "error", err)
+			return false, nil
+		}
+		if exists {
+			klog.V(4).InfoS("Pod still exists in fake indexer, waiting", "namespace", pod.Namespace, "name", pod.Name)
+			return false, nil
+		}
+		klog.V(4).InfoS("Pod no longer in fake indexer", "namespace", pod.Namespace, "name", pod.Name)
+		return true, nil
+	}, "All evicted pods removed from fake indexer"); err != nil {
+		return fmt.Errorf("timeout waiting for evicted pods to be removed from fake indexer: %w", err)
+	}
+
+	var restoredPods []*evictedPodInfo
+	for _, evictedPodInfo := range sandbox.evictedPodsCache.list() {
+		obj, err := podInformer.Lister().ByNamespace(evictedPodInfo.Namespace).Get(evictedPodInfo.Name)
+		if err != nil {
+			klog.V(3).InfoS("Pod not found in real client, skipping restoration", "namespace", evictedPodInfo.Namespace, "name", evictedPodInfo.Name, "error", err)
+			continue
+		}
+
+		pod, ok := obj.(*v1.Pod)
+		if !ok {
+			klog.ErrorS(nil, "Object is not a pod", "namespace", evictedPodInfo.Namespace, "name", evictedPodInfo.Name)
+			continue
+		}
+
+		if string(pod.UID) != evictedPodInfo.UID {
+			klog.V(3).InfoS("Pod UID mismatch, skipping restoration", "namespace", evictedPodInfo.Namespace, "name", evictedPodInfo.Name, "expectedUID", evictedPodInfo.UID, "actualUID", string(pod.UID))
+			continue
+		}
+
+		if err := sandbox.fakeKubeClient.Tracker().Add(pod); err != nil && !apierrors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to restore pod %s/%s to fake client: %w", evictedPodInfo.Namespace, evictedPodInfo.Name, err)
+		}
+		klog.V(4).InfoS("Successfully restored pod to fake client", "namespace", evictedPodInfo.Namespace, "name", evictedPodInfo.Name, "uid", evictedPodInfo.UID)
+		restoredPods = append(restoredPods, evictedPodInfo)
+	}
+
+	// Second wait loop: Make sure the evicted pods are added back to the fake client.
+	// This ensures the restored pods are accessible through the fake informer's lister.
+	if err := waitForPodsCondition(ctx, restoredPods, func(pod *evictedPodInfo) (bool, error) {
+		podObj, err := sandbox.fakeFactory.Core().V1().Pods().Lister().Pods(pod.Namespace).Get(pod.Name)
+		if err != nil {
+			klog.V(4).InfoS("Pod not yet accessible in fake informer, waiting", "namespace", pod.Namespace, "name", pod.Name)
+			return false, nil
+		}
+		klog.V(4).InfoS("Pod accessible in fake informer", "namespace", pod.Namespace, "name", pod.Name, "node", podObj.Spec.NodeName)
+		return true, nil
+	}, "All restored pods are accessible in fake informer"); err != nil {
+		return fmt.Errorf("timeout waiting for pods to be accessible in fake informer: %w", err)
+	}
+
+	// Third wait loop: Make sure the indexers see the added pods.
+	// This is important to ensure each descheduling cycle can see all the restored pods.
+	// Without this wait, the next cycle might not see the restored pods in the indexer yet.
+	if err := waitForPodsCondition(ctx, restoredPods, func(pod *evictedPodInfo) (bool, error) {
+		exists, err := sandbox.hasObjectInIndexer(v1.SchemeGroupVersion.WithResource("pods"), pod.Namespace, pod.Name)
+		if err != nil {
+			klog.V(4).InfoS("Error checking indexer for restored pod", "namespace", pod.Namespace, "name", pod.Name, "error", err)
+			return false, nil
+		}
+		if !exists {
+			klog.V(4).InfoS("Restored pod not yet in fake indexer, waiting", "namespace", pod.Namespace, "name", pod.Name)
+			return false, nil
+		}
+		klog.V(4).InfoS("Restored pod now in fake indexer", "namespace", pod.Namespace, "name", pod.Name)
+		return true, nil
+	}, "All restored pods are now in fake indexer"); err != nil {
+		return fmt.Errorf("timeout waiting for restored pods to appear in fake indexer: %w", err)
+	}
+
+	return nil
 }
 
 func nodeSelectorFromPolicy(deschedulerPolicy *api.DeschedulerPolicy) (labels.Selector, error) {
@@ -244,30 +447,6 @@ func nodeSelectorFromPolicy(deschedulerPolicy *api.DeschedulerPolicy) (labels.Se
 
 func addNodeSelectorIndexer(sharedInformerFactory informers.SharedInformerFactory, nodeSelector labels.Selector) error {
 	return nodeutil.AddNodeSelectorIndexer(sharedInformerFactory.Core().V1().Nodes().Informer(), indexerNodeSelectorGlobal, nodeSelector)
-}
-
-func setupInformerIndexers(sharedInformerFactory informers.SharedInformerFactory, deschedulerPolicy *api.DeschedulerPolicy) (podutil.GetPodsAssignedToNodeFunc, error) {
-	// create a new instance of the shared informer factory from the cached client
-	// register the pod informer, otherwise it will not get running
-	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(sharedInformerFactory.Core().V1().Pods().Informer())
-	if err != nil {
-		return nil, fmt.Errorf("build get pods assigned to node function error: %v", err)
-	}
-
-	// TODO(ingvagabund): copy paste all relevant indexers from the real client to the fake one
-	// TODO(ingvagabund): register one indexer per each profile. Respect the precedence of no profile-level node selector is specified.
-	//                    Also, keep a cache of node label selectors to detect duplicates to avoid creating an extra informer.
-
-	nodeSelector, err := nodeSelectorFromPolicy(deschedulerPolicy)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := addNodeSelectorIndexer(sharedInformerFactory, nodeSelector); err != nil {
-		return nil, err
-	}
-
-	return getPodsAssignedToNode, nil
 }
 
 func metricsProviderListToMap(providersList []api.MetricsProvider) map[api.MetricsSource]*api.MetricsProvider {
@@ -295,15 +474,11 @@ func setupPrometheusProvider(d *descheduler, namespacedSharedInformerFactory inf
 	return nil
 }
 
-func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory, namespacedSharedInformerFactory informers.SharedInformerFactory) (*descheduler, error) {
+func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory, kubeClientSandbox *kubeClientSandbox) (*descheduler, error) {
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
-
-	// Future work could be to let each plugin declare what type of resources it needs; that way dry runs would stay
-	// consistent with the real runs without having to keep the list here in sync.
-	kubeClientSandbox, err := newDefaultKubeClientSandbox(rs.Client, sharedInformerFactory)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kube client sandbox: %v", err)
-	}
+	// Temporarily register the PVC because it is used by the DefaultEvictor plugin during
+	// the descheduling cycle, where informer registration is ignored.
+	_ = sharedInformerFactory.Core().V1().PersistentVolumeClaims().Informer()
 
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
@@ -312,7 +487,7 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 
 	podEvictor, err := evictions.NewPodEvictor(
 		ctx,
-		rs.Client,
+		client,
 		eventRecorder,
 		podInformer,
 		rs.DefaultFeatureGates,
@@ -332,6 +507,7 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 
 	desch := &descheduler{
 		rs:                    rs,
+		client:                client,
 		kubeClientSandbox:     kubeClientSandbox,
 		getPodsAssignedToNode: getPodsAssignedToNode,
 		sharedInformerFactory: sharedInformerFactory,
@@ -479,42 +655,20 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context) error {
 		metrics.LoopDuration.With(map[string]string{}).Observe(time.Since(loopStartDuration).Seconds())
 	}(time.Now())
 
-	var client clientset.Interface
-	// When the dry mode is enable, collect all the relevant objects (mostly pods) under a fake client.
-	// So when evicting pods while running multiple strategies in a row have the cummulative effect
-	// as is when evicting pods for real.
-	if d.rs.DryRun {
-		klog.V(3).Infof("Building a cached client from the cluster for the dry run")
-		// Create a new cache so we start from scratch without any leftovers
-		err := d.kubeClientSandbox.buildSandbox()
-		if err != nil {
-			return err
-		}
-
-		getPodsAssignedToNode, err := setupInformerIndexers(d.kubeClientSandbox.fakeSharedInformerFactory(), d.deschedulerPolicy)
-		if err != nil {
-			return err
-		}
-		d.getPodsAssignedToNode = getPodsAssignedToNode
-
-		fakeCtx, cncl := context.WithCancel(context.TODO())
-		defer cncl()
-		d.kubeClientSandbox.fakeSharedInformerFactory().Start(fakeCtx.Done())
-		d.kubeClientSandbox.fakeSharedInformerFactory().WaitForCacheSync(fakeCtx.Done())
-
-		client = d.kubeClientSandbox.fakeClient()
-		d.sharedInformerFactory = d.kubeClientSandbox.fakeSharedInformerFactory()
-	} else {
-		client = d.rs.Client
-	}
-
-	klog.V(3).Infof("Setting up the pod evictor")
-	d.podEvictor.SetClient(client)
+	klog.V(3).Infof("Resetting pod evictor counters")
 	d.podEvictor.ResetCounters()
 
-	d.runProfiles(ctx, client)
+	d.runProfiles(ctx, d.client)
 
 	if d.rs.DryRun {
+		if d.kubeClientSandbox == nil {
+			return fmt.Errorf("kubeClientSandbox is nil in DryRun mode")
+		}
+		klog.V(3).Infof("Restoring evicted pods from cache")
+		if err := d.kubeClientSandbox.restoreEvictedPods(ctx); err != nil {
+			klog.ErrorS(err, "Failed to restore evicted pods")
+			return fmt.Errorf("failed to restore evicted pods: %w", err)
+		}
 		d.kubeClientSandbox.reset()
 	}
 
@@ -762,7 +916,8 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		}
 	}
 
-	descheduler, err := newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, sharedInformerFactory, namespacedSharedInformerFactory)
+	// Always create descheduler with real client/factory first to register all informers
+	descheduler, err := newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, rs.Client, sharedInformerFactory, nil)
 	if err != nil {
 		span.AddEvent("Failed to create new descheduler", trace.WithAttributes(attribute.String("err", err.Error())))
 		return err
@@ -776,16 +931,45 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		return err
 	}
 
+	// If in dry run mode, replace the descheduler with one using fake client/factory
+	if rs.DryRun {
+		// Create sandbox with resources to mirror from real client
+		kubeClientSandbox, err := newDefaultKubeClientSandbox(rs.Client, sharedInformerFactory)
+		if err != nil {
+			span.AddEvent("Failed to create kube client sandbox", trace.WithAttributes(attribute.String("err", err.Error())))
+			return fmt.Errorf("failed to create kube client sandbox: %v", err)
+		}
+
+		klog.V(3).Infof("Building a cached client from the cluster for the dry run")
+
+		// TODO(ingvagabund): drop the previous queue
+		// TODO(ingvagabund): stop the previous pod evictor
+		// Replace descheduler with one using fake client/factory
+		descheduler, err = newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), kubeClientSandbox)
+		if err != nil {
+			span.AddEvent("Failed to create dry run descheduler", trace.WithAttributes(attribute.String("err", err.Error())))
+			return err
+		}
+	}
+
+	// In dry run mode, start and sync the fake shared informer factory so it can mirror
+	// events from the real factory. Reliable propagation depends on both factories being
+	// fully synced (see WaitForCacheSync calls below), not solely on startup order.
+	if rs.DryRun {
+		descheduler.kubeClientSandbox.fakeSharedInformerFactory().Start(ctx.Done())
+		descheduler.kubeClientSandbox.fakeSharedInformerFactory().WaitForCacheSync(ctx.Done())
+	}
 	sharedInformerFactory.Start(ctx.Done())
 	if metricProviderTokenReconciliation == secretReconciliation {
 		namespacedSharedInformerFactory.Start(ctx.Done())
 	}
 
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
-	descheduler.podEvictor.WaitForEventHandlersSync(ctx)
 	if metricProviderTokenReconciliation == secretReconciliation {
 		namespacedSharedInformerFactory.WaitForCacheSync(ctx.Done())
 	}
+
+	descheduler.podEvictor.WaitForEventHandlersSync(ctx)
 
 	if descheduler.metricsCollector != nil {
 		go func() {

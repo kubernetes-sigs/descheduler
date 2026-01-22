@@ -403,12 +403,6 @@ func (pe *PodEvictor) ResetCounters() {
 	pe.totalPodCount = 0
 }
 
-func (pe *PodEvictor) SetClient(client clientset.Interface) {
-	pe.mu.Lock()
-	defer pe.mu.Unlock()
-	pe.client = client
-}
-
 func (pe *PodEvictor) evictionRequestsTotal() uint {
 	if pe.featureGates.Enabled(features.EvictionsInBackground) {
 		return pe.erCache.evictionRequestsTotal()

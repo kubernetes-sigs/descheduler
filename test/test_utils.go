@@ -43,6 +43,10 @@ import (
 // BuildTestPod creates a test pod with given parameters.
 func BuildTestPod(name string, cpu, memory int64, nodeName string, apply func(*v1.Pod)) *v1.Pod {
 	pod := &v1.Pod{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
 			Name:      name,
@@ -76,6 +80,10 @@ func BuildTestPod(name string, cpu, memory int64, nodeName string, apply func(*v
 func BuildTestPDB(name, appLabel string) *policyv1.PodDisruptionBudget {
 	maxUnavailable := intstr.FromInt32(1)
 	pdb := &policyv1.PodDisruptionBudget{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "policy/v1",
+			Kind:       "PodDisruptionBudget",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
 			Name:      name,
@@ -94,6 +102,10 @@ func BuildTestPDB(name, appLabel string) *policyv1.PodDisruptionBudget {
 
 func BuildTestPVC(name, storageClass string) *v1.PersistentVolumeClaim {
 	pvc := &v1.PersistentVolumeClaim{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "PersistentVolumeClaim",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
 			Name:      name,
@@ -114,6 +126,10 @@ func BuildTestPVC(name, storageClass string) *v1.PersistentVolumeClaim {
 // BuildPodMetrics creates a test podmetrics with given parameters.
 func BuildPodMetrics(name string, millicpu, mem int64) *v1beta1.PodMetrics {
 	return &v1beta1.PodMetrics{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "metrics.k8s.io/v1beta1",
+			Kind:       "PodMetrics",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "default",
@@ -171,6 +187,10 @@ func GetDaemonSetOwnerRefList() []metav1.OwnerReference {
 // BuildTestNode creates a node with specified capacity.
 func BuildTestNode(name string, millicpu, mem, pods int64, apply func(*v1.Node)) *v1.Node {
 	node := &v1.Node{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Node",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:     name,
 			SelfLink: fmt.Sprintf("/api/v1/nodes/%s", name),
@@ -201,6 +221,10 @@ func BuildTestNode(name string, millicpu, mem, pods int64, apply func(*v1.Node))
 
 func BuildNodeMetrics(name string, millicpu, mem int64) *v1beta1.NodeMetrics {
 	return &v1beta1.NodeMetrics{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "metrics.k8s.io/v1beta1",
+			Kind:       "NodeMetrics",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
