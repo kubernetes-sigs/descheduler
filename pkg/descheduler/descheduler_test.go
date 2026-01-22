@@ -202,6 +202,11 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 		t.Fatalf("Unable to create a descheduler instance: %v", err)
 	}
 
+	if err := setupPrometheusProvider(descheduler, nil); err != nil {
+		eventBroadcaster.Shutdown()
+		t.Fatalf("Failed to setup Prometheus provider: %v", err)
+	}
+
 	sharedInformerFactory.Start(ctx.Done())
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
