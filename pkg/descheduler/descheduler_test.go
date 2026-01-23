@@ -13,15 +13,18 @@ import (
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	apiversion "k8s.io/apimachinery/pkg/version"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/informers"
-	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/component-base/featuregate"
 	"k8s.io/klog/v2"
 	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
@@ -196,19 +199,67 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
 
-	descheduler, err := newDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", eventRecorder, sharedInformerFactory, nil)
+	// Always create descheduler with real client/factory first to register all informers
+	descheduler, err := newDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", eventRecorder, rs.Client, sharedInformerFactory, nil)
 	if err != nil {
 		eventBroadcaster.Shutdown()
-		t.Fatalf("Unable to create a descheduler instance: %v", err)
+		t.Fatalf("Unable to create descheduler instance: %v", err)
 	}
 
+	// Setup Prometheus provider (only for real client case, not for dry run)
 	if err := setupPrometheusProvider(descheduler, nil); err != nil {
 		eventBroadcaster.Shutdown()
 		t.Fatalf("Failed to setup Prometheus provider: %v", err)
 	}
 
+	// If in dry run mode, replace the descheduler with one using fake client/factory
+	if dryRun {
+		// Create sandbox with resources to mirror from real client
+		kubeClientSandbox, err := newDefaultKubeClientSandbox(rs.Client, sharedInformerFactory)
+		if err != nil {
+			eventBroadcaster.Shutdown()
+			t.Fatalf("Failed to create kube client sandbox: %v", err)
+		}
+
+		// Replace descheduler with one using fake client/factory
+		descheduler, err = newDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), kubeClientSandbox)
+		if err != nil {
+			eventBroadcaster.Shutdown()
+			t.Fatalf("Unable to create dry run descheduler instance: %v", err)
+		}
+	}
+
+	// Start the real shared informer factory after creating the descheduler
+	if dryRun {
+		descheduler.kubeClientSandbox.fakeSharedInformerFactory().Start(ctx.Done())
+		descheduler.kubeClientSandbox.fakeSharedInformerFactory().WaitForCacheSync(ctx.Done())
+	}
 	sharedInformerFactory.Start(ctx.Done())
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	if dryRun {
+		if err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
+			for _, obj := range objects {
+				exists, err := descheduler.kubeClientSandbox.hasRuntimeObjectInIndexer(obj)
+				if err != nil {
+					return false, err
+				}
+				metaObj, err := meta.Accessor(obj)
+				if err != nil {
+					return false, fmt.Errorf("failed to get object metadata: %w", err)
+				}
+				key := cache.MetaObjectToName(metaObj).String()
+				if !exists {
+					klog.Infof("Object %q has not propagated to the indexer", key)
+					return false, nil
+				}
+				klog.Infof("Object %q has propagated to the indexer", key)
+			}
+			return true, nil
+		}); err != nil {
+			t.Fatalf("nodes did not propagate to the indexer: %v", err)
+		}
+	}
 
 	return rs, descheduler, client
 }
@@ -550,42 +601,22 @@ func TestPodEvictorReset(t *testing.T) {
 	}
 }
 
-// runDeschedulerLoopAndGetEvictedPods is a temporary duplication from runDeschedulerLoop
-// that will be removed after kubeClientSandbox gets migrated to event handlers.
+// runDeschedulerLoopAndGetEvictedPods runs a descheduling cycle and returns the names of evicted pods.
+// This is similar to runDeschedulerLoop but captures evicted pod names before the cache is reset.
 func runDeschedulerLoopAndGetEvictedPods(ctx context.Context, t *testing.T, d *descheduler, dryRun bool) []string {
-	var clientSet clientset.Interface
-	if dryRun {
-		if err := d.kubeClientSandbox.buildSandbox(); err != nil {
-			t.Fatalf("Failed to build sandbox: %v", err)
-		}
-
-		getPodsAssignedToNode, err := setupInformerIndexers(d.kubeClientSandbox.fakeSharedInformerFactory(), d.deschedulerPolicy)
-		if err != nil {
-			t.Fatalf("Failed to setup indexers: %v", err)
-		}
-		d.getPodsAssignedToNode = getPodsAssignedToNode
-
-		fakeCtx, cncl := context.WithCancel(context.TODO())
-		defer cncl()
-		d.kubeClientSandbox.fakeSharedInformerFactory().Start(fakeCtx.Done())
-		d.kubeClientSandbox.fakeSharedInformerFactory().WaitForCacheSync(fakeCtx.Done())
-
-		clientSet = d.kubeClientSandbox.fakeClient()
-		d.sharedInformerFactory = d.kubeClientSandbox.fakeSharedInformerFactory()
-	} else {
-		clientSet = d.rs.Client
-	}
-
-	d.podEvictor.SetClient(clientSet)
 	d.podEvictor.ResetCounters()
 
-	d.runProfiles(ctx, clientSet)
+	d.runProfiles(ctx, d.client)
 
 	var evictedPodNames []string
 	if dryRun {
 		evictedPodsFromCache := d.kubeClientSandbox.evictedPodsCache.list()
 		for _, pod := range evictedPodsFromCache {
 			evictedPodNames = append(evictedPodNames, pod.Name)
+		}
+
+		if err := d.kubeClientSandbox.restoreEvictedPods(ctx); err != nil {
+			t.Fatalf("Failed to restore evicted pods: %v", err)
 		}
 		d.kubeClientSandbox.reset()
 	}
@@ -962,6 +993,8 @@ func TestNodeLabelSelectorBasedEviction(t *testing.T) {
 			p3 := test.BuildTestPod("p3", 200, 0, node3.Name, updatePod)
 			p4 := test.BuildTestPod("p4", 200, 0, node4.Name, updatePod)
 
+			objects := []runtime.Object{node1, node2, node3, node4, p1, p2, p3, p4}
+
 			// Map pod names to their node names for validation
 			podToNode := map[string]string{
 				"p1": "n1",
@@ -976,7 +1009,7 @@ func TestNodeLabelSelectorBasedEviction(t *testing.T) {
 			}
 
 			ctxCancel, cancel := context.WithCancel(ctx)
-			_, deschedulerInstance, client := initDescheduler(t, ctxCancel, initFeatureGates(), policy, nil, tc.dryRun, node1, node2, node3, node4, p1, p2, p3, p4)
+			_, deschedulerInstance, client := initDescheduler(t, ctxCancel, initFeatureGates(), policy, nil, tc.dryRun, objects...)
 			defer cancel()
 
 			// Verify all pods are created initially
@@ -1008,13 +1041,13 @@ func TestNodeLabelSelectorBasedEviction(t *testing.T) {
 
 			// Verify the correct number of nodes had pods evicted
 			if len(nodesWithEvictedPods) != len(tc.expectedEvictedFromNodes) {
-				t.Errorf("Expected pods to be evicted from %d nodes, got %d nodes: %v", len(tc.expectedEvictedFromNodes), len(nodesWithEvictedPods), nodesWithEvictedPods)
+				t.Fatalf("Expected pods to be evicted from %d nodes, got %d nodes: %v", len(tc.expectedEvictedFromNodes), len(nodesWithEvictedPods), nodesWithEvictedPods)
 			}
 
 			// Verify pods were evicted from the correct nodes
 			for _, nodeName := range tc.expectedEvictedFromNodes {
 				if !nodesWithEvictedPods[nodeName] {
-					t.Errorf("Expected pod to be evicted from node %s, but it was not", nodeName)
+					t.Fatalf("Expected pod to be evicted from node %s, but it was not", nodeName)
 				}
 			}
 
@@ -1028,7 +1061,7 @@ func TestNodeLabelSelectorBasedEviction(t *testing.T) {
 					}
 				}
 				if !found {
-					t.Errorf("Unexpected eviction from node %s", nodeName)
+					t.Fatalf("Unexpected eviction from node %s", nodeName)
 				}
 			}
 
@@ -1141,10 +1174,6 @@ func TestKubeClientSandboxReset(t *testing.T) {
 		t.Fatalf("Failed to create kubeClientSandbox: %v", err)
 	}
 
-	if err := sandbox.buildSandbox(); err != nil {
-		t.Fatalf("Failed to build sandbox: %v", err)
-	}
-
 	eviction1 := &policy.Eviction{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      p1.Name,
@@ -1157,6 +1186,9 @@ func TestKubeClientSandboxReset(t *testing.T) {
 			Namespace: p2.Namespace,
 		},
 	}
+
+	sandbox.fakeSharedInformerFactory().Start(ctx.Done())
+	sandbox.fakeSharedInformerFactory().WaitForCacheSync(ctx.Done())
 
 	if err := sandbox.fakeClient().CoreV1().Pods(p1.Namespace).EvictV1(context.TODO(), eviction1); err != nil {
 		t.Fatalf("Error evicting p1: %v", err)
@@ -1484,5 +1516,144 @@ func TestPodEvictionReactionFncErrorHandling(t *testing.T) {
 				t.Errorf("Expected %d pods in cache, got %d", tc.expectedCacheLen, len(cache.list()))
 			}
 		})
+	}
+}
+
+// verifyPodIdentityFields checks if name, namespace, and UID match expected values
+func verifyPodIdentityFields(t *testing.T, name, namespace, uid, expectedName, expectedNamespace, expectedUID, context string) {
+	t.Helper()
+	if name != expectedName {
+		t.Fatalf("Expected pod name %s%s, got %s", expectedName, context, name)
+	}
+	if namespace != expectedNamespace {
+		t.Fatalf("Expected pod namespace %s%s, got %s", expectedNamespace, context, namespace)
+	}
+	if uid != expectedUID {
+		t.Fatalf("Expected pod UID %s%s, got %s", expectedUID, context, uid)
+	}
+}
+
+// verifyPodIdentity checks if a pod has the expected name, namespace, and UID
+func verifyPodIdentity(t *testing.T, pod *v1.Pod, expectedName, expectedNamespace string, expectedUID types.UID) {
+	t.Helper()
+	verifyPodIdentityFields(t, pod.Name, pod.Namespace, string(pod.UID), expectedName, expectedNamespace, string(expectedUID), "")
+}
+
+func TestEvictedPodRestorationInDryRun(t *testing.T) {
+	// Initialize klog flags
+	// klog.InitFlags(nil)
+
+	// Set verbosity level (higher number = more verbose)
+	// 0 = errors only, 1-4 = info, 5-9 = debug, 10+ = trace
+	// flag.Set("v", "4")
+
+	initPluginRegistry()
+
+	ctx := context.Background()
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, taintNodeNoSchedule)
+	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
+
+	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, test.SetRSOwnerRef)
+
+	internalDeschedulerPolicy := removePodsViolatingNodeTaintsPolicy()
+	ctxCancel, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Create descheduler with DryRun mode
+	client := fakeclientset.NewSimpleClientset(node1, node2, p1)
+	eventClient := fakeclientset.NewSimpleClientset(node1, node2, p1)
+
+	rs, err := options.NewDeschedulerServer()
+	if err != nil {
+		t.Fatalf("Unable to initialize server: %v", err)
+	}
+	rs.Client = client
+	rs.EventClient = eventClient
+	rs.DefaultFeatureGates = initFeatureGates()
+	rs.DryRun = true // Set DryRun before creating descheduler
+
+	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
+	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctxCancel, client)
+	defer eventBroadcaster.Shutdown()
+
+	// Always create descheduler with real client/factory first to register all informers
+	descheduler, err := newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, rs.Client, sharedInformerFactory, nil)
+	if err != nil {
+		t.Fatalf("Unable to create descheduler instance: %v", err)
+	}
+
+	sharedInformerFactory.Start(ctxCancel.Done())
+	sharedInformerFactory.WaitForCacheSync(ctxCancel.Done())
+
+	// Create sandbox with resources to mirror from real client
+	kubeClientSandbox, err := newDefaultKubeClientSandbox(rs.Client, sharedInformerFactory)
+	if err != nil {
+		t.Fatalf("Failed to create kube client sandbox: %v", err)
+	}
+
+	// Replace descheduler with one using fake client/factory
+	descheduler, err = newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), kubeClientSandbox)
+	if err != nil {
+		t.Fatalf("Unable to create dry run descheduler instance: %v", err)
+	}
+
+	// Start and sync the fake factory after creating the descheduler
+	kubeClientSandbox.fakeSharedInformerFactory().Start(ctxCancel.Done())
+	kubeClientSandbox.fakeSharedInformerFactory().WaitForCacheSync(ctxCancel.Done())
+
+	// Verify the pod exists in the fake client after initialization
+	pod, err := kubeClientSandbox.fakeClient().CoreV1().Pods(p1.Namespace).Get(ctx, p1.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Expected pod %s to exist in fake client after initialization, but got error: %v", p1.Name, err)
+	}
+	verifyPodIdentity(t, pod, p1.Name, p1.Namespace, p1.UID)
+	klog.Infof("Pod %s exists in fake client after initialization", p1.Name)
+
+	// Run two descheduling cycles to verify pod eviction and restoration works repeatedly
+	for i := 1; i <= 2; i++ {
+		// Run descheduling cycle
+		klog.Infof("Running descheduling cycle %d", i)
+		descheduler.podEvictor.ResetCounters()
+		descheduler.runProfiles(ctx, descheduler.client)
+
+		// Verify the pod was evicted (should not exist in fake client anymore)
+		_, err = kubeClientSandbox.fakeClient().CoreV1().Pods(p1.Namespace).Get(ctx, p1.Name, metav1.GetOptions{})
+		if err == nil {
+			t.Fatalf("Expected pod %s to be evicted from fake client in cycle %d, but it still exists", p1.Name, i)
+		}
+		if !apierrors.IsNotFound(err) {
+			t.Fatalf("Expected NotFound error for pod %s in cycle %d, got: %v", p1.Name, i, err)
+		}
+		klog.Infof("Pod %s was successfully evicted from fake client in cycle %d", p1.Name, i)
+
+		// Verify the pod was added to the evicted pods cache
+		evictedPods := descheduler.kubeClientSandbox.evictedPodsCache.list()
+		if len(evictedPods) != 1 {
+			t.Fatalf("Expected 1 pod in evicted cache in cycle %d, got %d", i, len(evictedPods))
+		}
+		verifyPodIdentityFields(t, evictedPods[0].Name, evictedPods[0].Namespace, evictedPods[0].UID, p1.Name, p1.Namespace, string(p1.UID), fmt.Sprintf(" in cycle %d", i))
+		klog.Infof("Pod %s was successfully added to evicted pods cache in cycle %d (UID: %s)", p1.Name, i, p1.UID)
+
+		// Restore evicted pods
+		klog.Infof("Restoring evicted pods from cache in cycle %d", i)
+		if err := descheduler.kubeClientSandbox.restoreEvictedPods(ctx); err != nil {
+			t.Fatalf("Failed to restore evicted pods in cycle %d: %v", i, err)
+		}
+		descheduler.kubeClientSandbox.evictedPodsCache.clear()
+
+		// Verify the pod was restored back to the fake client
+		pod, err = kubeClientSandbox.fakeClient().CoreV1().Pods(p1.Namespace).Get(ctx, p1.Name, metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("Expected pod %s to be restored to fake client in cycle %d, but got error: %v", p1.Name, i, err)
+		}
+		verifyPodIdentity(t, pod, p1.Name, p1.Namespace, p1.UID)
+		klog.Infof("Pod %s was successfully restored to fake client in cycle %d (UID: %s)", p1.Name, i, pod.UID)
+
+		// Verify cache was cleared after restoration
+		evictedPods = descheduler.kubeClientSandbox.evictedPodsCache.list()
+		if len(evictedPods) != 0 {
+			t.Fatalf("Expected evicted cache to be empty after restoration in cycle %d, got %d pods", i, len(evictedPods))
+		}
+		klog.Infof("Evicted pods cache was cleared after restoration in cycle %d", i)
 	}
 }
