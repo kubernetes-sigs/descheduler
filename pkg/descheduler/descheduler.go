@@ -658,7 +658,7 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context) error {
 	klog.V(3).Infof("Resetting pod evictor counters")
 	d.podEvictor.ResetCounters()
 
-	d.runProfiles(ctx, d.client)
+	d.runProfiles(ctx)
 
 	if d.rs.DryRun {
 		if d.kubeClientSandbox == nil {
@@ -680,7 +680,7 @@ func (d *descheduler) runDeschedulerLoop(ctx context.Context) error {
 // runProfiles runs all the deschedule plugins of all profiles and
 // later runs through all balance plugins of all profiles. (All Balance plugins should come after all Deschedule plugins)
 // see https://github.com/kubernetes-sigs/descheduler/issues/979
-func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interface) {
+func (d *descheduler) runProfiles(ctx context.Context) {
 	var span trace.Span
 	ctx, span = tracing.Tracer().Start(ctx, "runProfiles")
 	defer span.End()
@@ -711,7 +711,7 @@ func (d *descheduler) runProfiles(ctx context.Context, client clientset.Interfac
 			ctx,
 			profile,
 			pluginregistry.PluginRegistry,
-			frameworkprofile.WithClientSet(client),
+			frameworkprofile.WithClientSet(d.client),
 			frameworkprofile.WithSharedInformerFactory(d.sharedInformerFactory),
 			frameworkprofile.WithPodEvictor(d.podEvictor),
 			frameworkprofile.WithGetPodsAssignedToNodeFnc(d.getPodsAssignedToNode),

@@ -606,7 +606,7 @@ func TestPodEvictorReset(t *testing.T) {
 func runDeschedulerLoopAndGetEvictedPods(ctx context.Context, t *testing.T, d *descheduler, dryRun bool) []string {
 	d.podEvictor.ResetCounters()
 
-	d.runProfiles(ctx, d.client)
+	d.runProfiles(ctx)
 
 	var evictedPodNames []string
 	if dryRun {
@@ -1614,7 +1614,7 @@ func TestEvictedPodRestorationInDryRun(t *testing.T) {
 		// Run descheduling cycle
 		klog.Infof("Running descheduling cycle %d", i)
 		descheduler.podEvictor.ResetCounters()
-		descheduler.runProfiles(ctx, descheduler.client)
+		descheduler.runProfiles(ctx)
 
 		// Verify the pod was evicted (should not exist in fake client anymore)
 		_, err = kubeClientSandbox.fakeClient().CoreV1().Pods(p1.Namespace).Get(ctx, p1.Name, metav1.GetOptions{})
