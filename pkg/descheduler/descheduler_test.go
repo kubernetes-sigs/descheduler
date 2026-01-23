@@ -202,6 +202,11 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 		t.Fatalf("Unable to create a descheduler instance: %v", err)
 	}
 
+	if err := setupPrometheusProvider(descheduler, nil); err != nil {
+		eventBroadcaster.Shutdown()
+		t.Fatalf("Failed to setup Prometheus provider: %v", err)
+	}
+
 	sharedInformerFactory.Start(ctx.Done())
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
@@ -642,11 +647,6 @@ func TestEvictionRequestsCache(t *testing.T) {
 	_, descheduler, client := initDescheduler(t, ctxCancel, featureGates, internalDeschedulerPolicy, nil, false, node1, node2, p1, p2, p3, p4)
 	defer cancel()
 
-	var fakeEvictedPods []string
-	descheduler.kubeClientSandbox.podEvictionReactionFnc = func(*fakeclientset.Clientset, *evictedPodsCache) func(action core.Action) (bool, runtime.Object, error) {
-		return podEvictionReactionTestingFnc(&fakeEvictedPods, nil, podEvictionError)
-	}
-
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, func(name string) bool { return name == "p1" || name == "p2" }, nil))
 
@@ -782,11 +782,6 @@ func TestDeschedulingLimits(t *testing.T) {
 			})
 			_, descheduler, client := initDescheduler(t, ctxCancel, featureGates, tc.policy, nil, false, node1, node2)
 			defer cancel()
-
-			var fakeEvictedPods []string
-			descheduler.kubeClientSandbox.podEvictionReactionFnc = func(*fakeclientset.Clientset, *evictedPodsCache) func(action core.Action) (bool, runtime.Object, error) {
-				return podEvictionReactionTestingFnc(&fakeEvictedPods, nil, podEvictionError)
-			}
 
 			var evictedPods []string
 			client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, func(name string) bool { return name == "p1" || name == "p2" }, nil))

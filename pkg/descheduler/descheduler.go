@@ -160,6 +160,17 @@ type kubeClientSandbox struct {
 	podEvictionReactionFnc func(*fakeclientset.Clientset, *evictedPodsCache) func(action core.Action) (bool, runtime.Object, error)
 }
 
+func newDefaultKubeClientSandbox(client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory) (*kubeClientSandbox, error) {
+	return newKubeClientSandbox(client, sharedInformerFactory,
+		v1.SchemeGroupVersion.WithResource("pods"),
+		v1.SchemeGroupVersion.WithResource("nodes"),
+		v1.SchemeGroupVersion.WithResource("namespaces"),
+		schedulingv1.SchemeGroupVersion.WithResource("priorityclasses"),
+		policyv1.SchemeGroupVersion.WithResource("poddisruptionbudgets"),
+		v1.SchemeGroupVersion.WithResource("persistentvolumeclaims"),
+	)
+}
+
 func newKubeClientSandbox(client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory, resources ...schema.GroupVersionResource) (*kubeClientSandbox, error) {
 	sandbox := &kubeClientSandbox{
 		client:                 client,
@@ -267,19 +278,29 @@ func metricsProviderListToMap(providersList []api.MetricsProvider) map[api.Metri
 	return providersMap
 }
 
+// setupPrometheusProvider sets up the prometheus provider on the descheduler if configured
+func setupPrometheusProvider(d *descheduler, namespacedSharedInformerFactory informers.SharedInformerFactory) error {
+	prometheusProvider := d.metricsProviders[api.PrometheusMetrics]
+	if prometheusProvider != nil && prometheusProvider.Prometheus != nil && prometheusProvider.Prometheus.AuthToken != nil {
+		authTokenSecret := prometheusProvider.Prometheus.AuthToken.SecretReference
+		if authTokenSecret == nil || authTokenSecret.Namespace == "" {
+			return fmt.Errorf("prometheus metrics source configuration is missing authentication token secret")
+		}
+		if namespacedSharedInformerFactory == nil {
+			return fmt.Errorf("namespacedSharedInformerFactory not configured")
+		}
+		namespacedSharedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(d.eventHandler())
+		d.namespacedSecretsLister = namespacedSharedInformerFactory.Core().V1().Secrets().Lister().Secrets(authTokenSecret.Namespace)
+	}
+	return nil
+}
+
 func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, sharedInformerFactory, namespacedSharedInformerFactory informers.SharedInformerFactory) (*descheduler, error) {
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 
 	// Future work could be to let each plugin declare what type of resources it needs; that way dry runs would stay
 	// consistent with the real runs without having to keep the list here in sync.
-	kubeClientSandbox, err := newKubeClientSandbox(rs.Client, sharedInformerFactory,
-		v1.SchemeGroupVersion.WithResource("pods"),
-		v1.SchemeGroupVersion.WithResource("nodes"),
-		v1.SchemeGroupVersion.WithResource("namespaces"),
-		schedulingv1.SchemeGroupVersion.WithResource("priorityclasses"),
-		policyv1.SchemeGroupVersion.WithResource("poddisruptionbudgets"),
-		v1.SchemeGroupVersion.WithResource("persistentvolumeclaims"),
-	)
+	kubeClientSandbox, err := newDefaultKubeClientSandbox(rs.Client, sharedInformerFactory)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kube client sandbox: %v", err)
 	}
@@ -333,19 +354,6 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 
 	if rs.MetricsClient != nil {
 		desch.metricsCollector = metricscollector.NewMetricsCollector(sharedInformerFactory.Core().V1().Nodes().Lister(), rs.MetricsClient, nodeSelector)
-	}
-
-	prometheusProvider := desch.metricsProviders[api.PrometheusMetrics]
-	if prometheusProvider != nil && prometheusProvider.Prometheus != nil && prometheusProvider.Prometheus.AuthToken != nil {
-		authTokenSecret := prometheusProvider.Prometheus.AuthToken.SecretReference
-		if authTokenSecret == nil || authTokenSecret.Namespace == "" {
-			return nil, fmt.Errorf("prometheus metrics source configuration is missing authentication token secret")
-		}
-		if namespacedSharedInformerFactory == nil {
-			return nil, fmt.Errorf("namespacedSharedInformerFactory not configured")
-		}
-		namespacedSharedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(desch.eventHandler())
-		desch.namespacedSecretsLister = namespacedSharedInformerFactory.Core().V1().Secrets().Lister().Secrets(authTokenSecret.Namespace)
 	}
 
 	return desch, nil
@@ -761,6 +769,12 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	// Setup Prometheus provider (only for real client case, not for dry run)
+	if err := setupPrometheusProvider(descheduler, namespacedSharedInformerFactory); err != nil {
+		span.AddEvent("Failed to setup Prometheus provider", trace.WithAttributes(attribute.String("err", err.Error())))
+		return err
+	}
 
 	sharedInformerFactory.Start(ctx.Done())
 	if metricProviderTokenReconciliation == secretReconciliation {
