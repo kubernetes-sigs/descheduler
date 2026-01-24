@@ -215,19 +215,27 @@ func (sandbox *kubeClientSandbox) reset() {
 }
 
 // hasObjectInIndexer checks if an object exists in the fake indexer for the specified resource
-func (sandbox *kubeClientSandbox) hasObjectInIndexer(resource schema.GroupVersionResource, namespace, name string) (bool, error) {
+func (sandbox *kubeClientSandbox) hasObjectInIndexer(resource schema.GroupVersionResource, namespace, name, uid string) (bool, error) {
 	informer, err := sandbox.fakeFactory.ForResource(resource)
 	if err != nil {
 		return false, fmt.Errorf("error getting informer for resource %s: %w", resource, err)
 	}
 
 	key := cache.MetaObjectToName(&metav1.ObjectMeta{Namespace: namespace, Name: name}).String()
-	_, exists, err := informer.Informer().GetIndexer().GetByKey(key)
+	obj, exists, err := informer.Informer().GetIndexer().GetByKey(key)
 	if err != nil {
 		return false, err
 	}
 
-	return exists, nil
+	if !exists {
+		return false, nil
+	}
+
+	metaObj, err := meta.Accessor(obj)
+	if err != nil {
+		return false, fmt.Errorf("failed to get object metadata: %w", err)
+	}
+	return string(metaObj.GetUID()) == uid, nil
 }
 
 // hasRuntimeObjectInIndexer checks if a runtime.Object exists in the fake indexer by detecting its resource type
@@ -252,7 +260,28 @@ func (sandbox *kubeClientSandbox) hasRuntimeObjectInIndexer(obj runtime.Object) 
 		Resource: plural.Resource,
 	}
 
-	return sandbox.hasObjectInIndexer(gvr, metaObj.GetNamespace(), metaObj.GetName())
+	return sandbox.hasObjectInIndexer(gvr, metaObj.GetNamespace(), metaObj.GetName(), string(metaObj.GetUID()))
+}
+
+// shouldSkipPodWait checks if a pod still exists in the fake client with the expected UID.
+// Returns (shouldSkip, error). shouldSkip is true if we should skip waiting for this pod.
+// Returns an error for unexpected failures (non-NotFound errors).
+func (sandbox *kubeClientSandbox) shouldSkipPodWait(ctx context.Context, pod *evictedPodInfo) (bool, error) {
+	// Check if the pod still exists in the fake client (it could have been deleted from the real client
+	// and the deletion propagated via event handlers in the meantime)
+	fakePod, err := sandbox.fakeClient().CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			klog.V(3).InfoS("Pod no longer exists in fake client, skipping wait", "namespace", pod.Namespace, "name", pod.Name)
+			return true, nil
+		}
+		return false, fmt.Errorf("error getting pod %s/%s from fake client: %w", pod.Namespace, pod.Name, err)
+	}
+	if string(fakePod.UID) != pod.UID {
+		klog.V(3).InfoS("Pod UID mismatch in fake client, skipping wait", "namespace", pod.Namespace, "name", pod.Name, "expectedUID", pod.UID, "actualUID", string(fakePod.UID))
+		return true, nil
+	}
+	return false, nil
 }
 
 func waitForPodsCondition(ctx context.Context, pods []*evictedPodInfo, checkFn func(*evictedPodInfo) (bool, error), successMsg string) error {
@@ -291,46 +320,48 @@ func (sandbox *kubeClientSandbox) restoreEvictedPods(ctx context.Context) error 
 
 	// First wait loop: Check that all evicted pods are cleared from the indexers.
 	// This ensures the eviction has fully propagated through the fake informer's indexer.
+	// We check both existence and UID match to handle cases where a pod was deleted and
+	// recreated with the same name but different UID.
 	if err := waitForPodsCondition(ctx, evictedPods, func(pod *evictedPodInfo) (bool, error) {
-		exists, err := sandbox.hasObjectInIndexer(v1.SchemeGroupVersion.WithResource("pods"), pod.Namespace, pod.Name)
+		exists, err := sandbox.hasObjectInIndexer(v1.SchemeGroupVersion.WithResource("pods"), pod.Namespace, pod.Name, pod.UID)
 		if err != nil {
 			klog.V(4).InfoS("Error checking indexer for pod", "namespace", pod.Namespace, "name", pod.Name, "error", err)
 			return false, nil
 		}
 		if exists {
-			klog.V(4).InfoS("Pod still exists in fake indexer, waiting", "namespace", pod.Namespace, "name", pod.Name)
+			klog.V(4).InfoS("Pod with matching UID still exists in fake indexer, waiting", "namespace", pod.Namespace, "name", pod.Name, "uid", pod.UID)
 			return false, nil
 		}
-		klog.V(4).InfoS("Pod no longer in fake indexer", "namespace", pod.Namespace, "name", pod.Name)
+		klog.V(4).InfoS("Pod with matching UID no longer in fake indexer", "namespace", pod.Namespace, "name", pod.Name, "uid", pod.UID)
 		return true, nil
 	}, "All evicted pods removed from fake indexer"); err != nil {
 		return fmt.Errorf("timeout waiting for evicted pods to be removed from fake indexer: %w", err)
 	}
 
 	var restoredPods []*evictedPodInfo
-	for _, evictedPodInfo := range sandbox.evictedPodsCache.list() {
-		obj, err := podInformer.Lister().ByNamespace(evictedPodInfo.Namespace).Get(evictedPodInfo.Name)
+	for _, podInfo := range sandbox.evictedPodsCache.list() {
+		obj, err := podInformer.Lister().ByNamespace(podInfo.Namespace).Get(podInfo.Name)
 		if err != nil {
-			klog.V(3).InfoS("Pod not found in real client, skipping restoration", "namespace", evictedPodInfo.Namespace, "name", evictedPodInfo.Name, "error", err)
+			klog.V(3).InfoS("Pod not found in real client, skipping restoration", "namespace", podInfo.Namespace, "name", podInfo.Name, "error", err)
 			continue
 		}
 
 		pod, ok := obj.(*v1.Pod)
 		if !ok {
-			klog.ErrorS(nil, "Object is not a pod", "namespace", evictedPodInfo.Namespace, "name", evictedPodInfo.Name)
+			klog.ErrorS(nil, "Object is not a pod", "namespace", podInfo.Namespace, "name", podInfo.Name)
 			continue
 		}
 
-		if string(pod.UID) != evictedPodInfo.UID {
-			klog.V(3).InfoS("Pod UID mismatch, skipping restoration", "namespace", evictedPodInfo.Namespace, "name", evictedPodInfo.Name, "expectedUID", evictedPodInfo.UID, "actualUID", string(pod.UID))
+		if string(pod.UID) != podInfo.UID {
+			klog.V(3).InfoS("Pod UID mismatch, skipping restoration", "namespace", podInfo.Namespace, "name", podInfo.Name, "expectedUID", podInfo.UID, "actualUID", string(pod.UID))
 			continue
 		}
 
-		if err := sandbox.fakeKubeClient.Tracker().Add(pod); err != nil && !apierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("failed to restore pod %s/%s to fake client: %w", evictedPodInfo.Namespace, evictedPodInfo.Name, err)
+		if err = sandbox.fakeKubeClient.Tracker().Add(pod); err != nil && !apierrors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to restore pod %s/%s to fake client: %w", podInfo.Namespace, podInfo.Name, err)
 		}
-		klog.V(4).InfoS("Successfully restored pod to fake client", "namespace", evictedPodInfo.Namespace, "name", evictedPodInfo.Name, "uid", evictedPodInfo.UID)
-		restoredPods = append(restoredPods, evictedPodInfo)
+		klog.V(4).InfoS("Successfully restored pod to fake client", "namespace", podInfo.Namespace, "name", podInfo.Name, "uid", podInfo.UID)
+		restoredPods = append(restoredPods, podInfo)
 	}
 
 	// Second wait loop: Make sure the evicted pods are added back to the fake client.
@@ -339,6 +370,13 @@ func (sandbox *kubeClientSandbox) restoreEvictedPods(ctx context.Context) error 
 		podObj, err := sandbox.fakeFactory.Core().V1().Pods().Lister().Pods(pod.Namespace).Get(pod.Name)
 		if err != nil {
 			klog.V(4).InfoS("Pod not yet accessible in fake informer, waiting", "namespace", pod.Namespace, "name", pod.Name)
+			shouldSkip, checkErr := sandbox.shouldSkipPodWait(ctx, pod)
+			if checkErr != nil {
+				return false, checkErr
+			}
+			if shouldSkip {
+				return true, nil
+			}
 			return false, nil
 		}
 		klog.V(4).InfoS("Pod accessible in fake informer", "namespace", pod.Namespace, "name", pod.Name, "node", podObj.Spec.NodeName)
@@ -351,13 +389,20 @@ func (sandbox *kubeClientSandbox) restoreEvictedPods(ctx context.Context) error 
 	// This is important to ensure each descheduling cycle can see all the restored pods.
 	// Without this wait, the next cycle might not see the restored pods in the indexer yet.
 	if err := waitForPodsCondition(ctx, restoredPods, func(pod *evictedPodInfo) (bool, error) {
-		exists, err := sandbox.hasObjectInIndexer(v1.SchemeGroupVersion.WithResource("pods"), pod.Namespace, pod.Name)
+		exists, err := sandbox.hasObjectInIndexer(v1.SchemeGroupVersion.WithResource("pods"), pod.Namespace, pod.Name, pod.UID)
 		if err != nil {
 			klog.V(4).InfoS("Error checking indexer for restored pod", "namespace", pod.Namespace, "name", pod.Name, "error", err)
 			return false, nil
 		}
 		if !exists {
 			klog.V(4).InfoS("Restored pod not yet in fake indexer, waiting", "namespace", pod.Namespace, "name", pod.Name)
+			shouldSkip, checkErr := sandbox.shouldSkipPodWait(ctx, pod)
+			if checkErr != nil {
+				return false, checkErr
+			}
+			if shouldSkip {
+				return true, nil
+			}
 			return false, nil
 		}
 		klog.V(4).InfoS("Restored pod now in fake indexer", "namespace", pod.Namespace, "name", pod.Name)

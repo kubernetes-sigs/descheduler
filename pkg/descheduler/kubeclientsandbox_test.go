@@ -125,13 +125,14 @@ func TestKubeClientSandboxEventHandlers(t *testing.T) {
 	}
 
 	// Helper function to wait for a resource to appear in the sandbox's fake client indexer
-	waitForResourceInIndexer := func(resourceType, namespace, name, description string) error {
+	waitForResourceInIndexer := func(resourceType, namespace, name, uid, description string) error {
 		t.Logf("Waiting for %s to appear in fake client indexer...", description)
 		return wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 			exists, err := sandbox.hasObjectInIndexer(
 				v1.SchemeGroupVersion.WithResource(resourceType),
 				namespace,
 				name,
+				uid,
 			)
 			if err != nil {
 				t.Logf("Error checking %s in indexer: %v", description, err)
@@ -146,12 +147,12 @@ func TestKubeClientSandboxEventHandlers(t *testing.T) {
 	}
 
 	// Wait for the pod to appear in the sandbox's fake client indexer
-	if err := waitForResourceInIndexer("pods", testPod.Namespace, testPod.Name, "pod"); err != nil {
+	if err := waitForResourceInIndexer("pods", testPod.Namespace, testPod.Name, string(testPod.UID), "pod"); err != nil {
 		t.Fatalf("Pod did not appear in fake client indexer within timeout: %v", err)
 	}
 
 	// Wait for the node to appear in the sandbox's fake client indexer
-	if err := waitForResourceInIndexer("nodes", "", testNode.Name, "node"); err != nil {
+	if err := waitForResourceInIndexer("nodes", "", testNode.Name, string(testNode.UID), "node"); err != nil {
 		t.Fatalf("Node did not appear in fake client indexer within timeout: %v", err)
 	}
 
@@ -267,6 +268,137 @@ func TestKubeClientSandboxReset(t *testing.T) {
 		t.Fatalf("Expected cache to be empty after reset, but found %d pods", len(evictedPodsAfterReset))
 	}
 	t.Logf("Successfully verified cache is empty after reset")
+}
+
+func TestKubeClientSandboxRestoreEvictedPods(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+
+	// Create test pods
+	pod1 := test.BuildTestPod("pod1", 100, 0, node1.Name, test.SetRSOwnerRef)
+	pod2 := test.BuildTestPod("pod2", 100, 0, node1.Name, test.SetRSOwnerRef)
+	pod3 := test.BuildTestPod("pod3", 100, 0, node1.Name, test.SetRSOwnerRef)
+	pod4 := test.BuildTestPod("pod4", 100, 0, node1.Name, test.SetRSOwnerRef)
+
+	sandbox, _, realClient := setupTestSandbox(ctx, t, node1, pod1, pod2, pod3, pod4)
+
+	// Evict all pods
+	for _, pod := range []*v1.Pod{pod1, pod2, pod3, pod4} {
+		eviction := &policy.Eviction{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      pod.Name,
+				Namespace: pod.Namespace,
+			},
+		}
+		if err := sandbox.fakeClient().CoreV1().Pods(pod.Namespace).EvictV1(ctx, eviction); err != nil {
+			t.Fatalf("Error evicting %s: %v", pod.Name, err)
+		}
+	}
+
+	// Delete pod2 from real client to simulate it being deleted (should skip restoration)
+	if err := realClient.CoreV1().Pods(pod2.Namespace).Delete(ctx, pod2.Name, metav1.DeleteOptions{}); err != nil {
+		t.Fatalf("Error deleting pod2 from real client: %v", err)
+	}
+
+	// Delete and recreate pod3 with different UID in real client (should skip restoration)
+	if err := realClient.CoreV1().Pods(pod3.Namespace).Delete(ctx, pod3.Name, metav1.DeleteOptions{}); err != nil {
+		t.Fatalf("Error deleting pod3 from real client: %v", err)
+	}
+	pod3New := test.BuildTestPod("pod3", 100, 0, node1.Name, test.SetRSOwnerRef)
+	// Ensure pod3New has a different UID from pod3
+	if pod3New.UID == pod3.UID {
+		pod3New.UID = "new-uid-for-pod3"
+	}
+	if _, err := realClient.CoreV1().Pods(pod3New.Namespace).Create(ctx, pod3New, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("Error recreating pod3 in real client: %v", err)
+	}
+
+	// Verify evicted pods are in cache
+	evictedPods := sandbox.evictedPodsCache.list()
+	if len(evictedPods) != 4 {
+		t.Fatalf("Expected 4 evicted pods in cache, got %d", len(evictedPods))
+	}
+	t.Logf("Evicted pods in cache: %d", len(evictedPods))
+
+	// Call restoreEvictedPods
+	t.Log("Calling restoreEvictedPods...")
+	if err := sandbox.restoreEvictedPods(ctx); err != nil {
+		t.Fatalf("restoreEvictedPods failed: %v", err)
+	}
+
+	// Verify pod1 and pod4 were restored (exists in fake client with matching UID and accessible via indexer)
+	for _, pod := range []*v1.Pod{pod1, pod4} {
+		// Check restoration via fake client
+		restoredPod, err := sandbox.fakeClient().CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+		if err != nil {
+			t.Errorf("%s should have been restored to fake client: %v", pod.Name, err)
+		} else {
+			if restoredPod.UID != pod.UID {
+				t.Errorf("Restored %s UID mismatch: got %s, want %s", pod.Name, restoredPod.UID, pod.UID)
+			}
+			t.Logf("Successfully verified %s restoration: %s/%s (UID: %s)", pod.Name, restoredPod.Namespace, restoredPod.Name, restoredPod.UID)
+		}
+
+		// Check accessibility via indexer
+		exists, err := sandbox.hasObjectInIndexer(v1.SchemeGroupVersion.WithResource("pods"), pod.Namespace, pod.Name, string(pod.UID))
+		if err != nil {
+			t.Errorf("Error checking %s in indexer: %v", pod.Name, err)
+		}
+		if !exists {
+			t.Errorf("%s should exist in fake indexer after restoration", pod.Name)
+		} else {
+			t.Logf("Successfully verified %s exists in fake indexer", pod.Name)
+		}
+	}
+
+	// Verify pod2 was NOT restored (deleted from real client)
+	_, err := sandbox.fakeClient().CoreV1().Pods(pod2.Namespace).Get(ctx, pod2.Name, metav1.GetOptions{})
+	if err == nil {
+		t.Error("pod2 should NOT have been restored (was deleted from real client)")
+	} else {
+		t.Logf("Correctly verified pod2 was not restored: %v", err)
+	}
+
+	// Verify pod3 was NOT restored with old UID (UID mismatch case)
+	// Note: pod3 may exist in fake client with NEW UID due to event handler syncing,
+	// but it should NOT have been restored with the OLD UID from evicted cache
+	pod3InFake, err := sandbox.fakeClient().CoreV1().Pods(pod3.Namespace).Get(ctx, pod3.Name, metav1.GetOptions{})
+	if err == nil {
+		// Pod3 exists, but it should have the NEW UID, not the old one
+		if pod3InFake.UID == pod3.UID {
+			t.Error("pod3 should NOT have been restored with old UID (UID mismatch should prevent restoration)")
+		} else {
+			t.Logf("Correctly verified pod3 has new UID (%s), not old UID (%s) - restoration was skipped", pod3InFake.UID, pod3.UID)
+		}
+	} else {
+		// Pod3 doesn't exist - this is also acceptable (event handlers haven't synced it yet)
+		t.Logf("pod3 not found in fake client: %v", err)
+	}
+
+	// Verify evicted pods cache is still intact (restoreEvictedPods doesn't clear it)
+	evictedPodsAfter := sandbox.evictedPodsCache.list()
+	if len(evictedPodsAfter) != 4 {
+		t.Errorf("Expected evicted pods cache to still have 4 entries, got %d", len(evictedPodsAfter))
+	}
+}
+
+func TestKubeClientSandboxRestoreEvictedPodsEmptyCache(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	sandbox, _, _ := setupTestSandbox(ctx, t, node1)
+
+	// Call restoreEvictedPods with empty cache - should be a no-op
+	t.Log("Calling restoreEvictedPods with empty cache...")
+	if err := sandbox.restoreEvictedPods(ctx); err != nil {
+		t.Fatalf("restoreEvictedPods should succeed with empty cache: %v", err)
+	}
+	t.Log("Successfully verified restoreEvictedPods handles empty cache")
 }
 
 func TestEvictedPodsCache(t *testing.T) {
