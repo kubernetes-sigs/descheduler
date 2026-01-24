@@ -19,41 +19,213 @@ package descheduler
 import (
 	"context"
 	"testing"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
+	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 
 	"sigs.k8s.io/descheduler/test"
 )
 
-func TestKubeClientSandboxReset(t *testing.T) {
-	ctx := context.Background()
-	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
-	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, test.SetRSOwnerRef)
-	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, test.SetRSOwnerRef)
+// setupTestSandbox creates and initializes a kubeClientSandbox for testing.
+// It creates a fake client, informer factory, registers pod and node informers,
+// creates the sandbox, and starts both factories.
+func setupTestSandbox(ctx context.Context, t *testing.T, initialObjects ...runtime.Object) (*kubeClientSandbox, informers.SharedInformerFactory, clientset.Interface) {
+	// Create a "real" fake client to act as the source of truth
+	realClient := fakeclientset.NewSimpleClientset(initialObjects...)
+	realFactory := informers.NewSharedInformerFactoryWithOptions(realClient, 0)
 
-	client := fakeclientset.NewSimpleClientset(node1, p1, p2)
-	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(client, 0)
+	// Register pods and nodes informers BEFORE creating the sandbox
+	_ = realFactory.Core().V1().Pods().Informer()
+	_ = realFactory.Core().V1().Nodes().Informer()
 
-	// Explicitly get the informers to ensure they're registered
-	_ = sharedInformerFactory.Core().V1().Pods().Informer()
-	_ = sharedInformerFactory.Core().V1().Nodes().Informer()
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	sharedInformerFactory.Start(ctx.Done())
-	sharedInformerFactory.WaitForCacheSync(ctx.Done())
-
-	sandbox, err := newKubeClientSandbox(client, sharedInformerFactory,
+	// Create the sandbox with only pods and nodes resources
+	sandbox, err := newKubeClientSandbox(realClient, realFactory,
 		v1.SchemeGroupVersion.WithResource("pods"),
 		v1.SchemeGroupVersion.WithResource("nodes"),
 	)
 	if err != nil {
 		t.Fatalf("Failed to create kubeClientSandbox: %v", err)
 	}
+
+	// fake factory created by newKubeClientSandbox needs to be started before
+	// the "real" fake client factory to have all handlers registered
+	// to get complete propagation
+	sandbox.fakeSharedInformerFactory().Start(ctx.Done())
+	sandbox.fakeSharedInformerFactory().WaitForCacheSync(ctx.Done())
+
+	realFactory.Start(ctx.Done())
+	realFactory.WaitForCacheSync(ctx.Done())
+
+	return sandbox, realFactory, realClient
+}
+
+func TestKubeClientSandboxEventHandlers(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	sandbox, realFactory, realClient := setupTestSandbox(ctx, t)
+
+	// Register a third resource (secrets) in the real factory AFTER sandbox creation
+	// This should NOT be synced to the fake client
+	_ = realFactory.Core().V1().Secrets().Informer()
+
+	// Create test objects
+	testPod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod",
+			Namespace: "default",
+			UID:       "pod-uid-12345",
+		},
+		Spec: v1.PodSpec{
+			NodeName: "test-node",
+		},
+	}
+
+	testNode := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-node",
+			UID:  "node-uid-67890",
+		},
+	}
+
+	testSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secret",
+			Namespace: "default",
+			UID:       "secret-uid-abcde",
+		},
+		Data: map[string][]byte{
+			"key": []byte("value"),
+		},
+	}
+
+	// Add objects to the real client
+	var err error
+	_, err = realClient.CoreV1().Pods(testPod.Namespace).Create(ctx, testPod, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create pod in real client: %v", err)
+	}
+
+	_, err = realClient.CoreV1().Nodes().Create(ctx, testNode, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create node in real client: %v", err)
+	}
+
+	_, err = realClient.CoreV1().Secrets(testSecret.Namespace).Create(ctx, testSecret, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create secret in real client: %v", err)
+	}
+
+	// Helper function to wait for a resource to appear in the sandbox's fake client indexer
+	waitForResourceInIndexer := func(resourceType, namespace, name, description string) error {
+		t.Logf("Waiting for %s to appear in fake client indexer...", description)
+		return wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
+			exists, err := sandbox.hasObjectInIndexer(
+				v1.SchemeGroupVersion.WithResource(resourceType),
+				namespace,
+				name,
+			)
+			if err != nil {
+				t.Logf("Error checking %s in indexer: %v", description, err)
+				return false, nil
+			}
+			if exists {
+				t.Logf("%s appeared in fake client indexer", description)
+				return true, nil
+			}
+			return false, nil
+		})
+	}
+
+	// Wait for the pod to appear in the sandbox's fake client indexer
+	if err := waitForResourceInIndexer("pods", testPod.Namespace, testPod.Name, "pod"); err != nil {
+		t.Fatalf("Pod did not appear in fake client indexer within timeout: %v", err)
+	}
+
+	// Wait for the node to appear in the sandbox's fake client indexer
+	if err := waitForResourceInIndexer("nodes", "", testNode.Name, "node"); err != nil {
+		t.Fatalf("Node did not appear in fake client indexer within timeout: %v", err)
+	}
+
+	// Verify the pod can be retrieved from the fake client
+	retrievedPod, err := sandbox.fakeClient().CoreV1().Pods(testPod.Namespace).Get(ctx, testPod.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Failed to retrieve pod from fake client: %v", err)
+	}
+	if retrievedPod.Namespace != testPod.Namespace || retrievedPod.Name != testPod.Name || retrievedPod.UID != testPod.UID {
+		t.Errorf("Retrieved pod mismatch: got namespace=%s name=%s uid=%s, want namespace=%s name=%s uid=%s",
+			retrievedPod.Namespace, retrievedPod.Name, retrievedPod.UID, testPod.Namespace, testPod.Name, testPod.UID)
+	}
+	t.Logf("Successfully retrieved pod from fake client: %s/%s", retrievedPod.Namespace, retrievedPod.Name)
+
+	// Verify the node can be retrieved from the fake client
+	retrievedNode, err := sandbox.fakeClient().CoreV1().Nodes().Get(ctx, testNode.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Failed to retrieve node from fake client: %v", err)
+	}
+	if retrievedNode.Name != testNode.Name || retrievedNode.UID != testNode.UID {
+		t.Errorf("Retrieved node mismatch: got name=%s uid=%s, want name=%s uid=%s",
+			retrievedNode.Name, retrievedNode.UID, testNode.Name, testNode.UID)
+	}
+	t.Logf("Successfully retrieved node from fake client: %s", retrievedNode.Name)
+
+	// Wait a bit longer and verify the secret does NOT appear in the fake client indexer
+	// because secrets were registered AFTER the sandbox was created
+	t.Log("Verifying secret does NOT appear in fake client indexer...")
+	time.Sleep(500 * time.Millisecond) // Give extra time to ensure it's not just a timing issue
+
+	// First, verify we can get the informer for secrets in the fake factory
+	secretInformer, err := sandbox.fakeSharedInformerFactory().ForResource(v1.SchemeGroupVersion.WithResource("secrets"))
+	if err != nil {
+		t.Logf("Expected: Cannot get secret informer from fake factory: %v", err)
+	} else {
+		// If we can get the informer, check if the secret exists in it
+		key := "default/test-secret"
+		_, exists, err := secretInformer.Informer().GetIndexer().GetByKey(key)
+		if err != nil {
+			t.Logf("Error checking secret in fake indexer: %v", err)
+		}
+		if exists {
+			t.Error("Secret should NOT exist in fake client indexer (it was registered after sandbox creation)")
+		} else {
+			t.Log("Correctly verified: Secret does not exist in fake client indexer")
+		}
+	}
+
+	// Also verify that attempting to get the secret directly from fake client should fail
+	_, err = sandbox.fakeClient().CoreV1().Secrets(testSecret.Namespace).Get(ctx, testSecret.Name, metav1.GetOptions{})
+	if err == nil {
+		t.Error("Secret should NOT be retrievable from fake client (it was not synced)")
+	} else {
+		t.Logf("Correctly verified: Secret not retrievable from fake client: %v", err)
+	}
+
+	// Verify the secret IS in the real client (sanity check)
+	_, err = realClient.CoreV1().Secrets(testSecret.Namespace).Get(ctx, testSecret.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Secret should exist in real client but got error: %v", err)
+	}
+	t.Log("Sanity check passed: Secret exists in real client")
+}
+
+func TestKubeClientSandboxReset(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, test.SetRSOwnerRef)
+	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, test.SetRSOwnerRef)
+
+	sandbox, _, _ := setupTestSandbox(ctx, t, node1, p1, p2)
 
 	eviction1 := &policy.Eviction{
 		ObjectMeta: metav1.ObjectMeta{
@@ -67,9 +239,6 @@ func TestKubeClientSandboxReset(t *testing.T) {
 			Namespace: p2.Namespace,
 		},
 	}
-
-	sandbox.fakeSharedInformerFactory().Start(ctx.Done())
-	sandbox.fakeSharedInformerFactory().WaitForCacheSync(ctx.Done())
 
 	if err := sandbox.fakeClient().CoreV1().Pods(p1.Namespace).EvictV1(context.TODO(), eviction1); err != nil {
 		t.Fatalf("Error evicting p1: %v", err)
