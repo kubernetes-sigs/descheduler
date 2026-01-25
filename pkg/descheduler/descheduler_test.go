@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	promapi "github.com/prometheus/client_golang/api"
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,15 +38,31 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/features"
+	fakeplugin "sigs.k8s.io/descheduler/pkg/framework/fake/plugin"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
+	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	deschedulerversion "sigs.k8s.io/descheduler/pkg/version"
 	"sigs.k8s.io/descheduler/test"
 )
+
+type mockPrometheusClient struct {
+	name string
+}
+
+func (m *mockPrometheusClient) URL(ep string, args map[string]string) *url.URL {
+	return nil
+}
+
+func (m *mockPrometheusClient) Do(ctx context.Context, req *http.Request) (*http.Response, []byte, error) {
+	return nil, nil, nil
+}
+
+var _ promapi.Client = &mockPrometheusClient{}
 
 var (
 	podEvictionError     = errors.New("PodEvictionError")
@@ -1404,5 +1422,150 @@ func TestEvictedPodRestorationInDryRun(t *testing.T) {
 			t.Fatalf("Expected evicted cache to be empty after restoration in cycle %d, got %d pods", i, len(evictedPods))
 		}
 		klog.Infof("Evicted pods cache was cleared after restoration in cycle %d", i)
+	}
+}
+
+// verifyAllPrometheusClientsEqual checks that all Prometheus client variables are equal to the expected value
+func verifyAllPrometheusClientsEqual(t *testing.T, expected, fromReactor, fromPluginHandle, fromDescheduler promapi.Client) {
+	t.Helper()
+	if fromReactor != expected {
+		t.Fatalf("Prometheus client from reactor: expected %v, got %v", expected, fromReactor)
+	}
+	if fromPluginHandle != expected {
+		t.Fatalf("Prometheus client from plugin handle: expected %v, got %v", expected, fromPluginHandle)
+	}
+	if fromDescheduler != expected {
+		t.Fatalf("Prometheus client from descheduler: expected %v, got %v", expected, fromDescheduler)
+	}
+	t.Logf("All Prometheus clients variables correctly set to: %v", expected)
+}
+
+// TestPluginPrometheusClientAccess tests that the Prometheus client is accessible through the plugin handle
+func TestPluginPrometheusClientAccess(t *testing.T) {
+	testCases := []struct {
+		name   string
+		dryRun bool
+	}{
+		{
+			name:   "dry run disabled",
+			dryRun: false,
+		},
+		{
+			name:   "dry run enabled",
+			dryRun: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			initPluginRegistry()
+
+			newInvoked := false
+			reactorInvoked := false
+			var prometheusClientFromPluginNewHandle promapi.Client
+			var prometheusClientFromReactor promapi.Client
+
+			fakePlugin := &fakeplugin.FakePlugin{
+				PluginName: "TestPluginWithPrometheusClient",
+			}
+
+			fakePlugin.AddReactor(string(frameworktypes.DescheduleExtensionPoint), func(action fakeplugin.Action) (handled, filter bool, err error) {
+				if dAction, ok := action.(fakeplugin.DescheduleAction); ok {
+					reactorInvoked = true
+					prometheusClientFromReactor = dAction.Handle().PrometheusClient()
+					return true, false, nil
+				}
+				return false, false, nil
+			})
+
+			pluginregistry.Register(
+				fakePlugin.PluginName,
+				fakeplugin.NewPluginFncFromFakeWithReactor(fakePlugin, func(action fakeplugin.ActionImpl) {
+					newInvoked = true
+					prometheusClientFromPluginNewHandle = action.Handle().PrometheusClient()
+				}),
+				&fakeplugin.FakePlugin{},
+				&fakeplugin.FakePluginArgs{},
+				fakeplugin.ValidateFakePluginArgs,
+				fakeplugin.SetDefaults_FakePluginArgs,
+				pluginregistry.PluginRegistry,
+			)
+
+			deschedulerPolicy := &api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: "test-profile",
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: fakePlugin.PluginName,
+								Args: &fakeplugin.FakePluginArgs{},
+							},
+						},
+						Plugins: api.Plugins{
+							Deschedule: api.PluginSet{
+								Enabled: []string{fakePlugin.PluginName},
+							},
+						},
+					},
+				},
+			}
+
+			node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
+			node2 := test.BuildTestNode("node2", 1000, 2000, 9, nil)
+
+			_, descheduler, _ := initDescheduler(t, ctx, initFeatureGates(), deschedulerPolicy, nil, tc.dryRun, node1, node2)
+
+			// Test cycles with different Prometheus client values
+			cycles := []struct {
+				name   string
+				client promapi.Client
+			}{
+				{
+					name:   "initial client",
+					client: &mockPrometheusClient{name: "new-init-client"},
+				},
+				{
+					name:   "nil client",
+					client: nil,
+				},
+				{
+					name:   "new client",
+					client: &mockPrometheusClient{name: "new-client"},
+				},
+				{
+					name:   "another client",
+					client: &mockPrometheusClient{name: "another-client"},
+				},
+			}
+
+			for i, cycle := range cycles {
+				t.Logf("Cycle %d: %s", i+1, cycle.name)
+
+				// Set the descheduler's Prometheus client
+				t.Logf("Setting descheduler.prometheusClient from %v to %v", descheduler.prometheusClient, cycle.client)
+				descheduler.prometheusClient = cycle.client
+
+				newInvoked = false
+				reactorInvoked = false
+				prometheusClientFromPluginNewHandle = nil
+				prometheusClientFromReactor = nil
+
+				descheduler.runProfiles(ctx)
+
+				t.Logf("After cycle %d: prometheusClientFromReactor=%v, descheduler.prometheusClient=%v", i+1, prometheusClientFromReactor, descheduler.prometheusClient)
+
+				if !newInvoked {
+					t.Fatalf("Expected plugin new to be invoked during cycle %d", i+1)
+				}
+
+				if !reactorInvoked {
+					t.Fatalf("Expected deschedule reactor to be invoked during cycle %d", i+1)
+				}
+
+				verifyAllPrometheusClientsEqual(t, cycle.client, prometheusClientFromReactor, prometheusClientFromPluginNewHandle, descheduler.prometheusClient)
+			}
+		})
 	}
 }
