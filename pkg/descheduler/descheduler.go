@@ -91,6 +91,11 @@ type descheduler struct {
 	promClientCtrl        *promClientController
 }
 
+type (
+	createPrometheusClientFunc func(url, token string) (promapi.Client, *http.Transport, error)
+	inClusterConfigFunc        func() (*rest.Config, error)
+)
+
 type promClientController struct {
 	promClient                        promapi.Client
 	previousPrometheusClientTransport *http.Transport
@@ -98,13 +103,17 @@ type promClientController struct {
 	currentPrometheusAuthToken        string
 	namespacedSecretsLister           corev1listers.SecretNamespaceLister
 	metricsProviders                  map[api.MetricsSource]*api.MetricsProvider
+	createPrometheusClient            createPrometheusClientFunc
+	inClusterConfig                   inClusterConfigFunc
 }
 
 func newPromClientController(prometheusClient promapi.Client, metricsProviders map[api.MetricsSource]*api.MetricsProvider) *promClientController {
 	return &promClientController{
-		promClient:       prometheusClient,
-		queue:            workqueue.NewRateLimitingQueueWithConfig(workqueue.DefaultControllerRateLimiter(), workqueue.RateLimitingQueueConfig{Name: "descheduler"}),
-		metricsProviders: metricsProviders,
+		promClient:             prometheusClient,
+		queue:                  workqueue.NewRateLimitingQueueWithConfig(workqueue.DefaultControllerRateLimiter(), workqueue.RateLimitingQueueConfig{Name: "descheduler"}),
+		metricsProviders:       metricsProviders,
+		createPrometheusClient: client.CreatePrometheusClient,
+		inClusterConfig:        rest.InClusterConfig,
 	}
 }
 
@@ -217,11 +226,11 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 
 func (d *promClientController) reconcileInClusterSAToken() error {
 	// Read the sa token and assume it has the sufficient permissions to authenticate
-	cfg, err := rest.InClusterConfig()
+	cfg, err := d.inClusterConfig()
 	if err == nil {
 		if d.currentPrometheusAuthToken != cfg.BearerToken {
 			klog.V(2).Infof("Creating Prometheus client (with SA token)")
-			prometheusClient, transport, err := client.CreatePrometheusClient(d.metricsProviders[api.PrometheusMetrics].Prometheus.URL, cfg.BearerToken)
+			prometheusClient, transport, err := d.createPrometheusClient(d.metricsProviders[api.PrometheusMetrics].Prometheus.URL, cfg.BearerToken)
 			if err != nil {
 				return fmt.Errorf("unable to create a prometheus client: %v", err)
 			}
@@ -305,7 +314,7 @@ func (d *promClientController) sync() error {
 	}
 
 	klog.V(2).Infof("authentication secret token updated, recreating prometheus client")
-	prometheusClient, transport, err := client.CreatePrometheusClient(prometheusConfig.URL, authToken)
+	prometheusClient, transport, err := d.createPrometheusClient(prometheusConfig.URL, authToken)
 	if err != nil {
 		return fmt.Errorf("unable to create a prometheus client: %v", err)
 	}
