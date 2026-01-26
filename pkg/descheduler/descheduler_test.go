@@ -1544,8 +1544,8 @@ func TestPluginPrometheusClientAccess(t *testing.T) {
 				t.Logf("Cycle %d: %s", i+1, cycle.name)
 
 				// Set the descheduler's Prometheus client
-				t.Logf("Setting descheduler.prometheusClient from %v to %v", descheduler.prometheusClient, cycle.client)
-				descheduler.prometheusClient = cycle.client
+				t.Logf("Setting descheduler.promClientCtrl.promClient from %v to %v", descheduler.promClientCtrl.promClient, cycle.client)
+				descheduler.promClientCtrl.promClient = cycle.client
 
 				newInvoked = false
 				reactorInvoked = false
@@ -1554,7 +1554,7 @@ func TestPluginPrometheusClientAccess(t *testing.T) {
 
 				descheduler.runProfiles(ctx)
 
-				t.Logf("After cycle %d: prometheusClientFromReactor=%v, descheduler.prometheusClient=%v", i+1, prometheusClientFromReactor, descheduler.prometheusClient)
+				t.Logf("After cycle %d: prometheusClientFromReactor=%v, descheduler.promClientCtrl.promClient=%v", i+1, prometheusClientFromReactor, descheduler.promClientCtrl.promClient)
 
 				if !newInvoked {
 					t.Fatalf("Expected plugin new to be invoked during cycle %d", i+1)
@@ -1564,7 +1564,7 @@ func TestPluginPrometheusClientAccess(t *testing.T) {
 					t.Fatalf("Expected deschedule reactor to be invoked during cycle %d", i+1)
 				}
 
-				verifyAllPrometheusClientsEqual(t, cycle.client, prometheusClientFromReactor, prometheusClientFromPluginNewHandle, descheduler.prometheusClient)
+				verifyAllPrometheusClientsEqual(t, cycle.client, prometheusClientFromReactor, prometheusClientFromPluginNewHandle, descheduler.promClientCtrl.promClient)
 			}
 		})
 	}
