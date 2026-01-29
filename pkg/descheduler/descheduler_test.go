@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/informers"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
+	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/rest"
 	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
@@ -218,15 +220,21 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
 
+	var namespacedSharedInformerFactory informers.SharedInformerFactory
+	prometheusConfig := getPrometheusConfig(internalDeschedulerPolicy.MetricsProviders)
+	if prometheusConfig != nil && configureSecretPromClientReconciler(prometheusConfig) {
+		namespacedSharedInformerFactory = informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields), informers.WithNamespace(prometheusConfig.AuthToken.SecretReference.Namespace))
+	}
+
 	// Always create descheduler with real client/factory first to register all informers
-	descheduler, err := newDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", eventRecorder, rs.Client, sharedInformerFactory, nil)
+	descheduler, err := newDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", eventRecorder, rs.Client, sharedInformerFactory, namespacedSharedInformerFactory, nil)
 	if err != nil {
 		eventBroadcaster.Shutdown()
 		t.Fatalf("Unable to create descheduler instance: %v", err)
 	}
 
 	// Setup Prometheus provider (only for real client case, not for dry run)
-	if err := setupPrometheusProvider(descheduler, nil); err != nil {
+	if err := setupPrometheusProvider(descheduler.secretBasedPromClientCtrl, namespacedSharedInformerFactory); err != nil {
 		eventBroadcaster.Shutdown()
 		t.Fatalf("Failed to setup Prometheus provider: %v", err)
 	}
@@ -240,11 +248,23 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 			t.Fatalf("Failed to create kube client sandbox: %v", err)
 		}
 
+		// Create fake namespaced informer factory if needed for secret-based reconciliation
+		var fakeNamespacedInformerFactory informers.SharedInformerFactory
+		if prometheusConfig != nil && configureSecretPromClientReconciler(prometheusConfig) {
+			fakeNamespacedInformerFactory = informers.NewSharedInformerFactoryWithOptions(kubeClientSandbox.fakeClient(), 0, informers.WithTransform(trimManagedFields), informers.WithNamespace(prometheusConfig.AuthToken.SecretReference.Namespace))
+		}
+
 		// Replace descheduler with one using fake client/factory
-		descheduler, err = newDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), kubeClientSandbox)
+		descheduler, err = newDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), fakeNamespacedInformerFactory, kubeClientSandbox)
 		if err != nil {
 			eventBroadcaster.Shutdown()
 			t.Fatalf("Unable to create dry run descheduler instance: %v", err)
+		}
+
+		// Start fake namespaced informer factory if created
+		if fakeNamespacedInformerFactory != nil {
+			fakeNamespacedInformerFactory.Start(ctx.Done())
+			fakeNamespacedInformerFactory.WaitForCacheSync(ctx.Done())
 		}
 	}
 
@@ -254,11 +274,21 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 		descheduler.kubeClientSandbox.fakeSharedInformerFactory().WaitForCacheSync(ctx.Done())
 	}
 	sharedInformerFactory.Start(ctx.Done())
+	if namespacedSharedInformerFactory != nil {
+		namespacedSharedInformerFactory.Start(ctx.Done())
+	}
 	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+	if namespacedSharedInformerFactory != nil {
+		namespacedSharedInformerFactory.WaitForCacheSync(ctx.Done())
+	}
 
 	if dryRun {
 		if err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
 			for _, obj := range objects {
+				// Only check for nodes - secrets are handled by namespacedSharedInformerFactory
+				if _, ok := obj.(*v1.Node); !ok {
+					continue
+				}
 				exists, err := descheduler.kubeClientSandbox.hasRuntimeObjectInIndexer(obj)
 				if err != nil {
 					return false, err
@@ -281,6 +311,27 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 	}
 
 	return rs, descheduler, client
+}
+
+func waitForSecretsPropagation(ctx context.Context, secretsLister corev1listers.SecretNamespaceLister, objects []runtime.Object) error {
+	return wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
+		for _, obj := range objects {
+			secret, ok := obj.(*v1.Secret)
+			if !ok {
+				continue
+			}
+			_, err := secretsLister.Get(secret.Name)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					klog.Infof("Secret %s/%s has not propagated to the indexer", secret.Namespace, secret.Name)
+					return false, nil
+				}
+				return false, err
+			}
+			klog.Infof("Secret %s/%s has propagated to the indexer", secret.Namespace, secret.Name)
+		}
+		return true, nil
+	})
 }
 
 func TestTaintsUpdated(t *testing.T) {
@@ -1345,7 +1396,7 @@ func TestEvictedPodRestorationInDryRun(t *testing.T) {
 	defer eventBroadcaster.Shutdown()
 
 	// Always create descheduler with real client/factory first to register all informers
-	descheduler, err := newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, rs.Client, sharedInformerFactory, nil)
+	descheduler, err := newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, rs.Client, sharedInformerFactory, nil, nil)
 	if err != nil {
 		t.Fatalf("Unable to create descheduler instance: %v", err)
 	}
@@ -1360,7 +1411,7 @@ func TestEvictedPodRestorationInDryRun(t *testing.T) {
 	}
 
 	// Replace descheduler with one using fake client/factory
-	descheduler, err = newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), kubeClientSandbox)
+	descheduler, err = newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), nil, kubeClientSandbox)
 	if err != nil {
 		t.Fatalf("Unable to create dry run descheduler instance: %v", err)
 	}
@@ -1444,16 +1495,56 @@ func verifyAllPrometheusClientsEqual(t *testing.T, expected, fromReactor, fromPl
 // TestPluginPrometheusClientAccess tests that the Prometheus client is accessible through the plugin handle
 func TestPluginPrometheusClientAccess(t *testing.T) {
 	testCases := []struct {
-		name   string
-		dryRun bool
+		name             string
+		dryRun           bool
+		metricsProviders []api.MetricsProvider
+		objects          []runtime.Object
 	}{
 		{
-			name:   "dry run disabled",
+			name:   "dry run disabled with in cluster reconciliation",
 			dryRun: false,
+			metricsProviders: []api.MetricsProvider{
+				{
+					Source: api.PrometheusMetrics,
+					Prometheus: &api.Prometheus{
+						URL: prometheusURL,
+					},
+				},
+			},
 		},
 		{
-			name:   "dry run enabled",
+			name:   "dry run disabled with secret based reconciliation",
+			dryRun: false,
+			metricsProviders: []api.MetricsProvider{
+				{
+					Source:     api.PrometheusMetrics,
+					Prometheus: newPrometheusConfig(),
+				},
+			},
+			objects: []runtime.Object{newPrometheusAuthSecret(withToken("test-token"))},
+		},
+		{
+			name:   "dry run enabled with in cluster reconciliation",
 			dryRun: true,
+			metricsProviders: []api.MetricsProvider{
+				{
+					Source: api.PrometheusMetrics,
+					Prometheus: &api.Prometheus{
+						URL: prometheusURL,
+					},
+				},
+			},
+		},
+		{
+			name:   "dry run enabled with secret based reconciliation",
+			dryRun: true,
+			metricsProviders: []api.MetricsProvider{
+				{
+					Source:     api.PrometheusMetrics,
+					Prometheus: newPrometheusConfig(),
+				},
+			},
+			objects: []runtime.Object{newPrometheusAuthSecret(withToken("test-token"))},
 		},
 	}
 
@@ -1511,12 +1602,14 @@ func TestPluginPrometheusClientAccess(t *testing.T) {
 						},
 					},
 				},
+				MetricsProviders: tc.metricsProviders,
 			}
 
 			node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
 			node2 := test.BuildTestNode("node2", 1000, 2000, 9, nil)
 
-			_, descheduler, _ := initDescheduler(t, ctx, initFeatureGates(), deschedulerPolicy, nil, tc.dryRun, node1, node2)
+			objects := append(tc.objects, node1, node2)
+			_, descheduler, _ := initDescheduler(t, ctx, initFeatureGates(), deschedulerPolicy, nil, tc.dryRun, objects...)
 
 			// Test cycles with different Prometheus client values
 			cycles := []struct {
@@ -1544,9 +1637,17 @@ func TestPluginPrometheusClientAccess(t *testing.T) {
 			for i, cycle := range cycles {
 				t.Logf("Cycle %d: %s", i+1, cycle.name)
 
-				// Set the descheduler's Prometheus client
-				t.Logf("Setting descheduler.promClientCtrl.promClient from %v to %v", descheduler.promClientCtrl.promClient, cycle.client)
-				descheduler.promClientCtrl.promClient = cycle.client
+				if descheduler.inClusterPromClientCtrl != nil {
+					descheduler.inClusterPromClientCtrl.mu.Lock()
+					descheduler.inClusterPromClientCtrl.promClient = cycle.client
+					descheduler.inClusterPromClientCtrl.mu.Unlock()
+				} else if descheduler.secretBasedPromClientCtrl != nil {
+					descheduler.secretBasedPromClientCtrl.mu.Lock()
+					descheduler.secretBasedPromClientCtrl.promClient = cycle.client
+					descheduler.secretBasedPromClientCtrl.mu.Unlock()
+				} else {
+					t.Fatalf("expected at least one prom client reconciler set, got none")
+				}
 
 				newInvoked = false
 				reactorInvoked = false
@@ -1555,7 +1656,7 @@ func TestPluginPrometheusClientAccess(t *testing.T) {
 
 				descheduler.runProfiles(ctx)
 
-				t.Logf("After cycle %d: prometheusClientFromReactor=%v, descheduler.promClientCtrl.promClient=%v", i+1, prometheusClientFromReactor, descheduler.promClientCtrl.promClient)
+				t.Logf("After cycle %d: prometheusClientFromReactor=%v", i+1, prometheusClientFromReactor)
 
 				if !newInvoked {
 					t.Fatalf("Expected plugin new to be invoked during cycle %d", i+1)
@@ -1565,7 +1666,16 @@ func TestPluginPrometheusClientAccess(t *testing.T) {
 					t.Fatalf("Expected deschedule reactor to be invoked during cycle %d", i+1)
 				}
 
-				verifyAllPrometheusClientsEqual(t, cycle.client, prometheusClientFromReactor, prometheusClientFromPluginNewHandle, descheduler.promClientCtrl.promClient)
+				deschPromClient := promapi.Client(nil)
+				if descheduler.inClusterPromClientCtrl != nil {
+					deschPromClient = descheduler.inClusterPromClientCtrl.prometheusClient()
+				} else if descheduler.secretBasedPromClientCtrl != nil {
+					deschPromClient = descheduler.secretBasedPromClientCtrl.prometheusClient()
+				} else {
+					t.Fatalf("expected at least one prom client reconciler set, got none")
+				}
+
+				verifyAllPrometheusClientsEqual(t, cycle.client, prometheusClientFromReactor, prometheusClientFromPluginNewHandle, deschPromClient)
 			}
 		})
 	}
@@ -1579,6 +1689,10 @@ func withToken(token string) func(*v1.Secret) {
 
 func newPrometheusAuthSecret(apply func(*v1.Secret)) *v1.Secret {
 	secret := &v1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Secret",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "prom-token",
 			Namespace: "kube-system",
@@ -1597,12 +1711,12 @@ type promClientControllerTestSetup struct {
 	fakeClient                *fakeclientset.Clientset
 	namespacedInformerFactory informers.SharedInformerFactory
 	metricsProviders          map[api.MetricsSource]*api.MetricsProvider
-	ctrl                      *promClientController
+	ctrl                      *secretBasedPromClientController
 	stopCh                    chan struct{}
 	namespace                 string
 }
 
-func setupPromClientControllerTest(objects []runtime.Object, prometheusConfig *api.Prometheus) *promClientControllerTestSetup {
+func setupPromClientControllerTest(t *testing.T, objects []runtime.Object, prometheusConfig *api.Prometheus, setNamespacedSharedInformerFactory bool) *promClientControllerTestSetup {
 	fakeClient := fakeclientset.NewSimpleClientset(objects...)
 
 	namespace := "default"
@@ -1618,15 +1732,27 @@ func setupPromClientControllerTest(objects []runtime.Object, prometheusConfig *a
 		Prometheus: prometheusConfig,
 	}})
 
-	ctrl := newPromClientController(nil, metricsProviders)
-	if prometheusConfig != nil && prometheusConfig.AuthToken != nil && prometheusConfig.AuthToken.SecretReference != nil {
-		ctrl.namespacedSecretsLister = namespacedInformerFactory.Core().V1().Secrets().Lister().Secrets(namespace)
-		namespacedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(ctrl.eventHandler())
+	ctrl := newSecretBasedPromClientController(nil, prometheusConfig, namespacedInformerFactory)
+
+	if setNamespacedSharedInformerFactory {
+		if err := setupPrometheusProvider(ctrl, namespacedInformerFactory); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	stopCh := make(chan struct{})
 	namespacedInformerFactory.Start(stopCh)
 	namespacedInformerFactory.WaitForCacheSync(stopCh)
+
+	// Wait for secrets to propagate to the informer
+	if len(objects) > 0 && setNamespacedSharedInformerFactory {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		secretsLister := namespacedInformerFactory.Core().V1().Secrets().Lister().Secrets(namespace)
+		if err := waitForSecretsPropagation(ctx, secretsLister, objects); err != nil {
+			t.Fatalf("secrets did not propagate to the indexer: %v", err)
+		}
+	}
 
 	return &promClientControllerTestSetup{
 		fakeClient:                fakeClient,
@@ -1652,10 +1778,11 @@ func newPrometheusConfig() *api.Prometheus {
 
 func TestPromClientControllerSync_InvalidConfig(t *testing.T) {
 	testCases := []struct {
-		name             string
-		objects          []runtime.Object
-		prometheusConfig *api.Prometheus
-		expectedErr      error
+		name                          string
+		objects                       []runtime.Object
+		prometheusConfig              *api.Prometheus
+		expectedErr                   error
+		setupPromClientControllerTest bool
 	}{
 		{
 			name:             "empty prometheus config",
@@ -1688,24 +1815,26 @@ func TestPromClientControllerSync_InvalidConfig(t *testing.T) {
 			expectedErr: fmt.Errorf("prometheus metrics source configuration is missing authentication token secret"),
 		},
 		{
-			name:             "secret exists but empty token",
-			objects:          []runtime.Object{newPrometheusAuthSecret(withToken(""))},
-			prometheusConfig: newPrometheusConfig(),
-			expectedErr:      fmt.Errorf("prometheus authentication token secret missing \"prometheusAuthToken\" data or empty"),
+			name:                          "secret exists but empty token",
+			objects:                       []runtime.Object{newPrometheusAuthSecret(withToken(""))},
+			prometheusConfig:              newPrometheusConfig(),
+			setupPromClientControllerTest: true,
+			expectedErr:                   fmt.Errorf("prometheus authentication token secret missing \"prometheusAuthToken\" data or empty"),
 		},
 		{
 			name: "secret exists but missing token key",
 			objects: []runtime.Object{newPrometheusAuthSecret(func(s *v1.Secret) {
 				s.Data = map[string][]byte{}
 			})},
-			prometheusConfig: newPrometheusConfig(),
-			expectedErr:      fmt.Errorf("prometheus authentication token secret missing \"prometheusAuthToken\" data or empty"),
+			prometheusConfig:              newPrometheusConfig(),
+			setupPromClientControllerTest: true,
+			expectedErr:                   fmt.Errorf("prometheus authentication token secret missing \"prometheusAuthToken\" data or empty"),
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			setup := setupPromClientControllerTest(tc.objects, tc.prometheusConfig)
+			setup := setupPromClientControllerTest(t, tc.objects, tc.prometheusConfig, tc.setupPromClientControllerTest)
 			defer close(setup.stopCh)
 
 			// Call sync
@@ -1772,7 +1901,7 @@ func TestPromClientControllerSync_ClientCreation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			setup := setupPromClientControllerTest(tc.objects, newPrometheusConfig())
+			setup := setupPromClientControllerTest(t, tc.objects, newPrometheusConfig(), true)
 			defer close(setup.stopCh)
 
 			// Set additional test-specific fields
@@ -1852,14 +1981,17 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 	prometheusConfig := newPrometheusConfig()
 	secretName := prometheusConfig.AuthToken.SecretReference.Name
 
-	setup := setupPromClientControllerTest(nil, prometheusConfig)
+	setup := setupPromClientControllerTest(t, nil, prometheusConfig, true)
 	defer close(setup.stopCh)
 
 	// Track created clients to verify different instances
 	var createdClients []promapi.Client
+	var createdClientsMu sync.Mutex
 	setup.ctrl.createPrometheusClient = func(url, token string) (promapi.Client, *http.Transport, error) {
 		client := &mockPrometheusClient{name: "client-" + token}
+		createdClientsMu.Lock()
 		createdClients = append(createdClients, client)
+		createdClientsMu.Unlock()
 		return client, &http.Transport{}, nil
 	}
 
@@ -1934,27 +2066,37 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 			if tc.processItem {
 				// Wait for event to be processed by the reconciler
 				err := wait.PollUntilContextTimeout(ctx, 10*time.Millisecond, 2*time.Second, true, func(ctx context.Context) (bool, error) {
-					// Check if all expected conditions are met
+					// Check if all expected conditions are met (with mutex protection)
+					setup.ctrl.mu.RLock()
+					promClient := setup.ctrl.promClient
+					currentToken := setup.ctrl.currentPrometheusAuthToken
+					previousTransport := setup.ctrl.previousPrometheusClientTransport
+					setup.ctrl.mu.RUnlock()
+
 					if tc.expectedPromClientSet {
-						if setup.ctrl.promClient == nil {
+						if promClient == nil {
 							return false, nil
 						}
 					} else {
-						if setup.ctrl.promClient != nil {
+						if promClient != nil {
 							return false, nil
 						}
 					}
 
-					if len(createdClients) != tc.expectedCreatedClientsCount {
+					createdClientsMu.Lock()
+					createdClientsLen := len(createdClients)
+					createdClientsMu.Unlock()
+
+					if createdClientsLen != tc.expectedCreatedClientsCount {
 						return false, nil
 					}
 
-					if setup.ctrl.currentPrometheusAuthToken != tc.expectedCurrentToken {
+					if currentToken != tc.expectedCurrentToken {
 						return false, nil
 					}
 
 					if tc.expectedPreviousTransportCleared {
-						if setup.ctrl.previousPrometheusClientTransport != nil {
+						if previousTransport != nil {
 							return false, nil
 						}
 					}
@@ -2003,6 +2145,7 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 		})
 	}
 }
+
 func TestReconcileInClusterSAToken(t *testing.T) {
 	testCases := []struct {
 		name                           string
@@ -2102,15 +2245,10 @@ func TestReconcileInClusterSAToken(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := &promClientController{
+			ctrl := &inClusterPromClientController{
 				currentPrometheusAuthToken: tc.currentAuthToken,
-				metricsProviders: map[api.MetricsSource]*api.MetricsProvider{
-					api.PrometheusMetrics: &api.MetricsProvider{
-						Source: api.PrometheusMetrics,
-						Prometheus: &api.Prometheus{
-							URL: prometheusURL,
-						},
-					},
+				prometheusConfig: &api.Prometheus{
+					URL: prometheusURL,
 				},
 				inClusterConfig: tc.inClusterConfigFunc,
 			}
