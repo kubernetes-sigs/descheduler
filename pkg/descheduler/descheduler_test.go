@@ -233,12 +233,6 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 		t.Fatalf("Unable to create descheduler instance: %v", err)
 	}
 
-	// Setup Prometheus provider (only for real client case, not for dry run)
-	if err := setupPrometheusProvider(descheduler.secretBasedPromClientCtrl, namespacedSharedInformerFactory); err != nil {
-		eventBroadcaster.Shutdown()
-		t.Fatalf("Failed to setup Prometheus provider: %v", err)
-	}
-
 	// If in dry run mode, replace the descheduler with one using fake client/factory
 	if dryRun {
 		// Create sandbox with resources to mirror from real client
@@ -1737,12 +1731,6 @@ func setupPromClientControllerTest(t *testing.T, objects []runtime.Object, prome
 		return nil, err
 	}
 
-	if setNamespacedSharedInformerFactory {
-		if err := setupPrometheusProvider(ctrl, namespacedInformerFactory); err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	stopCh := make(chan struct{})
 	namespacedInformerFactory.Start(stopCh)
 	namespacedInformerFactory.WaitForCacheSync(stopCh)
@@ -1781,12 +1769,10 @@ func newPrometheusConfig() *api.Prometheus {
 
 func TestPromClientControllerSync_InvalidConfig(t *testing.T) {
 	testCases := []struct {
-		name                          string
-		objects                       []runtime.Object
-		prometheusConfig              *api.Prometheus
-		expectedNewErr                error
-		expectedSyncErr               error
-		setupPromClientControllerTest bool
+		name             string
+		objects          []runtime.Object
+		prometheusConfig *api.Prometheus
+		expectedNewErr   error
 	}{
 		{
 			name:             "empty prometheus config",
@@ -1818,34 +1804,50 @@ func TestPromClientControllerSync_InvalidConfig(t *testing.T) {
 			},
 			expectedNewErr: fmt.Errorf("prometheus metrics source configuration is missing authentication token secret"),
 		},
-		{
-			name:                          "secret exists but empty token",
-			objects:                       []runtime.Object{newPrometheusAuthSecret(withToken(""))},
-			prometheusConfig:              newPrometheusConfig(),
-			setupPromClientControllerTest: true,
-			expectedSyncErr:               fmt.Errorf("prometheus authentication token secret missing \"prometheusAuthToken\" data or empty"),
-		},
-		{
-			name: "secret exists but missing token key",
-			objects: []runtime.Object{newPrometheusAuthSecret(func(s *v1.Secret) {
-				s.Data = map[string][]byte{}
-			})},
-			prometheusConfig:              newPrometheusConfig(),
-			setupPromClientControllerTest: true,
-			expectedSyncErr:               fmt.Errorf("prometheus authentication token secret missing \"prometheusAuthToken\" data or empty"),
-		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			setup, err := setupPromClientControllerTest(t, tc.objects, tc.prometheusConfig, tc.setupPromClientControllerTest)
+			_, err := setupPromClientControllerTest(t, tc.objects, tc.prometheusConfig, false)
 			if tc.expectedNewErr != nil {
 				if err == nil {
 					t.Fatalf("Expected error %q but got none", tc.expectedNewErr)
 				} else if err.Error() != tc.expectedNewErr.Error() {
 					t.Fatalf("Expected error %q but got %q", tc.expectedNewErr, err.Error())
 				}
-				return
+			}
+		})
+	}
+}
+
+func TestPromClientControllerSync_InvalidSecret(t *testing.T) {
+	testCases := []struct {
+		name             string
+		objects          []runtime.Object
+		prometheusConfig *api.Prometheus
+		expectedSyncErr  error
+	}{
+		{
+			name:             "secret exists but empty token",
+			objects:          []runtime.Object{newPrometheusAuthSecret(withToken(""))},
+			prometheusConfig: newPrometheusConfig(),
+			expectedSyncErr:  fmt.Errorf("prometheus authentication token secret missing \"prometheusAuthToken\" data or empty"),
+		},
+		{
+			name: "secret exists but missing token key",
+			objects: []runtime.Object{newPrometheusAuthSecret(func(s *v1.Secret) {
+				s.Data = map[string][]byte{}
+			})},
+			prometheusConfig: newPrometheusConfig(),
+			expectedSyncErr:  fmt.Errorf("prometheus authentication token secret missing \"prometheusAuthToken\" data or empty"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setup, err := setupPromClientControllerTest(t, tc.objects, tc.prometheusConfig, true)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
 			}
 
 			defer close(setup.stopCh)

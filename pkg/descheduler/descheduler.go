@@ -135,12 +135,20 @@ func newSecretBasedPromClientController(prometheusClient promapi.Client, prometh
 		return nil, fmt.Errorf("prometheus metrics source configuration is missing authentication token secret")
 	}
 
+	if namespacedSharedInformerFactory == nil {
+		return nil, fmt.Errorf("namespacedSharedInformerFactory not configured")
+	}
+
 	ctrl := &secretBasedPromClientController{
 		promClient:             prometheusClient,
 		queue:                  workqueue.NewRateLimitingQueueWithConfig(workqueue.DefaultControllerRateLimiter(), workqueue.RateLimitingQueueConfig{Name: "descheduler"}),
 		prometheusConfig:       prometheusConfig,
 		createPrometheusClient: client.CreatePrometheusClient,
 	}
+
+	authTokenSecret := ctrl.prometheusConfig.AuthToken.SecretReference
+	namespacedSharedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(ctrl.eventHandler())
+	ctrl.namespacedSecretsLister = namespacedSharedInformerFactory.Core().V1().Secrets().Lister().Secrets(authTokenSecret.Namespace)
 
 	return ctrl, nil
 }
@@ -179,20 +187,6 @@ func metricsProviderListToMap(providersList []api.MetricsProvider) map[api.Metri
 		providersMap[provider.Source] = &provider
 	}
 	return providersMap
-}
-
-// setupPrometheusProvider sets up the prometheus provider on the descheduler if configured
-func setupPrometheusProvider(ctrl *secretBasedPromClientController, namespacedSharedInformerFactory informers.SharedInformerFactory) error {
-	if ctrl == nil {
-		return nil
-	}
-	authTokenSecret := ctrl.prometheusConfig.AuthToken.SecretReference
-	if namespacedSharedInformerFactory == nil {
-		return fmt.Errorf("namespacedSharedInformerFactory not configured")
-	}
-	namespacedSharedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(ctrl.eventHandler())
-	ctrl.namespacedSecretsLister = namespacedSharedInformerFactory.Core().V1().Secrets().Lister().Secrets(authTokenSecret.Namespace)
-	return nil
 }
 
 func getPrometheusConfig(providersList []api.MetricsProvider) *api.Prometheus {
@@ -642,12 +636,6 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	// Setup Prometheus provider (only for real client case, not for dry run)
-	if err := setupPrometheusProvider(descheduler.secretBasedPromClientCtrl, namespacedSharedInformerFactory); err != nil {
-		span.AddEvent("Failed to setup Prometheus provider", trace.WithAttributes(attribute.String("err", err.Error())))
-		return err
-	}
 
 	// If in dry run mode, replace the descheduler with one using fake client/factory
 	if rs.DryRun {
