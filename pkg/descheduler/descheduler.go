@@ -130,7 +130,11 @@ func newInClusterPromClientController(prometheusClient promapi.Client, prometheu
 	}
 }
 
-func newSecretBasedPromClientController(prometheusClient promapi.Client, prometheusConfig *api.Prometheus, namespacedSharedInformerFactory informers.SharedInformerFactory) *secretBasedPromClientController {
+func newSecretBasedPromClientController(prometheusClient promapi.Client, prometheusConfig *api.Prometheus, namespacedSharedInformerFactory informers.SharedInformerFactory) (*secretBasedPromClientController, error) {
+	if prometheusConfig == nil || prometheusConfig.AuthToken == nil || prometheusConfig.AuthToken.SecretReference == nil {
+		return nil, fmt.Errorf("prometheus metrics source configuration is missing authentication token secret")
+	}
+
 	ctrl := &secretBasedPromClientController{
 		promClient:             prometheusClient,
 		queue:                  workqueue.NewRateLimitingQueueWithConfig(workqueue.DefaultControllerRateLimiter(), workqueue.RateLimitingQueueConfig{Name: "descheduler"}),
@@ -138,7 +142,7 @@ func newSecretBasedPromClientController(prometheusClient promapi.Client, prometh
 		createPrometheusClient: client.CreatePrometheusClient,
 	}
 
-	return ctrl
+	return ctrl, nil
 }
 
 func (d *inClusterPromClientController) prometheusClient() promapi.Client {
@@ -182,21 +186,12 @@ func setupPrometheusProvider(ctrl *secretBasedPromClientController, namespacedSh
 	if ctrl == nil {
 		return nil
 	}
-	prometheusConfig := ctrl.prometheusConfig
-	if prometheusConfig == nil {
-		return fmt.Errorf("prometheus configuration is missing")
+	authTokenSecret := ctrl.prometheusConfig.AuthToken.SecretReference
+	if namespacedSharedInformerFactory == nil {
+		return fmt.Errorf("namespacedSharedInformerFactory not configured")
 	}
-	if prometheusConfig.AuthToken != nil {
-		authTokenSecret := prometheusConfig.AuthToken.SecretReference
-		if authTokenSecret == nil || authTokenSecret.Namespace == "" {
-			return fmt.Errorf("prometheus metrics source configuration is missing authentication token secret")
-		}
-		if namespacedSharedInformerFactory == nil {
-			return fmt.Errorf("namespacedSharedInformerFactory not configured")
-		}
-		namespacedSharedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(ctrl.eventHandler())
-		ctrl.namespacedSecretsLister = namespacedSharedInformerFactory.Core().V1().Secrets().Lister().Secrets(authTokenSecret.Namespace)
-	}
+	namespacedSharedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(ctrl.eventHandler())
+	ctrl.namespacedSecretsLister = namespacedSharedInformerFactory.Core().V1().Secrets().Lister().Secrets(authTokenSecret.Namespace)
 	return nil
 }
 
@@ -258,7 +253,11 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 	if prometheusConfig != nil {
 		if configureSecretPromClientReconciler(prometheusConfig) {
 			// Secret-based mode
-			desch.secretBasedPromClientCtrl = newSecretBasedPromClientController(rs.PrometheusClient, prometheusConfig, namespacedSharedInformerFactory)
+			ctrl, err := newSecretBasedPromClientController(rs.PrometheusClient, prometheusConfig, namespacedSharedInformerFactory)
+			if err != nil {
+				return nil, err
+			}
+			desch.secretBasedPromClientCtrl = ctrl
 		} else {
 			// In-cluster mode
 			desch.inClusterPromClientCtrl = newInClusterPromClientController(rs.PrometheusClient, prometheusConfig)
@@ -357,9 +356,6 @@ func (d *secretBasedPromClientController) sync() error {
 	defer d.mu.Unlock()
 
 	prometheusConfig := d.prometheusConfig
-	if prometheusConfig == nil || prometheusConfig.AuthToken == nil || prometheusConfig.AuthToken.SecretReference == nil {
-		return fmt.Errorf("prometheus metrics source configuration is missing authentication token secret")
-	}
 	ns := prometheusConfig.AuthToken.SecretReference.Namespace
 	name := prometheusConfig.AuthToken.SecretReference.Name
 	secretObj, err := d.namespacedSecretsLister.Get(name)
