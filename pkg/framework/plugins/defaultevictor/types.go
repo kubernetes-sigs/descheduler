@@ -15,6 +15,7 @@ package defaultevictor
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
@@ -25,13 +26,14 @@ import (
 type DefaultEvictorArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	NodeSelector      string                 `json:"nodeSelector,omitempty"`
-	LabelSelector     *metav1.LabelSelector  `json:"labelSelector,omitempty"`
-	PriorityThreshold *api.PriorityThreshold `json:"priorityThreshold,omitempty"`
-	NodeFit           bool                   `json:"nodeFit,omitempty"`
-	MinReplicas       uint                   `json:"minReplicas,omitempty"`
-	MinPodAge         *metav1.Duration       `json:"minPodAge,omitempty"`
-	NoEvictionPolicy  NoEvictionPolicy       `json:"noEvictionPolicy,omitempty"`
+	NodeSelector           string                 `json:"nodeSelector,omitempty"`
+	LabelSelector          *metav1.LabelSelector  `json:"labelSelector,omitempty"`
+	NamespaceLabelSelector *metav1.LabelSelector  `json:"namespaceLabelSelector,omitempty"`
+	PriorityThreshold      *api.PriorityThreshold `json:"priorityThreshold,omitempty"`
+	NodeFit                bool                   `json:"nodeFit,omitempty"`
+	MinReplicas            uint                   `json:"minReplicas,omitempty"`
+	MinPodAge              *metav1.Duration       `json:"minPodAge,omitempty"`
+	NoEvictionPolicy       NoEvictionPolicy       `json:"noEvictionPolicy,omitempty"`
 
 	// PodProtections holds the list of enabled and disabled protection policies.
 	// Users can selectively disable certain default protection rules or enable extra ones.

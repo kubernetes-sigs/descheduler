@@ -3,7 +3,7 @@ Copyright 2022 The Kubernetes Authors.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
+   http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,6 +21,8 @@ import (
 	"slices"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/informers"
@@ -28,6 +30,7 @@ import (
 	"k8s.io/klog/v2"
 
 	evictionutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
+
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -35,8 +38,9 @@ import (
 )
 
 const (
-	PluginName            = "DefaultEvictor"
-	evictPodAnnotationKey = "descheduler.alpha.kubernetes.io/evict"
+	PluginName                 = "DefaultEvictor"
+	evictPodAnnotationKey      = "descheduler.alpha.kubernetes.io/evict"
+	namespaceWithLabelSelector = "namespaceWithLabelSelector-"
 )
 
 var _ frameworktypes.EvictorPlugin = &DefaultEvictor{}
@@ -85,7 +89,41 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 	if err != nil {
 		return nil, err
 	}
+
+	if ev.args.NamespaceLabelSelector != nil && len(ev.args.NamespaceLabelSelector.MatchLabels) > 0 {
+		selector, nslErr := metav1.LabelSelectorAsSelector(ev.args.NamespaceLabelSelector)
+		if nslErr != nil {
+			return nil, fmt.Errorf("unable to convert namespaceLabelSelector to label selector: %w", nslErr)
+		}
+		indexName := namespaceWithLabelSelector + ev.handle.PluginInstanceID()
+		if nslErr := addNamespaceLabelSelectorIndexer(ev.handle.SharedInformerFactory().Core().V1().Namespaces().Informer(), indexName, selector); nslErr != nil {
+			return nil, fmt.Errorf("failed to add namespace label selector indexer: %w", nslErr)
+		}
+	}
 	return ev, nil
+}
+
+func addNamespaceLabelSelectorIndexer(informer cache.SharedIndexInformer, indexName string, selector labels.Selector) error {
+	indexer := informer.GetIndexer()
+	for name := range indexer.GetIndexers() {
+		if name == indexName {
+			return nil
+		}
+	}
+	return informer.AddIndexers(cache.Indexers{
+		indexName: func(obj interface{}) ([]string, error) {
+			ns, ok := obj.(*v1.Namespace)
+			if !ok {
+				return []string{}, errors.New("unexpected object")
+			}
+			if !selector.Empty() {
+				if !selector.Matches(labels.Set(ns.Labels)) {
+					return []string{}, nil
+				}
+			}
+			return []string{ns.GetName()}, nil
+		},
+	})
 }
 
 func (d *DefaultEvictor) addAllConstraints(logger klog.Logger, handle frameworktypes.Handle) error {
@@ -407,7 +445,20 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 			logger.Info("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable", "pod", klog.KObj(pod))
 			return false
 		}
+	}
+
+	if d.args.NamespaceLabelSelector == nil || len(d.args.NamespaceLabelSelector.MatchLabels) == 0 {
 		return true
+	}
+	indexName := namespaceWithLabelSelector + d.handle.PluginInstanceID()
+	objs, err := d.handle.SharedInformerFactory().Core().V1().Namespaces().Informer().GetIndexer().ByIndex(indexName, pod.Namespace)
+	if err != nil {
+		logger.Error(err, "unable to list namespaces for namespaceLabelSelector filter in the policy parameter", "pod", klog.KObj(pod))
+		return false
+	}
+	if len(objs) == 0 {
+		logger.Info("pod namespace do not match the namespaceLabelSelector filter in the policy parameter", "pod", klog.KObj(pod))
+		return false
 	}
 	return true
 }
@@ -473,6 +524,5 @@ func getPodIndexerByOwnerRefs(indexName string, handle frameworktypes.Handle) (c
 	}); err != nil {
 		return nil, err
 	}
-
 	return indexer, nil
 }
