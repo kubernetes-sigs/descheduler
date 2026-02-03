@@ -547,6 +547,47 @@ const (
 	secretReconciliation
 )
 
+func bootstrapDescheduler(
+	ctx context.Context,
+	rs *options.DeschedulerServer,
+	deschedulerPolicy *api.DeschedulerPolicy,
+	evictionPolicyGroupVersion string,
+	sharedInformerFactory, namespacedSharedInformerFactory informers.SharedInformerFactory,
+	eventRecorder events.EventRecorder,
+) (*descheduler, error) {
+	// Always create descheduler with real client/factory first to register all informers
+	descheduler, err := newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, rs.Client, sharedInformerFactory, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new descheduler: %v", err)
+	}
+
+	// Setup Prometheus provider (only for real client case, not for dry run)
+	if err := setupPrometheusProvider(descheduler, namespacedSharedInformerFactory); err != nil {
+		return nil, fmt.Errorf("failed to setup Prometheus provider: %v", err)
+	}
+
+	// If in dry run mode, replace the descheduler with one using fake client/factory
+	if rs.DryRun {
+		// Create sandbox with resources to mirror from real client
+		kubeClientSandbox, err := newDefaultKubeClientSandbox(rs.Client, sharedInformerFactory)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create kube client sandbox: %v", err)
+		}
+
+		klog.V(3).Infof("Building a cached client from the cluster for the dry run")
+
+		// TODO(ingvagabund): drop the previous queue
+		// TODO(ingvagabund): stop the previous pod evictor
+		// Replace descheduler with one using fake client/factory
+		descheduler, err = newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), kubeClientSandbox)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create dry run descheduler: %v", err)
+		}
+	}
+
+	return descheduler, nil
+}
+
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -581,38 +622,10 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		}
 	}
 
-	// Always create descheduler with real client/factory first to register all informers
-	descheduler, err := newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, rs.Client, sharedInformerFactory, nil)
+	descheduler, err := bootstrapDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, sharedInformerFactory, namespacedSharedInformerFactory, eventRecorder)
 	if err != nil {
-		span.AddEvent("Failed to create new descheduler", trace.WithAttributes(attribute.String("err", err.Error())))
+		span.AddEvent("Failed to bootstrap a descheduler", trace.WithAttributes(attribute.String("err", err.Error())))
 		return err
-	}
-
-	// Setup Prometheus provider (only for real client case, not for dry run)
-	if err := setupPrometheusProvider(descheduler, namespacedSharedInformerFactory); err != nil {
-		span.AddEvent("Failed to setup Prometheus provider", trace.WithAttributes(attribute.String("err", err.Error())))
-		return err
-	}
-
-	// If in dry run mode, replace the descheduler with one using fake client/factory
-	if rs.DryRun {
-		// Create sandbox with resources to mirror from real client
-		kubeClientSandbox, err := newDefaultKubeClientSandbox(rs.Client, sharedInformerFactory)
-		if err != nil {
-			span.AddEvent("Failed to create kube client sandbox", trace.WithAttributes(attribute.String("err", err.Error())))
-			return fmt.Errorf("failed to create kube client sandbox: %v", err)
-		}
-
-		klog.V(3).Infof("Building a cached client from the cluster for the dry run")
-
-		// TODO(ingvagabund): drop the previous queue
-		// TODO(ingvagabund): stop the previous pod evictor
-		// Replace descheduler with one using fake client/factory
-		descheduler, err = newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), kubeClientSandbox)
-		if err != nil {
-			span.AddEvent("Failed to create dry run descheduler", trace.WithAttributes(attribute.String("err", err.Error())))
-			return err
-		}
 	}
 
 	// In dry run mode, start and sync the fake shared informer factory so it can mirror

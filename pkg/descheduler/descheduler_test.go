@@ -220,33 +220,10 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
 
 	// Always create descheduler with real client/factory first to register all informers
-	descheduler, err := newDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", eventRecorder, rs.Client, sharedInformerFactory, nil)
+	descheduler, err := bootstrapDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", sharedInformerFactory, nil, eventRecorder)
 	if err != nil {
 		eventBroadcaster.Shutdown()
-		t.Fatalf("Unable to create descheduler instance: %v", err)
-	}
-
-	// Setup Prometheus provider (only for real client case, not for dry run)
-	if err := setupPrometheusProvider(descheduler, nil); err != nil {
-		eventBroadcaster.Shutdown()
-		t.Fatalf("Failed to setup Prometheus provider: %v", err)
-	}
-
-	// If in dry run mode, replace the descheduler with one using fake client/factory
-	if dryRun {
-		// Create sandbox with resources to mirror from real client
-		kubeClientSandbox, err := newDefaultKubeClientSandbox(rs.Client, sharedInformerFactory)
-		if err != nil {
-			eventBroadcaster.Shutdown()
-			t.Fatalf("Failed to create kube client sandbox: %v", err)
-		}
-
-		// Replace descheduler with one using fake client/factory
-		descheduler, err = newDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), kubeClientSandbox)
-		if err != nil {
-			eventBroadcaster.Shutdown()
-			t.Fatalf("Unable to create dry run descheduler instance: %v", err)
-		}
+		t.Fatalf("Failed to bootstrap a descheduler: %v", err)
 	}
 
 	// Start the real shared informer factory after creating the descheduler
