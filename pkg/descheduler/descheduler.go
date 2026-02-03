@@ -552,6 +552,7 @@ func bootstrapDescheduler(
 	rs *options.DeschedulerServer,
 	deschedulerPolicy *api.DeschedulerPolicy,
 	evictionPolicyGroupVersion string,
+	metricProviderTokenReconciliation tokenReconciliation,
 	sharedInformerFactory, namespacedSharedInformerFactory informers.SharedInformerFactory,
 	eventRecorder events.EventRecorder,
 ) (*descheduler, error) {
@@ -583,6 +584,53 @@ func bootstrapDescheduler(
 		if err != nil {
 			return nil, fmt.Errorf("failed to create dry run descheduler: %v", err)
 		}
+	}
+
+	// init is responsible for starting all informer factories, metrics providers
+	// and other parts that require to start before a first descheduling cycle is run
+	deschedulerInitFnc := func(ctx context.Context) error {
+		// In dry run mode, start and sync the fake shared informer factory so it can mirror
+		// events from the real factory. Reliable propagation depends on both factories being
+		// fully synced (see WaitForCacheSync calls below), not solely on startup order.
+		if rs.DryRun {
+			descheduler.kubeClientSandbox.fakeSharedInformerFactory().Start(ctx.Done())
+			descheduler.kubeClientSandbox.fakeSharedInformerFactory().WaitForCacheSync(ctx.Done())
+		}
+		sharedInformerFactory.Start(ctx.Done())
+		if metricProviderTokenReconciliation == secretReconciliation {
+			namespacedSharedInformerFactory.Start(ctx.Done())
+		}
+
+		sharedInformerFactory.WaitForCacheSync(ctx.Done())
+		if metricProviderTokenReconciliation == secretReconciliation {
+			namespacedSharedInformerFactory.WaitForCacheSync(ctx.Done())
+		}
+
+		descheduler.podEvictor.WaitForEventHandlersSync(ctx)
+
+		if descheduler.metricsCollector != nil {
+			go func() {
+				klog.V(2).Infof("Starting metrics collector")
+				descheduler.metricsCollector.Run(ctx)
+				klog.V(2).Infof("Stopped metrics collector")
+			}()
+			klog.V(2).Infof("Waiting for metrics collector to sync")
+			if err := wait.PollWithContext(ctx, time.Second, time.Minute, func(context.Context) (done bool, err error) {
+				return descheduler.metricsCollector.HasSynced(), nil
+			}); err != nil {
+				return fmt.Errorf("unable to wait for metrics collector to sync: %v", err)
+			}
+		}
+
+		if metricProviderTokenReconciliation == secretReconciliation {
+			go descheduler.promClientCtrl.runAuthenticationSecretReconciler(ctx)
+		}
+
+		return nil
+	}
+
+	if err := deschedulerInitFnc(ctx); err != nil {
+		return nil, err
 	}
 
 	return descheduler, nil
@@ -622,47 +670,10 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		}
 	}
 
-	descheduler, err := bootstrapDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, sharedInformerFactory, namespacedSharedInformerFactory, eventRecorder)
+	descheduler, err := bootstrapDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, metricProviderTokenReconciliation, sharedInformerFactory, namespacedSharedInformerFactory, eventRecorder)
 	if err != nil {
 		span.AddEvent("Failed to bootstrap a descheduler", trace.WithAttributes(attribute.String("err", err.Error())))
 		return err
-	}
-
-	// In dry run mode, start and sync the fake shared informer factory so it can mirror
-	// events from the real factory. Reliable propagation depends on both factories being
-	// fully synced (see WaitForCacheSync calls below), not solely on startup order.
-	if rs.DryRun {
-		descheduler.kubeClientSandbox.fakeSharedInformerFactory().Start(ctx.Done())
-		descheduler.kubeClientSandbox.fakeSharedInformerFactory().WaitForCacheSync(ctx.Done())
-	}
-	sharedInformerFactory.Start(ctx.Done())
-	if metricProviderTokenReconciliation == secretReconciliation {
-		namespacedSharedInformerFactory.Start(ctx.Done())
-	}
-
-	sharedInformerFactory.WaitForCacheSync(ctx.Done())
-	if metricProviderTokenReconciliation == secretReconciliation {
-		namespacedSharedInformerFactory.WaitForCacheSync(ctx.Done())
-	}
-
-	descheduler.podEvictor.WaitForEventHandlersSync(ctx)
-
-	if descheduler.metricsCollector != nil {
-		go func() {
-			klog.V(2).Infof("Starting metrics collector")
-			descheduler.metricsCollector.Run(ctx)
-			klog.V(2).Infof("Stopped metrics collector")
-		}()
-		klog.V(2).Infof("Waiting for metrics collector to sync")
-		if err := wait.PollWithContext(ctx, time.Second, time.Minute, func(context.Context) (done bool, err error) {
-			return descheduler.metricsCollector.HasSynced(), nil
-		}); err != nil {
-			return fmt.Errorf("unable to wait for metrics collector to sync: %v", err)
-		}
-	}
-
-	if metricProviderTokenReconciliation == secretReconciliation {
-		go descheduler.promClientCtrl.runAuthenticationSecretReconciler(ctx)
 	}
 
 	wait.NonSlidingUntil(func() {

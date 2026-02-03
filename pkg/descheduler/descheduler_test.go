@@ -220,19 +220,11 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
 
 	// Always create descheduler with real client/factory first to register all informers
-	descheduler, err := bootstrapDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", sharedInformerFactory, nil, eventRecorder)
+	descheduler, err := bootstrapDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", noReconciliation, sharedInformerFactory, nil, eventRecorder)
 	if err != nil {
 		eventBroadcaster.Shutdown()
 		t.Fatalf("Failed to bootstrap a descheduler: %v", err)
 	}
-
-	// Start the real shared informer factory after creating the descheduler
-	if dryRun {
-		descheduler.kubeClientSandbox.fakeSharedInformerFactory().Start(ctx.Done())
-		descheduler.kubeClientSandbox.fakeSharedInformerFactory().WaitForCacheSync(ctx.Done())
-	}
-	sharedInformerFactory.Start(ctx.Done())
-	sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
 	if dryRun {
 		if err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
