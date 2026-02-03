@@ -547,6 +547,8 @@ const (
 	secretReconciliation
 )
 
+type runFncType func(context.Context) error
+
 func bootstrapDescheduler(
 	ctx context.Context,
 	rs *options.DeschedulerServer,
@@ -555,16 +557,16 @@ func bootstrapDescheduler(
 	metricProviderTokenReconciliation tokenReconciliation,
 	sharedInformerFactory, namespacedSharedInformerFactory informers.SharedInformerFactory,
 	eventRecorder events.EventRecorder,
-) (*descheduler, error) {
+) (*descheduler, runFncType, error) {
 	// Always create descheduler with real client/factory first to register all informers
 	descheduler, err := newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, rs.Client, sharedInformerFactory, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create new descheduler: %v", err)
+		return nil, nil, fmt.Errorf("failed to create new descheduler: %v", err)
 	}
 
 	// Setup Prometheus provider (only for real client case, not for dry run)
 	if err := setupPrometheusProvider(descheduler, namespacedSharedInformerFactory); err != nil {
-		return nil, fmt.Errorf("failed to setup Prometheus provider: %v", err)
+		return nil, nil, fmt.Errorf("failed to setup Prometheus provider: %v", err)
 	}
 
 	// If in dry run mode, replace the descheduler with one using fake client/factory
@@ -572,7 +574,7 @@ func bootstrapDescheduler(
 		// Create sandbox with resources to mirror from real client
 		kubeClientSandbox, err := newDefaultKubeClientSandbox(rs.Client, sharedInformerFactory)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create kube client sandbox: %v", err)
+			return nil, nil, fmt.Errorf("failed to create kube client sandbox: %v", err)
 		}
 
 		klog.V(3).Infof("Building a cached client from the cluster for the dry run")
@@ -582,7 +584,7 @@ func bootstrapDescheduler(
 		// Replace descheduler with one using fake client/factory
 		descheduler, err = newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), kubeClientSandbox)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create dry run descheduler: %v", err)
+			return nil, nil, fmt.Errorf("failed to create dry run descheduler: %v", err)
 		}
 	}
 
@@ -630,10 +632,26 @@ func bootstrapDescheduler(
 	}
 
 	if err := deschedulerInitFnc(ctx); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return descheduler, nil
+	runFnc := func(ctx context.Context) error {
+		if metricProviderTokenReconciliation == inClusterReconciliation {
+			// Read the sa token and assume it has the sufficient permissions to authenticate
+			if err := descheduler.promClientCtrl.reconcileInClusterSAToken(); err != nil {
+				return fmt.Errorf("unable to reconcile an in cluster SA token: %v", err)
+			}
+		}
+
+		err = descheduler.runDeschedulerLoop(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to run descheduler loop: %v", err)
+		}
+
+		return nil
+	}
+
+	return descheduler, runFnc, nil
 }
 
 func prometheusProviderToTokenReconciliation(prometheusProvider *api.MetricsProvider) tokenReconciliation {
@@ -676,28 +694,19 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		namespacedSharedInformerFactory = informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields), informers.WithNamespace(prometheusProvider.Prometheus.AuthToken.SecretReference.Namespace))
 	}
 
-	descheduler, err := bootstrapDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, metricProviderTokenReconciliation, sharedInformerFactory, namespacedSharedInformerFactory, eventRecorder)
+	_, runLoop, err := bootstrapDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, metricProviderTokenReconciliation, sharedInformerFactory, namespacedSharedInformerFactory, eventRecorder)
 	if err != nil {
 		span.AddEvent("Failed to bootstrap a descheduler", trace.WithAttributes(attribute.String("err", err.Error())))
 		return err
 	}
 
 	wait.NonSlidingUntil(func() {
-		if metricProviderTokenReconciliation == inClusterReconciliation {
-			// Read the sa token and assume it has the sufficient permissions to authenticate
-			if err := descheduler.promClientCtrl.reconcileInClusterSAToken(); err != nil {
-				klog.ErrorS(err, "unable to reconcile an in cluster SA token")
-				return
-			}
-		}
-
 		// A next context is created here intentionally to avoid nesting the spans via context.
 		sCtx, sSpan := tracing.Tracer().Start(ctx, "NonSlidingUntil")
 		defer sSpan.End()
 
-		err = descheduler.runDeschedulerLoop(sCtx)
-		if err != nil {
-			sSpan.AddEvent("Failed to run descheduler loop", trace.WithAttributes(attribute.String("err", err.Error())))
+		if err := runLoop(sCtx); err != nil {
+			sSpan.AddEvent("Descheduling loop failed", trace.WithAttributes(attribute.String("err", err.Error())))
 			klog.Error(err)
 			return
 		}

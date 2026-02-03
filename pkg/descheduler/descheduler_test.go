@@ -202,7 +202,7 @@ func lowNodeUtilizationPolicy(thresholds, targetThresholds api.ResourceThreshold
 	}
 }
 
-func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate.FeatureGate, internalDeschedulerPolicy *api.DeschedulerPolicy, metricsClient metricsclient.Interface, dryRun bool, objects ...runtime.Object) (*options.DeschedulerServer, *descheduler, *fakeclientset.Clientset) {
+func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate.FeatureGate, internalDeschedulerPolicy *api.DeschedulerPolicy, metricsClient metricsclient.Interface, dryRun bool, objects ...runtime.Object) (*options.DeschedulerServer, *descheduler, runFncType, *fakeclientset.Clientset) {
 	client := fakeclientset.NewSimpleClientset(objects...)
 	eventClient := fakeclientset.NewSimpleClientset(objects...)
 
@@ -219,8 +219,16 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
 	eventBroadcaster, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
 
+	var namespacedSharedInformerFactory informers.SharedInformerFactory
+
+	prometheusProvider := metricsProviderListToMap(internalDeschedulerPolicy.MetricsProviders)[api.PrometheusMetrics]
+	metricProviderTokenReconciliation := prometheusProviderToTokenReconciliation(prometheusProvider)
+	if metricProviderTokenReconciliation == secretReconciliation {
+		namespacedSharedInformerFactory = informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields), informers.WithNamespace(prometheusProvider.Prometheus.AuthToken.SecretReference.Namespace))
+	}
+
 	// Always create descheduler with real client/factory first to register all informers
-	descheduler, err := bootstrapDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", noReconciliation, sharedInformerFactory, nil, eventRecorder)
+	descheduler, runFnc, err := bootstrapDescheduler(ctx, rs, internalDeschedulerPolicy, "v1", metricProviderTokenReconciliation, sharedInformerFactory, namespacedSharedInformerFactory, eventRecorder)
 	if err != nil {
 		eventBroadcaster.Shutdown()
 		t.Fatalf("Failed to bootstrap a descheduler: %v", err)
@@ -250,7 +258,7 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 		}
 	}
 
-	return rs, descheduler, client
+	return rs, descheduler, runFnc, client
 }
 
 func TestTaintsUpdated(t *testing.T) {
@@ -571,7 +579,7 @@ func TestPodEvictorReset(t *testing.T) {
 
 			internalDeschedulerPolicy := removePodsViolatingNodeTaintsPolicy()
 			ctxCancel, cancel := context.WithCancel(ctx)
-			_, descheduler, client := initDescheduler(t, ctxCancel, initFeatureGates(), internalDeschedulerPolicy, nil, tc.dryRun, node1, node2, p1, p2)
+			_, descheduler, _, client := initDescheduler(t, ctxCancel, initFeatureGates(), internalDeschedulerPolicy, nil, tc.dryRun, node1, node2, p1, p2)
 			defer cancel()
 
 			var evictedPods []string
@@ -623,8 +631,8 @@ func checkTotals(t *testing.T, ctx context.Context, descheduler *descheduler, to
 	t.Logf("Total evictions: %v, total eviction requests: %v, total evictions and eviction requests: %v", totalEvicted, totalEvictionRequests, totalEvicted+totalEvictionRequests)
 }
 
-func runDeschedulingCycleAndCheckTotals(t *testing.T, ctx context.Context, nodes []*v1.Node, descheduler *descheduler, totalEvictionRequests, totalEvicted uint) {
-	err := descheduler.runDeschedulerLoop(ctx)
+func runDeschedulingCycleAndCheckTotals(t *testing.T, ctx context.Context, nodes []*v1.Node, descheduler *descheduler, runFnc runFncType, totalEvictionRequests, totalEvicted uint) {
+	err := runFnc(ctx)
 	if err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
@@ -664,19 +672,19 @@ func TestEvictionRequestsCache(t *testing.T) {
 	featureGates.Add(map[featuregate.Feature]featuregate.FeatureSpec{
 		features.EvictionsInBackground: {Default: true, PreRelease: featuregate.Alpha},
 	})
-	_, descheduler, client := initDescheduler(t, ctxCancel, featureGates, internalDeschedulerPolicy, nil, false, node1, node2, p1, p2, p3, p4)
+	_, descheduler, runFnc, client := initDescheduler(t, ctxCancel, featureGates, internalDeschedulerPolicy, nil, false, node1, node2, p1, p2, p3, p4)
 	defer cancel()
 
 	var evictedPods []string
 	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, func(name string) bool { return name == "p1" || name == "p2" }, nil))
 
 	klog.Infof("2 evictions in background expected, 2 normal evictions")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 2, 2)
+	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, runFnc, 2, 2)
 
 	klog.Infof("Repeat the same as previously to confirm no more evictions in background are requested")
 	// No evicted pod is actually deleted on purpose so the test can run the descheduling cycle repeatedly
 	// without recreating the pods.
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 2, 2)
+	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, runFnc, 2, 2)
 
 	klog.Infof("Scenario: Eviction in background got initiated")
 	p2.Annotations[evictions.EvictionInProgressAnnotationKey] = ""
@@ -686,7 +694,7 @@ func TestEvictionRequestsCache(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	klog.Infof("Repeat the same as previously to confirm no more evictions in background are requested")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 2, 2)
+	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, runFnc, 2, 2)
 
 	klog.Infof("Scenario: Another eviction in background got initiated")
 	p1.Annotations[evictions.EvictionInProgressAnnotationKey] = ""
@@ -696,7 +704,7 @@ func TestEvictionRequestsCache(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	klog.Infof("Repeat the same as previously to confirm no more evictions in background are requested")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 2, 2)
+	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, runFnc, 2, 2)
 
 	klog.Infof("Scenario: Eviction in background completed")
 	if err := client.CoreV1().Pods(p1.Namespace).Delete(context.TODO(), p1.Name, metav1.DeleteOptions{}); err != nil {
@@ -705,7 +713,7 @@ func TestEvictionRequestsCache(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	klog.Infof("Check the number of evictions in background decreased")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 1, 2)
+	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, runFnc, 1, 2)
 
 	klog.Infof("Scenario: A new pod without eviction in background added")
 	if _, err := client.CoreV1().Pods(p5.Namespace).Create(context.TODO(), p5, metav1.CreateOptions{}); err != nil {
@@ -714,7 +722,7 @@ func TestEvictionRequestsCache(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	klog.Infof("Check the number of evictions increased after running a descheduling cycle")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 1, 3)
+	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, runFnc, 1, 3)
 
 	klog.Infof("Scenario: Eviction in background canceled => eviction in progress annotation removed")
 	delete(p2.Annotations, evictions.EvictionInProgressAnnotationKey)
@@ -727,7 +735,7 @@ func TestEvictionRequestsCache(t *testing.T) {
 	checkTotals(t, ctx, descheduler, 0, 3)
 
 	klog.Infof("Scenario: Re-run the descheduling cycle to re-request eviction in background")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 1, 3)
+	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, runFnc, 1, 3)
 
 	klog.Infof("Scenario: Eviction in background completed with a pod in completed state")
 	p2.Status.Phase = v1.PodSucceeded
@@ -737,7 +745,7 @@ func TestEvictionRequestsCache(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	klog.Infof("Check the number of evictions in background decreased")
-	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, 0, 3)
+	runDeschedulingCycleAndCheckTotals(t, ctx, nodes, descheduler, runFnc, 0, 3)
 }
 
 func TestDeschedulingLimits(t *testing.T) {
@@ -800,7 +808,7 @@ func TestDeschedulingLimits(t *testing.T) {
 			featureGates.Add(map[featuregate.Feature]featuregate.FeatureSpec{
 				features.EvictionsInBackground: {Default: true, PreRelease: featuregate.Alpha},
 			})
-			_, descheduler, client := initDescheduler(t, ctxCancel, featureGates, tc.policy, nil, false, node1, node2)
+			_, descheduler, runFnc, client := initDescheduler(t, ctxCancel, featureGates, tc.policy, nil, false, node1, node2)
 			defer cancel()
 
 			var evictedPods []string
@@ -832,7 +840,7 @@ func TestDeschedulingLimits(t *testing.T) {
 					time.Sleep(100 * time.Millisecond)
 
 					klog.Infof("2 evictions in background expected, 2 normal evictions")
-					err := descheduler.runDeschedulerLoop(ctx)
+					err := runFnc(ctx)
 					if err != nil {
 						t.Fatalf("Unable to run a descheduling loop: %v", err)
 					}
@@ -998,7 +1006,7 @@ func TestNodeLabelSelectorBasedEviction(t *testing.T) {
 			}
 
 			ctxCancel, cancel := context.WithCancel(ctx)
-			_, deschedulerInstance, client := initDescheduler(t, ctxCancel, initFeatureGates(), policy, nil, tc.dryRun, objects...)
+			_, deschedulerInstance, _, client := initDescheduler(t, ctxCancel, initFeatureGates(), policy, nil, tc.dryRun, objects...)
 			defer cancel()
 
 			// Verify all pods are created initially
@@ -1112,7 +1120,7 @@ func TestLoadAwareDescheduling(t *testing.T) {
 	policy.MetricsProviders = []api.MetricsProvider{{Source: api.KubernetesMetrics}}
 
 	ctxCancel, cancel := context.WithCancel(ctx)
-	_, descheduler, _ := initDescheduler(
+	_, descheduler, runFnc, _ := initDescheduler(
 		t,
 		ctxCancel,
 		initFeatureGates(),
@@ -1126,7 +1134,7 @@ func TestLoadAwareDescheduling(t *testing.T) {
 	// after newDescheduler in RunDeschedulerStrategies.
 	descheduler.metricsCollector.Collect(ctx)
 
-	err := descheduler.runDeschedulerLoop(ctx)
+	err := runFnc(ctx)
 	if err != nil {
 		t.Fatalf("Unable to run a descheduling loop: %v", err)
 	}
@@ -1465,6 +1473,14 @@ func TestPluginPrometheusClientAccess(t *testing.T) {
 			)
 
 			deschedulerPolicy := &api.DeschedulerPolicy{
+				MetricsProviders: []api.MetricsProvider{
+					{
+						Source: api.PrometheusMetrics,
+						Prometheus: &api.Prometheus{
+							URL: prometheusURL,
+						},
+					},
+				},
 				Profiles: []api.DeschedulerProfile{
 					{
 						Name: "test-profile",
@@ -1486,28 +1502,33 @@ func TestPluginPrometheusClientAccess(t *testing.T) {
 			node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
 			node2 := test.BuildTestNode("node2", 1000, 2000, 9, nil)
 
-			_, descheduler, _ := initDescheduler(t, ctx, initFeatureGates(), deschedulerPolicy, nil, tc.dryRun, node1, node2)
+			_, descheduler, runFnc, _ := initDescheduler(t, ctx, initFeatureGates(), deschedulerPolicy, nil, tc.dryRun, node1, node2)
 
 			// Test cycles with different Prometheus client values
 			cycles := []struct {
 				name   string
 				client promapi.Client
+				token  string
 			}{
 				{
 					name:   "initial client",
 					client: &mockPrometheusClient{name: "new-init-client"},
+					token:  "init-token",
 				},
 				{
 					name:   "nil client",
 					client: nil,
+					token:  "",
 				},
 				{
 					name:   "new client",
 					client: &mockPrometheusClient{name: "new-client"},
+					token:  "new-token",
 				},
 				{
 					name:   "another client",
 					client: &mockPrometheusClient{name: "another-client"},
+					token:  "another-token",
 				},
 			}
 
@@ -1516,14 +1537,27 @@ func TestPluginPrometheusClientAccess(t *testing.T) {
 
 				// Set the descheduler's Prometheus client
 				t.Logf("Setting descheduler.promClientCtrl.promClient from %v to %v", descheduler.promClientCtrl.promClient, cycle.client)
-				descheduler.promClientCtrl.promClient = cycle.client
+				descheduler.promClientCtrl.inClusterConfig = func() (*rest.Config, error) {
+					return &rest.Config{BearerToken: cycle.token}, nil
+				}
+				descheduler.promClientCtrl.createPrometheusClient = func(url, token string) (promapi.Client, *http.Transport, error) {
+					if token != cycle.token {
+						t.Errorf("Expected token to be %q, got %q", cycle.token, token)
+					}
+					if url != prometheusURL {
+						t.Errorf("Expected url to be %q, got %q", prometheusURL, url)
+					}
+					return cycle.client, &http.Transport{}, nil
+				}
 
 				newInvoked = false
 				reactorInvoked = false
 				prometheusClientFromPluginNewHandle = nil
 				prometheusClientFromReactor = nil
 
-				descheduler.runProfiles(ctx)
+				if err := runFnc(ctx); err != nil {
+					t.Fatalf("Unexpected error during running a descheduling cycle: %v", err)
+				}
 
 				t.Logf("After cycle %d: prometheusClientFromReactor=%v, descheduler.promClientCtrl.promClient=%v", i+1, prometheusClientFromReactor, descheduler.promClientCtrl.promClient)
 
