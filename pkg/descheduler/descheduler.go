@@ -636,6 +636,19 @@ func bootstrapDescheduler(
 	return descheduler, nil
 }
 
+func prometheusProviderToTokenReconciliation(prometheusProvider *api.MetricsProvider) tokenReconciliation {
+	if prometheusProvider != nil && prometheusProvider.Prometheus != nil && prometheusProvider.Prometheus.URL != "" {
+		if prometheusProvider.Prometheus.AuthToken != nil {
+			// Will get reconciled
+			return secretReconciliation
+		} else {
+			// Use the sa token and assume it has the sufficient permissions to authenticate
+			return inClusterReconciliation
+		}
+	}
+	return noReconciliation
+}
+
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -656,18 +669,11 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	defer eventBroadcaster.Shutdown()
 
 	var namespacedSharedInformerFactory informers.SharedInformerFactory
-	metricProviderTokenReconciliation := noReconciliation
 
 	prometheusProvider := metricsProviderListToMap(deschedulerPolicy.MetricsProviders)[api.PrometheusMetrics]
-	if prometheusProvider != nil && prometheusProvider.Prometheus != nil && prometheusProvider.Prometheus.URL != "" {
-		if prometheusProvider.Prometheus.AuthToken != nil {
-			// Will get reconciled
-			namespacedSharedInformerFactory = informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields), informers.WithNamespace(prometheusProvider.Prometheus.AuthToken.SecretReference.Namespace))
-			metricProviderTokenReconciliation = secretReconciliation
-		} else {
-			// Use the sa token and assume it has the sufficient permissions to authenticate
-			metricProviderTokenReconciliation = inClusterReconciliation
-		}
+	metricProviderTokenReconciliation := prometheusProviderToTokenReconciliation(prometheusProvider)
+	if metricProviderTokenReconciliation == secretReconciliation {
+		namespacedSharedInformerFactory = informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields), informers.WithNamespace(prometheusProvider.Prometheus.AuthToken.SecretReference.Namespace))
 	}
 
 	descheduler, err := bootstrapDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, metricProviderTokenReconciliation, sharedInformerFactory, namespacedSharedInformerFactory, eventRecorder)
