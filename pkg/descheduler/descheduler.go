@@ -699,7 +699,6 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		if err != nil {
 			sSpan.AddEvent("Failed to run descheduler loop", trace.WithAttributes(attribute.String("err", err.Error())))
 			klog.Error(err)
-			cancel()
 			return
 		}
 		// If there was no interval specified, send a signal to the stopChannel to end the wait.Until loop after 1 iteration
