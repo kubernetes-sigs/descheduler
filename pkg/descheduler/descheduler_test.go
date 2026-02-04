@@ -1420,7 +1420,193 @@ func verifyAllPrometheusClientsEqual(t *testing.T, expected, fromReactor, fromPl
 }
 
 // TestPluginPrometheusClientAccess tests that the Prometheus client is accessible through the plugin handle
-func TestPluginPrometheusClientAccess(t *testing.T) {
+func TestPluginPrometheusClientAccess_Secret(t *testing.T) {
+	testCases := []struct {
+		name   string
+		dryRun bool
+	}{
+		{
+			name:   "dry run disabled",
+			dryRun: false,
+		},
+		{
+			name:   "dry run enabled",
+			dryRun: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			initPluginRegistry()
+
+			newInvoked := false
+			reactorInvoked := false
+			var prometheusClientFromPluginNewHandle promapi.Client
+			var prometheusClientFromReactor promapi.Client
+
+			fakePlugin := &fakeplugin.FakePlugin{
+				PluginName: "TestPluginWithPrometheusClient",
+			}
+
+			fakePlugin.AddReactor(string(frameworktypes.DescheduleExtensionPoint), func(action fakeplugin.Action) (handled, filter bool, err error) {
+				if dAction, ok := action.(fakeplugin.DescheduleAction); ok {
+					reactorInvoked = true
+					prometheusClientFromReactor = dAction.Handle().PrometheusClient()
+					return true, false, nil
+				}
+				return false, false, nil
+			})
+
+			pluginregistry.Register(
+				fakePlugin.PluginName,
+				fakeplugin.NewPluginFncFromFakeWithReactor(fakePlugin, func(action fakeplugin.ActionImpl) {
+					newInvoked = true
+					prometheusClientFromPluginNewHandle = action.Handle().PrometheusClient()
+				}),
+				&fakeplugin.FakePlugin{},
+				&fakeplugin.FakePluginArgs{},
+				fakeplugin.ValidateFakePluginArgs,
+				fakeplugin.SetDefaults_FakePluginArgs,
+				pluginregistry.PluginRegistry,
+			)
+
+			deschedulerPolicy := &api.DeschedulerPolicy{
+				MetricsProviders: []api.MetricsProvider{
+					{
+						Source:     api.PrometheusMetrics,
+						Prometheus: newPrometheusConfig(),
+					},
+				},
+				Profiles: []api.DeschedulerProfile{
+					{
+						Name: "test-profile",
+						PluginConfigs: []api.PluginConfig{
+							{
+								Name: fakePlugin.PluginName,
+								Args: &fakeplugin.FakePluginArgs{},
+							},
+						},
+						Plugins: api.Plugins{
+							Deschedule: api.PluginSet{
+								Enabled: []string{fakePlugin.PluginName},
+							},
+						},
+					},
+				},
+			}
+
+			node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
+			node2 := test.BuildTestNode("node2", 1000, 2000, 9, nil)
+
+			_, descheduler, runFnc, fakeClient := initDescheduler(t, ctx, initFeatureGates(), deschedulerPolicy, nil, tc.dryRun, node1, node2)
+
+			// Test cycles with different Prometheus client values
+			cycles := []struct {
+				name        string
+				operation   func() error
+				skipWaiting bool
+				client      promapi.Client
+				token       string
+			}{
+				{
+					name:        "no secret initially",
+					operation:   func() error { return nil },
+					skipWaiting: true,
+					client:      nil,
+					token:       "",
+				},
+				{
+					name: "add secret",
+					operation: func() error {
+						secret := newPrometheusAuthSecret(withToken("token-1"))
+						_, err := fakeClient.CoreV1().Secrets(secret.Namespace).Create(ctx, secret, metav1.CreateOptions{})
+						return err
+					},
+					client: &mockPrometheusClient{name: "new-init-client"},
+					token:  "token-1",
+				},
+				{
+					name: "update secret",
+					operation: func() error {
+						secret := newPrometheusAuthSecret(withToken("token-2"))
+						_, err := fakeClient.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
+						return err
+					},
+					client: &mockPrometheusClient{name: "new-client"},
+					token:  "token-2",
+				},
+				{
+					name: "delete secret",
+					operation: func() error {
+						secret := newPrometheusAuthSecret(withToken("token-3"))
+						return fakeClient.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
+					},
+					client: nil,
+					token:  "",
+				},
+			}
+
+			for i, cycle := range cycles {
+				t.Logf("Cycle %d: %s", i+1, cycle.name)
+
+				// Set the descheduler's Prometheus client
+				t.Logf("Setting descheduler.promClientCtrl.promClient from %v to %v", descheduler.promClientCtrl.promClient, cycle.client)
+				descheduler.promClientCtrl.createPrometheusClient = func(url, token string) (promapi.Client, *http.Transport, error) {
+					if token != cycle.token {
+						t.Fatalf("Expected token to be %q, got %q", cycle.token, token)
+					}
+					if url != prometheusURL {
+						t.Fatalf("Expected url to be %q, got %q", prometheusURL, url)
+					}
+					return cycle.client, &http.Transport{}, nil
+				}
+
+				if err := cycle.operation(); err != nil {
+					t.Fatalf("operation failed: %v", err)
+				}
+
+				if !cycle.skipWaiting {
+					err := wait.PollUntilContextTimeout(ctx, 50*time.Millisecond, 200*time.Millisecond, true, func(ctx context.Context) (bool, error) {
+						currentPromClient := descheduler.promClientCtrl.prometheusClient()
+						if currentPromClient != cycle.client {
+							t.Logf("Waiting for prometheus client to be set to %v, got %v instead, waiting", cycle.client, currentPromClient)
+							return false, nil
+						}
+						return true, nil
+					})
+					if err != nil {
+						t.Fatalf("Timed out waiting for expected conditions: %v", err)
+					}
+				}
+
+				newInvoked = false
+				reactorInvoked = false
+				prometheusClientFromPluginNewHandle = nil
+				prometheusClientFromReactor = nil
+
+				if err := runFnc(ctx); err != nil {
+					t.Fatalf("Unexpected error during running a descheduling cycle: %v", err)
+				}
+
+				t.Logf("After cycle %d: prometheusClientFromReactor=%v, descheduler.promClientCtrl.promClient=%v", i+1, prometheusClientFromReactor, descheduler.promClientCtrl.promClient)
+
+				if !newInvoked {
+					t.Fatalf("Expected plugin new to be invoked during cycle %d", i+1)
+				}
+
+				if !reactorInvoked {
+					t.Fatalf("Expected deschedule reactor to be invoked during cycle %d", i+1)
+				}
+
+				verifyAllPrometheusClientsEqual(t, cycle.client, prometheusClientFromReactor, prometheusClientFromPluginNewHandle, descheduler.promClientCtrl.promClient)
+			}
+		})
+	}
+}
+
+func TestPluginPrometheusClientAccess_InCluster(t *testing.T) {
 	testCases := []struct {
 		name   string
 		dryRun bool
