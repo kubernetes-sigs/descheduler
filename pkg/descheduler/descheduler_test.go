@@ -2152,23 +2152,62 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			if err := tc.operation(); err != nil {
-				t.Fatalf("Failed to execute operation: %v", err)
-			}
+			for _, tc := range testCases {
+				t.Run(tc.name, func(t *testing.T) {
+					if err := tc.operation(); err != nil {
+						t.Fatalf("Failed to execute operation: %v", err)
+					}
 
-			if tc.processItem {
-				// Wait for event to be processed by the reconciler
-				err := wait.PollUntilContextTimeout(ctx, 10*time.Millisecond, 2*time.Second, true, func(ctx context.Context) (bool, error) {
-					// Check if all expected conditions are met
+					if tc.processItem {
+						// Wait for event to be processed by the reconciler
+						err := wait.PollUntilContextTimeout(ctx, 10*time.Millisecond, 2*time.Second, true, func(ctx context.Context) (bool, error) {
+							// Check if all expected conditions are met
+							if tc.expectedPromClientSet {
+								if setup.ctrl.promClient == nil {
+									return false, nil
+								}
+							} else {
+								if setup.ctrl.promClient != nil {
+									return false, nil
+								}
+							}
+
+							createdClientsMu.Lock()
+							createdClientsLen := len(createdClients)
+							createdClientsMu.Unlock()
+							if createdClientsLen != tc.expectedCreatedClientsCount {
+								return false, nil
+							}
+
+							if setup.ctrl.currentPrometheusAuthToken != tc.expectedCurrentToken {
+								return false, nil
+							}
+
+							if tc.expectedPreviousTransportCleared {
+								if setup.ctrl.previousPrometheusClientTransport != nil {
+									return false, nil
+								}
+							}
+
+							return true, nil
+						})
+						if err != nil {
+							t.Fatalf("Timed out waiting for expected conditions: %v", err)
+						}
+
+						// Log all expected conditions that were met
+						t.Logf("All expected conditions met: promClientSet=%v, createdClientsCount=%d, currentToken=%q, previousTransportCleared=%v",
+							tc.expectedPromClientSet, tc.expectedCreatedClientsCount, tc.expectedCurrentToken, tc.expectedPreviousTransportCleared)
+					}
+
+					// Validate post-conditions
 					if tc.expectedPromClientSet {
 						if setup.ctrl.promClient == nil {
-							return false, nil
+							t.Error("Expected prometheus client to be set, but it was nil")
 						}
 					} else {
 						if setup.ctrl.promClient != nil {
-							return false, nil
+							t.Errorf("Expected prometheus client to be nil, but got: %v", setup.ctrl.promClient)
 						}
 					}
 
@@ -2176,67 +2215,28 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 					createdClientsLen := len(createdClients)
 					createdClientsMu.Unlock()
 					if createdClientsLen != tc.expectedCreatedClientsCount {
-						return false, nil
+						t.Errorf("Expected %d clients created, but got %d", tc.expectedCreatedClientsCount, len(createdClients))
 					}
 
 					if setup.ctrl.currentPrometheusAuthToken != tc.expectedCurrentToken {
-						return false, nil
+						t.Errorf("Expected current token to be %q, got %q", tc.expectedCurrentToken, setup.ctrl.currentPrometheusAuthToken)
 					}
 
 					if tc.expectedPreviousTransportCleared {
 						if setup.ctrl.previousPrometheusClientTransport != nil {
-							return false, nil
+							t.Error("Expected previous transport to be cleared, but it was set")
 						}
 					}
 
-					return true, nil
+					if tc.expectDifferentClients && len(createdClients) >= 2 {
+						createdClientsMu.Lock()
+						defer createdClientsMu.Unlock()
+						if createdClients[0] == createdClients[1] {
+							t.Error("Expected different client instances")
+						}
+					}
 				})
-				if err != nil {
-					t.Fatalf("Timed out waiting for expected conditions: %v", err)
-				}
-
-				// Log all expected conditions that were met
-				t.Logf("All expected conditions met: promClientSet=%v, createdClientsCount=%d, currentToken=%q, previousTransportCleared=%v",
-					tc.expectedPromClientSet, tc.expectedCreatedClientsCount, tc.expectedCurrentToken, tc.expectedPreviousTransportCleared)
 			}
-
-			// Validate post-conditions
-			if tc.expectedPromClientSet {
-				if setup.ctrl.promClient == nil {
-					t.Error("Expected prometheus client to be set, but it was nil")
-				}
-			} else {
-				if setup.ctrl.promClient != nil {
-					t.Errorf("Expected prometheus client to be nil, but got: %v", setup.ctrl.promClient)
-				}
-			}
-
-			createdClientsMu.Lock()
-			createdClientsLen := len(createdClients)
-			createdClientsMu.Unlock()
-			if createdClientsLen != tc.expectedCreatedClientsCount {
-				t.Errorf("Expected %d clients created, but got %d", tc.expectedCreatedClientsCount, len(createdClients))
-			}
-
-			if setup.ctrl.currentPrometheusAuthToken != tc.expectedCurrentToken {
-				t.Errorf("Expected current token to be %q, got %q", tc.expectedCurrentToken, setup.ctrl.currentPrometheusAuthToken)
-			}
-
-			if tc.expectedPreviousTransportCleared {
-				if setup.ctrl.previousPrometheusClientTransport != nil {
-					t.Error("Expected previous transport to be cleared, but it was set")
-				}
-			}
-
-			if tc.expectDifferentClients && len(createdClients) >= 2 {
-				createdClientsMu.Lock()
-				defer createdClientsMu.Unlock()
-				if createdClients[0] == createdClients[1] {
-					t.Error("Expected different client instances")
-				}
-			}
-		})
-	}
 }
 
 func TestReconcileInClusterSAToken(t *testing.T) {
