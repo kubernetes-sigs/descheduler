@@ -2372,18 +2372,53 @@ func TestReconcileInClusterSAToken(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-					ctrl := &promClientController{
-						currentPrometheusAuthToken: tc.currentAuthToken,
-						metricsProviders: map[api.MetricsSource]*api.MetricsProvider{
-							api.PrometheusMetrics: {
-								Source: api.PrometheusMetrics,
-								Prometheus: &api.Prometheus{
-									URL: prometheusURL,
+			for _, setupMode := range []struct {
+				name string
+				init func(t *testing.T) *promClientController
+			}{
+				{
+					name: "running with prom reconciler directly",
+					init: func(t *testing.T) *promClientController {
+						return &promClientController{
+							currentPrometheusAuthToken: tc.currentAuthToken,
+							metricsProviders: map[api.MetricsSource]*api.MetricsProvider{
+								api.PrometheusMetrics: {
+									Source: api.PrometheusMetrics,
+									Prometheus: &api.Prometheus{
+										URL: prometheusURL,
+									},
 								},
 							},
-						},
-						inClusterConfig: tc.inClusterConfigFunc,
-					}
+							inClusterConfig: tc.inClusterConfigFunc,
+						}
+					},
+				},
+				{
+					name: "running with full descheduler",
+					init: func(t *testing.T) *promClientController {
+						ctx := context.Background()
+						prometheusConfig := &api.Prometheus{
+							URL: prometheusURL,
+						}
+						deschedulerPolicy := &api.DeschedulerPolicy{
+							MetricsProviders: []api.MetricsProvider{
+								{
+									Source:     api.PrometheusMetrics,
+									Prometheus: prometheusConfig,
+								},
+							},
+						}
+						_, descheduler, _, _ := initDescheduler(t, ctx, initFeatureGates(), deschedulerPolicy, nil, false)
+
+						// Override the fields needed for this test
+						descheduler.promClientCtrl.currentPrometheusAuthToken = tc.currentAuthToken
+						descheduler.promClientCtrl.inClusterConfig = tc.inClusterConfigFunc
+						return descheduler.promClientCtrl
+					},
+				},
+			} {
+				t.Run(setupMode.name, func(t *testing.T) {
+					ctrl := setupMode.init(t)
 
 					// Set previous transport and client if test expects them to be cleared
 					if tc.expectPreviousTransportCleared {
@@ -2455,6 +2490,8 @@ func TestReconcileInClusterSAToken(t *testing.T) {
 							t.Error("Expected promClient to be cleared, but it was set")
 						}
 					}
+				})
+			}
 		})
 	}
 }
