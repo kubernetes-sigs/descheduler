@@ -2175,14 +2175,15 @@ func TestPromClientControllerSync_ClientCreation(t *testing.T) {
 
 func TestPromClientControllerSync_EventHandler(t *testing.T) {
 	testCases := []struct {
-		name                             string
-		operation                        func(ctx context.Context, fakeClient *fakeclientset.Clientset) error
-		processItem                      bool
-		expectedPromClientSet            bool
-		expectedCreatedClientsCount      int
-		expectedCurrentToken             string
-		expectedPreviousTransportCleared bool
-		expectDifferentClients           bool
+		name                              string
+		operation                         func(ctx context.Context, fakeClient *fakeclientset.Clientset) error
+		processItem                       bool
+		expectedPromClientSet             bool
+		expectedCreatedClientsCount       int
+		expectedCurrentToken              string
+		expectedPreviousTransportCleared  bool
+		expectDifferentClients            bool
+		expectCreatePrometheusClientError bool
 	}{
 		// Check initial conditions
 		{
@@ -2220,14 +2221,55 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 			expectDifferentClients:      true,
 		},
 		{
+			name: "update secret with invalid data",
+			operation: func(ctx context.Context, fakeClient *fakeclientset.Clientset) error {
+				secret := newPrometheusAuthSecret(withToken("token-3"))
+				secret.Data[prometheusAuthTokenSecretKey] = []byte{}
+				_, err := fakeClient.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
+				return err
+			},
+			processItem:                 true,
+			expectedPromClientSet:       false,
+			expectedCreatedClientsCount: 2,
+			expectedCurrentToken:        "",
+			expectDifferentClients:      true,
+		},
+		{
+			name: "update secret with valid data",
+			operation: func(ctx context.Context, fakeClient *fakeclientset.Clientset) error {
+				secret := newPrometheusAuthSecret(withToken("token-4"))
+				_, err := fakeClient.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
+				return err
+			},
+			processItem:                 true,
+			expectedPromClientSet:       true,
+			expectedCreatedClientsCount: 3,
+			expectedCurrentToken:        "token-4",
+			expectDifferentClients:      true,
+		},
+		{
+			name: "update secret with valid data but createPrometheusClient failing",
+			operation: func(ctx context.Context, fakeClient *fakeclientset.Clientset) error {
+				secret := newPrometheusAuthSecret(withToken("token-5"))
+				_, err := fakeClient.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
+				return err
+			},
+			processItem:                       true,
+			expectedPromClientSet:             false,
+			expectedCreatedClientsCount:       3,
+			expectedCurrentToken:              "",
+			expectDifferentClients:            true,
+			expectCreatePrometheusClientError: true,
+		},
+		{
 			name: "delete secret",
 			operation: func(ctx context.Context, fakeClient *fakeclientset.Clientset) error {
-				secret := newPrometheusAuthSecret(withToken("token-2"))
+				secret := newPrometheusAuthSecret(withToken("token-5"))
 				return fakeClient.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
 			},
 			processItem:                      true,
 			expectedPromClientSet:            false,
-			expectedCreatedClientsCount:      2,
+			expectedCreatedClientsCount:      3,
 			expectedCurrentToken:             "",
 			expectedPreviousTransportCleared: true,
 		},
@@ -2279,16 +2321,22 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 			// Track created clients to verify different instances
 			var createdClients []promapi.Client
 			var createdClientsMu sync.Mutex
-			ctrl.createPrometheusClient = func(url, token string) (promapi.Client, *http.Transport, error) {
-				client := &mockPrometheusClient{name: "client-" + token}
-				createdClientsMu.Lock()
-				createdClients = append(createdClients, client)
-				createdClientsMu.Unlock()
-				return client, &http.Transport{}, nil
-			}
 
 			for _, tc := range testCases {
 				t.Run(tc.name, func(t *testing.T) {
+					ctrl.mu.Lock()
+					ctrl.createPrometheusClient = func(url, token string) (promapi.Client, *http.Transport, error) {
+						if tc.expectCreatePrometheusClientError {
+							return nil, &http.Transport{}, fmt.Errorf("error creating a prometheus client")
+						}
+						client := &mockPrometheusClient{name: "client-" + token}
+						createdClientsMu.Lock()
+						createdClients = append(createdClients, client)
+						createdClientsMu.Unlock()
+						return client, &http.Transport{}, nil
+					}
+					ctrl.mu.Unlock()
+
 					if err := tc.operation(ctx, fakeClient); err != nil {
 						t.Fatalf("Failed to execute operation: %v", err)
 					}
@@ -2430,7 +2478,7 @@ func TestReconcileInClusterSAToken(t *testing.T) {
 			},
 			expectedErr:                    fmt.Errorf("unable to create a prometheus client: failed to create client"),
 			expectClientCreated:            false,
-			expectCurrentToken:             "old-token",
+			expectCurrentToken:             "",
 			expectPreviousTransportCleared: false,
 			expectPromClientCleared:        false,
 		},

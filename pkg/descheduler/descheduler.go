@@ -289,6 +289,7 @@ func (d *inClusterPromClientController) reconcileInClusterSAToken() error {
 			klog.V(2).Infof("Creating Prometheus client (with SA token)")
 			prometheusClient, transport, err := d.createPrometheusClient(d.prometheusConfig.URL, cfg.BearerToken)
 			if err != nil {
+				d.clearConnection()
 				return fmt.Errorf("unable to create a prometheus client: %v", err)
 			}
 			d.promClient = prometheusClient
@@ -304,6 +305,23 @@ func (d *inClusterPromClientController) reconcileInClusterSAToken() error {
 		return nil
 	}
 	return fmt.Errorf("unexpected error when reading in cluster config: %v", err)
+}
+
+func clearPromClientConnection(currentPrometheusAuthToken *string, previousPrometheusClientTransport **http.Transport, promClient *promapi.Client) {
+	*currentPrometheusAuthToken = ""
+	if *previousPrometheusClientTransport != nil {
+		(*previousPrometheusClientTransport).CloseIdleConnections()
+	}
+	*previousPrometheusClientTransport = nil
+	*promClient = nil
+}
+
+func (d *inClusterPromClientController) clearConnection() {
+	clearPromClientConnection(&d.currentPrometheusAuthToken, &d.previousPrometheusClientTransport, &d.promClient)
+}
+
+func (d *secretBasedPromClientController) clearConnection() {
+	clearPromClientConnection(&d.currentPrometheusAuthToken, &d.previousPrometheusClientTransport, &d.promClient)
 }
 
 func (d *secretBasedPromClientController) runAuthenticationSecretReconciler(ctx context.Context) {
@@ -353,17 +371,13 @@ func (d *secretBasedPromClientController) sync() error {
 	if err != nil {
 		// clear the token if the secret is not found
 		if apierrors.IsNotFound(err) {
-			d.currentPrometheusAuthToken = ""
-			if d.previousPrometheusClientTransport != nil {
-				d.previousPrometheusClientTransport.CloseIdleConnections()
-			}
-			d.previousPrometheusClientTransport = nil
-			d.promClient = nil
+			d.clearConnection()
 		}
 		return fmt.Errorf("unable to get %v/%v secret", ns, name)
 	}
 	authToken := string(secretObj.Data[prometheusAuthTokenSecretKey])
 	if authToken == "" {
+		d.clearConnection()
 		return fmt.Errorf("prometheus authentication token secret missing %q data or empty", prometheusAuthTokenSecretKey)
 	}
 	if d.currentPrometheusAuthToken == authToken {
@@ -373,6 +387,7 @@ func (d *secretBasedPromClientController) sync() error {
 	klog.V(2).Infof("authentication secret token updated, recreating prometheus client")
 	prometheusClient, transport, err := d.createPrometheusClient(prometheusConfig.URL, authToken)
 	if err != nil {
+		d.clearConnection()
 		return fmt.Errorf("unable to create a prometheus client: %v", err)
 	}
 	d.promClient = prometheusClient
