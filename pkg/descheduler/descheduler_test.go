@@ -1347,7 +1347,7 @@ func TestEvictedPodRestorationInDryRun(t *testing.T) {
 	defer eventBroadcaster.Shutdown()
 
 	// Always create descheduler with real client/factory first to register all informers
-	descheduler, err := newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, rs.Client, sharedInformerFactory, nil)
+	descheduler, err := newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, rs.Client, sharedInformerFactory, nil, nil)
 	if err != nil {
 		t.Fatalf("Unable to create descheduler instance: %v", err)
 	}
@@ -1362,7 +1362,7 @@ func TestEvictedPodRestorationInDryRun(t *testing.T) {
 	}
 
 	// Replace descheduler with one using fake client/factory
-	descheduler, err = newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), kubeClientSandbox)
+	descheduler, err = newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), nil, kubeClientSandbox)
 	if err != nil {
 		t.Fatalf("Unable to create dry run descheduler instance: %v", err)
 	}
@@ -1839,14 +1839,9 @@ func setupPromClientControllerTest(ctx context.Context, t *testing.T, objects []
 		Prometheus: prometheusConfig,
 	}})
 
-	ctrl, err := newSecretBasedPromClientController(nil, prometheusConfig)
+	ctrl, err := newSecretBasedPromClientController(nil, prometheusConfig, namespacedInformerFactory)
 	if err != nil {
 		return nil, err
-	}
-	if setNamespacedSharedInformerFactory {
-		if err := setupPrometheusProvider(ctrl, namespacedInformerFactory); err != nil {
-			t.Fatal(err)
-		}
 	}
 
 	namespacedInformerFactory.Start(ctx.Done())
@@ -1938,7 +1933,7 @@ func TestPromClientControllerSync_InvalidConfig(t *testing.T) {
 				URL: prometheusURL,
 				AuthToken: &api.AuthToken{
 					SecretReference: &api.SecretReference{
-						Name:      "prom-token",
+						Name: "prom-token",
 					},
 				},
 			},

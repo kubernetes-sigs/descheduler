@@ -130,7 +130,7 @@ func newInClusterPromClientController(prometheusClient promapi.Client, prometheu
 	}
 }
 
-func newSecretBasedPromClientController(prometheusClient promapi.Client, prometheusConfig *api.Prometheus) (*secretBasedPromClientController, error) {
+func newSecretBasedPromClientController(prometheusClient promapi.Client, prometheusConfig *api.Prometheus, namespacedSharedInformerFactory informers.SharedInformerFactory) (*secretBasedPromClientController, error) {
 	if prometheusConfig == nil || prometheusConfig.AuthToken == nil || prometheusConfig.AuthToken.SecretReference == nil {
 		return nil, fmt.Errorf("prometheus metrics source configuration is missing authentication token secret")
 	}
@@ -138,12 +138,20 @@ func newSecretBasedPromClientController(prometheusClient promapi.Client, prometh
 	if authTokenSecret.Name == "" || authTokenSecret.Namespace == "" {
 		return nil, fmt.Errorf("prometheus metrics source configuration is missing authentication token secret")
 	}
+
+	if namespacedSharedInformerFactory == nil {
+		return nil, fmt.Errorf("namespacedSharedInformerFactory not configured")
+	}
+
 	ctrl := &secretBasedPromClientController{
 		promClient:             prometheusClient,
 		queue:                  workqueue.NewRateLimitingQueueWithConfig(workqueue.DefaultControllerRateLimiter(), workqueue.RateLimitingQueueConfig{Name: "descheduler"}),
 		prometheusConfig:       prometheusConfig,
 		createPrometheusClient: client.CreatePrometheusClient,
 	}
+
+	namespacedSharedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(ctrl.eventHandler())
+	ctrl.namespacedSecretsLister = namespacedSharedInformerFactory.Core().V1().Secrets().Lister().Secrets(authTokenSecret.Namespace)
 
 	return ctrl, nil
 }
@@ -185,20 +193,6 @@ func metricsProviderListToMap(providersList []api.MetricsProvider) map[api.Metri
 	return providersMap
 }
 
-// setupPrometheusProvider sets up the prometheus provider on the descheduler if configured
-func setupPrometheusProvider(ctrl *secretBasedPromClientController, namespacedSharedInformerFactory informers.SharedInformerFactory) error {
-	if ctrl == nil {
-		return nil
-	}
-	if namespacedSharedInformerFactory == nil {
-		return fmt.Errorf("namespacedSharedInformerFactory not configured")
-	}
-	authTokenSecret := ctrl.prometheusConfig.AuthToken.SecretReference
-	namespacedSharedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(ctrl.eventHandler())
-	ctrl.namespacedSecretsLister = namespacedSharedInformerFactory.Core().V1().Secrets().Lister().Secrets(authTokenSecret.Namespace)
-	return nil
-}
-
 func getPrometheusConfig(providersList []api.MetricsProvider) *api.Prometheus {
 	prometheusProvider := metricsProviderListToMap(providersList)[api.PrometheusMetrics]
 	if prometheusProvider == nil {
@@ -211,7 +205,7 @@ func configureSecretPromClientReconciler(prometheusConfig *api.Prometheus) bool 
 	return prometheusConfig.URL != "" && prometheusConfig.AuthToken != nil
 }
 
-func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory, kubeClientSandbox *kubeClientSandbox) (*descheduler, error) {
+func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, client clientset.Interface, sharedInformerFactory, namespacedSharedInformerFactory informers.SharedInformerFactory, kubeClientSandbox *kubeClientSandbox) (*descheduler, error) {
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 	// Temporarily register the PVC because it is used by the DefaultEvictor plugin during
 	// the descheduling cycle, where informer registration is ignored.
@@ -257,7 +251,7 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 	if prometheusConfig != nil && prometheusConfig.URL != "" {
 		if configureSecretPromClientReconciler(prometheusConfig) {
 			// Secret-based mode
-			ctrl, err := newSecretBasedPromClientController(rs.PrometheusClient, prometheusConfig)
+			ctrl, err := newSecretBasedPromClientController(rs.PrometheusClient, prometheusConfig, namespacedSharedInformerFactory)
 			if err != nil {
 				return nil, err
 			}
@@ -619,14 +613,9 @@ func bootstrapDescheduler(
 	eventRecorder events.EventRecorder,
 ) (*descheduler, runFncType, error) {
 	// Always create descheduler with real client/factory first to register all informers
-	descheduler, err := newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, rs.Client, sharedInformerFactory, nil)
+	descheduler, err := newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, rs.Client, sharedInformerFactory, namespacedSharedInformerFactory, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create new descheduler: %v", err)
-	}
-
-	// Setup Prometheus provider
-	if err := setupPrometheusProvider(descheduler.secretBasedPromClientCtrl, namespacedSharedInformerFactory); err != nil {
-		return nil, nil, fmt.Errorf("failed to setup Prometheus provider: %v", err)
 	}
 
 	// If in dry run mode, replace the descheduler with one using fake client/factory
@@ -642,14 +631,9 @@ func bootstrapDescheduler(
 		// TODO(ingvagabund): drop the previous queue
 		// TODO(ingvagabund): stop the previous pod evictor
 		// Replace descheduler with one using fake client/factory
-		descheduler, err = newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), kubeClientSandbox)
+		descheduler, err = newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), namespacedSharedInformerFactory, kubeClientSandbox)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create dry run descheduler: %v", err)
-		}
-
-		// Setup Prometheus provider (with the real shared informer factory as the secret is only read)
-		if err := setupPrometheusProvider(descheduler.secretBasedPromClientCtrl, namespacedSharedInformerFactory); err != nil {
-			return nil, nil, fmt.Errorf("failed to setup Prometheus provider for the dry run descheduler: %v", err)
 		}
 	}
 
