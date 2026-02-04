@@ -2077,10 +2077,7 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	prometheusConfig := newPrometheusConfig()
-	secretName := prometheusConfig.AuthToken.SecretReference.Name
-
-	setup := setupPromClientControllerTest(ctx, nil, prometheusConfig)
+	setup := setupPromClientControllerTest(ctx, nil, newPrometheusConfig())
 
 	// Track created clients to verify different instances
 	var createdClients []promapi.Client
@@ -2120,7 +2117,7 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 			name: "add secret",
 			operation: func() error {
 				secret := newPrometheusAuthSecret(withToken("token-1"))
-				_, err := setup.fakeClient.CoreV1().Secrets(setup.namespace).Create(ctx, secret, metav1.CreateOptions{})
+				_, err := setup.fakeClient.CoreV1().Secrets(secret.Namespace).Create(ctx, secret, metav1.CreateOptions{})
 				return err
 			},
 			processItem:                 true,
@@ -2132,7 +2129,7 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 			name: "update secret",
 			operation: func() error {
 				secret := newPrometheusAuthSecret(withToken("token-2"))
-				_, err := setup.fakeClient.CoreV1().Secrets(setup.namespace).Update(ctx, secret, metav1.UpdateOptions{})
+				_, err := setup.fakeClient.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
 				return err
 			},
 			processItem:                 true,
@@ -2144,7 +2141,8 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 		{
 			name: "delete secret",
 			operation: func() error {
-				return setup.fakeClient.CoreV1().Secrets(setup.namespace).Delete(ctx, secretName, metav1.DeleteOptions{})
+				secret := newPrometheusAuthSecret(withToken("token-2"))
+				return setup.fakeClient.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
 			},
 			processItem:                      true,
 			expectedPromClientSet:            false,
