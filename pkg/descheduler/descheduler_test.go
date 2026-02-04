@@ -1788,11 +1788,10 @@ type promClientControllerTestSetup struct {
 	namespacedInformerFactory informers.SharedInformerFactory
 	metricsProviders          map[api.MetricsSource]*api.MetricsProvider
 	ctrl                      *promClientController
-	stopCh                    chan struct{}
 	namespace                 string
 }
 
-func setupPromClientControllerTest(objects []runtime.Object, prometheusConfig *api.Prometheus) *promClientControllerTestSetup {
+func setupPromClientControllerTest(ctx context.Context, objects []runtime.Object, prometheusConfig *api.Prometheus) *promClientControllerTestSetup {
 	fakeClient := fakeclientset.NewSimpleClientset(objects...)
 
 	namespace := "default"
@@ -1814,16 +1813,14 @@ func setupPromClientControllerTest(objects []runtime.Object, prometheusConfig *a
 		namespacedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(ctrl.eventHandler())
 	}
 
-	stopCh := make(chan struct{})
-	namespacedInformerFactory.Start(stopCh)
-	namespacedInformerFactory.WaitForCacheSync(stopCh)
+	namespacedInformerFactory.Start(ctx.Done())
+	namespacedInformerFactory.WaitForCacheSync(ctx.Done())
 
 	return &promClientControllerTestSetup{
 		fakeClient:                fakeClient,
 		namespacedInformerFactory: namespacedInformerFactory,
 		metricsProviders:          metricsProviders,
 		ctrl:                      ctrl,
-		stopCh:                    stopCh,
 		namespace:                 namespace,
 	}
 }
@@ -1895,8 +1892,9 @@ func TestPromClientControllerSync_InvalidConfig(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			setup := setupPromClientControllerTest(tc.objects, tc.prometheusConfig)
-			defer close(setup.stopCh)
+			ctx, cancel := context.WithCancel(context.TODO())
+			defer cancel()
+			setup := setupPromClientControllerTest(ctx, tc.objects, tc.prometheusConfig)
 
 			// Call sync
 			err := setup.ctrl.sync()
@@ -1970,8 +1968,9 @@ func TestPromClientControllerSync_ClientCreation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			setup := setupPromClientControllerTest(tc.objects, newPrometheusConfig())
-			defer close(setup.stopCh)
+			ctx, cancel := context.WithCancel(context.TODO())
+			defer cancel()
+			setup := setupPromClientControllerTest(ctx, tc.objects, newPrometheusConfig())
 
 			// Set additional test-specific fields
 			setup.ctrl.currentPrometheusAuthToken = tc.currentAuthToken
@@ -2050,8 +2049,7 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 	prometheusConfig := newPrometheusConfig()
 	secretName := prometheusConfig.AuthToken.SecretReference.Name
 
-	setup := setupPromClientControllerTest(nil, prometheusConfig)
-	defer close(setup.stopCh)
+	setup := setupPromClientControllerTest(ctx, nil, prometheusConfig)
 
 	// Track created clients to verify different instances
 	var createdClients []promapi.Client
