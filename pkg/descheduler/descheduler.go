@@ -22,6 +22,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	promapi "github.com/prometheus/client_golang/api"
@@ -78,17 +79,41 @@ type profileRunner struct {
 	descheduleEPs, balanceEPs eprunner
 }
 
+// inClusterPromClientController manages prometheus client using in-cluster SA token
+type inClusterPromClientController struct {
+	mu                                sync.RWMutex
+	promClient                        promapi.Client
+	previousPrometheusClientTransport *http.Transport
+	currentPrometheusAuthToken        string
+	prometheusConfig                  *api.Prometheus
+	createPrometheusClient            createPrometheusClientFunc
+	inClusterConfig                   inClusterConfigFunc
+}
+
+// secretBasedPromClientController manages prometheus client using Kubernetes secret
+type secretBasedPromClientController struct {
+	mu                                sync.RWMutex
+	promClient                        promapi.Client
+	previousPrometheusClientTransport *http.Transport
+	queue                             workqueue.RateLimitingInterface
+	currentPrometheusAuthToken        string
+	namespacedSecretsLister           corev1listers.SecretNamespaceLister
+	prometheusConfig                  *api.Prometheus
+	createPrometheusClient            createPrometheusClientFunc
+}
+
 type descheduler struct {
-	rs                    *options.DeschedulerServer
-	client                clientset.Interface
-	kubeClientSandbox     *kubeClientSandbox
-	getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc
-	sharedInformerFactory informers.SharedInformerFactory
-	deschedulerPolicy     *api.DeschedulerPolicy
-	eventRecorder         events.EventRecorder
-	podEvictor            *evictions.PodEvictor
-	metricsCollector      *metricscollector.MetricsCollector
-	promClientCtrl        *promClientController
+	rs                        *options.DeschedulerServer
+	client                    clientset.Interface
+	kubeClientSandbox         *kubeClientSandbox
+	getPodsAssignedToNode     podutil.GetPodsAssignedToNodeFunc
+	sharedInformerFactory     informers.SharedInformerFactory
+	deschedulerPolicy         *api.DeschedulerPolicy
+	eventRecorder             events.EventRecorder
+	podEvictor                *evictions.PodEvictor
+	metricsCollector          *metricscollector.MetricsCollector
+	inClusterPromClientCtrl   *inClusterPromClientController
+	secretBasedPromClientCtrl *secretBasedPromClientController
 }
 
 type (
@@ -96,28 +121,35 @@ type (
 	inClusterConfigFunc        func() (*rest.Config, error)
 )
 
-type promClientController struct {
-	promClient                        promapi.Client
-	previousPrometheusClientTransport *http.Transport
-	queue                             workqueue.RateLimitingInterface
-	currentPrometheusAuthToken        string
-	namespacedSecretsLister           corev1listers.SecretNamespaceLister
-	metricsProviders                  map[api.MetricsSource]*api.MetricsProvider
-	createPrometheusClient            createPrometheusClientFunc
-	inClusterConfig                   inClusterConfigFunc
-}
-
-func newPromClientController(prometheusClient promapi.Client, metricsProviders map[api.MetricsSource]*api.MetricsProvider) *promClientController {
-	return &promClientController{
+func newInClusterPromClientController(prometheusClient promapi.Client, prometheusConfig *api.Prometheus) *inClusterPromClientController {
+	return &inClusterPromClientController{
 		promClient:             prometheusClient,
-		queue:                  workqueue.NewRateLimitingQueueWithConfig(workqueue.DefaultControllerRateLimiter(), workqueue.RateLimitingQueueConfig{Name: "descheduler"}),
-		metricsProviders:       metricsProviders,
+		prometheusConfig:       prometheusConfig,
 		createPrometheusClient: client.CreatePrometheusClient,
 		inClusterConfig:        rest.InClusterConfig,
 	}
 }
 
-func (d *promClientController) prometheusClient() promapi.Client {
+func newSecretBasedPromClientController(prometheusClient promapi.Client, prometheusConfig *api.Prometheus) *secretBasedPromClientController {
+	ctrl := &secretBasedPromClientController{
+		promClient:             prometheusClient,
+		queue:                  workqueue.NewRateLimitingQueueWithConfig(workqueue.DefaultControllerRateLimiter(), workqueue.RateLimitingQueueConfig{Name: "descheduler"}),
+		prometheusConfig:       prometheusConfig,
+		createPrometheusClient: client.CreatePrometheusClient,
+	}
+
+	return ctrl
+}
+
+func (d *inClusterPromClientController) prometheusClient() promapi.Client {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.promClient
+}
+
+func (d *secretBasedPromClientController) prometheusClient() promapi.Client {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	return d.promClient
 }
 
@@ -140,29 +172,45 @@ func addNodeSelectorIndexer(sharedInformerFactory informers.SharedInformerFactor
 func metricsProviderListToMap(providersList []api.MetricsProvider) map[api.MetricsSource]*api.MetricsProvider {
 	providersMap := make(map[api.MetricsSource]*api.MetricsProvider)
 	for _, provider := range providersList {
+		provider := provider
 		providersMap[provider.Source] = &provider
 	}
 	return providersMap
 }
 
 // setupPrometheusProvider sets up the prometheus provider on the descheduler if configured
-func setupPrometheusProvider(d *descheduler, namespacedSharedInformerFactory informers.SharedInformerFactory) error {
-	if d.promClientCtrl == nil {
+func setupPrometheusProvider(ctrl *secretBasedPromClientController, namespacedSharedInformerFactory informers.SharedInformerFactory) error {
+	if ctrl == nil {
 		return nil
 	}
-	prometheusProvider := d.promClientCtrl.metricsProviders[api.PrometheusMetrics]
-	if prometheusProvider != nil && prometheusProvider.Prometheus != nil && prometheusProvider.Prometheus.AuthToken != nil {
-		authTokenSecret := prometheusProvider.Prometheus.AuthToken.SecretReference
+	prometheusConfig := ctrl.prometheusConfig
+	if prometheusConfig == nil {
+		return fmt.Errorf("prometheus configuration is missing")
+	}
+	if prometheusConfig.AuthToken != nil {
+		authTokenSecret := prometheusConfig.AuthToken.SecretReference
 		if authTokenSecret == nil || authTokenSecret.Namespace == "" {
 			return fmt.Errorf("prometheus metrics source configuration is missing authentication token secret")
 		}
 		if namespacedSharedInformerFactory == nil {
 			return fmt.Errorf("namespacedSharedInformerFactory not configured")
 		}
-		namespacedSharedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(d.promClientCtrl.eventHandler())
-		d.promClientCtrl.namespacedSecretsLister = namespacedSharedInformerFactory.Core().V1().Secrets().Lister().Secrets(authTokenSecret.Namespace)
+		namespacedSharedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(ctrl.eventHandler())
+		ctrl.namespacedSecretsLister = namespacedSharedInformerFactory.Core().V1().Secrets().Lister().Secrets(authTokenSecret.Namespace)
 	}
 	return nil
+}
+
+func getPrometheusConfig(providersList []api.MetricsProvider) *api.Prometheus {
+	prometheusProvider := metricsProviderListToMap(providersList)[api.PrometheusMetrics]
+	if prometheusProvider == nil {
+		return nil
+	}
+	return prometheusProvider.Prometheus
+}
+
+func configureSecretPromClientReconciler(prometheusConfig *api.Prometheus) bool {
+	return prometheusConfig.URL != "" && prometheusConfig.AuthToken != nil
 }
 
 func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string, eventRecorder events.EventRecorder, client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory, kubeClientSandbox *kubeClientSandbox) (*descheduler, error) {
@@ -205,7 +253,17 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 		deschedulerPolicy:     deschedulerPolicy,
 		eventRecorder:         eventRecorder,
 		podEvictor:            podEvictor,
-		promClientCtrl:        newPromClientController(rs.PrometheusClient, metricsProviderListToMap(deschedulerPolicy.MetricsProviders)),
+	}
+
+	prometheusConfig := getPrometheusConfig(deschedulerPolicy.MetricsProviders)
+	if prometheusConfig != nil && prometheusConfig.URL != "" {
+		if configureSecretPromClientReconciler(prometheusConfig) {
+			// Secret-based mode
+			desch.secretBasedPromClientCtrl = newSecretBasedPromClientController(rs.PrometheusClient, prometheusConfig)
+		} else {
+			// In-cluster mode
+			desch.inClusterPromClientCtrl = newInClusterPromClientController(rs.PrometheusClient, prometheusConfig)
+		}
 	}
 
 	nodeSelector, err := nodeSelectorFromPolicy(deschedulerPolicy)
@@ -224,13 +282,16 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 	return desch, nil
 }
 
-func (d *promClientController) reconcileInClusterSAToken() error {
+func (d *inClusterPromClientController) reconcileInClusterSAToken() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	// Read the sa token and assume it has the sufficient permissions to authenticate
 	cfg, err := d.inClusterConfig()
 	if err == nil {
 		if d.currentPrometheusAuthToken != cfg.BearerToken {
 			klog.V(2).Infof("Creating Prometheus client (with SA token)")
-			prometheusClient, transport, err := d.createPrometheusClient(d.metricsProviders[api.PrometheusMetrics].Prometheus.URL, cfg.BearerToken)
+			prometheusClient, transport, err := d.createPrometheusClient(d.prometheusConfig.URL, cfg.BearerToken)
 			if err != nil {
 				return fmt.Errorf("unable to create a prometheus client: %v", err)
 			}
@@ -249,7 +310,7 @@ func (d *promClientController) reconcileInClusterSAToken() error {
 	return fmt.Errorf("unexpected error when reading in cluster config: %v", err)
 }
 
-func (d *promClientController) runAuthenticationSecretReconciler(ctx context.Context) {
+func (d *secretBasedPromClientController) runAuthenticationSecretReconciler(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 	defer d.queue.ShutDown()
 
@@ -261,12 +322,12 @@ func (d *promClientController) runAuthenticationSecretReconciler(ctx context.Con
 	<-ctx.Done()
 }
 
-func (d *promClientController) runAuthenticationSecretReconcilerWorker(ctx context.Context) {
+func (d *secretBasedPromClientController) runAuthenticationSecretReconcilerWorker(ctx context.Context) {
 	for d.processNextWorkItem(ctx) {
 	}
 }
 
-func (d *promClientController) processNextWorkItem(ctx context.Context) bool {
+func (d *secretBasedPromClientController) processNextWorkItem(ctx context.Context) bool {
 	dsKey, quit := d.queue.Get()
 	if quit {
 		return false
@@ -285,8 +346,11 @@ func (d *promClientController) processNextWorkItem(ctx context.Context) bool {
 	return true
 }
 
-func (d *promClientController) sync() error {
-	prometheusConfig := d.metricsProviders[api.PrometheusMetrics].Prometheus
+func (d *secretBasedPromClientController) sync() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	prometheusConfig := d.prometheusConfig
 	if prometheusConfig == nil || prometheusConfig.AuthToken == nil || prometheusConfig.AuthToken.SecretReference == nil {
 		return fmt.Errorf("prometheus metrics source configuration is missing authentication token secret")
 	}
@@ -327,7 +391,7 @@ func (d *promClientController) sync() error {
 	return nil
 }
 
-func (d *promClientController) eventHandler() cache.ResourceEventHandler {
+func (d *secretBasedPromClientController) eventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj interface{}) { d.queue.Add(workQueueKey) },
 		UpdateFunc: func(old, new interface{}) { d.queue.Add(workQueueKey) },
@@ -397,8 +461,14 @@ func (d *descheduler) runProfiles(ctx context.Context) {
 	var profileRunners []profileRunner
 	for idx, profile := range d.deschedulerPolicy.Profiles {
 		var promClient promapi.Client
-		if d.promClientCtrl != nil {
-			promClient = d.promClientCtrl.prometheusClient()
+		if d.inClusterPromClientCtrl != nil && d.secretBasedPromClientCtrl != nil {
+			klog.Error(fmt.Errorf("At most one of inClusterPromClientCtrl and secretBasedPromClientCtrl can be set, got both"))
+			continue
+		}
+		if d.inClusterPromClientCtrl != nil {
+			promClient = d.inClusterPromClientCtrl.prometheusClient()
+		} else if d.secretBasedPromClientCtrl != nil {
+			promClient = d.secretBasedPromClientCtrl.prometheusClient()
 		}
 		currProfile, err := frameworkprofile.NewProfile(
 			ctx,
@@ -539,14 +609,6 @@ func validateVersionCompatibility(discovery discovery.DiscoveryInterface, desche
 	return nil
 }
 
-type tokenReconciliation int
-
-const (
-	noReconciliation tokenReconciliation = iota
-	inClusterReconciliation
-	secretReconciliation
-)
-
 type runFncType func(context.Context) error
 
 func bootstrapDescheduler(
@@ -554,7 +616,6 @@ func bootstrapDescheduler(
 	rs *options.DeschedulerServer,
 	deschedulerPolicy *api.DeschedulerPolicy,
 	evictionPolicyGroupVersion string,
-	metricProviderTokenReconciliation tokenReconciliation,
 	sharedInformerFactory, namespacedSharedInformerFactory informers.SharedInformerFactory,
 	eventRecorder events.EventRecorder,
 ) (*descheduler, runFncType, error) {
@@ -565,7 +626,7 @@ func bootstrapDescheduler(
 	}
 
 	// Setup Prometheus provider
-	if err := setupPrometheusProvider(descheduler, namespacedSharedInformerFactory); err != nil {
+	if err := setupPrometheusProvider(descheduler.secretBasedPromClientCtrl, namespacedSharedInformerFactory); err != nil {
 		return nil, nil, fmt.Errorf("failed to setup Prometheus provider: %v", err)
 	}
 
@@ -588,7 +649,7 @@ func bootstrapDescheduler(
 		}
 
 		// Setup Prometheus provider (with the real shared informer factory as the secret is only read)
-		if err := setupPrometheusProvider(descheduler, namespacedSharedInformerFactory); err != nil {
+		if err := setupPrometheusProvider(descheduler.secretBasedPromClientCtrl, namespacedSharedInformerFactory); err != nil {
 			return nil, nil, fmt.Errorf("failed to setup Prometheus provider for the dry run descheduler: %v", err)
 		}
 	}
@@ -604,12 +665,12 @@ func bootstrapDescheduler(
 			descheduler.kubeClientSandbox.fakeSharedInformerFactory().WaitForCacheSync(ctx.Done())
 		}
 		sharedInformerFactory.Start(ctx.Done())
-		if metricProviderTokenReconciliation == secretReconciliation {
+		if descheduler.secretBasedPromClientCtrl != nil {
 			namespacedSharedInformerFactory.Start(ctx.Done())
 		}
 
 		sharedInformerFactory.WaitForCacheSync(ctx.Done())
-		if metricProviderTokenReconciliation == secretReconciliation {
+		if descheduler.secretBasedPromClientCtrl != nil {
 			namespacedSharedInformerFactory.WaitForCacheSync(ctx.Done())
 		}
 
@@ -629,8 +690,8 @@ func bootstrapDescheduler(
 			}
 		}
 
-		if metricProviderTokenReconciliation == secretReconciliation {
-			go descheduler.promClientCtrl.runAuthenticationSecretReconciler(ctx)
+		if descheduler.secretBasedPromClientCtrl != nil {
+			go descheduler.secretBasedPromClientCtrl.runAuthenticationSecretReconciler(ctx)
 		}
 
 		return nil
@@ -641,9 +702,9 @@ func bootstrapDescheduler(
 	}
 
 	runFnc := func(ctx context.Context) error {
-		if metricProviderTokenReconciliation == inClusterReconciliation {
+		if descheduler.inClusterPromClientCtrl != nil {
 			// Read the sa token and assume it has the sufficient permissions to authenticate
-			if err := descheduler.promClientCtrl.reconcileInClusterSAToken(); err != nil {
+			if err := descheduler.inClusterPromClientCtrl.reconcileInClusterSAToken(); err != nil {
 				return fmt.Errorf("unable to reconcile an in cluster SA token: %v", err)
 			}
 		}
@@ -657,19 +718,6 @@ func bootstrapDescheduler(
 	}
 
 	return descheduler, runFnc, nil
-}
-
-func prometheusProviderToTokenReconciliation(prometheusProvider *api.MetricsProvider) tokenReconciliation {
-	if prometheusProvider != nil && prometheusProvider.Prometheus != nil && prometheusProvider.Prometheus.URL != "" {
-		if prometheusProvider.Prometheus.AuthToken != nil {
-			// Will get reconciled
-			return secretReconciliation
-		} else {
-			// Use the sa token and assume it has the sufficient permissions to authenticate
-			return inClusterReconciliation
-		}
-	}
-	return noReconciliation
 }
 
 func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer, deschedulerPolicy *api.DeschedulerPolicy, evictionPolicyGroupVersion string) error {
@@ -692,14 +740,12 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	defer eventBroadcaster.Shutdown()
 
 	var namespacedSharedInformerFactory informers.SharedInformerFactory
-
-	prometheusProvider := metricsProviderListToMap(deschedulerPolicy.MetricsProviders)[api.PrometheusMetrics]
-	metricProviderTokenReconciliation := prometheusProviderToTokenReconciliation(prometheusProvider)
-	if metricProviderTokenReconciliation == secretReconciliation {
-		namespacedSharedInformerFactory = informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields), informers.WithNamespace(prometheusProvider.Prometheus.AuthToken.SecretReference.Namespace))
+	prometheusConfig := getPrometheusConfig(deschedulerPolicy.MetricsProviders)
+	if prometheusConfig != nil && configureSecretPromClientReconciler(prometheusConfig) {
+		namespacedSharedInformerFactory = informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields), informers.WithNamespace(prometheusConfig.AuthToken.SecretReference.Namespace))
 	}
 
-	_, runLoop, err := bootstrapDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, metricProviderTokenReconciliation, sharedInformerFactory, namespacedSharedInformerFactory, eventRecorder)
+	_, runLoop, err := bootstrapDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, sharedInformerFactory, namespacedSharedInformerFactory, eventRecorder)
 	if err != nil {
 		span.AddEvent("Failed to bootstrap a descheduler", trace.WithAttributes(attribute.String("err", err.Error())))
 		return err
