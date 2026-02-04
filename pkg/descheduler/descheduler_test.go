@@ -1968,20 +1968,49 @@ func TestPromClientControllerSync_ClientCreation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			for _, setupMode := range []struct {
+				name    string
+				setupFn func(context.Context, *testing.T, []runtime.Object) *promClientController
+			}{
+				{
+					name: "running with prom reconciler directly",
+					setupFn: func(ctx context.Context, t *testing.T, objects []runtime.Object) *promClientController {
+						setup := setupPromClientControllerTest(ctx, objects, newPrometheusConfig())
+						return setup.ctrl
+					},
+				},
+				{
+					name: "running with full descheduler",
+					setupFn: func(ctx context.Context, t *testing.T, objects []runtime.Object) *promClientController {
+						deschedulerPolicy := &api.DeschedulerPolicy{
+							MetricsProviders: []api.MetricsProvider{
+								{
+									Source:     api.PrometheusMetrics,
+									Prometheus: newPrometheusConfig(),
+								},
+							},
+						}
+						_, descheduler, _, _ := initDescheduler(t, ctx, initFeatureGates(), deschedulerPolicy, nil, false, objects...)
+						return descheduler.promClientCtrl
+					},
+				},
+			} {
+				t.Run(setupMode.name, func(t *testing.T) {
 					ctx, cancel := context.WithCancel(context.TODO())
 					defer cancel()
-					setup := setupPromClientControllerTest(ctx, tc.objects, newPrometheusConfig())
+
+					ctrl := setupMode.setupFn(ctx, t, tc.objects)
 
 					// Set additional test-specific fields
-					setup.ctrl.currentPrometheusAuthToken = tc.currentAuthToken
+					ctrl.currentPrometheusAuthToken = tc.currentAuthToken
 					if tc.currentAuthToken != "" {
-						setup.ctrl.previousPrometheusClientTransport = &http.Transport{}
+						ctrl.previousPrometheusClientTransport = &http.Transport{}
 					}
 
 					// Mock createPrometheusClient
 					clientCreated := false
 					if tc.createPrometheusClientFunc != nil {
-						setup.ctrl.createPrometheusClient = func(url, token string) (promapi.Client, *http.Transport, error) {
+						ctrl.createPrometheusClient = func(url, token string) (promapi.Client, *http.Transport, error) {
 							client, transport, err := tc.createPrometheusClientFunc(url, token)
 							if err == nil {
 								clientCreated = true
@@ -1991,7 +2020,7 @@ func TestPromClientControllerSync_ClientCreation(t *testing.T) {
 					}
 
 					// Call sync
-					err := setup.ctrl.sync()
+					err := ctrl.sync()
 
 					// Verify error expectations
 					if tc.expectedErr != nil {
@@ -2015,17 +2044,17 @@ func TestPromClientControllerSync_ClientCreation(t *testing.T) {
 					}
 
 					// Verify token cleared expectations
-					if tc.expectCurrentTokenCleared && setup.ctrl.currentPrometheusAuthToken != "" {
+					if tc.expectCurrentTokenCleared && ctrl.currentPrometheusAuthToken != "" {
 						t.Errorf("Expected current auth token to be cleared but it wasn't")
 					}
 
 					// Verify previous transport cleared expectations
-					if tc.expectPreviousTransportCleared && setup.ctrl.previousPrometheusClientTransport != nil {
+					if tc.expectPreviousTransportCleared && ctrl.previousPrometheusClientTransport != nil {
 						t.Errorf("Expected previous transport to be cleared but it wasn't")
 					}
 
 					// Verify promClient cleared when secret not found
-					if tc.expectPreviousTransportCleared && setup.ctrl.promClient != nil {
+					if tc.expectPreviousTransportCleared && ctrl.promClient != nil {
 						t.Errorf("Expected promClient to be cleared but it wasn't")
 					}
 
@@ -2033,11 +2062,13 @@ func TestPromClientControllerSync_ClientCreation(t *testing.T) {
 					if tc.expectClientCreated && len(tc.objects) > 0 {
 						if secret, ok := tc.objects[0].(*v1.Secret); ok && secret.Data != nil {
 							expectedToken := string(secret.Data[prometheusAuthTokenSecretKey])
-							if setup.ctrl.currentPrometheusAuthToken != expectedToken {
-								t.Errorf("Expected current auth token to be %q but got %q", expectedToken, setup.ctrl.currentPrometheusAuthToken)
+							if ctrl.currentPrometheusAuthToken != expectedToken {
+								t.Errorf("Expected current auth token to be %q but got %q", expectedToken, ctrl.currentPrometheusAuthToken)
 							}
 						}
 					}
+				})
+			}
 		})
 	}
 }
