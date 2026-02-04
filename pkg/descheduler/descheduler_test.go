@@ -2351,6 +2351,7 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 							previousTransport := ctrl.previousPrometheusClientTransport
 							ctrl.mu.RUnlock()
 
+							t.Logf("promClient: %v\n", promClient)
 							if tc.expectedPromClientSet {
 								if promClient == nil {
 									return false, nil
@@ -2364,14 +2365,15 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 							createdClientsMu.Lock()
 							createdClientsLen := len(createdClients)
 							createdClientsMu.Unlock()
+							t.Logf("createdClientsLen: %v\n", createdClientsLen)
 							if createdClientsLen != tc.expectedCreatedClientsCount {
 								return false, nil
 							}
-
+							t.Logf("currentToken: %v\n", currentToken)
 							if currentToken != tc.expectedCurrentToken {
 								return false, nil
 							}
-
+							t.Logf("previousTransport: %v\n", previousTransport)
 							if tc.expectedPreviousTransportCleared {
 								if previousTransport != nil {
 									return false, nil
