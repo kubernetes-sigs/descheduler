@@ -114,6 +114,7 @@ type descheduler struct {
 	metricsCollector          *metricscollector.MetricsCollector
 	inClusterPromClientCtrl   *inClusterPromClientController
 	secretBasedPromClientCtrl *secretBasedPromClientController
+	profileRunners            []profileRunner
 }
 
 type (
@@ -275,6 +276,35 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 		desch.metricsCollector = metricscollector.NewMetricsCollector(sharedInformerFactory.Core().V1().Nodes().Lister(), rs.MetricsClient, nodeSelector)
 	}
 
+	var profileRunners []profileRunner
+	for idx, profile := range deschedulerPolicy.Profiles {
+		var promClientGetter func() promapi.Client
+		if desch.inClusterPromClientCtrl != nil {
+			promClientGetter = desch.inClusterPromClientCtrl.prometheusClient
+		} else if desch.secretBasedPromClientCtrl != nil {
+			promClientGetter = desch.secretBasedPromClientCtrl.prometheusClient
+		}
+		currProfile, err := frameworkprofile.NewProfile(
+			ctx,
+			profile,
+			pluginregistry.PluginRegistry,
+			frameworkprofile.WithClientSet(desch.client),
+			frameworkprofile.WithSharedInformerFactory(desch.sharedInformerFactory),
+			frameworkprofile.WithPodEvictor(desch.podEvictor),
+			frameworkprofile.WithGetPodsAssignedToNodeFnc(desch.getPodsAssignedToNode),
+			frameworkprofile.WithMetricsCollector(desch.metricsCollector),
+			frameworkprofile.WithPrometheusClient(promClientGetter),
+			// Generate a unique instance ID using just the index to avoid long IDs
+			// when profile names are very long
+			frameworkprofile.WithProfileInstanceID(fmt.Sprintf("%d", idx)),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("unable to create %q profile: %v", profile.Name, err)
+		}
+		profileRunners = append(profileRunners, profileRunner{profile.Name, currProfile.RunDeschedulePlugins, currProfile.RunBalancePlugins})
+	}
+
+	desch.profileRunners = profileRunners
 	return desch, nil
 }
 
@@ -466,40 +496,7 @@ func (d *descheduler) runProfiles(ctx context.Context) {
 		return // gracefully skip this cycle instead of aborting
 	}
 
-	var profileRunners []profileRunner
-	for idx, profile := range d.deschedulerPolicy.Profiles {
-		var promClient promapi.Client
-		if d.inClusterPromClientCtrl != nil && d.secretBasedPromClientCtrl != nil {
-			klog.Error(fmt.Errorf("At most one of inClusterPromClientCtrl and secretBasedPromClientCtrl can be set, got both"))
-			continue
-		}
-		if d.inClusterPromClientCtrl != nil {
-			promClient = d.inClusterPromClientCtrl.prometheusClient()
-		} else if d.secretBasedPromClientCtrl != nil {
-			promClient = d.secretBasedPromClientCtrl.prometheusClient()
-		}
-		currProfile, err := frameworkprofile.NewProfile(
-			ctx,
-			profile,
-			pluginregistry.PluginRegistry,
-			frameworkprofile.WithClientSet(d.client),
-			frameworkprofile.WithSharedInformerFactory(d.sharedInformerFactory),
-			frameworkprofile.WithPodEvictor(d.podEvictor),
-			frameworkprofile.WithGetPodsAssignedToNodeFnc(d.getPodsAssignedToNode),
-			frameworkprofile.WithMetricsCollector(d.metricsCollector),
-			frameworkprofile.WithPrometheusClient(promClient),
-			// Generate a unique instance ID using just the index to avoid long IDs
-			// when profile names are very long
-			frameworkprofile.WithProfileInstanceID(fmt.Sprintf("%d", idx)),
-		)
-		if err != nil {
-			klog.ErrorS(err, "unable to create a profile", "profile", profile.Name)
-			continue
-		}
-		profileRunners = append(profileRunners, profileRunner{profile.Name, currProfile.RunDeschedulePlugins, currProfile.RunBalancePlugins})
-	}
-
-	for _, profileR := range profileRunners {
+	for _, profileR := range d.profileRunners {
 		// First deschedule
 		status := profileR.descheduleEPs(ctx, nodes)
 		if status != nil && status.Err != nil {
@@ -509,7 +506,7 @@ func (d *descheduler) runProfiles(ctx context.Context) {
 		}
 	}
 
-	for _, profileR := range profileRunners {
+	for _, profileR := range d.profileRunners {
 		// Balance Later
 		status := profileR.balanceEPs(ctx, nodes)
 		if status != nil && status.Err != nil {
