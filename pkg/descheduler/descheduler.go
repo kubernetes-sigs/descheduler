@@ -564,7 +564,7 @@ func bootstrapDescheduler(
 		return nil, nil, fmt.Errorf("failed to create new descheduler: %v", err)
 	}
 
-	// Setup Prometheus provider (only for real client case, not for dry run)
+	// Setup Prometheus provider
 	if err := setupPrometheusProvider(descheduler, namespacedSharedInformerFactory); err != nil {
 		return nil, nil, fmt.Errorf("failed to setup Prometheus provider: %v", err)
 	}
@@ -585,6 +585,11 @@ func bootstrapDescheduler(
 		descheduler, err = newDescheduler(ctx, rs, deschedulerPolicy, evictionPolicyGroupVersion, eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), kubeClientSandbox)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create dry run descheduler: %v", err)
+		}
+
+		// Setup Prometheus provider (with the real shared informer factory as the secret is only read)
+		if err := setupPrometheusProvider(descheduler, namespacedSharedInformerFactory); err != nil {
+			return nil, nil, fmt.Errorf("failed to setup Prometheus provider for the dry run descheduler: %v", err)
 		}
 	}
 
