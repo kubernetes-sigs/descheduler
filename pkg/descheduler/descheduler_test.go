@@ -1888,7 +1888,6 @@ func newPrometheusConfig() *api.Prometheus {
 	}
 }
 
-
 // TestPluginInformerRegistration tests that plugin-specific informers are registered during newDescheduler
 func TestPluginInformerRegistration(t *testing.T) {
 	testCases := []struct {

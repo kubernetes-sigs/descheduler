@@ -107,38 +107,38 @@ func newSecretBasedPromClientController(prometheusClient promapi.Client, prometh
 	return ctrl, nil
 }
 
-func (d *inClusterPromClientController) prometheusClient() promapi.Client {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.promClient
+func (ctrl *inClusterPromClientController) prometheusClient() promapi.Client {
+	ctrl.mu.RLock()
+	defer ctrl.mu.RUnlock()
+	return ctrl.promClient
 }
 
-func (d *secretBasedPromClientController) prometheusClient() promapi.Client {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.promClient
+func (ctrl *secretBasedPromClientController) prometheusClient() promapi.Client {
+	ctrl.mu.RLock()
+	defer ctrl.mu.RUnlock()
+	return ctrl.promClient
 }
 
-func (d *inClusterPromClientController) reconcileInClusterSAToken() error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+func (ctrl *inClusterPromClientController) reconcileInClusterSAToken() error {
+	ctrl.mu.Lock()
+	defer ctrl.mu.Unlock()
 
 	// Read the sa token and assume it has the sufficient permissions to authenticate
-	cfg, err := d.inClusterConfig()
+	cfg, err := ctrl.inClusterConfig()
 	if err == nil {
-		if d.currentPrometheusAuthToken != cfg.BearerToken {
+		if ctrl.currentPrometheusAuthToken != cfg.BearerToken {
 			klog.V(2).Infof("Creating Prometheus client (with SA token)")
-			prometheusClient, transport, err := d.createPrometheusClient(d.prometheusConfig.URL, cfg.BearerToken)
+			prometheusClient, transport, err := ctrl.createPrometheusClient(ctrl.prometheusConfig.URL, cfg.BearerToken)
 			if err != nil {
-				d.clearConnection()
+				ctrl.clearConnection()
 				return fmt.Errorf("unable to create a prometheus client: %v", err)
 			}
-			d.promClient = prometheusClient
-			if d.previousPrometheusClientTransport != nil {
-				d.previousPrometheusClientTransport.CloseIdleConnections()
+			ctrl.promClient = prometheusClient
+			if ctrl.previousPrometheusClientTransport != nil {
+				ctrl.previousPrometheusClientTransport.CloseIdleConnections()
 			}
-			d.previousPrometheusClientTransport = transport
-			d.currentPrometheusAuthToken = cfg.BearerToken
+			ctrl.previousPrometheusClientTransport = transport
+			ctrl.currentPrometheusAuthToken = cfg.BearerToken
 		}
 		return nil
 	}
@@ -157,93 +157,93 @@ func clearPromClientConnection(currentPrometheusAuthToken *string, previousProme
 	*promClient = nil
 }
 
-func (d *inClusterPromClientController) clearConnection() {
-	clearPromClientConnection(&d.currentPrometheusAuthToken, &d.previousPrometheusClientTransport, &d.promClient)
+func (ctrl *inClusterPromClientController) clearConnection() {
+	clearPromClientConnection(&ctrl.currentPrometheusAuthToken, &ctrl.previousPrometheusClientTransport, &ctrl.promClient)
 }
 
-func (d *secretBasedPromClientController) clearConnection() {
-	clearPromClientConnection(&d.currentPrometheusAuthToken, &d.previousPrometheusClientTransport, &d.promClient)
+func (ctrl *secretBasedPromClientController) clearConnection() {
+	clearPromClientConnection(&ctrl.currentPrometheusAuthToken, &ctrl.previousPrometheusClientTransport, &ctrl.promClient)
 }
 
-func (d *secretBasedPromClientController) runAuthenticationSecretReconciler(ctx context.Context) {
+func (ctrl *secretBasedPromClientController) runAuthenticationSecretReconciler(ctx context.Context) {
 	defer utilruntime.HandleCrash()
-	defer d.queue.ShutDown()
+	defer ctrl.queue.ShutDown()
 
 	klog.Infof("Starting authentication secret reconciler")
 	defer klog.Infof("Shutting down authentication secret reconciler")
 
-	go wait.UntilWithContext(ctx, d.runAuthenticationSecretReconcilerWorker, time.Second)
+	go wait.UntilWithContext(ctx, ctrl.runAuthenticationSecretReconcilerWorker, time.Second)
 
 	<-ctx.Done()
 }
 
-func (d *secretBasedPromClientController) runAuthenticationSecretReconcilerWorker(ctx context.Context) {
-	for d.processNextWorkItem(ctx) {
+func (ctrl *secretBasedPromClientController) runAuthenticationSecretReconcilerWorker(ctx context.Context) {
+	for ctrl.processNextWorkItem(ctx) {
 	}
 }
 
-func (d *secretBasedPromClientController) processNextWorkItem(ctx context.Context) bool {
-	dsKey, quit := d.queue.Get()
+func (ctrl *secretBasedPromClientController) processNextWorkItem(ctx context.Context) bool {
+	dsKey, quit := ctrl.queue.Get()
 	if quit {
 		return false
 	}
-	defer d.queue.Done(dsKey)
+	defer ctrl.queue.Done(dsKey)
 
-	err := d.sync()
+	err := ctrl.sync()
 	if err == nil {
-		d.queue.Forget(dsKey)
+		ctrl.queue.Forget(dsKey)
 		return true
 	}
 
 	utilruntime.HandleError(fmt.Errorf("%v failed with : %v", dsKey, err))
-	d.queue.AddRateLimited(dsKey)
+	ctrl.queue.AddRateLimited(dsKey)
 
 	return true
 }
 
-func (d *secretBasedPromClientController) sync() error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+func (ctrl *secretBasedPromClientController) sync() error {
+	ctrl.mu.Lock()
+	defer ctrl.mu.Unlock()
 
-	prometheusConfig := d.prometheusConfig
+	prometheusConfig := ctrl.prometheusConfig
 	ns := prometheusConfig.AuthToken.SecretReference.Namespace
 	name := prometheusConfig.AuthToken.SecretReference.Name
-	secretObj, err := d.namespacedSecretsLister.Get(name)
+	secretObj, err := ctrl.namespacedSecretsLister.Get(name)
 	if err != nil {
 		// clear the token if the secret is not found
 		if apierrors.IsNotFound(err) {
-			d.clearConnection()
+			ctrl.clearConnection()
 		}
 		return fmt.Errorf("unable to get %v/%v secret", ns, name)
 	}
 	authToken := string(secretObj.Data[prometheusAuthTokenSecretKey])
 	if authToken == "" {
-		d.clearConnection()
+		ctrl.clearConnection()
 		return fmt.Errorf("prometheus authentication token secret missing %q data or empty", prometheusAuthTokenSecretKey)
 	}
-	if d.currentPrometheusAuthToken == authToken {
+	if ctrl.currentPrometheusAuthToken == authToken {
 		return nil
 	}
 
 	klog.V(2).Infof("authentication secret token updated, recreating prometheus client")
-	prometheusClient, transport, err := d.createPrometheusClient(prometheusConfig.URL, authToken)
+	prometheusClient, transport, err := ctrl.createPrometheusClient(prometheusConfig.URL, authToken)
 	if err != nil {
-		d.clearConnection()
+		ctrl.clearConnection()
 		return fmt.Errorf("unable to create a prometheus client: %v", err)
 	}
-	d.promClient = prometheusClient
-	if d.previousPrometheusClientTransport != nil {
-		d.previousPrometheusClientTransport.CloseIdleConnections()
+	ctrl.promClient = prometheusClient
+	if ctrl.previousPrometheusClientTransport != nil {
+		ctrl.previousPrometheusClientTransport.CloseIdleConnections()
 	}
-	d.previousPrometheusClientTransport = transport
-	d.currentPrometheusAuthToken = authToken
+	ctrl.previousPrometheusClientTransport = transport
+	ctrl.currentPrometheusAuthToken = authToken
 	return nil
 }
 
-func (d *secretBasedPromClientController) eventHandler() cache.ResourceEventHandler {
+func (ctrl *secretBasedPromClientController) eventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { d.queue.Add(workQueueKey) },
-		UpdateFunc: func(old, new interface{}) { d.queue.Add(workQueueKey) },
-		DeleteFunc: func(obj interface{}) { d.queue.Add(workQueueKey) },
+		AddFunc:    func(obj interface{}) { ctrl.queue.Add(workQueueKey) },
+		UpdateFunc: func(old, new interface{}) { ctrl.queue.Add(workQueueKey) },
+		DeleteFunc: func(obj interface{}) { ctrl.queue.Add(workQueueKey) },
 	}
 }
