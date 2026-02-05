@@ -69,7 +69,7 @@ func (ei *evictorImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.Ev
 // handleImpl implements the framework handle which gets passed to plugins
 type handleImpl struct {
 	clientSet                 clientset.Interface
-	prometheusClient          promapi.Client
+	prometheusClientGetter    func() promapi.Client
 	metricsCollector          *metricscollector.MetricsCollector
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	sharedInformerFactory     informers.SharedInformerFactory
@@ -92,7 +92,11 @@ func (hi *handleImpl) ClientSet() clientset.Interface {
 }
 
 func (hi *handleImpl) PrometheusClient() promapi.Client {
-	return hi.prometheusClient
+	if hi.prometheusClientGetter == nil {
+		klog.V(3).Info("prometheusClientGetter is nil, returning nil Prometheus client")
+		return nil
+	}
+	return hi.prometheusClientGetter()
 }
 
 func (hi *handleImpl) MetricsCollector() *metricscollector.MetricsCollector {
@@ -156,7 +160,7 @@ type Option func(*handleImplOpts)
 
 type handleImplOpts struct {
 	clientSet                 clientset.Interface
-	prometheusClient          promapi.Client
+	prometheusClientGetter    func() promapi.Client
 	sharedInformerFactory     informers.SharedInformerFactory
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	podEvictor                *evictions.PodEvictor
@@ -171,10 +175,10 @@ func WithClientSet(clientSet clientset.Interface) Option {
 	}
 }
 
-// WithPrometheusClient sets Prometheus client for the scheduling frameworkImpl.
-func WithPrometheusClient(prometheusClient promapi.Client) Option {
+// WithPrometheusClient sets Prometheus client getter for the scheduling frameworkImpl.
+func WithPrometheusClient(prometheusClientGetter func() promapi.Client) Option {
 	return func(o *handleImplOpts) {
-		o.prometheusClient = prometheusClient
+		o.prometheusClientGetter = prometheusClientGetter
 	}
 }
 
@@ -309,8 +313,8 @@ func NewProfile(ctx context.Context, config api.DeschedulerProfile, reg pluginre
 			profileName: config.Name,
 			podEvictor:  hOpts.podEvictor,
 		},
-		metricsCollector: hOpts.metricsCollector,
-		prometheusClient: hOpts.prometheusClient,
+		metricsCollector:       hOpts.metricsCollector,
+		prometheusClientGetter: hOpts.prometheusClientGetter,
 	}
 
 	// Collect all unique plugin names across all extension points
