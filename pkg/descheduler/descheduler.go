@@ -20,9 +20,7 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
 	promapi "github.com/prometheus/client_golang/api"
@@ -31,21 +29,15 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/labels"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	utilversion "k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
-	corev1listers "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/events"
-	"k8s.io/client-go/util/workqueue"
 	componentbaseconfig "k8s.io/component-base/config"
 	"k8s.io/klog/v2"
 
@@ -67,9 +59,7 @@ import (
 )
 
 const (
-	prometheusAuthTokenSecretKey = "prometheusAuthToken"
-	workQueueKey                 = "key"
-	indexerNodeSelectorGlobal    = "indexer_node_selector_global"
+	indexerNodeSelectorGlobal = "indexer_node_selector_global"
 )
 
 type eprunner func(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status
@@ -77,29 +67,6 @@ type eprunner func(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status
 type profileRunner struct {
 	name                      string
 	descheduleEPs, balanceEPs eprunner
-}
-
-// inClusterPromClientController manages prometheus client using in-cluster SA token
-type inClusterPromClientController struct {
-	mu                                sync.RWMutex
-	promClient                        promapi.Client
-	previousPrometheusClientTransport *http.Transport
-	currentPrometheusAuthToken        string
-	prometheusConfig                  *api.Prometheus
-	createPrometheusClient            createPrometheusClientFunc
-	inClusterConfig                   inClusterConfigFunc
-}
-
-// secretBasedPromClientController manages prometheus client using Kubernetes secret
-type secretBasedPromClientController struct {
-	mu                                sync.RWMutex
-	promClient                        promapi.Client
-	previousPrometheusClientTransport *http.Transport
-	queue                             workqueue.RateLimitingInterface
-	currentPrometheusAuthToken        string
-	namespacedSecretsLister           corev1listers.SecretNamespaceLister
-	prometheusConfig                  *api.Prometheus
-	createPrometheusClient            createPrometheusClientFunc
 }
 
 type descheduler struct {
@@ -115,58 +82,6 @@ type descheduler struct {
 	inClusterPromClientCtrl   *inClusterPromClientController
 	secretBasedPromClientCtrl *secretBasedPromClientController
 	profileRunners            []profileRunner
-}
-
-type (
-	createPrometheusClientFunc func(url, token string) (promapi.Client, *http.Transport, error)
-	inClusterConfigFunc        func() (*rest.Config, error)
-)
-
-func newInClusterPromClientController(prometheusClient promapi.Client, prometheusConfig *api.Prometheus) *inClusterPromClientController {
-	return &inClusterPromClientController{
-		promClient:             prometheusClient,
-		prometheusConfig:       prometheusConfig,
-		createPrometheusClient: client.CreatePrometheusClient,
-		inClusterConfig:        rest.InClusterConfig,
-	}
-}
-
-func newSecretBasedPromClientController(prometheusClient promapi.Client, prometheusConfig *api.Prometheus, namespacedSharedInformerFactory informers.SharedInformerFactory) (*secretBasedPromClientController, error) {
-	if prometheusConfig == nil || prometheusConfig.AuthToken == nil || prometheusConfig.AuthToken.SecretReference == nil {
-		return nil, fmt.Errorf("prometheus metrics source configuration is missing authentication token secret")
-	}
-	authTokenSecret := prometheusConfig.AuthToken.SecretReference
-	if authTokenSecret.Name == "" || authTokenSecret.Namespace == "" {
-		return nil, fmt.Errorf("prometheus metrics source configuration is missing authentication token secret")
-	}
-
-	if namespacedSharedInformerFactory == nil {
-		return nil, fmt.Errorf("namespacedSharedInformerFactory not configured")
-	}
-
-	ctrl := &secretBasedPromClientController{
-		promClient:             prometheusClient,
-		queue:                  workqueue.NewRateLimitingQueueWithConfig(workqueue.DefaultControllerRateLimiter(), workqueue.RateLimitingQueueConfig{Name: "descheduler"}),
-		prometheusConfig:       prometheusConfig,
-		createPrometheusClient: client.CreatePrometheusClient,
-	}
-
-	namespacedSharedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(ctrl.eventHandler())
-	ctrl.namespacedSecretsLister = namespacedSharedInformerFactory.Core().V1().Secrets().Lister().Secrets(authTokenSecret.Namespace)
-
-	return ctrl, nil
-}
-
-func (d *inClusterPromClientController) prometheusClient() promapi.Client {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.promClient
-}
-
-func (d *secretBasedPromClientController) prometheusClient() promapi.Client {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.promClient
 }
 
 func nodeSelectorFromPolicy(deschedulerPolicy *api.DeschedulerPolicy) (labels.Selector, error) {
@@ -306,135 +221,6 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 
 	desch.profileRunners = profileRunners
 	return desch, nil
-}
-
-func (d *inClusterPromClientController) reconcileInClusterSAToken() error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	// Read the sa token and assume it has the sufficient permissions to authenticate
-	cfg, err := d.inClusterConfig()
-	if err == nil {
-		if d.currentPrometheusAuthToken != cfg.BearerToken {
-			klog.V(2).Infof("Creating Prometheus client (with SA token)")
-			prometheusClient, transport, err := d.createPrometheusClient(d.prometheusConfig.URL, cfg.BearerToken)
-			if err != nil {
-				d.clearConnection()
-				return fmt.Errorf("unable to create a prometheus client: %v", err)
-			}
-			d.promClient = prometheusClient
-			if d.previousPrometheusClientTransport != nil {
-				d.previousPrometheusClientTransport.CloseIdleConnections()
-			}
-			d.previousPrometheusClientTransport = transport
-			d.currentPrometheusAuthToken = cfg.BearerToken
-		}
-		return nil
-	}
-	if err == rest.ErrNotInCluster {
-		return nil
-	}
-	return fmt.Errorf("unexpected error when reading in cluster config: %v", err)
-}
-
-func clearPromClientConnection(currentPrometheusAuthToken *string, previousPrometheusClientTransport **http.Transport, promClient *promapi.Client) {
-	*currentPrometheusAuthToken = ""
-	if *previousPrometheusClientTransport != nil {
-		(*previousPrometheusClientTransport).CloseIdleConnections()
-	}
-	*previousPrometheusClientTransport = nil
-	*promClient = nil
-}
-
-func (d *inClusterPromClientController) clearConnection() {
-	clearPromClientConnection(&d.currentPrometheusAuthToken, &d.previousPrometheusClientTransport, &d.promClient)
-}
-
-func (d *secretBasedPromClientController) clearConnection() {
-	clearPromClientConnection(&d.currentPrometheusAuthToken, &d.previousPrometheusClientTransport, &d.promClient)
-}
-
-func (d *secretBasedPromClientController) runAuthenticationSecretReconciler(ctx context.Context) {
-	defer utilruntime.HandleCrash()
-	defer d.queue.ShutDown()
-
-	klog.Infof("Starting authentication secret reconciler")
-	defer klog.Infof("Shutting down authentication secret reconciler")
-
-	go wait.UntilWithContext(ctx, d.runAuthenticationSecretReconcilerWorker, time.Second)
-
-	<-ctx.Done()
-}
-
-func (d *secretBasedPromClientController) runAuthenticationSecretReconcilerWorker(ctx context.Context) {
-	for d.processNextWorkItem(ctx) {
-	}
-}
-
-func (d *secretBasedPromClientController) processNextWorkItem(ctx context.Context) bool {
-	dsKey, quit := d.queue.Get()
-	if quit {
-		return false
-	}
-	defer d.queue.Done(dsKey)
-
-	err := d.sync()
-	if err == nil {
-		d.queue.Forget(dsKey)
-		return true
-	}
-
-	utilruntime.HandleError(fmt.Errorf("%v failed with : %v", dsKey, err))
-	d.queue.AddRateLimited(dsKey)
-
-	return true
-}
-
-func (d *secretBasedPromClientController) sync() error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	prometheusConfig := d.prometheusConfig
-	ns := prometheusConfig.AuthToken.SecretReference.Namespace
-	name := prometheusConfig.AuthToken.SecretReference.Name
-	secretObj, err := d.namespacedSecretsLister.Get(name)
-	if err != nil {
-		// clear the token if the secret is not found
-		if apierrors.IsNotFound(err) {
-			d.clearConnection()
-		}
-		return fmt.Errorf("unable to get %v/%v secret", ns, name)
-	}
-	authToken := string(secretObj.Data[prometheusAuthTokenSecretKey])
-	if authToken == "" {
-		d.clearConnection()
-		return fmt.Errorf("prometheus authentication token secret missing %q data or empty", prometheusAuthTokenSecretKey)
-	}
-	if d.currentPrometheusAuthToken == authToken {
-		return nil
-	}
-
-	klog.V(2).Infof("authentication secret token updated, recreating prometheus client")
-	prometheusClient, transport, err := d.createPrometheusClient(prometheusConfig.URL, authToken)
-	if err != nil {
-		d.clearConnection()
-		return fmt.Errorf("unable to create a prometheus client: %v", err)
-	}
-	d.promClient = prometheusClient
-	if d.previousPrometheusClientTransport != nil {
-		d.previousPrometheusClientTransport.CloseIdleConnections()
-	}
-	d.previousPrometheusClientTransport = transport
-	d.currentPrometheusAuthToken = authToken
-	return nil
-}
-
-func (d *secretBasedPromClientController) eventHandler() cache.ResourceEventHandler {
-	return cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { d.queue.Add(workQueueKey) },
-		UpdateFunc: func(old, new interface{}) { d.queue.Add(workQueueKey) },
-		DeleteFunc: func(obj interface{}) { d.queue.Add(workQueueKey) },
-	}
 }
 
 func (d *descheduler) runDeschedulerLoop(ctx context.Context) error {
