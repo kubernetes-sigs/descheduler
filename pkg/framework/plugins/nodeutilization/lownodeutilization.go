@@ -116,6 +116,9 @@ func NewLowNodeUtilization(
 		}
 	}
 
+	// Register metrics for this plugin
+	RegisterMetrics()
+
 	return &LowNodeUtilization{
 		logger:                logger,
 		handle:                handle,
@@ -170,6 +173,7 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 			l.args.Thresholds,
 			l.args.TargetThresholds,
 		)
+		LowNodeUtilizationThresholdModeMetric.Set(1)
 	} else {
 		usage, thresholds = assessNodesUsagesAndStaticThresholds(
 			nodesUsageMap,
@@ -177,6 +181,7 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 			l.args.Thresholds,
 			l.args.TargetThresholds,
 		)
+		LowNodeUtilizationThresholdModeMetric.Set(0)
 	}
 
 	// classify nodes in under and over utilized. we will later try to move
@@ -235,8 +240,41 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 		}
 	}
 
-	// log nodes that are appropriately utilized.
+	// log nodes that are appropriately utilized and record metrics for all nodes
 	for nodeName := range nodesMap {
+		classification := 1.0
+		if _, isUnder := nodeGroups[0][nodeName]; isUnder {
+			classification = 0.0
+		} else if _, isOver := nodeGroups[1][nodeName]; isOver {
+			classification = 2.0
+		}
+		LowNodeUtilizationClassificationMetric.WithLabelValues(nodeName).Set(classification)
+
+		// Record utilization values and thresholds for each resource
+		if nodeUsage, ok := usage[nodeName]; ok {
+			for resourceName, utilizationPercentage := range nodeUsage {
+				resourceStr := string(resourceName)
+				LowNodeUtilizationValueMetric.WithLabelValues(nodeName, resourceStr).Set(float64(utilizationPercentage) / 100.0)
+			}
+		}
+
+		if nodeThresholds, ok := thresholds[nodeName]; ok {
+			// Record the underutilization threshold (first threshold) as "low"
+			if len(nodeThresholds) > 0 {
+				for resourceName, thresholdPercentage := range nodeThresholds[0] {
+					resourceStr := string(resourceName)
+					LowNodeUtilizationThresholdMetric.WithLabelValues(nodeName, resourceStr, "low").Set(float64(thresholdPercentage) / 100.0)
+				}
+			}
+			// Record the target/overutilization threshold (second threshold) as "high"
+			if len(nodeThresholds) > 1 {
+				for resourceName, thresholdPercentage := range nodeThresholds[1] {
+					resourceStr := string(resourceName)
+					LowNodeUtilizationThresholdMetric.WithLabelValues(nodeName, resourceStr, "high").Set(float64(thresholdPercentage) / 100.0)
+				}
+			}
+		}
+
 		if !classifiedNodes[nodeName] {
 			logger.Info(
 				"Node is appropriately utilized",
