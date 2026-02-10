@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 
 	policy "k8s.io/api/policy/v1"
@@ -145,17 +146,17 @@ func PodRequestsAndLimits(pod *v1.Pod) (v1.ResourceList, v1.ResourceList) {
 }
 
 // PodToleratesTaints returns true if a pod tolerates one node's taints
-func PodToleratesTaints(pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
+func PodToleratesTaints(ctx context.Context, pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
 	for nodeName, taintsForNode := range taintsOfNodes {
 		if len(pod.Spec.Tolerations) >= len(taintsForNode) {
 
-			if TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, taintsForNode, nil) {
+			if TolerationsTolerateTaintsWithFilter(ctx, pod.Spec.Tolerations, taintsForNode, nil) {
 				return true
 			}
 
 			if klog.V(5).Enabled() {
 				for i := range taintsForNode {
-					if !TolerationsTolerateTaint(pod.Spec.Tolerations, &taintsForNode[i]) {
+					if !TolerationsTolerateTaint(ctx, pod.Spec.Tolerations, &taintsForNode[i]) {
 						klog.V(5).InfoS("Pod doesn't tolerate node taint",
 							"pod", klog.KObj(pod),
 							"nodeName", nodeName,

@@ -107,7 +107,8 @@ func (d *RemovePodsViolatingNodeTaints) Name() string {
 
 // Deschedule extension point implementation for the plugin
 func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
-	logger := klog.FromContext(klog.NewContext(ctx, d.logger)).WithValues("ExtensionPoint", frameworktypes.DescheduleExtensionPoint)
+	ctx = klog.NewContext(ctx, d.logger)
+	logger := klog.FromContext(ctx).WithValues("ExtensionPoint", frameworktypes.DescheduleExtensionPoint)
 	for _, node := range nodes {
 		pods, err := podutil.ListPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		logger.V(1).Info("Processing node", "node", klog.KObj(node))
@@ -120,11 +121,7 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 		totalPods := len(pods)
 	loop:
 		for i := 0; i < totalPods; i++ {
-			if !utils.TolerationsTolerateTaintsWithFilter(
-				pods[i].Spec.Tolerations,
-				node.Spec.Taints,
-				d.taintFilterFnc,
-			) {
+			if !utils.TolerationsTolerateTaintsWithFilter(ctx, pods[i].Spec.Tolerations, node.Spec.Taints, d.taintFilterFnc) {
 				logger.V(2).Info("Not all taints with NoSchedule effect are tolerated after update for pod on node", "pod", klog.KObj(pods[i]), "node", klog.KObj(node))
 				err := d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
 				if err == nil {

@@ -413,7 +413,7 @@ func TestPodFitsCurrentNode(t *testing.T) {
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
-			actual := PodFitsCurrentNode(getPodsAssignedToNode, tc.pod, tc.node)
+			actual := PodFitsCurrentNode(ctx, getPodsAssignedToNode, tc.pod, tc.node)
 			if actual != tc.success {
 				t.Errorf("Test %#v failed", tc.description)
 			}
@@ -1298,7 +1298,7 @@ func TestNodeFit(t *testing.T) {
 
 			sharedInformerFactory.Start(ctx.Done())
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
-			err = NodeFit(getPodsAssignedToNode, tc.pod, tc.node)
+			err = NodeFit(ctx, getPodsAssignedToNode, tc.pod, tc.node)
 			if (err == nil && tc.err != nil) || (err != nil && err.Error() != tc.err.Error()) {
 				t.Errorf("Test %#v failed, got %v, expect %v", tc.description, err, tc.err)
 			}

@@ -131,7 +131,7 @@ func IsReady(node *v1.Node) bool {
 //
 // The checks are ordered from fastest to slowest to reduce unnecessary computation,
 // especially for nodes that are clearly unsuitable early in the evaluation process.
-func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) error {
+func NodeFit(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) error {
 	// Check if the node is marked as unschedulable.
 	if IsNodeUnschedulable(node) {
 		return errors.New("node is not schedulable")
@@ -145,7 +145,7 @@ func NodeFit(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v
 	}
 
 	// Check taints on the node that have effect NoSchedule or NoExecute.
-	ok := utils.TolerationsTolerateTaintsWithFilter(pod.Spec.Tolerations, node.Spec.Taints, func(taint *v1.Taint) bool {
+	ok := utils.TolerationsTolerateTaintsWithFilter(ctx, pod.Spec.Tolerations, node.Spec.Taints, func(taint *v1.Taint) bool {
 		return taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectNoExecute
 	})
 	if !ok {
@@ -180,7 +180,7 @@ func podFitsNodes(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, no
 		if excludeFilter != nil && excludeFilter(pod, node) {
 			return
 		}
-		err := NodeFit(nodeIndexer, pod, node)
+		err := NodeFit(ctx, nodeIndexer, pod, node)
 		if err == nil {
 			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			atomic.AddInt32(&filteredLen, 1)
@@ -212,8 +212,8 @@ func PodFitsAnyNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, 
 
 // PodFitsCurrentNode checks if the given pod will fit onto the given node. The predicates used
 // to determine if the pod will fit can be found in the NodeFit function.
-func PodFitsCurrentNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) bool {
-	err := NodeFit(nodeIndexer, pod, node)
+func PodFitsCurrentNode(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) bool {
+	err := NodeFit(ctx, nodeIndexer, pod, node)
 	if err == nil {
 		klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 		return true

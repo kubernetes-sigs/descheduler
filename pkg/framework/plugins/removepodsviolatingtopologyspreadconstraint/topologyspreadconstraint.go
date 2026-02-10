@@ -185,7 +185,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 			// (we can't just build it from existing pods' nodes because a topology may have 0 pods)
 			for _, node := range nodeMap {
 				if val, ok := node.Labels[tsc.TopologyKey]; ok {
-					if matchNodeInclusionPolicies(tsc, node) {
+					if matchNodeInclusionPolicies(ctx, tsc, node) {
 						constraintTopologies[topologyPair{key: tsc.TopologyKey, value: val}] = make([]*v1.Pod, 0)
 					}
 				}
@@ -224,7 +224,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 				logger.V(2).Info("Skipping topology constraint because it is already balanced", "constraint", tsc)
 				continue
 			}
-			d.balanceDomains(podsForEviction, tsc, constraintTopologies, sumPods, nodes)
+			d.balanceDomains(ctx, podsForEviction, tsc, constraintTopologies, sumPods, nodes)
 		}
 	}
 
@@ -305,20 +305,14 @@ func topologyIsBalanced(topology map[topologyPair][]*v1.Pod, tsc topologySpreadC
 // Following this, the above topology domains end up "sorted" as:
 // [5, 5, 5, 5, 5, 5]
 // (assuming even distribution by the scheduler of the evicted pods)
-func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(
-	podsForEviction map[*v1.Pod]struct{},
-	tsc topologySpreadConstraint,
-	constraintTopologies map[topologyPair][]*v1.Pod,
-	sumPods float64,
-	nodes []*v1.Node,
-) {
+func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(ctx context.Context, podsForEviction map[*v1.Pod]struct{}, tsc topologySpreadConstraint, constraintTopologies map[topologyPair][]*v1.Pod, sumPods float64, nodes []*v1.Node) {
 	idealAvg := sumPods / float64(len(constraintTopologies))
 	isEvictable := d.handle.Evictor().Filter
 	sortedDomains := sortDomains(constraintTopologies, isEvictable)
 	getPodsAssignedToNode := d.handle.GetPodsAssignedToNodeFunc()
 	topologyBalanceNodeFit := utilptr.Deref(d.args.TopologyBalanceNodeFit, true)
 
-	eligibleNodes := filterEligibleNodes(nodes, tsc)
+	eligibleNodes := filterEligibleNodes(ctx, nodes, tsc)
 	nodesBelowIdealAvg := filterNodesBelowIdealAvg(eligibleNodes, sortedDomains, tsc.TopologyKey, idealAvg)
 
 	// i is the index for belowOrEqualAvg
@@ -490,17 +484,17 @@ func doNotScheduleTaintsFilterFunc() func(t *v1.Taint) bool {
 	}
 }
 
-func filterEligibleNodes(nodes []*v1.Node, tsc topologySpreadConstraint) []*v1.Node {
+func filterEligibleNodes(ctx context.Context, nodes []*v1.Node, tsc topologySpreadConstraint) []*v1.Node {
 	var eligibleNodes []*v1.Node
 	for _, node := range nodes {
-		if matchNodeInclusionPolicies(tsc, node) {
+		if matchNodeInclusionPolicies(ctx, tsc, node) {
 			eligibleNodes = append(eligibleNodes, node)
 		}
 	}
 	return eligibleNodes
 }
 
-func matchNodeInclusionPolicies(tsc topologySpreadConstraint, node *v1.Node) bool {
+func matchNodeInclusionPolicies(ctx context.Context, tsc topologySpreadConstraint, node *v1.Node) bool {
 	if tsc.NodeAffinityPolicy == v1.NodeInclusionPolicyHonor {
 		// We ignore parsing errors here for backwards compatibility.
 		if match, _ := tsc.PodNodeAffinity.Match(node); !match {
@@ -508,8 +502,11 @@ func matchNodeInclusionPolicies(tsc topologySpreadConstraint, node *v1.Node) boo
 		}
 	}
 
+	logger := klog.FromContext(ctx)
 	if tsc.NodeTaintsPolicy == v1.NodeInclusionPolicyHonor {
-		if _, untolerated := v1helper.FindMatchingUntoleratedTaint(node.Spec.Taints, tsc.PodTolerations, doNotScheduleTaintsFilterFunc()); untolerated {
+		if _, untolerated := v1helper.FindMatchingUntoleratedTaint(
+			logger, node.Spec.Taints, tsc.PodTolerations, doNotScheduleTaintsFilterFunc(), true,
+		); untolerated {
 			return false
 		}
 	}

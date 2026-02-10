@@ -24,6 +24,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
@@ -611,8 +612,9 @@ func TestToleratesTaint(t *testing.T) {
 			expectTolerated: false,
 		},
 	}
+	logger := klog.FromContext(t.Context())
 	for _, tc := range testCases {
-		if tolerated := tc.toleration.ToleratesTaint(&tc.taint); tc.expectTolerated != tolerated {
+		if tolerated := tc.toleration.ToleratesTaint(logger, &tc.taint, true); tc.expectTolerated != tolerated {
 			t.Errorf("[%s] expect %v, got %v: toleration %+v, taint %s", tc.description, tc.expectTolerated, tolerated, tc.toleration, tc.taint.ToString())
 		}
 	}

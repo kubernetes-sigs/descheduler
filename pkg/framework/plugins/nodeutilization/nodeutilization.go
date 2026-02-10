@@ -283,7 +283,7 @@ func evictPods(
 			break
 		}
 
-		if !utils.PodToleratesTaints(pod, destinationTaints) {
+		if !utils.PodToleratesTaints(ctx, pod, destinationTaints) {
 			logger.V(3).Info(
 				"Skipping eviction for pod, doesn't tolerate node taint",
 				"pod", klog.KObj(pod),
