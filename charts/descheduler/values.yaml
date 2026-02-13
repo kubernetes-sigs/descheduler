@@ -233,6 +233,13 @@ livenessProbe:
   periodSeconds: 20
   timeoutSeconds: 5
 
+# Init containers to run before the main descheduler container
+initContainers: []
+# Example:
+# - name: init-myservice
+#   image: busybox:1.28
+#   command: ['sh', '-c', 'echo The app is running! && sleep 10']
+
 service:
   enabled: false
   # @param service.ipFamilyPolicy [string], support SingleStack, PreferDualStack and RequireDualStack
