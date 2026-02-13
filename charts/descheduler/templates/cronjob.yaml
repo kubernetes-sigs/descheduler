@@ -96,6 +96,10 @@ spec:
           imagePullSecrets:
           {{- toYaml . | nindent 10 }}
           {{- end }}
+          {{- with .Values.initContainers }}
+          initContainers:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           containers:
             - name: {{ .Chart.Name }}
               image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (printf "v%s" .Chart.AppVersion) }}"
