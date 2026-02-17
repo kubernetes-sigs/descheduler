@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes/fake"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/events"
@@ -94,7 +93,7 @@ func TestEvictPod(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
 			ctx := context.Background()
-			fakeClient := fake.NewClientset(test.pods...)
+			fakeClient := fakeclientset.NewClientset(test.pods...)
 			fakeClient.PrependReactor("create", "pods/eviction", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 				return true, nil, test.wantErr
 			})
@@ -326,7 +325,7 @@ func TestNewPodEvictor(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
-			fakeClient := fake.NewSimpleClientset(pod1)
+			fakeClient := fakeclientset.NewSimpleClientset(pod1)
 			fakeClient.PrependReactor("create", "pods/eviction", func(action core.Action) (handled bool, ret runtime.Object, err error) {
 				return true, nil, test.expectedError
 			})

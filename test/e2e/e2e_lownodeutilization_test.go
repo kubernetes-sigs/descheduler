@@ -201,8 +201,12 @@ func TestLowNodeUtilizationKubernetesMetrics(t *testing.T) {
 			waitForPodsRunning(ctx, t, clientSet, deploymentObj.Labels, tc.replicasNum, deploymentObj.Namespace)
 			// wait until workerNodes[0].Name has the right actual cpu utilization and all the testing pods are running
 			// and producing ~12 cores in total
-			wait.PollUntilWithContext(ctx, 5*time.Second, func(context.Context) (done bool, err error) {
+			wait.PollUntilContextCancel(ctx, 5*time.Second, true, func(context.Context) (done bool, err error) {
 				item, err := metricsClient.MetricsV1beta1().NodeMetricses().Get(ctx, workerNodes[0].Name, metav1.GetOptions{})
+				if err != nil {
+					t.Logf("unable to list nodemetricses: %v", err)
+					return false, nil
+				}
 				t.Logf("Waiting for %q nodemetrics cpu utilization to get over 12, currently %v", workerNodes[0].Name, item.Usage.Cpu().Value())
 				if item.Usage.Cpu().Value() < 12 {
 					return false, nil

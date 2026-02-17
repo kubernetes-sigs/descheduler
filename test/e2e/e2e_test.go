@@ -47,7 +47,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
-	"sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapiv1alpha2 "sigs.k8s.io/descheduler/pkg/api/v1alpha2"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
@@ -459,7 +458,7 @@ func runPodLifetimePlugin(
 		defaultevictor.DefaultEvictorArgs{
 			EvictSystemCriticalPods: evictCritical,
 			EvictDaemonSetPods:      evictDaemonSet,
-			PriorityThreshold: &api.PriorityThreshold{
+			PriorityThreshold: &deschedulerapi.PriorityThreshold{
 				Value: &thresholdPriority,
 			},
 		},
@@ -640,10 +639,10 @@ func TestLowNodeUtilization(t *testing.T) {
 
 	t.Log("Running LowNodeUtilization plugin")
 	plugin, err := nodeutilization.NewLowNodeUtilization(ctx, &nodeutilization.LowNodeUtilizationArgs{
-		Thresholds: api.ResourceThresholds{
+		Thresholds: deschedulerapi.ResourceThresholds{
 			v1.ResourceCPU: 70,
 		},
-		TargetThresholds: api.ResourceThresholds{
+		TargetThresholds: deschedulerapi.ResourceThresholds{
 			v1.ResourceCPU: 80,
 		},
 	}, handle)
@@ -1340,7 +1339,7 @@ func TestPodLifeTimeOldestEvicted(t *testing.T) {
 	}
 	waitForRCPodsRunning(ctx, t, clientSet, rc)
 
-	podList, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
+	_, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
 	if err != nil {
 		t.Fatalf("Unable to list pods: %v", err)
 	}
@@ -1584,7 +1583,7 @@ func createBalancedPodForNodes(
 	}
 
 	// find the max, if the node has the max,use the one, if not,use the ratio parameter
-	var maxCPUFraction, maxMemFraction float64 = ratio, ratio
+	maxCPUFraction, maxMemFraction := ratio, ratio
 	cpuFractionMap := make(map[string]float64)
 	memFractionMap := make(map[string]float64)
 
