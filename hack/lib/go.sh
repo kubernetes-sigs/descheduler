@@ -19,7 +19,7 @@
 go::verify_version() {
   GO_VERSION=($(go version))
 
-  if [[ -z $(echo "${GO_VERSION[2]}" | grep -E 'go1.22|go1.23|go1.24') ]]; then
+  if [[ -z $(echo "${GO_VERSION[2]}" | grep -E 'go1.23|go1.24|go1.25') ]]; then
     echo "Unknown go version '${GO_VERSION[2]}', skipping gofmt."
     exit 1
   fi
