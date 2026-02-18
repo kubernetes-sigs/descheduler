@@ -281,10 +281,10 @@ func NodeUsageFromPrometheusMetrics(ctx context.Context, promClient promapi.Clie
 	for _, sample := range results.(model.Vector) {
 		nodeName, exists := sample.Metric["instance"]
 		if !exists {
-			return nil, fmt.Errorf("The collected metrics sample is missing 'instance' key")
+			return nil, fmt.Errorf("the collected metrics sample is missing 'instance' key")
 		}
 		if sample.Value < 0 || sample.Value > 1 {
-			return nil, fmt.Errorf("The collected metrics sample for %q has value %v outside of <0; 1> interval", string(nodeName), sample.Value)
+			return nil, fmt.Errorf("the collected metrics sample for %q has value %v outside of <0; 1> interval", string(nodeName), sample.Value)
 		}
 		nodeUsages[string(nodeName)] = map[v1.ResourceName]*resource.Quantity{
 			MetricResource: resource.NewQuantity(int64(sample.Value*100), resource.DecimalSI),

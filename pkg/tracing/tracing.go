@@ -29,6 +29,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 	"google.golang.org/grpc/credentials"
 	"k8s.io/klog/v2"
 )
@@ -56,7 +57,7 @@ var (
 )
 
 func init() {
-	provider = trace.NewNoopTracerProvider()
+	provider = noop.NewTracerProvider()
 	tracer = provider.Tracer(TracerName)
 }
 
@@ -73,7 +74,7 @@ func NewTracerProvider(ctx context.Context, endpoint, caCert, name, namespace st
 		if err != nil && fallbackToNoOpTracer {
 			klog.ErrorS(err, "ran into an error trying to setup a trace provider. Falling back to NoOp provider")
 			err = nil
-			provider = trace.NewNoopTracerProvider()
+			provider = noop.NewTracerProvider()
 		}
 		otel.SetTextMapPropagator(propagation.TraceContext{})
 		otel.SetTracerProvider(provider)
@@ -85,8 +86,8 @@ func NewTracerProvider(ctx context.Context, endpoint, caCert, name, namespace st
 
 	if endpoint == "" {
 		klog.V(2).Info("Did not find a trace collector endpoint defined. Switching to NoopTraceProvider")
-		provider = trace.NewNoopTracerProvider()
-		return
+		provider = noop.NewTracerProvider()
+		return nil
 	}
 
 	var opts []otlptracegrpc.Option
@@ -144,7 +145,7 @@ func NewTracerProvider(ctx context.Context, endpoint, caCert, name, namespace st
 		sdktrace.WithResource(resource),
 	)
 	klog.V(2).Info("Successfully setup trace provider")
-	return
+	return nil
 }
 
 func defaultResourceOpts(name string) []sdkresource.Option {

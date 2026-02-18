@@ -23,7 +23,6 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
-	policy "k8s.io/api/policy/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -421,9 +420,9 @@ func podEvictionReactionFnc(fakeClient *fakeclientset.Clientset, evictedCache *e
 			if !matched {
 				return false, nil, fmt.Errorf("unable to convert action to core.CreateActionImpl")
 			}
-			eviction, matched := createAct.Object.(*policy.Eviction)
+			eviction, matched := createAct.Object.(*policyv1.Eviction)
 			if !matched {
-				return false, nil, fmt.Errorf("unable to convert action object into *policy.Eviction")
+				return false, nil, fmt.Errorf("unable to convert action object into *policyv1.Eviction")
 			}
 			podObj, err := fakeClient.Tracker().Get(action.GetResource(), eviction.GetNamespace(), eviction.GetName())
 			if err == nil {

@@ -464,7 +464,7 @@ func bootstrapDescheduler(
 				klog.V(2).Infof("Stopped metrics collector")
 			}()
 			klog.V(2).Infof("Waiting for metrics collector to sync")
-			if err := wait.PollWithContext(ctx, time.Second, time.Minute, func(context.Context) (done bool, err error) {
+			if err := wait.PollUntilContextTimeout(ctx, time.Second, time.Minute, true, func(context.Context) (done bool, err error) {
 				return descheduler.metricsCollector.HasSynced(), nil
 			}); err != nil {
 				return fmt.Errorf("unable to wait for metrics collector to sync: %v", err)

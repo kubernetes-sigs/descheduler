@@ -29,7 +29,7 @@ func InitFrameworkHandle(
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 	podsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Build get pods assigned to node function error: %v", err)
+		return nil, nil, fmt.Errorf("build get pods assigned to node function error: %v", err)
 	}
 
 	var getPodsAssignedToNode func(s string, filterFunc podutil.FilterFunc) ([]*v1.Pod, error)
@@ -52,7 +52,7 @@ func InitFrameworkHandle(
 	})
 	podEvictor, err := evictions.NewPodEvictor(ctx, client, eventRecorder, podInformer, featureGates, evictionOptions)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Unable to initialize pod evictor: %v", err)
+		return nil, nil, fmt.Errorf("unable to initialize pod evictor: %v", err)
 	}
 	evictorFilter, err := defaultevictor.New(
 		ctx,
@@ -64,7 +64,7 @@ func InitFrameworkHandle(
 		},
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Unable to initialize the plugin: %v", err)
+		return nil, nil, fmt.Errorf("unable to initialize the plugin: %v", err)
 	}
 	return &frameworkfake.HandleImpl{
 		ClientsetImpl:                 client,

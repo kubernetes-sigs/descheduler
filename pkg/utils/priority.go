@@ -41,5 +41,5 @@ func GetPriorityValueFromPriorityThreshold(ctx context.Context, client clientset
 	if priority > SystemCriticalPriority {
 		return 0, fmt.Errorf("priority threshold can't be greater than %d", SystemCriticalPriority)
 	}
-	return
+	return priority, nil
 }

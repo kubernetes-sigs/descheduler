@@ -352,6 +352,9 @@ func TestPodAntiAffinity(t *testing.T) {
 				&RemovePodsViolatingInterPodAntiAffinityArgs{},
 				handle,
 			)
+			if err != nil {
+				t.Fatalf("Unable to initialize a plugin: %v", err)
+			}
 
 			plugin.(frameworktypes.DeschedulePlugin).Deschedule(ctx, test.nodes)
 			podsEvicted := podEvictor.TotalEvicted()
