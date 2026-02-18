@@ -64,7 +64,7 @@ $ chmod +x $BINARY
 Or, if you have a go development environment set up:
 
 ```
-go get sigs.k8s.io/mdtoc
+go install sigs.k8s.io/mdtoc@latest
 ```
 
 ## Community, discussion, contribution, and support

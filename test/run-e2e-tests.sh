@@ -23,7 +23,7 @@ SKIP_INSTALL=${SKIP_INSTALL:-}
 KIND_E2E=${KIND_E2E:-}
 CONTAINER_ENGINE=${CONTAINER_ENGINE:-docker}
 KIND_SUDO=${KIND_SUDO:-}
-KIND_VERSION=${KIND_VERSION:-v0.30.0}
+KIND_VERSION=${KIND_VERSION:-v0.31.0}
 SKIP_KUBECTL_INSTALL=${SKIP_KUBECTL_INSTALL:-}
 SKIP_KIND_INSTALL=${SKIP_KIND_INSTALL:-}
 SKIP_KUBEVIRT_INSTALL=${SKIP_KUBEVIRT_INSTALL:-}
@@ -39,7 +39,7 @@ echo "DESCHEDULER_IMAGE: ${DESCHEDULER_IMAGE}"
 
 # This just runs e2e tests.
 if [ -n "$KIND_E2E" ]; then
-    K8S_VERSION=${KUBERNETES_VERSION:-v1.34.0}
+    K8S_VERSION=${KUBERNETES_VERSION:-v1.35.1}
     if [ -z "${SKIP_KUBECTL_INSTALL}" ]; then
         curl -Lo kubectl https://dl.k8s.io/release/${K8S_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/
     fi
@@ -100,7 +100,7 @@ if [ -z "${SKIP_KUBEVIRT_INSTALL}" ]; then
   kubectl -n kubevirt patch kubevirt kubevirt --type=merge --patch '{"spec":{"configuration":{"developerConfiguration":{"useEmulation":true}}}}'
 fi
 
-METRICS_SERVER_VERSION="v0.5.0"
+METRICS_SERVER_VERSION="v0.8.1"
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/${METRICS_SERVER_VERSION}/components.yaml
 kubectl patch -n kube-system deployment metrics-server --type=json \
   -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'

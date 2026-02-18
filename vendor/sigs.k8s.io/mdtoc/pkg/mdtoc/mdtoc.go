@@ -18,8 +18,8 @@ package mdtoc
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 	"regexp"
@@ -32,11 +32,11 @@ import (
 )
 
 const (
-	// StartTOC is the opening tag for the table of contents
+	// StartTOC is the opening tag for the table of contents.
 	StartTOC = "<!-- toc -->"
-	// EndTOC is the tag that marks the end of the TOC
+	// EndTOC is the tag that marks the end of the TOC.
 	EndTOC = "<!-- /toc -->"
-	//
+	// MaxHeaderDepth is the default maximum header depth for ToC generation.
 	MaxHeaderDepth = 6
 )
 
@@ -45,10 +45,11 @@ var (
 	endTOCRegex   = regexp.MustCompile("(?i)" + EndTOC)
 )
 
-// Options set for the toc generator
+// Options set for the toc generator.
 type Options struct {
 	Dryrun     bool
 	SkipPrefix bool
+	Version    bool
 	MaxDepth   int
 }
 
@@ -62,7 +63,7 @@ func parse(b []byte) ast.Node {
 	return p.Parse(b)
 }
 
-// GenerateTOC parses a document and returns its TOC
+// GenerateTOC parses a document and returns its TOC.
 func GenerateTOC(doc []byte, opts Options) (string, error) {
 	anchors := make(anchorGen)
 
@@ -72,7 +73,7 @@ func GenerateTOC(doc []byte, opts Options) (string, error) {
 	toc := &bytes.Buffer{}
 	htmlRenderer := html.NewRenderer(html.RendererOptions{})
 	walkHeadings(md, func(heading *ast.Heading) {
-		if heading.Level > opts.MaxDepth {
+		if opts.MaxDepth > 0 && heading.Level > opts.MaxDepth {
 			return
 		}
 		anchor := anchors.mkAnchor(asText(heading))
@@ -153,7 +154,7 @@ func asText(node ast.Node) (text string) {
 	return text
 }
 
-// Renders the heading body as HTML
+// Renders the heading body as HTML.
 func headingBody(renderer *html.Renderer, heading *ast.Heading) string {
 	var buf bytes.Buffer
 	for _, child := range heading.Children {
@@ -183,21 +184,21 @@ var punctuation = regexp.MustCompile(`[^\w\- ]`)
 // WriteTOC writes the TOC generator on file with options.
 // Returns the generated toc, and any error.
 func WriteTOC(file string, opts Options) error {
-	raw, err := ioutil.ReadFile(file)
+	raw, err := os.ReadFile(file)
 	if err != nil {
-		return fmt.Errorf("unable to read %s: %v", file, err)
+		return fmt.Errorf("unable to read %s: %w", file, err)
 	}
 
 	start, end := findTOCTags(raw)
 
 	if start == -1 {
-		return fmt.Errorf("missing opening TOC tag")
+		return errors.New("missing opening TOC tag")
 	}
 	if end == -1 {
-		return fmt.Errorf("missing closing TOC tag")
+		return errors.New("missing closing TOC tag")
 	}
 	if end < start {
-		return fmt.Errorf("TOC closing tag before start tag")
+		return errors.New("TOC closing tag before start tag")
 	}
 
 	var doc []byte
@@ -208,7 +209,7 @@ func WriteTOC(file string, opts Options) error {
 	}
 	toc, err := GenerateTOC(doc, opts)
 	if err != nil {
-		return fmt.Errorf("failed to generate toc: %v", err)
+		return fmt.Errorf("failed to generate toc: %w", err)
 	}
 
 	realStart := start + len(StartTOC)
@@ -231,9 +232,9 @@ func WriteTOC(file string, opts Options) error {
 // GetTOC generates the TOC from a file with options.
 // Returns the generated toc, and any error.
 func GetTOC(file string, opts Options) (string, error) {
-	doc, err := ioutil.ReadFile(file)
+	doc, err := os.ReadFile(file)
 	if err != nil {
-		return "", fmt.Errorf("unable to read %s: %v", file, err)
+		return "", fmt.Errorf("unable to read %s: %w", file, err)
 	}
 
 	start, end := findTOCTags(doc)
@@ -245,7 +246,7 @@ func GetTOC(file string, opts Options) (string, error) {
 	}
 	toc, err := GenerateTOC(doc[startPos:], opts)
 	if err != nil {
-		return toc, fmt.Errorf("failed to generate toc: %v", err)
+		return toc, fmt.Errorf("failed to generate toc: %w", err)
 	}
 
 	return toc, err
@@ -255,9 +256,10 @@ func GetTOC(file string, opts Options) (string, error) {
 // A temporary file is used so no changes are made to the original in the case of an error.
 func atomicWrite(filePath string, chunks ...string) error {
 	tmpPath := filePath + "_tmp"
-	tmp, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	const perms = 0o600
+	tmp, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perms)
 	if err != nil {
-		return fmt.Errorf("unable to open tepmorary file %s: %v", tmpPath, err)
+		return fmt.Errorf("unable to open tepmorary file %s: %w", tmpPath, err)
 	}
 
 	// Cleanup
@@ -268,12 +270,17 @@ func atomicWrite(filePath string, chunks ...string) error {
 
 	for _, chunk := range chunks {
 		if _, err := tmp.WriteString(chunk); err != nil {
-			return err
+			return fmt.Errorf("write temp string: %w", err)
 		}
 	}
 
 	if err := tmp.Close(); err != nil {
-		return err
+		return fmt.Errorf("close temp file: %w", err)
 	}
-	return os.Rename(tmp.Name(), filePath)
+
+	if err := os.Rename(tmp.Name(), filePath); err != nil {
+		return fmt.Errorf("rename temp file: %w", err)
+	}
+
+	return nil
 }

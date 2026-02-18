@@ -17,9 +17,15 @@ const (
 	escapable  = "[!\"#$%&'()*+,./:;<=>?@[\\\\\\]^_`{|}~-]"
 )
 
+const (
+	captionTable  = "Table: "
+	captionFigure = "Figure: "
+	captionQuote  = "Quote: "
+)
+
 var (
-	reBackslashOrAmp      = regexp.MustCompile("[\\&]")
-	reEntityOrEscapedChar = regexp.MustCompile("(?i)\\\\" + escapable + "|" + charEntity)
+	reBackslashOrAmp      = regexp.MustCompile(`[\&]`)
+	reEntityOrEscapedChar = regexp.MustCompile(`(?i)\\` + escapable + "|" + charEntity)
 
 	// blockTags is a set of tags that are recognized as HTML block tags.
 	// Any of these can be included in markdown text without special escaping.
@@ -74,9 +80,9 @@ var (
 	}
 )
 
-// sanitizeAnchorName returns a sanitized anchor name for the given text.
+// sanitizeHeadingID returns a sanitized anchor name for the given text.
 // Taken from https://github.com/shurcooL/sanitized_anchor_name/blob/master/main.go#L14:1
-func sanitizeAnchorName(text string) string {
+func sanitizeHeadingID(text string) string {
 	var anchorName []rune
 	var futureDash = false
 	for _, r := range text {
@@ -91,13 +97,16 @@ func sanitizeAnchorName(text string) string {
 			futureDash = true
 		}
 	}
+	if len(anchorName) == 0 {
+		return "empty"
+	}
 	return string(anchorName)
 }
 
-// Parse block-level data.
+// Parse Block-level data.
 // Note: this function and many that it calls assume that
 // the input buffer ends with a newline.
-func (p *Parser) block(data []byte) {
+func (p *Parser) Block(data []byte) {
 	// this is called recursively: enforce a maximum depth
 	if p.nesting >= p.maxNesting {
 		return
@@ -122,8 +131,18 @@ func (p *Parser) block(data []byte) {
 			}
 			if consumed > 0 {
 				included := f(p.includeStack.Last(), path, address)
+
+				// if we find a caption below this, we need to include it in 'included', so
+				// that the caption will be part of the include text. (+1 to skip newline)
+				for _, caption := range []string{captionFigure, captionTable, captionQuote} {
+					if _, _, capcon := p.caption(data[consumed+1:], []byte(caption)); capcon > 0 {
+						included = append(included, data[consumed+1:consumed+1+capcon]...)
+						consumed += 1 + capcon
+						break // there can only be 1 caption.
+					}
+				}
 				p.includeStack.Push(path)
-				p.block(included)
+				p.Block(included)
 				p.includeStack.Pop()
 				data = data[consumed:]
 				continue
@@ -137,10 +156,10 @@ func (p *Parser) block(data []byte) {
 				data = data[consumed:]
 
 				if node != nil {
-					p.addBlock(node)
+					p.AddBlock(node)
 					if blockdata != nil {
-						p.block(blockdata)
-						p.finalize(node)
+						p.Block(blockdata)
+						p.Finalize(node)
 					}
 				}
 				continue
@@ -172,6 +191,11 @@ func (p *Parser) block(data []byte) {
 		// <div>
 		//     ...
 		// </div>
+
+		if len(data) == 0 {
+			continue
+		}
+
 		if data[0] == '<' {
 			if i := p.html(data, true); i > 0 {
 				data = data[i:]
@@ -194,7 +218,7 @@ func (p *Parser) block(data []byte) {
 		}
 
 		// blank lines.  note: returns the # of bytes to skip
-		if i := p.isEmpty(data); i > 0 {
+		if i := IsEmpty(data); i > 0 {
 			data = data[i:]
 			continue
 		}
@@ -236,11 +260,11 @@ func (p *Parser) block(data []byte) {
 		// ******
 		// or
 		// ______
-		if p.isHRule(data) {
+		if isHRule(data) {
 			i := skipUntilChar(data, 0, '\n')
 			hr := ast.HorizontalRule{}
 			hr.Literal = bytes.Trim(data[:i], " \n")
-			p.addBlock(&hr)
+			p.AddBlock(&hr)
 			data = data[i:]
 			continue
 		}
@@ -278,12 +302,6 @@ func (p *Parser) block(data []byte) {
 			}
 		}
 
-		// table:
-		//
-		// Name  | Age | Phone
-		// ------|-----|---------
-		// Bob   | 31  | 555-1234
-		// Alice | 27  | 555-4321
 		if p.extensions&Tables != 0 {
 			if i := p.table(data); i > 0 {
 				data = data[i:]
@@ -298,7 +316,7 @@ func (p *Parser) block(data []byte) {
 		//
 		// also works with + or -
 		if p.uliPrefix(data) > 0 {
-			data = data[p.list(data, 0, 0):]
+			data = data[p.list(data, 0, 0, '.'):]
 			continue
 		}
 
@@ -308,14 +326,18 @@ func (p *Parser) block(data []byte) {
 		// 2. Item 2
 		if i := p.oliPrefix(data); i > 0 {
 			start := 0
-			if i > 2 && p.extensions&OrderedListStart != 0 {
-				s := string(data[:i-2])
-				start, _ = strconv.Atoi(s)
-				if start == 1 {
-					start = 0
+			delim := byte('.')
+			if i > 2 {
+				if p.extensions&OrderedListStart != 0 {
+					s := string(data[:i-2])
+					start, _ = strconv.Atoi(s)
+					if start == 1 {
+						start = 0
+					}
 				}
+				delim = data[i-2]
 			}
-			data = data[p.list(data, ast.ListTypeOrdered, start):]
+			data = data[p.list(data, ast.ListTypeOrdered, start, delim):]
 			continue
 		}
 
@@ -329,7 +351,7 @@ func (p *Parser) block(data []byte) {
 		// :   Definition c
 		if p.extensions&DefinitionLists != 0 {
 			if p.dliPrefix(data) > 0 {
-				data = data[p.list(data, ast.ListTypeDefinition, 0):]
+				data = data[p.list(data, ast.ListTypeDefinition, 0, '.'):]
 				continue
 			}
 		}
@@ -360,7 +382,7 @@ func (p *Parser) block(data []byte) {
 	p.nesting--
 }
 
-func (p *Parser) addBlock(n ast.Node) ast.Node {
+func (p *Parser) AddBlock(n ast.Node) ast.Node {
 	p.closeUnmatchedBlocks()
 
 	if p.attr != nil {
@@ -376,7 +398,7 @@ func (p *Parser) addBlock(n ast.Node) ast.Node {
 }
 
 func (p *Parser) isPrefixHeading(data []byte) bool {
-	if data[0] != '#' {
+	if len(data) > 0 && data[0] != '#' {
 		return false
 	}
 
@@ -422,15 +444,16 @@ func (p *Parser) prefixHeading(data []byte) int {
 		end--
 	}
 	if end > i {
-		if id == "" && p.extensions&AutoHeadingIDs != 0 {
-			id = sanitizeAnchorName(string(data[i:end]))
-		}
 		block := &ast.Heading{
 			HeadingID: id,
 			Level:     level,
 		}
+		if id == "" && p.extensions&AutoHeadingIDs != 0 {
+			block.HeadingID = sanitizeHeadingID(string(data[i:end]))
+			p.allHeadingsWithAutoID = append(p.allHeadingsWithAutoID, block)
+		}
 		block.Content = data[i:end]
-		p.addBlock(block)
+		p.AddBlock(block)
 	}
 	return skip
 }
@@ -492,17 +515,18 @@ func (p *Parser) prefixSpecialHeading(data []byte) int {
 		end--
 	}
 	if end > i {
-		if id == "" && p.extensions&AutoHeadingIDs != 0 {
-			id = sanitizeAnchorName(string(data[i:end]))
-		}
 		block := &ast.Heading{
 			HeadingID: id,
 			IsSpecial: true,
 			Level:     1, // always level 1.
 		}
+		if id == "" && p.extensions&AutoHeadingIDs != 0 {
+			block.HeadingID = sanitizeHeadingID(string(data[i:end]))
+			p.allHeadingsWithAutoID = append(p.allHeadingsWithAutoID, block)
+		}
 		block.Literal = data[i:end]
 		block.Content = data[i:end]
-		p.addBlock(block)
+		p.AddBlock(block)
 	}
 	return skip
 }
@@ -553,7 +577,7 @@ func (p *Parser) titleBlock(data []byte, doRender bool) int {
 		IsTitleblock: true,
 	}
 	block.Content = data
-	p.addBlock(block)
+	p.AddBlock(block)
 
 	return consumed
 }
@@ -598,14 +622,14 @@ func (p *Parser) html(data []byte, doRender bool) int {
 			}
 
 			// see if it is the only thing on the line
-			if skip := p.isEmpty(data[j:]); skip > 0 {
+			if skip := IsEmpty(data[j:]); skip > 0 {
 				// see if it is followed by a blank line/eof
 				j += skip
 				if j >= len(data) {
 					found = true
 					i = j
 				} else {
-					if skip := p.isEmpty(data[j:]); skip > 0 {
+					if skip := IsEmpty(data[j:]); skip > 0 {
 						j += skip
 						found = true
 						i = j
@@ -647,8 +671,8 @@ func (p *Parser) html(data []byte, doRender bool) int {
 	if doRender {
 		// trim newlines
 		end := backChar(data, i, '\n')
-		htmlBLock := &ast.HTMLBlock{ast.Leaf{Content: data[:end]}}
-		p.addBlock(htmlBLock)
+		htmlBLock := &ast.HTMLBlock{Leaf: ast.Leaf{Content: data[:end]}}
+		p.AddBlock(htmlBLock)
 		finalizeHTMLBlock(htmlBLock)
 	}
 
@@ -664,13 +688,13 @@ func finalizeHTMLBlock(block *ast.HTMLBlock) {
 func (p *Parser) htmlComment(data []byte, doRender bool) int {
 	i := p.inlineHTMLComment(data)
 	// needs to end with a blank line
-	if j := p.isEmpty(data[i:]); j > 0 {
+	if j := IsEmpty(data[i:]); j > 0 {
 		size := i + j
 		if doRender {
 			// trim trailing newlines
 			end := backChar(data, size, '\n')
-			htmlBLock := &ast.HTMLBlock{ast.Leaf{Content: data[:end]}}
-			p.addBlock(htmlBLock)
+			htmlBLock := &ast.HTMLBlock{Leaf: ast.Leaf{Content: data[:end]}}
+			p.AddBlock(htmlBLock)
 			finalizeHTMLBlock(htmlBLock)
 		}
 		return size
@@ -696,13 +720,13 @@ func (p *Parser) htmlHr(data []byte, doRender bool) int {
 	}
 	if i < len(data) && data[i] == '>' {
 		i++
-		if j := p.isEmpty(data[i:]); j > 0 {
+		if j := IsEmpty(data[i:]); j > 0 {
 			size := i + j
 			if doRender {
 				// trim newlines
 				end := backChar(data, size, '\n')
-				htmlBlock := &ast.HTMLBlock{ast.Leaf{Content: data[:end]}}
-				p.addBlock(htmlBlock)
+				htmlBlock := &ast.HTMLBlock{Leaf: ast.Leaf{Content: data[:end]}}
+				p.AddBlock(htmlBlock)
 				finalizeHTMLBlock(htmlBlock)
 			}
 			return size
@@ -734,7 +758,7 @@ func (p *Parser) htmlFindEnd(tag string, data []byte) int {
 
 	// check that the rest of the line is blank
 	skip := 0
-	if skip = p.isEmpty(data[i:]); skip == 0 {
+	if skip = IsEmpty(data[i:]); skip == 0 {
 		return 0
 	}
 	i += skip
@@ -747,7 +771,7 @@ func (p *Parser) htmlFindEnd(tag string, data []byte) int {
 	if p.extensions&LaxHTMLBlocks != 0 {
 		return i
 	}
-	if skip = p.isEmpty(data[i:]); skip == 0 {
+	if skip = IsEmpty(data[i:]); skip == 0 {
 		// following line must be blank
 		return 0
 	}
@@ -755,7 +779,7 @@ func (p *Parser) htmlFindEnd(tag string, data []byte) int {
 	return i + skip
 }
 
-func (*Parser) isEmpty(data []byte) int {
+func IsEmpty(data []byte) int {
 	// it is okay to call isEmpty on an empty buffer
 	if len(data) == 0 {
 		return 0
@@ -771,7 +795,7 @@ func (*Parser) isEmpty(data []byte) int {
 	return i
 }
 
-func (*Parser) isHRule(data []byte) bool {
+func isHRule(data []byte) bool {
 	i := 0
 
 	// skip up to three spaces
@@ -839,12 +863,9 @@ func isFenceLine(data []byte, syntax *string, oldmarker string) (end int, marker
 		return 0, ""
 	}
 
-	// TODO(shurcooL): It's probably a good idea to simplify the 2 code paths here
-	// into one, always get the syntax, and discard it if the caller doesn't care.
-	if syntax != nil {
-		syn := 0
+	// if just read the beginning marker, read the syntax
+	if oldmarker == "" {
 		i = skipChar(data, i, ' ')
-
 		if i >= n {
 			if i == n {
 				return i, marker
@@ -852,41 +873,15 @@ func isFenceLine(data []byte, syntax *string, oldmarker string) (end int, marker
 			return 0, ""
 		}
 
-		syntaxStart := i
-
-		if data[i] == '{' {
-			i++
-			syntaxStart++
-
-			for i < n && data[i] != '}' && data[i] != '\n' {
-				syn++
-				i++
-			}
-
-			if i >= n || data[i] != '}' {
-				return 0, ""
-			}
-
-			// strip all whitespace at the beginning and the end
-			// of the {} block
-			for syn > 0 && isSpace(data[syntaxStart]) {
-				syntaxStart++
-				syn--
-			}
-
-			for syn > 0 && isSpace(data[syntaxStart+syn-1]) {
-				syn--
-			}
-
-			i++
-		} else {
-			for i < n && !isSpace(data[i]) {
-				syn++
-				i++
-			}
+		syntaxStart, syntaxLen := syntaxRange(data, &i)
+		if syntaxStart == 0 && syntaxLen == 0 {
+			return 0, ""
 		}
 
-		*syntax = string(data[syntaxStart : syntaxStart+syn])
+		// caller wants the syntax
+		if syntax != nil {
+			*syntax = string(data[syntaxStart : syntaxStart+syntaxLen])
+		}
 	}
 
 	i = skipChar(data, i, ' ')
@@ -897,6 +892,47 @@ func isFenceLine(data []byte, syntax *string, oldmarker string) (end int, marker
 		return 0, ""
 	}
 	return i + 1, marker // Take newline into account.
+}
+
+func syntaxRange(data []byte, iout *int) (int, int) {
+	n := len(data)
+	syn := 0
+	i := *iout
+	syntaxStart := i
+	if data[i] == '{' {
+		i++
+		syntaxStart++
+
+		for i < n && data[i] != '}' && data[i] != '\n' {
+			syn++
+			i++
+		}
+
+		if i >= n || data[i] != '}' {
+			return 0, 0
+		}
+
+		// strip all whitespace at the beginning and the end
+		// of the {} block
+		for syn > 0 && IsSpace(data[syntaxStart]) {
+			syntaxStart++
+			syn--
+		}
+
+		for syn > 0 && IsSpace(data[syntaxStart+syn-1]) {
+			syn--
+		}
+
+		i++
+	} else {
+		for i < n && !IsSpace(data[i]) {
+			syn++
+			i++
+		}
+	}
+
+	*iout = i
+	return syntaxStart, syn
 }
 
 // fencedCodeBlock returns the end index if data contains a fenced code block at the beginning,
@@ -945,24 +981,24 @@ func (p *Parser) fencedCodeBlock(data []byte, doRender bool) int {
 		codeBlock.Content = work.Bytes() // TODO: get rid of temp buffer
 
 		if p.extensions&Mmark == 0 {
-			p.addBlock(codeBlock)
+			p.AddBlock(codeBlock)
 			finalizeCodeBlock(codeBlock)
 			return beg
 		}
 
 		// Check for caption and if found make it a figure.
-		if captionContent, id, consumed := p.caption(data[beg:], []byte("Figure: ")); consumed > 0 {
+		if captionContent, id, consumed := p.caption(data[beg:], []byte(captionFigure)); consumed > 0 {
 			figure := &ast.CaptionFigure{}
 			caption := &ast.Caption{}
 			figure.HeadingID = id
 			p.Inline(caption, captionContent)
 
-			p.addBlock(figure)
+			p.AddBlock(figure)
 			codeBlock.AsLeaf().Attribute = figure.AsContainer().Attribute
 			p.addChild(codeBlock)
 			finalizeCodeBlock(codeBlock)
 			p.addChild(caption)
-			p.finalize(figure)
+			p.Finalize(figure)
 
 			beg += consumed
 
@@ -970,7 +1006,7 @@ func (p *Parser) fencedCodeBlock(data []byte, doRender bool) int {
 		}
 
 		// Still here, normal block
-		p.addBlock(codeBlock)
+		p.AddBlock(codeBlock)
 		finalizeCodeBlock(codeBlock)
 	}
 
@@ -1005,294 +1041,6 @@ func finalizeCodeBlock(code *ast.CodeBlock) {
 	code.Content = nil
 }
 
-func (p *Parser) table(data []byte) int {
-	i, columns, table := p.tableHeader(data)
-	if i == 0 {
-		return 0
-	}
-
-	p.addBlock(&ast.TableBody{})
-
-	for i < len(data) {
-		pipes, rowStart := 0, i
-		for ; i < len(data) && data[i] != '\n'; i++ {
-			if data[i] == '|' {
-				pipes++
-			}
-		}
-
-		if pipes == 0 {
-			i = rowStart
-			break
-		}
-
-		// include the newline in data sent to tableRow
-		i = skipCharN(data, i, '\n', 1)
-
-		if p.tableFooter(data[rowStart:i]) {
-			continue
-		}
-
-		p.tableRow(data[rowStart:i], columns, false)
-	}
-	if captionContent, id, consumed := p.caption(data[i:], []byte("Table: ")); consumed > 0 {
-		caption := &ast.Caption{}
-		p.Inline(caption, captionContent)
-
-		// Some switcheroo to re-insert the parsed table as a child of the captionfigure.
-		figure := &ast.CaptionFigure{}
-		figure.HeadingID = id
-		table2 := &ast.Table{}
-		// Retain any block level attributes.
-		table2.AsContainer().Attribute = table.AsContainer().Attribute
-		children := table.GetChildren()
-		ast.RemoveFromTree(table)
-
-		table2.SetChildren(children)
-		ast.AppendChild(figure, table2)
-		ast.AppendChild(figure, caption)
-
-		p.addChild(figure)
-		p.finalize(figure)
-
-		i += consumed
-	}
-
-	return i
-}
-
-// check if the specified position is preceded by an odd number of backslashes
-func isBackslashEscaped(data []byte, i int) bool {
-	backslashes := 0
-	for i-backslashes-1 >= 0 && data[i-backslashes-1] == '\\' {
-		backslashes++
-	}
-	return backslashes&1 == 1
-}
-
-// tableHeaders parses the header. If recognized it will also add a table.
-func (p *Parser) tableHeader(data []byte) (size int, columns []ast.CellAlignFlags, table ast.Node) {
-	i := 0
-	colCount := 1
-	headerIsUnderline := true
-	for i = 0; i < len(data) && data[i] != '\n'; i++ {
-		if data[i] == '|' && !isBackslashEscaped(data, i) {
-			colCount++
-		}
-		if data[i] != '-' && data[i] != ' ' && data[i] != ':' && data[i] != '|' {
-			headerIsUnderline = false
-		}
-	}
-
-	// doesn't look like a table header
-	if colCount == 1 {
-		return
-	}
-
-	// include the newline in the data sent to tableRow
-	j := skipCharN(data, i, '\n', 1)
-	header := data[:j]
-
-	// column count ignores pipes at beginning or end of line
-	if data[0] == '|' {
-		colCount--
-	}
-	if i > 2 && data[i-1] == '|' && !isBackslashEscaped(data, i-1) {
-		colCount--
-	}
-
-	// if the header looks like a underline, then we omit the header
-	// and parse the first line again as underline
-	if headerIsUnderline {
-		header = nil
-		i = 0
-	} else {
-		i++ // move past newline
-	}
-
-	columns = make([]ast.CellAlignFlags, colCount)
-
-	// move on to the header underline
-	if i >= len(data) {
-		return
-	}
-
-	if data[i] == '|' && !isBackslashEscaped(data, i) {
-		i++
-	}
-	i = skipChar(data, i, ' ')
-
-	// each column header is of form: / *:?-+:? *|/ with # dashes + # colons >= 3
-	// and trailing | optional on last column
-	col := 0
-	n := len(data)
-	for i < n && data[i] != '\n' {
-		dashes := 0
-
-		if data[i] == ':' {
-			i++
-			columns[col] |= ast.TableAlignmentLeft
-			dashes++
-		}
-		for i < n && data[i] == '-' {
-			i++
-			dashes++
-		}
-		if i < n && data[i] == ':' {
-			i++
-			columns[col] |= ast.TableAlignmentRight
-			dashes++
-		}
-		for i < n && data[i] == ' ' {
-			i++
-		}
-		if i == n {
-			return
-		}
-		// end of column test is messy
-		switch {
-		case dashes < 3:
-			// not a valid column
-			return
-
-		case data[i] == '|' && !isBackslashEscaped(data, i):
-			// marker found, now skip past trailing whitespace
-			col++
-			i++
-			for i < n && data[i] == ' ' {
-				i++
-			}
-
-			// trailing junk found after last column
-			if col >= colCount && i < len(data) && data[i] != '\n' {
-				return
-			}
-
-		case (data[i] != '|' || isBackslashEscaped(data, i)) && col+1 < colCount:
-			// something else found where marker was required
-			return
-
-		case data[i] == '\n':
-			// marker is optional for the last column
-			col++
-
-		default:
-			// trailing junk found after last column
-			return
-		}
-	}
-	if col != colCount {
-		return
-	}
-
-	table = &ast.Table{}
-	p.addBlock(table)
-	if header != nil {
-		p.addBlock(&ast.TableHeader{})
-		p.tableRow(header, columns, true)
-	}
-	size = skipCharN(data, i, '\n', 1)
-	return
-}
-
-func (p *Parser) tableRow(data []byte, columns []ast.CellAlignFlags, header bool) {
-	p.addBlock(&ast.TableRow{})
-	i, col := 0, 0
-
-	if data[i] == '|' && !isBackslashEscaped(data, i) {
-		i++
-	}
-
-	n := len(data)
-	colspans := 0 // keep track of total colspan in this row.
-	for col = 0; col < len(columns) && i < n; col++ {
-		colspan := 0
-		for i < n && data[i] == ' ' {
-			i++
-		}
-
-		cellStart := i
-
-		for i < n && (data[i] != '|' || isBackslashEscaped(data, i)) && data[i] != '\n' {
-			i++
-		}
-
-		cellEnd := i
-
-		// skip the end-of-cell marker, possibly taking us past end of buffer
-		// each _extra_ | means a colspan
-		for i < len(data) && data[i] == '|' && !isBackslashEscaped(data, i) {
-			i++
-			colspan++
-		}
-		// only colspan > 1 make sense.
-		if colspan < 2 {
-			colspan = 0
-		}
-
-		for cellEnd > cellStart && cellEnd-1 < n && data[cellEnd-1] == ' ' {
-			cellEnd--
-		}
-
-		block := &ast.TableCell{
-			IsHeader: header,
-			Align:    columns[col],
-			ColSpan:  colspan,
-		}
-		block.Content = data[cellStart:cellEnd]
-		if cellStart == cellEnd && colspans > 0 {
-			// an empty cell that we should ignore, it exists because of colspan
-			colspans--
-		} else {
-			p.addBlock(block)
-		}
-
-		if colspan > 0 {
-			colspans += colspan - 1
-		}
-	}
-
-	// pad it out with empty columns to get the right number
-	for ; col < len(columns); col++ {
-		block := &ast.TableCell{
-			IsHeader: header,
-			Align:    columns[col],
-		}
-		p.addBlock(block)
-	}
-
-	// silently ignore rows with too many cells
-}
-
-// tableFooter parses the (optional) table footer.
-func (p *Parser) tableFooter(data []byte) bool {
-	colCount := 1
-	i := 0
-	n := len(data)
-	for i < 3 && i < n && data[i] == ' ' { // ignore up to 3 spaces
-		i++
-	}
-	for ; i < n && data[i] != '\n'; i++ {
-		if data[i] == '|' && !isBackslashEscaped(data, i) {
-			colCount++
-			continue
-		}
-		// remaining data must be the = character
-		if data[i] != '=' {
-			return false
-		}
-	}
-
-	// doesn't look like a table footer
-	if colCount == 1 {
-		return false
-	}
-
-	p.addBlock(&ast.TableFooter{})
-
-	return true
-}
-
 // returns blockquote prefix length
 func (p *Parser) quotePrefix(data []byte) int {
 	i := 0
@@ -1312,13 +1060,13 @@ func (p *Parser) quotePrefix(data []byte) int {
 // blockquote ends with at least one blank line
 // followed by something without a blockquote prefix
 func (p *Parser) terminateBlockquote(data []byte, beg, end int) bool {
-	if p.isEmpty(data[beg:]) <= 0 {
+	if IsEmpty(data[beg:]) <= 0 {
 		return false
 	}
 	if end >= len(data) {
 		return true
 	}
-	return p.quotePrefix(data[end:]) == 0 && p.isEmpty(data[end:]) == 0
+	return p.quotePrefix(data[end:]) == 0 && IsEmpty(data[end:]) == 0
 }
 
 // parse a blockquote fragment
@@ -1353,36 +1101,36 @@ func (p *Parser) quote(data []byte) int {
 	}
 
 	if p.extensions&Mmark == 0 {
-		block := p.addBlock(&ast.BlockQuote{})
-		p.block(raw.Bytes())
-		p.finalize(block)
+		block := p.AddBlock(&ast.BlockQuote{})
+		p.Block(raw.Bytes())
+		p.Finalize(block)
 		return end
 	}
 
-	if captionContent, id, consumed := p.caption(data[end:], []byte("Quote: ")); consumed > 0 {
+	if captionContent, id, consumed := p.caption(data[end:], []byte(captionQuote)); consumed > 0 {
 		figure := &ast.CaptionFigure{}
 		caption := &ast.Caption{}
 		figure.HeadingID = id
 		p.Inline(caption, captionContent)
 
-		p.addBlock(figure) // this discard any attributes
+		p.AddBlock(figure) // this discard any attributes
 		block := &ast.BlockQuote{}
 		block.AsContainer().Attribute = figure.AsContainer().Attribute
 		p.addChild(block)
-		p.block(raw.Bytes())
-		p.finalize(block)
+		p.Block(raw.Bytes())
+		p.Finalize(block)
 
 		p.addChild(caption)
-		p.finalize(figure)
+		p.Finalize(figure)
 
 		end += consumed
 
 		return end
 	}
 
-	block := p.addBlock(&ast.BlockQuote{})
-	p.block(raw.Bytes())
-	p.finalize(block)
+	block := p.AddBlock(&ast.BlockQuote{})
+	p.Block(raw.Bytes())
+	p.Finalize(block)
 
 	return end
 }
@@ -1409,7 +1157,7 @@ func (p *Parser) code(data []byte) int {
 		i = skipUntilChar(data, i, '\n')
 		i = skipCharN(data, i, '\n', 1)
 
-		blankline := p.isEmpty(data[beg:i]) > 0
+		blankline := IsEmpty(data[beg:i]) > 0
 		if pre := p.codePrefix(data[beg:i]); pre > 0 {
 			beg += pre
 		} else if !blankline {
@@ -1442,7 +1190,7 @@ func (p *Parser) code(data []byte) int {
 	}
 	// TODO: get rid of temp buffer
 	codeBlock.Content = work.Bytes()
-	p.addBlock(codeBlock)
+	p.AddBlock(codeBlock)
 	finalizeCodeBlock(codeBlock)
 
 	return i
@@ -1479,7 +1227,7 @@ func (p *Parser) oliPrefix(data []byte) int {
 	}
 
 	// we need >= 1 digits followed by a dot and a space or a tab
-	if data[i] != '.' || !(data[i+1] == ' ' || data[i+1] == '\t') {
+	if data[i] != '.' && data[i] != ')' || !(data[i+1] == ' ' || data[i+1] == '\t') {
 		return 0
 	}
 	return i + 2
@@ -1494,20 +1242,40 @@ func (p *Parser) dliPrefix(data []byte) int {
 	if data[0] != ':' || !(data[1] == ' ' || data[1] == '\t') {
 		return 0
 	}
+	// TODO: this is a no-op (data[0] is ':' so not ' ').
+	// Maybe the intent was to eat spaces before ':' ?
+	// either way, no change in tests
 	i := skipChar(data, 0, ' ')
 	return i + 2
 }
 
+// TODO: maybe it was meant to be like below
+// either way, no change in tests
+/*
+func (p *Parser) dliPrefix(data []byte) int {
+	i := skipChar(data, 0, ' ')
+	if i+len(data) < 2 {
+		return 0
+	}
+	// need a ':' followed by a space or a tab
+	if data[i] != ':' || !(data[i+1] == ' ' || data[i+1] == '\t') {
+		return 0
+	}
+	return i + 2
+}
+*/
+
 // parse ordered or unordered list block
-func (p *Parser) list(data []byte, flags ast.ListType, start int) int {
+func (p *Parser) list(data []byte, flags ast.ListType, start int, delim byte) int {
 	i := 0
 	flags |= ast.ListItemBeginningOfList
 	list := &ast.List{
 		ListFlags: flags,
 		Tight:     true,
 		Start:     start,
+		Delimiter: delim,
 	}
-	block := p.addBlock(list)
+	block := p.AddBlock(list)
 
 	for i < len(data) {
 		skip := p.listItem(data[i:], &flags)
@@ -1594,10 +1362,16 @@ func (p *Parser) listItem(data []byte, flags *ast.ListType) int {
 		}
 	}
 
-	var bulletChar byte = '*'
+	var (
+		bulletChar byte = '*'
+		delimiter  byte = '.'
+	)
 	i := p.uliPrefix(data)
 	if i == 0 {
 		i = p.oliPrefix(data)
+		if i > 0 {
+			delimiter = data[i-2]
+		}
 	} else {
 		bulletChar = data[i-2]
 	}
@@ -1648,7 +1422,7 @@ gatherlines:
 
 		// if it is an empty line, guess that it is part of this item
 		// and move on to the next line
-		if p.isEmpty(data[line:i]) > 0 {
+		if IsEmpty(data[line:i]) > 0 {
 			containsBlankLine = true
 			line = i
 			continue
@@ -1669,10 +1443,27 @@ gatherlines:
 
 		chunk := data[line+indentIndex : i]
 
+		// If there is a fence line (marking starting of a code block)
+		// without indent do not process it as part of the list.
+		if p.extensions&FencedCode != 0 {
+			fenceLineEnd, _ := isFenceLine(chunk, nil, "")
+			if fenceLineEnd > 0 && indent == 0 {
+				*flags |= ast.ListItemEndOfList
+				break gatherlines
+			}
+		}
+
 		// evaluate how this line fits in
 		switch {
 		// is this a nested list item?
-		case (p.uliPrefix(chunk) > 0 && !p.isHRule(chunk)) || p.oliPrefix(chunk) > 0 || p.dliPrefix(chunk) > 0:
+		case (p.uliPrefix(chunk) > 0 && !isHRule(chunk)) || p.oliPrefix(chunk) > 0 || p.dliPrefix(chunk) > 0:
+
+			// if indent is 4 or more spaces on unordered or ordered lists
+			// we need to add leadingWhiteSpaces + 1 spaces in the beginning of the chunk
+			if indentIndex >= 4 && p.dliPrefix(chunk) <= 0 {
+				leadingWhiteSpaces := skipChar(chunk, 0, ' ')
+				chunk = data[line+indentIndex-(leadingWhiteSpaces+1) : i]
+			}
 
 			// to be a nested list, it must be indented more
 			// if not, it is either a different kind of list
@@ -1717,10 +1508,7 @@ gatherlines:
 		case containsBlankLine && indent < 4:
 			if *flags&ast.ListTypeDefinition != 0 && i < len(data)-1 {
 				// is the next item still a part of this list?
-				next := i
-				for next < len(data) && data[next] != '\n' {
-					next++
-				}
+				next := skipUntilChar(data, i, '\n')
 				for next < len(data)-1 && data[next] == '\n' {
 					next++
 				}
@@ -1746,7 +1534,7 @@ gatherlines:
 		}
 
 		// add the line into the working buffer without prefix
-		raw.Write(data[line+indentIndex : i])
+		raw.Write(chunk)
 
 		line = i
 	}
@@ -1757,18 +1545,18 @@ gatherlines:
 		ListFlags:  *flags,
 		Tight:      false,
 		BulletChar: bulletChar,
-		Delimiter:  '.', // Only '.' is possible in Markdown, but ')' will also be possible in CommonMark
+		Delimiter:  delimiter,
 	}
-	p.addBlock(listItem)
+	p.AddBlock(listItem)
 
 	// render the contents of the list item
 	if *flags&ast.ListItemContainsBlock != 0 && *flags&ast.ListTypeTerm == 0 {
 		// intermediate render of block item, except for definition term
 		if sublist > 0 {
-			p.block(rawBytes[:sublist])
-			p.block(rawBytes[sublist:])
+			p.Block(rawBytes[:sublist])
+			p.Block(rawBytes[sublist:])
 		} else {
-			p.block(rawBytes)
+			p.Block(rawBytes)
 		}
 	} else {
 		// intermediate render of inline item
@@ -1780,7 +1568,7 @@ gatherlines:
 		}
 		p.addChild(para)
 		if sublist > 0 {
-			p.block(rawBytes[sublist:])
+			p.Block(rawBytes[sublist:])
 		}
 	}
 	return line
@@ -1807,7 +1595,7 @@ func (p *Parser) renderParagraph(data []byte) {
 	}
 	para := &ast.Paragraph{}
 	para.Content = data[beg:end]
-	p.addBlock(para)
+	p.AddBlock(para)
 }
 
 // blockMath handle block surround with $$
@@ -1829,7 +1617,7 @@ func (p *Parser) blockMath(data []byte) int {
 	// render the display math
 	mathBlock := &ast.MathBlock{}
 	mathBlock.Literal = data[2:end]
-	p.addBlock(mathBlock)
+	p.AddBlock(mathBlock)
 
 	return end + 2
 }
@@ -1859,11 +1647,11 @@ func (p *Parser) paragraph(data []byte) int {
 		}
 
 		// did we find a blank line marking the end of the paragraph?
-		if n := p.isEmpty(current); n > 0 {
+		if n := IsEmpty(current); n > 0 {
 			// did this blank line followed by a definition list item?
 			if p.extensions&DefinitionLists != 0 {
 				if i < len(data)-1 && data[i+1] == ':' {
-					listLen := p.list(data[prev:], ast.ListTypeDefinition, 0)
+					listLen := p.list(data[prev:], ast.ListTypeDefinition, 0, '.')
 					return prev + listLen
 				}
 			}
@@ -1887,17 +1675,16 @@ func (p *Parser) paragraph(data []byte) int {
 					eol--
 				}
 
-				id := ""
+				block := &ast.Heading{
+					Level: level,
+				}
 				if p.extensions&AutoHeadingIDs != 0 {
-					id = sanitizeAnchorName(string(data[prev:eol]))
+					block.HeadingID = sanitizeHeadingID(string(data[prev:eol]))
+					p.allHeadingsWithAutoID = append(p.allHeadingsWithAutoID, block)
 				}
 
-				block := &ast.Heading{
-					Level:     level,
-					HeadingID: id,
-				}
 				block.Content = data[prev:eol]
-				p.addBlock(block)
+				p.AddBlock(block)
 
 				// find the end of the underline
 				return skipUntilChar(data, i, '\n')
@@ -1914,7 +1701,13 @@ func (p *Parser) paragraph(data []byte) int {
 		}
 
 		// if there's a prefixed heading or a horizontal rule after this, paragraph is over
-		if p.isPrefixHeading(current) || p.isPrefixSpecialHeading(current) || p.isHRule(current) {
+		if p.isPrefixHeading(current) || p.isPrefixSpecialHeading(current) || isHRule(current) {
+			p.renderParagraph(data[:i])
+			return i
+		}
+
+		// if there's a block quote, paragraph is over
+		if p.quotePrefix(current) > 0 {
 			p.renderParagraph(data[:i])
 			return i
 		}
@@ -1935,10 +1728,18 @@ func (p *Parser) paragraph(data []byte) int {
 			}
 		}
 
+		// if there's a table, paragraph is over
+		if p.extensions&Tables != 0 {
+			if j, _, _ := p.tableHeader(current, false); j > 0 {
+				p.renderParagraph(data[:i])
+				return i
+			}
+		}
+
 		// if there's a definition list item, prev line is a definition term
 		if p.extensions&DefinitionLists != 0 {
 			if p.dliPrefix(current) != 0 {
-				ret := p.list(data[prev:], ast.ListTypeDefinition, 0)
+				ret := p.list(data[prev:], ast.ListTypeDefinition, 0, '.')
 				return ret + prev
 			}
 		}
@@ -1997,7 +1798,7 @@ func skipUntilChar(data []byte, i int, c byte) int {
 
 func skipAlnum(data []byte, i int) int {
 	n := len(data)
-	for i < n && isAlnum(data[i]) {
+	for i < n && IsAlnum(data[i]) {
 		i++
 	}
 	return i
@@ -2005,7 +1806,7 @@ func skipAlnum(data []byte, i int) int {
 
 func skipSpace(data []byte, i int) int {
 	n := len(data)
-	for i < n && isSpace(data[i]) {
+	for i < n && IsSpace(data[i]) {
 		i++
 	}
 	return i
