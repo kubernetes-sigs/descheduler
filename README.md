@@ -33,11 +33,12 @@ but relies on the default scheduler for that.
 ## ⚠️  Documentation Versions by Release
 
 If you are using a published release of Descheduler (such as
-`registry.k8s.io/descheduler/descheduler:v0.34.0`), follow the documentation in
+`registry.k8s.io/descheduler/descheduler:v0.35.0`), follow the documentation in
 that version's release branch, as listed below:
 
 |Descheduler Version|Docs link|
 |---|---|
+|v0.35.x|[`release-1.35`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.35/README.md)|
 |v0.34.x|[`release-1.34`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.34/README.md)|
 |v0.33.x|[`release-1.33`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.33/README.md)|
 |v0.32.x|[`release-1.32`](https://github.com/kubernetes-sigs/descheduler/blob/release-1.32/README.md)|
@@ -1135,6 +1136,7 @@ packages that it is compiled with.
 
 | Descheduler | Supported Kubernetes Version |
 |-------------|------------------------------|
+| v0.35       | v1.35                        |
 | v0.34       | v1.34                        |
 | v0.33       | v1.33                        |
 | v0.32       | v1.32                        |
