@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/gomarkdown/markdown/ast"
 )
@@ -56,7 +58,7 @@ const (
 )
 
 // for each character that triggers a response when parsing inline data.
-type inlineParser func(p *Parser, data []byte, offset int) (int, ast.Node)
+type InlineParser func(p *Parser, data []byte, offset int) (int, ast.Node)
 
 // ReferenceOverrideFunc is expected to be called with a reference string and
 // return either a valid Reference type that the reference string maps to or
@@ -98,10 +100,10 @@ type Parser struct {
 
 	refs           map[string]*reference
 	refsRecord     map[string]struct{}
-	inlineCallback [256]inlineParser
+	inlineCallback [256]InlineParser
 	nesting        int
 	maxNesting     int
-	insideLink     bool
+	InsideLink     bool
 	indexCnt       int // incremented after every index
 
 	// Footnotes need to be ordered as well as available to quickly check for
@@ -122,6 +124,8 @@ type Parser struct {
 	// collect headings where we auto-generated id so that we can
 	// ensure they are unique at the end
 	allHeadingsWithAutoID []*ast.Heading
+
+	didParse bool
 }
 
 // New creates a markdown parser with CommonExtensions.
@@ -138,8 +142,8 @@ func NewWithExtensions(extension Extensions) *Parser {
 	p := Parser{
 		refs:         make(map[string]*reference),
 		refsRecord:   make(map[string]struct{}),
-		maxNesting:   16,
-		insideLink:   false,
+		maxNesting:   64,
+		InsideLink:   false,
 		Doc:          &ast.Document{},
 		extensions:   extension,
 		allClosed:    true,
@@ -181,7 +185,7 @@ func NewWithExtensions(extension Extensions) *Parser {
 	return &p
 }
 
-func (p *Parser) RegisterInline(n byte, fn inlineParser) inlineParser {
+func (p *Parser) RegisterInline(n byte, fn InlineParser) InlineParser {
 	prev := p.inlineCallback[n]
 	p.inlineCallback[n] = fn
 	return prev
@@ -290,7 +294,14 @@ type Reference struct {
 //
 // You can then convert AST to html using html.Renderer, to some other format
 // using a custom renderer or transform the tree.
+//
+// Parser is not reusable. Create a new Parser for each Parse() call.
 func (p *Parser) Parse(input []byte) ast.Node {
+	if p.didParse {
+		panic("Parser is not reusable. Must create new Parser for each Parse() call.")
+	}
+	p.didParse = true
+
 	// the code only works with Unix CR newlines so to make life easy for
 	// callers normalize newlines
 	input = NormalizeNewlines(input)
@@ -727,7 +738,21 @@ func IsPunctuation(c byte) bool {
 	return false
 }
 
-// IsSpace returns true if c is a white-space charactr
+func IsPunctuation2(d []byte) bool {
+	if len(d) == 0 {
+		return false
+	}
+	if IsPunctuation(d[0]) {
+		return true
+	}
+	r, _ := utf8.DecodeRune(d)
+	if r == utf8.RuneError {
+		return false
+	}
+	return unicode.IsPunct(r)
+}
+
+// IsSpace returns true if c is a white-space character
 func IsSpace(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'
 }

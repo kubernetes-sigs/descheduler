@@ -103,7 +103,7 @@ github.com/golang/glog/internal/stackdump
 # github.com/golang/protobuf v1.5.4
 ## explicit; go 1.17
 github.com/golang/protobuf/proto
-# github.com/gomarkdown/markdown v0.0.0-20240328165702-4d01890c35c0
+# github.com/gomarkdown/markdown v0.0.0-20260217112301-37c66b85d6ab
 ## explicit; go 1.12
 github.com/gomarkdown/markdown/ast
 github.com/gomarkdown/markdown/html
