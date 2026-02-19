@@ -641,14 +641,29 @@ func (r *Renderer) EnsureUniqueHeadingID(id string) string {
 	return id
 }
 
-func (r *Renderer) headingEnter(w io.Writer, nodeData *ast.Heading) {
+func (r *Renderer) MakeUniqueHeadingID(hdr *ast.Heading) string {
+	if hdr.HeadingID == "" {
+		return ""
+	}
+	id := r.EnsureUniqueHeadingID(hdr.HeadingID)
+	if r.Opts.HeadingIDPrefix != "" {
+		id = r.Opts.HeadingIDPrefix + id
+	}
+	if r.Opts.HeadingIDSuffix != "" {
+		id = id + r.Opts.HeadingIDSuffix
+	}
+	hdr.HeadingID = id
+	return id
+}
+
+func (r *Renderer) HeadingEnter(w io.Writer, hdr *ast.Heading) {
 	var attrs []string
 	var class string
 	// TODO(miek): add helper functions for coalescing these classes.
-	if nodeData.IsTitleblock {
+	if hdr.IsTitleblock {
 		class = "title"
 	}
-	if nodeData.IsSpecial {
+	if hdr.IsSpecial {
 		if class != "" {
 			class += " special"
 		} else {
@@ -659,35 +674,29 @@ func (r *Renderer) headingEnter(w io.Writer, nodeData *ast.Heading) {
 		attrs = []string{`class="` + class + `"`}
 	}
 
-	if nodeData.HeadingID != "" {
-		id := r.EnsureUniqueHeadingID(nodeData.HeadingID)
-		if r.Opts.HeadingIDPrefix != "" {
-			id = r.Opts.HeadingIDPrefix + id
-		}
-		if r.Opts.HeadingIDSuffix != "" {
-			id = id + r.Opts.HeadingIDSuffix
-		}
+	if hdr.HeadingID != "" {
+		id := r.MakeUniqueHeadingID(hdr)
 		attrID := `id="` + id + `"`
 		attrs = append(attrs, attrID)
 	}
-	attrs = append(attrs, BlockAttrs(nodeData)...)
+	attrs = append(attrs, BlockAttrs(hdr)...)
 	r.CR(w)
-	r.OutTag(w, HeadingOpenTagFromLevel(nodeData.Level), attrs)
+	r.OutTag(w, HeadingOpenTagFromLevel(hdr.Level), attrs)
 }
 
-func (r *Renderer) headingExit(w io.Writer, heading *ast.Heading) {
-	r.Outs(w, HeadingCloseTagFromLevel(heading.Level))
-	if !(IsListItem(heading.Parent) && ast.GetNextNode(heading) == nil) {
+func (r *Renderer) HeadingExit(w io.Writer, hdr *ast.Heading) {
+	r.Outs(w, HeadingCloseTagFromLevel(hdr.Level))
+	if !(IsListItem(hdr.Parent) && ast.GetNextNode(hdr) == nil) {
 		r.CR(w)
 	}
 }
 
 // Heading writes ast.Heading node
-func (r *Renderer) Heading(w io.Writer, node *ast.Heading, entering bool) {
+func (r *Renderer) Heading(w io.Writer, hdr *ast.Heading, entering bool) {
 	if entering {
-		r.headingEnter(w, node)
+		r.HeadingEnter(w, hdr)
 	} else {
-		r.headingExit(w, node)
+		r.HeadingExit(w, hdr)
 	}
 }
 

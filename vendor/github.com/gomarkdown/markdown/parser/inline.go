@@ -271,7 +271,7 @@ func maybeInlineFootnoteOrSuper(p *Parser, data []byte, offset int) (int, ast.No
 // '[': parse a link or an image or a footnote or a citation
 func link(p *Parser, data []byte, offset int) (int, ast.Node) {
 	// no links allowed inside regular links, footnote, and deferred footnotes
-	if p.insideLink && (offset > 0 && data[offset-1] == '[' || len(data)-1 > offset && data[offset+1] == '^') {
+	if p.InsideLink && (offset > 0 && data[offset-1] == '[' || len(data)-1 > offset && data[offset+1] == '^') {
 		return 0, nil
 	}
 
@@ -362,25 +362,27 @@ func link(p *Parser, data []byte, offset int) (int, ast.Node) {
 		linkB := i
 		brace := 0
 
+		var c byte
 		// look for link end: ' " )
 	findlinkend:
 		for i < len(data) {
+			c = data[i]
 			switch {
-			case data[i] == '\\':
+			case c == '\\':
 				i += 2
 
-			case data[i] == '(':
+			case c == '(':
 				brace++
 				i++
 
-			case data[i] == ')':
+			case c == ')':
 				if brace <= 0 {
 					break findlinkend
 				}
 				brace--
 				i++
 
-			case data[i] == '\'' || data[i] == '"':
+			case c == '\'' || c == '"':
 				break findlinkend
 
 			default:
@@ -402,14 +404,15 @@ func link(p *Parser, data []byte, offset int) (int, ast.Node) {
 
 		findtitleend:
 			for i < len(data) {
+				c = data[i]
 				switch {
-				case data[i] == '\\':
+				case c == '\\':
 					i++
 
-				case data[i] == data[titleB-1]: // matching title delimiter
+				case c == data[titleB-1]: // matching title delimiter
 					titleEndCharFound = true
 
-				case titleEndCharFound && data[i] == ')':
+				case titleEndCharFound && c == ')':
 					break findtitleend
 				}
 				i++
@@ -619,10 +622,10 @@ func link(p *Parser, data []byte, offset int) (int, ast.Node) {
 		} else {
 			// links cannot contain other links, so turn off link parsing
 			// temporarily and recurse
-			insideLink := p.insideLink
-			p.insideLink = true
+			InsideLink := p.InsideLink
+			p.InsideLink = true
 			p.Inline(link, data[1:txtE])
-			p.insideLink = insideLink
+			p.InsideLink = InsideLink
 		}
 		return i, link
 
@@ -736,7 +739,7 @@ func leftAngle(p *Parser, data []byte, offset int) (int, ast.Node) {
 }
 
 // '\\' backslash escape
-var escapeChars = []byte("\\`*_{}[]()#+-.!:|&<>~^$")
+var EscapeChars = []byte("\\`*_{}[]()#+-.!:|&<>~^$")
 
 func escape(p *Parser, data []byte, offset int) (int, ast.Node) {
 	data = data[offset:]
@@ -753,7 +756,7 @@ func escape(p *Parser, data []byte, offset int) (int, ast.Node) {
 		return 2, &ast.Hardbreak{}
 	}
 
-	if bytes.IndexByte(escapeChars, data[1]) < 0 {
+	if bytes.IndexByte(EscapeChars, data[1]) < 0 {
 		return 0, nil
 	}
 
@@ -814,7 +817,12 @@ func entity(p *Parser, data []byte, offset int) (int, ast.Node) {
 		codepoint, err = strconv.ParseUint(string(ent[2:len(ent)-1]), 10, 64)
 	}
 	if err == nil { // only if conversion was valid return here.
-		return end, newTextNode([]byte(string(rune(codepoint))))
+		r := rune(codepoint)
+		// Replace invalid codepoints with U+FFFD per CommonMark spec section 6.2
+		if r == 0 || (r >= 0xD800 && r <= 0xDFFF) || r > 0x10FFFF {
+			r = '\uFFFD'
+		}
+		return end, newTextNode([]byte(string(r)))
 	}
 
 	return end, newTextNode(ent)
@@ -857,7 +865,7 @@ const shortestPrefix = 6 // len("ftp://"), the shortest of the above
 
 func maybeAutoLink(p *Parser, data []byte, offset int) (int, ast.Node) {
 	// quick check to rule out most false hits
-	if p.insideLink || len(data) < offset+shortestPrefix {
+	if p.InsideLink || len(data) < offset+shortestPrefix {
 		return 0, nil
 	}
 	for _, prefix := range protocolPrefixes {
@@ -1070,10 +1078,11 @@ func tagLength(data []byte) (autolink autolinkType, end int) {
 		// one of the forbidden chars has been found
 		autolink = notAutolink
 	}
-	i += bytes.IndexByte(data[i:], '>')
-	if i < 0 {
+	j = bytes.IndexByte(data[i:], '>')
+	if j < 0 {
 		return autolink, 0
 	}
+	i += j
 	return autolink, i + 1
 }
 
@@ -1185,30 +1194,30 @@ func helperFindEmphChar(data []byte, c byte) int {
 func helperEmphasis(p *Parser, data []byte, c byte) (int, ast.Node) {
 	i := 0
 
-	// skip one symbol if coming from emph3
+	// skip two symbol if coming from emph3, as it detected a double emphasis case
 	if len(data) > 1 && data[0] == c && data[1] == c {
-		i = 1
+		i = 2
 	}
 
 	for i < len(data) {
 		length := helperFindEmphChar(data[i:], c)
-		if length == 0 {
-			return 0, nil
-		}
 		i += length
 		if i >= len(data) {
 			return 0, nil
 		}
 
 		if i+1 < len(data) && data[i+1] == c {
-			i++
+			i += 2
 			continue
 		}
 
 		if data[i] == c && !IsSpace(data[i-1]) {
-
 			if p.extensions&NoIntraEmphasis != 0 {
-				if !(i+1 == len(data) || IsSpace(data[i+1]) || IsPunctuation(data[i+1])) {
+				rest := data[i+1:]
+				if !(len(rest) == 0 || IsSpace(rest[0]) || IsPunctuation2(rest)) {
+					if length == 0 {
+						return 0, nil
+					}
 					continue
 				}
 			}
@@ -1216,6 +1225,11 @@ func helperEmphasis(p *Parser, data []byte, c byte) (int, ast.Node) {
 			emph := &ast.Emph{}
 			p.Inline(emph, data[:i])
 			return i + 1, emph
+		}
+
+		// We have to check this at the end, otherwise the scenario where we find repeated c's will get skipped
+		if length == 0 {
+			return 0, nil
 		}
 	}
 
@@ -1233,16 +1247,51 @@ func helperDoubleEmphasis(p *Parser, data []byte, c byte) (int, ast.Node) {
 		i += length
 
 		if i+1 < len(data) && data[i] == c && data[i+1] == c && i > 0 && !IsSpace(data[i-1]) {
+			// When the closing delimiter is *** (3+ chars) and there is an
+			// unclosed single emphasis opener inside the content, include
+			// one extra char in the content so that the inner emphasis can
+			// pair with it. For example: **bold *ital*** should produce
+			// <strong>bold <em>ital</em></strong>, not <strong>bold *ital</strong>*.
+			// See https://github.com/gomarkdown/markdown/issues/279
+			contentEnd := i
+			if i+2 < len(data) && data[i+2] == c && c != '~' {
+				if hasTrailingEmphOpener(data[:i], c) {
+					contentEnd = i + 1
+				}
+			}
+
 			var node ast.Node = &ast.Strong{}
 			if c == '~' {
 				node = &ast.Del{}
 			}
-			p.Inline(node, data[:i])
-			return i + 2, node
+			p.Inline(node, data[:contentEnd])
+			return contentEnd + 2, node
 		}
 		i++
 	}
 	return 0, nil
+}
+
+// hasTrailingEmphOpener checks if the last occurrence of c in data is an
+// unclosed opener. An opener is c preceded by whitespace or start of data,
+// followed by non-whitespace. If the last c is a closer (preceded by
+// non-whitespace), the emphasis pair is balanced and we should not shift
+// the content boundary.
+func hasTrailingEmphOpener(data []byte, c byte) bool {
+	// find the last c in data
+	last := -1
+	for j := len(data) - 1; j >= 0; j-- {
+		if data[j] == c {
+			last = j
+			break
+		}
+	}
+	if last < 0 {
+		return false
+	}
+	// opener: preceded by space/start, followed by non-space
+	return (last == 0 || IsSpace(data[last-1])) &&
+		last+1 < len(data) && !IsSpace(data[last+1])
 }
 
 func helperTripleEmphasis(p *Parser, data []byte, offset int, c byte) (int, ast.Node) {

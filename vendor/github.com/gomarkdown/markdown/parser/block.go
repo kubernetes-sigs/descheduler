@@ -76,6 +76,7 @@ var (
 		"output":     {},
 		"progress":   {},
 		"section":    {},
+		"svg":        {},
 		"video":      {},
 	}
 )
@@ -925,7 +926,7 @@ func syntaxRange(data []byte, iout *int) (int, int) {
 
 		i++
 	} else {
-		for i < n && !IsSpace(data[i]) {
+		for i < n && data[i] != '\n' {
 			syn++
 			i++
 		}
@@ -950,8 +951,6 @@ func (p *Parser) fencedCodeBlock(data []byte, doRender bool) int {
 	work.WriteByte('\n')
 
 	for {
-		// safe to assume beg < len(data)
-
 		// check for the end of the code block
 		fenceEnd, _ := isFenceLine(data[beg:], nil, marker)
 		if fenceEnd != 0 {
@@ -968,47 +967,46 @@ func (p *Parser) fencedCodeBlock(data []byte, doRender bool) int {
 		}
 
 		// verbatim copy to the working buffer
-		if doRender {
-			work.Write(data[beg:end])
-		}
+		work.Write(data[beg:end])
 		beg = end
 	}
 
-	if doRender {
-		codeBlock := &ast.CodeBlock{
-			IsFenced: true,
-		}
-		codeBlock.Content = work.Bytes() // TODO: get rid of temp buffer
+	if !doRender {
+		return beg
+	}
+	codeBlock := &ast.CodeBlock{
+		IsFenced: true,
+	}
+	codeBlock.Content = work.Bytes() // TODO: get rid of temp buffer
 
-		if p.extensions&Mmark == 0 {
-			p.AddBlock(codeBlock)
-			finalizeCodeBlock(codeBlock)
-			return beg
-		}
-
-		// Check for caption and if found make it a figure.
-		if captionContent, id, consumed := p.caption(data[beg:], []byte(captionFigure)); consumed > 0 {
-			figure := &ast.CaptionFigure{}
-			caption := &ast.Caption{}
-			figure.HeadingID = id
-			p.Inline(caption, captionContent)
-
-			p.AddBlock(figure)
-			codeBlock.AsLeaf().Attribute = figure.AsContainer().Attribute
-			p.addChild(codeBlock)
-			finalizeCodeBlock(codeBlock)
-			p.addChild(caption)
-			p.Finalize(figure)
-
-			beg += consumed
-
-			return beg
-		}
-
-		// Still here, normal block
+	if p.extensions&Mmark == 0 {
 		p.AddBlock(codeBlock)
 		finalizeCodeBlock(codeBlock)
+		return beg
 	}
+
+	// Check for caption and if found make it a figure.
+	if captionContent, id, consumed := p.caption(data[beg:], []byte(captionFigure)); consumed > 0 {
+		figure := &ast.CaptionFigure{}
+		caption := &ast.Caption{}
+		figure.HeadingID = id
+		p.Inline(caption, captionContent)
+
+		p.AddBlock(figure)
+		codeBlock.AsLeaf().Attribute = figure.AsContainer().Attribute
+		p.addChild(codeBlock)
+		finalizeCodeBlock(codeBlock)
+		p.addChild(caption)
+		p.Finalize(figure)
+
+		beg += consumed
+
+		return beg
+	}
+
+	// Still here, normal block
+	p.AddBlock(codeBlock)
+	finalizeCodeBlock(codeBlock)
 
 	return beg
 }
@@ -1352,6 +1350,7 @@ func finalizeList(list *ast.List) {
 // Parse a single list item.
 // Assumes initial prefix is already removed if this is a sublist.
 func (p *Parser) listItem(data []byte, flags *ast.ListType) int {
+	isDefinitionList := *flags&ast.ListTypeDefinition != 0
 	// keep track of the indentation of the first line
 	itemIndent := 0
 	if data[0] == '\t' {
@@ -1384,7 +1383,7 @@ func (p *Parser) listItem(data []byte, flags *ast.ListType) int {
 	}
 	if i == 0 {
 		// if in definition list, set term flag and continue
-		if *flags&ast.ListTypeDefinition != 0 {
+		if isDefinitionList {
 			*flags |= ast.ListTypeTerm
 		} else {
 			return 0
@@ -1410,6 +1409,9 @@ func (p *Parser) listItem(data []byte, flags *ast.ListType) int {
 	// process the following lines
 	containsBlankLine := false
 	sublist := 0
+	// track fenced code blocks inside list items so that lines within
+	// the fence are gathered verbatim (not misinterpreted as list items)
+	fenceMarker := ""
 
 gatherlines:
 	for line < len(data) {
@@ -1443,9 +1445,49 @@ gatherlines:
 
 		chunk := data[line+indentIndex : i]
 
+		// track fenced code blocks inside list items;
+		// only track fences that are indented (part of the list item content),
+		// a fence at indent 0 ends the list (handled below)
+		if !isDefinitionList && p.extensions&FencedCode != 0 {
+			if fenceMarker != "" {
+				if indent == 0 {
+					// non-indented line while inside a fence means we
+					// left the list item content -- abandon the fence
+					fenceMarker = ""
+				} else {
+					// inside a fence: check for closing fence
+					_, marker := isFenceLine(chunk, nil, fenceMarker)
+					if marker != "" {
+						fenceMarker = ""
+					}
+					// gather the line verbatim, skip structure detection
+					if containsBlankLine {
+						containsBlankLine = false
+						raw.WriteByte('\n')
+					}
+					raw.Write(chunk)
+					line = i
+					continue
+				}
+			} else if indent > 0 {
+				// not inside a fence: check for opening fence (indented only)
+				_, marker := isFenceLine(chunk, nil, "")
+				if marker != "" {
+					fenceMarker = marker
+				}
+			}
+		}
+
 		// If there is a fence line (marking starting of a code block)
 		// without indent do not process it as part of the list.
-		if p.extensions&FencedCode != 0 {
+		//
+		// does not apply for definition lists because it causes infinite
+		// loop if text before defintion term is fenced code block start
+		// marker but not part of actual fenced code block
+		// for defnition lists we're called after parsing fence code blocks
+		// so we kno this cannot be a fenced block
+		// https://github.com/gomarkdown/markdown/issues/326
+		if !isDefinitionList && p.extensions&FencedCode != 0 {
 			fenceLineEnd, _ := isFenceLine(chunk, nil, "")
 			if fenceLineEnd > 0 && indent == 0 {
 				*flags |= ast.ListItemEndOfList
@@ -1652,7 +1694,9 @@ func (p *Parser) paragraph(data []byte) int {
 			if p.extensions&DefinitionLists != 0 {
 				if i < len(data)-1 && data[i+1] == ':' {
 					listLen := p.list(data[prev:], ast.ListTypeDefinition, 0, '.')
-					return prev + listLen
+					if listLen > 0 {
+						return prev + listLen
+					}
 				}
 			}
 
