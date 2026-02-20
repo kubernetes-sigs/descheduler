@@ -47,6 +47,13 @@ func (in *HighNodeUtilizationArgs) DeepCopyInto(out *HighNodeUtilizationArgs) {
 		*out = new(api.Namespaces)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.NodeSelector != nil {
+		in, out := &in.NodeSelector, &out.NodeSelector
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
 	return
 }
 
@@ -100,6 +107,13 @@ func (in *LowNodeUtilizationArgs) DeepCopyInto(out *LowNodeUtilizationArgs) {
 		in, out := &in.EvictionLimits, &out.EvictionLimits
 		*out = new(api.EvictionLimits)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.NodeSelector != nil {
+		in, out := &in.NodeSelector, &out.NodeSelector
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
 	}
 	return
 }
