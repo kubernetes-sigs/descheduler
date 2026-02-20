@@ -32,7 +32,6 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
-	"sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization/normalizer"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -283,7 +282,7 @@ func evictPods(
 			break
 		}
 
-		if !utils.PodToleratesTaints(pod, destinationTaints) {
+		if !utils.PodToleratesTaints(ctx, pod, destinationTaints) {
 			logger.V(3).Info(
 				"Skipping eviction for pod, doesn't tolerate node taint",
 				"pod", klog.KObj(pod),
@@ -757,7 +756,7 @@ func assessAvailableResourceInNodes(
 
 // withResourceRequestForAny returns a filter function that checks if a pod
 // has a resource request specified for any of the given resources names.
-func withResourceRequestForAny(names ...v1.ResourceName) pod.FilterFunc {
+func withResourceRequestForAny(names ...v1.ResourceName) podutil.FilterFunc {
 	return func(pod *v1.Pod) bool {
 		all := append(pod.Spec.Containers, pod.Spec.InitContainers...)
 		for _, name := range names {

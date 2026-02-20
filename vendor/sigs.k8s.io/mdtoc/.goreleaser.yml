@@ -1,0 +1,82 @@
+project_name: mdtoc
+
+env:
+  - CGO_ENABLED=0
+  - COSIGN_YES=true
+
+before:
+  hooks:
+    - go mod tidy
+    # - /bin/bash -c 'if [ -n "$(git --no-pager diff --exit-code go.mod go.sum)" ]; then exit 1; fi'
+
+gomod:
+  proxy: true
+
+builds:
+  - id: mdtoc
+    dir: .
+    no_unique_dist_dir: true
+    binary: mdtoc-{{ .Arch }}-{{ .Os }}
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - '7'
+    ignore:
+      - goos: windows
+        goarch: arm
+    flags:
+      - -trimpath
+    ldflags:
+      - "{{ .Env.LDFLAGS }}"
+
+archives:
+  - format: binary
+    name_template: "{{ .Binary }}"
+    allow_different_binary_count: true
+
+signs:
+  # Keyless
+  - id: mdtoc-keyless
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    cmd: cosign
+    args: ["sign-blob", "--output-signature", "${artifact}.sig", "--output-certificate", "${artifact}.pem", "${artifact}"]
+    artifacts: all
+
+sboms:
+  - id: mdtoc
+    cmd: bom
+    args:
+      - generate
+      - "--output"
+      - "mdtoc-bom.json.spdx"
+      - "-d"
+      - "../"
+      - "-c"
+      - "../.mdtoc-bom-config.yaml"
+      - "--format"
+      - "json"
+    artifacts: any
+    documents:
+      - "mdtoc-bom.json.spdx"
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ .Tag }}-next"
+
+release:
+  github:
+    owner: kubernetes-sigs
+    name: mdtoc
+  prerelease: auto
+
+changelog:
+  disable: true

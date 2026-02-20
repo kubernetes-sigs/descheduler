@@ -1,75 +1,126 @@
 ---
 run:
   concurrency: 6
-  deadline: 5m
+  timeout: 5m
 issues:
-  exclude-rules:
-    # counterfeiter fakes are usually named 'fake_<something>.go'
-    - path: fake_.*\.go
-      linters:
-        - gocritic
-        - golint
-        - dupl
 linters:
   disable-all: true
   enable:
+    - asasalint
     - asciicheck
+    - bidichk
     - bodyclose
-    - deadcode
-    - depguard
+    - canonicalheader
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    - cyclop
+    - decorder
     - dogsled
     - dupl
+    - dupword
+    - durationcheck
     - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - exportloopref
+    - fatcontext
+    - forcetypeassert
+    - funlen
+    - gci
+    - ginkgolinter
+    - gocheckcompilerdirectives
+    - gochecksumtype
+    - gocognit
     - goconst
     - gocritic
     - gocyclo
+    - godot
     - godox
     - gofmt
     - gofumpt
     - goheader
     - goimports
-    - golint
+    - gomoddirectives
     - gomodguard
     - goprintffuncname
+    - gosec
     - gosimple
+    - gosmopolitan
     - govet
+    - grouper
+    - importas
+    - inamedparam
     - ineffassign
-    - interfacer
-    - maligned
+    - interfacebloat
+    - intrange
+    - loggercheck
+    - maintidx
+    - makezero
+    - mirror
     - misspell
+    - mnd
+    - musttag
     - nakedret
+    - nestif
+    - nilerr
+    - nilnil
+    - noctx
+    - nolintlint
+    - nosprintfhostport
+    - paralleltest
+    - perfsprint
     - prealloc
+    - predeclared
+    - promlinter
+    - protogetter
+    - reassign
+    - revive
     - rowserrcheck
+    - sloglint
+    - spancheck
     - sqlclosecheck
     - staticcheck
-    - structcheck
     - stylecheck
+    - tagalign
+    - tagliatelle
+    - tenv
+    - testableexamples
+    - testifylint
+    - thelper
+    - tparallel
     - typecheck
     - unconvert
     - unparam
     - unused
-    - varcheck
+    - usestdlibvars
+    - wastedassign
     - whitespace
-    # - exhaustive
-    # - exportloopref
-    # - funlen
-    # - gci
+    - wrapcheck
+    - zerologlint
+    # - depguard
+    # - err113
+    # - exhaustruct
+    # - forbidigo
     # - gochecknoglobals
     # - gochecknoinits
-    # - gocognit
-    # - godot
-    # - goerr113
-    # - gomnd
-    # - gosec
+    # - ireturn
     # - lll
-    # - nestif
     # - nlreturn
-    # - noctx
-    # - nolintlint
-    # - scopelint
+    # - nonamedreturns
     # - testpackage
+    # - varnamelen
     # - wsl
 linters-settings:
+  gci:
+    sections:
+      - standard
+      - default
+      - localmodule
+  cyclop:
+    max-complexity: 15
   godox:
     keywords:
       - BUG
@@ -79,72 +130,4 @@ linters-settings:
     check-type-assertions: true
     check-blank: true
   gocritic:
-    enabled-checks:
-      # Diagnostic
-      - appendAssign
-      - argOrder
-      - badCond
-      - caseOrder
-      - codegenComment
-      - commentedOutCode
-      - deprecatedComment
-      - dupArg
-      - dupBranchBody
-      - dupCase
-      - dupSubExpr
-      - exitAfterDefer
-      - flagDeref
-      - flagName
-      - nilValReturn
-      - offBy1
-      - sloppyReassign
-      - weakCond
-      - octalLiteral
-
-      # Performance
-      - appendCombine
-      - equalFold
-      - hugeParam
-      - indexAlloc
-      - rangeExprCopy
-      - rangeValCopy
-
-      # Style
-      - assignOp
-      - boolExprSimplify
-      - captLocal
-      - commentFormatting
-      - commentedOutImport
-      - defaultCaseOrder
-      - docStub
-      - elseif
-      - emptyFallthrough
-      - emptyStringTest
-      - hexLiteral
-      - methodExprCall
-      - regexpMust
-      - singleCaseSwitch
-      - sloppyLen
-      - stringXbytes
-      - switchTrue
-      - typeAssertChain
-      - typeSwitchVar
-      - underef
-      - unlabelStmt
-      - unlambda
-      - unslice
-      - valSwap
-      - wrapperFunc
-      - yodaStyleExpr
-      # - ifElseChain
-
-      # Opinionated
-      - builtinShadow
-      - importShadow
-      - initClause
-      - nestingReduce
-      - paramTypeCombine
-      - ptrToRefParam
-      - typeUnparen
-      - unnamedResult
-      - unnecessaryBlock
+    enable-all: true

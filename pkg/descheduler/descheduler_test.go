@@ -67,7 +67,7 @@ func (m *mockPrometheusClient) Do(ctx context.Context, req *http.Request) (*http
 var _ promapi.Client = &mockPrometheusClient{}
 
 var (
-	podEvictionError     = errors.New("PodEvictionError")
+	errPodEviction       = errors.New("PodEvictionError")
 	tooManyRequestsError = &apierrors.StatusError{
 		ErrStatus: metav1.Status{
 			Status:  metav1.StatusFailure,
@@ -837,7 +837,10 @@ func TestDeschedulingLimits(t *testing.T) {
 			var evictedPods []string
 			client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, func(name string) bool { return name == "p1" || name == "p2" }, nil))
 
-			rand.Seed(time.Now().UnixNano())
+			// Create a local random source for reproducible shuffling in tests
+			// Use time.Now().UnixNano() for different sequences each run, or a fixed seed for deterministic tests
+			rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
 			pods := []*v1.Pod{
 				test.BuildTestPod("p1", 100, 0, node1.Name, updatePodWithEvictionInBackground),
 				test.BuildTestPod("p2", 100, 0, node1.Name, updatePodWithEvictionInBackground),
@@ -847,7 +850,7 @@ func TestDeschedulingLimits(t *testing.T) {
 			}
 
 			for i := 0; i < 10; i++ {
-				rand.Shuffle(len(pods), func(i, j int) { pods[i], pods[j] = pods[j], pods[i] })
+				rng.Shuffle(len(pods), func(i, j int) { pods[i], pods[j] = pods[j], pods[i] })
 				func() {
 					for j := 0; j < 5; j++ {
 						idx := j
@@ -1346,7 +1349,8 @@ func TestEvictedPodRestorationInDryRun(t *testing.T) {
 	defer eventBroadcaster.Shutdown()
 
 	// Always create descheduler with real client/factory first to register all informers
-	descheduler, err := newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, rs.Client, sharedInformerFactory, nil, nil)
+	// This initial instance is not used but required to register all informers
+	_, err = newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, rs.Client, sharedInformerFactory, nil, nil)
 	if err != nil {
 		t.Fatalf("Unable to create descheduler instance: %v", err)
 	}
@@ -1360,8 +1364,8 @@ func TestEvictedPodRestorationInDryRun(t *testing.T) {
 		t.Fatalf("Failed to create kube client sandbox: %v", err)
 	}
 
-	// Replace descheduler with one using fake client/factory
-	descheduler, err = newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), nil, kubeClientSandbox)
+	// Create descheduler with fake client/factory for testing
+	descheduler, err := newDescheduler(ctxCancel, rs, internalDeschedulerPolicy, "v1", eventRecorder, kubeClientSandbox.fakeClient(), kubeClientSandbox.fakeSharedInformerFactory(), nil, kubeClientSandbox)
 	if err != nil {
 		t.Fatalf("Unable to create dry run descheduler instance: %v", err)
 	}

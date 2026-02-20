@@ -17,13 +17,24 @@ limitations under the License.
 package main
 
 import (
-	"flag"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 
+	"github.com/spf13/cobra"
+	"sigs.k8s.io/release-utils/version"
+
 	"sigs.k8s.io/mdtoc/pkg/mdtoc"
 )
+
+var cmd = &cobra.Command{
+	Use: os.Args[0] + " [FILE]...",
+	Long: "Generate a table of contents for a markdown file (GitHub flavor).\n\n" +
+		"TOC may be wrapped in a pair of tags to allow in-place updates:\n" +
+		"<!-- toc --><!-- /toc -->",
+	RunE: run,
+}
 
 type utilityOptions struct {
 	mdtoc.Options
@@ -33,58 +44,62 @@ type utilityOptions struct {
 var defaultOptions utilityOptions
 
 func init() {
-	flag.BoolVar(&defaultOptions.Dryrun, "dryrun", false, "Whether to check for changes to TOC, rather than overwriting. Requires --inplace flag.")
-	flag.BoolVar(&defaultOptions.Inplace, "inplace", false, "Whether to edit the file in-place, or output to STDOUT. Requires toc tags to be present.")
-	flag.BoolVar(&defaultOptions.SkipPrefix, "skip-prefix", true, "Whether to ignore any headers before the opening toc tag.")
-	flag.IntVar(&defaultOptions.MaxDepth, "max-depth", mdtoc.MaxHeaderDepth, "Limit the depth of headers that will be included in the TOC.")
-
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [OPTIONS] [FILE]...\n", os.Args[0])
-		fmt.Fprintf(flag.CommandLine.Output(), "Generate a table of contents for a markdown file (github flavor).\n")
-		fmt.Fprintf(flag.CommandLine.Output(), "TOC may be wrapped in a pair of tags to allow in-place updates: <!-- toc --><!-- /toc -->\n")
-		flag.PrintDefaults()
-	}
+	cmd.PersistentFlags().BoolVarP(&defaultOptions.Dryrun, "dryrun", "d", false, "Whether to check for changes to TOC, rather than overwriting. Requires --inplace flag.")
+	cmd.PersistentFlags().BoolVarP(&defaultOptions.Inplace, "inplace", "i", false, "Whether to edit the file in-place, or output to STDOUT. Requires toc tags to be present.")
+	cmd.PersistentFlags().BoolVarP(&defaultOptions.SkipPrefix, "skip-prefix", "s", true, "Whether to ignore any headers before the opening toc tag.")
+	cmd.PersistentFlags().IntVarP(&defaultOptions.MaxDepth, "max-depth", "m", mdtoc.MaxHeaderDepth, "Limit the depth of headers that will be included in the TOC.")
+	cmd.PersistentFlags().BoolVarP(&defaultOptions.Version, "version", "v", false, "Show MDTOC version.")
 }
 
 func main() {
-	flag.Parse()
-	if err := validateArgs(defaultOptions, flag.Args()); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		flag.Usage()
-		os.Exit(1)
+	if err := cmd.Execute(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(_ *cobra.Command, args []string) error {
+	if defaultOptions.Version {
+		v := version.GetVersionInfo()
+		v.Name = "mdtoc"
+		v.Description = "is a utility for generating a table-of-contents for markdown files"
+		v.ASCIIName = "true"
+		v.FontName = "banner"
+		fmt.Fprintln(os.Stdout, v.String())
+		return nil
 	}
 
-	switch defaultOptions.Inplace {
-	case true:
-		hadError := false
-		for _, file := range flag.Args() {
-			err := mdtoc.WriteTOC(file, defaultOptions.Options)
-			if err != nil {
-				log.Printf("%s: %v", file, err)
-				hadError = true
+	if err := validateArgs(defaultOptions, args); err != nil {
+		return fmt.Errorf("validate args: %w", err)
+	}
+
+	if defaultOptions.Inplace {
+		var retErr error
+		for _, file := range args {
+			if err := mdtoc.WriteTOC(file, defaultOptions.Options); err != nil {
+				retErr = errors.Join(retErr, fmt.Errorf("%s: %w", file, err))
 			}
 		}
-		if hadError {
-			os.Exit(1)
-		}
-	case false:
-		toc, err := mdtoc.GetTOC(flag.Args()[0], defaultOptions.Options)
-		if err != nil {
-			os.Exit(1)
-		}
-		fmt.Println(toc)
+		return retErr
 	}
+
+	toc, err := mdtoc.GetTOC(args[0], defaultOptions.Options)
+	if err != nil {
+		return fmt.Errorf("get toc: %w", err)
+	}
+	fmt.Println(toc)
+
+	return nil
 }
 
 func validateArgs(opts utilityOptions, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("must specify at least 1 file")
+		return errors.New("must specify at least 1 file")
 	}
 	if !opts.Inplace && len(args) > 1 {
-		return fmt.Errorf("non-inplace updates require exactly 1 file")
+		return errors.New("non-inplace updates require exactly 1 file")
 	}
 	if opts.Dryrun && !opts.Inplace {
-		return fmt.Errorf("--dryrun requires --inplace")
+		return errors.New("--dryrun requires --inplace")
 	}
 	return nil
 }

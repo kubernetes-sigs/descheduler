@@ -1,2 +1,4 @@
 ./mdtoc
 coverage*
+dist/
+output/

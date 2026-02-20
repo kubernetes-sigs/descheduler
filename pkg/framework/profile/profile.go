@@ -121,7 +121,7 @@ func (hi *handleImpl) Evictor() frameworktypes.Evictor {
 // PluginInstanceID returns an empty string for the base handle.
 // Plugins should receive a pluginHandle which has a specific instance ID.
 func (hi *handleImpl) PluginInstanceID() string {
-	panic(fmt.Errorf("Not implemented"))
+	panic(fmt.Errorf("not implemented"))
 }
 
 // PluginInstanceID returns a unique identifier for this plugin instance.

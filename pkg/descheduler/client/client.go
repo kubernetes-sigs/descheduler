@@ -20,10 +20,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	promapi "github.com/prometheus/client_golang/api"
@@ -109,7 +109,7 @@ func GetMasterFromKubeconfig(filename string) (string, error) {
 }
 
 func loadCAFile(filepath string) (*x509.CertPool, error) {
-	caCert, err := ioutil.ReadFile(filepath)
+	caCert, err := os.ReadFile(filepath)
 	if err != nil {
 		return nil, err
 	}
@@ -126,13 +126,13 @@ func CreatePrometheusClient(prometheusURL, authToken string) (promapi.Client, *h
 	// Retrieve Pod CA cert
 	caCertPool, err := loadCAFile(K8sPodCAFilePath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Error loading CA file: %v", err)
+		return nil, nil, fmt.Errorf("error loading CA file: %v", err)
 	}
 
 	// Get Prometheus Host
 	u, err := url.Parse(prometheusURL)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Error parsing prometheus URL: %v", err)
+		return nil, nil, fmt.Errorf("error parsing prometheus URL: %v", err)
 	}
 	t := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,

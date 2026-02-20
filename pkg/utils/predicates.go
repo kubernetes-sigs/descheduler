@@ -17,6 +17,7 @@ limitations under the License.
 package utils
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"sort"
@@ -176,9 +177,10 @@ func NodeSelectorsEqual(n1, n2 *v1.NodeSelector) bool {
 }
 
 // TolerationsTolerateTaint checks if taint is tolerated by any of the tolerations.
-func TolerationsTolerateTaint(tolerations []v1.Toleration, taint *v1.Taint) bool {
+func TolerationsTolerateTaint(ctx context.Context, tolerations []v1.Toleration, taint *v1.Taint) bool {
+	logger := klog.FromContext(ctx)
 	for i := range tolerations {
-		if tolerations[i].ToleratesTaint(taint) {
+		if tolerations[i].ToleratesTaint(logger, taint, true) {
 			return true
 		}
 	}
@@ -189,13 +191,13 @@ type taintsFilterFunc func(*v1.Taint) bool
 
 // TolerationsTolerateTaintsWithFilter checks if given tolerations tolerates
 // all the taints that apply to the filter in given taint list.
-func TolerationsTolerateTaintsWithFilter(tolerations []v1.Toleration, taints []v1.Taint, applyFilter taintsFilterFunc) bool {
+func TolerationsTolerateTaintsWithFilter(ctx context.Context, tolerations []v1.Toleration, taints []v1.Taint, applyFilter taintsFilterFunc) bool {
 	for i := range taints {
 		if applyFilter != nil && !applyFilter(&taints[i]) {
 			continue
 		}
 
-		if !TolerationsTolerateTaint(tolerations, &taints[i]) {
+		if !TolerationsTolerateTaint(ctx, tolerations, &taints[i]) {
 			return false
 		}
 	}

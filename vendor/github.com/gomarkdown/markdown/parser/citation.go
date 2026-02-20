@@ -49,6 +49,9 @@ func citation(p *Parser, data []byte, offset int) (int, ast.Node) {
 	for _, citation := range citations {
 		var suffix []byte
 		citation = bytes.TrimSpace(citation)
+		if len(citation) == 0 {
+			continue
+		}
 		j := 0
 		if citation[j] != '@' {
 			// not a citation, drop out entirely.
@@ -65,6 +68,11 @@ func citation(p *Parser, data []byte, offset int) (int, ast.Node) {
 		}
 
 		citeType := ast.CitationTypeInformative
+
+		if len(citation) < 2 {
+			continue
+		}
+
 		j = 1
 		switch citation[j] {
 		case '!':

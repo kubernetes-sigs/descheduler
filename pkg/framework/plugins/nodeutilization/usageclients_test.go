@@ -230,7 +230,7 @@ func TestPrometheusUsageClient(t *testing.T) {
 					Timestamp: 1728991761711,
 				},
 			},
-			err: fmt.Errorf("The collected metrics sample is missing 'instance' key"),
+			err: fmt.Errorf("the collected metrics sample is missing 'instance' key"),
 		},
 		{
 			name:     "invalid data value out of range",
@@ -238,7 +238,7 @@ func TestPrometheusUsageClient(t *testing.T) {
 			result: model.Vector{
 				sample("instance:node_cpu:rate:sum", "ip-10-0-51-101.ec2.internal", 1.20381818181818104),
 			},
-			err: fmt.Errorf("The collected metrics sample for \"ip-10-0-51-101.ec2.internal\" has value 1.203818181818181 outside of <0; 1> interval"),
+			err: fmt.Errorf("the collected metrics sample for \"ip-10-0-51-101.ec2.internal\" has value 1.203818181818181 outside of <0; 1> interval"),
 		},
 		{
 			name:     "invalid data not a vector",

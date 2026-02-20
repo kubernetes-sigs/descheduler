@@ -1,0 +1,43 @@
+---
+namespace: https://sigs.k8s.io/zeitgeist
+license: Apache-2.0
+name: mdtoc
+creator:
+ person: The Kubernetes Authors
+ tool: mdtoc
+
+artifacts:
+  - type: file
+    source: mdtoc-amd64-windows.exe
+    license: Apache-2.0
+    gomodules: true
+
+  - type: file
+    source: mdtoc-arm64-windows.exe
+    license: Apache-2.0
+    gomodules: true
+
+  - type: file
+    source: mdtoc-amd64-darwin
+    license: Apache-2.0
+    gomodules: true
+
+  - type: file
+    source: mdtoc-amd64-linux
+    license: Apache-2.0
+    gomodules: true
+
+  - type: file
+    source: mdtoc-arm-linux
+    license: Apache-2.0
+    gomodules: true
+
+  - type: file
+    source: mdtoc-arm64-darwin
+    license: Apache-2.0
+    gomodules: true
+
+  - type: file
+    source: mdtoc-arm64-linux
+    license: Apache-2.0
+    gomodules: true
