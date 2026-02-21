@@ -36,6 +36,9 @@ rules:
   resourceNames: ["{{ .Values.leaderElection.resourceName | default "descheduler" }}"]
   verbs: ["get", "patch", "delete"]
 {{- end }}
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "watch", "list"]
 {{- if and .Values.deschedulerPolicy }}
 {{- range .Values.deschedulerPolicy.metricsProviders }}
 {{- if and (hasKey . "source") (eq .source "KubernetesMetrics") }}
