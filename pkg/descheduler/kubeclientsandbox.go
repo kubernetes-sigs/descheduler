@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
@@ -103,6 +104,8 @@ func newDefaultKubeClientSandbox(client clientset.Interface, sharedInformerFacto
 		schedulingv1.SchemeGroupVersion.WithResource("priorityclasses"),
 		policyv1.SchemeGroupVersion.WithResource("poddisruptionbudgets"),
 		v1.SchemeGroupVersion.WithResource("persistentvolumeclaims"),
+		appsv1.SchemeGroupVersion.WithResource("replicasets"),
+		appsv1.SchemeGroupVersion.WithResource("deployments"),
 	)
 }
 
