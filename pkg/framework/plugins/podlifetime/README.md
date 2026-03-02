@@ -2,135 +2,153 @@
 
 ## What It Does
 
-The PodLifeTime plugin evicts pods that have been running for too long. You can configure a maximum age threshold, and the plugin evicts pods older than that threshold. The oldest pods are evicted first.
+The PodLifeTime plugin evicts pods based on their age, status phase, condition transitions, container states, exit codes, and owner kinds. It can be used for simple age-based eviction or for fine-grained cleanup of pods matching specific transition criteria.
 
 ## How It Works
 
-The plugin examines all pods across your nodes and selects those that exceed the configured age threshold. You can further narrow down which pods are considered by specifying:
+The plugin builds a filter chain from the configured criteria. All non-empty filter categories are ANDed together (a pod must satisfy every specified filter to be evicted). Within each filter category, items are ORed (matching any one entry satisfies that filter).
 
-- Which namespaces to include or exclude
-- Which labels pods must have
-- Which states pods must be in (e.g., Running, Pending, CrashLoopBackOff)
-
-Once pods are selected, they are sorted by age (oldest first) and evicted in that order. Eviction stops when limits are reached (per-node limits, total limits, or Pod Disruption Budget constraints).
+Once pods are selected, they are sorted by the most relevant time (last transition time if any condition filter carries a `minTimeSinceLastTransitionSeconds`, otherwise creation time) with the oldest first, then evicted in order. Eviction stops when limits are reached (per-node limits, total limits, or Pod Disruption Budget constraints).
 
 ## Use Cases
 
-- **Resource Leakage Mitigation**: Restart long-running pods that may have accumulated memory leaks, stale cache, or resource leaks
+- **Evict completed/succeeded pods that have been idle too long**:
   ```yaml
   args:
-    maxPodLifeTimeSeconds: 604800  # 7 days
-    states: [Running]
+    states: [Succeeded]
+    conditions:
+      - reason: PodCompleted
+        status: "True"
+        minTimeSinceLastTransitionSeconds: 14400  # 4 hours
   ```
 
-- **Ephemeral Workload Cleanup**: Remove long-running batch jobs, test pods, or temporary workloads that have exceeded their expected lifetime
+- **Evict failed pods**, excluding Job-owned pods:
   ```yaml
   args:
-    maxPodLifeTimeSeconds: 7200  # 2 hours
-    states: [Succeeded, Failed]
-  ```
-
-- **Node Hygiene**: Remove forgotten or stuck pods that are consuming resources but not making progress
-  ```yaml
-  args:
-    maxPodLifeTimeSeconds: 3600  # 1 hour
-    states: [CrashLoopBackOff, ImagePullBackOff, ErrImagePull]
+    states: [Failed]
+    exitCodes: [1]
+    ownerKinds:
+      exclude: [Job]
+    maxPodLifeTimeSeconds: 3600
     includingInitContainers: true
   ```
 
-- **Config/Secret Update Pickup**: Force pod restart to pick up updated ConfigMaps, Secrets, or environment variables
-  ```yaml
-  args:
-    maxPodLifeTimeSeconds: 86400  # 1 day
-    states: [Running]
-    labelSelector:
-      matchLabels:
-        config-refresh: enabled
-  ```
-
-- **Security Rotation**: Periodically refresh pods to pick up new security tokens, certificates, or patched container images
-  ```yaml
-  args:
-    maxPodLifeTimeSeconds: 259200  # 3 days
-    states: [Running]
-    namespaces:
-      exclude: [kube-system]
-  ```
-
-- **Dev/Test Environment Cleanup**: Automatically clean up old pods in development or staging namespaces
-  ```yaml
-  args:
-    maxPodLifeTimeSeconds: 86400  # 1 day
-    namespaces:
-      include: [dev, staging, test]
-  ```
-
-- **Cluster Health Freshness**: Ensure pods periodically restart to maintain cluster health and verify workloads can recover from restarts
+- **Resource Leakage Mitigation**: Restart long-running pods that may have accumulated memory leaks:
   ```yaml
   args:
     maxPodLifeTimeSeconds: 604800  # 7 days
     states: [Running]
-    namespaces:
-      exclude: [kube-system, production]
   ```
 
-- **Rebalancing Assistance**: Work alongside other descheduler strategies by removing old pods to allow better pod distribution
+- **Clean up stuck pods in CrashLoopBackOff**:
   ```yaml
   args:
-    maxPodLifeTimeSeconds: 1209600  # 14 days
-    states: [Running]
+    states: [CrashLoopBackOff, ImagePullBackOff]
   ```
 
-- **Non-Critical Stateful Refresh**: Occasionally reset tolerable stateful workloads that can handle data loss or have external backup mechanisms
+- **Evict pods owned only by specific kinds**:
   ```yaml
   args:
-    maxPodLifeTimeSeconds: 2592000  # 30 days
-    labelSelector:
-      matchLabels:
-        stateful-tier: cache
+    states: [Succeeded, Failed]
+    ownerKinds:
+      include: [Job]
+    maxPodLifeTimeSeconds: 600
   ```
 
 ## Configuration
 
 | Parameter | Description | Type | Required | Default |
 |-----------|-------------|------|----------|---------|
-| `maxPodLifeTimeSeconds` | Pods older than this many seconds are evicted | `uint` | Yes | - |
-| `namespaces` | Limit eviction to specific namespaces (or exclude specific namespaces) | `Namespaces` | No | `nil` |
+| `maxPodLifeTimeSeconds` | Pods older than this many seconds are evicted | `uint` | No* | `nil` |
+| `states` | Filter pods by phase, pod status reason, or container waiting/terminated reason. A pod matches if any of its state values appear in this list | `[]string` | No | `nil` |
+| `conditions` | Only evict pods with matching status conditions (see PodConditionFilter) | `[]PodConditionFilter` | No | `nil` |
+| `exitCodes` | Only evict pods with matching container terminated exit codes | `[]int32` | No | `nil` |
+| `ownerKinds` | Include or exclude pods by owner reference kind | `OwnerKinds` | No | `nil` |
+| `namespaces` | Limit eviction to specific namespaces (include or exclude) | `Namespaces` | No | `nil` |
 | `labelSelector` | Only evict pods matching these labels | `metav1.LabelSelector` | No | `nil` |
-| `states` | Only evict pods in specific states (e.g., Running, CrashLoopBackOff) | `[]string` | No | `nil` |
-| `includingInitContainers` | When checking states, also check init container states | `bool` | No | `false` |
-| `includingEphemeralContainers` | When checking states, also check ephemeral container states | `bool` | No | `false` |
+| `includingInitContainers` | Extend state/exitCode filtering to init containers | `bool` | No | `false` |
+| `includingEphemeralContainers` | Extend state filtering to ephemeral containers | `bool` | No | `false` |
 
-### Discovering states
+*At least one filtering criterion must be specified (`maxPodLifeTimeSeconds`, `states`, `conditions`, or `exitCodes`).
 
-Each pod is checked for the following locations to discover its relevant state:
+### States
 
-1. **Pod Phase** - The overall pod lifecycle phase:
-   - `Running` - Pod is running on a node
-   - `Pending` - Pod has been accepted but containers are not yet running
-   - `Succeeded` - All containers terminated successfully
-   - `Failed` - All containers terminated, at least one failed
-   - `Unknown` - Pod state cannot be determined
+The `states` field matches pods using an OR across these categories:
 
-2. **Pod Status Reason** - Why the pod is in its current state:
-   - `NodeAffinity` - Pod cannot be scheduled due to node affinity rules
-   - `NodeLost` - Node hosting the pod is lost
-   - `Shutdown` - Pod terminated due to node shutdown
-   - `UnexpectedAdmissionError` - Pod admission failed unexpectedly
+| Category | Examples |
+|----------|----------|
+| Pod phase | `Running`, `Pending`, `Succeeded`, `Failed`, `Unknown` |
+| Pod status reason | `NodeAffinity`, `NodeLost`, `Shutdown`, `UnexpectedAdmissionError` |
+| Container waiting reason | `CrashLoopBackOff`, `ImagePullBackOff`, `ErrImagePull`, `CreateContainerConfigError`, `CreateContainerError`, `InvalidImageName`, `PodInitializing`, `ContainerCreating` |
+| Container terminated reason | `OOMKilled`, `Error`, `Completed`, `DeadlineExceeded`, `Evicted`, `ContainerCannotRun`, `StartError` |
 
-3. **Container Waiting Reason** - Why containers are waiting to start:
-   - `PodInitializing` - Pod is still initializing
-   - `ContainerCreating` - Container is being created
-   - `ImagePullBackOff` - Image pull is failing and backing off
-   - `CrashLoopBackOff` - Container is crashing repeatedly
-   - `CreateContainerConfigError` - Container configuration is invalid
-   - `ErrImagePull` - Image cannot be pulled
-   - `CreateContainerError` - Container creation failed
-   - `InvalidImageName` - Image name is invalid
+When `includingInitContainers` is true, init container states are also checked. When `includingEphemeralContainers` is true, ephemeral container states are also checked.
 
-By default, only regular containers are checked. Enable `includingInitContainers` or `includingEphemeralContainers` to also check those container types.
+### PodConditionFilter
+
+Each condition filter matches against `pod.status.conditions[]` entries. All specified field-level checks must match (AND). Unset fields are not checked. Multiple condition filters in the list are ORed.
+
+| Field | Description |
+|-------|-------------|
+| `type` | Condition type (e.g., `Ready`, `Initialized`, `ContainersReady`) |
+| `status` | Condition status (`True`, `False`, `Unknown`) |
+| `reason` | Condition reason (e.g., `PodCompleted`) |
+| `minTimeSinceLastTransitionSeconds` | Require the matching condition's `lastTransitionTime` to be at least this many seconds in the past |
+
+At least one of these fields must be set per filter entry.
+
+When `minTimeSinceLastTransitionSeconds` is set on a filter, a pod's condition must both match the type/status/reason fields AND have transitioned long enough ago. If the condition has no `lastTransitionTime`, it does not match.
+
+### OwnerKinds
+
+| Field | Description |
+|-------|-------------|
+| `include` | Only evict pods owned by these kinds |
+| `exclude` | Do not evict pods owned by these kinds |
+
+At most one of `include`/`exclude` may be set.
+
+## Migrating from RemoveFailedPods
+
+`RemoveFailedPods` delegates to `PodLifeTime` under the hood. You can use `PodLifeTime` directly for the same behavior with additional flexibility.
+
+| RemoveFailedPods | PodLifeTime |
+|---|---|
+| *(implicit phase=Failed)* | `states: [Failed]` |
+| `minPodLifetimeSeconds: 3600` | `maxPodLifeTimeSeconds: 3600` |
+| `excludeOwnerKinds: [Job]` | `ownerKinds: { exclude: [Job] }` |
+| `reasons: [NodeAffinity]` | `states: [Failed, NodeAffinity]` |
+| `exitCodes: [1]` | `exitCodes: [1]` |
+| `includingInitContainers: true` | `includingInitContainers: true` |
+
+**Before (RemoveFailedPods):**
+```yaml
+- name: RemoveFailedPods
+  args:
+    reasons: [NodeAffinity]
+    exitCodes: [1]
+    excludeOwnerKinds: [Job]
+    minPodLifetimeSeconds: 3600
+    includingInitContainers: true
+```
+
+**After (PodLifeTime):**
+```yaml
+- name: PodLifeTime
+  args:
+    states: [Failed, NodeAffinity]
+    exitCodes: [1]
+    ownerKinds:
+      exclude: [Job]
+    maxPodLifeTimeSeconds: 3600
+    includingInitContainers: true
+```
+
+> **Note:** When migrating `RemoveFailedPods` with `reasons`, the reasons are ORed with the `Failed` phase in `states`. This means a pod matching *any* of those values will pass the states filter. If you need strict AND logic (must be Failed AND have a specific reason), use `RemoveFailedPods` or apply additional filtering via `conditions`.
 
 ## Example
+
+### Age-based eviction with state filter
 
 ```yaml
 apiVersion: descheduler/v1alpha2
@@ -145,11 +163,36 @@ profiles:
       - name: PodLifeTime
         args:
           maxPodLifeTimeSeconds: 86400  # 1 day
+          states:
+            - Running
           namespaces:
             include:
               - default
-          states:
-            - Running
 ```
 
-This configuration evicts Running pods in the `default` namespace that are older than 1 day.
+### Transition-based eviction for completed pods
+
+```yaml
+apiVersion: descheduler/v1alpha2
+kind: DeschedulerPolicy
+profiles:
+  - name: default
+    plugins:
+      deschedule:
+        enabled:
+          - name: PodLifeTime
+    pluginConfig:
+      - name: PodLifeTime
+        args:
+          states:
+            - Succeeded
+          conditions:
+            - reason: PodCompleted
+              status: "True"
+              minTimeSinceLastTransitionSeconds: 14400
+          namespaces:
+            include:
+              - default
+```
+
+This configuration evicts Succeeded pods in the `default` namespace that have a `PodCompleted` condition with status `True` and whose last matching transition happened more than 4 hours ago.
