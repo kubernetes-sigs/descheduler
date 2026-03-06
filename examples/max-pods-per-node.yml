@@ -1,0 +1,22 @@
+apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "MaxPodsPerNode"
+      args:
+        maxPods: 30
+        namespaces:
+          include:
+            - "default"
+    - name: "DefaultEvictor"
+      args:
+        evictSystemCriticalPods: false
+        evictLocalStoragePods: true
+    plugins:
+      deschedule:
+        enabled:
+          - "MaxPodsPerNode"
+      filter:
+        enabled:
+          - "DefaultEvictor"
