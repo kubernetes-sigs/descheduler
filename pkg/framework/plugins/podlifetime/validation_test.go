@@ -55,7 +55,7 @@ func TestValidateRemovePodLifeTimeArgs(t *testing.T) {
 			args: &PodLifeTimeArgs{
 				MaxPodLifeTimeSeconds: nil,
 			},
-			errInfo: fmt.Errorf("MaxPodLifeTimeSeconds not set"),
+			errInfo: fmt.Errorf("at least one filtering criterion must be specified (maxPodLifeTimeSeconds, states, conditions, or exitCodes)"),
 		},
 		{
 			description: "invalid pod state arg, expects errors",
@@ -63,7 +63,7 @@ func TestValidateRemovePodLifeTimeArgs(t *testing.T) {
 				MaxPodLifeTimeSeconds: func(i uint) *uint { return &i }(1),
 				States:                []string{string("InvalidState")},
 			},
-			errInfo: fmt.Errorf("states must be one of [ContainerCreating CrashLoopBackOff CreateContainerConfigError CreateContainerError ErrImagePull Failed ImagePullBackOff InvalidImageName NodeAffinity NodeLost Pending PodInitializing Running Shutdown Succeeded UnexpectedAdmissionError Unknown]"),
+			errInfo: fmt.Errorf("states must be one of [Completed ContainerCannotRun ContainerCreating CrashLoopBackOff CreateContainerConfigError CreateContainerError DeadlineExceeded ErrImagePull Error Evicted Failed ImagePullBackOff InvalidImageName NodeAffinity NodeLost OOMKilled Pending PodInitializing Running Shutdown StartError Succeeded UnexpectedAdmissionError Unknown]"),
 		},
 		{
 			description: "nil MaxPodLifeTimeSeconds arg and invalid pod state arg, expects errors",
@@ -71,7 +71,7 @@ func TestValidateRemovePodLifeTimeArgs(t *testing.T) {
 				MaxPodLifeTimeSeconds: nil,
 				States:                []string{string("InvalidState")},
 			},
-			errInfo: fmt.Errorf("[MaxPodLifeTimeSeconds not set, states must be one of [ContainerCreating CrashLoopBackOff CreateContainerConfigError CreateContainerError ErrImagePull Failed ImagePullBackOff InvalidImageName NodeAffinity NodeLost Pending PodInitializing Running Shutdown Succeeded UnexpectedAdmissionError Unknown]]"),
+			errInfo: fmt.Errorf("states must be one of [Completed ContainerCannotRun ContainerCreating CrashLoopBackOff CreateContainerConfigError CreateContainerError DeadlineExceeded ErrImagePull Error Evicted Failed ImagePullBackOff InvalidImageName NodeAffinity NodeLost OOMKilled Pending PodInitializing Running Shutdown StartError Succeeded UnexpectedAdmissionError Unknown]"),
 		},
 	}
 

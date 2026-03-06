@@ -84,19 +84,13 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 			if states.Has(string(pod.Status.Phase)) {
 				return true
 			}
-
-			containerStatuses := pod.Status.ContainerStatuses
-
-			if tooManyRestartsArgs.IncludingInitContainers {
-				containerStatuses = append(containerStatuses, pod.Status.InitContainerStatuses...)
+			if podutil.HasMatchingContainerWaitingState(pod.Status.ContainerStatuses, states) {
+				return true
 			}
-
-			for _, containerStatus := range containerStatuses {
-				if containerStatus.State.Waiting != nil && states.Has(containerStatus.State.Waiting.Reason) {
-					return true
-				}
+			if tooManyRestartsArgs.IncludingInitContainers &&
+				podutil.HasMatchingContainerWaitingState(pod.Status.InitContainerStatuses, states) {
+				return true
 			}
-
 			return false
 		})
 	}
