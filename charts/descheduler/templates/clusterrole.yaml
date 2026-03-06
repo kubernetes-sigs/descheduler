@@ -27,6 +27,12 @@ rules:
 - apiGroups: ["policy"]
   resources: ["poddisruptionbudgets"]
   verbs: ["get", "watch", "list"]
+- apiGroups: ["apps"]
+  resources: ["replicasets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "patch"]
 {{- if .Values.leaderElection.enabled }}
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
