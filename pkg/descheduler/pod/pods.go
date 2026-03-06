@@ -292,6 +292,28 @@ func SortPodsBasedOnAge(pods []*v1.Pod) {
 	})
 }
 
+// HasMatchingContainerWaitingState returns true if any container status has a
+// waiting reason present in the given set.
+func HasMatchingContainerWaitingState(statuses []v1.ContainerStatus, states sets.Set[string]) bool {
+	for _, cs := range statuses {
+		if cs.State.Waiting != nil && states.Has(cs.State.Waiting.Reason) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasMatchingContainerTerminatedState returns true if any container status has
+// a terminated reason present in the given set.
+func HasMatchingContainerTerminatedState(statuses []v1.ContainerStatus, states sets.Set[string]) bool {
+	for _, cs := range statuses {
+		if cs.State.Terminated != nil && states.Has(cs.State.Terminated.Reason) {
+			return true
+		}
+	}
+	return false
+}
+
 func GroupByNodeName(pods []*v1.Pod) map[string][]*v1.Pod {
 	m := make(map[string][]*v1.Pod)
 	for i := 0; i < len(pods); i++ {
