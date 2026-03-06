@@ -1,0 +1,31 @@
+suite: Test ServiceMonitor
+
+templates:
+  - "*.yaml"
+
+release:
+  name: descheduler
+
+set:
+  kind: Deployment
+  serviceMonitor:
+    enabled: true
+
+tests:
+  - it: uses default ServiceMonitor apiVersion
+    template: templates/servicemonitor.yaml
+    asserts:
+      - equal:
+          path: apiVersion
+          value: monitoring.coreos.com/v1
+
+  - it: supports overriding ServiceMonitor apiVersion
+    set:
+      serviceMonitor:
+        enabled: true
+        apiVersion: azmonitoring.coreos.com/v1
+    template: templates/servicemonitor.yaml
+    asserts:
+      - equal:
+          path: apiVersion
+          value: azmonitoring.coreos.com/v1
