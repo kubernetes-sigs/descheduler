@@ -260,10 +260,12 @@ func TestPromClientControllerSync_ClientCreation(t *testing.T) {
 					ctrl := setupMode.setupFn(ctx, t, tc.objects)
 
 					// Set additional test-specific fields
+					ctrl.mu.Lock()
 					ctrl.currentPrometheusAuthToken = tc.currentAuthToken
 					if tc.currentAuthToken != "" {
 						ctrl.previousPrometheusClientTransport = &http.Transport{}
 					}
+					ctrl.mu.Unlock()
 
 					// Mock createPrometheusClient
 					clientCreated := false
@@ -302,12 +304,17 @@ func TestPromClientControllerSync_ClientCreation(t *testing.T) {
 					}
 
 					// Verify token cleared expectations
-					if tc.expectCurrentTokenCleared && ctrl.currentPrometheusAuthToken != "" {
+					ctrl.mu.RLock()
+					currentToken := ctrl.currentPrometheusAuthToken
+					previousTransport := ctrl.previousPrometheusClientTransport
+					ctrl.mu.RUnlock()
+
+					if tc.expectCurrentTokenCleared && currentToken != "" {
 						t.Errorf("Expected current auth token to be cleared but it wasn't")
 					}
 
 					// Verify previous transport cleared expectations
-					if tc.expectPreviousTransportCleared && ctrl.previousPrometheusClientTransport != nil {
+					if tc.expectPreviousTransportCleared && previousTransport != nil {
 						t.Errorf("Expected previous transport to be cleared but it wasn't")
 					}
 
@@ -320,8 +327,11 @@ func TestPromClientControllerSync_ClientCreation(t *testing.T) {
 					if tc.expectClientCreated && len(tc.objects) > 0 {
 						if secret, ok := tc.objects[0].(*v1.Secret); ok && secret.Data != nil {
 							expectedToken := string(secret.Data[prometheusAuthTokenSecretKey])
-							if ctrl.currentPrometheusAuthToken != expectedToken {
-								t.Errorf("Expected current auth token to be %q but got %q", expectedToken, ctrl.currentPrometheusAuthToken)
+							ctrl.mu.RLock()
+							actualToken := ctrl.currentPrometheusAuthToken
+							ctrl.mu.RUnlock()
+							if actualToken != expectedToken {
+								t.Errorf("Expected current auth token to be %q but got %q", expectedToken, actualToken)
 							}
 						}
 					}
@@ -568,12 +578,17 @@ func TestPromClientControllerSync_EventHandler(t *testing.T) {
 						t.Errorf("Expected %d clients created, but got %d", tc.expectedCreatedClientsCount, len(createdClients))
 					}
 
-					if ctrl.currentPrometheusAuthToken != tc.expectedCurrentToken {
-						t.Errorf("Expected current token to be %q, got %q", tc.expectedCurrentToken, ctrl.currentPrometheusAuthToken)
+					ctrl.mu.RLock()
+					actualToken := ctrl.currentPrometheusAuthToken
+					actualTransport := ctrl.previousPrometheusClientTransport
+					ctrl.mu.RUnlock()
+
+					if actualToken != tc.expectedCurrentToken {
+						t.Errorf("Expected current token to be %q, got %q", tc.expectedCurrentToken, actualToken)
 					}
 
 					if tc.expectedPreviousTransportCleared {
-						if ctrl.previousPrometheusClientTransport != nil {
+						if actualTransport != nil {
 							t.Error("Expected previous transport to be cleared, but it was set")
 						}
 					}
@@ -723,9 +738,10 @@ func TestReconcileInClusterSAToken(t *testing.T) {
 						}
 						_, descheduler, _, _ := initDescheduler(t, ctx, initFeatureGates(), deschedulerPolicy, nil, false)
 
-						// Override the fields needed for this test (no need for a mutex
-						// since reconcileInClusterSAToken gets to run later)
+						// Override the fields needed for this test
+						descheduler.inClusterPromClientCtrl.mu.Lock()
 						descheduler.inClusterPromClientCtrl.currentPrometheusAuthToken = tc.currentAuthToken
+						descheduler.inClusterPromClientCtrl.mu.Unlock()
 						descheduler.inClusterPromClientCtrl.inClusterConfig = tc.inClusterConfigFunc
 						return descheduler.inClusterPromClientCtrl
 					},
@@ -735,12 +751,14 @@ func TestReconcileInClusterSAToken(t *testing.T) {
 					ctrl := setupMode.init(t)
 
 					// Set previous transport and client if test expects them to be cleared
+					ctrl.mu.Lock()
 					if tc.expectPreviousTransportCleared {
 						ctrl.previousPrometheusClientTransport = &http.Transport{}
 					}
 					if tc.expectPromClientCleared {
 						ctrl.promClient = &mockPrometheusClient{name: "old-client"}
 					}
+					ctrl.mu.Unlock()
 
 					// Mock createPrometheusClient
 					clientCreated := false
@@ -779,20 +797,25 @@ func TestReconcileInClusterSAToken(t *testing.T) {
 					}
 
 					// Verify token expectations
-					if ctrl.currentPrometheusAuthToken != tc.expectCurrentToken {
-						t.Errorf("Expected current token to be %q but got %q", tc.expectCurrentToken, ctrl.currentPrometheusAuthToken)
+					ctrl.mu.RLock()
+					actualToken := ctrl.currentPrometheusAuthToken
+					actualTransport := ctrl.previousPrometheusClientTransport
+					ctrl.mu.RUnlock()
+
+					if actualToken != tc.expectCurrentToken {
+						t.Errorf("Expected current token to be %q but got %q", tc.expectCurrentToken, actualToken)
 					}
 
 					// Verify previous transport cleared when expected
 					if tc.expectPreviousTransportCleared {
 						if tc.expectClientCreated {
 							// Success case: new transport should be set
-							if ctrl.previousPrometheusClientTransport == nil {
+							if actualTransport == nil {
 								t.Error("Expected previous transport to be set to new transport, but it was nil")
 							}
 						} else if tc.expectedErr != nil {
 							// Failure case: transport should be nil
-							if ctrl.previousPrometheusClientTransport != nil {
+							if actualTransport != nil {
 								t.Error("Expected previous transport to be cleared on error, but it was set")
 							}
 						}

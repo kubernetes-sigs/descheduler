@@ -421,14 +421,12 @@ func runPodLifetimePlugin(
 	t *testing.T,
 	clientset clientset.Interface,
 	nodeLister listersv1.NodeLister,
-	namespaces *deschedulerapi.Namespaces,
-	priorityClass string,
-	priority *int32,
-	evictCritical bool,
-	evictDaemonSet bool,
-	maxPodsToEvictPerNamespace *uint,
-	labelSelector *metav1.LabelSelector,
+	args *podlifetime.PodLifeTimeArgs,
+	evictorArgs defaultevictor.DefaultEvictorArgs,
+	evictionOpts *evictions.Options,
 ) {
+	t.Helper()
+
 	evictionPolicyGroupVersion, err := eutils.SupportEviction(clientset)
 	if err != nil || len(evictionPolicyGroupVersion) == 0 {
 		t.Fatalf("%v", err)
@@ -439,42 +437,18 @@ func runPodLifetimePlugin(
 		t.Fatalf("%v", err)
 	}
 
-	var thresholdPriority int32
-	if priority != nil {
-		thresholdPriority = *priority
+	if evictionOpts == nil {
+		evictionOpts = evictions.NewOptions().WithPolicyGroupVersion(evictionPolicyGroupVersion)
 	} else {
-		thresholdPriority, err = utils.GetPriorityFromPriorityClass(ctx, clientset, priorityClass)
-		if err != nil {
-			t.Fatalf("Failed to get threshold priority from plugin arg params")
-		}
+		evictionOpts = evictionOpts.WithPolicyGroupVersion(evictionPolicyGroupVersion)
 	}
 
-	handle, _, err := frameworktesting.InitFrameworkHandle(
-		ctx,
-		clientset,
-		evictions.NewOptions().
-			WithPolicyGroupVersion(evictionPolicyGroupVersion).
-			WithMaxPodsToEvictPerNamespace(maxPodsToEvictPerNamespace),
-		defaultevictor.DefaultEvictorArgs{
-			EvictSystemCriticalPods: evictCritical,
-			EvictDaemonSetPods:      evictDaemonSet,
-			PriorityThreshold: &deschedulerapi.PriorityThreshold{
-				Value: &thresholdPriority,
-			},
-		},
-		nil,
-	)
+	handle, _, err := frameworktesting.InitFrameworkHandle(ctx, clientset, evictionOpts, evictorArgs, nil)
 	if err != nil {
 		t.Fatalf("Unable to initialize a framework handle: %v", err)
 	}
 
-	maxPodLifeTimeSeconds := uint(1)
-
-	plugin, err := podlifetime.New(ctx, &podlifetime.PodLifeTimeArgs{
-		MaxPodLifeTimeSeconds: &maxPodLifeTimeSeconds,
-		LabelSelector:         labelSelector,
-		Namespaces:            namespaces,
-	}, handle)
+	plugin, err := podlifetime.New(ctx, args, handle)
 	if err != nil {
 		t.Fatalf("Unable to initialize the plugin: %v", err)
 	}
@@ -707,9 +681,14 @@ func TestNamespaceConstraintsInclude(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Logf("run the plugin to delete pods from %v namespace", rc.Namespace)
-	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, &deschedulerapi.Namespaces{
-		Include: []string{rc.Namespace},
-	}, "", nil, false, false, nil, nil)
+	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer,
+		&podlifetime.PodLifeTimeArgs{
+			MaxPodLifeTimeSeconds: utilptr.To[uint](1),
+			Namespaces:            &deschedulerapi.Namespaces{Include: []string{rc.Namespace}},
+		},
+		defaultevictor.DefaultEvictorArgs{},
+		nil,
+	)
 
 	// All pods are supposed to be deleted, wait until all the old pods are deleted
 	if err := wait.PollUntilContextTimeout(ctx, time.Second, 20*time.Second, true, func(ctx context.Context) (bool, error) {
@@ -777,9 +756,14 @@ func TestNamespaceConstraintsExclude(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Logf("run the plugin to delete pods from namespaces except the %v namespace", rc.Namespace)
-	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, &deschedulerapi.Namespaces{
-		Exclude: []string{rc.Namespace},
-	}, "", nil, false, false, nil, nil)
+	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer,
+		&podlifetime.PodLifeTimeArgs{
+			MaxPodLifeTimeSeconds: utilptr.To[uint](1),
+			Namespaces:            &deschedulerapi.Namespaces{Exclude: []string{rc.Namespace}},
+		},
+		defaultevictor.DefaultEvictorArgs{},
+		nil,
+	)
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
@@ -890,11 +874,24 @@ func testEvictSystemCritical(t *testing.T, isPriorityClass bool) {
 	sort.Strings(initialPodNames)
 	t.Logf("Existing pods: %v", initialPodNames)
 
+	var thresholdPriority int32
 	if isPriorityClass {
-		runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, true, false, nil, nil)
+		resolved, err := utils.GetPriorityFromPriorityClass(ctx, clientSet, highPriorityClass.Name)
+		if err != nil {
+			t.Fatalf("Failed to get priority from priority class: %v", err)
+		}
+		thresholdPriority = resolved
 	} else {
-		runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, true, false, nil, nil)
+		thresholdPriority = highPriority
 	}
+	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer,
+		&podlifetime.PodLifeTimeArgs{MaxPodLifeTimeSeconds: utilptr.To[uint](1)},
+		defaultevictor.DefaultEvictorArgs{
+			EvictSystemCriticalPods: true,
+			PriorityThreshold:       &deschedulerapi.PriorityThreshold{Value: &thresholdPriority},
+		},
+		nil,
+	)
 
 	// All pods are supposed to be deleted, wait until all pods in the test namespace are terminating
 	t.Logf("All pods in the test namespace, no matter their priority (including system-node-critical and system-cluster-critical), will be deleted")
@@ -961,7 +958,11 @@ func testEvictDaemonSetPod(t *testing.T, isDaemonSet bool) {
 	sort.Strings(initialPodNames)
 	t.Logf("Existing pods: %v", initialPodNames)
 
-	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", nil, false, isDaemonSet, nil, nil)
+	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer,
+		&podlifetime.PodLifeTimeArgs{MaxPodLifeTimeSeconds: utilptr.To[uint](1)},
+		defaultevictor.DefaultEvictorArgs{EvictDaemonSetPods: isDaemonSet},
+		nil,
+	)
 
 	// All pods are supposed to be deleted, wait until all pods in the test namespace are terminating
 	t.Logf("All daemonset pods in the test namespace, will be deleted")
@@ -1074,13 +1075,25 @@ func testPriority(t *testing.T, isPriorityClass bool) {
 	sort.Strings(expectEvictPodNames)
 	t.Logf("Pods not expected to be evicted: %v, pods expected to be evicted: %v", expectReservePodNames, expectEvictPodNames)
 
+	var thresholdPriority int32
 	if isPriorityClass {
 		t.Logf("run the plugin to delete pods with priority lower than priority class %s", highPriorityClass.Name)
-		runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, highPriorityClass.Name, nil, false, false, nil, nil)
+		resolved, err := utils.GetPriorityFromPriorityClass(ctx, clientSet, highPriorityClass.Name)
+		if err != nil {
+			t.Fatalf("Failed to get priority from priority class: %v", err)
+		}
+		thresholdPriority = resolved
 	} else {
 		t.Logf("run the plugin to delete pods with priority lower than %d", highPriority)
-		runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", &highPriority, false, false, nil, nil)
+		thresholdPriority = highPriority
 	}
+	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer,
+		&podlifetime.PodLifeTimeArgs{MaxPodLifeTimeSeconds: utilptr.To[uint](1)},
+		defaultevictor.DefaultEvictorArgs{
+			PriorityThreshold: &deschedulerapi.PriorityThreshold{Value: &thresholdPriority},
+		},
+		nil,
+	)
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
@@ -1182,7 +1195,14 @@ func TestPodLabelSelector(t *testing.T) {
 	t.Logf("Pods not expected to be evicted: %v, pods expected to be evicted: %v", expectReservePodNames, expectEvictPodNames)
 
 	t.Logf("run the plugin to delete pods with label test:podlifetime-evict")
-	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer, nil, "", nil, false, false, nil, &metav1.LabelSelector{MatchLabels: map[string]string{"test": "podlifetime-evict"}})
+	runPodLifetimePlugin(ctx, t, clientSet, nodeInformer,
+		&podlifetime.PodLifeTimeArgs{
+			MaxPodLifeTimeSeconds: utilptr.To[uint](1),
+			LabelSelector:         &metav1.LabelSelector{MatchLabels: map[string]string{"test": "podlifetime-evict"}},
+		},
+		defaultevictor.DefaultEvictorArgs{},
+		nil,
+	)
 
 	t.Logf("Waiting 10s")
 	time.Sleep(10 * time.Second)
@@ -1281,7 +1301,11 @@ func TestEvictAnnotation(t *testing.T) {
 	t.Logf("Existing pods: %v", initialPodNames)
 
 	t.Log("Running PodLifetime plugin")
-	runPodLifetimePlugin(ctx, t, clientSet, nodeLister, nil, "", nil, false, false, nil, nil)
+	runPodLifetimePlugin(ctx, t, clientSet, nodeLister,
+		&podlifetime.PodLifeTimeArgs{MaxPodLifeTimeSeconds: utilptr.To[uint](1)},
+		defaultevictor.DefaultEvictorArgs{},
+		nil,
+	)
 
 	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, time.Minute, true, func(ctx context.Context) (bool, error) {
 		podList, err = clientSet.CoreV1().Pods(rc.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labels.SelectorFromSet(rc.Spec.Template.Labels).String()})
@@ -1346,7 +1370,11 @@ func TestPodLifeTimeOldestEvicted(t *testing.T) {
 
 	t.Log("Running PodLifetime plugin with maxPodsToEvictPerNamespace=1 to ensure only the oldest pod is evicted")
 	var maxPodsToEvictPerNamespace uint = 1
-	runPodLifetimePlugin(ctx, t, clientSet, nodeLister, nil, "", nil, false, false, &maxPodsToEvictPerNamespace, nil)
+	runPodLifetimePlugin(ctx, t, clientSet, nodeLister,
+		&podlifetime.PodLifeTimeArgs{MaxPodLifeTimeSeconds: utilptr.To[uint](1)},
+		defaultevictor.DefaultEvictorArgs{},
+		evictions.NewOptions().WithMaxPodsToEvictPerNamespace(&maxPodsToEvictPerNamespace),
+	)
 	t.Log("Finished PodLifetime plugin")
 
 	t.Logf("Wait for terminating pod to disappear")
