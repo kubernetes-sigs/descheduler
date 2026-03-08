@@ -1,0 +1,20 @@
+apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  - name: ProfileName
+    pluginConfig:
+    - name: "PodLifeTime"
+      args:
+        states:
+        - "Succeeded"
+        conditions:
+        - reason: "PodCompleted"
+          status: "True"
+          minTimeSinceLastTransitionSeconds: 14400 # 4 hours
+        namespaces:
+          include:
+          - "default"
+    plugins:
+      deschedule:
+        enabled:
+          - "PodLifeTime"
