@@ -140,7 +140,8 @@ func (l *LowNodeUtilization) Name() string {
 func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	logger := klog.FromContext(klog.NewContext(ctx, l.logger)).WithValues("ExtensionPoint", frameworktypes.BalanceExtensionPoint)
 
-	if err := l.usageClient.sync(ctx, nodes); err != nil {
+	syncedNodes, err := l.usageClient.sync(ctx, nodes)
+	if err != nil {
 		return &frameworktypes.Status{
 			Err: fmt.Errorf("error getting node usage: %v", err),
 		}
@@ -149,8 +150,8 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 	// starts by taking a snapshot ofthe nodes usage. we will use this
 	// snapshot to assess the nodes usage and classify them as
 	// underutilized or overutilized.
-	nodesMap, nodesUsageMap, podListMap := getNodeUsageSnapshot(nodes, l.usageClient)
-	capacities := referencedResourceListForNodesCapacity(nodes)
+	nodesMap, nodesUsageMap, podListMap := getNodeUsageSnapshot(syncedNodes, l.usageClient)
+	capacities := referencedResourceListForNodesCapacity(syncedNodes)
 
 	// usage, by default, is exposed in absolute values. we need to normalize
 	// them (convert them to percentages) to be able to compare them with the
@@ -271,7 +272,7 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 		return nil
 	}
 
-	if len(lowNodes) == len(nodes) {
+	if len(lowNodes) == len(syncedNodes) {
 		logger.V(1).Info("All nodes are underutilized, nothing to do here")
 		return nil
 	}

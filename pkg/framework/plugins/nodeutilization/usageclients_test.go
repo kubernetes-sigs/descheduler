@@ -63,7 +63,7 @@ func updateMetricsAndCheckNodeUtilization(
 	if err != nil {
 		t.Fatalf("failed to capture metrics: %v", err)
 	}
-	err = usageClient.sync(ctx, nodes)
+	_, err = usageClient.sync(ctx, nodes)
 	if err != nil {
 		t.Fatalf("failed to sync a snapshot: %v", err)
 	}
@@ -141,6 +141,144 @@ func TestActualUsageClient(t *testing.T) {
 		900, 1269,
 		metricsClientset, collector, usageClient, nodes, n2.Name, n2metrics,
 	)
+}
+
+func TestActualUsageClientSkipsNodesWithoutMetrics(t *testing.T) {
+	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
+	n3 := test.BuildTestNode("n3", 2000, 3000, 10, nil)
+
+	p1 := test.BuildTestPod("p1", 400, 0, n1.Name, nil)
+	p2 := test.BuildTestPod("p2", 400, 0, n2.Name, nil)
+	p3 := test.BuildTestPod("p3", 400, 0, n3.Name, nil)
+
+	// Only register metrics for n1 and n3, not n2
+	n1metrics := test.BuildNodeMetrics("n1", 400, 1714978816)
+	n3metrics := test.BuildNodeMetrics("n3", 300, 1714978816)
+
+	clientset := fakeclientset.NewSimpleClientset(n1, n2, n3, p1, p2, p3)
+	metricsClientset := fakemetricsclient.NewSimpleClientset()
+	metricsClientset.Tracker().Create(nodesgvr, n1metrics, "")
+	metricsClientset.Tracker().Create(nodesgvr, n3metrics, "")
+
+	ctx := context.TODO()
+
+	resourceNames := []v1.ResourceName{
+		v1.ResourceCPU,
+		v1.ResourceMemory,
+	}
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(clientset, 0)
+	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
+	nodeLister := sharedInformerFactory.Core().V1().Nodes().Lister()
+	podsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+	if err != nil {
+		t.Fatalf("Build get pods assigned to node function error: %v", err)
+	}
+
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	collector := metricscollector.NewMetricsCollector(nodeLister, metricsClientset, labels.Everything())
+	if err := collector.Collect(ctx); err != nil {
+		t.Fatalf("failed to collect metrics: %v", err)
+	}
+
+	usageClient := newActualUsageClient(
+		resourceNames,
+		podsAssignedToNode,
+		collector,
+	)
+
+	nodes := []*v1.Node{n1, n2, n3}
+	syncedNodes, err := usageClient.sync(ctx, nodes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// n2 should be excluded because it has no metrics
+	if len(syncedNodes) != 2 {
+		t.Fatalf("expected 2 synced nodes, got %v", len(syncedNodes))
+	}
+
+	syncedNodeNames := map[string]bool{}
+	for _, n := range syncedNodes {
+		syncedNodeNames[n.Name] = true
+	}
+	if !syncedNodeNames["n1"] || !syncedNodeNames["n3"] {
+		t.Fatalf("expected n1 and n3 in synced nodes, got %v", syncedNodeNames)
+	}
+	if syncedNodeNames["n2"] {
+		t.Fatal("n2 should not be in synced nodes (no metrics)")
+	}
+
+	// Verify n1 and n3 have utilization data
+	if usageClient.nodeUtilization("n1") == nil {
+		t.Fatal("expected utilization data for n1")
+	}
+	if usageClient.nodeUtilization("n3") == nil {
+		t.Fatal("expected utilization data for n3")
+	}
+	// n2 should have no utilization data
+	if usageClient.nodeUtilization("n2") != nil {
+		t.Fatal("expected no utilization data for n2")
+	}
+}
+
+func TestPrometheusUsageClientSkipsNodesWithoutMetrics(t *testing.T) {
+	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
+	n3 := test.BuildTestNode("n3", 2000, 3000, 10, nil)
+
+	p1 := test.BuildTestPod("p1", 400, 0, n1.Name, nil)
+	p2 := test.BuildTestPod("p2", 400, 0, n2.Name, nil)
+	p3 := test.BuildTestPod("p3", 400, 0, n3.Name, nil)
+
+	nodes := []*v1.Node{n1, n2, n3}
+
+	// Only provide metrics for n1 and n3, not n2
+	pClient := &fakePromClient{
+		result: model.Vector{
+			sample("instance:node_cpu:rate:sum", "n1", 0.42),
+			sample("instance:node_cpu:rate:sum", "n3", 0.56),
+		},
+		dataType: model.ValVector,
+	}
+
+	clientset := fakeclientset.NewSimpleClientset(n1, n2, n3, p1, p2, p3)
+
+	ctx := context.TODO()
+	sharedInformerFactory := informers.NewSharedInformerFactory(clientset, 0)
+	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
+	podsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+	if err != nil {
+		t.Fatalf("Build get pods assigned to node function error: %v", err)
+	}
+
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	prometheusUsageClient := newPrometheusUsageClient(podsAssignedToNode, pClient, "instance:node_cpu:rate:sum")
+	syncedNodes, err := prometheusUsageClient.sync(ctx, nodes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// n2 should be excluded because it has no metrics
+	if len(syncedNodes) != 2 {
+		t.Fatalf("expected 2 synced nodes, got %v", len(syncedNodes))
+	}
+
+	syncedNodeNames := map[string]bool{}
+	for _, n := range syncedNodes {
+		syncedNodeNames[n.Name] = true
+	}
+	if !syncedNodeNames["n1"] || !syncedNodeNames["n3"] {
+		t.Fatalf("expected n1 and n3 in synced nodes, got %v", syncedNodeNames)
+	}
+	if syncedNodeNames["n2"] {
+		t.Fatal("n2 should not be in synced nodes (no metrics)")
+	}
 }
 
 type fakePromClient struct {
@@ -272,7 +410,7 @@ func TestPrometheusUsageClient(t *testing.T) {
 			sharedInformerFactory.WaitForCacheSync(ctx.Done())
 
 			prometheusUsageClient := newPrometheusUsageClient(podsAssignedToNode, pClient, "instance:node_cpu:rate:sum")
-			err = prometheusUsageClient.sync(ctx, nodes)
+			_, err = prometheusUsageClient.sync(ctx, nodes)
 			if tc.err == nil {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
