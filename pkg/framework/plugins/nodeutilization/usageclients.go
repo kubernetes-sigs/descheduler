@@ -63,7 +63,10 @@ type usageClient interface {
 	// Both low/high node utilization plugins are expected to invoke sync right
 	// after Balance method is invoked. There's no cache invalidation so each
 	// Balance is expected to get the latest data by invoking sync.
-	sync(ctx context.Context, nodes []*v1.Node) error
+	// sync returns the subset of input nodes for which usage data is
+	// available. Nodes without metrics (e.g. unreachable by metrics-server)
+	// are excluded from the returned list and logged at V(1).
+	sync(ctx context.Context, nodes []*v1.Node) ([]*v1.Node, error)
 	nodeUtilization(node string) api.ReferencedResourceList
 	pods(node string) []*v1.Pod
 	podUsage(pod *v1.Pod) (api.ReferencedResourceList, error)
@@ -105,7 +108,7 @@ func (s *requestedUsageClient) podUsage(pod *v1.Pod) (api.ReferencedResourceList
 	return usage, nil
 }
 
-func (s *requestedUsageClient) sync(ctx context.Context, nodes []*v1.Node) error {
+func (s *requestedUsageClient) sync(ctx context.Context, nodes []*v1.Node) ([]*v1.Node, error) {
 	s._nodeUtilization = make(map[string]api.ReferencedResourceList)
 	s._pods = make(map[string][]*v1.Pod)
 
@@ -113,7 +116,7 @@ func (s *requestedUsageClient) sync(ctx context.Context, nodes []*v1.Node) error
 		pods, err := podutil.ListPodsOnANode(node.Name, s.getPodsAssignedToNode, nil)
 		if err != nil {
 			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
-			return fmt.Errorf("error accessing %q node's pods: %v", node.Name, err)
+			return nil, fmt.Errorf("error accessing %q node's pods: %v", node.Name, err)
 		}
 
 		nodeUsage, err := nodeutil.NodeUtilization(pods, s.resourceNames, func(pod *v1.Pod) (v1.ResourceList, error) {
@@ -121,7 +124,7 @@ func (s *requestedUsageClient) sync(ctx context.Context, nodes []*v1.Node) error
 			return req, nil
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		// store the snapshot of pods from the same (or the closest) node utilization computation
@@ -129,7 +132,7 @@ func (s *requestedUsageClient) sync(ctx context.Context, nodes []*v1.Node) error
 		s._nodeUtilization[node.Name] = nodeUsage
 	}
 
-	return nil
+	return nodes, nil
 }
 
 type actualUsageClient struct {
@@ -191,41 +194,49 @@ func (client *actualUsageClient) podUsage(pod *v1.Pod) (api.ReferencedResourceLi
 	return totalUsage, nil
 }
 
-func (client *actualUsageClient) sync(ctx context.Context, nodes []*v1.Node) error {
+func (client *actualUsageClient) sync(ctx context.Context, nodes []*v1.Node) ([]*v1.Node, error) {
 	client._nodeUtilization = make(map[string]api.ReferencedResourceList)
 	client._pods = make(map[string][]*v1.Pod)
 
 	nodesUsage, err := client.metricsCollector.AllNodesUsage()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	var syncedNodes []*v1.Node
 	for _, node := range nodes {
+		collectedNodeUsage, ok := nodesUsage[node.Name]
+		if !ok {
+			klog.V(1).InfoS("Node has no collected metrics and will be skipped", "node", klog.KObj(node))
+			continue
+		}
+
 		pods, err := podutil.ListPodsOnANode(node.Name, client.getPodsAssignedToNode, nil)
 		if err != nil {
 			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
-			return fmt.Errorf("error accessing %q node's pods: %v", node.Name, err)
+			return nil, fmt.Errorf("error accessing %q node's pods: %v", node.Name, err)
 		}
 
-		collectedNodeUsage, ok := nodesUsage[node.Name]
-		if !ok {
-			return fmt.Errorf("unable to find node %q in the collected metrics", node.Name)
-		}
 		collectedNodeUsage[v1.ResourcePods] = resource.NewQuantity(int64(len(pods)), resource.DecimalSI)
 
 		nodeUsage := api.ReferencedResourceList{}
 		for _, resourceName := range client.resourceNames {
 			if _, exists := collectedNodeUsage[resourceName]; !exists {
-				return fmt.Errorf("unable to find %q resource for collected %q node metric", resourceName, node.Name)
+				return nil, fmt.Errorf("unable to find %q resource for collected %q node metric", resourceName, node.Name)
 			}
 			nodeUsage[resourceName] = collectedNodeUsage[resourceName]
 		}
 		// store the snapshot of pods from the same (or the closest) node utilization computation
 		client._pods[node.Name] = pods
 		client._nodeUtilization[node.Name] = nodeUsage
+		syncedNodes = append(syncedNodes, node)
 	}
 
-	return nil
+	if len(nodes) > 0 && len(syncedNodes) == 0 {
+		klog.InfoS("No nodes had available metrics, balance cycle will be a no-op", "totalNodes", len(nodes))
+	}
+
+	return syncedNodes, nil
 }
 
 type prometheusUsageClient struct {
@@ -294,29 +305,36 @@ func NodeUsageFromPrometheusMetrics(ctx context.Context, promClient promapi.Clie
 	return nodeUsages, nil
 }
 
-func (client *prometheusUsageClient) sync(ctx context.Context, nodes []*v1.Node) error {
+func (client *prometheusUsageClient) sync(ctx context.Context, nodes []*v1.Node) ([]*v1.Node, error) {
 	client._nodeUtilization = make(map[string]map[v1.ResourceName]*resource.Quantity)
 	client._pods = make(map[string][]*v1.Pod)
 
 	nodeUsages, err := NodeUsageFromPrometheusMetrics(ctx, client.promClient, client.promQuery)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	var syncedNodes []*v1.Node
 	for _, node := range nodes {
 		if _, exists := nodeUsages[node.Name]; !exists {
-			return fmt.Errorf("unable to find metric entry for %v", node.Name)
+			klog.V(1).InfoS("Node has no collected metrics and will be skipped", "node", klog.KObj(node))
+			continue
 		}
 		pods, err := podutil.ListPodsOnANode(node.Name, client.getPodsAssignedToNode, nil)
 		if err != nil {
 			klog.V(2).InfoS("Node will not be processed, error accessing its pods", "node", klog.KObj(node), "err", err)
-			return fmt.Errorf("error accessing %q node's pods: %v", node.Name, err)
+			return nil, fmt.Errorf("error accessing %q node's pods: %v", node.Name, err)
 		}
 
 		// store the snapshot of pods from the same (or the closest) node utilization computation
 		client._pods[node.Name] = pods
 		client._nodeUtilization[node.Name] = nodeUsages[node.Name]
+		syncedNodes = append(syncedNodes, node)
 	}
 
-	return nil
+	if len(nodes) > 0 && len(syncedNodes) == 0 {
+		klog.InfoS("No nodes had available metrics, balance cycle will be a no-op", "totalNodes", len(nodes))
+	}
+
+	return syncedNodes, nil
 }
