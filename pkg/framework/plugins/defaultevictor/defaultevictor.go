@@ -90,7 +90,7 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 		return nil, err
 	}
 
-	if ev.args.NamespaceLabelSelector != nil && len(ev.args.NamespaceLabelSelector.MatchLabels) > 0 {
+	if ev.args.NamespaceLabelSelector != nil && (len(ev.args.NamespaceLabelSelector.MatchLabels) > 0 || len(ev.args.NamespaceLabelSelector.MatchExpressions) > 0) {
 		selector, nslErr := metav1.LabelSelectorAsSelector(ev.args.NamespaceLabelSelector)
 		if nslErr != nil {
 			return nil, fmt.Errorf("unable to convert namespaceLabelSelector to label selector: %w", nslErr)
@@ -447,7 +447,7 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 		}
 	}
 
-	if d.args.NamespaceLabelSelector == nil || len(d.args.NamespaceLabelSelector.MatchLabels) == 0 {
+	if d.args.NamespaceLabelSelector == nil || (len(d.args.NamespaceLabelSelector.MatchLabels) == 0 && len(d.args.NamespaceLabelSelector.MatchExpressions) == 0) {
 		return true
 	}
 	indexName := namespaceWithLabelSelector + d.handle.PluginInstanceID()
