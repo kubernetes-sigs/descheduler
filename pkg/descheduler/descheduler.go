@@ -532,23 +532,44 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		return err
 	}
 
-	wait.NonSlidingUntil(func() {
-		// A next context is created here intentionally to avoid nesting the spans via context.
-		sCtx, sSpan := tracing.Tracer().Start(ctx, "NonSlidingUntil")
+	executeCycle := func() error {
+		sCtx, sSpan := tracing.Tracer().Start(ctx, "DeschedulingCycle")
 		defer sSpan.End()
-
 		if err := runLoop(sCtx); err != nil {
 			sSpan.AddEvent("Descheduling loop failed", trace.WithAttributes(attribute.String("err", err.Error())))
 			klog.Error(err)
-			return
+			return err
 		}
-		// If there was no interval specified, send a signal to the stopChannel to end the wait.Until loop after 1 iteration
-		if rs.DeschedulingInterval.Seconds() == 0 {
-			cancel()
-		}
-	}, rs.DeschedulingInterval, ctx.Done())
+		return nil
+	}
 
-	return nil
+	executeCycle() //nolint:errcheck
+
+	if rs.DeschedulingInterval.Seconds() == 0 && rs.TriggerCh == nil {
+		return nil
+	}
+
+	var tickerC <-chan time.Time
+	if rs.DeschedulingInterval.Seconds() > 0 {
+		ticker := time.NewTicker(rs.DeschedulingInterval)
+		defer ticker.Stop()
+		tickerC = ticker.C
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-tickerC:
+			executeCycle() //nolint:errcheck
+		case resultCh := <-rs.TriggerCh:
+			klog.V(1).Info("Descheduling cycle triggered via API")
+			err := executeCycle()
+			if resultCh != nil {
+				resultCh <- err
+			}
+		}
+	}
 }
 
 func GetPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) (*api.PluginConfig, int) {
