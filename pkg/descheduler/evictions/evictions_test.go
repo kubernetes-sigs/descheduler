@@ -39,6 +39,9 @@ import (
 	"k8s.io/klog/v2"
 	utilptr "k8s.io/utils/ptr"
 
+	metricstest "k8s.io/component-base/metrics/testutil"
+
+	deschedulermetrics "sigs.k8s.io/descheduler/metrics"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/features"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -461,6 +464,113 @@ func TestEvictionRequestsCacheCleanup(t *testing.T) {
 	if totalERs := podEvictor.TotalEvictionRequests(); totalERs > 0 {
 		t.Fatalf("Expected 0 eviction requests, got %v instead", totalERs)
 	}
+}
+
+func TestEvictionInBackgroundMetrics(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), wait.ForeverTestTimeout)
+	defer cancel()
+
+	deschedulermetrics.Register()
+	deschedulermetrics.PodsEvicted.Reset()
+	deschedulermetrics.PodsEvictedTotal.Reset()
+
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+
+	ownerRef1 := test.GetReplicaSetOwnerRefList()
+	updatePod := func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+	}
+	updatePodWithEvictionAnnotation := func(pod *v1.Pod) {
+		updatePod(pod)
+		pod.Annotations = map[string]string{
+			EvictionRequestAnnotationKey: "",
+		}
+	}
+
+	// p1, p2: will be evicted in background
+	// p3, p4: will be evicted normally
+	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, updatePodWithEvictionAnnotation)
+	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, updatePodWithEvictionAnnotation)
+	p3 := test.BuildTestPod("p3", 100, 0, node1.Name, updatePod)
+	p4 := test.BuildTestPod("p4", 100, 0, node1.Name, updatePod)
+
+	client := fakeclientset.NewSimpleClientset(node1, p1, p2, p3, p4)
+	sharedInformerFactory := informers.NewSharedInformerFactory(client, 0)
+	_, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
+
+	podEvictor, err := NewPodEvictor(
+		ctx,
+		client,
+		eventRecorder,
+		sharedInformerFactory.Core().V1().Pods().Informer(),
+		initFeatureGates(),
+		NewOptions().WithMetricsEnabled(true),
+	)
+	if err != nil {
+		t.Fatalf("Unexpected error when creating a pod evictor: %v", err)
+	}
+
+	client.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() == "eviction" {
+			createAct, matched := action.(core.CreateActionImpl)
+			if !matched {
+				return false, nil, fmt.Errorf("unable to convert action to core.CreateActionImpl")
+			}
+			if eviction, matched := createAct.Object.(*policy.Eviction); matched {
+				if eviction.GetName() == "p1" || eviction.GetName() == "p2" {
+					return true, nil, &apierrors.StatusError{
+						ErrStatus: metav1.Status{
+							Reason:  metav1.StatusReasonTooManyRequests,
+							Message: "Eviction triggered evacuation",
+						},
+					}
+				}
+				return true, nil, nil
+			}
+		}
+		return false, nil, nil
+	})
+
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	evictOpts := EvictOptions{StrategyName: "TestStrategy", ProfileName: "TestProfile"}
+
+	// Cycle 1: p1/p2 go to background, p3/p4 are evicted normally.
+	podEvictor.EvictPod(ctx, p1, evictOpts)
+	podEvictor.EvictPod(ctx, p2, evictOpts)
+	podEvictor.EvictPod(ctx, p3, evictOpts)
+	podEvictor.EvictPod(ctx, p4, evictOpts)
+
+	// After cycle 1: 2 "background" (p1, p2), 2 "success" (p3, p4).
+	metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": "background"}, 2)
+	metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": "success"}, 2)
+
+	// Cycle 2: p1/p2 are still running (background eviction in progress).
+	// Re-attempting them must not emit any additional metrics.
+	podEvictor.EvictPod(ctx, p1, evictOpts)
+	podEvictor.EvictPod(ctx, p2, evictOpts)
+
+	// Counts must be unchanged after cycle 2.
+	metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": "background"}, 2)
+	metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": "success"}, 2)
+
+	// The background evictions complete: p1 and p2 are deleted.
+	// The informer's DeleteFunc fires and emits a "success" metric for each assumed pod.
+	client.CoreV1().Pods(p1.Namespace).Delete(ctx, p1.Name, metav1.DeleteOptions{})
+	client.CoreV1().Pods(p2.Namespace).Delete(ctx, p2.Name, metav1.DeleteOptions{})
+
+	// Poll until DeleteFunc has fired for both pods (informer is async).
+	if err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
+		return !podEvictor.erCache.hasPod(p1) && !podEvictor.erCache.hasPod(p2), nil
+	}); err != nil {
+		t.Fatalf("Timed out waiting for background evictions to complete: %v", err)
+	}
+
+	// After deletion: "success" grows by 2 (p1, p2 completed), "background" stays at 2.
+	metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": "success"}, 4)
+	metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": "background"}, 2)
 }
 
 func assertEqualEvents(t *testing.T, expected []string, actual <-chan string) {
