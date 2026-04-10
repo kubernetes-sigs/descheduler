@@ -81,6 +81,8 @@ kubectl create -f kubernetes/base/configmap.yaml
 kubectl create -f kubernetes/deployment/deployment.yaml
 ```
 
+> When running as a Deployment you can optionally enable the [Trigger API](#trigger-api) to manually trigger descheduling cycles on demand via an HTTP endpoint.
+
 ### Install Using Helm
 
 Starting with release v0.18.0 there is an official helm chart that can be used to install the
@@ -1147,6 +1149,108 @@ To get best results from HA mode some additional configurations might require:
 
 The metrics are served through https://localhost:10258/metrics by default.
 The address and port can be changed by setting `--binding-address` and `--secure-port` flags.
+
+## Trigger API
+
+The descheduler exposes an optional HTTP endpoint that allows any authorized caller to **manually trigger a descheduling cycle on demand** without waiting for the next scheduled interval or restarting the process.
+
+This is useful when:
+- A node drain or topology imbalance just occurred and eviction must run immediately, not in N minutes when the timer fires.
+- A CI/CD pipeline needs to rebalance pods after a rollout and must know the cycle has completed before proceeding.
+- An on-call engineer needs an emergency eviction pass without touching the descheduler deployment.
+- A cluster runs with a long `--descheduling-interval` to minimize churn, but requires an escape hatch for urgent situations.
+
+### Enabling the Trigger API
+
+Pass the `--enable-trigger-api` flag when starting the descheduler:
+
+```bash
+descheduler \
+  --policy-config-file=/etc/descheduler/policy.yaml \
+  --descheduling-interval=30m \
+  --enable-trigger-api
+```
+
+When using Helm, add the flag via `deschedulerCommandArguments`:
+
+```yaml
+deschedulerCommandArguments:
+  - "--enable-trigger-api"
+```
+
+The endpoint is registered on the existing HTTPS server (default port `10258`) — no additional ports, listeners, or TLS configuration is required.
+
+### Endpoint Reference
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/descheduler/run` | Synchronously trigger a full descheduling cycle |
+
+The request **blocks until the cycle completes** and returns a JSON response with the result. Only one trigger can be queued at a time; concurrent requests are rejected with `429`.
+
+#### Response codes
+
+| Code | Meaning |
+|------|---------|
+| `200 OK` | Cycle completed successfully |
+| `405 Method Not Allowed` | Non-POST request |
+| `429 Too Many Requests` | A trigger is already queued or a cycle is in progress |
+| `500 Internal Server Error` | Cycle failed; error detail in `message` field |
+| `504 Gateway Timeout` | HTTP client disconnected before the cycle finished |
+
+**Example success response:**
+```json
+{"message": "descheduling cycle completed successfully", "status": "ok"}
+```
+
+**Example rejection response (cycle already running):**
+```json
+{"message": "descheduling cycle already in progress or pending", "status": "error"}
+```
+
+### Usage Examples
+
+**Trigger from inside the cluster (exec into the descheduler pod):**
+
+```bash
+kubectl exec -n kube-system deploy/descheduler -- \
+  curl -sk -X POST https://localhost:10258/api/v1/descheduler/run
+```
+
+**Trigger via port-forward from a local machine:**
+
+```bash
+kubectl port-forward -n kube-system deploy/descheduler 10258:10258 &
+curl -sk -X POST https://localhost:10258/api/v1/descheduler/run
+```
+
+**Trigger with a timeout (useful in scripts):**
+
+```bash
+curl -sk --max-time 300 -X POST \
+  https://localhost:10258/api/v1/descheduler/run | jq .
+```
+
+**Use in a CI/CD step and assert success:**
+
+```bash
+curl -sk --max-time 300 -f -X POST \
+  https://localhost:10258/api/v1/descheduler/run \
+  | jq -e '.status == "ok"'
+```
+
+### On-Demand-Only Mode (no automatic interval)
+
+Setting `--descheduling-interval=0` together with `--enable-trigger-api` runs one cycle at startup and then keeps the process alive, responding exclusively to manual trigger requests. This is useful for environments where eviction should only happen on explicit operator request:
+
+```bash
+descheduler \
+  --policy-config-file=/etc/descheduler/policy.yaml \
+  --descheduling-interval=0 \
+  --enable-trigger-api
+```
+
+> **Note:** The trigger API is disabled by default. Existing deployments without `--enable-trigger-api` are completely unaffected.
 
 ## Compatibility Matrix
 The below compatibility matrix shows the k8s client package(client-go, apimachinery, etc) versions that descheduler
