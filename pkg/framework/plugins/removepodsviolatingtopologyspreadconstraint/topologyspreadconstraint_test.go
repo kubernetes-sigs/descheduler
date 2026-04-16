@@ -1825,30 +1825,65 @@ func TestFilterNodesByZoneBelowIdealAvg(t *testing.T) {
 		})
 	}
 
-	nodes := []*v1.Node{
-		makeNode("A1", "zoneA"),
-		makeNode("A2", "zoneA"),
-		makeNode("B1", "zoneB"),
-		makeNode("C1", "zoneC"),
-	}
-	sortedDomains := []topology{
-		{pair: topologyPair{"zone", "zoneA"}, pods: make([]*v1.Pod, 8)}, // above avg
-		{pair: topologyPair{"zone", "zoneB"}, pods: make([]*v1.Pod, 2)}, // below avg
-		{pair: topologyPair{"zone", "zoneC"}, pods: make([]*v1.Pod, 2)}, // below avg
-	}
-	idealAvg := 4.0
+	t.Run("happy path - filters above-average zones", func(t *testing.T) {
+		nodes := []*v1.Node{
+			makeNode("A1", "zoneA"),
+			makeNode("A2", "zoneA"),
+			makeNode("B1", "zoneB"),
+			makeNode("C1", "zoneC"),
+		}
+		sortedDomains := []topology{
+			{pair: topologyPair{"zone", "zoneA"}, pods: make([]*v1.Pod, 8)}, // above avg
+			{pair: topologyPair{"zone", "zoneB"}, pods: make([]*v1.Pod, 2)}, // below avg
+			{pair: topologyPair{"zone", "zoneC"}, pods: make([]*v1.Pod, 2)}, // below avg
+		}
+		idealAvg := 4.0
 
-	got := filterNodesByZoneBelowIdealAvg(nodes, sortedDomains, "zone", idealAvg)
+		got := filterNodesByZoneBelowIdealAvg(nodes, sortedDomains, "zone", idealAvg)
 
-	if _, ok := got["zoneA"]; ok {
-		t.Error("zoneA should not be in result: it is above idealAvg")
-	}
-	if zoneB := got["zoneB"]; len(zoneB) != 1 || zoneB[0].Name != "B1" {
-		t.Errorf("zoneB: got %v, want [B1]", zoneB)
-	}
-	if zoneC := got["zoneC"]; len(zoneC) != 1 || zoneC[0].Name != "C1" {
-		t.Errorf("zoneC: got %v, want [C1]", zoneC)
-	}
+		if _, ok := got["zoneA"]; ok {
+			t.Error("zoneA should not be in result: it is above idealAvg")
+		}
+		if zoneB := got["zoneB"]; len(zoneB) != 1 || zoneB[0].Name != "B1" {
+			t.Errorf("zoneB: got %v, want [B1]", zoneB)
+		}
+		if zoneC := got["zoneC"]; len(zoneC) != 1 || zoneC[0].Name != "C1" {
+			t.Errorf("zoneC: got %v, want [C1]", zoneC)
+		}
+	})
+
+	t.Run("domain at exactly idealAvg is excluded", func(t *testing.T) {
+		// A zone at exactly idealAvg (not strictly less) must not appear.
+		nodes2 := []*v1.Node{
+			makeNode("X1", "zoneX"),
+		}
+		domains2 := []topology{
+			{pair: topologyPair{"zone", "zoneX"}, pods: make([]*v1.Pod, 4)}, // == idealAvg
+		}
+		got := filterNodesByZoneBelowIdealAvg(nodes2, domains2, "zone", 4.0)
+		if _, ok := got["zoneX"]; ok {
+			t.Error("zoneX should not be in result: pod count equals idealAvg (not strictly less)")
+		}
+	})
+
+	t.Run("below-average domain with no eligible nodes is not included in result", func(t *testing.T) {
+		// Zone is below average but has no nodes with the matching label.
+		nodes3 := []*v1.Node{} // no nodes
+		domains3 := []topology{
+			{pair: topologyPair{"zone", "zoneY"}, pods: make([]*v1.Pod, 1)}, // below idealAvg=4
+		}
+		got := filterNodesByZoneBelowIdealAvg(nodes3, domains3, "zone", 4.0)
+		if _, ok := got["zoneY"]; ok {
+			t.Error("zoneY should not appear in result: it has no eligible nodes")
+		}
+	})
+
+	t.Run("empty sortedDomains returns empty map", func(t *testing.T) {
+		got := filterNodesByZoneBelowIdealAvg([]*v1.Node{makeNode("N1", "zoneZ")}, []topology{}, "zone", 4.0)
+		if len(got) != 0 {
+			t.Errorf("expected empty map, got %v", got)
+		}
+	})
 }
 
 func TestCheckIdenticalConstraints(t *testing.T) {
