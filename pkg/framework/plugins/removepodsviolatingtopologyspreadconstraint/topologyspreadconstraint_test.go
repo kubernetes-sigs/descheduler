@@ -1481,6 +1481,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			args: RemovePodsViolatingTopologySpreadConstraintArgs{
 				ZoneAwareNodeFit: utilptr.To(true),
 			},
+			nodeFit: true,
 		},
 		{
 			name: "ZoneAwareNodeFit=true, 2 domains [4,1], all target zones at CPU capacity, should evict 0 (no churn)",
@@ -1538,10 +1539,12 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					labels: map[string]string{"foo": "bar"},
 				},
 			}),
-			// idealAvg = (6+2+2)/3 = 3.33. balanceDomains runs two passes: first evicts 2 pods
-			// from zoneA toward zoneB (zoneC qualifies, so the gate passes), then evicts 1 more
-			// from zoneA toward zoneC → 3 total. zoneB's 50m CPU means it cannot receive new
-			// pods, but zoneC's 2000m CPU satisfies ZoneAwareNodeFit so eviction proceeds.
+			// idealAvg = (6+2+2)/3 = 3.33. Both zoneB (2 pods < 3.33) and zoneC (2 pods < 3.33)
+			// appear in nodesByZoneBelowIdealAvg. zoneB's node (B1, 50m CPU) cannot fit a 100m-request
+			// pod, but zoneC's node (C1, 2000m CPU) can — so podFitsAnyNodeInSomeZone returns true
+			// for every pod selected from zoneA. The topologyBalanceNodeFit gate (default true) also
+			// passes for the same reason (zoneC is in the merged nodesBelowIdealAvg flat list).
+			// balanceDomains selects ceil(6−3.33)=3 pods for eviction; all three pass both gates → 3 evicted.
 			expectedEvictedCount: 3,
 			namespaces:           []string{"ns1"},
 			args: RemovePodsViolatingTopologySpreadConstraintArgs{
@@ -1550,7 +1553,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			nodeFit: true,
 		},
 		{
-			name: "ZoneAwareNodeFit=false (default), 2 domains [4,1], target zone at CPU capacity, existing TopologyBalanceNodeFit still blocks eviction",
+			name: "ZoneAwareNodeFit omitted, nodeFit=true, target zone at CPU capacity, TopologyBalanceNodeFit=true (default) blocks eviction — backward compat",
 			nodes: []*v1.Node{
 				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
 				test.BuildTestNode("B1", 50, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
