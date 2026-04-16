@@ -1454,6 +1454,127 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			namespaces:           []string{"ns1"},
 			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
 		},
+		// --- ZoneAwareNodeFit test cases ---
+		{
+			name: "ZoneAwareNodeFit=true, 2 domains [4,1], target zone has capacity, should evict 1",
+			nodes: []*v1.Node{
+				// zoneA is over-loaded (4 pods). zoneB is under-loaded (1 pod) and has plenty of CPU.
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("A2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       4,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  1,
+					node:   "B1",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			namespaces:           []string{"ns1"},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				ZoneAwareNodeFit: utilptr.To(true),
+			},
+		},
+		{
+			name: "ZoneAwareNodeFit=true, 2 domains [4,1], all target zones at CPU capacity, should evict 0 (no churn)",
+			nodes: []*v1.Node{
+				// zoneA is over-loaded. zoneB is under-loaded by pod count BUT has only 50m CPU
+				// available — not enough for a 100m-request pod.
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("A2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 50, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       4,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  1,
+					node:   "B1",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			// Pod requests 100m CPU but zoneB node only has 50m → no eviction.
+			expectedEvictedCount: 0,
+			namespaces:           []string{"ns1"},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				ZoneAwareNodeFit: utilptr.To(true),
+			},
+			nodeFit: true,
+		},
+		{
+			name: "ZoneAwareNodeFit=true, 3 domains [6,2,2], one under-loaded zone at capacity, other has room, should evict 3",
+			nodes: []*v1.Node{
+				// zoneA: over-loaded. zoneB: under-loaded, at CPU capacity. zoneC: under-loaded, has CPU.
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 50, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+				test.BuildTestNode("C1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneC" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       6,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  2,
+					node:   "B1",
+					labels: map[string]string{"foo": "bar"},
+				},
+				{
+					count:  2,
+					node:   "C1",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			// idealAvg = (6+2+2)/3 = 3.33. balanceDomains runs two passes: first evicts 2 pods
+			// from zoneA toward zoneB (zoneC qualifies, so the gate passes), then evicts 1 more
+			// from zoneA toward zoneC → 3 total. zoneB's 50m CPU means it cannot receive new
+			// pods, but zoneC's 2000m CPU satisfies ZoneAwareNodeFit so eviction proceeds.
+			expectedEvictedCount: 3,
+			namespaces:           []string{"ns1"},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				ZoneAwareNodeFit: utilptr.To(true),
+			},
+			nodeFit: true,
+		},
+		{
+			name: "ZoneAwareNodeFit=false (default), 2 domains [4,1], target zone at CPU capacity, existing TopologyBalanceNodeFit still blocks eviction",
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 50, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       4,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  1,
+					node:   "B1",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			// ZoneAwareNodeFit is off, but TopologyBalanceNodeFit (default true) still prevents
+			// eviction when zoneB nodes can't fit the pod — existing behaviour is unchanged.
+			expectedEvictedCount: 0,
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
+			nodeFit:              true,
+		},
 	}
 
 	for _, tc := range testCases {
