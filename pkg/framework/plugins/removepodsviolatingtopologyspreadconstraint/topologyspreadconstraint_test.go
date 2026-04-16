@@ -1578,6 +1578,36 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
 			nodeFit:              true,
 		},
+		{
+			// Isolated test: TopologyBalanceNodeFit=false disables the aggregate gate; ZoneAwareNodeFit=true
+			// re-enables the per-node fit check zone-by-zone. With zoneB at CPU capacity the zone-aware
+			// gate should block eviction even though TopologyBalanceNodeFit is off.
+			name: "ZoneAwareNodeFit=true, TopologyBalanceNodeFit=false, target zone at CPU capacity, should evict 0",
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 50, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       4,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  1,
+					node:   "B1",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 0,
+			namespaces:           []string{"ns1"},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				TopologyBalanceNodeFit: utilptr.To(false),
+				ZoneAwareNodeFit:       utilptr.To(true),
+			},
+			nodeFit: true,
+		},
 	}
 
 	for _, tc := range testCases {
