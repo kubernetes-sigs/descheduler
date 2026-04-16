@@ -49,6 +49,7 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 				LabelSelector:          nil,
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
 				TopologyBalanceNodeFit: utilptr.To(true),
+				ZoneAwareNodeFit:       utilptr.To(false),
 			},
 		},
 		{
@@ -63,6 +64,7 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 				LabelSelector:          &metav1.LabelSelector{},
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule, v1.ScheduleAnyway},
 				TopologyBalanceNodeFit: utilptr.To(true),
+				ZoneAwareNodeFit:       utilptr.To(false),
 			},
 		},
 		{
@@ -71,6 +73,7 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 			want: &RemovePodsViolatingTopologySpreadConstraintArgs{
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
 				TopologyBalanceNodeFit: utilptr.To(true),
+				ZoneAwareNodeFit:       utilptr.To(false),
 			},
 		},
 		{
@@ -81,6 +84,7 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 			want: &RemovePodsViolatingTopologySpreadConstraintArgs{
 				TopologyBalanceNodeFit: utilptr.To(false),
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
+				ZoneAwareNodeFit:       utilptr.To(false),
 			},
 		},
 		{
@@ -91,6 +95,7 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 			want: &RemovePodsViolatingTopologySpreadConstraintArgs{
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
 				TopologyBalanceNodeFit: utilptr.To(true),
+				ZoneAwareNodeFit:       utilptr.To(false),
 			},
 		},
 	}
@@ -101,5 +106,21 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 				t.Errorf("Got unexpected defaults (-want, +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestZoneAwareNodeFitDefault(t *testing.T) {
+	args := &RemovePodsViolatingTopologySpreadConstraintArgs{}
+	SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(args)
+
+	if args.ZoneAwareNodeFit == nil {
+		t.Fatal("ZoneAwareNodeFit must not be nil after SetDefaults")
+	}
+	if *args.ZoneAwareNodeFit != false {
+		t.Errorf("ZoneAwareNodeFit default: got %v, want false", *args.ZoneAwareNodeFit)
+	}
+	// Existing default must not regress
+	if args.TopologyBalanceNodeFit == nil || !*args.TopologyBalanceNodeFit {
+		t.Error("TopologyBalanceNodeFit must default to true")
 	}
 }
