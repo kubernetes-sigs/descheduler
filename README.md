@@ -697,6 +697,16 @@ The `topologyBalanceNodeFit` arg is used when balancing topology domains while t
 topologyBalanceNodeFit: false
 ```
 
+The `zoneAwareNodeFit` arg (default: `false`) gates eviction on per-zone capacity: a pod is only
+evicted from an over-loaded zone if at least one specific under-loaded zone (identified by the
+constraint's `TopologyKey`) has sufficient resource capacity (CPU, memory, pod slots) to schedule
+the pod. This prevents eviction churn where a pod is evicted but immediately rescheduled back into
+the same over-loaded zone because no target zone has capacity. Works independently of
+`topologyBalanceNodeFit`; enabling both is valid.
+```yaml
+zoneAwareNodeFit: true
+```
+
 Strategy parameter `labelSelector` is not utilized when balancing topology domains and is only applied during eviction to determine if the pod can be evicted.
 
 [Supported Constraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/#spread-constraint-definition) fields:
@@ -720,6 +730,7 @@ Strategy parameter `labelSelector` is not utilized when balancing topology domai
 |`labelSelector`|(see [label filtering](#label-filtering))|
 |`constraints`|(see [whenUnsatisfiable](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.27/#topologyspreadconstraint-v1-core))||
 |`topologyBalanceNodeFit`|bool|default `true`. [node fit filtering](#node-fit-filtering) when balancing topology domains|
+|`zoneAwareNodeFit`|bool|default `false`. When enabled, gates eviction on per-zone capacity: pod must fit on a node within at least one specific under-loaded zone (opt-in, works independently of `topologyBalanceNodeFit`)|
 
 **Example:**
 
