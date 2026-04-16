@@ -1818,6 +1818,39 @@ func getDefaultTopologyConstraints(maxSkew int32, edits ...func(*v1.TopologySpre
 	return []v1.TopologySpreadConstraint{constraint}
 }
 
+func TestFilterNodesByZoneBelowIdealAvg(t *testing.T) {
+	makeNode := func(name, zone string) *v1.Node {
+		return test.BuildTestNode(name, 1000, 2000, 10, func(n *v1.Node) {
+			n.Labels["zone"] = zone
+		})
+	}
+
+	nodes := []*v1.Node{
+		makeNode("A1", "zoneA"),
+		makeNode("A2", "zoneA"),
+		makeNode("B1", "zoneB"),
+		makeNode("C1", "zoneC"),
+	}
+	sortedDomains := []topology{
+		{pair: topologyPair{"zone", "zoneA"}, pods: make([]*v1.Pod, 8)}, // above avg
+		{pair: topologyPair{"zone", "zoneB"}, pods: make([]*v1.Pod, 2)}, // below avg
+		{pair: topologyPair{"zone", "zoneC"}, pods: make([]*v1.Pod, 2)}, // below avg
+	}
+	idealAvg := 4.0
+
+	got := filterNodesByZoneBelowIdealAvg(nodes, sortedDomains, "zone", idealAvg)
+
+	if _, ok := got["zoneA"]; ok {
+		t.Error("zoneA should not be in result: it is above idealAvg")
+	}
+	if zoneB := got["zoneB"]; len(zoneB) != 1 || zoneB[0].Name != "B1" {
+		t.Errorf("zoneB: got %v, want [B1]", zoneB)
+	}
+	if zoneC := got["zoneC"]; len(zoneC) != 1 || zoneC[0].Name != "C1" {
+		t.Errorf("zoneC: got %v, want [C1]", zoneC)
+	}
+}
+
 func TestCheckIdenticalConstraints(t *testing.T) {
 	selector, _ := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}})
 
