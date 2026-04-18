@@ -371,7 +371,10 @@ func (r *SPRenderer) smartLeftAngle(out *bytes.Buffer, previousChar byte, text [
 		i++
 	}
 
-	out.Write(text[:i+1])
+	if i == len(text) { // No > found until the end of the text
+		return i
+	}
+	out.Write(text[:i+1]) // include the '>'
 	return i
 }
 
