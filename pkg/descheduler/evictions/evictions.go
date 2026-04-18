@@ -25,10 +25,12 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -229,6 +231,11 @@ type PodEvictor struct {
 	erCache                          *evictionRequestsCache
 	featureGates                     featuregate.FeatureGate
 
+	// restartedDeployments tracks "namespace/name" of Deployments already rollout-restarted this cycle
+	restartedDeployments map[string]bool
+	// lastRolloutRestart indicates the most recent evictPod call used rollout restart
+	lastRolloutRestart bool
+
 	// registeredHandlers contains the registrations of all handlers. It's used to check if all handlers have finished syncing before the scheduling cycles start.
 	registeredHandlers []cache.ResourceEventHandlerRegistration
 }
@@ -258,6 +265,7 @@ func NewPodEvictor(
 		metricsEnabled:                   options.metricsEnabled,
 		nodePodCount:                     make(nodePodEvictedCount),
 		namespacePodCount:                make(namespacePodEvictCount),
+		restartedDeployments:             make(map[string]bool),
 		featureGates:                     featureGates,
 	}
 
@@ -401,6 +409,7 @@ func (pe *PodEvictor) ResetCounters() {
 	pe.nodePodCount = make(nodePodEvictedCount)
 	pe.namespacePodCount = make(namespacePodEvictCount)
 	pe.totalPodCount = 0
+	pe.restartedDeployments = make(map[string]bool)
 }
 
 func (pe *PodEvictor) evictionRequestsTotal() uint {
@@ -552,10 +561,15 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		metrics.PodsEvictedTotal.With(map[string]string{"result": "success", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
 	}
 
+	method := "eviction"
+	if pe.lastRolloutRestart {
+		method = "rollout-restart"
+	}
+
 	if pe.dryRun {
-		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", opts.StrategyName, "node", pod.Spec.NodeName, "profile", opts.ProfileName)
+		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", opts.StrategyName, "node", pod.Spec.NodeName, "profile", opts.ProfileName, "method", method)
 	} else {
-		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", opts.StrategyName, "node", pod.Spec.NodeName, "profile", opts.ProfileName)
+		klog.V(1).InfoS("Evicted pod", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", opts.StrategyName, "node", pod.Spec.NodeName, "profile", opts.ProfileName, "method", method)
 		reason := opts.Reason
 		if len(reason) == 0 {
 			reason = opts.StrategyName
@@ -563,13 +577,108 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 				reason = "NotSet"
 			}
 		}
-		pe.eventRecorder.Eventf(pod, nil, v1.EventTypeNormal, reason, "Descheduled", "pod eviction from %v node by sigs.k8s.io/descheduler", pod.Spec.NodeName)
+		if pe.lastRolloutRestart {
+			pe.eventRecorder.Eventf(pod, nil, v1.EventTypeNormal, reason, "Descheduled", "pod rollout-restarted (single-replica) from %v node by sigs.k8s.io/descheduler", pod.Spec.NodeName)
+		} else {
+			pe.eventRecorder.Eventf(pod, nil, v1.EventTypeNormal, reason, "Descheduled", "pod eviction from %v node by sigs.k8s.io/descheduler", pod.Spec.NodeName)
+		}
 	}
 	return nil
 }
 
+// resolveDeploymentOwner walks the owner chain Pod → ReplicaSet → Deployment.
+// Returns (nil, nil) if the pod is not owned by a Deployment.
+func (pe *PodEvictor) resolveDeploymentOwner(ctx context.Context, pod *v1.Pod) (*appsv1.Deployment, error) {
+	var rsName string
+	for _, ref := range pod.OwnerReferences {
+		if ref.Kind == "ReplicaSet" {
+			rsName = ref.Name
+			break
+		}
+	}
+	if rsName == "" {
+		return nil, nil
+	}
+
+	rs, err := pe.client.AppsV1().ReplicaSets(pod.Namespace).Get(ctx, rsName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ReplicaSet %s/%s: %v", pod.Namespace, rsName, err)
+	}
+
+	var deployName string
+	for _, ref := range rs.OwnerReferences {
+		if ref.Kind == "Deployment" {
+			deployName = ref.Name
+			break
+		}
+	}
+	if deployName == "" {
+		return nil, nil
+	}
+
+	deploy, err := pe.client.AppsV1().Deployments(pod.Namespace).Get(ctx, deployName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Deployment %s/%s: %v", pod.Namespace, deployName, err)
+	}
+
+	return deploy, nil
+}
+
+// rolloutRestartDeployment patches the Deployment's pod template annotation to trigger a rolling restart.
+func (pe *PodEvictor) rolloutRestartDeployment(ctx context.Context, deploy *appsv1.Deployment) error {
+	patch := fmt.Sprintf(`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`, time.Now().Format(time.RFC3339))
+	_, err := pe.client.AppsV1().Deployments(deploy.Namespace).Patch(ctx, deploy.Name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+	return err
+}
+
+// tryRolloutRestart checks if the pod belongs to a single-replica Deployment with RollingUpdate
+// strategy and triggers a rollout restart instead of eviction to avoid downtime.
+// Returns (true, true/false, nil) if handled (ignore, rolloutRestarted),
+// or (false, false, nil) if normal eviction should proceed.
+func (pe *PodEvictor) tryRolloutRestart(ctx context.Context, pod *v1.Pod) (handled bool, ignore bool) {
+	deploy, err := pe.resolveDeploymentOwner(ctx, pod)
+	if err != nil {
+		klog.V(3).InfoS("Failed to resolve Deployment owner, falling through to normal eviction", "pod", klog.KObj(pod), "err", err)
+		return false, false
+	}
+	if deploy == nil {
+		return false, false
+	}
+
+	replicas := int32(1)
+	if deploy.Spec.Replicas != nil {
+		replicas = *deploy.Spec.Replicas
+	}
+	isRecreate := deploy.Spec.Strategy.Type == appsv1.RecreateDeploymentStrategyType
+
+	if replicas != 1 || isRecreate || deploy.Status.UnavailableReplicas != 0 {
+		return false, false
+	}
+
+	deployKey := deploy.Namespace + "/" + deploy.Name
+	if pe.restartedDeployments[deployKey] {
+		klog.V(3).InfoS("Deployment already rollout-restarted this cycle, skipping", "deployment", deployKey, "pod", klog.KObj(pod))
+		return true, true
+	}
+	if !pe.dryRun {
+		if err := pe.rolloutRestartDeployment(ctx, deploy); err != nil {
+			klog.V(1).InfoS("Failed to rollout restart Deployment, falling through to normal eviction", "deployment", deployKey, "pod", klog.KObj(pod), "err", err)
+			return false, false
+		}
+	}
+	klog.V(1).InfoS("Triggered rollout restart for single-replica Deployment instead of eviction", "deployment", deployKey, "pod", klog.KObj(pod), "dryRun", pe.dryRun)
+	pe.restartedDeployments[deployKey] = true
+	return true, false
+}
+
 // return (ignore, err)
 func (pe *PodEvictor) evictPod(ctx context.Context, pod *v1.Pod, opts EvictOptions) (bool, error) {
+	pe.lastRolloutRestart = false
+
+	if handled, ignore := pe.tryRolloutRestart(ctx, pod); handled {
+		pe.lastRolloutRestart = !ignore
+		return ignore, nil
+	}
 	deleteOptions := &metav1.DeleteOptions{
 		GracePeriodSeconds: pe.gracePeriodSeconds,
 	}

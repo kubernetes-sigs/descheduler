@@ -21,9 +21,11 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -460,6 +462,470 @@ func TestEvictionRequestsCacheCleanup(t *testing.T) {
 	podEvictor.erCache.cleanCache(ctx)
 	if totalERs := podEvictor.TotalEvictionRequests(); totalERs > 0 {
 		t.Fatalf("Expected 0 eviction requests, got %v instead", totalERs)
+	}
+}
+
+// helper to build a ReplicaSet owned by a Deployment
+func buildTestReplicaSet(name, namespace, deployName string) *appsv1.ReplicaSet {
+	return &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{Kind: "Deployment", Name: deployName, APIVersion: "apps/v1"},
+			},
+		},
+	}
+}
+
+// helper to build a Deployment
+func buildTestDeployment(name, namespace string, replicas *int32, strategy appsv1.DeploymentStrategyType) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: replicas,
+			Strategy: appsv1.DeploymentStrategy{Type: strategy},
+		},
+	}
+}
+
+func TestRolloutRestartSingleReplica(t *testing.T) {
+	ctx := context.Background()
+
+	rs := buildTestReplicaSet("rs-1", "default", "deploy-1")
+	deploy := buildTestDeployment("deploy-1", "default", utilptr.To[int32](1), appsv1.RollingUpdateDeploymentStrategyType)
+
+	pod := test.BuildTestPod("p1", 400, 0, "node1", func(p *v1.Pod) {
+		p.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			{Kind: "ReplicaSet", Name: "rs-1", APIVersion: "apps/v1"},
+		}
+	})
+
+	fakeClient := fakeclientset.NewSimpleClientset(pod, rs, deploy)
+
+	var patchCount int32
+	fakeClient.PrependReactor("patch", "deployments", func(action core.Action) (bool, runtime.Object, error) {
+		atomic.AddInt32(&patchCount, 1)
+		return true, deploy, nil
+	})
+
+	var evictionCalled int32
+	fakeClient.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() == "eviction" {
+			atomic.AddInt32(&evictionCalled, 1)
+			return true, nil, nil
+		}
+		return false, nil, nil
+	})
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	podEvictor, err := NewPodEvictor(ctx, fakeClient, &events.FakeRecorder{}, sharedInformerFactory.Core().V1().Pods().Informer(), initFeatureGates(), NewOptions())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	ignore, err := podEvictor.evictPod(ctx, pod, EvictOptions{})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if ignore {
+		t.Fatal("Expected ignore=false for rollout restart")
+	}
+	if atomic.LoadInt32(&patchCount) != 1 {
+		t.Errorf("Expected 1 PATCH on deployments, got %d", atomic.LoadInt32(&patchCount))
+	}
+	if atomic.LoadInt32(&evictionCalled) != 0 {
+		t.Errorf("Expected 0 eviction API calls, got %d", atomic.LoadInt32(&evictionCalled))
+	}
+}
+
+func TestRolloutRestartMultiReplica(t *testing.T) {
+	ctx := context.Background()
+
+	rs := buildTestReplicaSet("rs-1", "default", "deploy-1")
+	deploy := buildTestDeployment("deploy-1", "default", utilptr.To[int32](3), appsv1.RollingUpdateDeploymentStrategyType)
+
+	pod := test.BuildTestPod("p1", 400, 0, "node1", func(p *v1.Pod) {
+		p.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			{Kind: "ReplicaSet", Name: "rs-1", APIVersion: "apps/v1"},
+		}
+	})
+
+	fakeClient := fakeclientset.NewSimpleClientset(pod, rs, deploy)
+
+	var patchCount int32
+	fakeClient.PrependReactor("patch", "deployments", func(action core.Action) (bool, runtime.Object, error) {
+		atomic.AddInt32(&patchCount, 1)
+		return true, deploy, nil
+	})
+
+	fakeClient.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() == "eviction" {
+			return true, nil, nil
+		}
+		return false, nil, nil
+	})
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	podEvictor, err := NewPodEvictor(ctx, fakeClient, &events.FakeRecorder{}, sharedInformerFactory.Core().V1().Pods().Informer(), initFeatureGates(), NewOptions())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	ignore, err := podEvictor.evictPod(ctx, pod, EvictOptions{})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if ignore {
+		t.Fatal("Expected ignore=false for normal eviction")
+	}
+	if atomic.LoadInt32(&patchCount) != 0 {
+		t.Errorf("Expected 0 PATCH on deployments for multi-replica, got %d", atomic.LoadInt32(&patchCount))
+	}
+}
+
+func TestRolloutRestartNonDeploymentPod(t *testing.T) {
+	ctx := context.Background()
+
+	pod := test.BuildTestPod("p1", 400, 0, "node1", func(p *v1.Pod) {
+		p.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			{Kind: "StatefulSet", Name: "ss-1", APIVersion: "apps/v1"},
+		}
+	})
+
+	fakeClient := fakeclientset.NewSimpleClientset(pod)
+
+	var patchCount int32
+	fakeClient.PrependReactor("patch", "deployments", func(action core.Action) (bool, runtime.Object, error) {
+		atomic.AddInt32(&patchCount, 1)
+		return true, nil, nil
+	})
+
+	fakeClient.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() == "eviction" {
+			return true, nil, nil
+		}
+		return false, nil, nil
+	})
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	podEvictor, err := NewPodEvictor(ctx, fakeClient, &events.FakeRecorder{}, sharedInformerFactory.Core().V1().Pods().Informer(), initFeatureGates(), NewOptions())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	ignore, err := podEvictor.evictPod(ctx, pod, EvictOptions{})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if ignore {
+		t.Fatal("Expected ignore=false for normal eviction")
+	}
+	if atomic.LoadInt32(&patchCount) != 0 {
+		t.Errorf("Expected 0 PATCH for non-Deployment pod, got %d", atomic.LoadInt32(&patchCount))
+	}
+}
+
+func TestRolloutRestartDeduplication(t *testing.T) {
+	ctx := context.Background()
+
+	rs := buildTestReplicaSet("rs-1", "default", "deploy-1")
+	deploy := buildTestDeployment("deploy-1", "default", utilptr.To[int32](1), appsv1.RollingUpdateDeploymentStrategyType)
+
+	pod1 := test.BuildTestPod("p1", 400, 0, "node1", func(p *v1.Pod) {
+		p.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			{Kind: "ReplicaSet", Name: "rs-1", APIVersion: "apps/v1"},
+		}
+	})
+	pod2 := test.BuildTestPod("p2", 400, 0, "node1", func(p *v1.Pod) {
+		p.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			{Kind: "ReplicaSet", Name: "rs-1", APIVersion: "apps/v1"},
+		}
+	})
+
+	fakeClient := fakeclientset.NewSimpleClientset(pod1, pod2, rs, deploy)
+
+	var patchCount int32
+	fakeClient.PrependReactor("patch", "deployments", func(action core.Action) (bool, runtime.Object, error) {
+		atomic.AddInt32(&patchCount, 1)
+		return true, deploy, nil
+	})
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	podEvictor, err := NewPodEvictor(ctx, fakeClient, &events.FakeRecorder{}, sharedInformerFactory.Core().V1().Pods().Informer(), initFeatureGates(), NewOptions())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// First call should trigger rollout restart
+	ignore1, err := podEvictor.evictPod(ctx, pod1, EvictOptions{})
+	if err != nil {
+		t.Fatalf("Unexpected error on first call: %v", err)
+	}
+	if ignore1 {
+		t.Fatal("Expected ignore=false on first call")
+	}
+
+	// Second call for same deployment should be ignored (deduplicated)
+	ignore2, err := podEvictor.evictPod(ctx, pod2, EvictOptions{})
+	if err != nil {
+		t.Fatalf("Unexpected error on second call: %v", err)
+	}
+	if !ignore2 {
+		t.Fatal("Expected ignore=true on second call (deduplication)")
+	}
+
+	if atomic.LoadInt32(&patchCount) != 1 {
+		t.Errorf("Expected exactly 1 PATCH, got %d", atomic.LoadInt32(&patchCount))
+	}
+}
+
+func TestRolloutRestartDryRun(t *testing.T) {
+	ctx := context.Background()
+
+	rs := buildTestReplicaSet("rs-1", "default", "deploy-1")
+	deploy := buildTestDeployment("deploy-1", "default", utilptr.To[int32](1), appsv1.RollingUpdateDeploymentStrategyType)
+
+	pod := test.BuildTestPod("p1", 400, 0, "node1", func(p *v1.Pod) {
+		p.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			{Kind: "ReplicaSet", Name: "rs-1", APIVersion: "apps/v1"},
+		}
+	})
+
+	fakeClient := fakeclientset.NewSimpleClientset(pod, rs, deploy)
+
+	var patchCount int32
+	fakeClient.PrependReactor("patch", "deployments", func(action core.Action) (bool, runtime.Object, error) {
+		atomic.AddInt32(&patchCount, 1)
+		return true, deploy, nil
+	})
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	podEvictor, err := NewPodEvictor(ctx, fakeClient, &events.FakeRecorder{}, sharedInformerFactory.Core().V1().Pods().Informer(), initFeatureGates(),
+		NewOptions().WithDryRun(true))
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	ignore, err := podEvictor.evictPod(ctx, pod, EvictOptions{})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if ignore {
+		t.Fatal("Expected ignore=false for dry-run rollout restart")
+	}
+	if atomic.LoadInt32(&patchCount) != 0 {
+		t.Errorf("Expected 0 PATCH in dry-run mode, got %d", atomic.LoadInt32(&patchCount))
+	}
+	if !podEvictor.restartedDeployments["default/deploy-1"] {
+		t.Error("Expected restartedDeployments to be set even in dry-run")
+	}
+}
+
+func TestRolloutRestartResolveFailureFallback(t *testing.T) {
+	ctx := context.Background()
+
+	// Pod references an RS that doesn't exist → resolveDeploymentOwner fails → fallback to normal eviction
+	pod := test.BuildTestPod("p1", 400, 0, "node1", func(p *v1.Pod) {
+		p.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			{Kind: "ReplicaSet", Name: "nonexistent-rs", APIVersion: "apps/v1"},
+		}
+	})
+
+	fakeClient := fakeclientset.NewSimpleClientset(pod)
+
+	var evictionCalled int32
+	fakeClient.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() == "eviction" {
+			atomic.AddInt32(&evictionCalled, 1)
+			return true, nil, nil
+		}
+		return false, nil, nil
+	})
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	podEvictor, err := NewPodEvictor(ctx, fakeClient, &events.FakeRecorder{}, sharedInformerFactory.Core().V1().Pods().Informer(), initFeatureGates(), NewOptions())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	ignore, err := podEvictor.evictPod(ctx, pod, EvictOptions{})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if ignore {
+		t.Fatal("Expected ignore=false for fallback eviction")
+	}
+	if atomic.LoadInt32(&evictionCalled) != 1 {
+		t.Errorf("Expected 1 eviction API call (fallback), got %d", atomic.LoadInt32(&evictionCalled))
+	}
+}
+
+func TestRolloutRestartRecreateStrategy(t *testing.T) {
+	ctx := context.Background()
+
+	rs := buildTestReplicaSet("rs-1", "default", "deploy-1")
+	deploy := buildTestDeployment("deploy-1", "default", utilptr.To[int32](1), appsv1.RecreateDeploymentStrategyType)
+
+	pod := test.BuildTestPod("p1", 400, 0, "node1", func(p *v1.Pod) {
+		p.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			{Kind: "ReplicaSet", Name: "rs-1", APIVersion: "apps/v1"},
+		}
+	})
+
+	fakeClient := fakeclientset.NewSimpleClientset(pod, rs, deploy)
+
+	var patchCount int32
+	fakeClient.PrependReactor("patch", "deployments", func(action core.Action) (bool, runtime.Object, error) {
+		atomic.AddInt32(&patchCount, 1)
+		return true, deploy, nil
+	})
+
+	var evictionCalled int32
+	fakeClient.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() == "eviction" {
+			atomic.AddInt32(&evictionCalled, 1)
+			return true, nil, nil
+		}
+		return false, nil, nil
+	})
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	podEvictor, err := NewPodEvictor(ctx, fakeClient, &events.FakeRecorder{}, sharedInformerFactory.Core().V1().Pods().Informer(), initFeatureGates(), NewOptions())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	ignore, err := podEvictor.evictPod(ctx, pod, EvictOptions{})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if ignore {
+		t.Fatal("Expected ignore=false for Recreate strategy")
+	}
+	if atomic.LoadInt32(&patchCount) != 0 {
+		t.Errorf("Expected 0 PATCH for Recreate strategy, got %d", atomic.LoadInt32(&patchCount))
+	}
+	if atomic.LoadInt32(&evictionCalled) != 1 {
+		t.Errorf("Expected 1 eviction API call for Recreate strategy, got %d", atomic.LoadInt32(&evictionCalled))
+	}
+}
+
+func TestRolloutRestartNilReplicas(t *testing.T) {
+	ctx := context.Background()
+
+	rs := buildTestReplicaSet("rs-1", "default", "deploy-1")
+	// nil replicas = k8s default of 1
+	deploy := buildTestDeployment("deploy-1", "default", nil, appsv1.RollingUpdateDeploymentStrategyType)
+
+	pod := test.BuildTestPod("p1", 400, 0, "node1", func(p *v1.Pod) {
+		p.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			{Kind: "ReplicaSet", Name: "rs-1", APIVersion: "apps/v1"},
+		}
+	})
+
+	fakeClient := fakeclientset.NewSimpleClientset(pod, rs, deploy)
+
+	var patchCount int32
+	fakeClient.PrependReactor("patch", "deployments", func(action core.Action) (bool, runtime.Object, error) {
+		atomic.AddInt32(&patchCount, 1)
+		return true, deploy, nil
+	})
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	podEvictor, err := NewPodEvictor(ctx, fakeClient, &events.FakeRecorder{}, sharedInformerFactory.Core().V1().Pods().Informer(), initFeatureGates(), NewOptions())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	ignore, err := podEvictor.evictPod(ctx, pod, EvictOptions{})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if ignore {
+		t.Fatal("Expected ignore=false for rollout restart with nil replicas")
+	}
+	if atomic.LoadInt32(&patchCount) != 1 {
+		t.Errorf("Expected 1 PATCH for nil replicas (treated as 1), got %d", atomic.LoadInt32(&patchCount))
+	}
+}
+
+func TestRolloutRestartUnhealthyDeployment(t *testing.T) {
+	ctx := context.Background()
+
+	rs := buildTestReplicaSet("rs-1", "default", "deploy-1")
+	deploy := buildTestDeployment("deploy-1", "default", utilptr.To[int32](1), appsv1.RollingUpdateDeploymentStrategyType)
+	// Simulate a failed rollout: new pod is not ready
+	deploy.Status.UnavailableReplicas = 1
+
+	pod := test.BuildTestPod("p1", 400, 0, "node1", func(p *v1.Pod) {
+		p.ObjectMeta.OwnerReferences = []metav1.OwnerReference{
+			{Kind: "ReplicaSet", Name: "rs-1", APIVersion: "apps/v1"},
+		}
+	})
+
+	fakeClient := fakeclientset.NewSimpleClientset(pod, rs, deploy)
+
+	var patchCount int32
+	fakeClient.PrependReactor("patch", "deployments", func(action core.Action) (bool, runtime.Object, error) {
+		atomic.AddInt32(&patchCount, 1)
+		return true, deploy, nil
+	})
+
+	var evictionCount int32
+	fakeClient.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() == "eviction" {
+			atomic.AddInt32(&evictionCount, 1)
+			return true, nil, nil
+		}
+		return false, nil, nil
+	})
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	podEvictor, err := NewPodEvictor(ctx, fakeClient, &events.FakeRecorder{}, sharedInformerFactory.Core().V1().Pods().Informer(), initFeatureGates(), NewOptions())
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	_, err = podEvictor.evictPod(ctx, pod, EvictOptions{})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if atomic.LoadInt32(&patchCount) != 0 {
+		t.Errorf("Expected no PATCH for unhealthy deployment, got %d", atomic.LoadInt32(&patchCount))
+	}
+	if atomic.LoadInt32(&evictionCount) != 1 {
+		t.Errorf("Expected normal eviction for unhealthy deployment, got %d", atomic.LoadInt32(&evictionCount))
 	}
 }
 
