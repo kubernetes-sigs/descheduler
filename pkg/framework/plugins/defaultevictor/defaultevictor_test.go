@@ -1030,13 +1030,13 @@ func initializePlugin(ctx context.Context, test testCase) (frameworktypes.Plugin
 		objs = append(objs, ns)
 	}
 
-	fakeClient := fake.NewSimpleClientset(objs...)
+	fakeClient := fake.NewClientset(objs...)
 
 	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
 	_ = sharedInformerFactory.Policy().V1().PodDisruptionBudgets().Lister()
 	_ = sharedInformerFactory.Core().V1().PersistentVolumeClaims().Lister()
-	_ = sharedInformerFactory.Core().V1().Namespaces().Lister()
+	_ = sharedInformerFactory.Core().V1().Namespaces().Informer()
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
 		return nil, fmt.Errorf("build get pods assigned to node function error: %v", err)
@@ -1283,9 +1283,7 @@ func TestMultipleProfilesWithDifferentNamespaceLabelSelectors(t *testing.T) {
 	fakeClient := fake.NewClientset(node, nsProd, nsBackend, nsTest, podInProd, podInBackend, podInTest)
 	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 
-	_ = sharedInformerFactory.Core().V1().Namespaces().Lister()
-	sharedInformerFactory.Start(ctx.Done())
-	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+	_ = sharedInformerFactory.Core().V1().Namespaces().Informer()
 
 	// Create Profile 1: targets namespaces with env=prod
 	profile1Args := &DefaultEvictorArgs{
@@ -1328,6 +1326,9 @@ func TestMultipleProfilesWithDifferentNamespaceLabelSelectors(t *testing.T) {
 		t.Fatalf("unable to initialize profile2 plugin: %v", err)
 	}
 
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
 	// Test Profile 1: evicts pods in ns-prod, reject others
 	t.Run("profile1", func(t *testing.T) {
 		profile1 := profile1Plugin.(*DefaultEvictor)
@@ -1361,4 +1362,167 @@ func TestMultipleProfilesWithDifferentNamespaceLabelSelectors(t *testing.T) {
 			t.Errorf("podInBackend should not be rejected by profile2")
 		}
 	})
+}
+
+func TestNamespaceLabelSelectorAllOperations(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	node := test.BuildTestNode("node1", 1000, 2000, 10, nil)
+
+	nsProd := test.BuildTestNamespace("ns-prod")
+	nsProd.Labels = map[string]string{"env": "prod", "tier": "frontend"}
+
+	nsStaging := test.BuildTestNamespace("ns-staging")
+	nsStaging.Labels = map[string]string{"env": "staging", "tier": "backend"}
+
+	nsTest := test.BuildTestNamespace("ns-test")
+	nsTest.Labels = map[string]string{"env": "test"}
+
+	nsNoLabels := test.BuildTestNamespace("ns-nolabels")
+	nsNoLabels.Labels = map[string]string{}
+
+	podInProd := test.BuildTestPod("pod-in-prod", 100, 100, node.Name, func(pod *v1.Pod) {
+		pod.Namespace = "ns-prod"
+		test.SetNormalOwnerRef(pod)
+	})
+
+	podInStaging := test.BuildTestPod("pod-in-staging", 100, 100, node.Name, func(pod *v1.Pod) {
+		pod.Namespace = "ns-staging"
+		test.SetNormalOwnerRef(pod)
+	})
+
+	podInTest := test.BuildTestPod("pod-in-test", 100, 100, node.Name, func(pod *v1.Pod) {
+		pod.Namespace = "ns-test"
+		test.SetNormalOwnerRef(pod)
+	})
+
+	podInNoLabels := test.BuildTestPod("pod-in-nolabels", 100, 100, node.Name, func(pod *v1.Pod) {
+		pod.Namespace = "ns-nolabels"
+		test.SetNormalOwnerRef(pod)
+	})
+
+	fakeClient := fake.NewClientset(node, nsProd, nsStaging, nsTest, nsNoLabels, podInProd, podInStaging, podInTest, podInNoLabels)
+	sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+	getPodAssignedToNode, _ := podutil.BuildGetPodsAssignedToNodeFunc(sharedInformerFactory.Core().V1().Pods().Informer())
+
+	testCases := []struct {
+		name    string
+		args    *DefaultEvictorArgs
+		results map[string]bool
+	}{
+		{
+			name: "MatchLabels and MatchExpressions In",
+			args: &DefaultEvictorArgs{
+				NamespaceLabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"tier": "frontend"},
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{Key: "env", Operator: metav1.LabelSelectorOpIn, Values: []string{"prod", "staging"}},
+					},
+				},
+			},
+			results: map[string]bool{
+				"pod-in-prod":    true,
+				"pod-in-staging": false,
+				"pod-in-test":    false,
+			},
+		},
+		{
+			name: "MatchLabels and MatchExpressions Exists",
+			args: &DefaultEvictorArgs{
+				NamespaceLabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"tier": "backend"},
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{Key: "env", Operator: metav1.LabelSelectorOpExists},
+					},
+				},
+			},
+			results: map[string]bool{
+				"pod-in-prod":    false,
+				"pod-in-staging": true,
+				"pod-in-test":    false,
+			},
+		},
+		{
+			name: "Exists and In",
+			args: &DefaultEvictorArgs{
+				NamespaceLabelSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{Key: "tier", Operator: metav1.LabelSelectorOpExists},
+						{Key: "env", Operator: metav1.LabelSelectorOpIn, Values: []string{"staging"}},
+					},
+				},
+			},
+			results: map[string]bool{
+				"pod-in-prod":    false,
+				"pod-in-staging": true,
+				"pod-in-test":    false,
+			},
+		},
+		{
+			name: "DoesNotExist",
+			args: &DefaultEvictorArgs{
+				NamespaceLabelSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{Key: "tier", Operator: metav1.LabelSelectorOpDoesNotExist},
+					},
+				},
+			},
+			results: map[string]bool{
+				"pod-in-prod":     false,
+				"pod-in-staging":  false,
+				"pod-in-test":     true,
+				"pod-in-nolabels": true,
+			},
+		},
+		{
+			name: "NotIn",
+			args: &DefaultEvictorArgs{
+				NamespaceLabelSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{Key: "env", Operator: metav1.LabelSelectorOpNotIn, Values: []string{"prod", "test"}},
+					},
+				},
+			},
+			results: map[string]bool{
+				"pod-in-prod":    false,
+				"pod-in-staging": true,
+				"pod-in-test":    false,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			plugin, err := New(ctx, tc.args, &frameworkfake.HandleImpl{
+				ClientsetImpl:                 fakeClient,
+				GetPodsAssignedToNodeFuncImpl: getPodAssignedToNode,
+				SharedInformerFactoryImpl:     sharedInformerFactory,
+				PluginInstanceIDImpl:          "test-" + tc.name,
+			})
+			if err != nil {
+				t.Fatalf("unable to initialize plugin: %v", err)
+			}
+
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+			evictor := plugin.(*DefaultEvictor)
+			for podName, expected := range tc.results {
+				var pod *v1.Pod
+				switch podName {
+				case "pod-in-prod":
+					pod = podInProd
+				case "pod-in-staging":
+					pod = podInStaging
+				case "pod-in-test":
+					pod = podInTest
+				case "pod-in-nolabels":
+					pod = podInNoLabels
+				}
+				if result := evictor.PreEvictionFilter(pod); result != expected {
+					t.Errorf("pod %s expected %v, got %v", podName, expected, result)
+				}
+			}
+		})
+	}
 }
