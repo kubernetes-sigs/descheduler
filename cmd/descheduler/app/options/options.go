@@ -60,6 +60,10 @@ type DeschedulerServer struct {
 	SecureServingInfo *apiserver.SecureServingInfo
 	DisableMetrics    bool
 	EnableHTTP2       bool
+	EnableTriggerAPI  bool
+	// TriggerCh is used to manually trigger a descheduling cycle via the HTTP API.
+	// Each request sends a chan error; the loop sends the cycle result back on it.
+	TriggerCh chan chan error
 	// FeatureGates enabled by the user
 	FeatureGates map[string]bool
 	// DefaultFeatureGates for internal accessing so unit tests can enable/disable specific features
@@ -121,6 +125,7 @@ func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	fs.Float64Var(&rs.Tracing.SampleRate, "otel-sample-rate", 1.0, "Sample rate to collect the Traces")
 	fs.BoolVar(&rs.Tracing.FallbackToNoOpProviderOnError, "otel-fallback-no-op-on-error", false, "Fallback to NoOp Tracer in case of error")
 	fs.BoolVar(&rs.EnableHTTP2, "enable-http2", false, "If http/2 should be enabled for the metrics and health check")
+	fs.BoolVar(&rs.EnableTriggerAPI, "enable-trigger-api", rs.EnableTriggerAPI, "Enable the /api/v1/descheduler/run endpoint for manually triggering descheduling cycles via HTTP POST.")
 	fs.Var(cliflag.NewMapStringBool(&rs.FeatureGates), "feature-gates", "A set of key=value pairs that describe feature gates for alpha/experimental features. "+
 		"Options are:\n"+strings.Join(features.DefaultMutableFeatureGate.KnownFeatures(), "\n"))
 

@@ -19,7 +19,9 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"net/http"
 	"os/signal"
 	"syscall"
 	"time"
@@ -98,6 +100,12 @@ func Run(rootCtx context.Context, rs *options.DeschedulerServer) error {
 
 	healthz.InstallHandler(pathRecorderMux, healthz.NamedCheck("Descheduler", healthz.PingHealthz.Check))
 
+	if rs.EnableTriggerAPI {
+		rs.TriggerCh = make(chan chan error, 1)
+		pathRecorderMux.Handle("/api/v1/descheduler/run", newTriggerHandler(rs.TriggerCh))
+		klog.V(1).Info("Trigger API enabled at /api/v1/descheduler/run")
+	}
+
 	var stoppedCh <-chan struct{}
 	var err error
 	if rs.SecureServingInfo != nil {
@@ -136,4 +144,54 @@ func Run(rootCtx context.Context, rs *options.DeschedulerServer) error {
 	}
 
 	return nil
+}
+
+func newTriggerHandler(triggerCh chan chan error) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{
+				"status":  "error",
+				"message": "method not allowed, use POST",
+			})
+			return
+		}
+
+		resultCh := make(chan error, 1)
+		select {
+		case triggerCh <- resultCh:
+			klog.V(2).Info("Descheduling cycle triggered via API")
+		default:
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{
+				"status":  "error",
+				"message": "descheduling cycle already in progress or pending",
+			})
+			return
+		}
+
+		select {
+		case err := <-resultCh:
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{
+					"status":  "error",
+					"message": err.Error(),
+				})
+			} else {
+				writeJSON(w, http.StatusOK, map[string]string{
+					"status":  "ok",
+					"message": "descheduling cycle completed successfully",
+				})
+			}
+		case <-r.Context().Done():
+			writeJSON(w, http.StatusGatewayTimeout, map[string]string{
+				"status":  "error",
+				"message": "request cancelled or timed out",
+			})
+		}
+	})
+}
+
+func writeJSON(w http.ResponseWriter, statusCode int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(data) //nolint:errcheck
 }
