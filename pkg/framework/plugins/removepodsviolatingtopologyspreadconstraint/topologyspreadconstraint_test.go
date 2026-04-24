@@ -1540,8 +1540,8 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 			}),
 			// idealAvg = (6+2+2)/3 = 3.33. Both zoneB (2 pods < 3.33) and zoneC (2 pods < 3.33)
-			// appear in nodesByZoneBelowIdealAvg. zoneB's node (B1, 50m CPU) cannot fit a 100m-request
-			// pod, but zoneC's node (C1, 2000m CPU) can — so podFitsAnyNodeInSomeZone returns true
+			// appear in nodesByDomainBelowIdealAvg. zoneB's node (B1, 50m CPU) cannot fit a 100m-request
+			// pod, but zoneC's node (C1, 2000m CPU) can — so podFitsAnyNodeInSomeDomain returns true
 			// for every pod selected from zoneA. The topologyBalanceNodeFit gate (default true) also
 			// passes for the same reason (zoneC is in the merged nodesBelowIdealAvg flat list).
 			// balanceDomains selects ceil(6−3.33)=3 pods for eviction; all three pass both gates → 3 evicted.
@@ -1972,7 +1972,7 @@ func getDefaultTopologyConstraints(maxSkew int32, edits ...func(*v1.TopologySpre
 	return []v1.TopologySpreadConstraint{constraint}
 }
 
-func TestFilterNodesByZoneBelowIdealAvg(t *testing.T) {
+func TestFilterNodesByDomainBelowIdealAvg(t *testing.T) {
 	makeNode := func(name, zone string) *v1.Node {
 		return test.BuildTestNode(name, 1000, 2000, 10, func(n *v1.Node) {
 			n.Labels["zone"] = zone
@@ -1993,7 +1993,7 @@ func TestFilterNodesByZoneBelowIdealAvg(t *testing.T) {
 		}
 		idealAvg := 4.0
 
-		got := filterNodesByZoneBelowIdealAvg(nodes, sortedDomains, "zone", idealAvg)
+		got := filterNodesByDomainBelowIdealAvg(nodes, sortedDomains, "zone", idealAvg)
 
 		if _, ok := got["zoneA"]; ok {
 			t.Error("zoneA should not be in result: it is above idealAvg")
@@ -2014,7 +2014,7 @@ func TestFilterNodesByZoneBelowIdealAvg(t *testing.T) {
 		domains2 := []topology{
 			{pair: topologyPair{"zone", "zoneX"}, pods: make([]*v1.Pod, 4)}, // == idealAvg
 		}
-		got := filterNodesByZoneBelowIdealAvg(nodes2, domains2, "zone", 4.0)
+		got := filterNodesByDomainBelowIdealAvg(nodes2, domains2, "zone", 4.0)
 		if _, ok := got["zoneX"]; ok {
 			t.Error("zoneX should not be in result: pod count equals idealAvg (not strictly less)")
 		}
@@ -2026,14 +2026,14 @@ func TestFilterNodesByZoneBelowIdealAvg(t *testing.T) {
 		domains3 := []topology{
 			{pair: topologyPair{"zone", "zoneY"}, pods: make([]*v1.Pod, 1)}, // below idealAvg=4
 		}
-		got := filterNodesByZoneBelowIdealAvg(nodes3, domains3, "zone", 4.0)
+		got := filterNodesByDomainBelowIdealAvg(nodes3, domains3, "zone", 4.0)
 		if _, ok := got["zoneY"]; ok {
 			t.Error("zoneY should not appear in result: it has no eligible nodes")
 		}
 	})
 
 	t.Run("empty sortedDomains returns empty map", func(t *testing.T) {
-		got := filterNodesByZoneBelowIdealAvg([]*v1.Node{makeNode("N1", "zoneZ")}, []topology{}, "zone", 4.0)
+		got := filterNodesByDomainBelowIdealAvg([]*v1.Node{makeNode("N1", "zoneZ")}, []topology{}, "zone", 4.0)
 		if len(got) != 0 {
 			t.Errorf("expected empty map, got %v", got)
 		}
