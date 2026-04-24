@@ -697,6 +697,17 @@ The `topologyBalanceNodeFit` arg is used when balancing topology domains while t
 topologyBalanceNodeFit: false
 ```
 
+The `zoneAwareNodeFit` arg (default: `false`) gates eviction on per-node fit, evaluated
+zone-by-zone: a pod is only evicted if at least one specific under-loaded zone contains a
+node that can fit it (resource requests, nodeSelector, taints). It performs the same
+per-node check as `topologyBalanceNodeFit` but operates as an independent gate. When
+`topologyBalanceNodeFit: true` (the default), enabling `zoneAwareNodeFit` is redundant.
+It is most useful when `topologyBalanceNodeFit: false` and per-node fit checking should
+still apply.
+```yaml
+zoneAwareNodeFit: true
+```
+
 Strategy parameter `labelSelector` is not utilized when balancing topology domains and is only applied during eviction to determine if the pod can be evicted.
 
 [Supported Constraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/#spread-constraint-definition) fields:
@@ -714,12 +725,13 @@ Strategy parameter `labelSelector` is not utilized when balancing topology domai
 
 **Parameters:**
 
-|Name|Type|
-|---|---|
-|`namespaces`|(see [namespace filtering](#namespace-filtering))|
-|`labelSelector`|(see [label filtering](#label-filtering))|
+|Name|Type|Description|
+|---|---|---|
+|`namespaces`|(see [namespace filtering](#namespace-filtering))||
+|`labelSelector`|(see [label filtering](#label-filtering))||
 |`constraints`|(see [whenUnsatisfiable](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.27/#topologyspreadconstraint-v1-core))||
 |`topologyBalanceNodeFit`|bool|default `true`. [node fit filtering](#node-fit-filtering) when balancing topology domains|
+|`zoneAwareNodeFit`|bool|default `false`. When enabled, gates eviction on per-node fit evaluated per-topology-domain: pod must fit on a node within at least one specific under-loaded topology domain. Independent of `topologyBalanceNodeFit`; redundant when `topologyBalanceNodeFit: true` (the default).|
 
 **Example:**
 

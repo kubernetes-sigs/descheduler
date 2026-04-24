@@ -49,6 +49,7 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 				LabelSelector:          nil,
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
 				TopologyBalanceNodeFit: utilptr.To(true),
+				ZoneAwareNodeFit:       utilptr.To(false),
 			},
 		},
 		{
@@ -63,6 +64,7 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 				LabelSelector:          &metav1.LabelSelector{},
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule, v1.ScheduleAnyway},
 				TopologyBalanceNodeFit: utilptr.To(true),
+				ZoneAwareNodeFit:       utilptr.To(false),
 			},
 		},
 		{
@@ -71,6 +73,7 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 			want: &RemovePodsViolatingTopologySpreadConstraintArgs{
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
 				TopologyBalanceNodeFit: utilptr.To(true),
+				ZoneAwareNodeFit:       utilptr.To(false),
 			},
 		},
 		{
@@ -81,6 +84,7 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 			want: &RemovePodsViolatingTopologySpreadConstraintArgs{
 				TopologyBalanceNodeFit: utilptr.To(false),
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
+				ZoneAwareNodeFit:       utilptr.To(false),
 			},
 		},
 		{
@@ -91,6 +95,18 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 			want: &RemovePodsViolatingTopologySpreadConstraintArgs{
 				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
 				TopologyBalanceNodeFit: utilptr.To(true),
+				ZoneAwareNodeFit:       utilptr.To(false),
+			},
+		},
+		{
+			name: "RemovePodsViolatingTopologySpreadConstraintArgs with ZoneAwareNodeFit=true is not overwritten",
+			in: &RemovePodsViolatingTopologySpreadConstraintArgs{
+				ZoneAwareNodeFit: utilptr.To(true),
+			},
+			want: &RemovePodsViolatingTopologySpreadConstraintArgs{
+				TopologyBalanceNodeFit: utilptr.To(true),
+				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
+				ZoneAwareNodeFit:       utilptr.To(true),
 			},
 		},
 	}
