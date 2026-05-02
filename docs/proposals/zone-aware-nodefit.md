@@ -49,10 +49,13 @@ When `ZoneAwareNodeFit: true`, `balanceDomains` additionally:
    can fit the pod (resource requests, nodeSelector, taints).
 3. Skips eviction of the pod if no single target zone individually has capacity.
 
-This is a **strict superset** of `TopologyBalanceNodeFit`'s existing check: any pod
-that fails the zone-aware check would also fail the aggregate check (or vice versa
-only when two partial zones together sum to one fitting slot, which is not a valid
-scheduling destination).
+This is **strictly more restrictive** than `TopologyBalanceNodeFit`'s existing check.
+Enabling `ZoneAwareNodeFit` prevents some evictions that `TopologyBalanceNodeFit` alone
+would permit: specifically, when no individual under-loaded zone has a node with enough
+capacity to fit the pod, but the union of nodes across all under-loaded zones contains
+a fitting node. In that case the aggregate check passes while the zone-aware check
+blocks the eviction, avoiding churn from a pod being rescheduled to a zone that cannot
+actually accommodate it independently.
 
 ## API
 
@@ -91,6 +94,35 @@ Add `ZoneAwareNodeFit *bool` after `TopologyBalanceNodeFit`:
 ```go
 ZoneAwareNodeFit *bool `json:"zoneAwareNodeFit,omitempty"`
 ```
+
+### Default value (defaults.go)
+
+`SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs` must initialise the new
+field when it is nil:
+
+```go
+if args.ZoneAwareNodeFit == nil {
+    args.ZoneAwareNodeFit = utilptr.To(false)
+}
+```
+
+### Deep-copy generated file (zz_generated.deepcopy.go)
+
+Adding a `*bool` pointer field to a `+k8s:deepcopy-gen=true` struct requires
+regenerating `zz_generated.deepcopy.go`. The `DeepCopyInto` function for
+`RemovePodsViolatingTopologySpreadConstraintArgs` must include a nil-check block for
+`ZoneAwareNodeFit`, mirroring the existing block for `TopologyBalanceNodeFit`:
+
+```go
+if in.ZoneAwareNodeFit != nil {
+    in, out := &in.ZoneAwareNodeFit, &out.ZoneAwareNodeFit
+    *out = new(bool)
+    **out = **in
+}
+```
+
+Run `hack/update-generated-deepcopy.sh` (or the equivalent `controller-gen` invocation)
+to regenerate this file; do not edit it by hand.
 
 ### New helper functions (topologyspreadconstraint.go)
 
@@ -174,7 +206,7 @@ existing users. Rejected in favour of a new independent field.
 ## Test Plan
 
 1. ZoneAwareNodeFit enabled, target zone has capacity → pod evicted
-2. ZoneAwareNodeFit enabled, target zone at CPU capacity → pod NOT evicted (no churn)
+2. ZoneAwareNodeFit enabled, all target zones at CPU capacity → pod NOT evicted (no churn)
 3. ZoneAwareNodeFit enabled, multiple under-loaded zones, mixed capacity → pod evicted
    (at least one zone qualifies)
 4. ZoneAwareNodeFit disabled (default) → existing behaviour unchanged
