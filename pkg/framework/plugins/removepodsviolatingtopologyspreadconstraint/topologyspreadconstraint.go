@@ -430,9 +430,12 @@ func filterNodesByZoneBelowIdealAvg(nodes []*v1.Node, sortedDomains []topology, 
 		}
 	}
 	result := make(map[string][]*v1.Node)
+	// TODO: validate domain.pair.key == topologyKey to guard against future mixed-key domain lists.
 	for _, domain := range sortedDomains {
 		if float64(len(domain.pods)) < idealAvg {
-			result[domain.pair.value] = topologyNodesMap[domain.pair.value]
+			if zoneNodes := topologyNodesMap[domain.pair.value]; len(zoneNodes) > 0 {
+				result[domain.pair.value] = zoneNodes
+			}
 		}
 	}
 	return result
