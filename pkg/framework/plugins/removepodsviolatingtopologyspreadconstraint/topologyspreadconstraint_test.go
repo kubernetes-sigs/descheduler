@@ -1606,7 +1606,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				TopologyBalanceNodeFit: utilptr.To(false),
 				ZoneAwareNodeFit:       utilptr.To(true),
 			},
-			nodeFit: true,
+			nodeFit: false,
 		},
 	}
 
