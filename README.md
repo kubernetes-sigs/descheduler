@@ -725,13 +725,13 @@ Strategy parameter `labelSelector` is not utilized when balancing topology domai
 
 **Parameters:**
 
-|Name|Type|
-|---|---|
-|`namespaces`|(see [namespace filtering](#namespace-filtering))|
-|`labelSelector`|(see [label filtering](#label-filtering))|
+|Name|Type|Description|
+|---|---|---|
+|`namespaces`|(see [namespace filtering](#namespace-filtering))||
+|`labelSelector`|(see [label filtering](#label-filtering))||
 |`constraints`|(see [whenUnsatisfiable](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.27/#topologyspreadconstraint-v1-core))||
 |`topologyBalanceNodeFit`|bool|default `true`. [node fit filtering](#node-fit-filtering) when balancing topology domains|
-|`zoneAwareNodeFit`|bool|default `false`. When enabled, gates eviction on per-node fit evaluated per-zone: pod must fit on a node within at least one specific under-loaded zone. Independent of `topologyBalanceNodeFit`; redundant when `topologyBalanceNodeFit: true` (the default).|
+|`zoneAwareNodeFit`|bool|default `false`. When enabled, gates eviction on per-node fit evaluated per-topology-domain: pod must fit on a node within at least one specific under-loaded topology domain. Independent of `topologyBalanceNodeFit`; redundant when `topologyBalanceNodeFit: true` (the default).|
 
 **Example:**
 
