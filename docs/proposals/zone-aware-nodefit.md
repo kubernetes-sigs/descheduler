@@ -11,30 +11,33 @@
 
 `RemovePodsViolatingTopologySpreadConstraint` evicts pods from over-loaded topology
 zones. The existing `TopologyBalanceNodeFit` flag (default: `true`) gates eviction on
-whether the pod can fit on *some* node across *all* under-loaded zones combined. This
-aggregate check has a blind spot: if under-loaded zones each individually lack capacity,
-but the check passes because a node from zone B and a node from zone C together appear
-schedulable, the pod may be evicted and then reshuffled within the same over-loaded
-cluster of zones—causing bounded eviction churn.
+whether the pod can fit on *some* node across *all* under-loaded zones combined.
+`PodFitsAnyOtherNode` evaluates each candidate node independently (resource requests,
+nodeSelector, taints, anti-affinity), so this check correctly blocks eviction when no
+individual node has sufficient capacity.
+
+However, `TopologyBalanceNodeFit` is a single binary gate. Users who need to disable
+it (e.g., to allow eviction even when no target node is currently schedulable, relying
+on cluster-autoscaler to provision capacity) lose the per-node fit check entirely.
+There is no way to say "check per-node fit, but report it with zone-level granularity."
 
 ### Illustrative scenario
 
 ```
 Zone A (over-loaded): 10 pods, nodes have 2 000 m CPU free per node
 Zone B (under-loaded by pod count): 3 pods, nodes have only 50 m CPU free
-Zone C (under-loaded by pod count): 3 pods, nodes have only 50 m CPU free
+Zone C (under-loaded by pod count): 3 pods, nodes have 2 000 m CPU free
 Pod to evict: requests 100 m CPU
 ```
 
-With `TopologyBalanceNodeFit: true`, `nodesBelowIdealAvg` contains nodes from B and C
-combined. `PodFitsAnyOtherNode(pod, B+C)` returns `false` because no individual node
-has 100 m free — the check is correct here. But if any single node in B or C had
-100 m free, the check would pass even if the ZONE-LEVEL capacity picture meant the
-pod would be rescheduled back to A after eviction.
+With `TopologyBalanceNodeFit: false`, the per-node fit gate is disabled. Eviction
+proceeds regardless of whether any target zone can actually schedule the pod. A pod
+evicted from zone A may be scheduled into zone B despite zone B being resource-saturated
+at the per-node level, because no gate is active.
 
-The subtler issue: `nodesBelowIdealAvg` is filtered by pod *count*, not by resource
-headroom. A zone can appear under-loaded (fewer pods than average) while being
-resource-saturated. Zone-level capacity validation requires per-zone independent checks.
+`ZoneAwareNodeFit: true` re-enables the per-node fit check in a zone-grouped form:
+it verifies that at least one specific under-loaded zone contains a node that can fit
+the pod, without requiring `TopologyBalanceNodeFit` to be enabled.
 
 ## Proposed Change
 
@@ -49,13 +52,13 @@ When `ZoneAwareNodeFit: true`, `balanceDomains` additionally:
    can fit the pod (resource requests, nodeSelector, taints).
 3. Skips eviction of the pod if no single target zone individually has capacity.
 
-This is **strictly more restrictive** than `TopologyBalanceNodeFit`'s existing check.
-Enabling `ZoneAwareNodeFit` prevents some evictions that `TopologyBalanceNodeFit` alone
-would permit: specifically, when no individual under-loaded zone has a node with enough
-capacity to fit the pod, but the union of nodes across all under-loaded zones contains
-a fitting node. In that case the aggregate check passes while the zone-aware check
-blocks the eviction, avoiding churn from a pod being rescheduled to a zone that cannot
-actually accommodate it independently.
+Both `ZoneAwareNodeFit` and `TopologyBalanceNodeFit` perform the same per-node capacity
+check (resource requests, nodeSelector, taints, anti-affinity via `PodFitsAnyOtherNode`),
+and when both are enabled they evaluate the same set of nodes — so they are functionally
+equivalent when `topologyBalanceNodeFit: true` (the default). The value of
+`ZoneAwareNodeFit` is as an **independent gate** that can be activated even when
+`TopologyBalanceNodeFit` is disabled, preserving node-fit checking without coupling to
+the existing flag's on/off semantics.
 
 ## API
 
@@ -82,8 +85,10 @@ profiles:
 | `topologyBalanceNodeFit` | `true` | Gate: pod must fit on *some* node across the union of all under-loaded zone nodes |
 | `zoneAwareNodeFit` | `false` | Gate: pod must fit within at least one *specific* under-loaded zone |
 
-Both gates are independent. Enabling both is valid (redundant for a single under-loaded
-zone; stricter for multiple under-loaded zones with mixed capacity).
+Both gates are independent. Enabling both is valid but redundant when
+`topologyBalanceNodeFit: true` (the default): in that case both evaluate the same node
+set with the same per-node check. `zoneAwareNodeFit` is most useful when
+`topologyBalanceNodeFit: false` is desired and per-node fit checking should still apply.
 
 ## Implementation
 
@@ -129,7 +134,7 @@ to regenerate this file; do not edit it by hand.
 ```go
 // filterNodesByZoneBelowIdealAvg groups nodes from under-loaded topology domains
 // by their domain value (e.g. zone label). Only domains with pod count strictly
-// below idealAvg are included. Returns nil if no under-loaded domains exist.
+// below idealAvg are included. Returns an empty non-nil map if no under-loaded domains exist.
 func filterNodesByZoneBelowIdealAvg(
     nodes []*v1.Node,
     sortedDomains []topology,
