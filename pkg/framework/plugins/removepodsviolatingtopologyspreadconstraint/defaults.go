@@ -36,6 +36,9 @@ func SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(obj runtime.Obj
 	if args.TopologyBalanceNodeFit == nil {
 		args.TopologyBalanceNodeFit = utilptr.To(true)
 	}
+	if args.ZoneAwareNodeFit == nil {
+		args.ZoneAwareNodeFit = utilptr.To(false)
+	}
 	if len(args.Constraints) == 0 {
 		args.Constraints = append(args.Constraints, v1.DoNotSchedule)
 	}
