@@ -59,8 +59,18 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 	}
 
 	// We can combine Filter and PreEvictionFilter since for this strategy it does not matter where we run PreEvictionFilter
+	defaultFilter := handle.Evictor().Filter
+	if failedPodsArgs.IncludingSystemCriticalPods {
+		// The operator has explicitly opted in to evicting failed pods that are
+		// otherwise protected by the framework default-evictor (system-critical
+		// priority, daemon set, etc.). Bypass the default-evictor filter at
+		// candidate-listing time; the PodFailed phase check (below),
+		// validateCanEvict, and PreEvictionFilter still gate eviction.
+		defaultFilter = func(pod *v1.Pod) bool { return true }
+	}
+
 	podFilter, err := podutil.NewOptions().
-		WithFilter(podutil.WrapFilterFuncs(handle.Evictor().Filter, handle.Evictor().PreEvictionFilter)).
+		WithFilter(podutil.WrapFilterFuncs(defaultFilter, handle.Evictor().PreEvictionFilter)).
 		WithNamespaces(includedNamespaces).
 		WithoutNamespaces(excludedNamespaces).
 		WithLabelSelector(failedPodsArgs.LabelSelector).

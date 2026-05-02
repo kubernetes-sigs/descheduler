@@ -342,6 +342,30 @@ func TestRemoveFailedPods(t *testing.T) {
 				buildTestPod("p2", "node1", newPodStatus("Shutdown", v1.PodFailed, nil, nil), nil),
 			},
 		},
+		{
+			description:             "system-critical priority failed pod is protected by default",
+			args:                    createRemoveFailedPodsArgs(false, nil, nil, nil, nil),
+			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
+			expectedEvictedPodCount: 0,
+			pods: []*v1.Pod{
+				buildCriticalPriorityPod("p1", "node1", newPodStatus("", "", nil, &v1.ContainerState{
+					Terminated: &v1.ContainerStateTerminated{Reason: "NodeAffinity"},
+				})),
+			},
+		},
+		{
+			description: "includingSystemCriticalPods=true, system-critical priority failed pod is evicted",
+			args: RemoveFailedPodsArgs{
+				IncludingSystemCriticalPods: true,
+			},
+			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
+			expectedEvictedPodCount: 1,
+			pods: []*v1.Pod{
+				buildCriticalPriorityPod("p1", "node1", newPodStatus("", "", nil, &v1.ContainerState{
+					Terminated: &v1.ContainerStateTerminated{Reason: "NodeAffinity"},
+				})),
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.description, func(t *testing.T) {
@@ -363,13 +387,14 @@ func TestRemoveFailedPods(t *testing.T) {
 			}
 
 			plugin, err := New(ctx, &RemoveFailedPodsArgs{
-				Reasons:                 tc.args.Reasons,
-				ExitCodes:               tc.args.ExitCodes,
-				MinPodLifetimeSeconds:   tc.args.MinPodLifetimeSeconds,
-				IncludingInitContainers: tc.args.IncludingInitContainers,
-				ExcludeOwnerKinds:       tc.args.ExcludeOwnerKinds,
-				LabelSelector:           tc.args.LabelSelector,
-				Namespaces:              tc.args.Namespaces,
+				Reasons:                     tc.args.Reasons,
+				ExitCodes:                   tc.args.ExitCodes,
+				MinPodLifetimeSeconds:       tc.args.MinPodLifetimeSeconds,
+				IncludingInitContainers:     tc.args.IncludingInitContainers,
+				IncludingSystemCriticalPods: tc.args.IncludingSystemCriticalPods,
+				ExcludeOwnerKinds:           tc.args.ExcludeOwnerKinds,
+				LabelSelector:               tc.args.LabelSelector,
+				Namespaces:                  tc.args.Namespaces,
 			},
 				handle,
 			)
@@ -412,5 +437,14 @@ func buildTestPod(podName, nodeName string, podStatus v1.PodStatus, deletionTime
 	pod.ObjectMeta.OwnerReferences = test.GetReplicaSetOwnerRefList()
 	pod.ObjectMeta.SetCreationTimestamp(metav1.Now())
 	pod.DeletionTimestamp = deletionTimestamp
+	return pod
+}
+
+// buildCriticalPriorityPod builds a failed pod whose priority matches the
+// system-critical threshold checked by utils.IsCriticalPriorityPod.
+func buildCriticalPriorityPod(podName, nodeName string, podStatus v1.PodStatus) *v1.Pod {
+	pod := buildTestPod(podName, nodeName, podStatus, nil)
+	priority := int32(2000000000)
+	pod.Spec.Priority = &priority
 	return pod
 }
