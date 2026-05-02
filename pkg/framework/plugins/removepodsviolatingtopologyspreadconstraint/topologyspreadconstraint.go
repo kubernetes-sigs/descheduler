@@ -315,6 +315,13 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(ctx context
 	eligibleNodes := filterEligibleNodes(ctx, nodes, tsc)
 	nodesBelowIdealAvg := filterNodesBelowIdealAvg(eligibleNodes, sortedDomains, tsc.TopologyKey, idealAvg)
 
+	zoneAwareNodeFit := utilptr.Deref(d.args.ZoneAwareNodeFit, false)
+
+	var nodesByZoneBelowIdealAvg map[string][]*v1.Node
+	if zoneAwareNodeFit {
+		nodesByZoneBelowIdealAvg = filterNodesByZoneBelowIdealAvg(eligibleNodes, sortedDomains, tsc.TopologyKey, idealAvg)
+	}
+
 	// i is the index for belowOrEqualAvg
 	// j is the index for aboveAvg
 	i := 0
@@ -379,6 +386,11 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(ctx context
 				continue
 			}
 
+			if zoneAwareNodeFit && !podFitsAnyNodeInSomeZone(getPodsAssignedToNode, aboveToEvict[k], nodesByZoneBelowIdealAvg) {
+				d.logger.V(2).Info("ignoring pod for eviction: no target zone has sufficient capacity", "pod", klog.KObj(aboveToEvict[k]))
+				continue
+			}
+
 			podsForEviction[aboveToEvict[k]] = struct{}{}
 		}
 		sortedDomains[j].pods = sortedDomains[j].pods[:len(sortedDomains[j].pods)-movePods]
@@ -403,6 +415,39 @@ func filterNodesBelowIdealAvg(nodes []*v1.Node, sortedDomains []topology, topolo
 		}
 	}
 	return nodesBelowIdealAvg
+}
+
+// filterNodesByZoneBelowIdealAvg groups nodes from topology domains whose pod count
+// is strictly below idealAvg, keyed by their domain value (e.g. zone name).
+// Unlike filterNodesBelowIdealAvg, the zone-to-nodes mapping is preserved so callers
+// can validate capacity zone-by-zone rather than across an aggregate node list.
+// Returns an empty map (not nil) when no domains are below idealAvg.
+func filterNodesByZoneBelowIdealAvg(nodes []*v1.Node, sortedDomains []topology, topologyKey string, idealAvg float64) map[string][]*v1.Node {
+	topologyNodesMap := make(map[string][]*v1.Node, len(sortedDomains))
+	for _, n := range nodes {
+		if zone, ok := n.Labels[topologyKey]; ok {
+			topologyNodesMap[zone] = append(topologyNodesMap[zone], n)
+		}
+	}
+	result := make(map[string][]*v1.Node)
+	for _, domain := range sortedDomains {
+		if float64(len(domain.pods)) < idealAvg {
+			result[domain.pair.value] = topologyNodesMap[domain.pair.value]
+		}
+	}
+	return result
+}
+
+// podFitsAnyNodeInSomeZone returns true if pod can be scheduled on at least one node
+// within at least one zone from nodesByZone. Each zone is validated independently —
+// the pod must fit entirely within a single zone, not across a mix of zone nodes.
+func podFitsAnyNodeInSomeZone(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodesByZone map[string][]*v1.Node) bool {
+	for _, zoneNodes := range nodesByZone {
+		if node.PodFitsAnyOtherNode(nodeIndexer, pod, zoneNodes) {
+			return true
+		}
+	}
+	return false
 }
 
 // sortDomains sorts and splits the list of topology domains based on their size
