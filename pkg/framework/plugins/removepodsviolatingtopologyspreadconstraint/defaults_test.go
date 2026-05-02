@@ -98,6 +98,17 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 				ZoneAwareNodeFit:       utilptr.To(false),
 			},
 		},
+		{
+			name: "RemovePodsViolatingTopologySpreadConstraintArgs with ZoneAwareNodeFit=true is not overwritten",
+			in: &RemovePodsViolatingTopologySpreadConstraintArgs{
+				ZoneAwareNodeFit: utilptr.To(true),
+			},
+			want: &RemovePodsViolatingTopologySpreadConstraintArgs{
+				TopologyBalanceNodeFit: utilptr.To(true),
+				Constraints:            []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
+				ZoneAwareNodeFit:       utilptr.To(true),
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -106,21 +117,5 @@ func TestSetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(t *testing.
 				t.Errorf("Got unexpected defaults (-want, +got):\n%s", diff)
 			}
 		})
-	}
-}
-
-func TestZoneAwareNodeFitDefault(t *testing.T) {
-	args := &RemovePodsViolatingTopologySpreadConstraintArgs{}
-	SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs(args)
-
-	if args.ZoneAwareNodeFit == nil {
-		t.Fatal("ZoneAwareNodeFit must not be nil after SetDefaults")
-	}
-	if *args.ZoneAwareNodeFit != false {
-		t.Errorf("ZoneAwareNodeFit default: got %v, want false", *args.ZoneAwareNodeFit)
-	}
-	// Existing default must not regress
-	if args.TopologyBalanceNodeFit == nil || !*args.TopologyBalanceNodeFit {
-		t.Error("TopologyBalanceNodeFit must default to true")
 	}
 }
