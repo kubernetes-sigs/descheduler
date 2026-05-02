@@ -317,9 +317,9 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(ctx context
 
 	zoneAwareNodeFit := utilptr.Deref(d.args.ZoneAwareNodeFit, false)
 
-	var nodesByZoneBelowIdealAvg map[string][]*v1.Node
+	var nodesByDomainBelowIdealAvg map[string][]*v1.Node
 	if zoneAwareNodeFit {
-		nodesByZoneBelowIdealAvg = filterNodesByZoneBelowIdealAvg(eligibleNodes, sortedDomains, tsc.TopologyKey, idealAvg)
+		nodesByDomainBelowIdealAvg = filterNodesByDomainBelowIdealAvg(eligibleNodes, sortedDomains, tsc.TopologyKey, idealAvg)
 	}
 
 	// i is the index for belowOrEqualAvg
@@ -386,7 +386,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(ctx context
 				continue
 			}
 
-			if zoneAwareNodeFit && !podFitsAnyNodeInSomeZone(getPodsAssignedToNode, aboveToEvict[k], nodesByZoneBelowIdealAvg) {
+			if zoneAwareNodeFit && !podFitsAnyNodeInSomeDomain(getPodsAssignedToNode, aboveToEvict[k], nodesByDomainBelowIdealAvg) {
 				d.logger.V(2).Info("ignoring pod for eviction: no target zone has sufficient capacity", "pod", klog.KObj(aboveToEvict[k]))
 				continue
 			}
@@ -417,36 +417,37 @@ func filterNodesBelowIdealAvg(nodes []*v1.Node, sortedDomains []topology, topolo
 	return nodesBelowIdealAvg
 }
 
-// filterNodesByZoneBelowIdealAvg groups nodes from topology domains whose pod count
-// is strictly below idealAvg, keyed by their domain value (e.g. zone name).
-// Unlike filterNodesBelowIdealAvg, the zone-to-nodes mapping is preserved so callers
-// can validate capacity zone-by-zone rather than across an aggregate node list.
-// Returns an empty map (not nil) when no domains are below idealAvg.
-func filterNodesByZoneBelowIdealAvg(nodes []*v1.Node, sortedDomains []topology, topologyKey string, idealAvg float64) map[string][]*v1.Node {
+// filterNodesByDomainBelowIdealAvg groups nodes from topology domains whose pod count
+// is strictly below idealAvg, keyed by their topology domain value (e.g. zone name).
+// Unlike filterNodesBelowIdealAvg, the domain-to-nodes mapping is preserved so callers
+// can validate capacity domain-by-domain rather than across an aggregate node list.
+// Returns an empty map (not nil) when no topology domains are below idealAvg.
+func filterNodesByDomainBelowIdealAvg(nodes []*v1.Node, sortedDomains []topology, topologyKey string, idealAvg float64) map[string][]*v1.Node {
 	topologyNodesMap := make(map[string][]*v1.Node, len(sortedDomains))
 	for _, n := range nodes {
-		if zone, ok := n.Labels[topologyKey]; ok {
-			topologyNodesMap[zone] = append(topologyNodesMap[zone], n)
+		if domainValue, ok := n.Labels[topologyKey]; ok {
+			topologyNodesMap[domainValue] = append(topologyNodesMap[domainValue], n)
 		}
 	}
 	result := make(map[string][]*v1.Node)
 	// TODO: validate domain.pair.key == topologyKey to guard against future mixed-key domain lists.
 	for _, domain := range sortedDomains {
 		if float64(len(domain.pods)) < idealAvg {
-			if zoneNodes := topologyNodesMap[domain.pair.value]; len(zoneNodes) > 0 {
-				result[domain.pair.value] = zoneNodes
+			if domainNodes := topologyNodesMap[domain.pair.value]; len(domainNodes) > 0 {
+				result[domain.pair.value] = domainNodes
 			}
 		}
 	}
 	return result
 }
 
-// podFitsAnyNodeInSomeZone returns true if pod can be scheduled on at least one node
-// within at least one zone from nodesByZone. Each zone is validated independently —
-// the pod must fit entirely within a single zone, not across a mix of zone nodes.
-func podFitsAnyNodeInSomeZone(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodesByZone map[string][]*v1.Node) bool {
-	for _, zoneNodes := range nodesByZone {
-		if node.PodFitsAnyOtherNode(nodeIndexer, pod, zoneNodes) {
+// podFitsAnyNodeInSomeDomain returns true if pod can be scheduled on at least one node
+// within at least one topology domain (e.g. zone) from nodesByDomain. Each topology
+// domain is validated independently — the pod must fit entirely within a single
+// topology domain, not across a mix of nodes from different domains.
+func podFitsAnyNodeInSomeDomain(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodesByDomain map[string][]*v1.Node) bool {
+	for _, domainNodes := range nodesByDomain {
+		if node.PodFitsAnyOtherNode(nodeIndexer, pod, domainNodes) {
 			return true
 		}
 	}
