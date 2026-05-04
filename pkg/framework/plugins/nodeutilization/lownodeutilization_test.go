@@ -1661,3 +1661,83 @@ func TestLowNodeUtilizationWithPrometheusMetrics(t *testing.T) {
 		t.Run(tc.name, testFnc(false, tc.expectedPodsEvicted))
 	}
 }
+
+// TestLowNodeUtilizationPrometheusClientNilAtCreation ensures the plugin
+// tolerates a nil prometheus client at creation time (e.g. in-cluster SA token
+// not yet reconciled) and correctly picks up the client exposed by the handle
+// at Balance call time.
+func TestLowNodeUtilizationPrometheusClientNilAtCreation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	n1NodeName := "n1"
+	n2NodeName := "n2"
+	n3NodeName := "n3"
+
+	nodes := []*v1.Node{
+		test.BuildTestNode(n1NodeName, 4000, 3000, 9, nil),
+		test.BuildTestNode(n2NodeName, 4000, 3000, 10, nil),
+		test.BuildTestNode(n3NodeName, 4000, 3000, 10, nil),
+	}
+	pods := []*v1.Pod{
+		test.BuildTestPod("p1", 400, 0, n1NodeName, test.SetRSOwnerRef),
+		test.BuildTestPod("p2", 400, 0, n1NodeName, test.SetRSOwnerRef),
+		test.BuildTestPod("p3", 400, 0, n1NodeName, test.SetRSOwnerRef),
+		test.BuildTestPod("p4", 400, 0, n1NodeName, test.SetRSOwnerRef),
+		test.BuildTestPod("p5", 400, 0, n1NodeName, test.SetRSOwnerRef),
+		test.BuildTestPod("p6", 400, 0, n2NodeName, test.SetRSOwnerRef),
+	}
+
+	var objs []runtime.Object
+	for _, node := range nodes {
+		objs = append(objs, node)
+	}
+	for _, pod := range pods {
+		objs = append(objs, pod)
+	}
+	fakeClient := fake.NewSimpleClientset(objs...)
+
+	handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
+		ctx, fakeClient, nil, defaultevictor.DefaultEvictorArgs{NodeFit: true}, nil,
+	)
+	if err != nil {
+		t.Fatalf("Unable to initialize a framework handle: %v", err)
+	}
+
+	// PrometheusClientImpl is intentionally nil here — the in-cluster SA token
+	// has not been reconciled yet at plugin-creation time.
+	args := &LowNodeUtilizationArgs{
+		Thresholds:       api.ResourceThresholds{MetricResource: 30},
+		TargetThresholds: api.ResourceThresholds{MetricResource: 50},
+		MetricsUtilization: &MetricsUtilization{
+			Source: api.PrometheusMetrics,
+			Prometheus: &Prometheus{
+				Query: "instance:node_cpu:rate:sum",
+			},
+		},
+	}
+
+	plugin, err := NewLowNodeUtilization(ctx, args, handle)
+	if err != nil {
+		t.Fatalf("plugin creation must succeed even when prometheus client is nil: %v", err)
+	}
+
+	// Simulate the SA token becoming available before the first descheduling cycle.
+	handle.PrometheusClientImpl = &fakePromClient{
+		result: model.Vector{
+			sample("instance:node_cpu:rate:sum", n1NodeName, 0.57), // over target
+			sample("instance:node_cpu:rate:sum", n2NodeName, 0.42), // over target
+			sample("instance:node_cpu:rate:sum", n3NodeName, 0.20), // under threshold
+		},
+		dataType: model.ValVector,
+	}
+
+	status := plugin.(frameworktypes.BalancePlugin).Balance(ctx, nodes)
+	if status != nil {
+		t.Fatalf("Balance failed: %v", status.Err)
+	}
+
+	if podEvictor.TotalEvicted() == 0 {
+		t.Error("expected at least one pod to be evicted")
+	}
+}
