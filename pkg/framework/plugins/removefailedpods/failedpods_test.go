@@ -354,9 +354,9 @@ func TestRemoveFailedPods(t *testing.T) {
 			},
 		},
 		{
-			description: "includingSystemCriticalPods=true, system-critical priority failed pod is evicted",
+			description: "evictFailedSystemCriticalPods=true, system-critical priority failed pod is evicted",
 			args: RemoveFailedPodsArgs{
-				IncludingSystemCriticalPods: true,
+				EvictFailedSystemCriticalPods: true,
 			},
 			nodes:                   []*v1.Node{test.BuildTestNode("node1", 2000, 3000, 10, nil)},
 			expectedEvictedPodCount: 1,
@@ -387,14 +387,14 @@ func TestRemoveFailedPods(t *testing.T) {
 			}
 
 			plugin, err := New(ctx, &RemoveFailedPodsArgs{
-				Reasons:                     tc.args.Reasons,
-				ExitCodes:                   tc.args.ExitCodes,
-				MinPodLifetimeSeconds:       tc.args.MinPodLifetimeSeconds,
-				IncludingInitContainers:     tc.args.IncludingInitContainers,
-				IncludingSystemCriticalPods: tc.args.IncludingSystemCriticalPods,
-				ExcludeOwnerKinds:           tc.args.ExcludeOwnerKinds,
-				LabelSelector:               tc.args.LabelSelector,
-				Namespaces:                  tc.args.Namespaces,
+				Reasons:                       tc.args.Reasons,
+				ExitCodes:                     tc.args.ExitCodes,
+				MinPodLifetimeSeconds:         tc.args.MinPodLifetimeSeconds,
+				IncludingInitContainers:       tc.args.IncludingInitContainers,
+				EvictFailedSystemCriticalPods: tc.args.EvictFailedSystemCriticalPods,
+				ExcludeOwnerKinds:             tc.args.ExcludeOwnerKinds,
+				LabelSelector:                 tc.args.LabelSelector,
+				Namespaces:                    tc.args.Namespaces,
 			},
 				handle,
 			)

@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 const PluginName = "RemoveFailedPods"
@@ -60,13 +61,21 @@ func New(ctx context.Context, args runtime.Object, handle frameworktypes.Handle)
 
 	// We can combine Filter and PreEvictionFilter since for this strategy it does not matter where we run PreEvictionFilter
 	defaultFilter := handle.Evictor().Filter
-	if failedPodsArgs.IncludingSystemCriticalPods {
-		// The operator has explicitly opted in to evicting failed pods that are
-		// otherwise protected by the framework default-evictor (system-critical
-		// priority, daemon set, etc.). Bypass the default-evictor filter at
-		// candidate-listing time; the PodFailed phase check (below),
-		// validateCanEvict, and PreEvictionFilter still gate eviction.
-		defaultFilter = func(pod *v1.Pod) bool { return true }
+	if failedPodsArgs.EvictFailedSystemCriticalPods {
+		// The operator has explicitly opted in to evicting failed pods that
+		// would otherwise be protected by the framework default-evictor's
+		// SystemCriticalPods check. Wrap the default-evictor filter so that
+		// pods which are both PodFailed and system-critical are admitted at
+		// candidate-listing time; all other DefaultEvictor protections
+		// (DaemonSet, StaticPod, LocalStorage, ...) still apply, as do
+		// PreEvictionFilter, the PodFailed phase check (below), and
+		// validateCanEvict.
+		defaultFilter = func(pod *v1.Pod) bool {
+			if pod.Status.Phase == v1.PodFailed && utils.IsCriticalPriorityPod(pod) {
+				return true
+			}
+			return handle.Evictor().Filter(pod)
+		}
 	}
 
 	podFilter, err := podutil.NewOptions().

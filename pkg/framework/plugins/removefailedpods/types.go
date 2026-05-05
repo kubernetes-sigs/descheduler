@@ -25,12 +25,12 @@ import (
 type RemoveFailedPodsArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	Namespaces                  *api.Namespaces       `json:"namespaces,omitempty"`
-	LabelSelector               *metav1.LabelSelector `json:"labelSelector,omitempty"`
-	ExcludeOwnerKinds           []string              `json:"excludeOwnerKinds,omitempty"`
-	MinPodLifetimeSeconds       *uint                 `json:"minPodLifetimeSeconds,omitempty"`
-	Reasons                     []string              `json:"reasons,omitempty"`
-	ExitCodes                   []int32               `json:"exitCodes,omitempty"`
-	IncludingInitContainers     bool                  `json:"includingInitContainers,omitempty"`
-	IncludingSystemCriticalPods bool                  `json:"includingSystemCriticalPods,omitempty"`
+	Namespaces                    *api.Namespaces       `json:"namespaces,omitempty"`
+	LabelSelector                 *metav1.LabelSelector `json:"labelSelector,omitempty"`
+	ExcludeOwnerKinds             []string              `json:"excludeOwnerKinds,omitempty"`
+	MinPodLifetimeSeconds         *uint                 `json:"minPodLifetimeSeconds,omitempty"`
+	Reasons                       []string              `json:"reasons,omitempty"`
+	ExitCodes                     []int32               `json:"exitCodes,omitempty"`
+	IncludingInitContainers       bool                  `json:"includingInitContainers,omitempty"`
+	EvictFailedSystemCriticalPods bool                  `json:"evictFailedSystemCriticalPods,omitempty"`
 }
