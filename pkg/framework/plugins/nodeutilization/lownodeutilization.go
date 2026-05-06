@@ -103,18 +103,13 @@ func NewLowNodeUtilization(
 	}
 
 	// this plugins supports different ways of collecting usage data. each
-	// different way provides its own "usageClient". here we make sure we
-	// have the correct one or an error is triggered. XXX MetricsServer is
-	// deprecated, removed once dropped.
+	// different way provides its own "usageClient". the metrics-based client
+	// is reset at every extension point so we always get the latest prometheus
+	// client (whose SA token can be rotated after plugin creation).
+	// XXX MetricsServer is deprecated, removed once dropped.
 	var usageClient usageClient = newRequestedUsageClient(
 		extendedResourceNames, handle.GetPodsAssignedToNodeFunc(),
 	)
-	if metrics != nil {
-		usageClient, err = usageClientForMetrics(args, handle, extendedResourceNames)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	return &LowNodeUtilization{
 		logger:                logger,
@@ -134,11 +129,32 @@ func (l *LowNodeUtilization) Name() string {
 	return LowNodeUtilizationPluginName
 }
 
+// resetUsageClient refreshes the usageClient field from the current handle
+// state. It must be called at the start of every extension point so that a
+// rotated prometheus SA token is picked up without restarting the process.
+func (l *LowNodeUtilization) resetUsageClient() error {
+	if l.args.MetricsUtilization == nil {
+		return nil
+	}
+	client, err := usageClientForMetrics(l.args, l.handle, l.extendedResourceNames)
+	if err != nil {
+		return err
+	}
+	l.usageClient = client
+	return nil
+}
+
 // Balance holds the main logic of the plugin. It evicts pods from over
 // utilized nodes to under utilized nodes. The goal here is to evenly
 // distribute pods across nodes.
 func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *frameworktypes.Status {
 	logger := klog.FromContext(klog.NewContext(ctx, l.logger)).WithValues("ExtensionPoint", frameworktypes.BalanceExtensionPoint)
+
+	if err := l.resetUsageClient(); err != nil {
+		return &frameworktypes.Status{
+			Err: fmt.Errorf("error initializing usage client: %v", err),
+		}
+	}
 
 	if err := l.usageClient.sync(ctx, nodes); err != nil {
 		return &frameworktypes.Status{
