@@ -9,7 +9,7 @@
     <img src="assets/logo/descheduler-stacked-color.png" width="40%" align="center" alt="descheduler">
 </p>
 
-# Descheduler for Kubernetes
+# Descheduler for Kubernetes 
 
 Scheduling in Kubernetes is the process of binding pending pods to nodes, and is performed by
 a component of Kubernetes called kube-scheduler. The scheduler's decisions, whether or where a
