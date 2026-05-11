@@ -255,6 +255,7 @@ service:
 
 serviceMonitor:
   enabled: false
+  apiVersion: "monitoring.coreos.com/v1"
   # The namespace where Prometheus expects to find service monitors.
   # namespace: ""
   # Add custom labels to the ServiceMonitor resource

@@ -1,6 +1,6 @@
 {{- if eq .Values.kind "Deployment" }}
 {{- if eq .Values.serviceMonitor.enabled true }}
-apiVersion: monitoring.coreos.com/v1
+apiVersion: {{ .Values.serviceMonitor.apiVersion | default "monitoring.coreos.com/v1" }}
 kind: ServiceMonitor
 metadata:
   name: {{ template "descheduler.fullname" . }}-servicemonitor

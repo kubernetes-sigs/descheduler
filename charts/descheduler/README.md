@@ -79,6 +79,7 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `nodeSelector`                      | Node selectors to run the descheduler cronjob/deployment on specific nodes                                            | `nil`                                     |
 | `service.enabled`                   | If `true`, create a service for deployment                                                                            | `false`                                   |
 | `serviceMonitor.enabled`            | If `true`, create a ServiceMonitor for deployment                                                                     | `false`                                   |
+| `serviceMonitor.apiVersion`         | API version used by the ServiceMonitor resource                                                                       | `monitoring.coreos.com/v1`                |
 | `serviceMonitor.namespace`          | The namespace where Prometheus expects to find service monitors                                                       | `nil`                                     |
 | `serviceMonitor.additionalLabels`   | Add custom labels to the ServiceMonitor resource                                                                      | `{}`                                      |
 | `serviceMonitor.interval`           | The scrape interval. If not set, the Prometheus default scrape interval is used                                       | `nil`                                     |
