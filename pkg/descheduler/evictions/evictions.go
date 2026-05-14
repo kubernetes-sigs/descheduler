@@ -154,8 +154,23 @@ func (erc *evictionRequestsCache) assumePod(pod *v1.Pod, profileName, strategyNa
 	erc.mu.Lock()
 	defer erc.mu.Unlock()
 	uid := getPodKey(pod)
-	if _, exists := erc.requests[uid]; exists {
-		// Pod already assumed by a previous strategy/profile; first one wins.
+	if item, exists := erc.requests[uid]; exists {
+		if item.evictionAssumed {
+			// Pod already assumed by a previous strategy/profile; first one wins.
+			return
+		}
+		// The informer's UpdateFunc called addPod (evictionAssumed=false) before
+		// the TooManyRequests response arrived. Upgrade the entry in place without
+		// bumping the counters a second time.
+		erc.requests[uid] = evictionRequestItem{
+			podNamespace:     item.podNamespace,
+			podName:          item.podName,
+			podNodeName:      item.podNodeName,
+			strategyName:     strategyName,
+			profileName:      profileName,
+			evictionAssumed:  true,
+			assumedTimestamp: metav1.NewTime(time.Now()),
+		}
 		return
 	}
 	erc.requests[uid] = evictionRequestItem{
