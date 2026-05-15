@@ -69,7 +69,7 @@ func TestDeschedulingInterval(t *testing.T) {
 	// dropping the `--descheduling-interval` flag so the descheduler exits after
 	// one iteration, and setting RestartPolicy=Never so the Pod doesn't get
 	// restarted by the kubelet on completion.
-	pod := newDeschedulerOneShotPod("descheduling-interval", deschedulerPolicyConfigMapObj.Name)
+	pod := newDeschedulerOneShotPod("descheduling-interval")
 
 	t.Logf("Creating one-shot descheduler pod %v", pod.Name)
 	if _, err := clientSet.CoreV1().Pods(pod.Namespace).Create(ctx, pod, metav1.CreateOptions{}); err != nil {
@@ -112,11 +112,9 @@ func TestDeschedulingInterval(t *testing.T) {
 //     follows the run-once-and-exit code path.
 //   - No liveness probe — a one-shot run isn't long enough to make probing
 //     meaningful, and a slow first probe could race the clean exit.
-func newDeschedulerOneShotPod(testName, policyConfigMapName string) *v1.Pod {
-	deploymentTemplate := deschedulerDeployment(testName)
-	podTemplate := deploymentTemplate.Spec.Template
-
-	podSpec := podTemplate.Spec
+func newDeschedulerOneShotPod(testName string) *v1.Pod {
+	deployment := deschedulerDeployment(testName)
+	podSpec := deployment.Spec.Template.Spec
 	podSpec.RestartPolicy = v1.RestartPolicyNever
 
 	container := podSpec.Containers[0]
@@ -127,17 +125,11 @@ func newDeschedulerOneShotPod(testName, policyConfigMapName string) *v1.Pod {
 	container.LivenessProbe = nil
 	podSpec.Containers[0] = container
 
-	for i, vol := range podSpec.Volumes {
-		if vol.ConfigMap != nil && vol.ConfigMap.LocalObjectReference.Name == "descheduler-policy-configmap" {
-			podSpec.Volumes[i].ConfigMap.LocalObjectReference.Name = policyConfigMapName
-		}
-	}
-
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "descheduler-oneshot-" + testName,
-			Namespace: deploymentTemplate.Namespace,
-			Labels:    deploymentTemplate.Spec.Template.Labels,
+			Namespace: deployment.Namespace,
+			Labels:    deployment.Spec.Template.Labels,
 		},
 		Spec: podSpec,
 	}
