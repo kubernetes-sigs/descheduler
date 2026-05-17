@@ -1,8 +1,8 @@
 # RFC: ZoneAwareNodeFit for RemovePodsViolatingTopologySpreadConstraint
 
-**Status:** Implementable  
-**Author:** bruno.chauvet@rokt.com  
-**Date:** 2026-04-15  
+**Status:** Implementable
+**Author:** bruno.chauvet@rokt.com
+**Date:** 2026-04-15 (revised 2026-05-17)
 **Related issues:** kubernetes-sigs/descheduler#1534, kubernetes-sigs/descheduler#1067
 
 ---
@@ -10,55 +10,69 @@
 ## Problem
 
 `RemovePodsViolatingTopologySpreadConstraint` evicts pods from over-loaded topology
-zones. The existing `TopologyBalanceNodeFit` flag (default: `true`) gates eviction on
-whether the pod can fit on *some* node across *all* under-loaded zones combined.
-`PodFitsAnyOtherNode` evaluates each candidate node independently (resource requests,
-nodeSelector, taints, anti-affinity), so this check correctly blocks eviction when no
-individual node has sufficient capacity.
+domains in batches: each iteration of `balanceDomains` selects N candidate pods from
+an over-loaded domain and lets the scheduler place them in under-loaded domains. The
+existing `TopologyBalanceNodeFit` gate (default `true`) checks, for each candidate,
+whether the pod can fit on at least one node in the union of all under-loaded domains.
 
-However, `TopologyBalanceNodeFit` is a single binary gate. Users who need to disable
-it (e.g., to allow eviction even when no target node is currently schedulable, relying
-on cluster-autoscaler to provision capacity) lose the per-node fit check entirely.
-There is no way to say "check per-node fit, but report it with zone-level granularity."
+The check is **stateless across the batch**: every candidate evaluates `PodFitsAnyOtherNode`
+against the same node-view (the descheduler does not simulate intermediate scheduler
+decisions). So if N candidates each individually fit on a node in the only under-loaded
+domain `B`, all N pass the gate — even though `B` may only have aggregate room for
+K ≪ N of them. After eviction, the scheduler can place only K pods in `B`; the
+remaining N − K either go back to the over-loaded domain (churn — issues #1534, #1067)
+or remain Pending.
 
 ### Illustrative scenario
 
 ```
-Zone A (over-loaded): 10 pods, nodes have 2 000 m CPU free per node
-Zone B (under-loaded by pod count): 3 pods, nodes have only 50 m CPU free
-Zone C (under-loaded by pod count): 3 pods, nodes have 2 000 m CPU free
-Pod to evict: requests 100 m CPU
+Domain A (over-loaded): 7 pods on nodes with ample CPU
+Domain B (under-loaded by pod count): 1 pod on a node with 250 m CPU allocatable
+Existing pod in B uses 100 m → 150 m of aggregate headroom remains in domain B
+Candidate pods request 100 m CPU each
+
+balanceDomains schedules 3 evictions toward domain B.
+TopologyBalanceNodeFit evaluates each candidate against the live indexer state
+(B1 still has 150 m headroom) → all 3 pass → all 3 evicted.
+The scheduler can fit at most 1 of them in B. The other 2 go back to A → churn.
 ```
 
-With `TopologyBalanceNodeFit: false`, the per-node fit gate is disabled. Eviction
-proceeds regardless of whether any target zone can actually schedule the pod. A pod
-evicted from zone A may be scheduled into zone B despite zone B being resource-saturated
-at the per-node level, because no gate is active.
-
-`ZoneAwareNodeFit: true` re-enables the per-node fit check in a zone-grouped form:
-it verifies that at least one specific under-loaded zone contains a node that can fit
-the pod, without requiring `TopologyBalanceNodeFit` to be enabled.
+The fundamental gap: `TopologyBalanceNodeFit` reasons about **per-node fit on the
+union of under-loaded domains**, which mathematically collapses to
+`OR(merge(domains))`. It cannot detect cumulative over-commit of a single under-loaded
+domain because it never tracks state across the batch.
 
 ## Proposed Change
 
-Add a new opt-in field `ZoneAwareNodeFit *bool` to
-`RemovePodsViolatingTopologySpreadConstraintArgs` (default: `false`).
+Add an opt-in field `ZoneAwareNodeFit *bool` to
+`RemovePodsViolatingTopologySpreadConstraintArgs` (default `false`).
 
-When `ZoneAwareNodeFit: true`, `balanceDomains` additionally:
+When enabled, `balanceDomains` tracks, **per under-loaded topology domain**, the
+aggregate resource headroom remaining for the current batch. Each candidate pod is
+admitted only if some specific under-loaded domain has both:
 
-1. Groups eligible nodes from under-loaded zones by their topology key value (zone →
-   nodes map).
-2. For each candidate pod, checks whether at least one *specific* zone has a node that
-   can fit the pod (resource requests, nodeSelector, taints).
-3. Skips eviction of the pod if no single target zone individually has capacity.
+- (a) at least one node where the pod fits per the scheduler's per-node predicates
+  (`PodFitsAnyOtherNode`), AND
+- (b) sufficient remaining aggregate headroom — after subtracting all pods already
+  committed to that domain in this batch — to absorb the pod's resource request and
+  one pod slot.
 
-Both `ZoneAwareNodeFit` and `TopologyBalanceNodeFit` perform the same per-node capacity
-check (resource requests, nodeSelector, taints, anti-affinity via `PodFitsAnyOtherNode`),
-and when both are enabled they evaluate the same set of nodes — so they are functionally
-equivalent when `topologyBalanceNodeFit: true` (the default). The value of
-`ZoneAwareNodeFit` is as an **independent gate** that can be activated even when
-`TopologyBalanceNodeFit` is disabled, preserving node-fit checking without coupling to
-the existing flag's on/off semantics.
+On admission, that domain's headroom is decremented. Subsequent candidates see the
+decremented state; once a domain is drained, later candidates must find another
+qualifying domain or be skipped.
+
+Per-domain headroom is initialised as `sum(allocatable) − sum(existing pod requests)`
+across the domain's nodes, for cpu, memory, and pod count.
+
+### Why this is qualitatively different from `TopologyBalanceNodeFit`
+
+The accumulator makes pod-N's decision depend on commitments 1..N-1. There is no
+equivalent stateless `OR(merge(...))` formulation, because `PodFitsAnyOtherNode` has
+no notion of "headroom remaining after prior commitments in this batch."
+
+`ZoneAwareNodeFit` is therefore **strictly stricter** than `TopologyBalanceNodeFit`:
+any pod that fails `ZoneAwareNodeFit` also fails the cumulative-correctness goal
+that `TopologyBalanceNodeFit` cannot express.
 
 ## API
 
@@ -74,36 +88,35 @@ profiles:
     pluginConfig:
       - name: RemovePodsViolatingTopologySpreadConstraint
         args:
-          topologyBalanceNodeFit: true   # unchanged — existing field
-          zoneAwareNodeFit: true         # NEW — opt-in per-zone capacity check
+          topologyBalanceNodeFit: true   # unchanged — existing flag
+          zoneAwareNodeFit: true         # NEW — cumulative per-domain gate
 ```
 
 ### Field semantics
 
-| Field | Default | Meaning |
-|---|---|---|
-| `topologyBalanceNodeFit` | `true` | Gate: pod must fit on *some* node across the union of all under-loaded zone nodes |
-| `zoneAwareNodeFit` | `false` | Gate: pod must fit within at least one *specific* under-loaded zone |
+| Field | Default | Reasoning level | Catches cumulative over-commit? |
+|---|---|---|---|
+| `topologyBalanceNodeFit` | `true` | Per-node, stateless across batch | No |
+| `zoneAwareNodeFit` | `false` | Per-domain, cumulative within batch | Yes |
 
-Both gates are independent. Enabling both is valid but redundant when
-`topologyBalanceNodeFit: true` (the default): in that case both evaluate the same node
-set with the same per-node check. `zoneAwareNodeFit` is most useful when
-`topologyBalanceNodeFit: false` is desired and per-node fit checking should still apply.
+Enabling both is valid: `TopologyBalanceNodeFit` runs first as a fast per-node pre-filter,
+then `ZoneAwareNodeFit` applies the cumulative-headroom constraint.
 
 ## Implementation
 
-### New types (types.go)
-
-Add `ZoneAwareNodeFit *bool` after `TopologyBalanceNodeFit`:
+### types.go
 
 ```go
+// ZoneAwareNodeFit, if set to true, requires that each pod evicted by topology-spread
+// balancing have, in at least one specific under-loaded topology domain (as identified
+// by the constraint's TopologyKey), (a) a node where the pod fits per the scheduler's
+// per-node predicates AND (b) sufficient remaining aggregate resource headroom — after
+// accounting for other pods already committed to that domain during the same balancing
+// round — to absorb the pod.
 ZoneAwareNodeFit *bool `json:"zoneAwareNodeFit,omitempty"`
 ```
 
-### Default value (defaults.go)
-
-`SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs` must initialise the new
-field when it is nil:
+### defaults.go
 
 ```go
 if args.ZoneAwareNodeFit == nil {
@@ -111,115 +124,96 @@ if args.ZoneAwareNodeFit == nil {
 }
 ```
 
-### Deep-copy generated file (zz_generated.deepcopy.go)
+### topologyspreadconstraint.go
 
-Adding a `*bool` pointer field to a `+k8s:deepcopy-gen=true` struct requires
-regenerating `zz_generated.deepcopy.go`. The `DeepCopyInto` function for
-`RemovePodsViolatingTopologySpreadConstraintArgs` must include a nil-check block for
-`ZoneAwareNodeFit`, mirroring the existing block for `TopologyBalanceNodeFit`:
+Two new helpers replace the original duplicate filter + naive OR(OR) check:
 
 ```go
-if in.ZoneAwareNodeFit != nil {
-    in, out := &in.ZoneAwareNodeFit, &out.ZoneAwareNodeFit
-    *out = new(bool)
-    **out = **in
-}
-```
+// groupNodesByDomain classifies the supplied nodes (already filtered to under-loaded
+// domains) by their topology-key label value. Single pass over the same node slice
+// the existing filterNodesBelowIdealAvg returns.
+func groupNodesByDomain(nodes []*v1.Node, topologyKey string) map[string][]*v1.Node
 
-Run `hack/update-generated-deepcopy.sh` (or the equivalent `controller-gen` invocation)
-to regenerate this file; do not edit it by hand.
+// computeDomainHeadroom returns, per under-loaded domain, the aggregate remaining
+// resource headroom (allocatable − already-requested) summed across the domain's
+// nodes. Tracks cpu, memory, and pod count. Computed once per balanceDomains call.
+func computeDomainHeadroom(
+    nodesByDomain map[string][]*v1.Node,
+    nodeIndexer podutil.GetPodsAssignedToNodeFunc,
+) map[string]v1.ResourceList
 
-### New helper functions (topologyspreadconstraint.go)
-
-```go
-// filterNodesByZoneBelowIdealAvg groups nodes from under-loaded topology domains
-// by their domain value (e.g. zone label). Only domains with pod count strictly
-// below idealAvg are included. Returns an empty non-nil map if no under-loaded domains exist.
-func filterNodesByZoneBelowIdealAvg(
-    nodes []*v1.Node,
-    sortedDomains []topology,
-    topologyKey string,
-    idealAvg float64,
-) map[string][]*v1.Node {
-    topologyNodesMap := make(map[string][]*v1.Node, len(sortedDomains))
-    for _, n := range nodes {
-        if zone, ok := n.Labels[topologyKey]; ok {
-            topologyNodesMap[zone] = append(topologyNodesMap[zone], n)
-        }
-    }
-    result := make(map[string][]*v1.Node)
-    for _, domain := range sortedDomains {
-        if float64(len(domain.pods)) < idealAvg {
-            result[domain.pair.value] = topologyNodesMap[domain.pair.value]
-        }
-    }
-    return result
-}
-
-// podFitsAnyNodeInSomeZone returns true if the pod can be scheduled on at least
-// one node within at least one zone from nodesByZone. Each zone is validated
-// independently — the pod must fit entirely within a single zone.
-func podFitsAnyNodeInSomeZone(
+// podFitsSomeDomainWithHeadroom returns the topology-domain key whose remaining
+// headroom AND per-node fit both admit pod. On success it decrements that domain's
+// headroom in place and returns ok=true. Iterates domains in sorted order for
+// determinism.
+func podFitsSomeDomainWithHeadroom(
     nodeIndexer podutil.GetPodsAssignedToNodeFunc,
     pod *v1.Pod,
-    nodesByZone map[string][]*v1.Node,
-) bool {
-    for _, zoneNodes := range nodesByZone {
-        if node.PodFitsAnyOtherNode(nodeIndexer, pod, zoneNodes) {
-            return true
-        }
-    }
-    return false
-}
+    nodesByDomain map[string][]*v1.Node,
+    remainingHeadroom map[string]v1.ResourceList,
+) (string, bool)
 ```
 
-### balanceDomains update (topologyspreadconstraint.go)
-
-In `balanceDomains`, after the existing `topologyBalanceNodeFit` declaration:
+In `balanceDomains`:
 
 ```go
 zoneAwareNodeFit := utilptr.Deref(d.args.ZoneAwareNodeFit, false)
-
-var nodesByZoneBelowIdealAvg map[string][]*v1.Node
+var nodesByDomain map[string][]*v1.Node
+var remainingHeadroom map[string]v1.ResourceList
 if zoneAwareNodeFit {
-    nodesByZoneBelowIdealAvg = filterNodesByZoneBelowIdealAvg(
-        eligibleNodes, sortedDomains, tsc.TopologyKey, idealAvg)
+    nodesByDomain = groupNodesByDomain(nodesBelowIdealAvg, tsc.TopologyKey)
+    remainingHeadroom = computeDomainHeadroom(nodesByDomain, getPodsAssignedToNode)
 }
 ```
 
-Inside the eviction gate loop, after the existing `topologyBalanceNodeFit` check:
+Inside the per-pod loop, after the existing `topologyBalanceNodeFit` gate:
 
 ```go
-if zoneAwareNodeFit && !podFitsAnyNodeInSomeZone(
-    getPodsAssignedToNode, aboveToEvict[k], nodesByZoneBelowIdealAvg) {
-    d.logger.V(2).Info("ignoring pod for eviction: no target zone has sufficient capacity",
-        "pod", klog.KObj(aboveToEvict[k]))
-    continue
+if zoneAwareNodeFit {
+    if _, ok := podFitsSomeDomainWithHeadroom(
+        getPodsAssignedToNode, aboveToEvict[k], nodesByDomain, remainingHeadroom,
+    ); !ok {
+        d.logger.V(2).Info(
+            "ignoring pod for eviction: no target topology domain has fit + remaining headroom",
+            "pod", klog.KObj(aboveToEvict[k]),
+        )
+        continue
+    }
 }
 ```
 
 ## Alternatives Considered
 
-**Modify PreEvictionFilter in DefaultEvictor to be zone-aware**: requires threading zone
-context through the `EvictorPlugin` interface (`PreEvictionFilter(pod *v1.Pod) bool` has
-no zone parameter), which is a breaking API change affecting all plugins. Rejected in
-favour of a TSC-local, opt-in gate.
+**Modify `TopologyBalanceNodeFit` semantics to be cumulative.** Silent behavioural change
+for existing users. Rejected.
 
-**Change TopologyBalanceNodeFit semantics**: would be a silent behaviour change for
-existing users. Rejected in favour of a new independent field.
+**Per-node-fit-only gate, no headroom tracking.** This is what the first revision of this
+proposal shipped; review surfaced that it collapses to `OR(merge(domains))` and adds
+nothing over `TopologyBalanceNodeFit`. Rejected — see Problem section.
+
+**Threading zone context through `EvictorPlugin.PreEvictionFilter`.** Breaking API change
+across all plugins. Rejected in favour of a TSC-local gate.
 
 ## Test Plan
 
-1. ZoneAwareNodeFit enabled, target zone has capacity → pod evicted
-2. ZoneAwareNodeFit enabled, all target zones at CPU capacity → pod NOT evicted (no churn)
-3. ZoneAwareNodeFit enabled, multiple under-loaded zones, mixed capacity → pod evicted
-   (at least one zone qualifies)
-4. ZoneAwareNodeFit disabled (default) → existing behaviour unchanged
+1. **Cumulative-overflow**: 7 pods on `zoneA`, 1 pod on `zoneB` (250 m CPU node, 150 m
+   headroom). `ZoneAwareNodeFit=true, TopologyBalanceNodeFit=false, nodeFit=false`
+   → 1 eviction (only one pod fits zoneB's aggregate headroom).
+2. **Baseline contrast**: same topology, all gates off → 3 evictions; with
+   `TopologyBalanceNodeFit=true` only → still 3 evictions (the bug the new gate fixes).
+3. **Multi-domain redirection**: 3 domains, `zoneB` tight (1 pod's worth of headroom),
+   `zoneC` plenty. Evictions spread across domains; all candidates admitted.
+4. **Per-node fit still required**: `zoneB` has high aggregate headroom but no single
+   node fits the pod → 0 evictions.
+5. **Default off**: `zoneAwareNodeFit` unset → byte-for-byte identical behaviour to
+   prior versions.
+6. Unit test for `podFitsSomeDomainWithHeadroom`: deterministic ordering, headroom
+   drain, aggregate-failure rejection, per-node-failure rejection, empty input.
 
 ## Risk
 
-**Low.** Change is:
-- Opt-in (`false` by default)
-- Additive (existing `TopologyBalanceNodeFit` gate is unmodified)
-- Localised to `balanceDomains` inside the TSC plugin
-- No changes to framework types, eviction API, or other plugins
+**Low.**
+- Opt-in (`false` by default).
+- Additive: existing `TopologyBalanceNodeFit` is unchanged.
+- Localised to `balanceDomains` and a few new helpers in the TSC plugin.
+- No changes to framework types, eviction API, or other plugins.

@@ -33,11 +33,19 @@ type RemovePodsViolatingTopologySpreadConstraintArgs struct {
 	LabelSelector          *metav1.LabelSelector              `json:"labelSelector,omitempty"`
 	Constraints            []v1.UnsatisfiableConstraintAction `json:"constraints,omitempty"`
 	TopologyBalanceNodeFit *bool                              `json:"topologyBalanceNodeFit,omitempty"`
-	// ZoneAwareNodeFit, if set to true, gates eviction on per-topology-domain
-	// capacity: a pod is only evicted from an over-loaded topology domain
-	// (for example, a zone) if at least one specific under-loaded topology
-	// domain, as identified by the constraint's TopologyKey, has sufficient
-	// resource capacity to schedule the pod. Defaults to false.
-	// Works independently from TopologyBalanceNodeFit.
+	// ZoneAwareNodeFit, if set to true, requires that each pod evicted by
+	// topology-spread balancing have, in at least one specific under-loaded
+	// topology domain (as identified by the constraint's TopologyKey),
+	// (a) a node where the pod fits per the scheduler's per-node predicates
+	// AND (b) sufficient remaining aggregate resource headroom — after
+	// accounting for other pods already committed to that domain during
+	// the same balancing round — to absorb the pod.
+	//
+	// Unlike TopologyBalanceNodeFit, which only checks per-node fit across
+	// the union of under-loaded domains, ZoneAwareNodeFit reasons about
+	// per-domain cumulative capacity. This prevents over-committing a single
+	// under-loaded domain within one balancing round, which would otherwise
+	// cause the scheduler to push evicted pods back to the over-loaded
+	// domain (eviction churn). Defaults to false.
 	ZoneAwareNodeFit *bool `json:"zoneAwareNodeFit,omitempty"`
 }

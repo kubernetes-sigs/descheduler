@@ -21,6 +21,7 @@ import (
 	"sort"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -317,9 +318,15 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(ctx context
 
 	zoneAwareNodeFit := utilptr.Deref(d.args.ZoneAwareNodeFit, false)
 
-	var nodesByDomainBelowIdealAvg map[string][]*v1.Node
+	// When zoneAwareNodeFit is enabled, group the same under-loaded nodes by their
+	// topology-domain value and compute each domain's remaining aggregate headroom.
+	// The headroom map is mutated as evictions are committed within this call so that
+	// later candidate pods see headroom already consumed by earlier ones.
+	var nodesByDomain map[string][]*v1.Node
+	var remainingHeadroom map[string]v1.ResourceList
 	if zoneAwareNodeFit {
-		nodesByDomainBelowIdealAvg = filterNodesByDomainBelowIdealAvg(eligibleNodes, sortedDomains, tsc.TopologyKey, idealAvg)
+		nodesByDomain = groupNodesByDomain(nodesBelowIdealAvg, tsc.TopologyKey)
+		remainingHeadroom = computeDomainHeadroom(nodesByDomain, getPodsAssignedToNode)
 	}
 
 	// i is the index for belowOrEqualAvg
@@ -386,9 +393,11 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(ctx context
 				continue
 			}
 
-			if zoneAwareNodeFit && !podFitsAnyNodeInSomeDomain(getPodsAssignedToNode, aboveToEvict[k], nodesByDomainBelowIdealAvg) {
-				d.logger.V(2).Info("ignoring pod for eviction: no target zone has sufficient capacity", "pod", klog.KObj(aboveToEvict[k]))
-				continue
+			if zoneAwareNodeFit {
+				if _, ok := podFitsSomeDomainWithHeadroom(getPodsAssignedToNode, aboveToEvict[k], nodesByDomain, remainingHeadroom); !ok {
+					d.logger.V(2).Info("ignoring pod for eviction: no target topology domain has fit + remaining headroom", "pod", klog.KObj(aboveToEvict[k]))
+					continue
+				}
 			}
 
 			podsForEviction[aboveToEvict[k]] = struct{}{}
@@ -417,41 +426,114 @@ func filterNodesBelowIdealAvg(nodes []*v1.Node, sortedDomains []topology, topolo
 	return nodesBelowIdealAvg
 }
 
-// filterNodesByDomainBelowIdealAvg groups nodes from topology domains whose pod count
-// is strictly below idealAvg, keyed by their topology domain value (e.g. zone name).
-// Unlike filterNodesBelowIdealAvg, the domain-to-nodes mapping is preserved so callers
-// can validate capacity domain-by-domain rather than across an aggregate node list.
-// Returns an empty map (not nil) when no topology domains are below idealAvg.
-func filterNodesByDomainBelowIdealAvg(nodes []*v1.Node, sortedDomains []topology, topologyKey string, idealAvg float64) map[string][]*v1.Node {
-	topologyNodesMap := make(map[string][]*v1.Node, len(sortedDomains))
-	for _, n := range nodes {
-		if domainValue, ok := n.Labels[topologyKey]; ok {
-			topologyNodesMap[domainValue] = append(topologyNodesMap[domainValue], n)
-		}
-	}
+// groupNodesByDomain classifies the given nodes by their topology-domain label value.
+// Nodes missing the label are skipped. Returns an empty (non-nil) map if no nodes have the label.
+func groupNodesByDomain(nodes []*v1.Node, topologyKey string) map[string][]*v1.Node {
 	result := make(map[string][]*v1.Node)
-	// TODO: validate domain.pair.key == topologyKey to guard against future mixed-key domain lists.
-	for _, domain := range sortedDomains {
-		if float64(len(domain.pods)) < idealAvg {
-			if domainNodes := topologyNodesMap[domain.pair.value]; len(domainNodes) > 0 {
-				result[domain.pair.value] = domainNodes
-			}
+	for _, n := range nodes {
+		if v, ok := n.Labels[topologyKey]; ok {
+			result[v] = append(result[v], n)
 		}
 	}
 	return result
 }
 
-// podFitsAnyNodeInSomeDomain returns true if pod can be scheduled on at least one node
-// within at least one topology domain (e.g. zone) from nodesByDomain. Each topology
-// domain is validated independently — the pod must fit entirely within a single
-// topology domain, not across a mix of nodes from different domains.
-func podFitsAnyNodeInSomeDomain(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodesByDomain map[string][]*v1.Node) bool {
-	for _, domainNodes := range nodesByDomain {
-		if node.PodFitsAnyOtherNode(nodeIndexer, pod, domainNodes) {
-			return true
+// computeDomainHeadroom returns, for each topology domain, the aggregate remaining
+// resource headroom (allocatable minus already-requested) summed across the domain's
+// nodes. Tracked resources: cpu, memory, pod count. Nodes whose pod listing fails
+// contribute only their raw allocatable (best-effort, conservatively over-counting
+// rather than blocking eviction).
+func computeDomainHeadroom(nodesByDomain map[string][]*v1.Node, nodeIndexer podutil.GetPodsAssignedToNodeFunc) map[string]v1.ResourceList {
+	result := make(map[string]v1.ResourceList, len(nodesByDomain))
+	for domain, dnodes := range nodesByDomain {
+		var cpuMilli, memBytes, podSlots int64
+		for _, n := range dnodes {
+			cpuMilli += n.Status.Allocatable.Cpu().MilliValue()
+			memBytes += n.Status.Allocatable.Memory().Value()
+			podSlots += n.Status.Allocatable.Pods().Value()
+			podsOnNode, err := podutil.ListPodsOnANode(n.Name, nodeIndexer, nil)
+			if err != nil {
+				continue
+			}
+			for _, p := range podsOnNode {
+				req, _ := utils.PodRequestsAndLimits(p)
+				if q, ok := req[v1.ResourceCPU]; ok {
+					cpuMilli -= q.MilliValue()
+				}
+				if q, ok := req[v1.ResourceMemory]; ok {
+					memBytes -= q.Value()
+				}
+				podSlots--
+			}
+		}
+		result[domain] = v1.ResourceList{
+			v1.ResourceCPU:    *resource.NewMilliQuantity(cpuMilli, resource.DecimalSI),
+			v1.ResourceMemory: *resource.NewQuantity(memBytes, resource.BinarySI),
+			v1.ResourcePods:   *resource.NewQuantity(podSlots, resource.DecimalSI),
 		}
 	}
-	return false
+	return result
+}
+
+// podFitsSomeDomainWithHeadroom returns the topology-domain key whose remaining aggregate
+// headroom can absorb the pod AND whose nodes include at least one where the pod fits per
+// the scheduler's per-node predicates. On success it decrements that domain's headroom by
+// the pod's requests (cpu/mem/1 pod slot) and returns ok=true. Returns ok=false if no
+// domain qualifies. Domain keys are iterated in deterministic (sorted) order.
+func podFitsSomeDomainWithHeadroom(
+	nodeIndexer podutil.GetPodsAssignedToNodeFunc,
+	pod *v1.Pod,
+	nodesByDomain map[string][]*v1.Node,
+	remainingHeadroom map[string]v1.ResourceList,
+) (string, bool) {
+	podReq, _ := utils.PodRequestsAndLimits(pod)
+	domains := make([]string, 0, len(nodesByDomain))
+	for d := range nodesByDomain {
+		domains = append(domains, d)
+	}
+	sort.Strings(domains)
+
+	for _, domain := range domains {
+		if !headroomCoversPod(remainingHeadroom[domain], podReq) {
+			continue
+		}
+		if !node.PodFitsAnyOtherNode(nodeIndexer, pod, nodesByDomain[domain]) {
+			continue
+		}
+		subtractPodFromHeadroom(remainingHeadroom, domain, podReq)
+		return domain, true
+	}
+	return "", false
+}
+
+// headroomCoversPod reports whether the domain's remaining headroom is sufficient to
+// absorb pod's cpu/memory request plus one pod slot. Missing keys are treated as zero.
+func headroomCoversPod(headroom v1.ResourceList, podReq v1.ResourceList) bool {
+	cpuHead := headroom[v1.ResourceCPU]
+	memHead := headroom[v1.ResourceMemory]
+	podsHead := headroom[v1.ResourcePods]
+	cpuReq := podReq[v1.ResourceCPU]
+	memReq := podReq[v1.ResourceMemory]
+	return cpuHead.MilliValue() >= cpuReq.MilliValue() &&
+		memHead.Value() >= memReq.Value() &&
+		podsHead.Value() >= 1
+}
+
+// subtractPodFromHeadroom decrements remainingHeadroom[domain] by the pod's cpu/memory
+// request and one pod slot.
+func subtractPodFromHeadroom(remainingHeadroom map[string]v1.ResourceList, domain string, podReq v1.ResourceList) {
+	rl := remainingHeadroom[domain]
+	cpuReq := podReq[v1.ResourceCPU]
+	memReq := podReq[v1.ResourceMemory]
+	cpu := rl[v1.ResourceCPU]
+	cpu.Sub(cpuReq)
+	rl[v1.ResourceCPU] = cpu
+	mem := rl[v1.ResourceMemory]
+	mem.Sub(memReq)
+	rl[v1.ResourceMemory] = mem
+	pods := rl[v1.ResourcePods]
+	pods.Sub(*resource.NewQuantity(1, resource.DecimalSI))
+	rl[v1.ResourcePods] = pods
 }
 
 // sortDomains sorts and splits the list of topology domains based on their size

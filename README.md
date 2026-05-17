@@ -697,13 +697,20 @@ The `topologyBalanceNodeFit` arg is used when balancing topology domains while t
 topologyBalanceNodeFit: false
 ```
 
-The `zoneAwareNodeFit` arg (default: `false`) gates eviction on per-node fit, evaluated
-zone-by-zone: a pod is only evicted if at least one specific under-loaded zone contains a
-node that can fit it (resource requests, nodeSelector, taints). It performs the same
-per-node check as `topologyBalanceNodeFit` but operates as an independent gate. When
-`topologyBalanceNodeFit: true` (the default), enabling `zoneAwareNodeFit` is redundant.
-It is most useful when `topologyBalanceNodeFit: false` and per-node fit checking should
-still apply.
+The `zoneAwareNodeFit` arg (default: `false`) prevents over-committing a single
+under-loaded topology domain within one balancing round. For each candidate pod the
+descheduler considers evicting, it requires that at least one specific under-loaded
+domain (identified by the constraint's `topologyKey`) has both (a) a node where the pod
+fits per the scheduler's per-node predicates AND (b) sufficient remaining aggregate
+resource headroom — after subtracting pods already committed to that domain in this
+round — to absorb the pod's cpu/memory request and one pod slot.
+
+Unlike `topologyBalanceNodeFit`, which only checks per-node fit on the union of
+under-loaded domain nodes (a check that is stateless across the batch),
+`zoneAwareNodeFit` tracks per-domain cumulative state. Use it when batched eviction
+would otherwise push more pods toward an under-loaded domain than it can actually
+absorb, causing the scheduler to send the excess back to the over-loaded domain
+(eviction churn).
 ```yaml
 zoneAwareNodeFit: true
 ```
@@ -731,7 +738,7 @@ Strategy parameter `labelSelector` is not utilized when balancing topology domai
 |`labelSelector`|(see [label filtering](#label-filtering))||
 |`constraints`|(see [whenUnsatisfiable](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.27/#topologyspreadconstraint-v1-core))||
 |`topologyBalanceNodeFit`|bool|default `true`. [node fit filtering](#node-fit-filtering) when balancing topology domains|
-|`zoneAwareNodeFit`|bool|default `false`. When enabled, gates eviction on per-node fit evaluated per-topology-domain: pod must fit on a node within at least one specific under-loaded topology domain. Independent of `topologyBalanceNodeFit`; redundant when `topologyBalanceNodeFit: true` (the default).|
+|`zoneAwareNodeFit`|bool|default `false`. When enabled, gates eviction on cumulative per-topology-domain headroom: a candidate pod is admitted only if some specific under-loaded domain has both a node where it fits AND remaining aggregate cpu/memory/pod-slot headroom (after pods already committed to that domain in this round). Prevents over-committing a single under-loaded domain — a case `topologyBalanceNodeFit` cannot detect.|
 
 **Example:**
 
