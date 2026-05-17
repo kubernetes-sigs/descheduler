@@ -508,7 +508,7 @@ func podFitsSomeDomainWithHeadroom(
 
 // headroomCoversPod reports whether the domain's remaining headroom is sufficient to
 // absorb pod's cpu/memory request plus one pod slot. Missing keys are treated as zero.
-func headroomCoversPod(headroom v1.ResourceList, podReq v1.ResourceList) bool {
+func headroomCoversPod(headroom, podReq v1.ResourceList) bool {
 	cpuHead := headroom[v1.ResourceCPU]
 	memHead := headroom[v1.ResourceMemory]
 	podsHead := headroom[v1.ResourcePods]
