@@ -37,6 +37,46 @@ TopologyBalanceNodeFit evaluates each candidate against the live indexer state
 The scheduler can fit at most 1 of them in B. The other 2 go back to A → churn.
 ```
 
+### Stateless vs cumulative checks, side-by-side
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant BD as balanceDomains
+    participant TBNF as topologyBalanceNodeFit gate<br/>(stateless per-node check on union of domains)
+    participant ZANF as zoneAwareNodeFit gate<br/>(cumulative per-domain headroom)
+    participant Idx as live nodeIndexer<br/>(B1 = 150 m headroom)
+    participant H as remainingHeadroom map<br/>(zoneB = 150 m initially)
+
+    Note over BD: 3 candidate pods<br/>(each requests 100 m)
+
+    BD->>TBNF: candidate 1
+    TBNF->>Idx: PodFitsAnyOtherNode([B1])
+    Idx-->>TBNF: yes (150 m ≥ 100 m)
+    TBNF-->>BD: pass
+    BD->>ZANF: candidate 1
+    ZANF->>H: zoneB headroom?
+    H-->>ZANF: 150 m
+    ZANF->>H: decrement by 100 m → 50 m
+    ZANF-->>BD: pass
+
+    BD->>TBNF: candidate 2
+    TBNF->>Idx: PodFitsAnyOtherNode([B1])
+    Idx-->>TBNF: yes — indexer is NOT mutated mid-batch
+    TBNF-->>BD: pass ← bug
+    BD->>ZANF: candidate 2
+    ZANF->>H: zoneB headroom?
+    H-->>ZANF: 50 m
+    ZANF-->>BD: reject (50 m < 100 m)
+
+    BD->>TBNF: candidate 3
+    TBNF-->>BD: pass ← bug
+    BD->>ZANF: candidate 3
+    ZANF-->>BD: reject
+
+    Note over BD: topologyBalanceNodeFit alone:<br/>3 evictions, scheduler returns 2 → churn<br/>zoneAwareNodeFit (with or without TBNF):<br/>1 eviction, no churn
+```
+
 The fundamental gap: `TopologyBalanceNodeFit` reasons about **per-node fit on the
 union of under-loaded domains**, which mathematically collapses to
 `OR(merge(domains))`. It cannot detect cumulative over-commit of a single under-loaded
@@ -196,19 +236,38 @@ across all plugins. Rejected in favour of a TSC-local gate.
 
 ## Test Plan
 
-1. **Cumulative-overflow**: 7 pods on `zoneA`, 1 pod on `zoneB` (250 m CPU node, 150 m
-   headroom). `ZoneAwareNodeFit=true, TopologyBalanceNodeFit=false, nodeFit=false`
-   → 1 eviction (only one pod fits zoneB's aggregate headroom).
-2. **Baseline contrast**: same topology, all gates off → 3 evictions; with
-   `TopologyBalanceNodeFit=true` only → still 3 evictions (the bug the new gate fixes).
-3. **Multi-domain redirection**: 3 domains, `zoneB` tight (1 pod's worth of headroom),
-   `zoneC` plenty. Evictions spread across domains; all candidates admitted.
-4. **Per-node fit still required**: `zoneB` has high aggregate headroom but no single
-   node fits the pod → 0 evictions.
-5. **Default off**: `zoneAwareNodeFit` unset → byte-for-byte identical behaviour to
-   prior versions.
-6. Unit test for `podFitsSomeDomainWithHeadroom`: deterministic ordering, headroom
-   drain, aggregate-failure rejection, per-node-failure rejection, empty input.
+The acceptance bar for this test plan: each behavioural case must produce a different
+result under the redesign than under a naive `OR(merge(domains))` per-node-fit
+implementation. Cases marked **gap-catching** would have flagged the prior revision's
+churn bug. Cases marked **regression** ensure the new gate still enforces existing
+invariants (per-node fit, default-off no-op).
+
+### Integration cases (`TestTopologySpreadConstraint` table)
+
+Shared topology unless noted: `zoneA` over-loaded (7 pods on a 2 000 m node);
+`zoneB` under-loaded (1 pod on a 250 m node → 150 m aggregate headroom).
+Each candidate pod requests 100 m CPU. balanceDomains schedules 3 evictions.
+
+| # | Scenario | Args | Expected | Catches gap? |
+|---|---|---|---|---|
+| 1 | ZoneAwareNodeFit caps cumulative load **on top of** TopologyBalanceNodeFit | TBNF=true (default), ZANF=true, evictor nodeFit=false | 1 of 3 | ✅ — prior impl admits 3 (per-node check stateless across batch) |
+| 2 | ZoneAwareNodeFit alone caps at aggregate headroom | TBNF=false, ZANF=true, evictor nodeFit=false | 1 of 3 | ✅ — prior impl admits 3 |
+| 3 | TopologyBalanceNodeFit alone does **not** cap cumulative load (the bug) | defaults (TBNF=true, ZANF=false), nodeFit=false | 3 of 3 | ❌ baseline contrast (proves the bug exists without the new gate) |
+| 4 | Drains domain by domain, caps at sum of headroom across domains (zoneB=150 m, zoneC=250 m → total headroom 400 m fits 4×100 m, but algorithm schedules 4 evictions in 2 iterations; the 4th finds both domains drained) | TBNF=false, ZANF=true, nodeFit=false | 3 of 4 | ✅ — prior impl admits 4 (zoneC always has per-node fit) |
+| 5 | Per-node fit still required when aggregate headroom is misleadingly high (zoneB has 5 × 50 m nodes = 250 m aggregate but no single node fits 100 m) | TBNF=false, ZANF=true, nodeFit=false | 0 evictions | ❌ regression — both impls reject |
+| 6 | Default off — backward compat (ZANF unset, evictor nodeFit handles it) | defaults, nodeFit=true | 0 evictions | ❌ regression — identical to prior versions |
+
+### Helper unit tests
+
+| Test | Coverage |
+|---|---|
+| `TestGroupNodesByDomain` | Classifies by `node.Labels[topologyKey]`; drops nodes missing the label |
+| `TestComputeDomainHeadroom` | Aggregates allocatable − sum-of-requests across a domain's nodes; counts cpu (millicores) and pod slots correctly |
+| `TestPodFitsSomeDomainWithHeadroom` — alphabetical commit | Inserts `zoneB` first into the map, asserts commit lands on `zoneA` (deterministic sorted iteration) |
+| `TestPodFitsSomeDomainWithHeadroom` — drain then reject | Three sequential calls with starting headroom = 250 m; first two admit, third rejects (50 m < 100 m) |
+| `TestPodFitsSomeDomainWithHeadroom` — aggregate failure | Headroom < pod request → reject |
+| `TestPodFitsSomeDomainWithHeadroom` — per-node failure | Aggregate ample but no single node fits (occupant pod consumes capacity) → reject |
+| `TestPodFitsSomeDomainWithHeadroom` — empty input | Empty `nodesByDomain` → reject without error |
 
 ## Risk
 
