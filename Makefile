@@ -29,7 +29,7 @@ LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}
 GOLANGCI_VERSION := v2.8.0
 HAS_GOLANGCI := $(shell ls _output/bin/golangci-lint 2> /dev/null)
 
-GOFUMPT_VERSION := v0.7.0
+GOFUMPT_VERSION := v0.10.0
 HAS_GOFUMPT := $(shell command -v gofumpt 2> /dev/null)
 
 GO_VERSION := $(shell (command -v jq > /dev/null && (go mod edit -json | jq -r .Go)) || (sed -En 's/^go (.*)$$/\1/p' go.mod))
@@ -146,7 +146,7 @@ verify-gen:
 
 lint:
 ifndef HAS_GOLANGCI
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./_output/bin ${GOLANGCI_VERSION}
+	GOBIN=$(CURRENT_DIR)/_output/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_VERSION}
 endif
 	./_output/bin/golangci-lint run -v
 	./_output/bin/golangci-lint fmt -v

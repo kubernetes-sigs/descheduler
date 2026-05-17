@@ -27,7 +27,7 @@ KIND_VERSION=${KIND_VERSION:-v0.31.0}
 SKIP_KUBECTL_INSTALL=${SKIP_KUBECTL_INSTALL:-}
 SKIP_KIND_INSTALL=${SKIP_KIND_INSTALL:-}
 SKIP_KUBEVIRT_INSTALL=${SKIP_KUBEVIRT_INSTALL:-}
-KUBEVIRT_VERSION=${KUBEVIRT_VERSION:-v1.6.2}
+KUBEVIRT_VERSION=${KUBEVIRT_VERSION:-v1.8.2}
 
 # Build a descheduler image
 IMAGE_TAG=v$(date +%Y%m%d)-$(git describe --tags)
@@ -40,6 +40,7 @@ echo "DESCHEDULER_IMAGE: ${DESCHEDULER_IMAGE}"
 # This just runs e2e tests.
 if [ -n "$KIND_E2E" ]; then
     K8S_VERSION=${KUBERNETES_VERSION:-v1.36.1}
+    KIND_NODE_IMAGE=${KIND_NODE_IMAGE:-localhost/kindest/node:${K8S_VERSION}}
     if [ -z "${SKIP_KUBECTL_INSTALL}" ]; then
         curl -Lo kubectl https://dl.k8s.io/release/${K8S_VERSION}/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/
     fi
@@ -52,7 +53,8 @@ if [ -n "$KIND_E2E" ]; then
 
     # If we did not set SKIP_INSTALL
     if [ -z "$SKIP_INSTALL" ]; then
-        ${KIND_SUDO} kind create cluster --image kindest/node:${K8S_VERSION} --config=./hack/kind_config.yaml
+        ${KIND_SUDO} kind build node-image ${K8S_VERSION} --image ${KIND_NODE_IMAGE}
+        ${KIND_SUDO} kind create cluster --image ${KIND_NODE_IMAGE} --config=./hack/kind_config.yaml
     fi
     ${CONTAINER_ENGINE} pull registry.k8s.io/pause
     if [ "${CONTAINER_ENGINE}" == "podman" ]; then
