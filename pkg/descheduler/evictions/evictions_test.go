@@ -573,6 +573,116 @@ func TestEvictionInBackgroundMetrics(t *testing.T) {
 	metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": "background"}, 2)
 }
 
+// TestEvictionInBackgroundMetrics_InformerRace reproduces the race where the
+// informer's UpdateFunc calls addPod (evictionAssumed=false) before evictPod's
+// assumePod call, causing the "success" metric to be silently dropped when the
+// pod is later deleted.
+//
+// The race: evictPod sends the eviction request; the KubeVirt handler sets
+// EvictionInProgressAnnotationKey before returning TooManyRequests, so the
+// informer's UpdateFunc fires and calls addPod (evictionAssumed=false) while
+// evictPod is still waiting for the HTTP response. When the response arrives,
+// assumePod finds the entry already present and returns early, leaving
+// evictionAssumed=false. DeleteFunc then skips the "success" metric.
+func TestEvictionInBackgroundMetrics_InformerRace(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), wait.ForeverTestTimeout)
+	defer cancel()
+
+	deschedulermetrics.Register()
+	deschedulermetrics.PodsEvicted.Reset()
+	deschedulermetrics.PodsEvictedTotal.Reset()
+
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+
+	ownerRef1 := test.GetReplicaSetOwnerRefList()
+	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+		pod.Annotations = map[string]string{
+			EvictionRequestAnnotationKey: "",
+		}
+	})
+
+	client := fakeclientset.NewSimpleClientset(node1, p1)
+	sharedInformerFactory := informers.NewSharedInformerFactory(client, 0)
+	_, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
+
+	podEvictor, err := NewPodEvictor(
+		ctx,
+		client,
+		eventRecorder,
+		sharedInformerFactory.Core().V1().Pods().Informer(),
+		initFeatureGates(),
+		NewOptions().WithMetricsEnabled(true),
+	)
+	if err != nil {
+		t.Fatalf("Unexpected error when creating a pod evictor: %v", err)
+	}
+
+	// calling erCache.addPod from a goroutine.
+	triggerAddPod := make(chan struct{})
+	addPodDone := make(chan struct{})
+
+	go func() {
+		<-triggerAddPod
+		// Simulate what UpdateFunc does when KubeVirt sets
+		// EvictionInProgressAnnotationKey before the TooManyRequests response
+		// arrives: addPod inserts the entry with evictionAssumed=false.
+		podEvictor.erCache.addPod(p1)
+		close(addPodDone)
+	}()
+
+	client.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() != "eviction" {
+			return false, nil, nil
+		}
+		createAct, ok := action.(core.CreateActionImpl)
+		if !ok {
+			return false, nil, fmt.Errorf("unable to convert action to core.CreateActionImpl")
+		}
+		eviction, ok := createAct.Object.(*policy.Eviction)
+		if !ok || eviction.GetName() != "p1" {
+			return false, nil, nil
+		}
+
+		// Trigger addPod and wait for it to complete before returning
+		// TooManyRequests, ensuring assumePod will find the entry already present.
+		close(triggerAddPod)
+		<-addPodDone
+
+		return true, nil, &apierrors.StatusError{
+			ErrStatus: metav1.Status{
+				Reason:  metav1.StatusReasonTooManyRequests,
+				Message: "Eviction triggered evacuation",
+			},
+		}
+	})
+
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	evictOpts := EvictOptions{StrategyName: "TestStrategy", ProfileName: "TestProfile"}
+	podEvictor.EvictPod(ctx, p1, evictOpts)
+
+	// The "background" metric must have been emitted.
+	metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": "background"}, 1)
+
+	// Simulate the background eviction completing: the pod is deleted.
+	client.CoreV1().Pods(p1.Namespace).Delete(ctx, p1.Name, metav1.DeleteOptions{})
+
+	// Wait until DeleteFunc has fired and removed the pod from the cache.
+	if err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
+		return !podEvictor.erCache.hasPod(p1), nil
+	}); err != nil {
+		t.Fatalf("Timed out waiting for background eviction to complete: %v", err)
+	}
+
+	// "success" must also be 1: the background eviction completed.
+	// Without the fix this will be 0 because assumePod returned early (entry
+	// already present from addPod) leaving evictionAssumed=false.
+	metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": "success"}, 1)
+}
+
 func assertEqualEvents(t *testing.T, expected []string, actual <-chan string) {
 	t.Logf("Assert for events: %v", expected)
 	c := time.After(wait.ForeverTestTimeout)
