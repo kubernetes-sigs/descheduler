@@ -1614,6 +1614,37 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			nodeFit: false,
 		},
 		{
+			name: "ZoneAwareNodeFit aggregates headroom across multiple nodes in the same below-ideal domain",
+			// Verifies grouping correctness when more than one node belongs to the same
+			// below-ideal domain. zoneB has two nodes (B1, B2) each with 200m allocatable
+			// and a 100m existing pod → 100m per-node headroom, 200m aggregate. A grouping
+			// bug that mis-bucketed nodes (e.g. counted only one B node) would yield
+			// expectedEvictedCount=1; correct multi-node aggregation yields 2 commits
+			// (cumulatively draining the domain) and a 3rd rejection.
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 200, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+				test.BuildTestNode("B2", 200, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       9,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{count: 1, node: "B1", labels: map[string]string{"foo": "bar"}},
+				{count: 1, node: "B2", labels: map[string]string{"foo": "bar"}},
+			}),
+			expectedEvictedCount: 2,
+			namespaces:           []string{"ns1"},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				TopologyBalanceNodeFit: utilptr.To(false),
+				ZoneAwareNodeFit:       utilptr.To(true),
+			},
+			nodeFit: false,
+		},
+		{
 			name: "ZoneAwareNodeFit default (false) is no-op — behaviour matches prior versions",
 			// Default args (TBNF=true, ZANF=false). With nodeFit=true on DefaultEvictor and
 			// zoneB unable to host more pods, eviction is blocked by the DefaultEvictor's own
