@@ -1552,8 +1552,9 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			// 3 domains, each under-loaded zone individually tight. Under the previous
 			// OR(merge) implementation, every candidate would see at least one node in some
 			// domain with per-node headroom — all candidates pass. The cumulative gate must
-			// commit pod 1 to zoneB (drains zoneB), then redirect to zoneC for 2 more pods
-			// (which drain zoneC), then reject pod 4 because BOTH domains are saturated.
+			// pick the roomiest domain first (zoneC, 250m), commit until it can no longer
+			// fit, then fall back to zoneB (150m), and reject any 4th candidate because
+			// both domains are saturated.
 			//
 			// zoneB: 250m allocatable - 100m used = 150m headroom → fits 1 × 100m pod
 			// zoneC: 350m allocatable - 100m used = 250m headroom → fits 2 × 100m pods
@@ -1572,10 +1573,11 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				{count: 1, node: "B1", labels: map[string]string{"foo": "bar"}},
 				{count: 1, node: "C1", labels: map[string]string{"foo": "bar"}},
 			}),
-			// Total batch headroom: 150 + 250 = 400m → fits 4 × 100m pods. balanceDomains
-			// would otherwise schedule 4 evictions across two iterations. The previous
-			// implementation would admit all 4; the new gate admits 3 (1 to zoneB, 2 to
-			// zoneC, the 4th rejected when both domains are drained).
+			// Total batch headroom: 150 + 250 = 400m → fits 3 × 100m pods plus 100m
+			// stranded across the two domains. The previous OR(merge) implementation
+			// would admit all 4 candidates; the new gate admits 3 (2 to zoneC, 1 to
+			// zoneB) and rejects the 4th when both domains are drained below the pod
+			// request.
 			expectedEvictedCount: 3,
 			namespaces:           []string{"ns1"},
 			args: RemovePodsViolatingTopologySpreadConstraintArgs{
@@ -2079,6 +2081,29 @@ func TestComputeDomainHeadroom(t *testing.T) {
 	}
 }
 
+func TestComputeDomainHeadroomFailsClosedOnIndexerError(t *testing.T) {
+	// If ListPodsOnANode fails for a node, that node must contribute zero — neither
+	// its allocatable nor any pod requests should land in the aggregate. Over-counting
+	// would re-introduce the eviction churn this gate prevents.
+	a1 := test.BuildTestNode("A1", 1000, 1<<30, 10, nil)
+	a2 := test.BuildTestNode("A2", 500, 1<<30, 10, nil)
+	indexer := podutil.GetPodsAssignedToNodeFunc(func(nodeName string, filter podutil.FilterFunc) ([]*v1.Pod, error) {
+		if nodeName == "A2" {
+			return nil, fmt.Errorf("simulated indexer failure")
+		}
+		return nil, nil
+	})
+
+	got := computeDomainHeadroom(map[string][]*v1.Node{"zoneA": {a1, a2}}, indexer)
+	// Only A1 (1000m, 10 pod slots) contributes; A2 is excluded fail-closed.
+	if cpu := got["zoneA"][v1.ResourceCPU]; cpu.MilliValue() != 1000 {
+		t.Errorf("aggregate CPU after fail-closed exclusion: got %dm, want 1000m", cpu.MilliValue())
+	}
+	if pods := got["zoneA"][v1.ResourcePods]; pods.Value() != 10 {
+		t.Errorf("aggregate pod slots after fail-closed exclusion: got %d, want 10", pods.Value())
+	}
+}
+
 func TestPodFitsSomeDomainWithHeadroom(t *testing.T) {
 	// Build a stub node indexer that reports the supplied pods as living on the named node.
 	makeIndexer := func(podsByNode map[string][]*v1.Pod) podutil.GetPodsAssignedToNodeFunc {
@@ -2093,7 +2118,43 @@ func TestPodFitsSomeDomainWithHeadroom(t *testing.T) {
 		})
 	}
 
-	t.Run("commits to alphabetically-first qualifying domain and decrements its headroom", func(t *testing.T) {
+	t.Run("commits to roomiest qualifying domain and decrements its headroom", func(t *testing.T) {
+		// zoneA has more CPU headroom than zoneB, so even though zoneB sorts first
+		// alphabetically, the candidate must commit to zoneA. This guards against
+		// regressing back to an alphabetical-first selection that would drain the
+		// tighter domain prematurely.
+		nodesByDomain := map[string][]*v1.Node{
+			"zoneB": {test.BuildTestNode("B1", 1000, 1<<30, 10, nil)},
+			"zoneA": {test.BuildTestNode("A1", 1000, 1<<30, 10, nil)},
+		}
+		headroom := map[string]v1.ResourceList{
+			"zoneA": {
+				v1.ResourceCPU:    *resource.NewMilliQuantity(800, resource.DecimalSI),
+				v1.ResourceMemory: *resource.NewQuantity(1<<28, resource.BinarySI),
+				v1.ResourcePods:   *resource.NewQuantity(5, resource.DecimalSI),
+			},
+			"zoneB": {
+				v1.ResourceCPU:    *resource.NewMilliQuantity(300, resource.DecimalSI),
+				v1.ResourceMemory: *resource.NewQuantity(1<<28, resource.BinarySI),
+				v1.ResourcePods:   *resource.NewQuantity(5, resource.DecimalSI),
+			},
+		}
+		pod := test.BuildTestPod("candidate", 100, 0, "other", nil)
+		indexer := makeIndexer(nil)
+
+		domain, ok := podFitsSomeDomainWithHeadroom(indexer, pod, nodesByDomain, headroom)
+		if !ok || domain != "zoneA" {
+			t.Fatalf("expected commit to roomiest domain zoneA, got domain=%q ok=%v", domain, ok)
+		}
+		if cpu := headroom["zoneA"][v1.ResourceCPU]; cpu.MilliValue() != 700 {
+			t.Errorf("zoneA CPU headroom after commit: got %dm, want 700m", cpu.MilliValue())
+		}
+		if cpu := headroom["zoneB"][v1.ResourceCPU]; cpu.MilliValue() != 300 {
+			t.Errorf("zoneB CPU headroom must be untouched: got %dm, want 300m", cpu.MilliValue())
+		}
+	})
+
+	t.Run("equal headroom falls back to alphabetical for determinism", func(t *testing.T) {
 		nodesByDomain := map[string][]*v1.Node{
 			"zoneB": {test.BuildTestNode("B1", 1000, 1<<30, 10, nil)},
 			"zoneA": {test.BuildTestNode("A1", 1000, 1<<30, 10, nil)},
@@ -2115,13 +2176,7 @@ func TestPodFitsSomeDomainWithHeadroom(t *testing.T) {
 
 		domain, ok := podFitsSomeDomainWithHeadroom(indexer, pod, nodesByDomain, headroom)
 		if !ok || domain != "zoneA" {
-			t.Fatalf("expected commit to zoneA, got domain=%q ok=%v", domain, ok)
-		}
-		if cpu := headroom["zoneA"][v1.ResourceCPU]; cpu.MilliValue() != 400 {
-			t.Errorf("zoneA CPU headroom after commit: got %dm, want 400m", cpu.MilliValue())
-		}
-		if cpu := headroom["zoneB"][v1.ResourceCPU]; cpu.MilliValue() != 500 {
-			t.Errorf("zoneB CPU headroom must be untouched: got %dm, want 500m", cpu.MilliValue())
+			t.Fatalf("expected alphabetical tie-break to commit to zoneA, got domain=%q ok=%v", domain, ok)
 		}
 	})
 

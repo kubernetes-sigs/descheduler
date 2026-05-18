@@ -184,8 +184,9 @@ func computeDomainHeadroom(
 
 // podFitsSomeDomainWithHeadroom returns the topology-domain key whose remaining
 // headroom AND per-node fit both admit pod. On success it decrements that domain's
-// headroom in place and returns ok=true. Iterates domains in sorted order for
-// determinism.
+// headroom in place and returns ok=true. Iterates domains in descending remaining
+// CPU headroom order so pods spread toward the roomiest under-loaded domain first;
+// ties fall back to alphabetical for determinism.
 func podFitsSomeDomainWithHeadroom(
     nodeIndexer podutil.GetPodsAssignedToNodeFunc,
     pod *v1.Pod,
@@ -255,7 +256,8 @@ Each candidate pod requests 100 m CPU. balanceDomains schedules 3 evictions.
 | 3 | TopologyBalanceNodeFit alone does **not** cap cumulative load (the bug) | defaults (TBNF=true, ZANF=false), nodeFit=false | 3 of 3 | ❌ baseline contrast (proves the bug exists without the new gate) |
 | 4 | Drains domain by domain, caps at sum of headroom across domains (zoneB=150 m, zoneC=250 m → total headroom 400 m fits 4×100 m, but algorithm schedules 4 evictions in 2 iterations; the 4th finds both domains drained) | TBNF=false, ZANF=true, nodeFit=false | 3 of 4 | ✅ — prior impl admits 4 (zoneC always has per-node fit) |
 | 5 | Per-node fit still required when aggregate headroom is misleadingly high (zoneB has 5 × 50 m nodes = 250 m aggregate but no single node fits 100 m) | TBNF=false, ZANF=true, nodeFit=false | 0 evictions | ❌ regression — both impls reject |
-| 6 | Default off — backward compat (ZANF unset, evictor nodeFit handles it) | defaults, nodeFit=true | 0 evictions | ❌ regression — identical to prior versions |
+| 6 | Multi-node-per-domain grouping (zoneB has 2 nodes each contributing 100 m → 200 m aggregate fits 2×100 m) | TBNF=false, ZANF=true, nodeFit=false | 2 evictions | ✅ — would surface a grouping bug that mis-bucketed nodes |
+| 7 | Default off — backward compat (ZANF unset, evictor nodeFit handles it) | defaults, nodeFit=true | 0 evictions | ❌ regression — identical to prior versions |
 
 ### Helper unit tests
 
@@ -263,7 +265,9 @@ Each candidate pod requests 100 m CPU. balanceDomains schedules 3 evictions.
 |---|---|
 | `TestGroupNodesByDomain` | Classifies by `node.Labels[topologyKey]`; drops nodes missing the label |
 | `TestComputeDomainHeadroom` | Aggregates allocatable − sum-of-requests across a domain's nodes; counts cpu (millicores) and pod slots correctly |
-| `TestPodFitsSomeDomainWithHeadroom` — alphabetical commit | Inserts `zoneB` first into the map, asserts commit lands on `zoneA` (deterministic sorted iteration) |
+| `TestComputeDomainHeadroomFailsClosedOnIndexerError` | When `ListPodsOnANode` errors for a node, that node contributes zero to the domain aggregate (no allocatable, no requests) |
+| `TestPodFitsSomeDomainWithHeadroom` — roomiest first | Picks the domain with the highest remaining CPU headroom even when it sorts later alphabetically |
+| `TestPodFitsSomeDomainWithHeadroom` — alphabetical tie-break | When two domains have equal headroom, commits to the alphabetically-earlier domain (determinism) |
 | `TestPodFitsSomeDomainWithHeadroom` — drain then reject | Three sequential calls with starting headroom = 250 m; first two admit, third rejects (50 m < 100 m) |
 | `TestPodFitsSomeDomainWithHeadroom` — aggregate failure | Headroom < pod request → reject |
 | `TestPodFitsSomeDomainWithHeadroom` — per-node failure | Aggregate ample but no single node fits (occupant pod consumes capacity) → reject |

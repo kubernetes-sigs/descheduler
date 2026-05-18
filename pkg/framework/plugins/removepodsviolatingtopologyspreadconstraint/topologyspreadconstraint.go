@@ -440,21 +440,26 @@ func groupNodesByDomain(nodes []*v1.Node, topologyKey string) map[string][]*v1.N
 
 // computeDomainHeadroom returns, for each topology domain, the aggregate remaining
 // resource headroom (allocatable minus already-requested) summed across the domain's
-// nodes. Tracked resources: cpu, memory, pod count. Nodes whose pod listing fails
-// contribute only their raw allocatable (best-effort, conservatively over-counting
-// rather than blocking eviction).
+// nodes. Tracked resources: cpu, memory, pod count.
+//
+// Fails closed: if the pod indexer cannot list pods on a node, that node is omitted
+// from the headroom entirely (neither its allocatable nor any requests are counted)
+// and the error is logged. Counting allocatable without subtracting requests would
+// over-state available capacity and re-introduce the eviction churn this gate is
+// meant to prevent.
 func computeDomainHeadroom(nodesByDomain map[string][]*v1.Node, nodeIndexer podutil.GetPodsAssignedToNodeFunc) map[string]v1.ResourceList {
 	result := make(map[string]v1.ResourceList, len(nodesByDomain))
 	for domain, dnodes := range nodesByDomain {
 		var cpuMilli, memBytes, podSlots int64
 		for _, n := range dnodes {
+			podsOnNode, err := podutil.ListPodsOnANode(n.Name, nodeIndexer, nil)
+			if err != nil {
+				klog.V(2).ErrorS(err, "ZoneAwareNodeFit: failed to list pods on node; excluding from domain headroom (fail-closed)", "node", n.Name, "domain", domain)
+				continue
+			}
 			cpuMilli += n.Status.Allocatable.Cpu().MilliValue()
 			memBytes += n.Status.Allocatable.Memory().Value()
 			podSlots += n.Status.Allocatable.Pods().Value()
-			podsOnNode, err := podutil.ListPodsOnANode(n.Name, nodeIndexer, nil)
-			if err != nil {
-				continue
-			}
 			for _, p := range podsOnNode {
 				req, _ := utils.PodRequestsAndLimits(p)
 				if q, ok := req[v1.ResourceCPU]; ok {
@@ -479,7 +484,13 @@ func computeDomainHeadroom(nodesByDomain map[string][]*v1.Node, nodeIndexer podu
 // headroom can absorb the pod AND whose nodes include at least one where the pod fits per
 // the scheduler's per-node predicates. On success it decrements that domain's headroom by
 // the pod's requests (cpu/mem/1 pod slot) and returns ok=true. Returns ok=false if no
-// domain qualifies. Domain keys are iterated in deterministic (sorted) order.
+// domain qualifies.
+//
+// Domain selection order: domains are iterated by descending remaining CPU headroom so
+// pods are spread toward the roomiest under-loaded domain first; ties (and zero/negative
+// headroom) fall back to alphabetical order for determinism. This avoids draining
+// alphabetically-earlier domains first and leaving later candidates rejected even though
+// a different domain had headroom to spare.
 func podFitsSomeDomainWithHeadroom(
 	nodeIndexer podutil.GetPodsAssignedToNodeFunc,
 	pod *v1.Pod,
@@ -491,7 +502,14 @@ func podFitsSomeDomainWithHeadroom(
 	for d := range nodesByDomain {
 		domains = append(domains, d)
 	}
-	sort.Strings(domains)
+	sort.Slice(domains, func(i, j int) bool {
+		ci := remainingHeadroom[domains[i]][v1.ResourceCPU]
+		cj := remainingHeadroom[domains[j]][v1.ResourceCPU]
+		if ci.MilliValue() != cj.MilliValue() {
+			return ci.MilliValue() > cj.MilliValue()
+		}
+		return domains[i] < domains[j]
+	})
 
 	for _, domain := range domains {
 		if !headroomCoversPod(remainingHeadroom[domain], podReq) {

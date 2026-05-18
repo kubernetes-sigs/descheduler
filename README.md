@@ -711,6 +711,7 @@ under-loaded domain nodes (a check that is stateless across the batch),
 would otherwise push more pods toward an under-loaded domain than it can actually
 absorb, causing the scheduler to send the excess back to the over-loaded domain
 (eviction churn).
+
 ```yaml
 zoneAwareNodeFit: true
 ```
