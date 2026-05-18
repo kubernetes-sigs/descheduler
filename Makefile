@@ -146,7 +146,7 @@ verify-gen:
 
 lint:
 ifndef HAS_GOLANGCI
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./_output/bin ${GOLANGCI_VERSION}
+	GOBIN=$(CURRENT_DIR)/_output/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_VERSION}
 endif
 	./_output/bin/golangci-lint run -v
 	./_output/bin/golangci-lint fmt -v
