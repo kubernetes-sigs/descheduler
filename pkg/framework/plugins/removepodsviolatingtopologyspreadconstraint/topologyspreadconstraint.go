@@ -322,6 +322,15 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(ctx context
 	// topology-domain value and compute each domain's remaining aggregate headroom.
 	// The headroom map is mutated as evictions are committed within this call so that
 	// later candidate pods see headroom already consumed by earlier ones.
+	//
+	// The grouping and headroom snapshot are taken once at entry and are *not* recomputed
+	// as the outer (i, j) loop progresses. As pods get added to podsForEviction the
+	// effective set of below-ideal domains can shift, but the snapshot's drift is the
+	// safe (conservative) direction: a domain that becomes saturated mid-batch will stop
+	// admitting new pods once its tracked headroom is drained, and a domain that becomes
+	// further below idealAvg is simply not promoted into the gate's view. Recomputing
+	// per iteration would be more accurate but costs an extra ListPodsOnANode sweep
+	// across the domain's nodes for every (i, j) step.
 	var nodesByDomain map[string][]*v1.Node
 	var remainingHeadroom map[string]v1.ResourceList
 	if zoneAwareNodeFit {
@@ -394,10 +403,20 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(ctx context
 			}
 
 			if zoneAwareNodeFit {
-				if _, ok := podFitsSomeDomainWithHeadroom(getPodsAssignedToNode, aboveToEvict[k], nodesByDomain, remainingHeadroom); !ok {
+				// Note: headroom is decremented at this point, before the actual eviction
+				// is recorded in the eviction loop. If a later eviction filter (rate limit,
+				// pre-eviction predicate, eviction error) rejects this pod, the chosen
+				// domain's headroom has been consumed without an actual pod move, making
+				// the gate conservative on the next candidate. Deferring the subtraction
+				// would require restructuring the eviction loop to call back into the
+				// gate on success; the current behaviour favours safety (admit fewer
+				// pods than nominally possible) over throughput.
+				targetDomain, ok := podFitsSomeDomainWithHeadroom(getPodsAssignedToNode, aboveToEvict[k], nodesByDomain, remainingHeadroom)
+				if !ok {
 					d.logger.V(2).Info("ignoring pod for eviction: no target topology domain has fit + remaining headroom", "pod", klog.KObj(aboveToEvict[k]))
 					continue
 				}
+				d.logger.V(2).Info("ZoneAwareNodeFit admitted pod; target domain headroom decremented", "pod", klog.KObj(aboveToEvict[k]), "targetDomain", targetDomain)
 			}
 
 			podsForEviction[aboveToEvict[k]] = struct{}{}
@@ -452,6 +471,13 @@ func computeDomainHeadroom(nodesByDomain map[string][]*v1.Node, nodeIndexer podu
 	for domain, dnodes := range nodesByDomain {
 		var cpuMilli, memBytes, podSlots int64
 		for _, n := range dnodes {
+			// Filter is intentionally nil so this aggregation reasons over the same pod
+			// set as nodeAvailableResources / fitsRequest (pkg/descheduler/node/node.go),
+			// which also calls ListPodsOnANode with no filter. Diverging here would let
+			// per-node fit and per-domain headroom disagree about what counts as occupied
+			// capacity; if fitsRequest ever tightens its filter (e.g. to exclude
+			// terminal/terminating pods), this call site must be updated in the same
+			// change to keep the two halves of the gate aligned.
 			podsOnNode, err := podutil.ListPodsOnANode(n.Name, nodeIndexer, nil)
 			if err != nil {
 				klog.V(2).ErrorS(err, "ZoneAwareNodeFit: failed to list pods on node; excluding from domain headroom (fail-closed)", "node", n.Name, "domain", domain)
@@ -491,6 +517,15 @@ func computeDomainHeadroom(nodesByDomain map[string][]*v1.Node, nodeIndexer podu
 // headroom) fall back to alphabetical order for determinism. This avoids draining
 // alphabetically-earlier domains first and leaving later candidates rejected even though
 // a different domain had headroom to spare.
+//
+// The CPU-only sort key is intentional: CPU is the most commonly request-constrained
+// resource for workloads we are spreading across topology domains, and a multi-resource
+// composite scoring (e.g. normalized headroom across the pod's actual requests) would
+// add complexity without changing behaviour for the typical case. For memory-heavy pods
+// in environments with abundant CPU slack but uneven memory headroom, the alphabetical
+// fallback can pick a domain with tighter memory than another candidate; the
+// headroomCoversPod check below still rejects domains that cannot absorb the pod, so
+// this only affects ordering, not correctness.
 func podFitsSomeDomainWithHeadroom(
 	nodeIndexer podutil.GetPodsAssignedToNodeFunc,
 	pod *v1.Pod,
