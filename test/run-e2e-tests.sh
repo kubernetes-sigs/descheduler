@@ -27,7 +27,13 @@ KIND_VERSION=${KIND_VERSION:-v0.31.0}
 SKIP_KUBECTL_INSTALL=${SKIP_KUBECTL_INSTALL:-}
 SKIP_KIND_INSTALL=${SKIP_KIND_INSTALL:-}
 SKIP_KUBEVIRT_INSTALL=${SKIP_KUBEVIRT_INSTALL:-}
-KUBEVIRT_VERSION=${KUBEVIRT_VERSION:-v1.8.2}
+# v1.9.0-alpha.0 (or newer) is required for Kubernetes v1.36+, which
+# enforces stricter CRD numeric format validation
+# (https://github.com/kubernetes/kubernetes/pull/136582) and rejects the
+# pre-fix VMI checksum status schema present in v1.8.x. Fixed upstream
+# by https://github.com/kubevirt/kubevirt/pull/17469 (not backported to
+# v1.8.x). See https://github.com/kubevirt/kubevirt/issues/17858.
+KUBEVIRT_VERSION=${KUBEVIRT_VERSION:-v1.9.0-alpha.0}
 
 # Build a descheduler image
 IMAGE_TAG=v$(date +%Y%m%d)-$(git describe --tags)
