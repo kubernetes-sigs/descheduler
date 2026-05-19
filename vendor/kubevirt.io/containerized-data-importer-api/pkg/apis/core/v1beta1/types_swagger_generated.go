@@ -68,6 +68,14 @@ func (DataVolumeSourceSnapshot) SwaggerDoc() map[string]string {
 	}
 }
 
+func (DataSourceRefSourceDataSource) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"":          "DataSourceRefSourceDataSource serves as a reference to another DataSource\nCan be resolved into a DataVolumeSourcePVC or a DataVolumeSourceSnapshot\nThe maximum depth of a reference chain may not exceed 1.",
+		"namespace": "The namespace of the source DataSource",
+		"name":      "The name of the source DataSource",
+	}
+}
+
 func (DataVolumeBlankImage) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"": "DataVolumeBlankImage provides the parameters to create a new raw blank image for the PVC",
@@ -105,6 +113,13 @@ func (DataVolumeSourceRegistry) SwaggerDoc() map[string]string {
 		"pullMethod":    "PullMethod can be either \"pod\" (default import), or \"node\" (node docker cache based import)\n+optional",
 		"secretRef":     "SecretRef provides the secret reference needed to access the Registry source\n+optional",
 		"certConfigMap": "CertConfigMap provides a reference to the Registry certs\n+optional",
+		"platform":      "Platform describes the minimum runtime requirements of the image\n+optional",
+	}
+}
+
+func (PlatformOptions) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"architecture": "Architecture specifies the image target CPU architecture\n+optional",
 	}
 }
 
@@ -121,11 +136,12 @@ func (DataVolumeSourceHTTP) SwaggerDoc() map[string]string {
 
 func (DataVolumeSourceImageIO) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"":              "DataVolumeSourceImageIO provides the parameters to create a Data Volume from an imageio source",
-		"url":           "URL is the URL of the ovirt-engine",
-		"diskId":        "DiskID provides id of a disk to be imported",
-		"secretRef":     "SecretRef provides the secret reference needed to access the ovirt-engine",
-		"certConfigMap": "CertConfigMap provides a reference to the CA cert",
+		"":                   "DataVolumeSourceImageIO provides the parameters to create a Data Volume from an imageio source",
+		"url":                "URL is the URL of the ovirt-engine",
+		"diskId":             "DiskID provides id of a disk to be imported",
+		"secretRef":          "SecretRef provides the secret reference needed to access the ovirt-engine",
+		"certConfigMap":      "CertConfigMap provides a reference to the CA cert",
+		"insecureSkipVerify": "InsecureSkipVerify is a flag to skip certificate verification",
 	}
 }
 
@@ -138,6 +154,7 @@ func (DataVolumeSourceVDDK) SwaggerDoc() map[string]string {
 		"thumbprint":   "Thumbprint is the certificate thumbprint of the vCenter or ESXi host",
 		"secretRef":    "SecretRef provides a reference to a secret containing the username and password needed to access the vCenter or ESXi host",
 		"initImageURL": "InitImageURL is an optional URL to an image containing an extracted VDDK library, overrides v2v-vmware config map",
+		"extraArgs":    "ExtraArgs is a reference to a ConfigMap containing extra arguments to pass directly to the VDDK library",
 	}
 }
 
@@ -174,33 +191,37 @@ func (DataVolumeCondition) SwaggerDoc() map[string]string {
 
 func (StorageProfile) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"": "StorageProfile provides a CDI specific recommendation for storage parameters\n+genclient\n+k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object\n+kubebuilder:object:root=true\n+kubebuilder:storageversion\n+kubebuilder:resource:scope=Cluster",
+		"": "StorageProfile provides a CDI specific recommendation for storage parameters\n+genclient\n+k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object\n+kubebuilder:object:root=true\n+kubebuilder:storageversion\n+kubebuilder:resource:scope=Cluster\n+kubebuilder:subresource:status",
 	}
 }
 
 func (StorageProfileSpec) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"":                  "StorageProfileSpec defines specification for StorageProfile",
-		"cloneStrategy":     "CloneStrategy defines the preferred method for performing a CDI clone",
-		"claimPropertySets": "ClaimPropertySets is a provided set of properties applicable to PVC",
+		"":                           "StorageProfileSpec defines specification for StorageProfile",
+		"cloneStrategy":              "CloneStrategy defines the preferred method for performing a CDI clone",
+		"claimPropertySets":          "ClaimPropertySets is a provided set of properties applicable to PVC\n+kubebuilder:validation:MaxItems=8",
+		"dataImportCronSourceFormat": "DataImportCronSourceFormat defines the format of the DataImportCron-created disk image sources",
+		"snapshotClass":              "SnapshotClass is optional specific VolumeSnapshotClass for CloneStrategySnapshot. If not set, a VolumeSnapshotClass is chosen according to the provisioner.",
 	}
 }
 
 func (StorageProfileStatus) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"":                  "StorageProfileStatus provides the most recently observed status of the StorageProfile",
-		"storageClass":      "The StorageClass name for which capabilities are defined",
-		"provisioner":       "The Storage class provisioner plugin name",
-		"cloneStrategy":     "CloneStrategy defines the preferred method for performing a CDI clone",
-		"claimPropertySets": "ClaimPropertySets computed from the spec and detected in the system",
+		"":                           "StorageProfileStatus provides the most recently observed status of the StorageProfile",
+		"storageClass":               "The StorageClass name for which capabilities are defined",
+		"provisioner":                "The Storage class provisioner plugin name",
+		"cloneStrategy":              "CloneStrategy defines the preferred method for performing a CDI clone",
+		"claimPropertySets":          "ClaimPropertySets computed from the spec and detected in the system\n+kubebuilder:validation:MaxItems=8",
+		"dataImportCronSourceFormat": "DataImportCronSourceFormat defines the format of the DataImportCron-created disk image sources",
+		"snapshotClass":              "SnapshotClass is optional specific VolumeSnapshotClass for CloneStrategySnapshot. If not set, a VolumeSnapshotClass is chosen according to the provisioner.",
 	}
 }
 
 func (ClaimPropertySet) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"":            "ClaimPropertySet is a set of properties applicable to PVC",
-		"accessModes": "AccessModes contains the desired access modes the volume should have.\nMore info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes-1\n+optional",
-		"volumeMode":  "VolumeMode defines what type of volume is required by the claim.\nValue of Filesystem is implied when not included in claim spec.\n+optional",
+		"accessModes": "AccessModes contains the desired access modes the volume should have.\nMore info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#access-modes-1\n+kubebuilder:validation:MaxItems=4\n+kubebuilder:validation:XValidation:rule=\"self.all(am, am in ['ReadWriteOnce', 'ReadOnlyMany', 'ReadWriteMany', 'ReadWriteOncePod'])\", message=\"Illegal AccessMode\"",
+		"volumeMode":  "VolumeMode defines what type of volume is required by the claim.\nValue of Filesystem is implied when not included in claim spec.\n+kubebuilder:validation:Enum=\"Block\";\"Filesystem\"",
 	}
 }
 
@@ -226,9 +247,10 @@ func (DataSourceSpec) SwaggerDoc() map[string]string {
 
 func (DataSourceSource) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"":         "DataSourceSource represents the source for our DataSource",
-		"pvc":      "+optional",
-		"snapshot": "+optional",
+		"":           "DataSourceSource represents the source for our DataSource",
+		"pvc":        "+optional",
+		"snapshot":   "+optional",
+		"dataSource": "+optional",
 	}
 }
 
@@ -260,19 +282,20 @@ func (DataSourceList) SwaggerDoc() map[string]string {
 
 func (DataImportCron) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"": "DataImportCron defines a cron job for recurring polling/importing disk images as PVCs into a golden image namespace\n+genclient\n+k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object\n+kubebuilder:object:root=true\n+kubebuilder:storageversion\n+kubebuilder:resource:shortName=dic;dics,categories=all",
+		"": "DataImportCron defines a cron job for recurring polling/importing disk images as PVCs into a golden image namespace\n+genclient\n+k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object\n+kubebuilder:object:root=true\n+kubebuilder:storageversion\n+kubebuilder:resource:shortName=dic;dics,categories=all\n+kubebuilder:printcolumn:name=\"Format\",type=\"string\",JSONPath=\".status.sourceFormat\",description=\"The format in which created sources are saved\"",
 	}
 }
 
 func (DataImportCronSpec) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"":                  "DataImportCronSpec defines specification for DataImportCron",
-		"template":          "Template specifies template for the DVs to be created",
-		"schedule":          "Schedule specifies in cron format when and how often to look for new imports",
-		"garbageCollect":    "GarbageCollect specifies whether old PVCs should be cleaned up after a new PVC is imported.\nOptions are currently \"Outdated\" and \"Never\", defaults to \"Outdated\".\n+optional",
-		"importsToKeep":     "Number of import PVCs to keep when garbage collecting. Default is 3.\n+optional",
-		"managedDataSource": "ManagedDataSource specifies the name of the corresponding DataSource this cron will manage.\nDataSource has to be in the same namespace.",
-		"retentionPolicy":   "RetentionPolicy specifies whether the created DataVolumes and DataSources are retained when their DataImportCron is deleted. Default is RatainAll.\n+optional",
+		"":                   "DataImportCronSpec defines specification for DataImportCron",
+		"template":           "Template specifies template for the DVs to be created",
+		"schedule":           "Schedule specifies in cron format when and how often to look for new imports",
+		"garbageCollect":     "GarbageCollect specifies whether old PVCs should be cleaned up after a new PVC is imported.\nOptions are currently \"Outdated\" and \"Never\", defaults to \"Outdated\".\n+optional",
+		"importsToKeep":      "Number of import PVCs to keep when garbage collecting. Default is 3.\n+optional",
+		"managedDataSource":  "ManagedDataSource specifies the name of the corresponding DataSource this cron will manage.\nDataSource has to be in the same namespace.",
+		"retentionPolicy":    "RetentionPolicy specifies whether the created DataVolumes and DataSources are retained when their DataImportCron is deleted. Default is RatainAll.\n+optional",
+		"serviceAccountName": "ServiceAccountName is the name of the ServiceAccount for creating DataVolumes.\n+optional\n+kubebuilder:validation:MinLength=1",
 	}
 }
 
@@ -283,6 +306,7 @@ func (DataImportCronStatus) SwaggerDoc() map[string]string {
 		"lastImportedPVC":        "LastImportedPVC is the last imported PVC",
 		"lastExecutionTimestamp": "LastExecutionTimestamp is the time of the last polling",
 		"lastImportTimestamp":    "LastImportTimestamp is the time of the last import",
+		"sourceFormat":           "SourceFormat defines the format of the DataImportCron-created disk image sources",
 	}
 }
 
@@ -316,10 +340,13 @@ func (VolumeImportSource) SwaggerDoc() map[string]string {
 
 func (VolumeImportSourceSpec) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"":              "VolumeImportSourceSpec defines the Spec field for VolumeImportSource",
-		"source":        "Source is the src of the data to be imported in the target PVC",
-		"preallocation": "Preallocation controls whether storage for the target PVC should be allocated in advance.",
-		"contentType":   "ContentType represents the type of the imported data (Kubevirt or archive)",
+		"":                "VolumeImportSourceSpec defines the Spec field for VolumeImportSource",
+		"source":          "Source is the src of the data to be imported in the target PVC",
+		"preallocation":   "Preallocation controls whether storage for the target PVC should be allocated in advance.",
+		"contentType":     "ContentType represents the type of the imported data (Kubevirt or archive)",
+		"targetClaim":     "TargetClaim the name of the specific claim to be populated with a multistage import.",
+		"checkpoints":     "Checkpoints is a list of DataVolumeCheckpoints, representing stages in a multistage import.",
+		"finalCheckpoint": "FinalCheckpoint indicates whether the current DataVolumeCheckpoint is the final checkpoint.",
 	}
 }
 
@@ -412,6 +439,7 @@ func (CDICertConfig) SwaggerDoc() map[string]string {
 		"":       "CDICertConfig has the CertConfigs for CDI",
 		"ca":     "CA configuration\nCA certs are kept in the CA bundle as long as they are valid",
 		"server": "Server configuration\nCerts are rotated and discarded",
+		"client": "Client configuration\nCerts are rotated and discarded",
 	}
 }
 
@@ -420,12 +448,43 @@ func (CDISpec) SwaggerDoc() map[string]string {
 		"":                      "CDISpec defines our specification for the CDI installation",
 		"imagePullPolicy":       "+kubebuilder:validation:Enum=Always;IfNotPresent;Never\nPullPolicy describes a policy for if/when to pull a container image",
 		"uninstallStrategy":     "+kubebuilder:validation:Enum=RemoveWorkloads;BlockUninstallIfWorkloadsExist\nCDIUninstallStrategy defines the state to leave CDI on uninstall",
-		"infra":                 "Rules on which nodes CDI infrastructure pods will be scheduled",
+		"infra":                 "Selectors and tolerations that should apply to cdi infrastructure components",
 		"workload":              "Restrict on which nodes CDI workload pods will be scheduled",
 		"cloneStrategyOverride": "Clone strategy override: should we use a host-assisted copy even if snapshots are available?\n+kubebuilder:validation:Enum=\"copy\";\"snapshot\";\"csi-clone\"",
 		"config":                "CDIConfig at CDI level",
 		"certConfig":            "certificate configuration",
 		"priorityClass":         "PriorityClass of the CDI control plane",
+	}
+}
+
+func (ComponentConfig) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"":                    "ComponentConfig defines the scheduling and replicas configuration for CDI components",
+		"deploymentReplicas":  "DeploymentReplicas set Replicas for cdi-deployment",
+		"apiServerReplicas":   "ApiserverReplicas set Replicas for cdi-apiserver",
+		"uploadProxyReplicas": "UploadproxyReplicas set Replicas for cdi-uploadproxy",
+	}
+}
+
+func (CustomizeComponents) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"":        "CustomizeComponents defines patches for components deployed by the CDI operator.",
+		"patches": "+listType=atomic",
+		"flags":   "Configure the value used for deployment and daemonset resources",
+	}
+}
+
+func (Flags) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"": "Flags will create a patch that will replace all flags for the container's\ncommand field. The only flags that will be used are those define. There are no\nguarantees around forward/backward compatibility.  If set incorrectly this will\ncause the resource when rolled out to error until flags are updated.",
+	}
+}
+
+func (CustomizeComponentsPatch) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"":             "CustomizeComponentsPatch defines a patch for some resource.",
+		"resourceName": "+kubebuilder:validation:MinLength=1",
+		"resourceType": "+kubebuilder:validation:MinLength=1",
 	}
 }
 
@@ -464,12 +523,13 @@ func (CDIConfigSpec) SwaggerDoc() map[string]string {
 		"scratchSpaceStorageClass": "Override the storage class to used for scratch space during transfer operations. The scratch space storage class is determined in the following order: 1. value of scratchSpaceStorageClass, if that doesn't exist, use the default storage class, if there is no default storage class, use the storage class of the DataVolume, if no storage class specified, use no storage class for scratch space",
 		"podResourceRequirements":  "ResourceRequirements describes the compute resource requirements.",
 		"featureGates":             "FeatureGates are a list of specific enabled feature gates",
-		"filesystemOverhead":       "FilesystemOverhead describes the space reserved for overhead when using Filesystem volumes. A value is between 0 and 1, if not defined it is 0.055 (5.5% overhead)",
+		"filesystemOverhead":       "FilesystemOverhead describes the space reserved for overhead when using Filesystem volumes. A value is between 0 and 1, if not defined it is 0.06 (6% overhead)",
 		"preallocation":            "Preallocation controls whether storage for DataVolumes should be allocated in advance.",
 		"insecureRegistries":       "InsecureRegistries is a list of TLS disabled registries",
-		"dataVolumeTTLSeconds":     "DataVolumeTTLSeconds is the time in seconds after DataVolume completion it can be garbage collected. The default is 0 sec. To disable GC use -1.\n+optional",
+		"dataVolumeTTLSeconds":     "DataVolumeTTLSeconds is the time in seconds after DataVolume completion it can be garbage collected. Disabled by default.\nDeprecated: Removed in v1.62.\n+optional",
 		"tlsSecurityProfile":       "TLSSecurityProfile is used by operators to apply cluster-wide TLS security settings to operands.",
 		"imagePullSecrets":         "The imagePullSecrets used to pull the container images",
+		"logVerbosity":             "LogVerbosity overrides the default verbosity level used to initialize loggers\n+optional",
 	}
 }
 
@@ -477,6 +537,7 @@ func (CDIConfigStatus) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"":                               "CDIConfigStatus provides the most recently observed status of the CDI Config resource",
 		"uploadProxyURL":                 "The calculated upload proxy URL",
+		"uploadProxyCA":                  "UploadProxyCA is the certificate authority of the upload proxy",
 		"importProxy":                    "ImportProxy contains importer pod proxy configuration.\n+optional",
 		"scratchSpaceStorageClass":       "The calculated storage class to be used for scratch space",
 		"defaultPodResourceRequirements": "ResourceRequirements describes the compute resource requirements.",

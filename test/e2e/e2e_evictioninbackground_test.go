@@ -23,7 +23,7 @@ import (
 	utilptr "k8s.io/utils/ptr"
 
 	kvcorev1 "kubevirt.io/api/core/v1"
-	generatedclient "kubevirt.io/client-go/generated/kubevirt/clientset/versioned"
+	kubevirtclient "kubevirt.io/client-go/kubevirt"
 
 	"sigs.k8s.io/descheduler/pkg/api"
 	apiv1alpha2 "sigs.k8s.io/descheduler/pkg/api/v1alpha2"
@@ -110,7 +110,7 @@ ethernets:
 	}
 }
 
-func waitForKubevirtReady(t *testing.T, ctx context.Context, kvClient generatedclient.Interface) {
+func waitForKubevirtReady(t *testing.T, ctx context.Context, kvClient kubevirtclient.Interface) {
 	obj, err := kvClient.KubevirtV1().KubeVirts("kubevirt").Get(ctx, "kubevirt", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Unable to get kubevirt/kubevirt: %v", err)
@@ -129,7 +129,7 @@ func waitForKubevirtReady(t *testing.T, ctx context.Context, kvClient generatedc
 	klog.Infof("Kubevirt is available")
 }
 
-func allVMIsHaveRunningPods(t *testing.T, ctx context.Context, kubeClient clientset.Interface, kvClient generatedclient.Interface) (bool, error) {
+func allVMIsHaveRunningPods(t *testing.T, ctx context.Context, kubeClient clientset.Interface, kvClient kubevirtclient.Interface) (bool, error) {
 	klog.Infof("Checking all vmi active pods are running")
 	uidMap := make(map[types.UID]*corev1.Pod)
 	podList, err := kubeClient.CoreV1().Pods("default").List(ctx, metav1.ListOptions{})
@@ -368,7 +368,7 @@ func updateDeschedulerPolicy(t *testing.T, ctx context.Context, kubeClient clien
 	}
 }
 
-func createKubevirtClient() (generatedclient.Interface, error) {
+func createKubevirtClient() (kubevirtclient.Interface, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	loadingRules.DefaultClientConfig = &clientcmd.DefaultClientConfig
 	overrides := &clientcmd.ConfigOverrides{}
@@ -382,7 +382,7 @@ func createKubevirtClient() (generatedclient.Interface, error) {
 	config.APIPath = "/apis"
 	config.ContentType = runtime.ContentTypeJSON
 
-	return generatedclient.NewForConfig(config)
+	return kubevirtclient.NewForConfig(config)
 }
 
 func TestLiveMigrationInBackground(t *testing.T) {
