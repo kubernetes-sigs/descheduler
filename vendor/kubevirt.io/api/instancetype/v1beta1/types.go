@@ -112,6 +112,10 @@ type VirtualMachineInstancetypeSpec struct {
 	// +optional
 	IOThreadsPolicy *v1.IOThreadsPolicy `json:"ioThreadsPolicy,omitempty"`
 
+	// Optionally specifies the IOThreads options to be used by the instancetype.
+	// +optional
+	IOThreads *v1.DiskIOThreads `json:"ioThreads,omitempty"`
+
 	// Optionally defines the LaunchSecurity to be used by the instancetype.
 	//
 	// +optional
@@ -298,6 +302,11 @@ type VirtualMachinePreferenceSpec struct {
 	//
 	//+optional
 	PreferSpreadSocketToCoreRatio uint32 `json:"preferSpreadSocketToCoreRatio,omitempty"`
+
+	// PreferredArchitecture defines a prefeerred architecture for the VirtualMachine
+	//
+	//+optional
+	PreferredArchitecture *string `json:"preferredArchitecture,omitempty"`
 }
 
 type VolumePreferences struct {
@@ -312,23 +321,39 @@ type VolumePreferences struct {
 type PreferredCPUTopology string
 
 const (
-
 	// Prefer vCPUs to be exposed as cores to the guest
-	PreferCores PreferredCPUTopology = "preferCores"
+	DeprecatedPreferCores PreferredCPUTopology = "preferCores"
 
 	// Prefer vCPUs to be exposed as sockets to the guest, this is the default for the PreferredCPUTopology attribute of CPUPreferences.
-	PreferSockets PreferredCPUTopology = "preferSockets"
+	DeprecatedPreferSockets PreferredCPUTopology = "preferSockets"
 
 	// Prefer vCPUs to be exposed as threads to the guest
-	PreferThreads PreferredCPUTopology = "preferThreads"
+	DeprecatedPreferThreads PreferredCPUTopology = "preferThreads"
 
 	// Prefer vCPUs to be spread evenly between cores and sockets with any remaining vCPUs being presented as cores
-	PreferSpread PreferredCPUTopology = "preferSpread"
+	DeprecatedPreferSpread PreferredCPUTopology = "preferSpread"
 
 	// Prefer vCPUs to be spread according to VirtualMachineInstanceTemplateSpec
 	//
 	// If used with VirtualMachineInstanceType it will use sockets as default
-	PreferAny PreferredCPUTopology = "preferAny"
+	DeprecatedPreferAny PreferredCPUTopology = "preferAny"
+
+	// Prefer vCPUs to be exposed as cores to the guest
+	Cores PreferredCPUTopology = "cores"
+
+	// Prefer vCPUs to be exposed as sockets to the guest, this is the default for the PreferredCPUTopology attribute of CPUPreferences.
+	Sockets PreferredCPUTopology = "sockets"
+
+	// Prefer vCPUs to be exposed as threads to the guest
+	Threads PreferredCPUTopology = "threads"
+
+	// Prefer vCPUs to be spread evenly between cores and sockets with any remaining vCPUs being presented as cores
+	Spread PreferredCPUTopology = "spread"
+
+	// Prefer vCPUs to be spread according to VirtualMachineInstanceTemplateSpec
+	//
+	// If used with VirtualMachineInstanceType it will use sockets as default
+	Any PreferredCPUTopology = "any"
 )
 
 // CPUPreferences contains various optional CPU preferences.
@@ -503,6 +528,11 @@ type DevicePreferences struct {
 	//
 	// +optional
 	PreferredInterfaceMasquerade *v1.InterfaceMasquerade `json:"preferredInterfaceMasquerade,omitempty"`
+
+	// PreferredPanicDeviceModel optionally defines the preferred panic device model to use with panic devices.
+	//
+	// +optional
+	PreferredPanicDeviceModel *v1.PanicDeviceModel `json:"preferredPanicDeviceModel,omitempty"`
 }
 
 // FeaturePreferences contains various optional defaults for Features.
@@ -557,14 +587,21 @@ type FirmwarePreferences struct {
 	// PreferredUseEfi optionally enables EFI
 	//
 	// +optional
-	PreferredUseEfi *bool `json:"preferredUseEfi,omitempty"`
+	// Deprecated: Will be removed with v1beta2 or v1
+	DeprecatedPreferredUseEfi *bool `json:"preferredUseEfi,omitempty"`
 
 	// PreferredUseSecureBoot optionally enables SecureBoot and the OVMF roms will be swapped for SecureBoot-enabled ones.
 	//
 	// Requires PreferredUseEfi and PreferredSmm to be enabled.
 	//
 	// +optional
-	PreferredUseSecureBoot *bool `json:"preferredUseSecureBoot,omitempty"`
+	// Deprecated: Will be removed with v1beta2 or v1
+	DeprecatedPreferredUseSecureBoot *bool `json:"preferredUseSecureBoot,omitempty"`
+
+	// PreferredEfi optionally enables EFI
+	//
+	// +optional
+	PreferredEfi *v1.EFI `json:"preferredEfi,omitempty"`
 }
 
 // MachinePreferences contains various optional defaults for Machine.
@@ -601,6 +638,11 @@ type PreferenceRequirements struct {
 	//
 	//+optional
 	Memory *MemoryPreferenceRequirement `json:"memory,omitempty"`
+
+	// Required Architecture of the VM referencing this preference
+	//
+	//+optional
+	Architecture *string `json:"architecture,omitempty"`
 }
 
 type CPUPreferenceRequirement struct {

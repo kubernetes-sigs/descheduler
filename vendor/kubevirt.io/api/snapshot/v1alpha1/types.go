@@ -80,7 +80,17 @@ const (
 	VMSnapshotOnlineSnapshotIndication Indication = "Online"
 	VMSnapshotNoGuestAgentIndication   Indication = "NoGuestAgent"
 	VMSnapshotGuestAgentIndication     Indication = "GuestAgent"
+	VMSnapshotQuiesceTimeoutIndication Indication = "QuiesceTimeout"
+	VMSnapshotPausedIndication         Indication = "Paused"
 )
+
+// SourceIndication provides an indication of the source VM with its description message
+type SourceIndication struct {
+	// Indication is the indication type
+	Indication Indication `json:"indication"`
+	// Message provides a description message of the indication
+	Message string `json:"message"`
+}
 
 // VirtualMachineSnapshotPhase is the current phase of the VirtualMachineSnapshot
 type VirtualMachineSnapshotPhase string
@@ -118,9 +128,14 @@ type VirtualMachineSnapshotStatus struct {
 	// +optional
 	Conditions []Condition `json:"conditions,omitempty"`
 
+	// Deprecated: Use SourceIndications instead. This field will be removed in a future version.
 	// +optional
 	// +listType=set
 	Indications []Indication `json:"indications,omitempty"`
+
+	// +optional
+	// +listType=atomic
+	SourceIndications []SourceIndication `json:"sourceIndications,omitempty"`
 
 	// +optional
 	SnapshotVolumes *SnapshotVolumesLists `json:"snapshotVolumes,omitempty"`
@@ -316,7 +331,7 @@ type VirtualMachineRestoreSpec struct {
 	// If the target for the restore does not exist, it will be created. Patches holds JSON patches that would be
 	// applied to the target manifest before it's created. Patches should fit the target's Kind.
 	//
-	// Example for a patch: {"op": "replace", "path": "/metadata/name", "value": "new-vm-name"}
+	// Example for a patch: {"op": "replace", "path": "/spec/template/spec/domain/devices/interfaces/0/macAddress", "value": "00:00:5e:00:53:01"}
 	//
 	// +optional
 	// +listType=atomic

@@ -17,6 +17,14 @@ func (VirtualMachineSnapshotSpec) SwaggerDoc() map[string]string {
 	}
 }
 
+func (SourceIndication) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"":           "SourceIndication provides an indication of the source VM with its description message",
+		"indication": "Indication is the indication type",
+		"message":    "Message provides a description message of the indication",
+	}
+}
+
 func (VirtualMachineSnapshotStatus) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"":                                  "VirtualMachineSnapshotStatus is the status for a VirtualMachineSnapshot resource",
@@ -27,7 +35,8 @@ func (VirtualMachineSnapshotStatus) SwaggerDoc() map[string]string {
 		"readyToUse":                        "+optional",
 		"error":                             "+optional",
 		"conditions":                        "+optional",
-		"indications":                       "+optional\n+listType=set",
+		"indications":                       "Deprecated: Use SourceIndications instead. This field will be removed in a future version.\n+optional\n+listType=set",
+		"sourceIndications":                 "+optional\n+listType=atomic",
 		"snapshotVolumes":                   "+optional",
 	}
 }
@@ -141,7 +150,7 @@ func (VirtualMachineRestoreSpec) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"":        "VirtualMachineRestoreSpec is the spec for a VirtualMachineRestoreresource",
 		"target":  "initially only VirtualMachine type supported",
-		"patches": "If the target for the restore does not exist, it will be created. Patches holds JSON patches that would be\napplied to the target manifest before it's created. Patches should fit the target's Kind.\n\nExample for a patch: {\"op\": \"replace\", \"path\": \"/metadata/name\", \"value\": \"new-vm-name\"}\n\n+optional\n+listType=atomic",
+		"patches": "If the target for the restore does not exist, it will be created. Patches holds JSON patches that would be\napplied to the target manifest before it's created. Patches should fit the target's Kind.\n\nExample for a patch: {\"op\": \"replace\", \"path\": \"/spec/template/spec/domain/devices/interfaces/0/macAddress\", \"value\": \"00:00:5e:00:53:01\"}\n\n+optional\n+listType=atomic",
 	}
 }
 

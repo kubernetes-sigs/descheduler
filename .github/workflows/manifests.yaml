@@ -7,8 +7,10 @@ jobs:
   deploy:
     strategy:
       matrix:
-        k8s-version: ["v1.35.1"]
-        descheduler-version: ["v0.35.0"]
+        k8s-version: ["v1.36.1"]
+        build-kind-node-image: [true]
+        kind-node-image: ["localhost/kindest/node:v1.36.1"]
+        descheduler-version: ["v0.36.0"]
         descheduler-api: ["v1alpha2"]
         manifest: ["deployment"]
         kind-version: ["v0.31.0"] # keep in sync with test/run-e2e-tests.sh
@@ -16,10 +18,20 @@ jobs:
     steps:
       - name: Checkout Repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # git ls-remote https://github.com/actions/checkout.git refs/tags/v6.0.2
+      - name: Install kind
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # git ls-remote https://github.com/helm/kind-action.git refs/tags/v1.14.0
+        with:
+          version: ${{ matrix.kind-version }}
+          kubectl_version: ${{ matrix.k8s-version }}
+          install_only: true
+      - name: Build kind node image
+        if: ${{ matrix.build-kind-node-image == true }}
+        run: |
+          kind build node-image ${{ matrix.k8s-version }} --image ${{ matrix.kind-node-image }}
       - name: Create kind cluster
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # git ls-remote https://github.com/helm/kind-action.git refs/tags/v1.14.0
         with:
-          node_image: kindest/node:${{ matrix.k8s-version }}
+          node_image: ${{ matrix.kind-node-image }}
           kubectl_version: ${{ matrix.k8s-version }}
           config: test/kind-config.yaml
           version: ${{ matrix.kind-version }}

@@ -5,7 +5,6 @@ package otelgrpc // import "go.opentelemetry.io/contrib/instrumentation/google.g
 
 import (
 	"context"
-	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -47,10 +46,6 @@ type serverHandler struct {
 // NewServerHandler creates a stats.Handler for a gRPC server.
 func NewServerHandler(opts ...Option) stats.Handler {
 	c := newConfig(opts)
-	if c.SpanKind == trace.SpanKindUnspecified {
-		c.SpanKind = trace.SpanKindServer
-	}
-
 	h := &serverHandler{config: c}
 
 	h.tracer = c.TracerProvider.Tracer(
@@ -109,7 +104,7 @@ func (h *serverHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) cont
 		spanAttributes := make([]attribute.KeyValue, 0, len(attrs)+len(h.SpanAttributes))
 		spanAttributes = append(append(spanAttributes, attrs...), h.SpanAttributes...)
 		opts := []trace.SpanStartOption{
-			trace.WithSpanKind(h.SpanKind),
+			trace.WithSpanKind(trace.SpanKindServer),
 			trace.WithAttributes(spanAttributes...),
 		}
 		if h.PublicEndpoint || (h.PublicEndpointFn != nil && h.PublicEndpointFn(ctx, info)) {
@@ -166,10 +161,6 @@ type clientHandler struct {
 // NewClientHandler creates a stats.Handler for a gRPC client.
 func NewClientHandler(opts ...Option) stats.Handler {
 	c := newConfig(opts)
-	if c.SpanKind == trace.SpanKindUnspecified {
-		c.SpanKind = trace.SpanKindClient
-	}
-
 	h := &clientHandler{config: c}
 
 	h.tracer = c.TracerProvider.Tracer(
@@ -219,7 +210,7 @@ func (h *clientHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) cont
 		ctx, _ = h.tracer.Start(
 			ctx,
 			name,
-			trace.WithSpanKind(h.SpanKind),
+			trace.WithSpanKind(trace.SpanKindClient),
 			trace.WithAttributes(spanAttributes...),
 		)
 	}
@@ -329,9 +320,9 @@ func (c *config) handleRPC(
 		var s *status.Status
 		if rs.Error != nil {
 			s, _ = status.FromError(rs.Error)
-			rpcStatusAttr = semconv.RPCResponseStatusCode(canonicalString(s.Code()))
+			rpcStatusAttr = semconv.RPCResponseStatusCode(s.Code().String())
 		} else {
-			rpcStatusAttr = semconv.RPCResponseStatusCode(canonicalString(grpc_codes.OK))
+			rpcStatusAttr = semconv.RPCResponseStatusCode(grpc_codes.OK.String())
 		}
 		if span.IsRecording() {
 			if s != nil {
@@ -356,51 +347,10 @@ func (c *config) handleRPC(
 
 		// Use floating point division here for higher precision (instead of Millisecond method).
 		// Measure right before calling Record() to capture as much elapsed time as possible.
-		elapsedTime := float64(rs.EndTime.Sub(rs.BeginTime)) / float64(time.Second)
+		elapsedTime := float64(rs.EndTime.Sub(rs.BeginTime)) / float64(time.Millisecond)
 
 		duration.Record(ctx, elapsedTime, recordOpts...)
 	default:
 		return
-	}
-}
-
-func canonicalString(code grpc_codes.Code) string {
-	switch code {
-	case grpc_codes.OK:
-		return "OK"
-	case grpc_codes.Canceled:
-		return "CANCELLED"
-	case grpc_codes.Unknown:
-		return "UNKNOWN"
-	case grpc_codes.InvalidArgument:
-		return "INVALID_ARGUMENT"
-	case grpc_codes.DeadlineExceeded:
-		return "DEADLINE_EXCEEDED"
-	case grpc_codes.NotFound:
-		return "NOT_FOUND"
-	case grpc_codes.AlreadyExists:
-		return "ALREADY_EXISTS"
-	case grpc_codes.PermissionDenied:
-		return "PERMISSION_DENIED"
-	case grpc_codes.ResourceExhausted:
-		return "RESOURCE_EXHAUSTED"
-	case grpc_codes.FailedPrecondition:
-		return "FAILED_PRECONDITION"
-	case grpc_codes.Aborted:
-		return "ABORTED"
-	case grpc_codes.OutOfRange:
-		return "OUT_OF_RANGE"
-	case grpc_codes.Unimplemented:
-		return "UNIMPLEMENTED"
-	case grpc_codes.Internal:
-		return "INTERNAL"
-	case grpc_codes.Unavailable:
-		return "UNAVAILABLE"
-	case grpc_codes.DataLoss:
-		return "DATA_LOSS"
-	case grpc_codes.Unauthenticated:
-		return "UNAUTHENTICATED"
-	default:
-		return "CODE(" + strconv.FormatInt(int64(code), 10) + ")"
 	}
 }

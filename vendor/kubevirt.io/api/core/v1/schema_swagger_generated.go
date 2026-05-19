@@ -44,6 +44,14 @@ func (ServiceAccountVolumeSource) SwaggerDoc() map[string]string {
 	}
 }
 
+func (ContainerPathVolumeSource) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"":         "ContainerPathVolumeSource represents a path from the virt-launcher container\nto be exposed to the VM via virtiofs. The path must correspond to an existing\nvolumeMount in the virt-launcher pod's compute container.",
+		"path":     "Path is the absolute path within the virt-launcher container to expose to the VM.\nThe path must correspond to an existing volumeMount in the compute container.\n+kubebuilder:validation:MaxLength=4096\n+kubebuilder:validation:XValidation:rule=\"self.startsWith('/')\",message=\"path must be absolute (start with '/')\"\n+kubebuilder:validation:XValidation:rule=\"!self.contains('..')\",message=\"path must not contain '..'\"",
+		"readOnly": "ReadOnly controls whether the volume is exposed as read-only to the VM.\nDefaults to true. Write access is not currently supported.\n+optional\n+kubebuilder:default:=true\n+kubebuilder:validation:XValidation:rule=\"self == true\",message=\"readOnly must be true, write access is not supported\"",
+	}
+}
+
 func (DownwardMetricsVolumeSource) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"": "DownwardMetricsVolumeSource adds a very small disk to VMIs which contains a limited view of host and guest\nmetrics. The disk content is compatible with vhostmd (https://github.com/vhostmd/vhostmd) and vm-dump-metrics.",
@@ -92,9 +100,11 @@ func (DomainSpec) SwaggerDoc() map[string]string {
 		"clock":           "Clock sets the clock and timers of the vmi.\n+optional",
 		"features":        "Features like acpi, apic, hyperv, smm.\n+optional",
 		"devices":         "Devices allows adding disks, network interfaces, and others",
-		"ioThreadsPolicy": "Controls whether or not disks will share IOThreads.\nOmitting IOThreadsPolicy disables use of IOThreads.\nOne of: shared, auto\n+optional",
+		"ioThreadsPolicy": "Controls whether or not disks will share IOThreads.\nOmitting IOThreadsPolicy disables use of IOThreads.\nOne of: shared, auto, supplementalPool\n+optional",
+		"ioThreads":       "IOThreads specifies the IOThreads options.\n+optional",
 		"chassis":         "Chassis specifies the chassis info passed to the domain.\n+optional",
 		"launchSecurity":  "Launch Security setting of the vmi.\n+optional",
+		"rebootPolicy":    "RebootPolicy specifies how the guest should behave on reboot.\nReboot (default): The guest is allowed to reboot silently.\nTerminate: The VMI will be terminated on guest reboot, allowing\nhigher level controllers (such as the VM controller) to recreate\nthe VMI with any updated configuration such as boot order changes.\n+optional",
 	}
 }
 
@@ -185,7 +195,7 @@ func (NUMAGuestMappingPassthrough) SwaggerDoc() map[string]string {
 
 func (NUMA) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"guestMappingPassthrough": "GuestMappingPassthrough will create an efficient guest topology based on host CPUs exclusively assigned to a pod.\nThe created topology ensures that memory and CPUs on the virtual numa nodes never cross boundaries of host numa nodes.\n+opitonal",
+		"guestMappingPassthrough": "GuestMappingPassthrough will create an efficient guest topology based on host CPUs exclusively assigned to a pod.\nThe created topology ensures that memory and CPUs on the virtual numa nodes never cross boundaries of host numa nodes.\n+optional",
 	}
 }
 
@@ -199,10 +209,11 @@ func (CPUFeature) SwaggerDoc() map[string]string {
 
 func (Memory) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"":          "Memory allows specifying the VirtualMachineInstance memory features.",
-		"hugepages": "Hugepages allow to use hugepages for the VirtualMachineInstance instead of regular memory.\n+optional",
-		"guest":     "Guest allows to specifying the amount of memory which is visible inside the Guest OS.\nThe Guest must lie between Requests and Limits from the resources section.\nDefaults to the requested memory in the resources section if not specified.\n+ optional",
-		"maxGuest":  "MaxGuest allows to specify the maximum amount of memory which is visible inside the Guest OS.\nThe delta between MaxGuest and Guest is the amount of memory that can be hot(un)plugged.",
+		"":                 "Memory allows specifying the VirtualMachineInstance memory features.",
+		"hugepages":        "Hugepages allow to use hugepages for the VirtualMachineInstance instead of regular memory.\n+optional",
+		"guest":            "Guest allows to specifying the amount of memory which is visible inside the Guest OS.\nThe Guest must lie between Requests and Limits from the resources section.\nDefaults to the requested memory in the resources section if not specified.\n+ optional",
+		"maxGuest":         "MaxGuest allows to specify the maximum amount of memory which is visible inside the Guest OS.\nThe delta between MaxGuest and Guest is the amount of memory that can be hot(un)plugged.",
+		"reservedOverhead": "ReservedOverhead configures the memory overhead applied to a VM\nand its characteristics.\n+optional",
 	}
 }
 
@@ -211,6 +222,7 @@ func (MemoryStatus) SwaggerDoc() map[string]string {
 		"guestAtBoot":    "GuestAtBoot specifies with how much memory the VirtualMachine intiallly booted with.\n+optional",
 		"guestCurrent":   "GuestCurrent specifies how much memory is currently available for the VirtualMachine.\n+optional",
 		"guestRequested": "GuestRequested specifies how much memory was requested (hotplug) for the VirtualMachine.\n+optional",
+		"memoryOverhead": "MemoryOverhead specifies the memory overhead added by the virtualization infrastructure\nfor the virt-launcher pod.\n+optional",
 	}
 }
 
@@ -218,6 +230,13 @@ func (Hugepages) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"":         "Hugepages allow to use hugepages for the VirtualMachineInstance instead of regular memory.",
 		"pageSize": "PageSize specifies the hugepage size, for x86_64 architecture valid values are 1Gi and 2Mi.",
+	}
+}
+
+func (ReservedOverhead) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"addedOverhead": "AddedOverhead determines the memory overhead that will be reserved\nfor the VM. It increases the virt-launcher pod memory limit.\n+optional",
+		"memLock":       "RequiresLock determines whether the VM's and its overhead memory\nneed to be locked or not. It is a common practice to enable this\nif vDPA, VFIO or any other specialized hardware that depends on\nDMA is being used by the VM.\nFalse - (Default) memory lock RLimits are not modified.\nTrue - Memory lock RLimits will be updated to consider VM memory\n       size and memory overhead\n+optional\n+kubebuilder:validation:Enum=NotRequired;Required",
 	}
 }
 
@@ -240,6 +259,7 @@ func (Firmware) SwaggerDoc() map[string]string {
 func (ACPI) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"slicNameRef": "SlicNameRef should match the volume name of a secret object. The data in the secret should\nbe a binary blob that follows the ACPI SLIC standard, see:\nhttps://learn.microsoft.com/en-us/previous-versions/windows/hardware/design/dn653305(v=vs.85)",
+		"msdmNameRef": "Similar to SlicNameRef, another ACPI entry that is used in more recent Windows versions.\nThe above points to the spec of MSDM too.",
 	}
 }
 
@@ -263,11 +283,13 @@ func (Devices) SwaggerDoc() map[string]string {
 		"networkInterfaceMultiqueue": "If specified, virtual network interfaces configured with a virtio bus will also enable the vhost multiqueue feature for network devices. The number of queues created depends on additional factors of the VirtualMachineInstance, like the number of guest CPUs.\n+optional",
 		"gpus":                       "Whether to attach a GPU device to the vmi.\n+optional\n+listType=atomic",
 		"downwardMetrics":            "DownwardMetrics creates a virtio serials for exposing the downward metrics to the vmi.\n+optional",
+		"panicDevices":               "PanicDevices provides additional crash information when a guest crashes.\n+optional\n+listtype=atomic",
 		"filesystems":                "Filesystems describes filesystem which is connected to the vmi.\n+optional\n+listType=atomic",
 		"hostDevices":                "Whether to attach a host device to the vmi.\n+optional\n+listType=atomic",
 		"clientPassthrough":          "To configure and access client devices such as redirecting USB\n+optional",
 		"sound":                      "Whether to emulate a sound device.\n+optional",
 		"tpm":                        "Whether to emulate a TPM device.\n+optional",
+		"video":                      "Video describes the video device configuration for the vmi.\n+optional",
 	}
 }
 
@@ -287,7 +309,14 @@ func (SoundDevice) SwaggerDoc() map[string]string {
 
 func (TPMDevice) SwaggerDoc() map[string]string {
 	return map[string]string{
+		"enabled":    "Enabled allows a user to explicitly disable the vTPM even when one is enabled by a preference referenced by the VirtualMachine\nDefaults to True",
 		"persistent": "Persistent indicates the state of the TPM device should be kept accross reboots\nDefaults to false",
+	}
+}
+
+func (VideoDevice) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"type": "Type specifies the video device type (e.g., virtio, vga, bochs, ramfb).\nIf not specified, the default is architecture-dependent (VGA for BIOS-based VMs, Bochs for EFI-based VMs on AMD64; virtio for Arm and s390x).\n+optional",
 	}
 }
 
@@ -316,8 +345,16 @@ func (DownwardMetrics) SwaggerDoc() map[string]string {
 
 func (GPU) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"name": "Name of the GPU device as exposed by a device plugin",
-		"tag":  "If specified, the virtual network interface address and its tag will be provided to the guest via config drive\n+optional",
+		"name":       "Name of the GPU device as exposed by a device plugin",
+		"deviceName": "DeviceName is the name of the device provisioned by device-plugins",
+		"tag":        "If specified, the virtual network interface address and its tag will be provided to the guest via config drive\n+optional",
+	}
+}
+
+func (ClaimRequest) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"claimName":   "ClaimName needs to be provided from the list vmi.spec.resourceClaims[].name where this\ndevice is allocated\n+optional",
+		"requestName": "RequestName needs to be provided from resourceClaim.spec.devices.requests[].name where this\ndevice is requested\n+optional",
 	}
 }
 
@@ -332,25 +369,32 @@ func (VGPUDisplayOptions) SwaggerDoc() map[string]string {
 	}
 }
 
+func (PanicDevice) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"model": "Model specifies what type of panic device is provided.\nThe panic model used when this attribute is missing depends on the hypervisor and guest arch.\nOne of: isa, hyperv, pvpanic.\n+optional",
+	}
+}
+
 func (HostDevice) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"deviceName": "DeviceName is the resource name of the host device exposed by a device plugin",
+		"deviceName": "DeviceName is the name of the device provisioned by device-plugins",
 		"tag":        "If specified, the virtual network interface address and its tag will be provided to the guest via config drive\n+optional",
 	}
 }
 
 func (Disk) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"name":              "Name is the device name",
-		"bootOrder":         "BootOrder is an integer value > 0, used to determine ordering of boot devices.\nLower values take precedence.\nEach disk or interface that has a boot order must have a unique value.\nDisks without a boot order are not tried if a disk with a boot order exists.\n+optional",
-		"serial":            "Serial provides the ability to specify a serial number for the disk device.\n+optional",
-		"dedicatedIOThread": "dedicatedIOThread indicates this disk should have an exclusive IO Thread.\nEnabling this implies useIOThreads = true.\nDefaults to false.\n+optional",
-		"cache":             "Cache specifies which kvm disk cache mode should be used.\nSupported values are: CacheNone, CacheWriteThrough.\n+optional",
-		"io":                "IO specifies which QEMU disk IO mode should be used.\nSupported values are: native, default, threads.\n+optional",
-		"tag":               "If specified, disk address and its tag will be provided to the guest via config drive metadata\n+optional",
-		"blockSize":         "If specified, the virtual disk will be presented with the given block sizes.\n+optional",
-		"shareable":         "If specified the disk is made sharable and multiple write from different VMs are permitted\n+optional",
-		"errorPolicy":       "If specified, it can change the default error policy (stop) for the disk\n+optional",
+		"name":                 "Name is the device name",
+		"bootOrder":            "BootOrder is an integer value > 0, used to determine ordering of boot devices.\nLower values take precedence.\nEach disk or interface that has a boot order must have a unique value.\nDisks without a boot order are not tried if a disk with a boot order exists.\n+optional",
+		"serial":               "Serial provides the ability to specify a serial number for the disk device.\n+optional",
+		"dedicatedIOThread":    "dedicatedIOThread indicates this disk should have an exclusive IO Thread.\nEnabling this implies useIOThreads = true.\nDefaults to false.\n+optional",
+		"cache":                "Cache specifies which kvm disk cache mode should be used.\nSupported values are:\nnone: Guest I/O not cached on the host, but may be kept in a disk cache.\nwritethrough: Guest I/O cached on the host but written through to the physical medium. Slowest but with most guarantees.\nwriteback: Guest I/O cached on the host.\nDefaults to none if the storage supports O_DIRECT, otherwise writethrough.\n+optional",
+		"io":                   "IO specifies which QEMU disk IO mode should be used.\nSupported values are: native, default, threads.\n+optional",
+		"tag":                  "If specified, disk address and its tag will be provided to the guest via config drive metadata\n+optional",
+		"blockSize":            "If specified, the virtual disk will be presented with the given block sizes.\n+optional",
+		"shareable":            "If specified the disk is made sharable and multiple write from different VMs are permitted\n+optional",
+		"errorPolicy":          "If specified, it can change the default error policy (stop) for the disk\n+optional",
+		"changedBlockTracking": "ChangedBlockTracking indicates this disk should have CBT option\nDefaults to false.\n+optional",
 	}
 }
 
@@ -386,13 +430,15 @@ func (DiskTarget) SwaggerDoc() map[string]string {
 func (LaunchSecurity) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"sev": "AMD Secure Encrypted Virtualization (SEV).",
+		"snp": "AMD SEV-SNP flags defined by the SEV-SNP specifications.\n+optional",
+		"tdx": "Intel Trust Domain Extensions (TDX).",
 	}
 }
 
 func (SEV) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"policy":      "Guest policy flags as defined in AMD SEV API specification.\nNote: due to security reasons it is not allowed to enable guest debugging. Therefore NoDebug flag is not exposed to users and is always true.",
-		"attestation": "If specified, run the attestation process for a vmi.\n+opitonal",
+		"attestation": "If specified, run the attestation process for a vmi.\n+optional",
 		"session":     "Base64 encoded session blob.",
 		"dhCert":      "Base64 encoded guest owner's Diffie-Hellman key.",
 	}
@@ -404,7 +450,15 @@ func (SEVPolicy) SwaggerDoc() map[string]string {
 	}
 }
 
+func (SEVSNP) SwaggerDoc() map[string]string {
+	return map[string]string{}
+}
+
 func (SEVAttestation) SwaggerDoc() map[string]string {
+	return map[string]string{}
+}
+
+func (TDX) SwaggerDoc() map[string]string {
 	return map[string]string{}
 }
 
@@ -449,6 +503,7 @@ func (VolumeSource) SwaggerDoc() map[string]string {
 		"serviceAccount":        "ServiceAccountVolumeSource represents a reference to a service account.\nThere can only be one volume of this type!\nMore info: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/\n+optional",
 		"downwardMetrics":       "DownwardMetrics adds a very small disk to VMIs which contains a limited view of host and guest\nmetrics. The disk content is compatible with vhostmd (https://github.com/vhostmd/vhostmd) and vm-dump-metrics.",
 		"memoryDump":            "MemoryDump is attached to the virt launcher and is populated with a memory dump of the vmi",
+		"containerPath":         "ContainerPath exposes a path from the virt-launcher container to the VM via virtiofs.\nThe path must correspond to an existing volumeMount in the compute container.\n+optional",
 	}
 }
 
@@ -462,7 +517,7 @@ func (HotplugVolumeSource) SwaggerDoc() map[string]string {
 
 func (DataVolumeSource) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"name":         "Name of both the DataVolume and the PVC in the same namespace.\nAfter PVC population the DataVolume is garbage collected by default.",
+		"name":         "Name of both the DataVolume and the PVC in the same namespace.",
 		"hotpluggable": "Hotpluggable indicates whether the volume can be hotplugged and hotunplugged.\n+optional",
 	}
 }
@@ -498,6 +553,13 @@ func (ContainerDiskSource) SwaggerDoc() map[string]string {
 		"imagePullSecret": "ImagePullSecret is the name of the Docker registry secret required to pull the image. The secret must already exist.",
 		"path":            "Path defines the path to disk file in the container",
 		"imagePullPolicy": "Image pull policy.\nOne of Always, Never, IfNotPresent.\nDefaults to Always if :latest tag is specified, or IfNotPresent otherwise.\nCannot be updated.\nMore info: https://kubernetes.io/docs/concepts/containers/images#updating-images\n+optional",
+	}
+}
+
+func (UtilityVolume) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"name": "UtilityVolume's name.\nMust be unique within the vmi, including regular Volumes.",
+		"type": "Type represents the type of the utility volume.\n+optional",
 	}
 }
 
@@ -587,7 +649,9 @@ func (Features) SwaggerDoc() map[string]string {
 }
 
 func (SyNICTimer) SwaggerDoc() map[string]string {
-	return map[string]string{}
+	return map[string]string{
+		"direct": "+optional",
+	}
 }
 
 func (FeatureState) SwaggerDoc() map[string]string {
@@ -599,22 +663,26 @@ func (FeatureState) SwaggerDoc() map[string]string {
 
 func (FeatureAPIC) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"enabled":        "Enabled determines if the feature should be enabled or disabled on the guest.\nDefaults to true.\n+optional",
 		"endOfInterrupt": "EndOfInterrupt enables the end of interrupt notification in the guest.\nDefaults to false.\n+optional",
 	}
 }
 
 func (FeatureSpinlocks) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"enabled":   "Enabled determines if the feature should be enabled or disabled on the guest.\nDefaults to true.\n+optional",
 		"spinlocks": "Retries indicates the number of retries.\nMust be a value greater or equal 4096.\nDefaults to 4096.\n+optional",
 	}
 }
 
 func (FeatureVendorID) SwaggerDoc() map[string]string {
 	return map[string]string{
-		"enabled":  "Enabled determines if the feature should be enabled or disabled on the guest.\nDefaults to true.\n+optional",
 		"vendorid": "VendorID sets the hypervisor vendor id, visible to the vmi.\nString up to twelve characters.",
+	}
+}
+
+func (TLBFlush) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"direct":   "Direct allows sending the TLB flush command directly to the hypervisor.\nIt can be useful to optimize performance in nested virtualization cases, such as Windows VBS.\n+optional",
+		"extended": "Extended allows the guest to execute partial TLB flushes. It can be helpful for general purpose workloads.\n+optional",
 	}
 }
 
@@ -655,6 +723,7 @@ func (WatchdogDevice) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"":         "Hardware watchdog device.\nExactly one of its members must be set.",
 		"i6300esb": "i6300esb watchdog device.\n+optional",
+		"diag288":  "diag288 watchdog device (specific to s390x architecture).\n+optional",
 	}
 }
 
@@ -665,10 +734,17 @@ func (I6300ESBWatchdog) SwaggerDoc() map[string]string {
 	}
 }
 
+func (Diag288Watchdog) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"":       "diag288 watchdog device.",
+		"action": "The action to take. Valid values are poweroff, reset, shutdown.\nDefaults to reset.",
+	}
+}
+
 func (Interface) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"name":        "Logical name of the interface as well as a reference to the associated networks.\nMust match the Name of a Network.",
-		"model":       "Interface model.\nOne of: e1000, e1000e, ne2k_pci, pcnet, rtl8139, virtio.\nDefaults to virtio.",
+		"model":       "Interface model.\nOne of: e1000, e1000e, igb, ne2k_pci, pcnet, rtl8139, virtio.\nDefaults to virtio.",
 		"binding":     "Binding specifies the binding plugin that will be used to connect the interface to the guest.\nIt provides an alternative to InterfaceBindingMethod.\nversion: 1alphav1",
 		"ports":       "List of ports to be forwarded to the virtual machine.",
 		"macAddress":  "Interface MAC address. For example: de:ad:00:00:be:af or DE-AD-00-00-BE-AF.",
@@ -677,7 +753,7 @@ func (Interface) SwaggerDoc() map[string]string {
 		"dhcpOptions": "If specified the network interface will pass additional DHCP options to the VMI\n+optional",
 		"tag":         "If specified, the virtual network interface address and its tag will be provided to the guest via config drive\n+optional",
 		"acpiIndex":   "If specified, the ACPI index is used to provide network interface device naming, that is stable across changes\nin PCI addresses assigned to the device.\nThis value is required to be unique across all devices and be between 1 and (16*1024-1).\n+optional",
-		"state":       "State represents the requested operational state of the interface.\nThe (only) value supported is `absent`, expressing a request to remove the interface.\n+optional",
+		"state":       "State represents the requested operational state of the interface.\nThe supported values are:\n`absent`, expressing a request to remove the interface.\n`down`, expressing a request to set the link down.\n`up`, expressing a request to set the link up.\nEmpty value functions as `up`.\n+optional",
 	}
 }
 
@@ -741,6 +817,12 @@ func (DeprecatedInterfaceMacvtap) SwaggerDoc() map[string]string {
 func (DeprecatedInterfacePasst) SwaggerDoc() map[string]string {
 	return map[string]string{
 		"": "DeprecatedInterfacePasst is an alias to the deprecated InterfacePasst\nDeprecated: Removed in v1.3",
+	}
+}
+
+func (InterfacePasstBinding) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"": "InterfacePasstBinding connects to a given network using passt usermode networking.",
 	}
 }
 
@@ -886,5 +968,11 @@ func (CPUTopology) SwaggerDoc() map[string]string {
 		"cores":   "Cores specifies the number of cores inside the vmi.\nMust be a value greater or equal 1.",
 		"sockets": "Sockets specifies the number of sockets inside the vmi.\nMust be a value greater or equal 1.",
 		"threads": "Threads specifies the number of threads inside the vmi.\nMust be a value greater or equal 1.",
+	}
+}
+
+func (DiskIOThreads) SwaggerDoc() map[string]string {
+	return map[string]string{
+		"supplementalPoolThreadCount": "SupplementalPoolThreadCount specifies how many iothreads are allocated for the supplementalPool policy.\n+optional",
 	}
 }
