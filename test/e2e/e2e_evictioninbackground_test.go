@@ -110,71 +110,6 @@ ethernets:
 	}
 }
 
-// ensureVMIsLiveMigratable waits until every VMI reports the LiveMigratable
-// condition with status True. If a VMI fails to become migratable within the
-// per-attempt timeout, it is deleted and recreated. This works around an
-// upstream KubeVirt race where virt-handler computes the containerdisk
-// checksum before the disk socket is ready, fails, and never retries; the
-// recreated VMI lands on a node that already has the containerdisk image
-// cached, so the socket comes up before virt-handler's first attempt.
-// See https://github.com/kubernetes-sigs/descheduler/pull/1874 for context.
-func ensureVMIsLiveMigratable(t *testing.T, ctx context.Context, kvClient kubevirtclient.Interface) {
-	t.Helper()
-	const (
-		maxAttempts    = 3
-		perAttemptWait = 120 * time.Second
-		deleteWait     = 60 * time.Second
-	)
-
-	isLiveMigratable := func(vmi *kvcorev1.VirtualMachineInstance) bool {
-		for _, c := range vmi.Status.Conditions {
-			if c.Type == kvcorev1.VirtualMachineInstanceIsMigratable && c.Status == corev1.ConditionTrue {
-				return true
-			}
-		}
-		return false
-	}
-
-	for i := 1; i <= vmiCount; i++ {
-		name := fmt.Sprintf("kubevirtvmi-%v", i)
-		var lastVMI *kvcorev1.VirtualMachineInstance
-		for attempt := 1; attempt <= maxAttempts; attempt++ {
-			err := wait.PollUntilContextTimeout(ctx, 5*time.Second, perAttemptWait, true, func(ctx context.Context) (bool, error) {
-				vmi, err := kvClient.KubevirtV1().VirtualMachineInstances("default").Get(ctx, name, metav1.GetOptions{})
-				if err != nil {
-					klog.Infof("Unable to get vmi %v: %v", name, err)
-					return false, nil
-				}
-				lastVMI = vmi
-				return isLiveMigratable(vmi), nil
-			})
-			if err == nil {
-				klog.Infof("vmi %v is LiveMigratable (attempt %d/%d)", name, attempt, maxAttempts)
-				break
-			}
-			if attempt == maxAttempts {
-				if lastVMI != nil {
-					klog.Infof("Final vmi %v status: phase=%v, conditions=%#v", name, lastVMI.Status.Phase, lastVMI.Status.Conditions)
-				}
-				t.Fatalf("vmi %v never became LiveMigratable after %d attempts", name, maxAttempts)
-			}
-			klog.Warningf("vmi %v not LiveMigratable after %v, recreating (attempt %d/%d) to work around virt-handler containerdisk-socket race", name, perAttemptWait, attempt, maxAttempts)
-			if err := kvClient.KubevirtV1().VirtualMachineInstances("default").Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-				t.Fatalf("Unable to delete vmi %v for retry: %v", name, err)
-			}
-			if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, deleteWait, true, func(ctx context.Context) (bool, error) {
-				_, err := kvClient.KubevirtV1().VirtualMachineInstances("default").Get(ctx, name, metav1.GetOptions{})
-				return apierrors.IsNotFound(err), nil
-			}); err != nil {
-				t.Fatalf("Timed out waiting for vmi %v to be deleted: %v", name, err)
-			}
-			if _, err := kvClient.KubevirtV1().VirtualMachineInstances("default").Create(ctx, virtualMachineInstance(i), metav1.CreateOptions{}); err != nil {
-				t.Fatalf("Unable to recreate vmi %v: %v", name, err)
-			}
-		}
-	}
-}
-
 func waitForKubevirtReady(t *testing.T, ctx context.Context, kvClient kubevirtclient.Interface) {
 	obj, err := kvClient.KubevirtV1().KubeVirts("kubevirt").Get(ctx, "kubevirt", metav1.GetOptions{})
 	if err != nil {
@@ -504,18 +439,6 @@ func TestLiveMigrationInBackground(t *testing.T) {
 		return allVMIsHaveRunningPods(t, ctx, kubeClient, kvClient)
 	}); err != nil {
 		t.Fatalf("Error waiting for all vmi active pods to be running: %v", err)
-	}
-
-	// Ensure VMIs are actually live-migratable before starting the descheduler;
-	// recreates any VMI that lost the virt-handler containerdisk-socket race.
-	ensureVMIsLiveMigratable(t, ctx, kvClient)
-
-	// VMIs may have been recreated above, so re-check that pods are Running
-	// before snapshotting the active virt-launcher pod names below.
-	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 300*time.Second, true, func(ctx context.Context) (bool, error) {
-		return allVMIsHaveRunningPods(t, ctx, kubeClient, kvClient)
-	}); err != nil {
-		t.Fatalf("Error waiting for all vmi active pods to be running after recreate: %v", err)
 	}
 
 	usedRunningPodNames := make(map[string]struct{})
