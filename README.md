@@ -1155,10 +1155,11 @@ The address and port can be changed by setting `--binding-address` and `--secure
 The descheduler exposes an optional HTTP endpoint that allows any authorized caller to **manually trigger a descheduling cycle on demand** without waiting for the next scheduled interval or restarting the process.
 
 This is useful when:
-- A node drain or topology imbalance just occurred and eviction must run immediately, not in N minutes when the timer fires.
-- A CI/CD pipeline needs to rebalance pods after a rollout and must know the cycle has completed before proceeding.
-- An on-call engineer needs an emergency eviction pass without touching the descheduler deployment.
-- A cluster runs with a long `--descheduling-interval` to minimize churn, but requires an escape hatch for urgent situations.
+
+* A node drain or topology imbalance just occurred and eviction must run immediately, not in N minutes when the timer fires.
+* A CI/CD pipeline needs to request a rebalance after a rollout and know the cycle was accepted.
+* An on-call engineer needs an emergency eviction pass without touching the descheduler deployment.
+* A cluster runs with a long `--descheduling-interval` to minimize churn, but requires an escape hatch for urgent situations.
 
 ### Enabling the Trigger API
 
@@ -1178,65 +1179,92 @@ deschedulerCommandArguments:
   - "--enable-trigger-api"
 ```
 
-The endpoint is registered on the existing HTTPS server (default port `10258`) — no additional ports, listeners, or TLS configuration is required.
+The endpoint is registered on the existing HTTPS server (default port `10258`) — no additional ports, listeners, or TLS configuration is required. Requests must include a Kubernetes service account bearer token authorized to `post` the `/api/v1/descheduler/run` non-resource URL.
+
+Example caller RBAC:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: descheduler-trigger
+rules:
+- nonResourceURLs:
+  - /api/v1/descheduler/run
+  verbs:
+  - post
+```
 
 ### Endpoint Reference
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/v1/descheduler/run` | Synchronously trigger a full descheduling cycle |
+| `POST` | `/api/v1/descheduler/run` | Start a descheduling cycle |
 
-The request **blocks until the cycle completes** and returns a JSON response with the result. Only one trigger can be queued at a time; concurrent requests are rejected with `429`.
+The request returns once the cycle has been accepted for execution. It does not block until the cycle completes. Only one descheduling cycle can run at a time across startup, scheduled, and manually triggered cycles; concurrent trigger requests are rejected with `409`.
 
 #### Response codes
 
 | Code | Meaning |
 |------|---------|
-| `200 OK` | Cycle completed successfully |
+| `202 Accepted` | Cycle started |
+| `401 Unauthorized` | Missing or invalid bearer token |
+| `403 Forbidden` | Caller is not allowed to trigger descheduler |
 | `405 Method Not Allowed` | Non-POST request |
-| `429 Too Many Requests` | A trigger is already queued or a cycle is in progress |
-| `500 Internal Server Error` | Cycle failed; error detail in `message` field |
-| `504 Gateway Timeout` | HTTP client disconnected before the cycle finished |
+| `409 Conflict` | A cycle is already running |
+| `500 Internal Server Error` | Authentication, authorization, or trigger startup failed |
+| `503 Service Unavailable` | Descheduler is not ready to accept trigger requests |
 
-**Example success response:**
+**Example accepted response:**
+
 ```json
-{"message": "descheduling cycle completed successfully", "status": "ok"}
+{"message": "descheduling cycle started", "status": "accepted"}
 ```
 
 **Example rejection response (cycle already running):**
+
 ```json
-{"message": "descheduling cycle already in progress or pending", "status": "error"}
+{"message": "descheduling cycle already running", "status": "error"}
 ```
 
 ### Usage Examples
 
-**Trigger from inside the cluster (exec into the descheduler pod):**
+**Trigger from inside a pod using an authorized service account:**
 
 ```bash
-kubectl exec -n kube-system deploy/descheduler -- \
-  curl -sk -X POST https://localhost:10258/api/v1/descheduler/run
+TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+curl -sk -X POST \
+  -H "Authorization: Bearer ${TOKEN}" \
+  https://descheduler.kube-system.svc:10258/api/v1/descheduler/run
 ```
 
 **Trigger via port-forward from a local machine:**
 
 ```bash
+TOKEN="$(kubectl -n kube-system create token descheduler-trigger)"
 kubectl port-forward -n kube-system deploy/descheduler 10258:10258 &
-curl -sk -X POST https://localhost:10258/api/v1/descheduler/run
+curl -sk -X POST \
+  -H "Authorization: Bearer ${TOKEN}" \
+  https://localhost:10258/api/v1/descheduler/run
 ```
+
+The `descheduler-trigger` service account in this example must be bound to a role that allows `post` on the `/api/v1/descheduler/run` non-resource URL.
 
 **Trigger with a timeout (useful in scripts):**
 
 ```bash
 curl -sk --max-time 300 -X POST \
+  -H "Authorization: Bearer ${TOKEN}" \
   https://localhost:10258/api/v1/descheduler/run | jq .
 ```
 
-**Use in a CI/CD step and assert success:**
+**Use in a CI/CD step and assert the cycle was accepted:**
 
 ```bash
 curl -sk --max-time 300 -f -X POST \
+  -H "Authorization: Bearer ${TOKEN}" \
   https://localhost:10258/api/v1/descheduler/run \
-  | jq -e '.status == "ok"'
+  | jq -e '.status == "accepted"'
 ```
 
 ### On-Demand-Only Mode (no automatic interval)

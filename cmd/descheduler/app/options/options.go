@@ -39,6 +39,7 @@ import (
 
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
+	"sigs.k8s.io/descheduler/pkg/descheduler/cycle"
 	deschedulerscheme "sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 	"sigs.k8s.io/descheduler/pkg/features"
 	"sigs.k8s.io/descheduler/pkg/tracing"
@@ -54,6 +55,7 @@ type DeschedulerServer struct {
 
 	Client            clientset.Interface
 	EventClient       clientset.Interface
+	TriggerAuthClient clientset.Interface
 	MetricsClient     metricsclient.Interface
 	PrometheusClient  promapi.Client
 	SecureServing     *apiserveroptions.SecureServingOptionsWithLoopback
@@ -61,9 +63,7 @@ type DeschedulerServer struct {
 	DisableMetrics    bool
 	EnableHTTP2       bool
 	EnableTriggerAPI  bool
-	// TriggerCh is used to manually trigger a descheduling cycle via the HTTP API.
-	// Each request sends a chan error; the loop sends the cycle result back on it.
-	TriggerCh chan chan error
+	CycleManager      *cycle.Manager
 	// FeatureGates enabled by the user
 	FeatureGates map[string]bool
 	// DefaultFeatureGates for internal accessing so unit tests can enable/disable specific features
@@ -83,6 +83,7 @@ func NewDeschedulerServer() (*DeschedulerServer, error) {
 	return &DeschedulerServer{
 		DeschedulerConfiguration: *cfg,
 		SecureServing:            secureServing,
+		CycleManager:             cycle.NewManager(),
 	}, nil
 }
 
