@@ -683,6 +683,159 @@ func TestEvictionInBackgroundMetrics_InformerRace(t *testing.T) {
 	metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": "success"}, 1)
 }
 
+// TestEvictionInBackgroundMetrics_PodCompleted verifies that when a pod
+// transitions to a terminal phase via UpdateFunc (without ever being deleted),
+// the correct metric is emitted: "success" for PodSucceeded, "error" for PodFailed.
+func TestEvictionInBackgroundMetrics_PodCompleted(t *testing.T) {
+	testCases := []struct {
+		name           string
+		phase          v1.PodPhase
+		expectedResult string
+	}{
+		{name: "PodSucceeded emits success", phase: v1.PodSucceeded, expectedResult: "success"},
+		{name: "PodFailed emits error", phase: v1.PodFailed, expectedResult: "error"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), wait.ForeverTestTimeout)
+			defer cancel()
+
+			deschedulermetrics.Register()
+			deschedulermetrics.PodsEvicted.Reset()
+			deschedulermetrics.PodsEvictedTotal.Reset()
+
+			node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+			ownerRef1 := test.GetReplicaSetOwnerRefList()
+			p1 := test.BuildTestPod("p1", 100, 0, node1.Name, func(pod *v1.Pod) {
+				pod.Namespace = "dev"
+				pod.ObjectMeta.OwnerReferences = ownerRef1
+				pod.Annotations = map[string]string{
+					EvictionRequestAnnotationKey: "",
+				}
+			})
+
+			client := fakeclientset.NewSimpleClientset(node1, p1)
+			sharedInformerFactory := informers.NewSharedInformerFactory(client, 0)
+			_, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
+
+			podEvictor, err := NewPodEvictor(
+				ctx,
+				client,
+				eventRecorder,
+				sharedInformerFactory.Core().V1().Pods().Informer(),
+				initFeatureGates(),
+				NewOptions().WithMetricsEnabled(true),
+			)
+			if err != nil {
+				t.Fatalf("Unexpected error when creating a pod evictor: %v", err)
+			}
+
+			client.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+				if action.GetSubresource() != "eviction" {
+					return false, nil, nil
+				}
+				return true, nil, &apierrors.StatusError{
+					ErrStatus: metav1.Status{
+						Reason:  metav1.StatusReasonTooManyRequests,
+						Message: "Eviction triggered evacuation",
+					},
+				}
+			})
+
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+			evictOpts := EvictOptions{StrategyName: "TestStrategy", ProfileName: "TestProfile"}
+			podEvictor.EvictPod(ctx, p1, evictOpts)
+
+			metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": "background"}, 1)
+
+			// Transition the pod to a terminal phase without deleting it.
+			p1Updated := p1.DeepCopy()
+			p1Updated.Status.Phase = tc.phase
+			client.CoreV1().Pods(p1.Namespace).UpdateStatus(ctx, p1Updated, metav1.UpdateOptions{})
+
+			// Wait for UpdateFunc to fire and remove the pod from the cache.
+			if err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, wait.ForeverTestTimeout, true, func(ctx context.Context) (bool, error) {
+				return !podEvictor.erCache.hasPod(p1), nil
+			}); err != nil {
+				t.Fatalf("Timed out waiting for background eviction to complete: %v", err)
+			}
+
+			metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": tc.expectedResult}, 1)
+		})
+	}
+}
+
+// TestEvictionInBackgroundMetrics_AssumedTimeout verifies that when an assumed
+// eviction entry expires in cleanCache, the "error" metric is emitted.
+func TestEvictionInBackgroundMetrics_AssumedTimeout(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), wait.ForeverTestTimeout)
+	defer cancel()
+
+	deschedulermetrics.Register()
+	deschedulermetrics.PodsEvicted.Reset()
+	deschedulermetrics.PodsEvictedTotal.Reset()
+
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	ownerRef1 := test.GetReplicaSetOwnerRefList()
+	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, func(pod *v1.Pod) {
+		pod.Namespace = "dev"
+		pod.ObjectMeta.OwnerReferences = ownerRef1
+		pod.Annotations = map[string]string{
+			EvictionRequestAnnotationKey: "",
+		}
+	})
+
+	client := fakeclientset.NewSimpleClientset(node1, p1)
+	sharedInformerFactory := informers.NewSharedInformerFactory(client, 0)
+	_, eventRecorder := utils.GetRecorderAndBroadcaster(ctx, client)
+
+	podEvictor, err := NewPodEvictor(
+		ctx,
+		client,
+		eventRecorder,
+		sharedInformerFactory.Core().V1().Pods().Informer(),
+		initFeatureGates(),
+		NewOptions().WithMetricsEnabled(true),
+	)
+	if err != nil {
+		t.Fatalf("Unexpected error when creating a pod evictor: %v", err)
+	}
+
+	client.PrependReactor("create", "pods", func(action core.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() != "eviction" {
+			return false, nil, nil
+		}
+		return true, nil, &apierrors.StatusError{
+			ErrStatus: metav1.Status{
+				Reason:  metav1.StatusReasonTooManyRequests,
+				Message: "Eviction triggered evacuation",
+			},
+		}
+	})
+
+	sharedInformerFactory.Start(ctx.Done())
+	sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+	evictOpts := EvictOptions{StrategyName: "TestStrategy", ProfileName: "TestProfile"}
+	podEvictor.EvictPod(ctx, p1, evictOpts)
+
+	metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": "background"}, 1)
+
+	// Back-date all assumed entries so they appear expired, then run cleanCache.
+	podEvictor.erCache.mu.Lock()
+	for uid, item := range podEvictor.erCache.requests {
+		item.assumedTimestamp = metav1.NewTime(time.Now().Add(-time.Hour))
+		podEvictor.erCache.requests[uid] = item
+	}
+	podEvictor.erCache.mu.Unlock()
+	podEvictor.erCache.cleanCache(ctx)
+
+	metricstest.AssertVectorCount(t, "descheduler_pods_evicted_total", map[string]string{"result": "error"}, 1)
+}
+
 func assertEqualEvents(t *testing.T, expected []string, actual <-chan string) {
 	t.Logf("Assert for events: %v", expected)
 	c := time.After(wait.ForeverTestTimeout)
