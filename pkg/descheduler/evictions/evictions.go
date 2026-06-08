@@ -69,6 +69,7 @@ type evictionRequestsCache struct {
 	requestsPerNamespace         map[string]uint
 	requestsTotal                uint
 	assumedRequestTimeoutSeconds uint
+	onAssumedTimeout             func(item evictionRequestItem)
 }
 
 func newEvictionRequestsCache(assumedRequestTimeoutSeconds uint) *evictionRequestsCache {
@@ -95,6 +96,9 @@ func (erc *evictionRequestsCache) cleanCache(ctx context.Context) {
 			requestAgeSeconds := uint(metav1.Now().Sub(item.assumedTimestamp.Local()).Seconds())
 			if requestAgeSeconds > erc.assumedRequestTimeoutSeconds {
 				klog.V(4).InfoS("Assumed eviction request in background timed out, deleting", "timeout", erc.assumedRequestTimeoutSeconds, "podNamespace", item.podNamespace, "podName", item.podName)
+				if erc.onAssumedTimeout != nil {
+					erc.onAssumedTimeout(item)
+				}
 				erc.deleteItem(uid)
 			}
 		}
@@ -290,6 +294,12 @@ func NewPodEvictor(
 
 	if featureGates.Enabled(features.EvictionsInBackground) {
 		erCache := newEvictionRequestsCache(assumedEvictionRequestTimeoutSeconds)
+		if podEvictor.metricsEnabled {
+			erCache.onAssumedTimeout = func(item evictionRequestItem) {
+				metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": item.strategyName, "namespace": item.podNamespace, "node": item.podNodeName, "profile": item.profileName}).Inc()
+				metrics.PodsEvictedTotal.With(map[string]string{"result": "error", "strategy": item.strategyName, "namespace": item.podNamespace, "node": item.podNodeName, "profile": item.profileName}).Inc()
+			}
+		}
 
 		handlerRegistration, err := podInformer.AddEventHandler(
 			cache.ResourceEventHandlerFuncs{
@@ -330,8 +340,18 @@ func NewPodEvictor(
 					}
 					// Remove completed/suceeeded or failed pods from the cache
 					if newPod.Status.Phase == v1.PodSucceeded || newPod.Status.Phase == v1.PodFailed {
-						klog.V(3).InfoS("Pod with eviction in background completed. Removing pod from the cache.", "pod", klog.KObj(newPod))
-						erCache.deletePod(newPod)
+						if item, exists := erCache.getPod(newPod); exists {
+							klog.V(3).InfoS("Pod with eviction in background completed. Removing pod from the cache.", "pod", klog.KObj(newPod))
+							if item.evictionAssumed && podEvictor.metricsEnabled {
+								result := "success"
+								if newPod.Status.Phase == v1.PodFailed {
+									result = "error"
+								}
+								metrics.PodsEvicted.With(map[string]string{"result": result, "strategy": item.strategyName, "namespace": item.podNamespace, "node": item.podNodeName, "profile": item.profileName}).Inc()
+								metrics.PodsEvictedTotal.With(map[string]string{"result": result, "strategy": item.strategyName, "namespace": item.podNamespace, "node": item.podNodeName, "profile": item.profileName}).Inc()
+							}
+							erCache.deletePod(newPod)
+						}
 						return
 					}
 					// Ignore any pod that does not have eviction in progress
