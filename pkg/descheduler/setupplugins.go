@@ -19,6 +19,7 @@ package descheduler
 import (
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/maxpodspernode"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
@@ -47,4 +48,5 @@ func RegisterDefaultPlugins(registry pluginregistry.Registry) {
 	pluginregistry.Register(removepodsviolatingnodeaffinity.PluginName, removepodsviolatingnodeaffinity.New, &removepodsviolatingnodeaffinity.RemovePodsViolatingNodeAffinity{}, &removepodsviolatingnodeaffinity.RemovePodsViolatingNodeAffinityArgs{}, removepodsviolatingnodeaffinity.ValidateRemovePodsViolatingNodeAffinityArgs, removepodsviolatingnodeaffinity.SetDefaults_RemovePodsViolatingNodeAffinityArgs, registry)
 	pluginregistry.Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaints{}, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs, removepodsviolatingnodetaints.SetDefaults_RemovePodsViolatingNodeTaintsArgs, registry)
 	pluginregistry.Register(removepodsviolatingtopologyspreadconstraint.PluginName, removepodsviolatingtopologyspreadconstraint.New, &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraint{}, &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{}, removepodsviolatingtopologyspreadconstraint.ValidateRemovePodsViolatingTopologySpreadConstraintArgs, removepodsviolatingtopologyspreadconstraint.SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs, registry)
+	pluginregistry.Register(maxpodspernode.PluginName, maxpodspernode.New, &maxpodspernode.MaxPodsPerNode{}, &maxpodspernode.MaxPodsPerNodeArgs{}, maxpodspernode.ValidateMaxPodsPerNodeArgs, maxpodspernode.SetDefaults_MaxPodsPerNodeArgs, registry)
 }
