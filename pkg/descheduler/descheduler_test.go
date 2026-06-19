@@ -389,6 +389,85 @@ func TestDuplicate(t *testing.T) {
 	}
 }
 
+// TestPodsWithoutPDBProtectionRespectsPDBs is a regression test for #1882.
+//
+// The DefaultEvictor PodsWithoutPDB protection reads the PDB lister during the
+// descheduling cycle, which runs after the shared informer factory has started.
+// If the PDB informer is not registered up front, the lister is empty, every pod
+// looks "without PDB", the protection blocks all evictions, and nothing is evicted.
+//
+// Here the duplicate pods ARE covered by a PDB, so with PodsWithoutPDB enabled they
+// must still be evictable by RemoveDuplicates. This fails without the informer
+// registration (the pods are wrongly treated as uncovered and protected). It must run
+// through the real newDescheduler/RunDeschedulerStrategies path: the defaultevictor
+// unit harness pre-registers the PDB lister and would mask the bug.
+func TestPodsWithoutPDBProtectionRespectsPDBs(t *testing.T) {
+	initPluginRegistry()
+
+	ctx := context.Background()
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
+
+	ownerRef := test.GetReplicaSetOwnerRefList()
+	buildPod := func(name string) *v1.Pod {
+		p := test.BuildTestPod(name, 100, 0, node1.Name, nil)
+		p.Namespace = "default"
+		p.Labels = map[string]string{"app": "foo"}
+		p.ObjectMeta.OwnerReferences = ownerRef
+		return p
+	}
+	p1, p2, p3 := buildPod("p1"), buildPod("p2"), buildPod("p3")
+	pdb := test.BuildTestPDB("foo-pdb", "foo")
+
+	client := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3, pdb)
+	eventClient := fakeclientset.NewSimpleClientset(node1, node2, p1, p2, p3, pdb)
+
+	rs, err := options.NewDeschedulerServer()
+	if err != nil {
+		t.Fatalf("Unable to initialize server: %v", err)
+	}
+	rs.Client = client
+	rs.EventClient = eventClient
+	rs.DefaultFeatureGates = initFeatureGates()
+
+	var evictedPods []string
+	client.PrependReactor("create", "pods", podEvictionReactionTestingFnc(&evictedPods, nil, nil))
+
+	policy := &api.DeschedulerPolicy{
+		Profiles: []api.DeschedulerProfile{
+			{
+				Name: "Profile",
+				PluginConfigs: []api.PluginConfig{
+					{
+						Name: "RemoveDuplicates",
+						Args: &removeduplicates.RemoveDuplicatesArgs{},
+					},
+					{
+						Name: "DefaultEvictor",
+						Args: &defaultevictor.DefaultEvictorArgs{
+							PodProtections: defaultevictor.PodProtections{
+								ExtraEnabled: []defaultevictor.PodProtection{defaultevictor.PodsWithoutPDB},
+							},
+						},
+					},
+				},
+				Plugins: api.Plugins{
+					Filter:  api.PluginSet{Enabled: []string{"DefaultEvictor"}},
+					Balance: api.PluginSet{Enabled: []string{"RemoveDuplicates"}},
+				},
+			},
+		},
+	}
+
+	if err := RunDeschedulerStrategies(ctx, rs, policy, "v1"); err != nil {
+		t.Fatalf("Unable to run descheduler strategies: %v", err)
+	}
+
+	if len(evictedPods) == 0 {
+		t.Fatalf("expected a duplicate pod covered by a PDB to be evicted, but PodsWithoutPDB protection blocked all evictions (PDB informer not synced?)")
+	}
+}
+
 func TestRootCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
