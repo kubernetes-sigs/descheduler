@@ -18,6 +18,7 @@ spec:
   {{- else }}
   replicas: 1
   {{- end }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   selector:
     matchLabels:
       {{- include "descheduler.selectorLabels" . | nindent 6 }}

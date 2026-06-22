@@ -62,6 +62,7 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `ttlSecondsAfterFinished`           | If set, configure `ttlSecondsAfterFinished` for the _descheduler_ job                                                 | `nil`                                     |
 | `deschedulingInterval`              | If using kind:Deployment, sets time between consecutive descheduler executions.                                       | `5m`                                      |
 | `replicas`                          | The replica count for Deployment                                                                                      | `1`                                       |
+| `revisionHistoryLimit               | The revision history limit for Deployment                                                                             | `10`                                      |
 | `leaderElection`                    | The options for high availability when running replicated components                                                  | _see values.yaml_                         |
 | `cmdOptions`                        | The options to pass to the _descheduler_ command                                                                      | _see values.yaml_                         |
 | `priorityClassName`                 | The name of the priority class to add to pods                                                                         | `system-cluster-critical`                 |
