@@ -463,8 +463,12 @@ func TestPodsWithoutPDBProtectionRespectsPDBs(t *testing.T) {
 		t.Fatalf("Unable to run descheduler strategies: %v", err)
 	}
 
-	if len(evictedPods) == 0 {
-		t.Fatalf("expected a duplicate pod covered by a PDB to be evicted, but PodsWithoutPDB protection blocked all evictions (PDB informer not synced?)")
+	// Three duplicate pods on node1 with two feasible nodes means RemoveDuplicates
+	// should evict exactly one. Asserting != 1 catches both the original regression
+	// (PodsWithoutPDB blocking all evictions when the PDB informer is not synced)
+	// and any future over-eviction on this path.
+	if len(evictedPods) != 1 {
+		t.Fatalf("expected exactly one duplicate pod covered by a PDB to be evicted, got %d", len(evictedPods))
 	}
 }
 
