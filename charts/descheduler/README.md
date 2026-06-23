@@ -63,6 +63,10 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `deschedulingInterval`              | If using kind:Deployment, sets time between consecutive descheduler executions.                                       | `5m`                                      |
 | `replicas`                          | The replica count for Deployment                                                                                      | `1`                                       |
 | `leaderElection`                    | The options for high availability when running replicated components                                                  | _see values.yaml_                         |
+| `podDisruptionBudget.enabled`       | If `true` and `kind` is `Deployment`, create a PodDisruptionBudget for the descheduler                                | `false`                                   |
+| `podDisruptionBudget.minAvailable`  | Minimum descheduler pods that must stay available (mutually exclusive with `maxUnavailable`)                          | `1`                                       |
+| `podDisruptionBudget.maxUnavailable`| Maximum descheduler pods that can be unavailable (mutually exclusive with `minAvailable`)                             | `""`                                      |
+| `podDisruptionBudget.annotations`   | Annotations to add to the PodDisruptionBudget                                                                         | `{}`                                      |
 | `cmdOptions`                        | The options to pass to the _descheduler_ command                                                                      | _see values.yaml_                         |
 | `priorityClassName`                 | The name of the priority class to add to pods                                                                         | `system-cluster-critical`                 |
 | `rbac.create`                       | If `true`, create & use RBAC resources                                                                                | `true`                                    |

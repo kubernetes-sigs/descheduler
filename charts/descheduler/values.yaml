@@ -80,6 +80,20 @@ leaderElection: {}
 #  resourceName: "descheduler"
 #  resourceNamespace: "kube-system"
 
+# Pod Disruption Budget for the descheduler Deployment. Optional.
+# Only rendered when kind is "Deployment". The descheduler runs a single replica
+# by default, so this is disabled by default. Enable it for highly available
+# setups (replicas > 1 with leaderElection enabled) to keep a descheduler pod
+# available during voluntary node disruptions.
+podDisruptionBudget:
+  enabled: false
+  # minAvailable and maxUnavailable are mutually exclusive; set only one.
+  minAvailable: 1
+  maxUnavailable: ""
+  # See https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+  # unhealthyPodEvictionPolicy: IfHealthyBudget
+  annotations: {}
+
 command:
 - "/bin/descheduler"
 
