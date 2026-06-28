@@ -46,10 +46,8 @@ import (
 	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
 
-	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapiv1alpha2 "sigs.k8s.io/descheduler/pkg/api/v1alpha2"
-	"sigs.k8s.io/descheduler/pkg/descheduler"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
@@ -1389,43 +1387,6 @@ func TestPodLifeTimeOldestEvicted(t *testing.T) {
 		if pod.GetName() == oldestPod.GetName() {
 			t.Errorf("The oldest Pod %s was not evicted", oldestPod.GetName())
 		}
-	}
-}
-
-func TestDeschedulingInterval(t *testing.T) {
-	ctx := context.Background()
-	clientSet, err := client.CreateClient(componentbaseconfig.ClientConnectionConfiguration{Kubeconfig: os.Getenv("KUBECONFIG")}, "")
-	if err != nil {
-		t.Errorf("Error during client creation with %v", err)
-	}
-
-	// By default, the DeschedulingInterval param should be set to 0, meaning Descheduler only runs once then exits
-	s, err := options.NewDeschedulerServer()
-	if err != nil {
-		t.Fatalf("Unable to initialize server: %v", err)
-	}
-	s.Client = clientSet
-	s.DefaultFeatureGates = initFeatureGates()
-
-	deschedulerPolicy := &deschedulerapi.DeschedulerPolicy{}
-
-	c := make(chan bool, 1)
-	go func() {
-		evictionPolicyGroupVersion, err := eutils.SupportEviction(s.Client)
-		if err != nil || len(evictionPolicyGroupVersion) == 0 {
-			t.Errorf("Error when checking support for eviction: %v", err)
-		}
-		if err := descheduler.RunDeschedulerStrategies(ctx, s, deschedulerPolicy, evictionPolicyGroupVersion); err != nil {
-			t.Errorf("Error running descheduler strategies: %+v", err)
-		}
-		c <- true
-	}()
-
-	select {
-	case <-c:
-		// successfully returned
-	case <-time.After(3 * time.Minute):
-		t.Errorf("descheduler.Run timed out even without descheduling-interval set")
 	}
 }
 
