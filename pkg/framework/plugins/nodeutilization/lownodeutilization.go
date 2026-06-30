@@ -332,6 +332,7 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 		continueEvictionCond,
 		l.usageClient,
 		nodeLimit,
+		l.handle,
 	)
 
 	return nil
