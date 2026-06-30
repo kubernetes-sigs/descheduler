@@ -201,7 +201,66 @@ func TestValidateLowNodeUtilizationPluginConfig(t *testing.T) {
 					Source:        api.KubernetesMetrics,
 				},
 			},
-			errInfo: fmt.Errorf("it is not allowed to set both \"KubernetesMetrics\" source and metricsServer"),
+			errInfo: fmt.Errorf("it is not allowed to set both source and metricsServer"),
+		},
+		{
+			name: "legacy metrics server without metrics source",
+			args: &LowNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    20,
+					v1.ResourceMemory: 20,
+					extendedResource:  20,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    80,
+					v1.ResourceMemory: 80,
+					extendedResource:  80,
+				},
+				MetricsUtilization: &MetricsUtilization{
+					MetricsServer: true,
+				},
+			},
+			errInfo: nil,
+		},
+		{
+			name: "metrics server with explicit metrics source",
+			args: &LowNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    20,
+					v1.ResourceMemory: 20,
+					extendedResource:  20,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    80,
+					v1.ResourceMemory: 80,
+					extendedResource:  80,
+				},
+				MetricsUtilization: &MetricsUtilization{
+					MetricsServer: true,
+					Source:        api.PrometheusMetrics,
+				},
+			},
+			errInfo: fmt.Errorf("it is not allowed to set both source and metricsServer"),
+		},
+		{
+			name: "metrics server with prometheus configuration",
+			args: &LowNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    20,
+					v1.ResourceMemory: 20,
+					extendedResource:  20,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    80,
+					v1.ResourceMemory: 80,
+					extendedResource:  80,
+				},
+				MetricsUtilization: &MetricsUtilization{
+					MetricsServer: true,
+					Prometheus:    &Prometheus{Query: "up"},
+				},
+			},
+			errInfo: fmt.Errorf("prometheus configuration is not allowed when metricsServer is enabled"),
 		},
 		{
 			name: "missing prometheus query",
@@ -241,6 +300,42 @@ func TestValidateLowNodeUtilizationPluginConfig(t *testing.T) {
 				},
 			},
 			errInfo: fmt.Errorf("prometheus configuration is not allowed to set when source is set to \"KubernetesMetrics\""),
+		},
+		{
+			name: "metrics utilization without metrics source",
+			args: &LowNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    20,
+					v1.ResourceMemory: 20,
+					extendedResource:  20,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    80,
+					v1.ResourceMemory: 80,
+					extendedResource:  80,
+				},
+				MetricsUtilization: &MetricsUtilization{},
+			},
+			errInfo: fmt.Errorf("metrics source is empty"),
+		},
+		{
+			name: "unknown metrics source",
+			args: &LowNodeUtilizationArgs{
+				Thresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    20,
+					v1.ResourceMemory: 20,
+					extendedResource:  20,
+				},
+				TargetThresholds: api.ResourceThresholds{
+					v1.ResourceCPU:    80,
+					v1.ResourceMemory: 80,
+					extendedResource:  80,
+				},
+				MetricsUtilization: &MetricsUtilization{
+					Source: api.MetricsSource("UnknownMetrics"),
+				},
+			},
+			errInfo: fmt.Errorf("unrecognized metrics source"),
 		},
 	}
 
