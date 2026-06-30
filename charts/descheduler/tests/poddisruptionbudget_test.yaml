@@ -1,0 +1,75 @@
+suite: Test Descheduler PodDisruptionBudget
+
+templates:
+  - "*.yaml"
+
+release:
+  name: descheduler
+
+tests:
+  - it: is not created for the default CronJob kind even when enabled
+    template: templates/poddisruptionbudget.yaml
+    set:
+      podDisruptionBudget:
+        enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: is not created for Deployment kind unless enabled
+    template: templates/poddisruptionbudget.yaml
+    set:
+      kind: Deployment
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: creates a PodDisruptionBudget for Deployment kind when enabled
+    template: templates/poddisruptionbudget.yaml
+    set:
+      kind: Deployment
+      podDisruptionBudget:
+        enabled: true
+    asserts:
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.minAvailable
+          value: 1
+      - notExists:
+          path: spec.maxUnavailable
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: descheduler
+
+  - it: supports maxUnavailable instead of minAvailable
+    template: templates/poddisruptionbudget.yaml
+    set:
+      kind: Deployment
+      podDisruptionBudget:
+        enabled: true
+        minAvailable: ""
+        maxUnavailable: 1
+    asserts:
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+      - notExists:
+          path: spec.minAvailable
+
+  - it: supports unhealthyPodEvictionPolicy and annotations
+    template: templates/poddisruptionbudget.yaml
+    set:
+      kind: Deployment
+      podDisruptionBudget:
+        enabled: true
+        unhealthyPodEvictionPolicy: IfHealthyBudget
+        annotations:
+          example.com/team: platform
+    asserts:
+      - equal:
+          path: spec.unhealthyPodEvictionPolicy
+          value: IfHealthyBudget
+      - equal:
+          path: metadata.annotations["example.com/team"]
+          value: platform
