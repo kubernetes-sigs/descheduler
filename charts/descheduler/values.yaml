@@ -68,6 +68,8 @@ deschedulingInterval: 5m
 # only if that node is in the same zone as at least one already-running descheduler
 replicas: 1
 
+revisionHistoryLimit: 10
+
 # Specifies whether Leader Election resources should be created
 # Required when running as a Deployment
 # NOTE: Leader election can't be activated if DryRun enabled

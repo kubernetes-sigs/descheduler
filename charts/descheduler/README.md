@@ -62,6 +62,7 @@ The following table lists the configurable parameters of the _descheduler_ chart
 | `ttlSecondsAfterFinished`           | If set, configure `ttlSecondsAfterFinished` for the _descheduler_ job                                                 | `nil`                                     |
 | `deschedulingInterval`              | If using kind:Deployment, sets time between consecutive descheduler executions.                                       | `5m`                                      |
 | `replicas`                          | The replica count for Deployment                                                                                      | `1`                                       |
+| `revisionHistoryLimit               | The revision history limit for Deployment                                                                             | `10`                                      |
 | `leaderElection`                    | The options for high availability when running replicated components                                                  | _see values.yaml_                         |
 | `podDisruptionBudget.enabled`       | If `true` and `kind` is `Deployment`, create a PodDisruptionBudget for the descheduler                                | `false`                                   |
 | `podDisruptionBudget.minAvailable`  | Minimum descheduler pods that must stay available (mutually exclusive with `maxUnavailable`)                          | `1`                                       |
