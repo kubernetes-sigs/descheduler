@@ -461,6 +461,143 @@ func TestRootCancelWithNoInterval(t *testing.T) {
 	}
 }
 
+func TestTriggerAPIWithNoIntervalWaitsForCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
+	client := fakeclientset.NewSimpleClientset(n1, n2)
+	eventClient := fakeclientset.NewSimpleClientset(n1, n2)
+	dp := &api.DeschedulerPolicy{
+		Profiles: []api.DeschedulerProfile{},
+	}
+
+	rs, err := options.NewDeschedulerServer()
+	if err != nil {
+		t.Fatalf("Unable to initialize server: %v", err)
+	}
+	rs.Client = client
+	rs.EventClient = eventClient
+	rs.DeschedulingInterval = 0
+	rs.EnableTriggerAPI = true
+	rs.DefaultFeatureGates = initFeatureGates()
+	errChan := make(chan error, 1)
+	defer close(errChan)
+
+	go func() {
+		errChan <- RunDeschedulerStrategies(ctx, rs, dp, "v1")
+	}()
+
+	select {
+	case err := <-errChan:
+		t.Fatalf("expected descheduler to keep running with trigger API enabled, got %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	cancel()
+	select {
+	case err := <-errChan:
+		if err != nil {
+			t.Fatalf("Unable to run descheduler strategies: %v", err)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("Root ctx should have canceled")
+	}
+}
+
+func TestDeschedulingIntervalTriggerFlagCombinations(t *testing.T) {
+	testCases := []struct {
+		name                 string
+		deschedulingInterval time.Duration
+		enableTriggerAPI     bool
+		expectReturn         bool
+	}{
+		{
+			name:                 "zero interval trigger disabled returns after initial cycle",
+			deschedulingInterval: 0,
+			enableTriggerAPI:     false,
+			expectReturn:         true,
+		},
+		{
+			name:                 "zero interval trigger enabled waits for shutdown",
+			deschedulingInterval: 0,
+			enableTriggerAPI:     true,
+			expectReturn:         false,
+		},
+		{
+			name:                 "positive interval trigger disabled waits for shutdown",
+			deschedulingInterval: time.Hour,
+			enableTriggerAPI:     false,
+			expectReturn:         false,
+		},
+		{
+			name:                 "positive interval trigger enabled waits for shutdown",
+			deschedulingInterval: time.Hour,
+			enableTriggerAPI:     true,
+			expectReturn:         false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			n1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+			n2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
+			client := fakeclientset.NewSimpleClientset(n1, n2)
+			eventClient := fakeclientset.NewSimpleClientset(n1, n2)
+			dp := &api.DeschedulerPolicy{
+				Profiles: []api.DeschedulerProfile{},
+			}
+
+			rs, err := options.NewDeschedulerServer()
+			if err != nil {
+				t.Fatalf("Unable to initialize server: %v", err)
+			}
+			rs.Client = client
+			rs.EventClient = eventClient
+			rs.DeschedulingInterval = tc.deschedulingInterval
+			rs.EnableTriggerAPI = tc.enableTriggerAPI
+			rs.DefaultFeatureGates = initFeatureGates()
+
+			errChan := make(chan error, 1)
+			go func() {
+				errChan <- RunDeschedulerStrategies(ctx, rs, dp, "v1")
+			}()
+
+			if tc.expectReturn {
+				select {
+				case err := <-errChan:
+					if err != nil {
+						t.Fatalf("Unable to run descheduler strategies: %v", err)
+					}
+				case <-time.After(time.Second):
+					t.Fatalf("expected descheduler to return after initial cycle")
+				}
+				return
+			}
+
+			select {
+			case err := <-errChan:
+				if err != nil {
+					t.Fatalf("Unable to run descheduler strategies: %v", err)
+				}
+				t.Fatalf("expected descheduler to keep running until shutdown")
+			case <-time.After(100 * time.Millisecond):
+				cancel()
+				select {
+				case err := <-errChan:
+					if err != nil {
+						t.Fatalf("Unable to run descheduler strategies: %v", err)
+					}
+				case <-time.After(time.Second):
+					t.Fatal("Root ctx should have canceled")
+				}
+			}
+		})
+	}
+}
+
 func TestValidateVersionCompatibility(t *testing.T) {
 	type testCase struct {
 		name               string
