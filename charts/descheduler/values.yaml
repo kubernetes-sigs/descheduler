@@ -164,6 +164,14 @@ deschedulerPolicy:
 
 priorityClassName: system-cluster-critical
 
+# schedulerName is the name of the scheduler used to schedule the descheduler pods.
+# Leave empty to use the cluster default scheduler.
+schedulerName: ""
+
+# runtimeClassName is the RuntimeClass applied to the descheduler pods.
+# Leave empty to use the cluster default runtime.
+runtimeClassName: ""
+
 nodeSelector: {}
 #  foo: bar
 
