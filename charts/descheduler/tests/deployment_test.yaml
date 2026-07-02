@@ -47,3 +47,29 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].args
           content: --leader-elect-resource-namespace=typo
+
+  - it: sets schedulerName when provided
+    set:
+      schedulerName: custom-scheduler
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.schedulerName
+          value: custom-scheduler
+
+  - it: sets runtimeClassName when provided
+    set:
+      runtimeClassName: gvisor
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.runtimeClassName
+          value: gvisor
+
+  - it: omits schedulerName and runtimeClassName by default
+    template: templates/deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.schedulerName
+      - notExists:
+          path: spec.template.spec.runtimeClassName

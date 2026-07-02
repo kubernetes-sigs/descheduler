@@ -15,3 +15,29 @@ tests:
     asserts:
       - isKind:
           of: CronJob
+
+  - it: sets schedulerName when provided
+    set:
+      schedulerName: custom-scheduler
+    template: templates/cronjob.yaml
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.schedulerName
+          value: custom-scheduler
+
+  - it: sets runtimeClassName when provided
+    set:
+      runtimeClassName: gvisor
+    template: templates/cronjob.yaml
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.runtimeClassName
+          value: gvisor
+
+  - it: omits schedulerName and runtimeClassName by default
+    template: templates/cronjob.yaml
+    asserts:
+      - notExists:
+          path: spec.jobTemplate.spec.template.spec.schedulerName
+      - notExists:
+          path: spec.jobTemplate.spec.template.spec.runtimeClassName
