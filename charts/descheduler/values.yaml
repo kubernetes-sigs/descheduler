@@ -127,7 +127,6 @@ deschedulerPolicy:
               - "PodsWithLocalStorage"
               extraEnabled:
               - "PodsWithPVC"
-        - name: RemoveDuplicates
         - name: RemovePodsHavingTooManyRestarts
           args:
             podRestartThreshold: 100
@@ -152,7 +151,6 @@ deschedulerPolicy:
       plugins:
         balance:
           enabled:
-            - RemoveDuplicates
             - RemovePodsViolatingTopologySpreadConstraint
             - LowNodeUtilization
         deschedule:
