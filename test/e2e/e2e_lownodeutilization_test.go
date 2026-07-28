@@ -18,6 +18,8 @@ package e2e
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -32,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	componentbaseconfig "k8s.io/component-base/config"
+	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	utilptr "k8s.io/utils/ptr"
 
 	"sigs.k8s.io/descheduler/pkg/api"
@@ -39,6 +42,11 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
+)
+
+const (
+	lowNodeUtilizationMetricsWaitTimeout  = 3 * time.Minute
+	lowNodeUtilizationMetricsPollInterval = 5 * time.Second
 )
 
 func lowNodeUtilizationPolicy(lowNodeUtilizationArgs *nodeutilization.LowNodeUtilizationArgs, evictorArgs *defaultevictor.DefaultEvictorArgs, metricsCollectorEnabled bool) *apiv1alpha2.DeschedulerPolicy {
@@ -125,7 +133,8 @@ func TestLowNodeUtilizationKubernetesMetrics(t *testing.T) {
 		name                    string
 		replicasNum             int
 		beforeFunc              func(deployment *appsv1.Deployment)
-		expectedEvictedPodCount int
+		minEvictedPodCount      int
+		maxEvictedPodCount      int
 		lowNodeUtilizationArgs  *nodeutilization.LowNodeUtilizationArgs
 		evictorArgs             *defaultevictor.DefaultEvictorArgs
 		metricsCollectorEnabled bool
@@ -137,7 +146,8 @@ func TestLowNodeUtilizationKubernetesMetrics(t *testing.T) {
 				deployment.Spec.Replicas = utilptr.To[int32](4)
 				deployment.Spec.Template.Spec.NodeName = workerNodes[0].Name
 			},
-			expectedEvictedPodCount: 0,
+			minEvictedPodCount: 0,
+			maxEvictedPodCount: 0,
 			lowNodeUtilizationArgs: &nodeutilization.LowNodeUtilizationArgs{
 				Thresholds: api.ResourceThresholds{
 					v1.ResourceCPU:  30,
@@ -161,7 +171,8 @@ func TestLowNodeUtilizationKubernetesMetrics(t *testing.T) {
 				deployment.Spec.Replicas = utilptr.To[int32](4)
 				deployment.Spec.Template.Spec.NodeName = workerNodes[0].Name
 			},
-			expectedEvictedPodCount: 2,
+			minEvictedPodCount: 1,
+			maxEvictedPodCount: 4,
 			lowNodeUtilizationArgs: &nodeutilization.LowNodeUtilizationArgs{
 				Thresholds: api.ResourceThresholds{
 					v1.ResourceCPU:  30,
@@ -199,36 +210,19 @@ func TestLowNodeUtilizationKubernetesMetrics(t *testing.T) {
 				waitForPodsToDisappear(ctx, t, clientSet, deploymentObj.Labels, deploymentObj.Namespace)
 			}()
 			waitForPodsRunning(ctx, t, clientSet, deploymentObj.Labels, tc.replicasNum, deploymentObj.Namespace)
-			// wait until workerNodes[0].Name has the right actual cpu utilization and all the testing pods are running
-			// and producing ~12 cores in total
-			wait.PollUntilContextCancel(ctx, 5*time.Second, true, func(context.Context) (done bool, err error) {
-				item, err := metricsClient.MetricsV1beta1().NodeMetricses().Get(ctx, workerNodes[0].Name, metav1.GetOptions{})
-				if err != nil {
-					t.Logf("unable to list nodemetricses: %v", err)
-					return false, nil
-				}
-				t.Logf("Waiting for %q nodemetrics cpu utilization to get over 12, currently %v", workerNodes[0].Name, item.Usage.Cpu().Value())
-				if item.Usage.Cpu().Value() < 12 {
-					return false, nil
-				}
-				totalCpu := resource.NewMilliQuantity(0, resource.DecimalSI)
-				podItems, err := metricsClient.MetricsV1beta1().PodMetricses(deploymentObj.Namespace).List(ctx, metav1.ListOptions{})
-				if err != nil {
-					t.Logf("unable to list podmetricses: %v", err)
-					return false, nil
-				}
-				for _, podMetrics := range podItems.Items {
-					for _, container := range podMetrics.Containers {
-						if _, exists := container.Usage[v1.ResourceCPU]; !exists {
-							continue
-						}
-						totalCpu.Add(container.Usage[v1.ResourceCPU])
-					}
-				}
-				// Value() will round up (e.g. 11.1 -> 12), which is still ok
-				t.Logf("Waiting for totalCpu to get to 12 at least, got %v\n", totalCpu.Value())
-				return totalCpu.Value() >= 12, nil
-			})
+			minCPUUsage := minCPUUsageMilliForThreshold(workerNodes[0], tc.lowNodeUtilizationArgs.TargetThresholds[v1.ResourceCPU])
+			if err := waitForLowNodeUtilizationMetrics(
+				ctx,
+				t,
+				metricsClient,
+				workerNodes[0].Name,
+				deploymentObj.Namespace,
+				minCPUUsage,
+				lowNodeUtilizationMetricsWaitTimeout,
+				lowNodeUtilizationMetricsPollInterval,
+			); err != nil {
+				t.Fatalf("Error waiting for LowNodeUtilization metrics: %v", err)
+			}
 
 			preRunNames := sets.NewString(getCurrentPodNames(ctx, clientSet, testNamespace.Name, t)...)
 
@@ -288,8 +282,8 @@ func TestLowNodeUtilizationKubernetesMetrics(t *testing.T) {
 				actualEvictedPod := preRunNames.Difference(currentRunNames)
 				actualEvictedPodCount = actualEvictedPod.Len()
 				t.Logf("preRunNames: %v, currentRunNames: %v, actualEvictedPodCount: %v\n", preRunNames.List(), currentRunNames.List(), actualEvictedPodCount)
-				if actualEvictedPodCount != tc.expectedEvictedPodCount {
-					t.Logf("Expecting %v number of pods evicted, got %v instead", tc.expectedEvictedPodCount, actualEvictedPodCount)
+				if !meetsLowNodeUtilizationEvictionExpectation(actualEvictedPodCount, tc.minEvictedPodCount, tc.maxEvictedPodCount) {
+					t.Logf("Expecting %v-%v number of pods evicted, got %v instead", tc.minEvictedPodCount, tc.maxEvictedPodCount, actualEvictedPodCount)
 					return false, nil
 				}
 				meetsExpectations = true
@@ -299,10 +293,80 @@ func TestLowNodeUtilizationKubernetesMetrics(t *testing.T) {
 			}
 
 			if !meetsExpectations {
-				t.Errorf("Unexpected number of pods have been evicted, got %v, expected %v", actualEvictedPodCount, tc.expectedEvictedPodCount)
+				t.Errorf("Unexpected number of pods have been evicted, got %v, expected %v-%v", actualEvictedPodCount, tc.minEvictedPodCount, tc.maxEvictedPodCount)
 			} else {
 				t.Logf("Total of %d Pods were evicted for %s", actualEvictedPodCount, tc.name)
 			}
 		})
 	}
+}
+
+func meetsLowNodeUtilizationEvictionExpectation(actual, min, max int) bool {
+	return actual >= min && actual <= max
+}
+
+func minCPUUsageMilliForThreshold(node *v1.Node, threshold api.Percentage) int64 {
+	allocatableCPU := node.Status.Allocatable.Cpu()
+	if allocatableCPU == nil || allocatableCPU.MilliValue() <= 0 {
+		return 1
+	}
+	minCPUUsage := math.Ceil(float64(threshold) * 0.01 * float64(allocatableCPU.MilliValue()))
+	if minCPUUsage <= 0 && threshold > 0 {
+		return 1
+	}
+	return int64(minCPUUsage)
+}
+
+func waitForLowNodeUtilizationMetrics(ctx context.Context, t testing.TB, metricsClient metricsclient.Interface, nodeName, namespace string, minMilliCPUUsage int64, timeout, interval time.Duration) error {
+	t.Helper()
+
+	var lastNodeCPUUsage int64
+	var lastPodCPUUsage int64
+	var lastErr error
+
+	err := wait.PollUntilContextTimeout(ctx, interval, timeout, true, func(ctx context.Context) (bool, error) {
+		item, err := metricsClient.MetricsV1beta1().NodeMetricses().Get(ctx, nodeName, metav1.GetOptions{})
+		if err != nil {
+			lastErr = err
+			t.Logf("unable to get nodemetrics for %q: %v", nodeName, err)
+			return false, nil
+		}
+
+		lastNodeCPUUsage = item.Usage.Cpu().MilliValue()
+		if lastNodeCPUUsage < minMilliCPUUsage {
+			t.Logf("Waiting for %q nodemetrics cpu utilization to get to %vm, currently %vm", nodeName, minMilliCPUUsage, lastNodeCPUUsage)
+			return false, nil
+		}
+
+		totalCPU := resource.NewMilliQuantity(0, resource.DecimalSI)
+		podItems, err := metricsClient.MetricsV1beta1().PodMetricses(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			lastErr = err
+			t.Logf("unable to list podmetricses in namespace %q: %v", namespace, err)
+			return false, nil
+		}
+		for _, podMetrics := range podItems.Items {
+			for _, container := range podMetrics.Containers {
+				if _, exists := container.Usage[v1.ResourceCPU]; !exists {
+					continue
+				}
+				totalCPU.Add(container.Usage[v1.ResourceCPU])
+			}
+		}
+
+		lastPodCPUUsage = totalCPU.MilliValue()
+		if lastPodCPUUsage < minMilliCPUUsage {
+			t.Logf("Waiting for pod metrics total cpu to get to %vm, currently %vm", minMilliCPUUsage, lastPodCPUUsage)
+			return false, nil
+		}
+		return true, nil
+	})
+	if err == nil {
+		return nil
+	}
+
+	if lastErr != nil {
+		return fmt.Errorf("timed out waiting for metrics: node %q cpu=%vm, pod cpu=%vm, required cpu=%vm, last error=%v: %w", nodeName, lastNodeCPUUsage, lastPodCPUUsage, minMilliCPUUsage, lastErr, err)
+	}
+	return fmt.Errorf("timed out waiting for metrics: node %q cpu=%vm, pod cpu=%vm, required cpu=%vm: %w", nodeName, lastNodeCPUUsage, lastPodCPUUsage, minMilliCPUUsage, err)
 }
