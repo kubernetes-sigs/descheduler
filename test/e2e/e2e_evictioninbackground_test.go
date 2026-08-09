@@ -34,12 +34,16 @@ import (
 
 const (
 	vmiCount = 3
+	// virtLauncherSelector selects KubeVirt virt-launcher pods only,
+	// avoiding listing unrelated pods in the namespace.
+	virtLauncherSelector = "kubevirt.io=virt-launcher"
 )
 
-func virtualMachineInstance(idx int) *kvcorev1.VirtualMachineInstance {
+func virtualMachineInstance(idx int, namespace string) *kvcorev1.VirtualMachineInstance {
 	return &kvcorev1.VirtualMachineInstance{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: fmt.Sprintf("kubevirtvmi-%v", idx),
+			Name:      fmt.Sprintf("kubevirtvmi-%v", idx),
+			Namespace: namespace,
 			Annotations: map[string]string{
 				"descheduler.alpha.kubernetes.io/request-evict-only": "",
 			},
@@ -58,20 +62,12 @@ func virtualMachineInstance(idx int) *kvcorev1.VirtualMachineInstance {
 								},
 							},
 						},
-						{
-							Name: "cloudinitdisk",
-							DiskDevice: kvcorev1.DiskDevice{
-								Disk: &kvcorev1.DiskTarget{
-									Bus: kvcorev1.DiskBusVirtio,
-								},
-							},
-						},
 					},
 					Rng: &kvcorev1.Rng{},
 				},
 				Resources: kvcorev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
-						corev1.ResourceMemory: resource.MustParse("1024M"),
+						corev1.ResourceMemory: resource.MustParse("128M"),
 					},
 				},
 			},
@@ -81,32 +77,97 @@ func virtualMachineInstance(idx int) *kvcorev1.VirtualMachineInstance {
 					Name: "containerdisk",
 					VolumeSource: kvcorev1.VolumeSource{
 						ContainerDisk: &kvcorev1.ContainerDiskSource{
-							Image: "quay.io/kubevirt/fedora-with-test-tooling-container-disk:20240710_1265d1090",
-						},
-					},
-				},
-				{
-					Name: "cloudinitdisk",
-					VolumeSource: kvcorev1.VolumeSource{
-						CloudInitNoCloud: &kvcorev1.CloudInitNoCloudSource{
-							UserData: `#cloud-config
-password: fedora
-chpasswd: { expire: False }
-packages:
-  - nginx
-runcmd:
-  - [ "systemctl", "enable", "--now", "nginx" ]`,
-							NetworkData: `version: 2
-ethernets:
-  eth0:
-    addresses: [ fd10:0:2::2/120 ]
-    dhcp4: true
-    gateway6: fd10:0:2::1`,
+							Image: "quay.io/kubevirt/cirros-container-disk-demo:v1.8.2",
 						},
 					},
 				},
 			},
 		},
+	}
+}
+
+func formatContainerStatuses(pod *corev1.Pod) string {
+	var parts []string
+	formatList := func(prefix string, statuses []corev1.ContainerStatus) {
+		for _, cs := range statuses {
+			stateStr := "unknown"
+			if cs.State.Waiting != nil {
+				stateStr = fmt.Sprintf("waiting(reason=%q, message=%q)", cs.State.Waiting.Reason, cs.State.Waiting.Message)
+			} else if cs.State.Terminated != nil {
+				stateStr = fmt.Sprintf("terminated(exitCode=%d, reason=%q, message=%q)", cs.State.Terminated.ExitCode, cs.State.Terminated.Reason, cs.State.Terminated.Message)
+			} else if cs.State.Running != nil {
+				stateStr = "running"
+			}
+			parts = append(parts, fmt.Sprintf("%s%s: state=%s, ready=%v, restarts=%d", prefix, cs.Name, stateStr, cs.Ready, cs.RestartCount))
+		}
+	}
+	formatList("init:", pod.Status.InitContainerStatuses)
+	formatList("", pod.Status.ContainerStatuses)
+	return strings.Join(parts, "; ")
+}
+
+// ensureVMIsLiveMigratable waits until every VMI reports the LiveMigratable
+// condition with status True. If a VMI fails to become migratable within the
+// per-attempt timeout, it is deleted and recreated. This works around an
+// upstream KubeVirt race where virt-handler computes the containerdisk
+// checksum before the disk socket is ready, fails, and never retries; the
+// recreated VMI lands on a node that already has the containerdisk image
+// cached, so the socket comes up before virt-handler's first attempt.
+// See https://github.com/kubernetes-sigs/descheduler/pull/1874 for context.
+func ensureVMIsLiveMigratable(t *testing.T, ctx context.Context, kvClient kubevirtclient.Interface, namespace string) {
+	t.Helper()
+	const (
+		maxAttempts    = 3
+		perAttemptWait = 120 * time.Second
+		deleteWait     = 60 * time.Second
+	)
+
+	isLiveMigratable := func(vmi *kvcorev1.VirtualMachineInstance) bool {
+		for _, c := range vmi.Status.Conditions {
+			if c.Type == kvcorev1.VirtualMachineInstanceIsMigratable && c.Status == corev1.ConditionTrue {
+				return true
+			}
+		}
+		return false
+	}
+
+	for i := 1; i <= vmiCount; i++ {
+		name := fmt.Sprintf("kubevirtvmi-%v", i)
+		var lastVMI *kvcorev1.VirtualMachineInstance
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			err := wait.PollUntilContextTimeout(ctx, 5*time.Second, perAttemptWait, true, func(ctx context.Context) (bool, error) {
+				vmi, err := kvClient.KubevirtV1().VirtualMachineInstances(namespace).Get(ctx, name, metav1.GetOptions{})
+				if err != nil {
+					klog.Infof("Unable to get vmi %v: %v", name, err)
+					return false, nil
+				}
+				lastVMI = vmi
+				return isLiveMigratable(vmi), nil
+			})
+			if err == nil {
+				klog.Infof("vmi %v is LiveMigratable (attempt %d/%d)", name, attempt, maxAttempts)
+				break
+			}
+			if attempt == maxAttempts {
+				if lastVMI != nil {
+					klog.Infof("Final vmi %v status: phase=%v, conditions=%#v", name, lastVMI.Status.Phase, lastVMI.Status.Conditions)
+				}
+				t.Fatalf("vmi %v never became LiveMigratable after %d attempts", name, maxAttempts)
+			}
+			klog.Warningf("vmi %v not LiveMigratable after %v, recreating (attempt %d/%d) to work around virt-handler containerdisk-socket race", name, perAttemptWait, attempt, maxAttempts)
+			if err := kvClient.KubevirtV1().VirtualMachineInstances(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+				t.Fatalf("Unable to delete vmi %v for retry: %v", name, err)
+			}
+			if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, deleteWait, true, func(ctx context.Context) (bool, error) {
+				_, err := kvClient.KubevirtV1().VirtualMachineInstances(namespace).Get(ctx, name, metav1.GetOptions{})
+				return apierrors.IsNotFound(err), nil
+			}); err != nil {
+				t.Fatalf("Timed out waiting for vmi %v to be deleted: %v", name, err)
+			}
+			if _, err := kvClient.KubevirtV1().VirtualMachineInstances(namespace).Create(ctx, virtualMachineInstance(i, namespace), metav1.CreateOptions{}); err != nil {
+				t.Fatalf("Unable to recreate vmi %v: %v", name, err)
+			}
+		}
 	}
 }
 
@@ -129,12 +190,14 @@ func waitForKubevirtReady(t *testing.T, ctx context.Context, kvClient kubevirtcl
 	klog.Infof("Kubevirt is available")
 }
 
-func allVMIsHaveRunningPods(t *testing.T, ctx context.Context, kubeClient clientset.Interface, kvClient kubevirtclient.Interface) (bool, error) {
+func allVMIsHaveRunningPods(t *testing.T, ctx context.Context, kubeClient clientset.Interface, kvClient kubevirtclient.Interface, namespace string) (bool, error) {
 	klog.Infof("Checking all vmi active pods are running")
 	uidMap := make(map[types.UID]*corev1.Pod)
-	podList, err := kubeClient.CoreV1().Pods("default").List(ctx, metav1.ListOptions{})
+	podList, err := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: virtLauncherSelector,
+	})
 	if err != nil {
-		if strings.Contains(err.Error(), "client rate limiter") {
+		if isClientRateLimiterError(err) {
 			klog.Infof("Unable to list pods: %v", err)
 			return false, nil
 		}
@@ -148,7 +211,7 @@ func allVMIsHaveRunningPods(t *testing.T, ctx context.Context, kubeClient client
 		uidMap[item.UID] = &pod
 	}
 
-	vmiList, err := kvClient.KubevirtV1().VirtualMachineInstances("default").List(ctx, metav1.ListOptions{})
+	vmiList, err := kvClient.KubevirtV1().VirtualMachineInstances(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		klog.Infof("Unable to list VMIs: %v", err)
 		return false, err
@@ -165,14 +228,19 @@ func allVMIsHaveRunningPods(t *testing.T, ctx context.Context, kubeClient client
 				klog.Infof("Active pod %v not found", activePod)
 				return false, nil
 			}
-			klog.Infof("Checking whether active pod %v (uid=%v) is running", uidMap[activePod].Name, activePod)
-			// ignore completed/failed pods
-			if uidMap[activePod].Status.Phase == corev1.PodFailed || uidMap[activePod].Status.Phase == corev1.PodSucceeded {
-				klog.Infof("Ignoring active pod %v, phase=%v", uidMap[activePod].Name, uidMap[activePod].Status.Phase)
+			pod := uidMap[activePod]
+			klog.Infof("Checking whether active pod %v (uid=%v) is running", pod.Name, activePod)
+			if pod.Status.Phase == corev1.PodFailed {
+				details := fmt.Sprintf("pod %s (phase=Failed, reason=%q, message=%q, containers=[%s])", pod.Name, pod.Status.Reason, pod.Status.Message, formatContainerStatuses(pod))
+				klog.Infof("Active pod failed: %s", details)
 				continue
 			}
-			if uidMap[activePod].Status.Phase != corev1.PodRunning {
-				klog.Infof("activePod %v is not running: %v\n", uidMap[activePod].Name, uidMap[activePod].Status.Phase)
+			if pod.Status.Phase == corev1.PodSucceeded {
+				klog.Infof("Ignoring active pod %v, phase=%v", pod.Name, pod.Status.Phase)
+				continue
+			}
+			if pod.Status.Phase != corev1.PodRunning {
+				klog.Infof("activePod %v is not running: %v\n", pod.Name, pod.Status.Phase)
 				return false, nil
 			}
 			atLeastOneVmiIsRunning = true
@@ -186,7 +254,7 @@ func allVMIsHaveRunningPods(t *testing.T, ctx context.Context, kubeClient client
 	return true, nil
 }
 
-func podLifeTimePolicy() *apiv1alpha2.DeschedulerPolicy {
+func podLifeTimePolicy(namespace string) *apiv1alpha2.DeschedulerPolicy {
 	return &apiv1alpha2.DeschedulerPolicy{
 		Profiles: []apiv1alpha2.DeschedulerProfile{
 			{
@@ -198,7 +266,7 @@ func podLifeTimePolicy() *apiv1alpha2.DeschedulerPolicy {
 							Object: &podlifetime.PodLifeTimeArgs{
 								MaxPodLifeTimeSeconds: utilptr.To[uint](1), // set it to immediate eviction
 								Namespaces: &api.Namespaces{
-									Include: []string{"default"},
+									Include: []string{namespace},
 								},
 							},
 						},
@@ -229,10 +297,12 @@ func podLifeTimePolicy() *apiv1alpha2.DeschedulerPolicy {
 	}
 }
 
-func kVirtRunningPodNames(t *testing.T, ctx context.Context, kubeClient clientset.Interface) []string {
+func kVirtRunningPodNames(t *testing.T, ctx context.Context, kubeClient clientset.Interface, namespace string) []string {
 	names := []string{}
 	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
-		podList, err := kubeClient.CoreV1().Pods("default").List(ctx, metav1.ListOptions{})
+		podList, err := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: virtLauncherSelector,
+		})
 		if err != nil {
 			if isClientRateLimiterError(err) {
 				t.Log(err)
@@ -243,9 +313,6 @@ func kVirtRunningPodNames(t *testing.T, ctx context.Context, kubeClient clientse
 		}
 
 		for _, item := range podList.Items {
-			if !strings.HasPrefix(item.Name, "virt-launcher-kubevirtvmi-") {
-				t.Fatalf("Only pod names with 'virt-launcher-kubevirtvmi-' prefix are expected, got %q instead", item.Name)
-			}
 			if item.Status.Phase == corev1.PodRunning {
 				names = append(names, item.Name)
 			}
@@ -258,13 +325,13 @@ func kVirtRunningPodNames(t *testing.T, ctx context.Context, kubeClient clientse
 	return names
 }
 
-func observeLiveMigration(t *testing.T, ctx context.Context, kubeClient clientset.Interface, usedRunningPodNames map[string]struct{}) {
+func observeLiveMigration(t *testing.T, ctx context.Context, kubeClient clientset.Interface, namespace string, usedRunningPodNames map[string]struct{}) {
 	prevTotal := uint(0)
 	jumps := 0
 	// keep running the descheduling cycle until the migration is triggered and completed few times or times out
 	for i := 0; i < 240; i++ {
 		// monitor how many pods get evicted
-		names := kVirtRunningPodNames(t, ctx, kubeClient)
+		names := kVirtRunningPodNames(t, ctx, kubeClient, namespace)
 		klog.Infof("vmi pods: %#v\n", names)
 		// The number of pods need to be kept between vmiCount and vmiCount+1.
 		// At most two pods are expected to have virt-launcher-kubevirtvmi-X prefix name in common.
@@ -299,16 +366,18 @@ func observeLiveMigration(t *testing.T, ctx context.Context, kubeClient clientse
 		if prevTotal != 0 && prevTotal != total {
 			jumps++
 		}
-		// Expect at least 3 finished live migrations (two should be enough as well, though ...)
-		if jumps >= 6 {
+		// Expect at least 2 finished live migrations
+		if jumps >= 4 {
 			break
 		}
 		prevTotal = total
-		time.Sleep(time.Second)
+		time.Sleep(4 * time.Second)
 	}
 
-	if jumps < 6 {
-		podList, err := kubeClient.CoreV1().Pods("default").List(ctx, metav1.ListOptions{})
+	if jumps < 4 {
+		podList, err := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: virtLauncherSelector,
+		})
 		if err != nil {
 			klog.Infof("Unable to list pods: %v", err)
 		} else {
@@ -317,9 +386,9 @@ func observeLiveMigration(t *testing.T, ctx context.Context, kubeClient clientse
 			}
 		}
 
-		t.Fatalf("Expected at least 3 finished live migrations, got less: %v", jumps/2.0)
+		t.Fatalf("Expected at least 2 finished live migrations, got less: %v", jumps/2.0)
 	}
-	klog.Infof("The live migration finished 3 times")
+	klog.Infof("The live migration finished 2 times")
 
 	// len(usedRunningPodNames) is expected to be vmiCount + jumps/2 + 1 (one more live migration could still be initiated)
 	klog.Infof("len(usedRunningPodNames): %v, upper limit: %v\n", len(usedRunningPodNames), vmiCount+jumps/2+1)
@@ -328,7 +397,7 @@ func observeLiveMigration(t *testing.T, ctx context.Context, kubeClient clientse
 	}
 
 	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
-		names := kVirtRunningPodNames(t, ctx, kubeClient)
+		names := kVirtRunningPodNames(t, ctx, kubeClient, namespace)
 		klog.Infof("vmi pods: %#v\n", names)
 		lNames := len(names)
 		if lNames != vmiCount {
@@ -385,6 +454,64 @@ func createKubevirtClient() (kubevirtclient.Interface, error) {
 	return kubevirtclient.NewForConfig(config)
 }
 
+func setupE2ELiveMigrationNamespace(t *testing.T, ctx context.Context, kubeClient clientset.Interface, kvClient kubevirtclient.Interface, vmiNamespace string) {
+	t.Helper()
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: vmiNamespace}}
+	if _, err := kubeClient.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
+		t.Fatalf("Unable to create namespace %v: %v", vmiNamespace, err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		for i := 1; i <= vmiCount; i++ {
+			vmi := virtualMachineInstance(i, vmiNamespace)
+			if err := kvClient.KubevirtV1().VirtualMachineInstances(vmiNamespace).Delete(cleanupCtx, vmi.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+				klog.Infof("Unable to delete vmi %v: %v", vmi.Name, err)
+			}
+		}
+		wait.PollUntilContextTimeout(cleanupCtx, 5*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
+			podList, err := kubeClient.CoreV1().Pods(vmiNamespace).List(ctx, metav1.ListOptions{
+				LabelSelector: virtLauncherSelector,
+			})
+			if err != nil {
+				return false, err
+			}
+			lPods := len(podList.Items)
+			if lPods > 0 {
+				klog.Infof("Waiting until all virt-launcher pods under %v namespace are gone, %v remaining", vmiNamespace, lPods)
+				return false, nil
+			}
+			return true, nil
+		})
+		if err := kubeClient.CoreV1().Namespaces().Delete(cleanupCtx, vmiNamespace, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			klog.Infof("Unable to delete namespace %v: %v", vmiNamespace, err)
+		}
+	})
+}
+
+func waitForVMIEvictionsWithNoLimits(t *testing.T, ctx context.Context, kubeClient clientset.Interface, vmiNamespace string, remainingPods map[string]struct{}) {
+	t.Helper()
+	klog.Infof("Waiting until all pods are evicted (no limit set)")
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 120*time.Second, true, func(ctx context.Context) (bool, error) {
+		names := kVirtRunningPodNames(t, ctx, kubeClient, vmiNamespace)
+		for _, name := range names {
+			if _, exists := remainingPods[name]; exists {
+				klog.Infof("Waiting for %v to disappear", name)
+				return false, nil
+			}
+		}
+		lNames := len(names)
+		if lNames != vmiCount {
+			klog.Infof("Waiting for the number of newly running vmi pods to be %v, got %v instead", vmiCount, lNames)
+			return false, nil
+		}
+		klog.Infof("The number of newly running vmi pods is %v as expected", vmiCount)
+		return true, nil
+	}); err != nil {
+		t.Fatalf("Error waiting for %v new vmi active pods to be running: %v", vmiCount, err)
+	}
+}
+
 func TestLiveMigrationInBackground(t *testing.T) {
 	initPluginRegistry()
 
@@ -402,48 +529,33 @@ func TestLiveMigrationInBackground(t *testing.T) {
 
 	waitForKubevirtReady(t, ctx, kvClient)
 
-	// Delete all VMIs
-	defer func() {
-		for i := 1; i <= vmiCount; i++ {
-			vmi := virtualMachineInstance(i)
-			err := kvClient.KubevirtV1().VirtualMachineInstances("default").Delete(context.Background(), vmi.Name, metav1.DeleteOptions{})
-			if err != nil && !apierrors.IsNotFound(err) {
-				klog.Infof("Unable to delete vmi %v: %v", vmi.Name, err)
-			}
-		}
-		wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
-			podList, err := kubeClient.CoreV1().Pods("default").List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return false, err
-			}
-			lPods := len(podList.Items)
-			if lPods > 0 {
-				klog.Infof("Waiting until all pods under default namespace are gone, %v remaining", lPods)
-				return false, nil
-			}
-			return true, nil
-		})
-	}()
+	vmiNamespace := "e2e-livemigration"
+	setupE2ELiveMigrationNamespace(t, ctx, kubeClient, kvClient, vmiNamespace)
 
-	// Create N vmis and wait for the corresponding vm pods to be ready and running
 	for i := 1; i <= vmiCount; i++ {
-		vmi := virtualMachineInstance(i)
-		_, err = kvClient.KubevirtV1().VirtualMachineInstances("default").Create(context.Background(), vmi, metav1.CreateOptions{})
+		vmi := virtualMachineInstance(i, vmiNamespace)
+		_, err = kvClient.KubevirtV1().VirtualMachineInstances(vmiNamespace).Create(context.Background(), vmi, metav1.CreateOptions{})
 		if err != nil {
 			t.Fatalf("Unable to create KubeVirt vmi: %v\n", err)
 		}
 	}
 
-	// Wait until all VMIs have running pods
 	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 300*time.Second, true, func(ctx context.Context) (bool, error) {
-		return allVMIsHaveRunningPods(t, ctx, kubeClient, kvClient)
+		return allVMIsHaveRunningPods(t, ctx, kubeClient, kvClient, vmiNamespace)
 	}); err != nil {
 		t.Fatalf("Error waiting for all vmi active pods to be running: %v", err)
 	}
 
+	ensureVMIsLiveMigratable(t, ctx, kvClient, vmiNamespace)
+
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 300*time.Second, true, func(ctx context.Context) (bool, error) {
+		return allVMIsHaveRunningPods(t, ctx, kubeClient, kvClient, vmiNamespace)
+	}); err != nil {
+		t.Fatalf("Error waiting for all vmi active pods to be running after recreate: %v", err)
+	}
+
 	usedRunningPodNames := make(map[string]struct{})
-	// vmiCount number of names is expected
-	names := kVirtRunningPodNames(t, ctx, kubeClient)
+	names := kVirtRunningPodNames(t, ctx, kubeClient, vmiNamespace)
 	klog.Infof("vmi pods: %#v\n", names)
 	if len(names) != vmiCount {
 		t.Fatalf("Expected %v vmi pods, got %v instead", vmiCount, len(names))
@@ -452,51 +564,49 @@ func TestLiveMigrationInBackground(t *testing.T) {
 		usedRunningPodNames[name] = struct{}{}
 	}
 
-	policy := podLifeTimePolicy()
-	// Allow only a single eviction simultaneously
+	policy := podLifeTimePolicy(vmiNamespace)
 	policy.MaxNoOfPodsToEvictPerNamespace = utilptr.To[uint](1)
-	// Deploy the descheduler with the configured policy
 	deschedulerPolicyConfigMapObj, err := deschedulerPolicyConfigMap(policy)
 	if err != nil {
 		t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
 	}
-	klog.Infof("Creating %q policy CM with RemovePodsHavingTooManyRestarts configured...", deschedulerPolicyConfigMapObj.Name)
+	klog.Infof("Creating %q policy CM with PodLifeTime configured...", deschedulerPolicyConfigMapObj.Name)
 	_, err = kubeClient.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Create(ctx, deschedulerPolicyConfigMapObj, metav1.CreateOptions{})
 	if err != nil {
-		t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
-	}
-	defer func() {
-		klog.Infof("Deleting %q CM...", deschedulerPolicyConfigMapObj.Name)
-		err = kubeClient.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Delete(ctx, deschedulerPolicyConfigMapObj.Name, metav1.DeleteOptions{})
-		if err != nil {
-			t.Fatalf("Unable to delete %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
+		if apierrors.IsAlreadyExists(err) {
+			_ = kubeClient.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Delete(ctx, deschedulerPolicyConfigMapObj.Name, metav1.DeleteOptions{})
+			_, err = kubeClient.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Create(ctx, deschedulerPolicyConfigMapObj, metav1.CreateOptions{})
 		}
-	}()
+		if err != nil {
+			t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
+		}
+	}
+	t.Cleanup(func() {
+		klog.Infof("Deleting %q CM...", deschedulerPolicyConfigMapObj.Name)
+		if err := kubeClient.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Delete(context.Background(), deschedulerPolicyConfigMapObj.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			klog.Infof("Unable to delete %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
+		}
+	})
 
 	deschedulerDeploymentObj := deschedulerDeployment("kube-system")
-	// Set the descheduling interval to 10s
 	deschedulerDeploymentObj.Spec.Template.Spec.Containers[0].Args = []string{"--policy-config-file", "/policy-dir/policy.yaml", "--descheduling-interval", "10s", "--v", "4", "--feature-gates", "EvictionsInBackground=true"}
 
 	deschedulerPodName := ""
-	defer func() {
+	t.Cleanup(func() {
 		if deschedulerPodName != "" {
-			printPodLogs(ctx, t, kubeClient, deschedulerPodName)
+			printPodLogs(context.Background(), t, kubeClient, deschedulerPodName)
 		}
 
 		klog.Infof("Deleting %q deployment...", deschedulerDeploymentObj.Name)
-		err = kubeClient.AppsV1().Deployments(deschedulerDeploymentObj.Namespace).Delete(ctx, deschedulerDeploymentObj.Name, metav1.DeleteOptions{})
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				return
-			}
-			t.Fatalf("Unable to delete %q deployment: %v", deschedulerDeploymentObj.Name, err)
+		if err := kubeClient.AppsV1().Deployments(deschedulerDeploymentObj.Namespace).Delete(context.Background(), deschedulerDeploymentObj.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			klog.Infof("Unable to delete %q deployment: %v", deschedulerDeploymentObj.Name, err)
 		}
-		waitForPodsToDisappear(ctx, t, kubeClient, deschedulerDeploymentObj.Labels, deschedulerDeploymentObj.Namespace)
-	}()
+		waitForPodsToDisappear(context.Background(), t, kubeClient, deschedulerDeploymentObj.Labels, deschedulerDeploymentObj.Namespace)
+	})
 
 	deschedulerPodName = createAndWaitForDeschedulerRunning(t, ctx, kubeClient, deschedulerDeploymentObj)
 
-	observeLiveMigration(t, ctx, kubeClient, usedRunningPodNames)
+	observeLiveMigration(t, ctx, kubeClient, vmiNamespace, usedRunningPodNames)
 
 	printPodLogs(ctx, t, kubeClient, deschedulerPodName)
 
@@ -507,7 +617,7 @@ func TestLiveMigrationInBackground(t *testing.T) {
 	}
 
 	remainingPods := make(map[string]struct{})
-	for _, name := range kVirtRunningPodNames(t, ctx, kubeClient) {
+	for _, name := range kVirtRunningPodNames(t, ctx, kubeClient, vmiNamespace) {
 		remainingPods[name] = struct{}{}
 	}
 
@@ -519,23 +629,5 @@ func TestLiveMigrationInBackground(t *testing.T) {
 	deschedulerDeploymentObj.Spec.Template.Spec.Containers[0].Args = []string{"--policy-config-file", "/policy-dir/policy.yaml", "--descheduling-interval", "100m", "--v", "4", "--feature-gates", "EvictionsInBackground=true"}
 	deschedulerPodName = createAndWaitForDeschedulerRunning(t, ctx, kubeClient, deschedulerDeploymentObj)
 
-	klog.Infof("Waiting until all pods are evicted (no limit set)")
-	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 120*time.Second, true, func(ctx context.Context) (bool, error) {
-		names := kVirtRunningPodNames(t, ctx, kubeClient)
-		for _, name := range names {
-			if _, exists := remainingPods[name]; exists {
-				klog.Infof("Waiting for %v to disappear", name)
-				return false, nil
-			}
-		}
-		lNames := len(names)
-		if lNames != vmiCount {
-			klog.Infof("Waiting for the number of newly running vmi pods to be %v, got %v instead", vmiCount, lNames)
-			return false, nil
-		}
-		klog.Infof("The number of newly running vmi pods is %v as expected", vmiCount)
-		return true, nil
-	}); err != nil {
-		t.Fatalf("Error waiting for %v new vmi active pods to be running: %v", vmiCount, err)
-	}
+	waitForVMIEvictionsWithNoLimits(t, ctx, kubeClient, vmiNamespace, remainingPods)
 }

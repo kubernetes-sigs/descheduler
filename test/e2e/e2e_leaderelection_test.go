@@ -231,13 +231,24 @@ func startDeschedulerServer(t *testing.T, ctx context.Context, clientSet clients
 	t.Logf("Creating %q policy CM with RemoveDuplicates configured...", deschedulerPolicyConfigMapObj.Name)
 	_, err = clientSet.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Create(ctx, deschedulerPolicyConfigMapObj, metav1.CreateOptions{})
 	if err != nil {
-		t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
+		if apierrors.IsAlreadyExists(err) {
+			_ = clientSet.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Delete(ctx, deschedulerPolicyConfigMapObj.Name, metav1.DeleteOptions{})
+			_, err = clientSet.CoreV1().ConfigMaps(deschedulerPolicyConfigMapObj.Namespace).Create(ctx, deschedulerPolicyConfigMapObj, metav1.CreateOptions{})
+		}
+		if err != nil {
+			t.Fatalf("Error creating %q CM: %v", deschedulerPolicyConfigMapObj.Name, err)
+		}
 	}
 
 	deschedulerDeploymentObj := deschedulerDeployment(testName)
 	deschedulerDeploymentObj.Name = fmt.Sprintf("%s-%s", deschedulerDeploymentObj.Name, testName)
-	args := deschedulerDeploymentObj.Spec.Template.Spec.Containers[0].Args
-	deschedulerDeploymentObj.Spec.Template.Spec.Containers[0].Args = append(args, "--leader-elect", "--leader-elect-retry-period", "1s")
+	deschedulerDeploymentObj.Spec.Template.Spec.Containers[0].Args = []string{
+		"--policy-config-file", "/policy-dir/policy.yaml",
+		"--descheduling-interval", "3s",
+		"--v", "4",
+		"--leader-elect",
+		"--leader-elect-retry-period", "1s",
+	}
 	deschedulerDeploymentObj.Spec.Template.Spec.Volumes = []v1.Volume{
 		{
 			Name: "policy-volume",

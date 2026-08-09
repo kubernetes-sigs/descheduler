@@ -84,7 +84,12 @@ func TestMain(m *testing.M) {
 }
 
 func isClientRateLimiterError(err error) bool {
-	return strings.Contains(err.Error(), "client rate limiter")
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "client rate limiter") &&
+		!strings.Contains(err.Error(), "context deadline exceeded") &&
+		!strings.Contains(err.Error(), "context canceled")
 }
 
 func initFeatureGates() featuregate.FeatureGate {
