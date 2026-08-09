@@ -230,6 +230,11 @@ func (in *DevicePreferences) DeepCopyInto(out *DevicePreferences) {
 		*out = new(v1.PanicDeviceModel)
 		**out = **in
 	}
+	if in.PreferredVideoType != nil {
+		in, out := &in.PreferredVideoType, &out.PreferredVideoType
+		*out = new(string)
+		**out = **in
+	}
 	return
 }
 
@@ -812,6 +817,11 @@ func (in *VirtualMachinePreferenceSpec) DeepCopyInto(out *VirtualMachinePreferen
 		in, out := &in.PreferredArchitecture, &out.PreferredArchitecture
 		*out = new(string)
 		**out = **in
+	}
+	if in.PreferredLaunchSecurity != nil {
+		in, out := &in.PreferredLaunchSecurity, &out.PreferredLaunchSecurity
+		*out = new(v1.LaunchSecurity)
+		(*in).DeepCopyInto(*out)
 	}
 	return
 }

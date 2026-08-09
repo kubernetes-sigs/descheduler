@@ -20,4 +20,4 @@ Copyright The KubeVirt Authors.
 
 package v1alpha1
 
-type VirtualMachineExportExpansion interface{}
+type PluginExpansion interface{}

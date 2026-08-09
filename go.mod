@@ -28,8 +28,8 @@ require (
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/metrics v0.36.1
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2
-	kubevirt.io/api v1.8.2
-	kubevirt.io/client-go v1.8.2
+	kubevirt.io/api v1.9.0
+	kubevirt.io/client-go v1.9.0
 	sigs.k8s.io/mdtoc v1.4.0
 	sigs.k8s.io/yaml v1.6.0
 )

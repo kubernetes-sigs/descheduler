@@ -1431,7 +1431,7 @@ k8s.io/utils/pointer
 k8s.io/utils/ptr
 k8s.io/utils/third_party/forked/golang/btree
 k8s.io/utils/trace
-# kubevirt.io/api v1.8.2
+# kubevirt.io/api v1.9.0
 ## explicit; go 1.24.0
 kubevirt.io/api/backup
 kubevirt.io/api/backup/v1alpha1
@@ -1441,19 +1441,21 @@ kubevirt.io/api/clone/v1beta1
 kubevirt.io/api/core
 kubevirt.io/api/core/v1
 kubevirt.io/api/export
-kubevirt.io/api/export/v1alpha1
+kubevirt.io/api/export/v1
 kubevirt.io/api/export/v1beta1
 kubevirt.io/api/instancetype
 kubevirt.io/api/instancetype/v1beta1
 kubevirt.io/api/migrations
 kubevirt.io/api/migrations/v1alpha1
+kubevirt.io/api/plugin
+kubevirt.io/api/plugin/v1alpha1
 kubevirt.io/api/pool
 kubevirt.io/api/pool/v1alpha1
 kubevirt.io/api/pool/v1beta1
 kubevirt.io/api/snapshot
 kubevirt.io/api/snapshot/v1alpha1
 kubevirt.io/api/snapshot/v1beta1
-# kubevirt.io/client-go v1.8.2
+# kubevirt.io/client-go v1.9.0
 ## explicit; go 1.24.0
 kubevirt.io/client-go/kubevirt
 kubevirt.io/client-go/kubevirt/scheme
@@ -1461,10 +1463,11 @@ kubevirt.io/client-go/kubevirt/typed/backup/v1alpha1
 kubevirt.io/client-go/kubevirt/typed/clone/v1alpha1
 kubevirt.io/client-go/kubevirt/typed/clone/v1beta1
 kubevirt.io/client-go/kubevirt/typed/core/v1
-kubevirt.io/client-go/kubevirt/typed/export/v1alpha1
+kubevirt.io/client-go/kubevirt/typed/export/v1
 kubevirt.io/client-go/kubevirt/typed/export/v1beta1
 kubevirt.io/client-go/kubevirt/typed/instancetype/v1beta1
 kubevirt.io/client-go/kubevirt/typed/migrations/v1alpha1
+kubevirt.io/client-go/kubevirt/typed/plugin/v1alpha1
 kubevirt.io/client-go/kubevirt/typed/pool/v1alpha1
 kubevirt.io/client-go/kubevirt/typed/pool/v1beta1
 kubevirt.io/client-go/kubevirt/typed/snapshot/v1alpha1

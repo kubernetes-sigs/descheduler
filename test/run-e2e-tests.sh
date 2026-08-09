@@ -33,7 +33,7 @@ SKIP_KUBEVIRT_INSTALL=${SKIP_KUBEVIRT_INSTALL:-}
 # pre-fix VMI checksum status schema present in v1.8.x. Fixed upstream
 # by https://github.com/kubevirt/kubevirt/pull/17469 (not backported to
 # v1.8.x). See https://github.com/kubevirt/kubevirt/issues/17858.
-KUBEVIRT_VERSION=${KUBEVIRT_VERSION:-v1.9.0-alpha.0}
+KUBEVIRT_VERSION=${KUBEVIRT_VERSION:-v1.9.0}
 
 # Build a descheduler image
 IMAGE_TAG=v$(date +%Y%m%d)-$(git describe --tags)
@@ -104,7 +104,7 @@ trap "collect_logs" ERR
 if [ -z "${SKIP_KUBEVIRT_INSTALL}" ]; then
   kubectl create -f https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-operator.yaml
   kubectl create -f https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-cr.yaml
-  kubectl wait --timeout=180s --for=condition=Available -n kubevirt kv/kubevirt
+  kubectl wait --timeout=300s --for=condition=Available -n kubevirt kv/kubevirt
   kubectl -n kubevirt patch kubevirt kubevirt --type=merge --patch '{"spec":{"configuration":{"developerConfiguration":{"useEmulation":true}}}}'
 fi
 

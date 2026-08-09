@@ -13,12 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Copyright 2022 Red Hat, Inc.
+ * Copyright The KubeVirt Authors.
  *
  */
 
-// +k8s:deepcopy-gen=package
-// +groupName=export.kubevirt.io
-// +k8s:openapi-gen=true
+package plugin
 
-package v1alpha1
+const (
+	GroupName              = "plugin.kubevirt.io"
+	LatestVersion          = "v1alpha1"
+	Kind                   = "Plugin"
+	ListKind               = "PluginList"
+	ResourcePluginSingular = "plugin"
+	ResourcePluginPlural   = "plugins"
+)
+
+var (
+	ApiSupportedWebhookVersions = []string{LatestVersion}
+)
