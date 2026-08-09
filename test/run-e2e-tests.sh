@@ -27,13 +27,7 @@ KIND_VERSION=${KIND_VERSION:-v0.31.0}
 SKIP_KUBECTL_INSTALL=${SKIP_KUBECTL_INSTALL:-}
 SKIP_KIND_INSTALL=${SKIP_KIND_INSTALL:-}
 SKIP_KUBEVIRT_INSTALL=${SKIP_KUBEVIRT_INSTALL:-}
-# v1.9.0-alpha.0 (or newer) is required for Kubernetes v1.36+, which
-# enforces stricter CRD numeric format validation
-# (https://github.com/kubernetes/kubernetes/pull/136582) and rejects the
-# pre-fix VMI checksum status schema present in v1.8.x. Fixed upstream
-# by https://github.com/kubevirt/kubevirt/pull/17469 (not backported to
-# v1.8.x). See https://github.com/kubevirt/kubevirt/issues/17858.
-KUBEVIRT_VERSION=${KUBEVIRT_VERSION:-v1.9.0}
+KUBEVIRT_VERSION=${KUBEVIRT_VERSION:-v1.8.2}
 
 # Build a descheduler image
 IMAGE_TAG=v$(date +%Y%m%d)-$(git describe --tags)
@@ -104,14 +98,15 @@ trap "collect_logs" ERR
 if [ -z "${SKIP_KUBEVIRT_INSTALL}" ]; then
   kubectl create -f https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-operator.yaml
   kubectl create -f https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-cr.yaml
-  kubectl wait --timeout=300s --for=condition=Available -n kubevirt kv/kubevirt
   kubectl -n kubevirt patch kubevirt kubevirt --type=merge --patch '{"spec":{"configuration":{"developerConfiguration":{"useEmulation":true}}}}'
+  kubectl wait --timeout=300s --for=condition=Available -n kubevirt kv/kubevirt
 fi
 
 METRICS_SERVER_VERSION="v0.8.1"
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/${METRICS_SERVER_VERSION}/components.yaml
 kubectl patch -n kube-system deployment metrics-server --type=json \
   -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+kubectl wait --timeout=180s --for=condition=Available -n kube-system deployment/metrics-server
 
 PRJ_PREFIX="sigs.k8s.io/descheduler"
 go test ${PRJ_PREFIX}/test/e2e/ -v -timeout 0 --args --descheduler-image ${DESCHEDULER_IMAGE} --pod-run-as-user-id 1000 --pod-run-as-group-id 1000
