@@ -15,7 +15,7 @@ metadata:
     {{- end }}
 spec:
   schedule: {{ .Values.schedule | quote }}
-  {{- if .Values.suspend }}
+  {{- if kindIs "bool" .Values.suspend }}
   suspend: {{ .Values.suspend }}
   {{- end }}
   concurrencyPolicy: "Forbid"

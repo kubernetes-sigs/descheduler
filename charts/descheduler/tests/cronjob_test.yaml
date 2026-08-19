@@ -41,3 +41,19 @@ tests:
           path: spec.jobTemplate.spec.template.spec.schedulerName
       - notExists:
           path: spec.jobTemplate.spec.template.spec.runtimeClassName
+
+  - it: renders suspend false by default so GitOps can reconcile
+    template: templates/cronjob.yaml
+    asserts:
+      - equal:
+          path: spec.suspend
+          value: false
+
+  - it: renders suspend true when set
+    template: templates/cronjob.yaml
+    set:
+      suspend: true
+    asserts:
+      - equal:
+          path: spec.suspend
+          value: true
