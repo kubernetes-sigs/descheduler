@@ -45,6 +45,7 @@ import (
 	"sigs.k8s.io/descheduler/metrics"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
+	"sigs.k8s.io/descheduler/pkg/descheduler/cycle"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
 	"sigs.k8s.io/descheduler/pkg/descheduler/metricscollector"
@@ -313,12 +314,18 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	if rs.KubeconfigFile != "" && clientConnection.Kubeconfig == "" {
 		clientConnection.Kubeconfig = rs.KubeconfigFile
 	}
-	rsclient, eventClient, err := createClients(clientConnection)
-	if err != nil {
-		return err
+	if rs.Client == nil || rs.EventClient == nil {
+		rsclient, eventClient, err := createClients(clientConnection)
+		if err != nil {
+			return err
+		}
+		if rs.Client == nil {
+			rs.Client = rsclient
+		}
+		if rs.EventClient == nil {
+			rs.EventClient = eventClient
+		}
 	}
-	rs.Client = rsclient
-	rs.EventClient = eventClient
 
 	deschedulerPolicy, err := LoadPolicyConfig(rs.PolicyConfigFile, rs.Client, pluginregistry.PluginRegistry)
 	if err != nil {
@@ -360,7 +367,7 @@ func Run(ctx context.Context, rs *options.DeschedulerServer) error {
 	}
 
 	if rs.LeaderElection.LeaderElect && !rs.DryRun {
-		if err := NewLeaderElection(runFn, rsclient, &rs.LeaderElection, ctx); err != nil {
+		if err := NewLeaderElection(runFn, rs.Client, &rs.LeaderElection, ctx); err != nil {
 			span.AddEvent("Leader Election Failure", trace.WithAttributes(attribute.String("err", err.Error())))
 			return fmt.Errorf("leaderElection: %w", err)
 		}
@@ -532,23 +539,56 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		return err
 	}
 
-	wait.NonSlidingUntil(func() {
-		// A next context is created here intentionally to avoid nesting the spans via context.
-		sCtx, sSpan := tracing.Tracer().Start(ctx, "NonSlidingUntil")
+	executeCycle := func() error {
+		sCtx, sSpan := tracing.Tracer().Start(ctx, "DeschedulingCycle")
 		defer sSpan.End()
-
 		if err := runLoop(sCtx); err != nil {
 			sSpan.AddEvent("Descheduling loop failed", trace.WithAttributes(attribute.String("err", err.Error())))
 			klog.Error(err)
-			return
+			return err
 		}
-		// If there was no interval specified, send a signal to the stopChannel to end the wait.Until loop after 1 iteration
-		if rs.DeschedulingInterval.Seconds() == 0 {
-			cancel()
-		}
-	}, rs.DeschedulingInterval, ctx.Done())
+		return nil
+	}
 
-	return nil
+	cycleManager := rs.CycleManager
+	if cycleManager == nil {
+		cycleManager = cycle.NewManager()
+		rs.CycleManager = cycleManager
+	}
+	cycleManager.SetRunner(executeCycle)
+
+	if err := cycleManager.Run(); err != nil {
+		if err != cycle.ErrAlreadyRunning {
+			return err
+		}
+		klog.V(2).Info("Skipping startup descheduling cycle: another cycle is already running")
+	}
+
+	if rs.DeschedulingInterval.Seconds() == 0 && !rs.EnableTriggerAPI {
+		return nil
+	}
+
+	var tickerC <-chan time.Time
+	if rs.DeschedulingInterval.Seconds() > 0 {
+		ticker := time.NewTicker(rs.DeschedulingInterval)
+		defer ticker.Stop()
+		tickerC = ticker.C
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-tickerC:
+			if err := cycleManager.Run(); err != nil {
+				if err == cycle.ErrAlreadyRunning {
+					klog.V(2).Info("Skipping scheduled descheduling cycle: another cycle is already running")
+					continue
+				}
+				klog.ErrorS(err, "Failed to start scheduled descheduling cycle")
+			}
+		}
+	}
 }
 
 func GetPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) (*api.PluginConfig, int) {

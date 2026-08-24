@@ -23,6 +23,7 @@ descheduler [flags]
       --disable-metrics                          Disables metrics. The metrics are by default served through https://localhost:10258/metrics. Secure address, resp. port can be changed through --bind-address, resp. --secure-port flags.
       --dry-run                                  Execute descheduler in dry run mode.
       --enable-http2                             If http/2 should be enabled for the metrics and health check
+      --enable-trigger-api                       Enable the /api/v1/descheduler/run endpoint for manually triggering descheduling cycles via HTTP POST.
       --feature-gates mapStringBool              A set of key=value pairs that describe feature gates for alpha/experimental features. Options are:
                                                  AllAlpha=true|false (ALPHA - default=false)
                                                  AllBeta=true|false (BETA - default=false)

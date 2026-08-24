@@ -39,6 +39,7 @@ import (
 
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
+	"sigs.k8s.io/descheduler/pkg/descheduler/cycle"
 	deschedulerscheme "sigs.k8s.io/descheduler/pkg/descheduler/scheme"
 	"sigs.k8s.io/descheduler/pkg/features"
 	"sigs.k8s.io/descheduler/pkg/tracing"
@@ -54,12 +55,15 @@ type DeschedulerServer struct {
 
 	Client            clientset.Interface
 	EventClient       clientset.Interface
+	TriggerAuthClient clientset.Interface
 	MetricsClient     metricsclient.Interface
 	PrometheusClient  promapi.Client
 	SecureServing     *apiserveroptions.SecureServingOptionsWithLoopback
 	SecureServingInfo *apiserver.SecureServingInfo
 	DisableMetrics    bool
 	EnableHTTP2       bool
+	EnableTriggerAPI  bool
+	CycleManager      *cycle.Manager
 	// FeatureGates enabled by the user
 	FeatureGates map[string]bool
 	// DefaultFeatureGates for internal accessing so unit tests can enable/disable specific features
@@ -79,6 +83,7 @@ func NewDeschedulerServer() (*DeschedulerServer, error) {
 	return &DeschedulerServer{
 		DeschedulerConfiguration: *cfg,
 		SecureServing:            secureServing,
+		CycleManager:             cycle.NewManager(),
 	}, nil
 }
 
@@ -121,6 +126,7 @@ func (rs *DeschedulerServer) AddFlags(fs *pflag.FlagSet) {
 	fs.Float64Var(&rs.Tracing.SampleRate, "otel-sample-rate", 1.0, "Sample rate to collect the Traces")
 	fs.BoolVar(&rs.Tracing.FallbackToNoOpProviderOnError, "otel-fallback-no-op-on-error", false, "Fallback to NoOp Tracer in case of error")
 	fs.BoolVar(&rs.EnableHTTP2, "enable-http2", false, "If http/2 should be enabled for the metrics and health check")
+	fs.BoolVar(&rs.EnableTriggerAPI, "enable-trigger-api", rs.EnableTriggerAPI, "Enable the /api/v1/descheduler/run endpoint for manually triggering descheduling cycles via HTTP POST.")
 	fs.Var(cliflag.NewMapStringBool(&rs.FeatureGates), "feature-gates", "A set of key=value pairs that describe feature gates for alpha/experimental features. "+
 		"Options are:\n"+strings.Join(features.DefaultMutableFeatureGate.KnownFeatures(), "\n"))
 
