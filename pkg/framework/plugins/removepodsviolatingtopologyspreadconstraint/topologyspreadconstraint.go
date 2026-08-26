@@ -567,7 +567,7 @@ func newTopologySpreadConstraint(constraint v1.TopologySpreadConstraint, pod *v1
 // candidate nodes without violating any of the pod's DoNotSchedule topology spread constraints
 // (other than the constraint currently being balanced). Domain counts are computed as if the
 // pod was already evicted, mirroring what the scheduler evaluates when placing the replacement.
-func podFitsAnyNodeWithoutViolatingConstraints(ctx context.Context, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, candidateNodes []*v1.Node, nodes []*v1.Node, namespacePods []*v1.Pod, balanced topologySpreadConstraint, logger klog.Logger) bool {
+func podFitsAnyNodeWithoutViolatingConstraints(ctx context.Context, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, candidateNodes, nodes []*v1.Node, namespacePods []*v1.Pod, balanced topologySpreadConstraint, logger klog.Logger) bool {
 	constraints := otherHardTopologyConstraints(pod, balanced, logger)
 	if len(constraints) == 0 {
 		return true
