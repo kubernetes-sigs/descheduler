@@ -22,8 +22,10 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	core "k8s.io/client-go/testing"
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
@@ -110,6 +112,15 @@ func withUnschedulable(node *v1.Node) {
 	node.Spec.Unschedulable = true
 }
 
+func containsString(values []string, value string) bool {
+	for _, v := range values {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}
+
 func withPreferNoScheduleTestTaint1(node *v1.Node) {
 	node.Spec.Taints = []v1.Taint{
 		createPreferNoScheduleTaint("testTaint", "test", 1),
@@ -158,6 +169,9 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		expectedEvictedPodCount        uint
 		nodeFit                        bool
 		includePreferNoSchedule        bool
+		cordon                         bool
+		cordonedNodes                  []string
+		uncordonedNodes                []string
 		excludedTaints                 []string
 		includedTaints                 []string
 	}{
@@ -171,6 +185,72 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			nodes: []*v1.Node{
 				buildTestNode(nodeName1, withTestTaint1),
 			},
+			expectedEvictedPodCount: 1, // p2 gets evicted
+		},
+		{
+			description: "Node with a matching taint is cordoned before pods are evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
+			cordon:                  true,
+			cordonedNodes:           []string{nodeName1},
+			expectedEvictedPodCount: 1, // p2 gets evicted and node gets cordoned
+		},
+		{
+			description: "Node with a matching taint is not cordoned when cordon is disabled",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
+			cordon:                  false,
+			uncordonedNodes:         []string{nodeName1},
+			expectedEvictedPodCount: 1, // p2 gets evicted but node stays schedulable
+		},
+		{
+			description: "Node with a matching taint but no violating pods is not cordoned",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
+			cordon:                  true,
+			uncordonedNodes:         []string{nodeName1},
+			expectedEvictedPodCount: 0, // nothing is evicted, so the node is not cordoned
+		},
+		{
+			description: "Node without a matching taint is not cordoned",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p13", nodeName5, nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName5, withPreferNoScheduleTestTaint1),
+			},
+			cordon:                  true,
+			uncordonedNodes:         []string{nodeName5},
+			expectedEvictedPodCount: 0, // PreferNoSchedule is not matched unless enabled
+		},
+		{
+			description: "Already cordoned node stays cordoned and violating pods are evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, func(node *v1.Node) {
+					withTestTaint1(node)
+					withUnschedulable(node)
+				}),
+			},
+			cordon:                  true,
+			cordonedNodes:           []string{nodeName1},
 			expectedEvictedPodCount: 1, // p2 gets evicted
 		},
 		{
@@ -498,11 +578,13 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}
 
-			plugin, err := New(ctx, &RemovePodsViolatingNodeTaintsArgs{
-				IncludePreferNoSchedule: tc.includePreferNoSchedule,
-				ExcludedTaints:          tc.excludedTaints,
-				IncludedTaints:          tc.includedTaints,
-			},
+			plugin, err := New(
+				ctx, &RemovePodsViolatingNodeTaintsArgs{
+					Cordon:                  tc.cordon,
+					IncludePreferNoSchedule: tc.includePreferNoSchedule,
+					ExcludedTaints:          tc.excludedTaints,
+					IncludedTaints:          tc.includedTaints,
+				},
 				handle,
 			)
 			if err != nil {
@@ -513,6 +595,72 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			actualEvictedPodCount := podEvictor.TotalEvicted()
 			if actualEvictedPodCount != tc.expectedEvictedPodCount {
 				t.Errorf("Test %#v failed, Unexpected no of pods evicted: pods evicted: %d, expected: %d", tc.description, actualEvictedPodCount, tc.expectedEvictedPodCount)
+			}
+			for _, node := range tc.nodes {
+				updatedNode, err := fakeClient.CoreV1().Nodes().Get(ctx, node.Name, metav1.GetOptions{})
+				if err != nil {
+					t.Fatalf("Unable to get node %q: %v", node.Name, err)
+				}
+				if containsString(tc.cordonedNodes, node.Name) && !updatedNode.Spec.Unschedulable {
+					t.Errorf("Test %#v failed, expected node %q to be cordoned", tc.description, node.Name)
+				}
+				if containsString(tc.uncordonedNodes, node.Name) && updatedNode.Spec.Unschedulable {
+					t.Errorf("Test %#v failed, expected node %q to be uncordoned", tc.description, node.Name)
+				}
+			}
+		})
+	}
+}
+
+func TestCordonNode(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		description string
+		node        *v1.Node
+		updateErr   bool
+		wantErr     bool
+	}{
+		{
+			description: "Node gets cordoned",
+			node:        buildTestNode(nodeName1, withTestTaint1),
+		},
+		{
+			description: "Already cordoned node is a no-op",
+			node: buildTestNode(nodeName1, func(node *v1.Node) {
+				withTestTaint1(node)
+				withUnschedulable(node)
+			}),
+		},
+		{
+			description: "Update error is returned",
+			node:        buildTestNode(nodeName1, withTestTaint1),
+			updateErr:   true,
+			wantErr:     true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			fakeClient := fake.NewSimpleClientset(tc.node)
+			if tc.updateErr {
+				fakeClient.PrependReactor("update", "nodes", func(action core.Action) (bool, runtime.Object, error) {
+					return true, nil, fmt.Errorf("update error")
+				})
+			}
+
+			handle, _, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, evictions.NewOptions(), defaultevictor.DefaultEvictorArgs{}, nil)
+			if err != nil {
+				t.Fatalf("Unable to initialize a framework handle: %v", err)
+			}
+
+			d := &RemovePodsViolatingNodeTaints{handle: handle}
+			err = d.cordonNode(ctx, tc.node)
+			if tc.wantErr && err == nil {
+				t.Errorf("Test %#v failed, expected an error", tc.description)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("Test %#v failed, unexpected error: %v", tc.description, err)
 			}
 		})
 	}
