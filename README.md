@@ -639,8 +639,21 @@ If a list of includedTaints is provided, a taint will be considered if and only 
 |`excludedTaints`|list(string)|
 |`includedTaints`|list(string)|
 |`includePreferNoSchedule`|bool|
+|`cordon`|bool|
 |`namespaces`|(see [namespace filtering](#namespace-filtering))|
 |`labelSelector`|(see [label filtering](#label-filtering))|
+
+When `cordon` is set to `true`, a node is cordoned (marked unschedulable) right
+before the first pod is evicted from it, mirroring the `kubectl drain` behavior.
+This prevents the scheduler from placing new pods on the node while the
+descheduler is evacuating it. A node is only cordoned when it matches the
+configured taint filter (`includedTaints`/`excludedTaints` and
+`includePreferNoSchedule`) **and** has at least one pod that is going to be
+evicted, so nodes without a matching taint or without violating pods are left
+untouched. The node is not uncordoned automatically once the taint is removed;
+cordoned nodes have to be uncordoned manually. Cordon requires the descheduler
+to have `update` permission on `nodes` in addition to the default
+`get`/`list`/`watch`.
 
 **Example:**
 

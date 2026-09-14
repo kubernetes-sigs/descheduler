@@ -11,7 +11,7 @@ rules:
   verbs: ["create", "update"]
 - apiGroups: [""]
   resources: ["nodes"]
-  verbs: ["get", "watch", "list"]
+  verbs: ["get", "watch", "list", "update"]
 - apiGroups: [""]
   resources: ["namespaces"]
   verbs: ["get", "watch", "list"]
