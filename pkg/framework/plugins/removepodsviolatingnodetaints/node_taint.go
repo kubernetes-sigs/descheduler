@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
@@ -110,8 +111,9 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 	ctx = klog.NewContext(ctx, d.logger)
 	logger := klog.FromContext(ctx).WithValues("ExtensionPoint", frameworktypes.DescheduleExtensionPoint)
 	for _, node := range nodes {
-		pods, err := podutil.ListPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		logger.V(1).Info("Processing node", "node", klog.KObj(node))
+
+		pods, err := podutil.ListPodsOnANode(node.Name, d.handle.GetPodsAssignedToNodeFunc(), d.podFilter)
 		if err != nil {
 			// no pods evicted as error encountered retrieving evictable Pods
 			return &frameworktypes.Status{
@@ -119,10 +121,27 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 			}
 		}
 		totalPods := len(pods)
+
+		// Cordon the node right before the first eviction, matching the kubectl
+		// drain behavior. The node is only cordoned when it carries a taint this
+		// plugin is configured to react to and at least one pod on it is going to
+		// be evicted, so nodes without a matching taint or without violating pods
+		// are left untouched.
+		shouldCordon := d.args.Cordon && nodeHasMatchingTaint(node, d.taintFilterFnc)
+		cordoned := false
 	loop:
 		for i := 0; i < totalPods; i++ {
 			if !utils.TolerationsTolerateTaintsWithFilter(ctx, pods[i].Spec.Tolerations, node.Spec.Taints, d.taintFilterFnc) {
 				logger.V(2).Info("Not all taints with NoSchedule effect are tolerated after update for pod on node", "pod", klog.KObj(pods[i]), "node", klog.KObj(node))
+				if shouldCordon && !cordoned {
+					if err := d.cordonNode(ctx, node); err != nil {
+						logger.Error(err, "Error cordoning node", "node", klog.KObj(node))
+						return &frameworktypes.Status{
+							Err: fmt.Errorf("error cordoning node %v: %v", node.Name, err),
+						}
+					}
+					cordoned = true
+				}
 				err := d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
 				if err == nil {
 					continue
@@ -140,4 +159,27 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 	}
 
 	return nil
+}
+
+// nodeHasMatchingTaint returns true when the node carries at least one taint
+// that matches the plugin's taint filter.
+func nodeHasMatchingTaint(node *v1.Node, taintFilterFnc func(taint *v1.Taint) bool) bool {
+	for i := range node.Spec.Taints {
+		if taintFilterFnc(&node.Spec.Taints[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// cordonNode marks the given node as unschedulable so that the scheduler no
+// longer places new pods on it. It is a no-op when the node is already cordoned.
+func (d *RemovePodsViolatingNodeTaints) cordonNode(ctx context.Context, node *v1.Node) error {
+	if node.Spec.Unschedulable {
+		return nil
+	}
+	nodeCopy := node.DeepCopy()
+	nodeCopy.Spec.Unschedulable = true
+	_, err := d.handle.ClientSet().CoreV1().Nodes().Update(ctx, nodeCopy, metav1.UpdateOptions{})
+	return err
 }
