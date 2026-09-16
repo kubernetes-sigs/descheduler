@@ -188,7 +188,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			expectedEvictedPodCount: 1, // p2 gets evicted
 		},
 		{
-			description: "Node with a matching taint is cordoned before pods are evicted",
+			description: "Node with a matching taint is cordoned after a pod is evicted",
 			pods: []*v1.Pod{
 				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
 				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
@@ -252,6 +252,22 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			cordon:                  true,
 			cordonedNodes:           []string{nodeName1},
 			expectedEvictedPodCount: 1, // p2 gets evicted
+		},
+		{
+			description: "Node is not cordoned when eviction is refused by the evictor",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+				buildTestPodWithNormalOwnerRef("p3", nodeName1, withTestTaintToleration1),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+				buildTestNode(nodeName4, withUnschedulable),
+			},
+			nodeFit:                 true,
+			cordon:                  true,
+			uncordonedNodes:         []string{nodeName1},
+			expectedEvictedPodCount: 0, // p2 cannot be evicted, so node1 is not cordoned
 		},
 		{
 			description: "Pods with tolerations but not tolerating node taint should be evicted",

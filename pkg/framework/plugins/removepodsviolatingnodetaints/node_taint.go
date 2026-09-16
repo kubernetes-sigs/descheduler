@@ -122,28 +122,25 @@ func (d *RemovePodsViolatingNodeTaints) Deschedule(ctx context.Context, nodes []
 		}
 		totalPods := len(pods)
 
-		// Cordon the node right before the first eviction, matching the kubectl
-		// drain behavior. The node is only cordoned when it carries a taint this
-		// plugin is configured to react to and at least one pod on it is going to
-		// be evicted, so nodes without a matching taint or without violating pods
-		// are left untouched.
+		// Cordon the node right after the first successful eviction, mirroring the
+		// intent of kubectl drain. The node is only cordoned when it carries a
+		// taint this plugin is configured to react to and at least one pod has
+		// actually been evicted, so nodes with no evictions (e.g. every eviction
+		// was refused) are left untouched.
 		shouldCordon := d.args.Cordon && nodeHasMatchingTaint(node, d.taintFilterFnc)
-		cordoned := false
+		cordonAttempted := false
 	loop:
 		for i := 0; i < totalPods; i++ {
 			if !utils.TolerationsTolerateTaintsWithFilter(ctx, pods[i].Spec.Tolerations, node.Spec.Taints, d.taintFilterFnc) {
 				logger.V(2).Info("Not all taints with NoSchedule effect are tolerated after update for pod on node", "pod", klog.KObj(pods[i]), "node", klog.KObj(node))
-				if shouldCordon && !cordoned {
-					if err := d.cordonNode(ctx, node); err != nil {
-						logger.Error(err, "Error cordoning node", "node", klog.KObj(node))
-						return &frameworktypes.Status{
-							Err: fmt.Errorf("error cordoning node %v: %v", node.Name, err),
-						}
-					}
-					cordoned = true
-				}
 				err := d.handle.Evictor().Evict(ctx, pods[i], evictions.EvictOptions{StrategyName: PluginName})
 				if err == nil {
+					if shouldCordon && !cordonAttempted {
+						cordonAttempted = true
+						if cordonErr := d.cordonNode(ctx, node); cordonErr != nil {
+							logger.Error(cordonErr, "Error cordoning node", "node", klog.KObj(node))
+						}
+					}
 					continue
 				}
 				switch err.(type) {
