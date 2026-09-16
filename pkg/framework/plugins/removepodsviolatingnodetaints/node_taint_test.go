@@ -170,6 +170,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 		maxNoOfPodsToEvictTotal        *uint
 		expectedEvictedPodCount        uint
 		nodeFit                        bool
+		dryRun                         bool
 		includePreferNoSchedule        bool
 		cordon                         bool
 		cordonedNodes                  []string
@@ -270,6 +271,20 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 			cordon:                  true,
 			uncordonedNodes:         []string{nodeName1},
 			expectedEvictedPodCount: 0, // p2 cannot be evicted, so node1 is not cordoned
+		},
+		{
+			description: "Dry run does not cordon the node even when pods are evicted",
+			pods: []*v1.Pod{
+				buildTestPodWithNormalOwnerRef("p1", nodeName1, withTestTaintToleration1),
+				buildTestPodWithNormalOwnerRef("p2", nodeName1, nil),
+			},
+			nodes: []*v1.Node{
+				buildTestNode(nodeName1, withTestTaint1),
+			},
+			cordon:                  true,
+			dryRun:                  true,
+			uncordonedNodes:         []string{nodeName1},
+			expectedEvictedPodCount: 1, // eviction is counted in dry run, but the node is not cordoned
 		},
 		{
 			description: "Pods with tolerations but not tolerating node taint should be evicted",
@@ -582,6 +597,7 @@ func TestDeletePodsViolatingNodeTaints(t *testing.T) {
 				ctx,
 				fakeClient,
 				evictions.NewOptions().
+					WithDryRun(tc.dryRun).
 					WithMaxPodsToEvictPerNode(tc.maxPodsToEvictPerNode).
 					WithMaxPodsToEvictPerNamespace(tc.maxNoOfPodsToEvictPerNamespace).
 					WithMaxPodsToEvictTotal(tc.maxNoOfPodsToEvictTotal),
@@ -636,6 +652,7 @@ func TestCordonNode(t *testing.T) {
 	tests := []struct {
 		description     string
 		node            *v1.Node
+		dryRun          bool
 		updateErr       bool
 		conflictUpdates int
 		wantErr         bool
@@ -653,6 +670,11 @@ func TestCordonNode(t *testing.T) {
 				withUnschedulable(node)
 			}),
 			wantCordoned: true,
+		},
+		{
+			description: "Dry run does not cordon the node",
+			node:        buildTestNode(nodeName1, withTestTaint1),
+			dryRun:      true,
 		},
 		{
 			description: "Update error is returned",
@@ -691,7 +713,7 @@ func TestCordonNode(t *testing.T) {
 				})
 			}
 
-			handle, _, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, evictions.NewOptions(), defaultevictor.DefaultEvictorArgs{}, nil)
+			handle, _, err := frameworktesting.InitFrameworkHandle(ctx, fakeClient, evictions.NewOptions().WithDryRun(tc.dryRun), defaultevictor.DefaultEvictorArgs{}, nil)
 			if err != nil {
 				t.Fatalf("Unable to initialize a framework handle: %v", err)
 			}

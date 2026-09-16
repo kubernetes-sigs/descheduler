@@ -44,6 +44,9 @@ type Handle interface {
 	// PluginInstanceID returns a unique identifier for this plugin instance.
 	// The ID is unique across all plugin instances in a configuration.
 	PluginInstanceID() string
+	// DryRun returns whether the descheduler is running in dry run mode, in
+	// which case plugins must not mutate cluster state.
+	DryRun() bool
 }
 
 // Evictor defines an interface for filtering and evicting pods
