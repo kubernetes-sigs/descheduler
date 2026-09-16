@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -33,6 +34,10 @@ import (
 )
 
 const PluginName = "RemovePodsViolatingNodeTaints"
+
+// maxCordonRetries bounds how many times cordonNode re-fetches and retries
+// the node update when it conflicts with a concurrent modification.
+const maxCordonRetries = 5
 
 // RemovePodsViolatingNodeTaints evicts pods on the node which violate NoSchedule Taints on nodes
 type RemovePodsViolatingNodeTaints struct {
@@ -175,8 +180,26 @@ func (d *RemovePodsViolatingNodeTaints) cordonNode(ctx context.Context, node *v1
 	if node.Spec.Unschedulable {
 		return nil
 	}
-	nodeCopy := node.DeepCopy()
-	nodeCopy.Spec.Unschedulable = true
-	_, err := d.handle.ClientSet().CoreV1().Nodes().Update(ctx, nodeCopy, metav1.UpdateOptions{})
+
+	// The passed node may come from an informer cache with a stale
+	// resourceVersion. Re-fetch the latest version and retry on conflict in
+	// case the node was updated concurrently.
+	var err error
+	for i := 0; i < maxCordonRetries; i++ {
+		currentNode, getErr := d.handle.ClientSet().CoreV1().Nodes().Get(ctx, node.Name, metav1.GetOptions{})
+		if getErr != nil {
+			return getErr
+		}
+		if currentNode.Spec.Unschedulable {
+			return nil
+		}
+		currentNode.Spec.Unschedulable = true
+		if _, err = d.handle.ClientSet().CoreV1().Nodes().Update(ctx, currentNode, metav1.UpdateOptions{}); err == nil {
+			return nil
+		}
+		if !apierrors.IsConflict(err) {
+			return err
+		}
+	}
 	return err
 }

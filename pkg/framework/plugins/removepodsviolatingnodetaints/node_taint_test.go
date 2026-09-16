@@ -22,8 +22,10 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"k8s.io/klog/v2"
@@ -632,14 +634,17 @@ func TestCordonNode(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		description string
-		node        *v1.Node
-		updateErr   bool
-		wantErr     bool
+		description     string
+		node            *v1.Node
+		updateErr       bool
+		conflictUpdates int
+		wantErr         bool
+		wantCordoned    bool
 	}{
 		{
-			description: "Node gets cordoned",
-			node:        buildTestNode(nodeName1, withTestTaint1),
+			description:  "Node gets cordoned",
+			node:         buildTestNode(nodeName1, withTestTaint1),
+			wantCordoned: true,
 		},
 		{
 			description: "Already cordoned node is a no-op",
@@ -647,12 +652,19 @@ func TestCordonNode(t *testing.T) {
 				withTestTaint1(node)
 				withUnschedulable(node)
 			}),
+			wantCordoned: true,
 		},
 		{
 			description: "Update error is returned",
 			node:        buildTestNode(nodeName1, withTestTaint1),
 			updateErr:   true,
 			wantErr:     true,
+		},
+		{
+			description:     "Conflict on update is retried until the node is cordoned",
+			node:            buildTestNode(nodeName1, withTestTaint1),
+			conflictUpdates: 1,
+			wantCordoned:    true,
 		},
 	}
 
@@ -662,6 +674,20 @@ func TestCordonNode(t *testing.T) {
 			if tc.updateErr {
 				fakeClient.PrependReactor("update", "nodes", func(action core.Action) (bool, runtime.Object, error) {
 					return true, nil, fmt.Errorf("update error")
+				})
+			}
+			if tc.conflictUpdates > 0 {
+				conflicts := 0
+				fakeClient.PrependReactor("update", "nodes", func(action core.Action) (bool, runtime.Object, error) {
+					conflicts++
+					if conflicts <= tc.conflictUpdates {
+						return true, nil, apierrors.NewConflict(
+							schema.GroupResource{Resource: "nodes"},
+							tc.node.Name,
+							fmt.Errorf("the object has been modified"),
+						)
+					}
+					return false, nil, nil
 				})
 			}
 
@@ -677,6 +703,14 @@ func TestCordonNode(t *testing.T) {
 			}
 			if !tc.wantErr && err != nil {
 				t.Errorf("Test %#v failed, unexpected error: %v", tc.description, err)
+			}
+
+			updatedNode, getErr := fakeClient.CoreV1().Nodes().Get(ctx, tc.node.Name, metav1.GetOptions{})
+			if getErr != nil {
+				t.Fatalf("Unable to get node %q: %v", tc.node.Name, getErr)
+			}
+			if updatedNode.Spec.Unschedulable != tc.wantCordoned {
+				t.Errorf("Test %#v failed, expected cordoned=%v, got %v", tc.description, tc.wantCordoned, updatedNode.Spec.Unschedulable)
 			}
 		})
 	}
