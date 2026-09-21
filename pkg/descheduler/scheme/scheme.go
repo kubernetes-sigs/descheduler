@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/apis/componentconfig"
 	componentconfigv1alpha1 "sigs.k8s.io/descheduler/pkg/apis/componentconfig/v1alpha1"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/deploymentevictionlimit"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
@@ -44,6 +45,7 @@ var (
 func init() {
 	utilruntime.Must(api.AddToScheme(Scheme))
 	utilruntime.Must(defaultevictor.AddToScheme(Scheme))
+	utilruntime.Must(deploymentevictionlimit.AddToScheme(Scheme))
 	utilruntime.Must(nodeutilization.AddToScheme(Scheme))
 	utilruntime.Must(podlifetime.AddToScheme(Scheme))
 	utilruntime.Must(removeduplicates.AddToScheme(Scheme))

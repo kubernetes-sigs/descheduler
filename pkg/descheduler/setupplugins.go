@@ -19,6 +19,7 @@ package descheduler
 import (
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/deploymentevictionlimit"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/podlifetime"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
@@ -37,6 +38,7 @@ func SetupPlugins() {
 
 func RegisterDefaultPlugins(registry pluginregistry.Registry) {
 	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, registry)
+	pluginregistry.Register(deploymentevictionlimit.PluginName, deploymentevictionlimit.New, &deploymentevictionlimit.DeploymentEvictionLimit{}, &deploymentevictionlimit.DeploymentEvictionLimitArgs{}, deploymentevictionlimit.ValidateDeploymentEvictionLimitArgs, deploymentevictionlimit.SetDefaults_DeploymentEvictionLimitArgs, registry)
 	pluginregistry.Register(nodeutilization.LowNodeUtilizationPluginName, nodeutilization.NewLowNodeUtilization, &nodeutilization.LowNodeUtilization{}, &nodeutilization.LowNodeUtilizationArgs{}, nodeutilization.ValidateLowNodeUtilizationArgs, nodeutilization.SetDefaults_LowNodeUtilizationArgs, registry)
 	pluginregistry.Register(nodeutilization.HighNodeUtilizationPluginName, nodeutilization.NewHighNodeUtilization, &nodeutilization.HighNodeUtilization{}, &nodeutilization.HighNodeUtilizationArgs{}, nodeutilization.ValidateHighNodeUtilizationArgs, nodeutilization.SetDefaults_HighNodeUtilizationArgs, registry)
 	pluginregistry.Register(podlifetime.PluginName, podlifetime.New, &podlifetime.PodLifeTime{}, &podlifetime.PodLifeTimeArgs{}, podlifetime.ValidatePodLifeTimeArgs, podlifetime.SetDefaults_PodLifeTimeArgs, registry)
