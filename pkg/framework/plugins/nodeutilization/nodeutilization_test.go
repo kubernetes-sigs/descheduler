@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization/classifier"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization/normalizer"
+	"sigs.k8s.io/descheduler/test"
 )
 
 func BuildTestNodeInfo(name string, apply func(*NodeInfo)) *NodeInfo {
@@ -575,5 +576,30 @@ func TestNormalizeAndClassify(t *testing.T) {
 				t.Fatalf("unexpected result: %v, expecting: %v", res, tt.expected)
 			}
 		})
+	}
+}
+
+func TestWithResourceRequestForAnyDoesNotMutateCachedPod(t *testing.T) {
+	// Pods handed to this filter come from the shared informer cache and must
+	// be treated as read-only. Build a Containers slice with spare capacity
+	// (len 2, cap 3) so an append through it would write into backing memory
+	// owned by the cached object rather than allocating.
+	backing := make([]v1.Container, 3)
+	backing[0] = v1.Container{Name: "app"}
+	backing[1] = v1.Container{Name: "sidecar"}
+	backing[2] = v1.Container{Name: "sentinel"}
+
+	pod := test.BuildTestPod("p1", 100, 0, "node1", func(pod *v1.Pod) {
+		pod.Spec.Containers = backing[:2]
+		pod.Spec.InitContainers = []v1.Container{{Name: "init"}}
+	})
+
+	withResourceRequestForAny(v1.ResourceCPU)(pod)
+
+	if backing[2].Name != "sentinel" {
+		t.Errorf("filter wrote through the pod's Containers slice into shared backing memory: got %q, want %q", backing[2].Name, "sentinel")
+	}
+	if len(pod.Spec.Containers) != 2 || pod.Spec.Containers[0].Name != "app" || pod.Spec.Containers[1].Name != "sidecar" {
+		t.Errorf("filter modified the pod's Containers slice: %v", pod.Spec.Containers)
 	}
 }
