@@ -64,4 +64,4 @@ if [ -z "${SKIP_METRICS_SERVER_INSTALL}" ]; then
 fi
 
 PRJ_PREFIX="sigs.k8s.io/descheduler"
-go test ${PRJ_PREFIX}/test/e2e/ -v -timeout 0 --args --descheduler-image "${DESCHEDULER_IMAGE}" --kubevirt-version-tag "${KUBEVIRT_VERSION}" --pod-run-as-user-id 1000 --pod-run-as-group-id 1000
+GOEXPERIMENT="${GOEXPERIMENT:-none}" go test ${PRJ_PREFIX}/test/e2e/ -v -timeout 0 --args --descheduler-image "${DESCHEDULER_IMAGE}" --kubevirt-version-tag "${KUBEVIRT_VERSION}" --pod-run-as-user-id 1000 --pod-run-as-group-id 1000
