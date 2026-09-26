@@ -148,28 +148,24 @@ func PodRequestsAndLimits(pod *v1.Pod) (v1.ResourceList, v1.ResourceList) {
 // PodToleratesTaints returns true if a pod tolerates one node's taints
 func PodToleratesTaints(ctx context.Context, pod *v1.Pod, taintsOfNodes map[string][]v1.Taint) bool {
 	for nodeName, taintsForNode := range taintsOfNodes {
-		if len(pod.Spec.Tolerations) >= len(taintsForNode) {
+		// A single toleration can tolerate any number of taints (for example an
+		// Exists toleration with an empty key tolerates every taint), so we must
+		// always evaluate the tolerations against the taints rather than gating
+		// on the toleration/taint counts.
+		if TolerationsTolerateTaintsWithFilter(ctx, pod.Spec.Tolerations, taintsForNode, nil) {
+			return true
+		}
 
-			if TolerationsTolerateTaintsWithFilter(ctx, pod.Spec.Tolerations, taintsForNode, nil) {
-				return true
-			}
-
-			if klog.V(5).Enabled() {
-				for i := range taintsForNode {
-					if !TolerationsTolerateTaint(ctx, pod.Spec.Tolerations, &taintsForNode[i]) {
-						klog.V(5).InfoS("Pod doesn't tolerate node taint",
-							"pod", klog.KObj(pod),
-							"nodeName", nodeName,
-							"taint", fmt.Sprintf("%s:%s=%s", taintsForNode[i].Key, taintsForNode[i].Value, taintsForNode[i].Effect),
-						)
-					}
+		if klog.V(5).Enabled() {
+			for i := range taintsForNode {
+				if !TolerationsTolerateTaint(ctx, pod.Spec.Tolerations, &taintsForNode[i]) {
+					klog.V(5).InfoS("Pod doesn't tolerate node taint",
+						"pod", klog.KObj(pod),
+						"nodeName", nodeName,
+						"taint", fmt.Sprintf("%s:%s=%s", taintsForNode[i].Key, taintsForNode[i].Value, taintsForNode[i].Effect),
+					)
 				}
 			}
-		} else {
-			klog.V(5).InfoS("Pod doesn't tolerate nodes taint, count mismatch",
-				"pod", klog.KObj(pod),
-				"nodeName", nodeName,
-			)
 		}
 	}
 	return false
