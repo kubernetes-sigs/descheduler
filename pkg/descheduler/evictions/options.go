@@ -13,6 +13,7 @@ type Options struct {
 	evictionFailureEventNotification bool
 	metricsEnabled                   bool
 	gracePeriodSeconds               *int64
+	workloadResolver                 WorkloadResolver
 }
 
 // NewOptions returns an Options with default values.
@@ -61,5 +62,10 @@ func (o *Options) WithEvictionFailureEventNotification(evictionFailureEventNotif
 	if evictionFailureEventNotification != nil {
 		o.evictionFailureEventNotification = *evictionFailureEventNotification
 	}
+	return o
+}
+
+func (o *Options) WithWorkloadResolver(workloadResolver WorkloadResolver) *Options {
+	o.workloadResolver = workloadResolver
 	return o
 }

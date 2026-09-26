@@ -95,15 +95,17 @@ type kubeClientSandbox struct {
 	podEvictionReactionFnc func(*fakeclientset.Clientset, *evictedPodsCache) func(action core.Action) (bool, runtime.Object, error)
 }
 
-func newDefaultKubeClientSandbox(client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory) (*kubeClientSandbox, error) {
-	return newKubeClientSandbox(client, sharedInformerFactory,
+func newDefaultKubeClientSandbox(client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory, extraResources ...schema.GroupVersionResource) (*kubeClientSandbox, error) {
+	resources := []schema.GroupVersionResource{
 		v1.SchemeGroupVersion.WithResource("pods"),
 		v1.SchemeGroupVersion.WithResource("nodes"),
 		v1.SchemeGroupVersion.WithResource("namespaces"),
 		schedulingv1.SchemeGroupVersion.WithResource("priorityclasses"),
 		policyv1.SchemeGroupVersion.WithResource("poddisruptionbudgets"),
 		v1.SchemeGroupVersion.WithResource("persistentvolumeclaims"),
-	)
+	}
+	resources = append(resources, extraResources...)
+	return newKubeClientSandbox(client, sharedInformerFactory, resources...)
 }
 
 func newKubeClientSandbox(client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory, resources ...schema.GroupVersionResource) (*kubeClientSandbox, error) {
