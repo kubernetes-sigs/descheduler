@@ -126,6 +126,11 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 	// Temporarily register the PVC because it is used by the DefaultEvictor plugin during
 	// the descheduling cycle, where informer registration is ignored.
 	_ = sharedInformerFactory.Core().V1().PersistentVolumeClaims().Informer()
+	// Temporarily register the PDB for the same reason: the DefaultEvictor PodsWithoutPDB
+	// protection reads the PDB lister during the descheduling cycle, which runs after the
+	// factory has started, so the informer must be registered up front or the lister is
+	// empty and every pod is treated as not covered by a PDB.
+	_ = sharedInformerFactory.Policy().V1().PodDisruptionBudgets().Informer()
 
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
