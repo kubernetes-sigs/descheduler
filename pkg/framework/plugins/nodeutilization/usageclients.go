@@ -270,7 +270,7 @@ func NodeUsageFromPrometheusMetrics(ctx context.Context, promClient promapi.Clie
 		return nil, fmt.Errorf("unable to capture prometheus metrics: %v", err)
 	}
 	if len(warnings) > 0 {
-		logger.Info("prometheus metrics warnings: %v", warnings)
+		logger.Info("prometheus metrics returned warnings", "warnings", warnings)
 	}
 
 	if results.Type() != model.ValVector {
