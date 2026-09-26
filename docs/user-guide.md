@@ -122,6 +122,11 @@ The Descheduler will then deschedule workloads from those Nodes. Finally, if the
 allocation falls below the Cluster Autoscaler's scale down threshold, the Node will become a scale down candidate
 and can be removed by Cluster Autoscaler. These three components form an autohealing cycle for Node problems.
 
+If `cordon` is enabled on `RemovePodsViolatingNodeTaints`, note that cordoned
+nodes are not automatically uncordoned once the taint is removed, and cordoned
+nodes are typically not scaled down by Cluster Autoscaler. This can interrupt
+the autohealing cycle described above.
+
 ---
 **NOTE**
 
