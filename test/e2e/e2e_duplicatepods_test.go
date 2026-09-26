@@ -91,6 +91,7 @@ func TestRemoveDuplicates(t *testing.T) {
 	}
 
 	_, workerNodes := splitNodesAndWorkerNodes(nodeList.Items)
+	lenWorkerNodes := len(workerNodes)
 
 	t.Log("Creating testing namespace")
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
@@ -101,24 +102,27 @@ func TestRemoveDuplicates(t *testing.T) {
 
 	t.Log("Creating duplicates pods")
 	testLabel := map[string]string{"app": "test-duplicate", "name": "test-duplicatePods"}
-	deploymentObj := buildTestDeployment("duplicate-pod", testNamespace.Name, 0, testLabel, nil)
 
 	tests := []struct {
 		name                    string
 		replicasNum             int
-		beforeFunc              func(deployment *appsv1.Deployment)
+		deploymentObj           *appsv1.Deployment
 		expectedEvictedPodCount int
 		removeDuplicatesArgs    *removeduplicates.RemoveDuplicatesArgs
 		evictorArgs             *defaultevictor.DefaultEvictorArgs
 	}{
 		{
 			name:        "Evict Pod even Pods schedule to specific node",
-			replicasNum: 4,
-			beforeFunc: func(deployment *appsv1.Deployment) {
-				deployment.Spec.Replicas = utilptr.To[int32](4)
+			replicasNum: lenWorkerNodes * 2, // invariant: upper avg=2
+			deploymentObj: buildTestDeployment("duplicate-pod", testNamespace.Name, 0, testLabel, func(deployment *appsv1.Deployment) {
+				deployment.Spec.Replicas = utilptr.To(int32(lenWorkerNodes * 2))
 				deployment.Spec.Template.Spec.NodeName = workerNodes[0].Name
-			},
-			expectedEvictedPodCount: 2,
+			}),
+			// 1. all pods are scheduled to the same node
+			// 2. the number of duplicates is always replicasNum - 1
+			// 3. the number of evicted pods is always all the duplicates except the first one
+			// Thus, replicasNum - 2
+			expectedEvictedPodCount: lenWorkerNodes*2 - 2,
 			removeDuplicatesArgs:    &removeduplicates.RemoveDuplicatesArgs{},
 			evictorArgs: &defaultevictor.DefaultEvictorArgs{
 				EvictLocalStoragePods: true,
@@ -127,9 +131,10 @@ func TestRemoveDuplicates(t *testing.T) {
 		},
 		{
 			name:        "Evict Pod even Pods with local storage",
-			replicasNum: 5,
-			beforeFunc: func(deployment *appsv1.Deployment) {
-				deployment.Spec.Replicas = utilptr.To[int32](5)
+			replicasNum: lenWorkerNodes * 2, // invariant: upper avg=2
+			deploymentObj: buildTestDeployment("duplicate-pod", testNamespace.Name, 0, testLabel, func(deployment *appsv1.Deployment) {
+				deployment.Spec.Replicas = utilptr.To(int32(lenWorkerNodes * 2))
+				deployment.Spec.Template.Spec.NodeName = workerNodes[0].Name
 				deployment.Spec.Template.Spec.Volumes = []v1.Volume{
 					{
 						Name: "sample",
@@ -140,8 +145,12 @@ func TestRemoveDuplicates(t *testing.T) {
 						},
 					},
 				}
-			},
-			expectedEvictedPodCount: 2,
+			}),
+			// 1. all pods are scheduled to the same node
+			// 2. the number of duplicates is always replicasNum - 1
+			// 3. the number of evicted pods is always all the duplicates except the first one
+			// Thus, replicasNum - 2
+			expectedEvictedPodCount: lenWorkerNodes*2 - 2,
 			removeDuplicatesArgs:    &removeduplicates.RemoveDuplicatesArgs{},
 			evictorArgs: &defaultevictor.DefaultEvictorArgs{
 				EvictLocalStoragePods: true,
@@ -149,39 +158,43 @@ func TestRemoveDuplicates(t *testing.T) {
 			},
 		},
 		{
-			name:        "Ignores eviction with minReplicas of 4",
-			replicasNum: 3,
-			beforeFunc: func(deployment *appsv1.Deployment) {
-				deployment.Spec.Replicas = utilptr.To[int32](3)
-			},
+			name:        "Ignores eviction with minReplicas",
+			replicasNum: lenWorkerNodes * 2, // invariant: upper avg=2
+			deploymentObj: buildTestDeployment("duplicate-pod", testNamespace.Name, 0, testLabel, func(deployment *appsv1.Deployment) {
+				deployment.Spec.Replicas = utilptr.To(int32(lenWorkerNodes * 2))
+				deployment.Spec.Template.Spec.NodeName = workerNodes[0].Name
+			}),
+			// 1. all pods are scheduled to the same node
+			// 2. the number of duplicates is always replicasNum - 1
+			// 3. the number of evicted pods is always all the duplicates except the first one
+			// Thus, replicasNum - 2
 			expectedEvictedPodCount: 0,
 			removeDuplicatesArgs:    &removeduplicates.RemoveDuplicatesArgs{},
 			evictorArgs: &defaultevictor.DefaultEvictorArgs{
 				EvictLocalStoragePods: true,
-				MinReplicas:           4,
+				MinReplicas:           uint(lenWorkerNodes*2 + 1),
 			},
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Logf("Creating deployment %v in %v namespace", deploymentObj.Name, deploymentObj.Namespace)
-			tc.beforeFunc(deploymentObj)
+			t.Logf("Creating deployment %v in %v namespace", tc.deploymentObj.Name, tc.deploymentObj.Namespace)
 
-			_, err = clientSet.AppsV1().Deployments(deploymentObj.Namespace).Create(ctx, deploymentObj, metav1.CreateOptions{})
+			_, err = clientSet.AppsV1().Deployments(tc.deploymentObj.Namespace).Create(ctx, tc.deploymentObj, metav1.CreateOptions{})
 			if err != nil {
 				t.Logf("Error creating deployment: %v", err)
-				if err = clientSet.AppsV1().Deployments(deploymentObj.Namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
-					LabelSelector: labels.SelectorFromSet(deploymentObj.Labels).String(),
+				if err = clientSet.AppsV1().Deployments(tc.deploymentObj.Namespace).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
+					LabelSelector: labels.SelectorFromSet(tc.deploymentObj.Labels).String(),
 				}); err != nil {
 					t.Fatalf("Unable to delete deployment: %v", err)
 				}
 				return
 			}
 			defer func() {
-				clientSet.AppsV1().Deployments(deploymentObj.Namespace).Delete(ctx, deploymentObj.Name, metav1.DeleteOptions{})
-				waitForPodsToDisappear(ctx, t, clientSet, deploymentObj.Labels, deploymentObj.Namespace)
+				clientSet.AppsV1().Deployments(tc.deploymentObj.Namespace).Delete(ctx, tc.deploymentObj.Name, metav1.DeleteOptions{})
+				waitForPodsToDisappear(ctx, t, clientSet, tc.deploymentObj.Labels, tc.deploymentObj.Namespace)
 			}()
-			waitForPodsRunning(ctx, t, clientSet, deploymentObj.Labels, tc.replicasNum, deploymentObj.Namespace)
+			waitForPodsRunning(ctx, t, clientSet, tc.deploymentObj.Labels, tc.replicasNum, tc.deploymentObj.Namespace)
 
 			preRunNames := sets.NewString(getCurrentPodNames(ctx, clientSet, testNamespace.Name, t)...)
 
