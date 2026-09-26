@@ -7,13 +7,13 @@ jobs:
   deploy:
     strategy:
       matrix:
-        k8s-version: ["v1.36.1"]
+        k8s-version: ["v1.37.1"]
         build-kind-node-image: [true]
-        kind-node-image: ["localhost/kindest/node:v1.36.1"]
-        descheduler-version: ["v0.36.0"]
+        kind-node-image: ["localhost/kindest/node:v1.37.1"]
+        descheduler-version: ["v0.37.0"]
         descheduler-api: ["v1alpha2"]
         manifest: ["deployment"]
-        kind-version: ["v0.31.0"] # keep in sync with test/lib/e2e-versions.env
+        kind-version: ["v0.33.0"] # keep in sync with test/lib/e2e-versions.env
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
