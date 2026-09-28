@@ -6,3 +6,4 @@ vendordiff.patch
 .vscode/
 kind
 bin/
+/descheduler

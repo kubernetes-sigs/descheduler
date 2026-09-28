@@ -12,6 +12,15 @@ data:
       - name: ProfileName
         pluginConfig:
         - name: "DefaultEvictor"
+          args:
+            nodeFit: true
+            deletePDBsForSingleReplicaDeployments: true
+            labelSelector:
+              matchExpressions:
+              - key: istio
+                operator: In
+                values:
+                - ingressgateway
         - name: "RemovePodsViolatingInterPodAntiAffinity"
         - name: "RemoveDuplicates"
         - name: "LowNodeUtilization"

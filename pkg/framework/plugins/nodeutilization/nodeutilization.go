@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization/normalizer"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
@@ -161,6 +162,43 @@ func usageToKeysAndValues(usage api.ReferencedResourceList) []any {
 	return keysAndValues
 }
 
+// asDefaultEvictor returns the profile's DefaultEvictor instance, or nil when the
+// profile is not using one.
+func asDefaultEvictor(handle frameworktypes.Handle) *defaultevictor.DefaultEvictor {
+	evictorPlugin := handle.EvictorPlugin()
+	if evictorPlugin == nil {
+		return nil
+	}
+	defaultEvictor, ok := evictorPlugin.(*defaultevictor.DefaultEvictor)
+	if !ok {
+		return nil
+	}
+	return defaultEvictor
+}
+
+// uncordonNodeIfNeeded uncordons a node if it was cordoned by descheduler or is already unschedulable.
+// It logs the reason for uncordoning and returns any error from the uncordon operation.
+func uncordonNodeIfNeeded(ctx context.Context, node *v1.Node, logger klog.Logger, handle frameworktypes.Handle, nodesCordoned, nodeWasAlreadyUnschedulable map[string]bool, reason string) error {
+	// The drain of this node is over, however it ended, so any PodDisruptionBudget
+	// that was relaxed to let it proceed gets its original settings back. This
+	// runs before the uncordon and regardless of who cordoned the node: leaving a
+	// budget wide open is worse than leaving a node unschedulable, and it is a
+	// no-op when nothing was relaxed.
+	if defaultEvictor := asDefaultEvictor(handle); defaultEvictor != nil {
+		defaultEvictor.RestorePDBsForNode(ctx, node, logger)
+	}
+
+	if nodesCordoned[node.Name] || nodeWasAlreadyUnschedulable[node.Name] {
+		logger.V(1).Info("Uncordoning node", "node", klog.KObj(node), "reason", reason)
+		if uncordonErr := nodeutil.UncordonNode(ctx, handle.ClientSet(), node); uncordonErr != nil {
+			logger.Error(uncordonErr, "Failed to uncordon node", "node", klog.KObj(node))
+			return uncordonErr
+		}
+		delete(nodesCordoned, node.Name)
+	}
+	return nil
+}
+
 // evictPodsFromSourceNodes evicts pods based on priority, if all the pods on
 // the node have priority, if not evicts them based on QoS as fallback option.
 func evictPodsFromSourceNodes(
@@ -174,6 +212,7 @@ func evictPodsFromSourceNodes(
 	continueEviction continueEvictionCond,
 	usageClient usageClient,
 	maxNoOfPodsToEvictPerNode *uint,
+	handle frameworktypes.Handle,
 ) {
 	logger := klog.FromContext(ctx)
 	available, err := assessAvailableResourceInNodes(destinationNodes, resourceNames)
@@ -189,12 +228,35 @@ func evictPodsFromSourceNodes(
 		destinationTaints[node.node.Name] = node.node.Spec.Taints
 	}
 
+	// Track nodes that descheduler cordoned so we only uncordon those
+	nodesCordoned := make(map[string]bool)
+	// Also track nodes that were already unschedulable when we started
+	// (they may have been cordoned by a previous descheduler run that crashed/failed)
+	nodeWasAlreadyUnschedulable := make(map[string]bool)
+	for _, node := range sourceNodes {
+		if node.node.Spec.Unschedulable {
+			nodeWasAlreadyUnschedulable[node.node.Name] = true
+		}
+	}
+
 	for _, node := range sourceNodes {
 		logger.V(3).Info(
 			"Evicting pods from node",
 			"node", klog.KObj(node.node),
 			"usage", node.usage,
 		)
+
+		// Cordon the node FIRST to prevent new pods from being scheduled
+		if err := nodeutil.CordonNode(ctx, handle.ClientSet(), node.node); err != nil {
+			logger.Error(err, "Failed to cordon node, skipping node", "node", klog.KObj(node.node))
+			continue
+		}
+		nodesCordoned[node.node.Name] = true
+
+		// Relax PDBs BEFORE classifying pods to ensure the pod filter sees updated PDB state
+		if defaultEvictor := asDefaultEvictor(handle); defaultEvictor != nil {
+			defaultEvictor.RelaxPDBsForNode(ctx, node.node, logger)
+		}
 
 		nonRemovablePods, removablePods := classifyPods(node.allPods, podFilter)
 		logger.V(2).Info(
@@ -210,6 +272,9 @@ func evictPodsFromSourceNodes(
 				"No removable pods on node, try next node",
 				"node", klog.KObj(node.node),
 			)
+			// Uncordon if descheduler cordoned this node OR if it was already unschedulable
+			// (may be from a previous failed descheduler run that didn't clean up)
+			uncordonNodeIfNeeded(ctx, node.node, logger, handle, nodesCordoned, nodeWasAlreadyUnschedulable, "no-removable-pods")
 			continue
 		}
 
@@ -222,7 +287,7 @@ func evictPodsFromSourceNodes(
 		// priority, they are sorted based on QoS tiers.
 		podutil.SortPodsBasedOnPriorityLowToHigh(removablePods)
 
-		if err := evictPods(
+		evictedCount, err := evictPods(
 			ctx,
 			evictableNamespaces,
 			removablePods,
@@ -234,19 +299,36 @@ func evictPodsFromSourceNodes(
 			continueEviction,
 			usageClient,
 			maxNoOfPodsToEvictPerNode,
-		); err != nil {
+		)
+
+		if err != nil {
 			switch err.(type) {
 			case *evictions.EvictionTotalLimitError:
+				// Global eviction limit hit, uncordon the node if we or a previous run cordoned it
+				uncordonNodeIfNeeded(ctx, node.node, logger, handle, nodesCordoned, nodeWasAlreadyUnschedulable, "global-eviction-limit-reached")
 				return
 			default:
+				// Eviction failed, uncordon the node if we or a previous run cordoned it
+				uncordonNodeIfNeeded(ctx, node.node, logger, handle, nodesCordoned, nodeWasAlreadyUnschedulable, "eviction-failed")
 			}
+		} else if evictedCount < uint(len(removablePods)) {
+			// Eviction was incomplete - not all removable pods were evicted
+			// Uncordon the node if we or a previous run cordoned it
+			uncordonNodeIfNeeded(ctx, node.node, logger, handle, nodesCordoned, nodeWasAlreadyUnschedulable,
+				fmt.Sprintf("eviction-incomplete: %d/%d pods evicted", evictedCount, len(removablePods)))
+		} else {
+			// Eviction was successful - all removable pods were evicted
+			// Uncordon the node if we or a previous run cordoned it
+			uncordonNodeIfNeeded(ctx, node.node, logger, handle, nodesCordoned, nodeWasAlreadyUnschedulable,
+				fmt.Sprintf("eviction-successful: %d pods evicted", evictedCount))
 		}
 	}
 }
 
 // evictPods keeps evicting pods until the continueEviction function returns
 // false or we can't or shouldn't evict any more pods. available node resources
-// are updated after each eviction.
+// are updated after each eviction. Returns the number of successfully evicted pods
+// and any error that occurred.
 func evictPods(
 	ctx context.Context,
 	evictableNamespaces *api.Namespaces,
@@ -259,11 +341,11 @@ func evictPods(
 	continueEviction continueEvictionCond,
 	usageClient usageClient,
 	maxNoOfPodsToEvictPerNode *uint,
-) error {
+) (uint, error) {
 	logger := klog.FromContext(ctx)
 	// preemptive check to see if we should continue evicting pods.
 	if !continueEviction(nodeInfo, totalAvailableUsage) {
-		return nil
+		return 0, nil
 	}
 
 	// some namespaces can be excluded from the eviction process.
@@ -323,7 +405,7 @@ func evictPods(
 		if err := podEvictor.Evict(ctx, pod, evictOptions); err != nil {
 			switch err.(type) {
 			case *evictions.EvictionNodeLimitError, *evictions.EvictionTotalLimitError:
-				return err
+				return evictionCounter, err
 			default:
 				logger.Error(err, "eviction failed")
 				continue
@@ -347,12 +429,13 @@ func evictPods(
 		keysAndValues = append(keysAndValues, usageToKeysAndValues(nodeInfo.usage)...)
 		logger.V(3).Info("Updated node usage", keysAndValues...)
 
-		// make sure we should continue evicting pods.
-		if !continueEviction(nodeInfo, totalAvailableUsage) {
+		// When consolidating (maxNoOfPodsToEvictPerNode is set), evict ALL removable pods
+		// regardless of continueEviction status. Otherwise, check if we have enough capacity.
+		if maxNoOfPodsToEvictPerNode == nil && !continueEviction(nodeInfo, totalAvailableUsage) {
 			break
 		}
 	}
-	return nil
+	return evictionCounter, nil
 }
 
 // subtractPodUsageFromNodeAvailability subtracts the pod usage from the node

@@ -11,22 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-FROM golang:1.26.0
-
-WORKDIR /go/src/sigs.k8s.io/descheduler
-COPY . .
-ARG ARCH
-ARG VERSION
-RUN VERSION=${VERSION} make build.$ARCH
-
 FROM scratch
 
-MAINTAINER Kubernetes SIG Scheduling <sig-scheduling@kubernetes.io>
-
-LABEL org.opencontainers.image.source https://github.com/kubernetes-sigs/descheduler
+LABEL maintainer="Kubernetes SIG Scheduling <sig-scheduling@kubernetes.io>"
+LABEL org.opencontainers.image.source="https://github.com/kubernetes-sigs/descheduler"
 
 USER 1000
 
-COPY --from=0 /go/src/sigs.k8s.io/descheduler/_output/bin/descheduler /bin/descheduler
+COPY _output/bin/descheduler /bin/descheduler
 
 CMD ["/bin/descheduler", "--help"]

@@ -381,6 +381,11 @@ func validateVersionCompatibility(discovery discovery.DiscoveryInterface, desche
 		return fmt.Errorf("failed to parse Kubernetes server version '%s': %v", kubeServerVersionInfo.String(), err)
 	}
 
+	// Skip version compatibility check if descheduler version info is missing
+	if deschedulerVersionInfo.Minor == "" {
+		return nil
+	}
+
 	deschedulerMinor, err := strconv.ParseFloat(deschedulerVersionInfo.Minor, 64)
 	if err != nil {
 		return fmt.Errorf("failed to convert Descheduler minor version '%s' to float: %v", deschedulerVersionInfo.Minor, err)

@@ -15,7 +15,6 @@ package defaultevictor
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"sigs.k8s.io/descheduler/pkg/api"
 )
 
@@ -26,18 +25,29 @@ import (
 type DefaultEvictorArgs struct {
 	metav1.TypeMeta `json:",inline"`
 
-	NodeSelector           string                 `json:"nodeSelector,omitempty"`
-	LabelSelector          *metav1.LabelSelector  `json:"labelSelector,omitempty"`
-	NamespaceLabelSelector *metav1.LabelSelector  `json:"namespaceLabelSelector,omitempty"`
-	PriorityThreshold      *api.PriorityThreshold `json:"priorityThreshold,omitempty"`
-	NodeFit                bool                   `json:"nodeFit,omitempty"`
-	MinReplicas            uint                   `json:"minReplicas,omitempty"`
-	MinPodAge              *metav1.Duration       `json:"minPodAge,omitempty"`
-	NoEvictionPolicy       NoEvictionPolicy       `json:"noEvictionPolicy,omitempty"`
+	NodeSelector              string                 `json:"nodeSelector,omitempty"`
+	LabelSelector             *metav1.LabelSelector  `json:"labelSelector,omitempty"`
+	NamespaceLabelSelector    *metav1.LabelSelector  `json:"namespaceLabelSelector,omitempty"`
+	PriorityThreshold         *api.PriorityThreshold `json:"priorityThreshold,omitempty"`
+	NodeFit                   bool                   `json:"nodeFit,omitempty"`
+	NodeFitExcludedNamespaces []string               `json:"nodeFitExcludedNamespaces,omitempty"`
+	MinReplicas               uint                   `json:"minReplicas,omitempty"`
+	MinPodAge                 *metav1.Duration       `json:"minPodAge,omitempty"`
+	NoEvictionPolicy          NoEvictionPolicy       `json:"noEvictionPolicy,omitempty"`
 
 	// PodProtections holds the list of enabled and disabled protection policies.
 	// Users can selectively disable certain default protection rules or enable extra ones.
 	PodProtections PodProtections `json:"podProtections,omitempty"`
+
+	// DeletePDBsForSingleReplicaDeployments when true, deletes all PodDisruptionBudgets
+	// that protect pods from single-replica deployments, allowing descheduler to evict them.
+	DeletePDBsForSingleReplicaDeployments bool `json:"deletePDBsForSingleReplicaDeployments,omitempty"`
+
+	// DeletePDBsForUnderreplicatedDeployments when true, deletes PodDisruptionBudgets for
+	// deployments that are significantly under-replicated or concentrated on a single node.
+	// This helps descheduler complete node drains when PDBs prevent eviction of critical
+	// infrastructure components like istio ingress gateways.
+	DeletePDBsForUnderreplicatedDeployments bool `json:"deletePDBsForUnderreplicatedDeployments,omitempty"`
 
 	// Deprecated: Use DisabledDefaultPodProtection with "PodsWithLocalStorage" instead.
 	EvictLocalStoragePods bool `json:"evictLocalStoragePods,omitempty"`
