@@ -24,6 +24,7 @@ package v1alpha2
 import (
 	unsafe "unsafe"
 
+	config "github.com/prometheus/common/config"
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	api "sigs.k8s.io/descheduler/pkg/api"
@@ -394,6 +395,7 @@ func Convert_api_Plugins_To_v1alpha2_Plugins(in *api.Plugins, out *Plugins, s co
 
 func autoConvert_v1alpha2_Prometheus_To_api_Prometheus(in *Prometheus, out *api.Prometheus, s conversion.Scope) error {
 	out.URL = in.URL
+	out.TLSConfig = (*config.TLSConfig)(unsafe.Pointer(in.TLSConfig))
 	out.AuthToken = (*api.AuthToken)(unsafe.Pointer(in.AuthToken))
 	return nil
 }
@@ -405,6 +407,7 @@ func Convert_v1alpha2_Prometheus_To_api_Prometheus(in *Prometheus, out *api.Prom
 
 func autoConvert_api_Prometheus_To_v1alpha2_Prometheus(in *api.Prometheus, out *Prometheus, s conversion.Scope) error {
 	out.URL = in.URL
+	out.TLSConfig = (*config.TLSConfig)(unsafe.Pointer(in.TLSConfig))
 	out.AuthToken = (*AuthToken)(unsafe.Pointer(in.AuthToken))
 	return nil
 }

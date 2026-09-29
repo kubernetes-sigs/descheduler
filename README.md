@@ -134,6 +134,7 @@ These are top level keys in the Descheduler Policy that you can use to configure
 | `gracePeriodSeconds`               | `int`    | `nil`           | The duration in seconds before the object should be deleted. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used.            |
 | `prometheus` |`object`| `nil` | Configures collection of Prometheus metrics for actual resource utilization |
 | `prometheus.url` |`string`| `nil` | Points to a Prometheus server url |
+| `prometheus.tlsConfig` |`object`| `nil` | Configures TLS for the Prometheus server using the standard Prometheus TLS configuration fields. When omitted, the in-cluster service account CA is used. |
 | `prometheus.authToken` |`object`| `nil` | Sets Prometheus server authentication token. If not specified in cluster authentication token from the container's file system is read. |
 | `prometheus.authToken.secretReference` |`object`| `nil` | Read the authentication token from a kubernetes secret (the secret is expected to contain the token under `prometheusAuthToken` data key) |
 | `prometheus.authToken.secretReference.namespace` |`string`| `nil` | Authentication token kubernetes secret namespace (currently, the RBAC configuration permits retrieving secrets from the `kube-system` namespace. If the secret needs to be accessed from a different namespace, the existing RBAC rules must be explicitly extended. |
@@ -238,6 +239,9 @@ metricsProviders:
 - source: Prometheus
   prometheus:
     url: http://prometheus-kube-prometheus-prometheus.prom.svc.cluster.local
+    # tlsConfig:
+    #   ca_file: /etc/prometheus/ca.crt
+    #   server_name: prometheus-kube-prometheus-prometheus.prom.svc
     authToken:
       secretReference:
         namespace: "kube-system"

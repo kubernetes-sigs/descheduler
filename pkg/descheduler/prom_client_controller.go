@@ -74,10 +74,12 @@ type (
 
 func newInClusterPromClientController(prometheusClient promapi.Client, prometheusConfig *api.Prometheus) *inClusterPromClientController {
 	return &inClusterPromClientController{
-		promClient:             prometheusClient,
-		prometheusConfig:       prometheusConfig,
-		createPrometheusClient: client.CreatePrometheusClient,
-		inClusterConfig:        rest.InClusterConfig,
+		promClient:       prometheusClient,
+		prometheusConfig: prometheusConfig,
+		createPrometheusClient: func(url, token string) (promapi.Client, *http.Transport, error) {
+			return client.CreatePrometheusClient(url, token, prometheusConfig.TLSConfig)
+		},
+		inClusterConfig: rest.InClusterConfig,
 	}
 }
 
@@ -95,10 +97,12 @@ func newSecretBasedPromClientController(prometheusClient promapi.Client, prometh
 	}
 
 	ctrl := &secretBasedPromClientController{
-		promClient:             prometheusClient,
-		queue:                  workqueue.NewRateLimitingQueueWithConfig(workqueue.DefaultControllerRateLimiter(), workqueue.RateLimitingQueueConfig{Name: "descheduler"}),
-		prometheusConfig:       prometheusConfig,
-		createPrometheusClient: client.CreatePrometheusClient,
+		promClient:       prometheusClient,
+		queue:            workqueue.NewRateLimitingQueueWithConfig(workqueue.DefaultControllerRateLimiter(), workqueue.RateLimitingQueueConfig{Name: "descheduler"}),
+		prometheusConfig: prometheusConfig,
+		createPrometheusClient: func(url, token string) (promapi.Client, *http.Transport, error) {
+			return client.CreatePrometheusClient(url, token, prometheusConfig.TLSConfig)
+		},
 	}
 
 	namespacedSharedInformerFactory.Core().V1().Secrets().Informer().AddEventHandler(ctrl.eventHandler())
