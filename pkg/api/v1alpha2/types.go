@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha2
 
 import (
+	"github.com/prometheus/common/config"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -113,6 +114,9 @@ type MetricsProvider struct {
 
 type Prometheus struct {
 	URL string `json:"url,omitempty"`
+	// TLSConfig configures TLS for the Prometheus endpoint. When omitted, the
+	// in-cluster service account CA is used for backwards compatibility.
+	TLSConfig *config.TLSConfig `json:"tlsConfig,omitempty"`
 	// authToken used for authentication with the prometheus server.
 	// If not set the in cluster authentication token for the descheduler service
 	// account is read from the container's file system.

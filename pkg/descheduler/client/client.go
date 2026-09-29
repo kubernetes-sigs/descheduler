@@ -17,13 +17,10 @@ limitations under the License.
 package client
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 
 	promapi "github.com/prometheus/client_golang/api"
@@ -108,31 +105,22 @@ func GetMasterFromKubeconfig(filename string) (string, error) {
 	return "", fmt.Errorf("failed to get master address from kubeconfig: cluster information not found")
 }
 
-func loadCAFile(filepath string) (*x509.CertPool, error) {
-	caCert, err := os.ReadFile(filepath)
-	if err != nil {
-		return nil, err
-	}
-
-	caCertPool := x509.NewCertPool()
-	if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
-		return nil, fmt.Errorf("failed to append CA certificate to the pool")
-	}
-
-	return caCertPool, nil
-}
-
-func CreatePrometheusClient(prometheusURL, authToken string) (promapi.Client, *http.Transport, error) {
-	// Retrieve Pod CA cert
-	caCertPool, err := loadCAFile(K8sPodCAFilePath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("error loading CA file: %v", err)
-	}
-
+func CreatePrometheusClient(prometheusURL, authToken string, prometheusTLSConfig *config.TLSConfig) (promapi.Client, *http.Transport, error) {
 	// Get Prometheus Host
 	u, err := url.Parse(prometheusURL)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error parsing prometheus URL: %v", err)
+	}
+	tlsConfigConfig := config.TLSConfig{CAFile: K8sPodCAFilePath}
+	if prometheusTLSConfig != nil {
+		tlsConfigConfig = *prometheusTLSConfig
+	}
+	if tlsConfigConfig.ServerName == "" {
+		tlsConfigConfig.ServerName = u.Hostname()
+	}
+	tlsConfig, err := config.NewTLSConfig(&tlsConfigConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error creating TLS config: %w", err)
 	}
 	t := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -143,10 +131,7 @@ func CreatePrometheusClient(prometheusURL, authToken string) (promapi.Client, *h
 		MaxIdleConns:        100,
 		IdleConnTimeout:     90 * time.Second,
 		TLSHandshakeTimeout: 10 * time.Second,
-		TLSClientConfig: &tls.Config{
-			RootCAs:    caCertPool,
-			ServerName: u.Host,
-		},
+		TLSClientConfig:     tlsConfig,
 	}
 	roundTripper := transport.NewBearerAuthRoundTripper(
 		authToken,
@@ -161,7 +146,8 @@ func CreatePrometheusClient(prometheusURL, authToken string) (promapi.Client, *h
 		return client, t, err
 	}
 	client, err := promapi.NewClient(promapi.Config{
-		Address: prometheusURL,
+		Address:      prometheusURL,
+		RoundTripper: t,
 	})
 	return client, t, err
 }

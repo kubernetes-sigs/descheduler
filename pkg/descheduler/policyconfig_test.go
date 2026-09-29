@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/prometheus/common/config"
 
 	"k8s.io/apimachinery/pkg/conversion"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
@@ -121,6 +122,31 @@ profiles:
 						},
 					},
 				},
+			},
+		},
+		{
+			description: "v1alpha2 Prometheus TLS configuration to internal",
+			policy: []byte(`apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+metricsProviders:
+  - source: Prometheus
+    prometheus:
+      url: "https://prometheus.example.com:9091"
+      tlsConfig:
+        ca_file: /etc/prometheus/ca.crt
+        server_name: prometheus.example.com
+`),
+			result: &api.DeschedulerPolicy{
+				MetricsProviders: []api.MetricsProvider{{
+					Source: api.PrometheusMetrics,
+					Prometheus: &api.Prometheus{
+						URL: "https://prometheus.example.com:9091",
+						TLSConfig: &config.TLSConfig{
+							CAFile:     "/etc/prometheus/ca.crt",
+							ServerName: "prometheus.example.com",
+						},
+					},
+				}},
 			},
 		},
 		{
