@@ -14,13 +14,7 @@ image:
 imagePullSecrets:
 #   - name: container-registry-secret
 
-resources:
-  requests:
-    cpu: 500m
-    memory: 256Mi
-  limits:
-    cpu: 500m
-    memory: 256Mi
+resources: {}
 
 ports:
   - containerPort: 10258
