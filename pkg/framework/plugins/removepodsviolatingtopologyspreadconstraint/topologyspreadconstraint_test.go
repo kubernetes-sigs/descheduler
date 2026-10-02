@@ -1454,6 +1454,94 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			namespaces:           []string{"ns1"},
 			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
 		},
+		{
+			name: "3 zones, sizes [2,2,2] with empty node, soft node constraint blocked by hard zone constraint, move 0 pods",
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA"; n.Labels["node"] = "A1" }),
+				test.BuildTestNode("A2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA"; n.Labels["node"] = "A2" }),
+				test.BuildTestNode("A3", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA"; n.Labels["node"] = "A3" }),
+				test.BuildTestNode("B1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB"; n.Labels["node"] = "B1" }),
+				test.BuildTestNode("C1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneC"; n.Labels["node"] = "C1" }),
+			},
+			// zones are balanced 2/2/2, but node topology is violated (A3=0, B1=2, C1=2).
+			// The only below-average node domains are in zoneA, which is already at the zone
+			// maximum, so moving a pod there would violate the hard zone constraint
+			// (zones would become 3/2/1 after eviction, then 4/2/1... skew > 1).
+			// Evicting would loop, so no pods should be evicted.
+			pods: createTestPods([]testPodList{
+				{count: 1, node: "A1", labels: map[string]string{"foo": "bar"}, constraints: getZoneHardNodeSoftConstraints(1)},
+				{count: 1, node: "A2", labels: map[string]string{"foo": "bar"}, constraints: getZoneHardNodeSoftConstraints(1)},
+				{count: 2, node: "B1", labels: map[string]string{"foo": "bar"}, constraints: getZoneHardNodeSoftConstraints(1)},
+				{count: 2, node: "C1", labels: map[string]string{"foo": "bar"}, constraints: getZoneHardNodeSoftConstraints(1)},
+			}),
+			expectedEvictedCount: 0,
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{Constraints: []v1.UnsatisfiableConstraintAction{v1.ScheduleAnyway}},
+		},
+		{
+			name: "3 zones, sizes [2,1,1] with empty nodes, soft node constraint allowed by hard zone constraint, move 1 pod",
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA"; n.Labels["node"] = "A1" }),
+				test.BuildTestNode("A2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA"; n.Labels["node"] = "A2" }),
+				test.BuildTestNode("A3", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA"; n.Labels["node"] = "A3" }),
+				test.BuildTestNode("B1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB"; n.Labels["node"] = "B1" }),
+				test.BuildTestNode("C1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneC"; n.Labels["node"] = "C1" }),
+			},
+			// moving a pod from A1 to A2/A3 keeps zones at 2/1/1, skew 1: allowed
+			pods: createTestPods([]testPodList{
+				{count: 2, node: "A1", labels: map[string]string{"foo": "bar"}, constraints: getZoneHardNodeSoftConstraints(1)},
+				{count: 1, node: "B1", labels: map[string]string{"foo": "bar"}, constraints: getZoneHardNodeSoftConstraints(1)},
+				{count: 1, node: "C1", labels: map[string]string{"foo": "bar"}, constraints: getZoneHardNodeSoftConstraints(1)},
+			}),
+			expectedEvictedCount: 1,
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{Constraints: []v1.UnsatisfiableConstraintAction{v1.ScheduleAnyway}},
+		},
+		{
+			name: "3 zones, sizes [2,2,2] with empty node, hard node constraint blocked by hard zone constraint, move 0 pods",
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA"; n.Labels["node"] = "A1" }),
+				test.BuildTestNode("A2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA"; n.Labels["node"] = "A2" }),
+				test.BuildTestNode("A3", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA"; n.Labels["node"] = "A3" }),
+				test.BuildTestNode("B1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB"; n.Labels["node"] = "B1" }),
+				test.BuildTestNode("C1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneC"; n.Labels["node"] = "C1" }),
+			},
+			// node topology is violated (A3=0, B1=2, C1=2) but all below-average nodes are in
+			// zoneA, which is already at the zone maximum; moving a pod there after eviction
+			// would leave zones at 3/2/1 -> skew 2, violating the hard zone constraint,
+			// so no pods should be evicted.
+			pods: createTestPods([]testPodList{
+				{count: 1, node: "A1", labels: map[string]string{"foo": "bar"}, constraints: getZoneAndNodeHardConstraints(1)},
+				{count: 1, node: "A2", labels: map[string]string{"foo": "bar"}, constraints: getZoneAndNodeHardConstraints(1)},
+				{count: 2, node: "B1", labels: map[string]string{"foo": "bar"}, constraints: getZoneAndNodeHardConstraints(1)},
+				{count: 2, node: "C1", labels: map[string]string{"foo": "bar"}, constraints: getZoneAndNodeHardConstraints(1)},
+			}),
+			expectedEvictedCount: 0,
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
+		},
+		{
+			name: "3 zones, sizes [2,2,2] with empty node, soft node constraint with topologyBalanceNodeFit=false still evicts",
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA"; n.Labels["node"] = "A1" }),
+				test.BuildTestNode("A2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA"; n.Labels["node"] = "A2" }),
+				test.BuildTestNode("A3", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA"; n.Labels["node"] = "A3" }),
+				test.BuildTestNode("B1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB"; n.Labels["node"] = "B1" }),
+				test.BuildTestNode("C1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneC"; n.Labels["node"] = "C1" }),
+			},
+			pods: createTestPods([]testPodList{
+				{count: 1, node: "A1", labels: map[string]string{"foo": "bar"}, constraints: getZoneHardNodeSoftConstraints(1)},
+				{count: 1, node: "A2", labels: map[string]string{"foo": "bar"}, constraints: getZoneHardNodeSoftConstraints(1)},
+				{count: 2, node: "B1", labels: map[string]string{"foo": "bar"}, constraints: getZoneHardNodeSoftConstraints(1)},
+				{count: 2, node: "C1", labels: map[string]string{"foo": "bar"}, constraints: getZoneHardNodeSoftConstraints(1)},
+			}),
+			expectedEvictedCount: 1,
+			namespaces:           []string{"ns1"},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				Constraints:            []v1.UnsatisfiableConstraintAction{v1.ScheduleAnyway},
+				TopologyBalanceNodeFit: utilptr.To(false),
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1816,6 +1904,32 @@ func getDefaultTopologyConstraints(maxSkew int32, edits ...func(*v1.TopologySpre
 	}
 
 	return []v1.TopologySpreadConstraint{constraint}
+}
+
+// getZoneHardNodeSoftConstraints mirrors workloads that combine a hard zone spread
+// with a soft hostname spread (e.g. zone DoNotSchedule injected cluster-wide plus a
+// hostname ScheduleAnyway preference).
+func getZoneHardNodeSoftConstraints(maxSkew int32) []v1.TopologySpreadConstraint {
+	return []v1.TopologySpreadConstraint{
+		{
+			MaxSkew:           maxSkew,
+			TopologyKey:       "zone",
+			WhenUnsatisfiable: v1.DoNotSchedule,
+			LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+		},
+		{
+			MaxSkew:           maxSkew,
+			TopologyKey:       "node",
+			WhenUnsatisfiable: v1.ScheduleAnyway,
+			LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+		},
+	}
+}
+
+func getZoneAndNodeHardConstraints(maxSkew int32) []v1.TopologySpreadConstraint {
+	constraints := getZoneHardNodeSoftConstraints(maxSkew)
+	constraints[1].WhenUnsatisfiable = v1.DoNotSchedule
+	return constraints
 }
 
 func TestCheckIdenticalConstraints(t *testing.T) {
