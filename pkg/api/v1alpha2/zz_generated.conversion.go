@@ -140,7 +140,7 @@ func RegisterConversions(s *runtime.Scheme) error {
 }
 
 func autoConvert_v1alpha2_AuthToken_To_api_AuthToken(in *AuthToken, out *api.AuthToken, s conversion.Scope) error {
-	out.SecretReference = (*api.SecretReference)(unsafe.Pointer(in.SecretReference))
+	*out = *(*api.AuthToken)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -150,7 +150,7 @@ func Convert_v1alpha2_AuthToken_To_api_AuthToken(in *AuthToken, out *api.AuthTok
 }
 
 func autoConvert_api_AuthToken_To_v1alpha2_AuthToken(in *api.AuthToken, out *AuthToken, s conversion.Scope) error {
-	out.SecretReference = (*SecretReference)(unsafe.Pointer(in.SecretReference))
+	*out = *(*AuthToken)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -254,7 +254,7 @@ func Convert_api_DeschedulerProfile_To_v1alpha2_DeschedulerProfile(in *api.Desch
 }
 
 func autoConvert_v1alpha2_MetricsCollector_To_api_MetricsCollector(in *MetricsCollector, out *api.MetricsCollector, s conversion.Scope) error {
-	out.Enabled = in.Enabled
+	*out = *(*api.MetricsCollector)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -264,7 +264,7 @@ func Convert_v1alpha2_MetricsCollector_To_api_MetricsCollector(in *MetricsCollec
 }
 
 func autoConvert_api_MetricsCollector_To_v1alpha2_MetricsCollector(in *api.MetricsCollector, out *MetricsCollector, s conversion.Scope) error {
-	out.Enabled = in.Enabled
+	*out = *(*MetricsCollector)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -274,8 +274,7 @@ func Convert_api_MetricsCollector_To_v1alpha2_MetricsCollector(in *api.MetricsCo
 }
 
 func autoConvert_v1alpha2_MetricsProvider_To_api_MetricsProvider(in *MetricsProvider, out *api.MetricsProvider, s conversion.Scope) error {
-	out.Source = api.MetricsSource(in.Source)
-	out.Prometheus = (*api.Prometheus)(unsafe.Pointer(in.Prometheus))
+	*out = *(*api.MetricsProvider)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -285,8 +284,7 @@ func Convert_v1alpha2_MetricsProvider_To_api_MetricsProvider(in *MetricsProvider
 }
 
 func autoConvert_api_MetricsProvider_To_v1alpha2_MetricsProvider(in *api.MetricsProvider, out *MetricsProvider, s conversion.Scope) error {
-	out.Source = MetricsSource(in.Source)
-	out.Prometheus = (*Prometheus)(unsafe.Pointer(in.Prometheus))
+	*out = *(*MetricsProvider)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -317,8 +315,7 @@ func Convert_api_PluginConfig_To_v1alpha2_PluginConfig(in *api.PluginConfig, out
 }
 
 func autoConvert_v1alpha2_PluginSet_To_api_PluginSet(in *PluginSet, out *api.PluginSet, s conversion.Scope) error {
-	out.Enabled = *(*[]string)(unsafe.Pointer(&in.Enabled))
-	out.Disabled = *(*[]string)(unsafe.Pointer(&in.Disabled))
+	*out = *(*api.PluginSet)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -328,8 +325,7 @@ func Convert_v1alpha2_PluginSet_To_api_PluginSet(in *PluginSet, out *api.PluginS
 }
 
 func autoConvert_api_PluginSet_To_v1alpha2_PluginSet(in *api.PluginSet, out *PluginSet, s conversion.Scope) error {
-	out.Enabled = *(*[]string)(unsafe.Pointer(&in.Enabled))
-	out.Disabled = *(*[]string)(unsafe.Pointer(&in.Disabled))
+	*out = *(*PluginSet)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -339,24 +335,7 @@ func Convert_api_PluginSet_To_v1alpha2_PluginSet(in *api.PluginSet, out *PluginS
 }
 
 func autoConvert_v1alpha2_Plugins_To_api_Plugins(in *Plugins, out *api.Plugins, s conversion.Scope) error {
-	if err := Convert_v1alpha2_PluginSet_To_api_PluginSet(&in.PreSort, &out.PreSort, s); err != nil {
-		return err
-	}
-	if err := Convert_v1alpha2_PluginSet_To_api_PluginSet(&in.Sort, &out.Sort, s); err != nil {
-		return err
-	}
-	if err := Convert_v1alpha2_PluginSet_To_api_PluginSet(&in.Deschedule, &out.Deschedule, s); err != nil {
-		return err
-	}
-	if err := Convert_v1alpha2_PluginSet_To_api_PluginSet(&in.Balance, &out.Balance, s); err != nil {
-		return err
-	}
-	if err := Convert_v1alpha2_PluginSet_To_api_PluginSet(&in.Filter, &out.Filter, s); err != nil {
-		return err
-	}
-	if err := Convert_v1alpha2_PluginSet_To_api_PluginSet(&in.PreEvictionFilter, &out.PreEvictionFilter, s); err != nil {
-		return err
-	}
+	*out = *(*api.Plugins)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -366,24 +345,7 @@ func Convert_v1alpha2_Plugins_To_api_Plugins(in *Plugins, out *api.Plugins, s co
 }
 
 func autoConvert_api_Plugins_To_v1alpha2_Plugins(in *api.Plugins, out *Plugins, s conversion.Scope) error {
-	if err := Convert_api_PluginSet_To_v1alpha2_PluginSet(&in.PreSort, &out.PreSort, s); err != nil {
-		return err
-	}
-	if err := Convert_api_PluginSet_To_v1alpha2_PluginSet(&in.Sort, &out.Sort, s); err != nil {
-		return err
-	}
-	if err := Convert_api_PluginSet_To_v1alpha2_PluginSet(&in.Deschedule, &out.Deschedule, s); err != nil {
-		return err
-	}
-	if err := Convert_api_PluginSet_To_v1alpha2_PluginSet(&in.Balance, &out.Balance, s); err != nil {
-		return err
-	}
-	if err := Convert_api_PluginSet_To_v1alpha2_PluginSet(&in.Filter, &out.Filter, s); err != nil {
-		return err
-	}
-	if err := Convert_api_PluginSet_To_v1alpha2_PluginSet(&in.PreEvictionFilter, &out.PreEvictionFilter, s); err != nil {
-		return err
-	}
+	*out = *(*Plugins)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -393,8 +355,7 @@ func Convert_api_Plugins_To_v1alpha2_Plugins(in *api.Plugins, out *Plugins, s co
 }
 
 func autoConvert_v1alpha2_Prometheus_To_api_Prometheus(in *Prometheus, out *api.Prometheus, s conversion.Scope) error {
-	out.URL = in.URL
-	out.AuthToken = (*api.AuthToken)(unsafe.Pointer(in.AuthToken))
+	*out = *(*api.Prometheus)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -404,8 +365,7 @@ func Convert_v1alpha2_Prometheus_To_api_Prometheus(in *Prometheus, out *api.Prom
 }
 
 func autoConvert_api_Prometheus_To_v1alpha2_Prometheus(in *api.Prometheus, out *Prometheus, s conversion.Scope) error {
-	out.URL = in.URL
-	out.AuthToken = (*AuthToken)(unsafe.Pointer(in.AuthToken))
+	*out = *(*Prometheus)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -415,8 +375,7 @@ func Convert_api_Prometheus_To_v1alpha2_Prometheus(in *api.Prometheus, out *Prom
 }
 
 func autoConvert_v1alpha2_SecretReference_To_api_SecretReference(in *SecretReference, out *api.SecretReference, s conversion.Scope) error {
-	out.Namespace = in.Namespace
-	out.Name = in.Name
+	*out = *(*api.SecretReference)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -426,8 +385,7 @@ func Convert_v1alpha2_SecretReference_To_api_SecretReference(in *SecretReference
 }
 
 func autoConvert_api_SecretReference_To_v1alpha2_SecretReference(in *api.SecretReference, out *SecretReference, s conversion.Scope) error {
-	out.Namespace = in.Namespace
-	out.Name = in.Name
+	*out = *(*SecretReference)(unsafe.Pointer(in))
 	return nil
 }
 

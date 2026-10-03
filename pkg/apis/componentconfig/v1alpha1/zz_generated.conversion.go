@@ -23,6 +23,7 @@ package v1alpha1
 
 import (
 	time "time"
+	unsafe "unsafe"
 
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -106,12 +107,7 @@ func Convert_componentconfig_DeschedulerConfiguration_To_v1alpha1_DeschedulerCon
 }
 
 func autoConvert_v1alpha1_TracingConfiguration_To_componentconfig_TracingConfiguration(in *TracingConfiguration, out *componentconfig.TracingConfiguration, s conversion.Scope) error {
-	out.CollectorEndpoint = in.CollectorEndpoint
-	out.TransportCert = in.TransportCert
-	out.ServiceName = in.ServiceName
-	out.ServiceNamespace = in.ServiceNamespace
-	out.SampleRate = in.SampleRate
-	out.FallbackToNoOpProviderOnError = in.FallbackToNoOpProviderOnError
+	*out = *(*componentconfig.TracingConfiguration)(unsafe.Pointer(in))
 	return nil
 }
 
@@ -121,12 +117,7 @@ func Convert_v1alpha1_TracingConfiguration_To_componentconfig_TracingConfigurati
 }
 
 func autoConvert_componentconfig_TracingConfiguration_To_v1alpha1_TracingConfiguration(in *componentconfig.TracingConfiguration, out *TracingConfiguration, s conversion.Scope) error {
-	out.CollectorEndpoint = in.CollectorEndpoint
-	out.TransportCert = in.TransportCert
-	out.ServiceName = in.ServiceName
-	out.ServiceNamespace = in.ServiceNamespace
-	out.SampleRate = in.SampleRate
-	out.FallbackToNoOpProviderOnError = in.FallbackToNoOpProviderOnError
+	*out = *(*TracingConfiguration)(unsafe.Pointer(in))
 	return nil
 }
 
