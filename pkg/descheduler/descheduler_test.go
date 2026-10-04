@@ -2005,7 +2005,7 @@ func TestPluginInformerRegistration(t *testing.T) {
 					continue
 				}
 
-				if informer.Informer() != informer2.Informer() {
+				if informer.Informer().GetIndexer() != informer2.Informer().GetIndexer() {
 					t.Errorf("Expected %s informer to be cached in factory", gvr.Resource)
 				}
 				t.Logf("Found %v informer after initializing the descheduler", gvr)

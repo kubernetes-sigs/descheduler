@@ -7,14 +7,30 @@ nodes:
 - role: worker
   kubeadmConfigPatches:
     - |
+      apiVersion: kubeadm.k8s.io/v1beta3
       kind: JoinConfiguration
       nodeRegistration:
         kubeletExtraArgs:
           node-labels: "topology.kubernetes.io/zone=local-a"
+    - |
+      apiVersion: kubeadm.k8s.io/v1beta4
+      kind: JoinConfiguration
+      nodeRegistration:
+        kubeletExtraArgs:
+          - name: "node-labels"
+            value: "topology.kubernetes.io/zone=local-a"
 - role: worker
   kubeadmConfigPatches:
     - |
+      apiVersion: kubeadm.k8s.io/v1beta3
       kind: JoinConfiguration
       nodeRegistration:
         kubeletExtraArgs:
           node-labels: "topology.kubernetes.io/zone=local-b"
+    - |
+      apiVersion: kubeadm.k8s.io/v1beta4
+      kind: JoinConfiguration
+      nodeRegistration:
+        kubeletExtraArgs:
+          - name: "node-labels"
+            value: "topology.kubernetes.io/zone=local-b"
