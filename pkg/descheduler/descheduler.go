@@ -28,9 +28,12 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilversion "k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
@@ -127,6 +130,21 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 	// the descheduling cycle, where informer registration is ignored.
 	_ = sharedInformerFactory.Core().V1().PersistentVolumeClaims().Informer()
 
+	// ReplicaSets and Jobs are watched only to resolve a pod's owning workload
+	// for the pod_evictions_total metric, so their informers are registered only when metrics are enabled.
+	var workloadResolver evictions.WorkloadResolver
+	if !rs.DisableMetrics {
+		replicaSetInformer := sharedInformerFactory.Apps().V1().ReplicaSets()
+		if err := replicaSetInformer.Informer().SetTransform(trimWorkloadMetadata); err != nil {
+			return nil, fmt.Errorf("unable to set ReplicaSet informer transform: %v", err)
+		}
+		jobInformer := sharedInformerFactory.Batch().V1().Jobs()
+		if err := jobInformer.Informer().SetTransform(trimWorkloadMetadata); err != nil {
+			return nil, fmt.Errorf("unable to set Job informer transform: %v", err)
+		}
+		workloadResolver = newWorkloadResolver(replicaSetInformer.Lister(), jobInformer.Lister())
+	}
+
 	getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
 	if err != nil {
 		return nil, fmt.Errorf("build get pods assigned to node function error: %v", err)
@@ -146,7 +164,8 @@ func newDescheduler(ctx context.Context, rs *options.DeschedulerServer, deschedu
 			WithEvictionFailureEventNotification(deschedulerPolicy.EvictionFailureEventNotification).
 			WithGracePeriodSeconds(deschedulerPolicy.GracePeriodSeconds).
 			WithDryRun(rs.DryRun).
-			WithMetricsEnabled(!rs.DisableMetrics),
+			WithMetricsEnabled(!rs.DisableMetrics).
+			WithWorkloadResolver(workloadResolver),
 	)
 	if err != nil {
 		return nil, err
@@ -418,8 +437,18 @@ func bootstrapDescheduler(
 
 	// If in dry run mode, replace the descheduler with one using fake client/factory
 	if rs.DryRun {
+		// ReplicaSets and Jobs are mirrored so that dry-run workload resolution matches live mode instead
+		// of degrading to unstable, high-cardinality intermediate-owner names.
+		// They are registered (and mirrored) only when metrics are enabled.
+		var extraResources []schema.GroupVersionResource
+		if !rs.DisableMetrics {
+			extraResources = append(extraResources,
+				appsv1.SchemeGroupVersion.WithResource("replicasets"),
+				batchv1.SchemeGroupVersion.WithResource("jobs"),
+			)
+		}
 		// Create sandbox with resources to mirror from real client
-		kubeClientSandbox, err := newDefaultKubeClientSandbox(rs.Client, sharedInformerFactory)
+		kubeClientSandbox, err := newDefaultKubeClientSandbox(rs.Client, sharedInformerFactory, extraResources...)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create kube client sandbox: %v", err)
 		}
@@ -579,4 +608,16 @@ func trimManagedFields(obj interface{}) (interface{}, error) {
 		accessor.SetManagedFields(nil)
 	}
 	return obj, nil
+}
+
+func trimWorkloadMetadata(obj interface{}) (interface{}, error) {
+	switch t := obj.(type) {
+	case *appsv1.ReplicaSet:
+		t.Spec = appsv1.ReplicaSetSpec{}
+		t.Status = appsv1.ReplicaSetStatus{}
+	case *batchv1.Job:
+		t.Spec = batchv1.JobSpec{}
+		t.Status = batchv1.JobStatus{}
+	}
+	return trimManagedFields(obj)
 }
