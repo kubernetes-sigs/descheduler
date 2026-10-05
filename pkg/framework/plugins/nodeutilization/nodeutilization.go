@@ -758,7 +758,7 @@ func assessAvailableResourceInNodes(
 // has a resource request specified for any of the given resources names.
 func withResourceRequestForAny(names ...v1.ResourceName) podutil.FilterFunc {
 	return func(pod *v1.Pod) bool {
-		all := append(pod.Spec.Containers, pod.Spec.InitContainers...)
+		all := slices.Concat(pod.Spec.Containers, pod.Spec.InitContainers)
 		for _, name := range names {
 			for _, container := range all {
 				if _, ok := container.Resources.Requests[name]; ok {
