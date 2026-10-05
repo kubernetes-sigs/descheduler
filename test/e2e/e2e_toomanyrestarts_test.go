@@ -105,6 +105,7 @@ func TestTooManyRestarts(t *testing.T) {
 	defer clientSet.CoreV1().Namespaces().Delete(ctx, testNamespace.Name, metav1.DeleteOptions{})
 
 	deploymentObj := buildTestDeployment("restart-pod", testNamespace.Name, deploymentReplicas, map[string]string{"test": "restart-pod", "name": "test-toomanyrestarts"}, func(deployment *appsv1.Deployment) {
+		deployment.Spec.Template.Spec.Containers[0].Image = "registry.k8s.io/e2e-test-images/busybox:1.36.1-1"
 		deployment.Spec.Template.Spec.Containers[0].Command = []string{"/bin/sh"}
 		deployment.Spec.Template.Spec.Containers[0].Args = []string{"-c", "sleep 1s && exit 1"}
 	})
