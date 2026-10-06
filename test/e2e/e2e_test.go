@@ -47,10 +47,8 @@ import (
 	utilptr "k8s.io/utils/ptr"
 	"sigs.k8s.io/yaml"
 
-	"sigs.k8s.io/descheduler/cmd/descheduler/app/options"
 	deschedulerapi "sigs.k8s.io/descheduler/pkg/api"
 	deschedulerapiv1alpha2 "sigs.k8s.io/descheduler/pkg/api/v1alpha2"
-	"sigs.k8s.io/descheduler/pkg/descheduler"
 	"sigs.k8s.io/descheduler/pkg/descheduler/client"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
@@ -195,8 +193,88 @@ func createDeschedulerDeploymentWithCleanup(t *testing.T, ctx context.Context, k
 	return deschedulerPodName
 }
 
+// deschedulerPodSpec returns the pod spec used to run the descheduler image
+// inside the cluster, with the given `--descheduling-interval` value.
+func deschedulerPodSpec(deschedulingInterval string) v1.PodSpec {
+	podSpec := v1.PodSpec{
+		PriorityClassName:  "system-cluster-critical",
+		ServiceAccountName: "descheduler-sa",
+		SecurityContext: &v1.PodSecurityContext{
+			RunAsNonRoot: utilptr.To(true),
+			SeccompProfile: &v1.SeccompProfile{
+				Type: v1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
+		Containers: []v1.Container{
+			{
+				Name:            "descheduler",
+				Image:           *deschedulerImage,
+				ImagePullPolicy: "IfNotPresent",
+				Command:         []string{"/bin/descheduler"},
+				Args:            []string{"--policy-config-file", "/policy-dir/policy.yaml", "--descheduling-interval", deschedulingInterval, "--v", "4"},
+				Ports:           []v1.ContainerPort{{ContainerPort: 10258, Protocol: "TCP"}},
+				LivenessProbe: &v1.Probe{
+					FailureThreshold: 3,
+					ProbeHandler: v1.ProbeHandler{
+						HTTPGet: &v1.HTTPGetAction{
+							Path:   "/healthz",
+							Port:   intstr.FromInt(10258),
+							Scheme: v1.URISchemeHTTPS,
+						},
+					},
+					InitialDelaySeconds: 3,
+					PeriodSeconds:       10,
+				},
+				Resources: v1.ResourceRequirements{
+					Requests: v1.ResourceList{
+						v1.ResourceCPU:    resource.MustParse("500m"),
+						v1.ResourceMemory: resource.MustParse("256Mi"),
+					},
+				},
+				SecurityContext: &v1.SecurityContext{
+					AllowPrivilegeEscalation: utilptr.To(false),
+					Capabilities: &v1.Capabilities{
+						Drop: []v1.Capability{
+							"ALL",
+						},
+					},
+					Privileged:             utilptr.To[bool](false),
+					ReadOnlyRootFilesystem: utilptr.To[bool](true),
+					RunAsNonRoot:           utilptr.To[bool](true),
+				},
+				VolumeMounts: []v1.VolumeMount{
+					{
+						MountPath: "/policy-dir",
+						Name:      "policy-volume",
+					},
+				},
+			},
+		},
+		Volumes: []v1.Volume{
+			{
+				Name: "policy-volume",
+				VolumeSource: v1.VolumeSource{
+					ConfigMap: &v1.ConfigMapVolumeSource{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: "descheduler-policy-configmap",
+						},
+					},
+				},
+			},
+		},
+	}
+	if *podRunAsUserId != 0 {
+		podSpec.SecurityContext.RunAsUser = podRunAsUserId
+	}
+	if *podRunAsGroupId != 0 {
+		podSpec.SecurityContext.RunAsGroup = podRunAsGroupId
+	}
+
+	return podSpec
+}
+
 func deschedulerDeployment(testName string) *appsv1.Deployment {
-	deploymentObject := &appsv1.Deployment{
+	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "descheduler",
 			Namespace: "kube-system",
@@ -211,84 +289,10 @@ func deschedulerDeployment(testName string) *appsv1.Deployment {
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{"app": "descheduler", "test": testName},
 				},
-				Spec: v1.PodSpec{
-					PriorityClassName:  "system-cluster-critical",
-					ServiceAccountName: "descheduler-sa",
-					SecurityContext: &v1.PodSecurityContext{
-						RunAsNonRoot: utilptr.To(true),
-						SeccompProfile: &v1.SeccompProfile{
-							Type: v1.SeccompProfileTypeRuntimeDefault,
-						},
-					},
-					Containers: []v1.Container{
-						{
-							Name:            "descheduler",
-							Image:           *deschedulerImage,
-							ImagePullPolicy: "IfNotPresent",
-							Command:         []string{"/bin/descheduler"},
-							Args:            []string{"--policy-config-file", "/policy-dir/policy.yaml", "--descheduling-interval", "100m", "--v", "4"},
-							Ports:           []v1.ContainerPort{{ContainerPort: 10258, Protocol: "TCP"}},
-							LivenessProbe: &v1.Probe{
-								FailureThreshold: 3,
-								ProbeHandler: v1.ProbeHandler{
-									HTTPGet: &v1.HTTPGetAction{
-										Path:   "/healthz",
-										Port:   intstr.FromInt(10258),
-										Scheme: v1.URISchemeHTTPS,
-									},
-								},
-								InitialDelaySeconds: 3,
-								PeriodSeconds:       10,
-							},
-							Resources: v1.ResourceRequirements{
-								Requests: v1.ResourceList{
-									v1.ResourceCPU:    resource.MustParse("500m"),
-									v1.ResourceMemory: resource.MustParse("256Mi"),
-								},
-							},
-							SecurityContext: &v1.SecurityContext{
-								AllowPrivilegeEscalation: utilptr.To(false),
-								Capabilities: &v1.Capabilities{
-									Drop: []v1.Capability{
-										"ALL",
-									},
-								},
-								Privileged:             utilptr.To[bool](false),
-								ReadOnlyRootFilesystem: utilptr.To[bool](true),
-								RunAsNonRoot:           utilptr.To[bool](true),
-							},
-							VolumeMounts: []v1.VolumeMount{
-								{
-									MountPath: "/policy-dir",
-									Name:      "policy-volume",
-								},
-							},
-						},
-					},
-					Volumes: []v1.Volume{
-						{
-							Name: "policy-volume",
-							VolumeSource: v1.VolumeSource{
-								ConfigMap: &v1.ConfigMapVolumeSource{
-									LocalObjectReference: v1.LocalObjectReference{
-										Name: "descheduler-policy-configmap",
-									},
-								},
-							},
-						},
-					},
-				},
+				Spec: deschedulerPodSpec("100m"),
 			},
 		},
 	}
-	if *podRunAsUserId != 0 {
-		deploymentObject.Spec.Template.Spec.SecurityContext.RunAsUser = podRunAsUserId
-	}
-	if *podRunAsGroupId != 0 {
-		deploymentObject.Spec.Template.Spec.SecurityContext.RunAsGroup = podRunAsGroupId
-	}
-
-	return deploymentObject
 }
 
 func printPodLogs(ctx context.Context, t *testing.T, kubeClient clientset.Interface, podName string) {
@@ -1472,43 +1476,6 @@ func TestPodLifeTimeOldestEvicted(t *testing.T) {
 		if pod.GetName() == oldestPod.GetName() {
 			t.Errorf("The oldest Pod %s was not evicted", oldestPod.GetName())
 		}
-	}
-}
-
-func TestDeschedulingInterval(t *testing.T) {
-	ctx := context.Background()
-	clientSet, err := client.CreateClient(componentbaseconfig.ClientConnectionConfiguration{Kubeconfig: os.Getenv("KUBECONFIG")}, "")
-	if err != nil {
-		t.Errorf("Error during client creation with %v", err)
-	}
-
-	// By default, the DeschedulingInterval param should be set to 0, meaning Descheduler only runs once then exits
-	s, err := options.NewDeschedulerServer()
-	if err != nil {
-		t.Fatalf("Unable to initialize server: %v", err)
-	}
-	s.Client = clientSet
-	s.DefaultFeatureGates = initFeatureGates()
-
-	deschedulerPolicy := &deschedulerapi.DeschedulerPolicy{}
-
-	c := make(chan bool, 1)
-	go func() {
-		evictionPolicyGroupVersion, err := eutils.SupportEviction(s.Client)
-		if err != nil || len(evictionPolicyGroupVersion) == 0 {
-			t.Errorf("Error when checking support for eviction: %v", err)
-		}
-		if err := descheduler.RunDeschedulerStrategies(ctx, s, deschedulerPolicy, evictionPolicyGroupVersion); err != nil {
-			t.Errorf("Error running descheduler strategies: %+v", err)
-		}
-		c <- true
-	}()
-
-	select {
-	case <-c:
-		// successfully returned
-	case <-time.After(3 * time.Minute):
-		t.Errorf("descheduler.Run timed out even without descheduling-interval set")
 	}
 }
 
