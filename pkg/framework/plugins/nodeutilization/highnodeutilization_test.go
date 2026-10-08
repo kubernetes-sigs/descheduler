@@ -52,6 +52,7 @@ func TestHighNodeUtilization(t *testing.T) {
 		pods                []*v1.Pod
 		expectedPodsEvicted uint
 		evictedPods         []string
+		maxNodesToProcess   int
 	}{
 		{
 			name: "no node below threshold usage",
@@ -464,6 +465,34 @@ func TestHighNodeUtilization(t *testing.T) {
 			},
 			expectedPodsEvicted: 0,
 		},
+		{
+			// n1 and n2 are both underutilized and each holds a single pod, so an
+			// unlimited run would drain both. MaxNodesToProcess caps the run at one
+			// of them. n3 and n4 sit above the threshold and act as the targets.
+			name: "limits number of underutilized nodes processed per run with MaxNodesToProcess",
+			thresholds: api.ResourceThresholds{
+				v1.ResourceCPU:  30,
+				v1.ResourcePods: 30,
+			},
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 4000, 3000, 10, nil),
+				test.BuildTestNode("n2", 4000, 3000, 10, nil),
+				test.BuildTestNode("n3", 4000, 3000, 10, nil),
+				test.BuildTestNode("n4", 4000, 3000, 10, nil),
+			},
+			pods: []*v1.Pod{
+				test.BuildTestPod("p1", 400, 0, "n1", test.SetRSOwnerRef),
+				test.BuildTestPod("p2", 400, 0, "n2", test.SetRSOwnerRef),
+				test.BuildTestPod("p3", 2000, 0, "n3", test.SetRSOwnerRef),
+				test.BuildTestPod("p4", 2000, 0, "n4", test.SetRSOwnerRef),
+			},
+			maxNodesToProcess:   1,
+			expectedPodsEvicted: 1,
+			// Which of the two underutilized nodes gets picked is not guaranteed, so
+			// either pod is an acceptable eviction.
+			evictedPods:   []string{"p1", "p2"},
+			evictionModes: nil,
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -508,8 +537,9 @@ func TestHighNodeUtilization(t *testing.T) {
 			plugin, err := NewHighNodeUtilization(
 				ctx,
 				&HighNodeUtilizationArgs{
-					Thresholds:    testCase.thresholds,
-					EvictionModes: testCase.evictionModes,
+					Thresholds:        testCase.thresholds,
+					EvictionModes:     testCase.evictionModes,
+					MaxNodesToProcess: testCase.maxNodesToProcess,
 				},
 				handle,
 			)

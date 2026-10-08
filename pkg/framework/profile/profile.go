@@ -74,6 +74,7 @@ type handleImpl struct {
 	getPodsAssignedToNodeFunc podutil.GetPodsAssignedToNodeFunc
 	sharedInformerFactory     informers.SharedInformerFactory
 	evictor                   *evictorImpl
+	evictorPlugin             interface{}
 }
 
 var _ frameworktypes.Handle = &handleImpl{}
@@ -127,6 +128,11 @@ func (hi *handleImpl) PluginInstanceID() string {
 // PluginInstanceID returns a unique identifier for this plugin instance.
 func (ph *pluginHandle) PluginInstanceID() string {
 	return ph.pluginInstanceID
+}
+
+// EvictorPlugin returns the DefaultEvictor plugin instance if available
+func (hi *handleImpl) EvictorPlugin() interface{} {
+	return hi.evictorPlugin
 }
 
 type filterPlugin interface {
@@ -363,6 +369,11 @@ func NewProfile(ctx context.Context, config api.DeschedulerProfile, reg pluginre
 
 	handle.evictor.filter = podutil.WrapFilterFuncs(filters...)
 	handle.evictor.preEvictionFilter = podutil.WrapFilterFuncs(preEvictionFilters...)
+
+	// Store the DefaultEvictor plugin if available for use by other plugins
+	if defaultEvictorPlugin, ok := plugins["DefaultEvictor"]; ok {
+		handle.evictorPlugin = defaultEvictorPlugin
+	}
 
 	return pi, nil
 }

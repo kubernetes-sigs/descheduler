@@ -46,6 +46,11 @@ func (in *DefaultEvictorArgs) DeepCopyInto(out *DefaultEvictorArgs) {
 		*out = new(api.PriorityThreshold)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.NodeFitExcludedNamespaces != nil {
+		in, out := &in.NodeFitExcludedNamespaces, &out.NodeFitExcludedNamespaces
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.MinPodAge != nil {
 		in, out := &in.MinPodAge, &out.MinPodAge
 		*out = new(v1.Duration)
