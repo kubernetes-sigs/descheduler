@@ -164,6 +164,7 @@ The Default Evictor Plugin is used by default for filtering pods before processi
 | `labelSelector`           | `metav1.LabelSelector` |               | (See [label filtering](#label-filtering))                                                                                                                                                                           |
 | `priorityThreshold`       | `priorityThreshold`    |               | (See [priority filtering](#priority-filtering))                                                                                                                                                                     |
 | `nodeFit`                 | `bool`                 | `false`       | (See [node fit filtering](#node-fit-filtering))                                                                                                                                                                     |
+| `includePreferredAntiAffinity` | `bool`            | `false`       | When `nodeFit` is `true`, also treat `preferredDuringSchedulingIgnoredDuringExecution` inter-pod anti-affinity as a hard fit constraint. Default `false` keeps required-only anti-affinity checks.                 |
 | `minReplicas`             | `uint`                 | `0`           | Ignores eviction of pods where the owner (e.g., `ReplicaSet`) replicas are below this threshold.                                                                                                                    |
 | `minPodAge`               | `metav1.Duration`      | `0`           | Ignores eviction of pods with a creation time within this threshold.                                                                                                                                                |
 | `noEvictionPolicy`        | `enum`                 | ``            | sets whether a `descheduler.alpha.kubernetes.io/prefer-no-eviction` pod annotation is considered preferred or mandatory. Accepted values: "", "Preferred", "Mandatory". Defaults to "Preferred".                    |
@@ -1057,7 +1058,8 @@ profiles:
 - `nodeAffinity` on the pod
 - Resource `requests` made by the pod and the resources available on other nodes
 - Whether any of the other nodes are marked as `unschedulable`
-- Any `podAntiAffinity` between the pod and the pods on the other nodes
+- Any required (`requiredDuringSchedulingIgnoredDuringExecution`) `podAntiAffinity` between the pod and the pods on the other nodes
+- Optionally, preferred (`preferredDuringSchedulingIgnoredDuringExecution`) `podAntiAffinity` when `includePreferredAntiAffinity` is also `true` (default `false`). Enable this to stop eviction loops under strategies like `LowNodeUtilization` when the scheduler keeps placing a pod back on the same underutilized node because preferred anti-affinity steered it there.
 
 E.g.
 
@@ -1070,6 +1072,7 @@ profiles:
     - name: "DefaultEvictor"
       args:
         nodeFit: true
+        includePreferredAntiAffinity: true
     - name: "PodLifeTime"
       args:
         maxPodLifeTimeSeconds: 86400

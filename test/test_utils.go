@@ -404,6 +404,34 @@ func PodWithPodAntiAffinity(inputPod *v1.Pod, labelKey, labelValue string) *v1.P
 	return inputPod
 }
 
+// PodWithPreferredPodAntiAffinity sets preferredDuringSchedulingIgnoredDuringExecution
+// inter-pod anti-affinity on the pod (weight 100, topologyKey region).
+func PodWithPreferredPodAntiAffinity(inputPod *v1.Pod, labelKey, labelValue string) *v1.Pod {
+	inputPod.Spec.Affinity = &v1.Affinity{
+		PodAntiAffinity: &v1.PodAntiAffinity{
+			PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
+				{
+					Weight: 100,
+					PodAffinityTerm: v1.PodAffinityTerm{
+						LabelSelector: &metav1.LabelSelector{
+							MatchExpressions: []metav1.LabelSelectorRequirement{
+								{
+									Key:      labelKey,
+									Operator: metav1.LabelSelectorOpIn,
+									Values:   []string{labelValue},
+								},
+							},
+						},
+						TopologyKey: "region",
+					},
+				},
+			},
+		},
+	}
+	inputPod.Labels = map[string]string{labelKey: labelValue}
+	return inputPod
+}
+
 func RegisterEvictedPodsCollector(fakeClient *fake.Clientset, evictedPods *[]string) {
 	fakeClient.PrependReactor("create", "pods", func(action clientgotesting.Action) (bool, runtime.Object, error) {
 		if action.GetSubresource() == "eviction" {
