@@ -1386,3 +1386,73 @@ func createResourceList(cpu, memory, ephemeralStorage int64) v1.ResourceList {
 	resourceList[v1.ResourceEphemeralStorage] = *resource.NewQuantity(ephemeralStorage, resource.DecimalSI)
 	return resourceList
 }
+
+func TestNodeFitInterPodAntiAffinityTopologyDomain(t *testing.T) {
+	zoneKey := "topology.kubernetes.io/zone"
+	hostKey := "kubernetes.io/hostname"
+
+	buildNode := func(name, zone string) *v1.Node {
+		return test.BuildTestNode(name, 4000, 8000, 110, func(node *v1.Node) {
+			node.Labels = map[string]string{zoneKey: zone, hostKey: name}
+		})
+	}
+	n1, n2, n3, n4 := buildNode("n1", "a"), buildNode("n2", "a"), buildNode("n3", "b"), buildNode("n4", "b")
+	nodes := []*v1.Node{n1, n2, n3, n4}
+
+	// db-1 runs on n1 (zone a), app-1 runs on n3 (zone b) and must not share
+	// the topology domain with a pod labeled role=db.
+	dbPod := test.BuildTestPod("db-1", 100, 100, n1.Name, func(pod *v1.Pod) {
+		pod.Labels = map[string]string{"role": "db"}
+	})
+	buildAppPod := func(topologyKey string) *v1.Pod {
+		return test.BuildTestPod("app-1", 100, 100, n3.Name, func(pod *v1.Pod) {
+			pod.Spec.Affinity = &v1.Affinity{
+				PodAntiAffinity: &v1.PodAntiAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{{
+						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"role": "db"}},
+						TopologyKey:   topologyKey,
+					}},
+				},
+			}
+		})
+	}
+
+	tests := []struct {
+		description string
+		topologyKey string
+		node        *v1.Node
+		fits        bool
+	}{
+		{description: "zone: node that runs the matching pod", topologyKey: zoneKey, node: n1, fits: false},
+		{description: "zone: other node of the zone that runs the matching pod", topologyKey: zoneKey, node: n2, fits: false},
+		{description: "zone: node of the zone the pod already runs in", topologyKey: zoneKey, node: n3, fits: true},
+		{description: "zone: other node of a zone without matching pods", topologyKey: zoneKey, node: n4, fits: true},
+		{description: "hostname: node that runs the matching pod", topologyKey: hostKey, node: n1, fits: false},
+		{description: "hostname: other node of the zone that runs the matching pod", topologyKey: hostKey, node: n2, fits: true},
+		{description: "hostname: node in another zone", topologyKey: hostKey, node: n4, fits: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			appPod := buildAppPod(tc.topologyKey)
+			fakeClient := fake.NewSimpleClientset(n1, n2, n3, n4, dbPod, appPod)
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
+
+			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			if err != nil {
+				t.Fatalf("Build get pods assigned to node function error: %v", err)
+			}
+
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+			if err := nodeFit(ctx, getPodsAssignedToNode, appPod, tc.node, nodes); (err == nil) != tc.fits {
+				t.Errorf("expected pod to fit node %s: %v, got err: %v", tc.node.Name, tc.fits, err)
+			}
+		})
+	}
+}
