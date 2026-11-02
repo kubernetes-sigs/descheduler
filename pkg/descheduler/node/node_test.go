@@ -1132,7 +1132,7 @@ func TestPodFitsNodes(t *testing.T) {
 	podFitsNodes(getPodsAssignedToNode, pod, nodes, func(pod *v1.Pod, node *v1.Node) bool {
 		nodesTraversed.Store(node.Name, node)
 		return true
-	})
+	}, FitOptions{})
 
 	for _, node := range nodes {
 		if _, exists := nodesTraversed.Load(node.Name); !exists {
@@ -1184,6 +1184,14 @@ func TestNodeFit(t *testing.T) {
 				test.PodWithPodAntiAffinity(test.BuildTestPod("p2", 1000, 1000, node.Name, nil), "foo", "bar"),
 			},
 			err: errors.New("pod matches inter-pod anti-affinity rule of other pod on node"),
+		},
+		{
+			description: "Preferred inter-pod anti-affinity is ignored by default NodeFit",
+			pod:         test.PodWithPreferredPodAntiAffinity(test.BuildTestPod("p1", 1000, 1000, node.Name, nil), "foo", "bar"),
+			node:        node,
+			podsOnNode: []*v1.Pod{
+				test.PodWithPreferredPodAntiAffinity(test.BuildTestPod("p2", 1000, 1000, node.Name, nil), "foo", "bar"),
+			},
 		},
 		{
 			description: "Pod doesn't match inter-pod anti-affinity rule of other pod on node, because pod and other pod is not same namespace",
@@ -1301,6 +1309,72 @@ func TestNodeFit(t *testing.T) {
 			err = NodeFit(ctx, getPodsAssignedToNode, tc.pod, tc.node)
 			if (err == nil && tc.err != nil) || (err != nil && err.Error() != tc.err.Error()) {
 				t.Errorf("Test %#v failed, got %v, expect %v", tc.description, err, tc.err)
+			}
+		})
+	}
+}
+
+func TestNodeFitPreferredAntiAffinity(t *testing.T) {
+	node := test.BuildTestNode("node", 64000, 128*1000*1000*1000, 2, func(n *v1.Node) {
+		n.ObjectMeta.Labels = map[string]string{
+			"region": "main-region",
+		}
+	})
+	otherNode := test.BuildTestNode("other", 64000, 128*1000*1000*1000, 2, func(n *v1.Node) {
+		n.ObjectMeta.Labels = map[string]string{
+			"region": "main-region",
+		}
+	})
+
+	pod := test.PodWithPreferredPodAntiAffinity(test.BuildTestPod("p1", 1000, 1000, node.Name, nil), "foo", "bar")
+	peer := test.PodWithPreferredPodAntiAffinity(test.BuildTestPod("p2", 1000, 1000, otherNode.Name, nil), "foo", "bar")
+
+	tests := []struct {
+		description string
+		opts        FitOptions
+		wantErr     string
+		fitsOther   bool
+	}{
+		{
+			description: "preferred conflict ignored without IncludePreferredAntiAffinity",
+			opts:        FitOptions{},
+			fitsOther:   true,
+		},
+		{
+			description: "preferred conflict blocks NodeFit when IncludePreferredAntiAffinity is set",
+			opts:        FitOptions{IncludePreferredAntiAffinity: true},
+			wantErr:     "pod matches inter-pod anti-affinity rule of other pod on node",
+			fitsOther:   false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			fakeClient := fake.NewSimpleClientset(node, otherNode, pod, peer)
+			sharedInformerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
+			podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
+			getPodsAssignedToNode, err := podutil.BuildGetPodsAssignedToNodeFunc(podInformer)
+			if err != nil {
+				t.Fatalf("Build get pods assigned to node function error: %v", err)
+			}
+			sharedInformerFactory.Start(ctx.Done())
+			sharedInformerFactory.WaitForCacheSync(ctx.Done())
+
+			err = NodeFitWithOptions(ctx, getPodsAssignedToNode, pod, otherNode, tc.opts)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected fit, got %v", err)
+				}
+			} else if err == nil || err.Error() != tc.wantErr {
+				t.Fatalf("got error %v, want %q", err, tc.wantErr)
+			}
+
+			fits := PodFitsAnyOtherNodeWithOptions(getPodsAssignedToNode, pod, []*v1.Node{node, otherNode}, tc.opts)
+			if fits != tc.fitsOther {
+				t.Fatalf("PodFitsAnyOtherNodeWithOptions = %v, want %v", fits, tc.fitsOther)
 			}
 		})
 	}

@@ -31,7 +31,11 @@ type DefaultEvictorArgs struct {
 	NamespaceLabelSelector *metav1.LabelSelector  `json:"namespaceLabelSelector,omitempty"`
 	PriorityThreshold      *api.PriorityThreshold `json:"priorityThreshold,omitempty"`
 	NodeFit                bool                   `json:"nodeFit,omitempty"`
-	MinReplicas            uint                   `json:"minReplicas,omitempty"`
+	// IncludePreferredAntiAffinity extends nodeFit to treat preferredDuringSchedulingIgnoredDuringExecution
+	// inter-pod anti-affinity as a hard fit constraint. Default false so existing nodeFit users keep
+	// required-only anti-affinity checks. Only applies when nodeFit is true.
+	IncludePreferredAntiAffinity bool `json:"includePreferredAntiAffinity,omitempty"`
+	MinReplicas                  uint `json:"minReplicas,omitempty"`
 	MinPodAge              *metav1.Duration       `json:"minPodAge,omitempty"`
 	NoEvictionPolicy       NoEvictionPolicy       `json:"noEvictionPolicy,omitempty"`
 
