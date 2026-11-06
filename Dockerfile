@@ -15,15 +15,16 @@ FROM golang:1.26.0
 
 WORKDIR /go/src/sigs.k8s.io/descheduler
 COPY . .
-ARG ARCH
+ARG TARGETARCH
+ARG ARCH=${TARGETARCH}
 ARG VERSION
-RUN VERSION=${VERSION} make build.$ARCH
+RUN VERSION=${VERSION} make build.${ARCH}
 
 FROM scratch
 
 MAINTAINER Kubernetes SIG Scheduling <sig-scheduling@kubernetes.io>
 
-LABEL org.opencontainers.image.source https://github.com/kubernetes-sigs/descheduler
+LABEL org.opencontainers.image.source="https://github.com/sharondescalo/descheduler"
 
 USER 1000
 
