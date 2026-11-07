@@ -39,10 +39,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=stg-${{ github.sha }},enable=${{ github.ref == 'refs/heads/staging' }}
-            type=raw,value=stg,enable=${{ github.ref == 'refs/heads/staging' }}
-            type=raw,value=${{ github.sha }},enable=${{ github.ref == 'refs/heads/master' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+            type=raw,value=${{ github.sha }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -51,7 +48,7 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           build-args: |
-            VERSION=${{ github.ref == 'refs/heads/staging' && format('stg-{0}', github.sha) || github.sha }}
+            VERSION=${{ github.sha }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
