@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - staging
   workflow_dispatch:
 
 permissions:
@@ -38,7 +39,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=${{ github.sha }}
+            type=raw,value=stg-${{ github.sha }},enable=${{ github.ref == 'refs/heads/staging' }}
+            type=raw,value=stg,enable=${{ github.ref == 'refs/heads/staging' }}
+            type=raw,value=${{ github.sha }},enable=${{ github.ref == 'refs/heads/master' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
 
       - name: Build and push
@@ -48,7 +51,7 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           build-args: |
-            VERSION=${{ github.sha }}
+            VERSION=${{ github.ref == 'refs/heads/staging' && format('stg-{0}', github.sha) || github.sha }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
