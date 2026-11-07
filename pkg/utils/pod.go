@@ -68,6 +68,58 @@ func IsDaemonsetPod(ownerRefList []metav1.OwnerReference) bool {
 	return false
 }
 
+const evictPodAnnotationKey = "descheduler.alpha.kubernetes.io/evict"
+
+// EvictionCandidates returns the pods DefaultEvictor would accept under the
+// default protections: no mirror or static pods, no terminating pods, no bare
+// pods, no DaemonSets, no local storage, and no system-critical priority.
+// The descheduler.alpha.kubernetes.io/evict annotation bypasses those checks.
+func EvictionCandidates(pods []*v1.Pod) []*v1.Pod {
+	out := make([]*v1.Pod, 0, len(pods))
+	for _, pod := range pods {
+		if pod == nil {
+			continue
+		}
+		if _, ok := pod.Annotations[evictPodAnnotationKey]; ok {
+			out = append(out, pod)
+			continue
+		}
+		if IsMirrorPod(pod) || IsStaticPod(pod) || IsPodTerminating(pod) {
+			continue
+		}
+		if len(pod.OwnerReferences) == 0 {
+			continue
+		}
+		if isDaemonSet(pod) || hasLocalStorage(pod) || isSystemCritical(pod) {
+			continue
+		}
+		out = append(out, pod)
+	}
+	return out
+}
+
+func isDaemonSet(pod *v1.Pod) bool {
+	for _, owner := range pod.OwnerReferences {
+		if owner.Kind == "DaemonSet" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasLocalStorage(pod *v1.Pod) bool {
+	for _, volume := range pod.Spec.Volumes {
+		if volume.HostPath != nil || volume.EmptyDir != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func isSystemCritical(pod *v1.Pod) bool {
+	return pod.Spec.Priority != nil && *pod.Spec.Priority >= SystemCriticalPriority
+}
+
 // IsPodWithLocalStorage returns true if the pod has local storage.
 func IsPodWithLocalStorage(pod *v1.Pod) bool {
 	for _, volume := range pod.Spec.Volumes {

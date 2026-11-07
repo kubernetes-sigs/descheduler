@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/tracing"
+	"sigs.k8s.io/descheduler/pkg/utils"
 )
 
 // evictorImpl implements the Evictor interface so plugins
@@ -50,8 +51,16 @@ type evictorImpl struct {
 
 var _ frameworktypes.Evictor = &evictorImpl{}
 
-// Filter checks if a pod can be evicted
+// Filter checks if a pod can be evicted.
+// EvictionCandidates applies the default protections first. The configured
+// filter plugins, including DefaultEvictor, still run after that.
 func (ei *evictorImpl) Filter(pod *v1.Pod) bool {
+	if len(utils.EvictionCandidates([]*v1.Pod{pod})) == 0 {
+		return false
+	}
+	if ei.filter == nil {
+		return true
+	}
 	return ei.filter(pod)
 }
 
