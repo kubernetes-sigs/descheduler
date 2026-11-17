@@ -317,7 +317,7 @@ func CheckPodsWithAntiAffinityExist(candidatePod *v1.Pod, assignedPods map[strin
 
 		for namespace := range namespaces {
 			for _, assignedPod := range assignedPods[namespace] {
-				if assignedPod.Name == candidatePod.Name || !PodMatchesTermsNamespaceAndSelector(assignedPod, namespaces, selector) {
+				if (assignedPod.Namespace == candidatePod.Namespace && assignedPod.Name == candidatePod.Name) || !PodMatchesTermsNamespaceAndSelector(assignedPod, namespaces, selector) {
 					klog.V(4).InfoS("CandidatePod doesn't matches inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(candidatePod), "assignedPod", klog.KObj(assignedPod))
 					continue
 				}
