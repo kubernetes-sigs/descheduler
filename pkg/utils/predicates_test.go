@@ -1101,6 +1101,54 @@ func TestCheckPodsWithAntiAffinityExist(t *testing.T) {
 			nodeMap:         map[string]*v1.Node{},
 			expMatch:        false,
 		},
+		{
+			// Cross-namespace anti-affinity (via the term's Namespaces field)
+			// must be detected even when the conflicting pod happens to share
+			// the candidate pod's name. The two pods are distinct objects that
+			// live in different namespaces, so the candidate must not treat the
+			// other pod as itself and skip it.
+			name: "match cross-namespace anti-affinity when the other pod shares the candidate's name",
+			pod: test.BuildTestPod("foo", 1000, 1000, "node-a", func(pod *v1.Pod) {
+				pod.Namespace = "team-a"
+				pod.Labels = map[string]string{"app": "bar"}
+				pod.Spec.Affinity = &v1.Affinity{
+					PodAntiAffinity: &v1.PodAntiAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+							{
+								Namespaces:  []string{"team-b"},
+								TopologyKey: "region",
+								LabelSelector: &metav1.LabelSelector{
+									MatchExpressions: []metav1.LabelSelectorRequirement{
+										{
+											Key:      "app",
+											Operator: metav1.LabelSelectorOpIn,
+											Values:   []string{"bar"},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			}),
+			podsInNamespace: map[string][]*v1.Pod{
+				"team-b": {
+					test.BuildTestPod("foo", 1000, 1000, "node-b", func(pod *v1.Pod) {
+						pod.Namespace = "team-b"
+						pod.Labels = map[string]string{"app": "bar"}
+					}),
+				},
+			},
+			nodeMap: map[string]*v1.Node{
+				"node-a": test.BuildTestNode("node-a", 64000, 128*1000*1000*1000, 2, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{"region": "main-region"}
+				}),
+				"node-b": test.BuildTestNode("node-b", 64000, 128*1000*1000*1000, 2, func(node *v1.Node) {
+					node.ObjectMeta.Labels = map[string]string{"region": "main-region"}
+				}),
+			},
+			expMatch: true,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
