@@ -9,6 +9,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -16,6 +17,7 @@ import (
 	utilptr "k8s.io/utils/ptr"
 
 	"sigs.k8s.io/descheduler/pkg/api"
+	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -1454,6 +1456,219 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			namespaces:           []string{"ns1"},
 			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
 		},
+		// --- ZoneAwareNodeFit test cases ---
+		// All five share the same topology: zoneA (over-loaded, 7 pods) vs zoneB (under-loaded,
+		// 1 pod). zoneB has just 250m CPU on a single node, of which 100m is already used by the
+		// existing pod — i.e. 150m of aggregate CPU headroom, enough for exactly one additional
+		// 100m-request pod. balanceDomains schedules 3 evictions toward zoneB.
+		//
+		// These cases isolate ZoneAwareNodeFit by disabling DefaultEvictor NodeFit and (where
+		// noted) TopologyBalanceNodeFit, so the only differentiator is the new gate.
+		{
+			name: "ZoneAwareNodeFit caps cumulative load on top of TopologyBalanceNodeFit (1 of 3)",
+			// Critical regression: with the previous OR(merge) implementation of
+			// ZoneAwareNodeFit, this case would evict 3 (the stateless per-node-fit check
+			// passes for every candidate because the live indexer reports B1 at 150m
+			// throughout the loop). The cumulative-headroom gate must reduce this to 1,
+			// even when TopologyBalanceNodeFit is also enabled. This proves ZoneAwareNodeFit
+			// adds value over the existing flag — not just as a renamed alias.
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 250, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       7,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{count: 1, node: "B1", labels: map[string]string{"foo": "bar"}},
+			}),
+			expectedEvictedCount: 1,
+			namespaces:           []string{"ns1"},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				// TopologyBalanceNodeFit default-on; ZoneAwareNodeFit on. The new gate
+				// must still cap evictions at zoneB's 150m headroom.
+				ZoneAwareNodeFit: utilptr.To(true),
+			},
+			nodeFit: false,
+		},
+		{
+			name: "ZoneAwareNodeFit=true alone caps evictions at zoneB's aggregate headroom (1 of 3)",
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 250, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       7,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{count: 1, node: "B1", labels: map[string]string{"foo": "bar"}},
+			}),
+			// zoneB headroom: 250m allocatable - 100m existing = 150m → fits exactly 1 more
+			// 100m-request pod. Pod 1 commits and decrements headroom to 50m. Pods 2 and 3 are
+			// rejected by the aggregate-headroom check (50m < 100m) even though per-node fit
+			// (live indexer view) still says B1 has room.
+			expectedEvictedCount: 1,
+			namespaces:           []string{"ns1"},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				TopologyBalanceNodeFit: utilptr.To(false),
+				ZoneAwareNodeFit:       utilptr.To(true),
+			},
+			nodeFit: false,
+		},
+		{
+			name: "TopologyBalanceNodeFit=true alone does NOT cap cumulative load (evicts 3)",
+			// Same topology and same cumulative-overflow condition as the previous case. This
+			// case shows the existing TopologyBalanceNodeFit gate cannot detect the over-commit
+			// because it evaluates each candidate pod against a stateless per-node fit check;
+			// all three candidates individually see B1 as having 150m headroom (the indexer is
+			// not mutated mid-loop), so all three pass and get evicted — the exact churn the
+			// new gate prevents.
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 250, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       7,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{count: 1, node: "B1", labels: map[string]string{"foo": "bar"}},
+			}),
+			expectedEvictedCount: 3,
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{}, // defaults: TBNF=true, ZANF=false
+			nodeFit:              false,
+		},
+		{
+			name: "ZoneAwareNodeFit drains domain by domain and caps total at sum of headroom",
+			// 3 domains, each under-loaded zone individually tight. Under the previous
+			// OR(merge) implementation, every candidate would see at least one node in some
+			// domain with per-node headroom — all candidates pass. The cumulative gate must
+			// pick the roomiest domain first (zoneC, 250m), commit until it can no longer
+			// fit, then fall back to zoneB (150m), and reject any 4th candidate because
+			// both domains are saturated.
+			//
+			// zoneB: 250m allocatable - 100m used = 150m headroom → fits 1 × 100m pod
+			// zoneC: 350m allocatable - 100m used = 250m headroom → fits 2 × 100m pods
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 250, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+				test.BuildTestNode("C1", 350, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneC" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       7,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{count: 1, node: "B1", labels: map[string]string{"foo": "bar"}},
+				{count: 1, node: "C1", labels: map[string]string{"foo": "bar"}},
+			}),
+			// Total batch headroom: 150 + 250 = 400m → fits 3 × 100m pods plus 100m
+			// stranded across the two domains. The previous OR(merge) implementation
+			// would admit all 4 candidates; the new gate admits 3 (2 to zoneC, 1 to
+			// zoneB) and rejects the 4th when both domains are drained below the pod
+			// request.
+			expectedEvictedCount: 3,
+			namespaces:           []string{"ns1"},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				TopologyBalanceNodeFit: utilptr.To(false),
+				ZoneAwareNodeFit:       utilptr.To(true),
+			},
+			nodeFit: false,
+		},
+		{
+			name: "ZoneAwareNodeFit still requires per-node fit (aggregate headroom alone is insufficient)",
+			// zoneB has 5 nodes with 50m CPU each → 250m aggregate headroom (looks like 2 pods'
+			// worth), but no single node can host a 100m-request pod. The new gate must reject.
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 50, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+				test.BuildTestNode("B2", 50, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+				test.BuildTestNode("B3", 50, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+				test.BuildTestNode("B4", 50, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+				test.BuildTestNode("B5", 50, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       7,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{count: 1, node: "B1", labels: map[string]string{"foo": "bar"}},
+			}),
+			expectedEvictedCount: 0,
+			namespaces:           []string{"ns1"},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				TopologyBalanceNodeFit: utilptr.To(false),
+				ZoneAwareNodeFit:       utilptr.To(true),
+			},
+			nodeFit: false,
+		},
+		{
+			name: "ZoneAwareNodeFit aggregates headroom across multiple nodes in the same below-ideal domain",
+			// Verifies grouping correctness when more than one node belongs to the same
+			// below-ideal domain. zoneB has two nodes (B1, B2) each with 200m allocatable
+			// and a 100m existing pod → 100m per-node headroom, 200m aggregate. A grouping
+			// bug that mis-bucketed nodes (e.g. counted only one B node) would yield
+			// expectedEvictedCount=1; correct multi-node aggregation yields 2 commits
+			// (cumulatively draining the domain) and a 3rd rejection.
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 200, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+				test.BuildTestNode("B2", 200, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       9,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{count: 1, node: "B1", labels: map[string]string{"foo": "bar"}},
+				{count: 1, node: "B2", labels: map[string]string{"foo": "bar"}},
+			}),
+			expectedEvictedCount: 2,
+			namespaces:           []string{"ns1"},
+			args: RemovePodsViolatingTopologySpreadConstraintArgs{
+				TopologyBalanceNodeFit: utilptr.To(false),
+				ZoneAwareNodeFit:       utilptr.To(true),
+			},
+			nodeFit: false,
+		},
+		{
+			name: "ZoneAwareNodeFit default (false) is no-op — behaviour matches prior versions",
+			// Default args (TBNF=true, ZANF=false). With nodeFit=true on DefaultEvictor and
+			// zoneB unable to host more pods, eviction is blocked by the DefaultEvictor's own
+			// pre-filter — confirming the new flag introduces no behavioural change when off.
+			nodes: []*v1.Node{
+				test.BuildTestNode("A1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("B1", 50, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       4,
+					node:        "A1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{count: 1, node: "B1", labels: map[string]string{"foo": "bar"}},
+			}),
+			expectedEvictedCount: 0,
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
+			nodeFit:              true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1816,6 +2031,224 @@ func getDefaultTopologyConstraints(maxSkew int32, edits ...func(*v1.TopologySpre
 	}
 
 	return []v1.TopologySpreadConstraint{constraint}
+}
+
+func TestGroupNodesByDomain(t *testing.T) {
+	mkNode := func(name, zone string) *v1.Node {
+		return test.BuildTestNode(name, 1000, 1<<30, 10, func(n *v1.Node) {
+			if zone != "" {
+				n.Labels["zone"] = zone
+			}
+		})
+	}
+	nodes := []*v1.Node{
+		mkNode("A1", "zoneA"),
+		mkNode("A2", "zoneA"),
+		mkNode("B1", "zoneB"),
+		mkNode("X1", ""), // missing label
+	}
+	got := groupNodesByDomain(nodes, "zone")
+	if len(got["zoneA"]) != 2 {
+		t.Errorf("zoneA: got %d nodes, want 2", len(got["zoneA"]))
+	}
+	if len(got["zoneB"]) != 1 {
+		t.Errorf("zoneB: got %d nodes, want 1", len(got["zoneB"]))
+	}
+	if _, ok := got[""]; ok {
+		t.Error("nodes missing the topology key must not produce an empty-string entry")
+	}
+}
+
+func TestComputeDomainHeadroom(t *testing.T) {
+	// zoneA has two nodes: A1 (1000m cpu, no pods), A2 (500m cpu, one 200m pod).
+	// Expected aggregate headroom: (1000 - 0) + (500 - 200) = 1300m. Pod slots: 10 + 10 - 1 = 19.
+	a1 := test.BuildTestNode("A1", 1000, 1<<30, 10, nil)
+	a2 := test.BuildTestNode("A2", 500, 1<<30, 10, nil)
+	occupant := test.BuildTestPod("occ", 200, 0, "A2", nil)
+	indexer := podutil.GetPodsAssignedToNodeFunc(func(nodeName string, filter podutil.FilterFunc) ([]*v1.Pod, error) {
+		if nodeName == "A2" {
+			return []*v1.Pod{occupant}, nil
+		}
+		return nil, nil
+	})
+
+	got := computeDomainHeadroom(map[string][]*v1.Node{"zoneA": {a1, a2}}, indexer)
+	if cpu := got["zoneA"][v1.ResourceCPU]; cpu.MilliValue() != 1300 {
+		t.Errorf("aggregate CPU: got %dm, want 1300m", cpu.MilliValue())
+	}
+	if pods := got["zoneA"][v1.ResourcePods]; pods.Value() != 19 {
+		t.Errorf("aggregate pod slots: got %d, want 19", pods.Value())
+	}
+}
+
+func TestComputeDomainHeadroomFailsClosedOnIndexerError(t *testing.T) {
+	// If ListPodsOnANode fails for a node, that node must contribute zero — neither
+	// its allocatable nor any pod requests should land in the aggregate. Over-counting
+	// would re-introduce the eviction churn this gate prevents.
+	a1 := test.BuildTestNode("A1", 1000, 1<<30, 10, nil)
+	a2 := test.BuildTestNode("A2", 500, 1<<30, 10, nil)
+	indexer := podutil.GetPodsAssignedToNodeFunc(func(nodeName string, filter podutil.FilterFunc) ([]*v1.Pod, error) {
+		if nodeName == "A2" {
+			return nil, fmt.Errorf("simulated indexer failure")
+		}
+		return nil, nil
+	})
+
+	got := computeDomainHeadroom(map[string][]*v1.Node{"zoneA": {a1, a2}}, indexer)
+	// Only A1 (1000m, 10 pod slots) contributes; A2 is excluded fail-closed.
+	if cpu := got["zoneA"][v1.ResourceCPU]; cpu.MilliValue() != 1000 {
+		t.Errorf("aggregate CPU after fail-closed exclusion: got %dm, want 1000m", cpu.MilliValue())
+	}
+	if pods := got["zoneA"][v1.ResourcePods]; pods.Value() != 10 {
+		t.Errorf("aggregate pod slots after fail-closed exclusion: got %d, want 10", pods.Value())
+	}
+}
+
+func TestPodFitsSomeDomainWithHeadroom(t *testing.T) {
+	// Build a stub node indexer that reports the supplied pods as living on the named node.
+	makeIndexer := func(podsByNode map[string][]*v1.Pod) podutil.GetPodsAssignedToNodeFunc {
+		return podutil.GetPodsAssignedToNodeFunc(func(nodeName string, filter podutil.FilterFunc) ([]*v1.Pod, error) {
+			out := []*v1.Pod{}
+			for _, p := range podsByNode[nodeName] {
+				if filter == nil || filter(p) {
+					out = append(out, p)
+				}
+			}
+			return out, nil
+		})
+	}
+
+	t.Run("commits to roomiest qualifying domain and decrements its headroom", func(t *testing.T) {
+		// zoneA has more CPU headroom than zoneB, so even though zoneB sorts first
+		// alphabetically, the candidate must commit to zoneA. This guards against
+		// regressing back to an alphabetical-first selection that would drain the
+		// tighter domain prematurely.
+		nodesByDomain := map[string][]*v1.Node{
+			"zoneB": {test.BuildTestNode("B1", 1000, 1<<30, 10, nil)},
+			"zoneA": {test.BuildTestNode("A1", 1000, 1<<30, 10, nil)},
+		}
+		headroom := map[string]v1.ResourceList{
+			"zoneA": {
+				v1.ResourceCPU:    *resource.NewMilliQuantity(800, resource.DecimalSI),
+				v1.ResourceMemory: *resource.NewQuantity(1<<28, resource.BinarySI),
+				v1.ResourcePods:   *resource.NewQuantity(5, resource.DecimalSI),
+			},
+			"zoneB": {
+				v1.ResourceCPU:    *resource.NewMilliQuantity(300, resource.DecimalSI),
+				v1.ResourceMemory: *resource.NewQuantity(1<<28, resource.BinarySI),
+				v1.ResourcePods:   *resource.NewQuantity(5, resource.DecimalSI),
+			},
+		}
+		pod := test.BuildTestPod("candidate", 100, 0, "other", nil)
+		indexer := makeIndexer(nil)
+
+		domain, ok := podFitsSomeDomainWithHeadroom(indexer, pod, nodesByDomain, headroom)
+		if !ok || domain != "zoneA" {
+			t.Fatalf("expected commit to roomiest domain zoneA, got domain=%q ok=%v", domain, ok)
+		}
+		if cpu := headroom["zoneA"][v1.ResourceCPU]; cpu.MilliValue() != 700 {
+			t.Errorf("zoneA CPU headroom after commit: got %dm, want 700m", cpu.MilliValue())
+		}
+		if cpu := headroom["zoneB"][v1.ResourceCPU]; cpu.MilliValue() != 300 {
+			t.Errorf("zoneB CPU headroom must be untouched: got %dm, want 300m", cpu.MilliValue())
+		}
+	})
+
+	t.Run("equal headroom falls back to alphabetical for determinism", func(t *testing.T) {
+		nodesByDomain := map[string][]*v1.Node{
+			"zoneB": {test.BuildTestNode("B1", 1000, 1<<30, 10, nil)},
+			"zoneA": {test.BuildTestNode("A1", 1000, 1<<30, 10, nil)},
+		}
+		headroom := map[string]v1.ResourceList{
+			"zoneA": {
+				v1.ResourceCPU:    *resource.NewMilliQuantity(500, resource.DecimalSI),
+				v1.ResourceMemory: *resource.NewQuantity(1<<28, resource.BinarySI),
+				v1.ResourcePods:   *resource.NewQuantity(5, resource.DecimalSI),
+			},
+			"zoneB": {
+				v1.ResourceCPU:    *resource.NewMilliQuantity(500, resource.DecimalSI),
+				v1.ResourceMemory: *resource.NewQuantity(1<<28, resource.BinarySI),
+				v1.ResourcePods:   *resource.NewQuantity(5, resource.DecimalSI),
+			},
+		}
+		pod := test.BuildTestPod("candidate", 100, 0, "other", nil)
+		indexer := makeIndexer(nil)
+
+		domain, ok := podFitsSomeDomainWithHeadroom(indexer, pod, nodesByDomain, headroom)
+		if !ok || domain != "zoneA" {
+			t.Fatalf("expected alphabetical tie-break to commit to zoneA, got domain=%q ok=%v", domain, ok)
+		}
+	})
+
+	t.Run("repeated calls drain headroom and then reject", func(t *testing.T) {
+		nodesByDomain := map[string][]*v1.Node{
+			"zoneA": {test.BuildTestNode("A1", 1000, 1<<30, 10, nil)},
+		}
+		headroom := map[string]v1.ResourceList{
+			"zoneA": {
+				v1.ResourceCPU:    *resource.NewMilliQuantity(250, resource.DecimalSI),
+				v1.ResourceMemory: *resource.NewQuantity(1<<28, resource.BinarySI),
+				v1.ResourcePods:   *resource.NewQuantity(5, resource.DecimalSI),
+			},
+		}
+		indexer := makeIndexer(nil)
+		pod := test.BuildTestPod("p", 100, 0, "other", nil)
+
+		if _, ok := podFitsSomeDomainWithHeadroom(indexer, pod, nodesByDomain, headroom); !ok {
+			t.Fatal("first call: expected ok=true (250m >= 100m)")
+		}
+		if _, ok := podFitsSomeDomainWithHeadroom(indexer, pod, nodesByDomain, headroom); !ok {
+			t.Fatal("second call: expected ok=true (150m >= 100m)")
+		}
+		if _, ok := podFitsSomeDomainWithHeadroom(indexer, pod, nodesByDomain, headroom); ok {
+			t.Fatal("third call: expected ok=false (50m < 100m)")
+		}
+	})
+
+	t.Run("returns false when no domain has aggregate headroom", func(t *testing.T) {
+		nodesByDomain := map[string][]*v1.Node{
+			"zoneA": {test.BuildTestNode("A1", 1000, 1<<30, 10, nil)},
+		}
+		headroom := map[string]v1.ResourceList{
+			"zoneA": {
+				v1.ResourceCPU:    *resource.NewMilliQuantity(50, resource.DecimalSI),
+				v1.ResourceMemory: *resource.NewQuantity(1<<28, resource.BinarySI),
+				v1.ResourcePods:   *resource.NewQuantity(5, resource.DecimalSI),
+			},
+		}
+		pod := test.BuildTestPod("p", 100, 0, "other", nil)
+		if _, ok := podFitsSomeDomainWithHeadroom(makeIndexer(nil), pod, nodesByDomain, headroom); ok {
+			t.Error("expected ok=false when aggregate CPU is insufficient")
+		}
+	})
+
+	t.Run("returns false when no domain node can host the pod (per-node fit fails)", func(t *testing.T) {
+		// Node has plenty of aggregate headroom by allocatable, but an existing pod on the
+		// node consumes most of it, leaving no per-node room. Aggregate headroom is supplied
+		// separately so only the per-node fit check (via fitsRequest) should reject.
+		smallNode := test.BuildTestNode("A1", 120, 1<<30, 10, nil)
+		nodesByDomain := map[string][]*v1.Node{"zoneA": {smallNode}}
+		headroom := map[string]v1.ResourceList{
+			"zoneA": {
+				v1.ResourceCPU:    *resource.NewMilliQuantity(10000, resource.DecimalSI),
+				v1.ResourceMemory: *resource.NewQuantity(1<<30, resource.BinarySI),
+				v1.ResourcePods:   *resource.NewQuantity(10, resource.DecimalSI),
+			},
+		}
+		occupant := test.BuildTestPod("occupant", 100, 0, "A1", nil)
+		indexer := makeIndexer(map[string][]*v1.Pod{"A1": {occupant}})
+		candidate := test.BuildTestPod("candidate", 100, 0, "other", nil)
+		if _, ok := podFitsSomeDomainWithHeadroom(indexer, candidate, nodesByDomain, headroom); ok {
+			t.Error("expected ok=false when no node has per-node room despite aggregate headroom")
+		}
+	})
+
+	t.Run("empty nodesByDomain returns false without error", func(t *testing.T) {
+		pod := test.BuildTestPod("p", 100, 0, "other", nil)
+		if _, ok := podFitsSomeDomainWithHeadroom(makeIndexer(nil), pod, map[string][]*v1.Node{}, map[string]v1.ResourceList{}); ok {
+			t.Error("expected ok=false on empty input")
+		}
+	})
 }
 
 func TestCheckIdenticalConstraints(t *testing.T) {

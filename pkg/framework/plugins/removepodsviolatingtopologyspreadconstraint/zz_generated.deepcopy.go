@@ -52,6 +52,11 @@ func (in *RemovePodsViolatingTopologySpreadConstraintArgs) DeepCopyInto(out *Rem
 		*out = new(bool)
 		**out = **in
 	}
+	if in.ZoneAwareNodeFit != nil {
+		in, out := &in.ZoneAwareNodeFit, &out.ZoneAwareNodeFit
+		*out = new(bool)
+		**out = **in
+	}
 	return
 }
 
