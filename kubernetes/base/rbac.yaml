@@ -43,6 +43,7 @@ kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: descheduler-role
+  namespace: kube-system
 rules:
 - apiGroups: [""]
   resources: ["secrets"]
@@ -71,6 +72,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: descheduler-role-binding
+  namespace: kube-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role

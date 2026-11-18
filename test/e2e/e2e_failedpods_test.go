@@ -181,6 +181,7 @@ func initFailedJob(name, namespace string) *batchv1.Job {
 	podSpec := makePodSpec("", nil)
 	podSpec.Containers[0].Command = []string{"/bin/false"}
 	podSpec.RestartPolicy = v1.RestartPolicyNever
+	podSpec.Containers[0].Image = "registry.k8s.io/e2e-test-images/busybox:1.36.1-1"
 	labelsSet := labels.Set{"test": name, "name": name}
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{

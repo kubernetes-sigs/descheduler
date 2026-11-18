@@ -77,6 +77,33 @@ func TestTopologySpreadConstraint(t *testing.T) {
 		t.Errorf("Error listing node with %v", err)
 	}
 	_, workerNodes := splitNodesAndWorkerNodes(nodeList.Items)
+	lenWorkerNodes := len(workerNodes)
+
+	// Count unique zones among worker nodes
+	uniqueZones := sets.NewString()
+	for _, node := range workerNodes {
+		if zone, ok := node.Labels[zoneTopologyKey]; ok {
+			uniqueZones.Insert(zone)
+		}
+	}
+	numZones := uniqueZones.Len()
+
+	// Determine topology key and domain count based on cluster topology
+	var topologyKey string
+	var numDomains int
+
+	if numZones >= 2 {
+		// Multi-zone cluster: use zones as topology domain
+		topologyKey = zoneTopologyKey
+		numDomains = numZones
+		t.Logf("Found %d worker nodes in %d unique zones, using zone topology", lenWorkerNodes, numZones)
+	} else {
+		// Single-zone or no-zone cluster: fall back to node topology
+		topologyKey = v1.LabelHostname
+		numDomains = lenWorkerNodes
+		t.Logf("Found %d worker nodes in %d zone(s), falling back to node (hostname) topology", lenWorkerNodes, numZones)
+	}
+
 	t.Log("Creating testing namespace")
 	testNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "e2e-" + strings.ToLower(t.Name())}}
 	if _, err := clientSet.CoreV1().Namespaces().Create(ctx, testNamespace, metav1.CreateOptions{}); err != nil {
@@ -93,7 +120,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 		{
 			name:                    "test-topology-spread-hard-constraint",
 			expectedEvictedPodCount: 1,
-			replicaCount:            4,
+			replicaCount:            numDomains * 2,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -101,14 +128,14 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					},
 				},
 				MaxSkew:           1,
-				TopologyKey:       zoneTopologyKey,
+				TopologyKey:       topologyKey,
 				WhenUnsatisfiable: v1.DoNotSchedule,
 			},
 		},
 		{
 			name:                    "test-topology-spread-soft-constraint",
 			expectedEvictedPodCount: 1,
-			replicaCount:            4,
+			replicaCount:            numDomains * 2,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -116,14 +143,14 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					},
 				},
 				MaxSkew:           1,
-				TopologyKey:       zoneTopologyKey,
+				TopologyKey:       topologyKey,
 				WhenUnsatisfiable: v1.ScheduleAnyway,
 			},
 		},
 		{
 			name:                    "test-node-taints-policy-honor",
 			expectedEvictedPodCount: 1,
-			replicaCount:            4,
+			replicaCount:            numDomains * 2,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -132,30 +159,30 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 				MaxSkew:           1,
 				NodeTaintsPolicy:  nodeInclusionPolicyRef(v1.NodeInclusionPolicyHonor),
-				TopologyKey:       zoneTopologyKey,
+				TopologyKey:       topologyKey,
 				WhenUnsatisfiable: v1.DoNotSchedule,
 			},
 		},
 		{
 			name:                    "test-node-affinity-policy-ignore",
 			expectedEvictedPodCount: 1,
-			replicaCount:            4,
+			replicaCount:            numDomains * 2,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
-						"test": "node-taints-policy-honor",
+						"test": "node-affinity-policy-ignore",
 					},
 				},
 				MaxSkew:            1,
 				NodeAffinityPolicy: nodeInclusionPolicyRef(v1.NodeInclusionPolicyIgnore),
-				TopologyKey:        zoneTopologyKey,
+				TopologyKey:        topologyKey,
 				WhenUnsatisfiable:  v1.DoNotSchedule,
 			},
 		},
 		{
 			name:                    "test-match-label-keys",
 			expectedEvictedPodCount: 0,
-			replicaCount:            4,
+			replicaCount:            numDomains * 2,
 			topologySpreadConstraint: v1.TopologySpreadConstraint{
 				LabelSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -164,7 +191,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 				},
 				MatchLabelKeys:    []string{appsv1.DefaultDeploymentUniqueLabelKey},
 				MaxSkew:           1,
-				TopologyKey:       zoneTopologyKey,
+				TopologyKey:       topologyKey,
 				WhenUnsatisfiable: v1.DoNotSchedule,
 			},
 		},
@@ -176,6 +203,22 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			deployLabels["name"] = tc.name
 			deployment := buildTestDeployment(tc.name, testNamespace.Name, int32(tc.replicaCount), deployLabels, func(d *appsv1.Deployment) {
 				d.Spec.Template.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{tc.topologySpreadConstraint}
+				// Add tolerations so pods can be scheduled and rescheduled on all nodes (in case some of them are tainted)
+				d.Spec.Template.Spec.Tolerations = []v1.Toleration{
+					{Operator: v1.TolerationOpExists},
+				}
+				d.Spec.Template.Spec.Affinity = &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+							NodeSelectorTerms: []v1.NodeSelectorTerm{{
+								MatchExpressions: []v1.NodeSelectorRequirement{{
+									Key:      "node-role.kubernetes.io/control-plane",
+									Operator: v1.NodeSelectorOpDoesNotExist,
+								}},
+							}},
+						},
+					},
+				}
 			})
 			if _, err := clientSet.AppsV1().Deployments(deployment.Namespace).Create(ctx, deployment, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Error creating Deployment %s %v", tc.name, err)
@@ -186,12 +229,16 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			}()
 			waitForPodsRunning(ctx, t, clientSet, deployment.Labels, tc.replicaCount, deployment.Namespace)
 
-			// Create a "Violator" Deployment that has the same label and is forced to be on the same node using a nodeSelector
+			// Create a "Violator" Deployment that has the same label and is forced to be on the same topology domain
 			violatorDeploymentName := tc.name + "-violator"
 			violatorDeployLabels := tc.topologySpreadConstraint.LabelSelector.DeepCopy().MatchLabels
 			violatorDeployLabels["name"] = violatorDeploymentName
 			violatorDeployment := buildTestDeployment(violatorDeploymentName, testNamespace.Name, tc.topologySpreadConstraint.MaxSkew+1, violatorDeployLabels, func(d *appsv1.Deployment) {
-				d.Spec.Template.Spec.NodeSelector = map[string]string{zoneTopologyKey: workerNodes[0].Labels[zoneTopologyKey]}
+				d.Spec.Template.Spec.NodeSelector = map[string]string{topologyKey: workerNodes[0].Labels[topologyKey]}
+				// Add tolerations so violator pods can be scheduled on all nodes (in case some of them are tainted)
+				d.Spec.Template.Spec.Tolerations = []v1.Toleration{
+					{Operator: v1.TolerationOpExists},
+				}
 			})
 			if _, err := clientSet.AppsV1().Deployments(violatorDeployment.Namespace).Create(ctx, violatorDeployment, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Error creating Deployment %s: %v", violatorDeployment.Name, err)
@@ -262,19 +309,28 @@ func TestTopologySpreadConstraint(t *testing.T) {
 					t.Errorf("Error listing pods for %s: %v", tc.name, err)
 				}
 
-				nodePodCountMap := make(map[string]int)
-				for _, pod := range pods.Items {
-					nodePodCountMap[pod.Spec.NodeName]++
+				topologyPodCountMap := make(map[string]int)
+				nodeMap := make(map[string]*v1.Node)
+				for _, node := range workerNodes {
+					nodeMap[node.Name] = node
 				}
 
-				if len(nodePodCountMap) != len(workerNodes) {
-					t.Errorf("%s Pods were scheduled on only '%d' nodes and were not properly distributed on the nodes", tc.name, len(nodePodCountMap))
+				for _, pod := range pods.Items {
+					if node, ok := nodeMap[pod.Spec.NodeName]; ok {
+						if topologyValue, ok := node.Labels[topologyKey]; ok {
+							topologyPodCountMap[topologyValue]++
+						}
+					}
+				}
+
+				if len(topologyPodCountMap) != numDomains {
+					t.Logf("%s Pods were scheduled in only '%d' topology domains (expected %d domains) and were not properly distributed", tc.name, len(topologyPodCountMap), numDomains)
 					return false, nil
 				}
 
-				skewVal = getSkewValPodDistribution(nodePodCountMap)
+				skewVal = getSkewValPodDistribution(topologyPodCountMap)
 				if skewVal > int(tc.topologySpreadConstraint.MaxSkew) {
-					t.Errorf("Pod distribution for %s is still violating the max skew of %d as it is %d", tc.name, tc.topologySpreadConstraint.MaxSkew, skewVal)
+					t.Logf("Pod distribution for %s is still violating the max skew of %d as it is %d", tc.name, tc.topologySpreadConstraint.MaxSkew, skewVal)
 					return false, nil
 				}
 
