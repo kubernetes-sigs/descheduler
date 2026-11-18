@@ -338,11 +338,27 @@ func CheckPodsWithAntiAffinityExist(candidatePod *v1.Pod, assignedPods map[strin
 	return false
 }
 
-// GetPodAntiAffinityTerms gets the antiaffinity terms for the given pod.
-func GetPodAntiAffinityTerms(podAntiAffinity *v1.PodAntiAffinity) (terms []v1.PodAffinityTerm) {
-	if podAntiAffinity != nil {
-		if len(podAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution) != 0 {
-			terms = podAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+// GetPodAntiAffinityTerms gets the required antiaffinity terms for the given pod.
+func GetPodAntiAffinityTerms(podAntiAffinity *v1.PodAntiAffinity) []v1.PodAffinityTerm {
+	return getPodAntiAffinityTerms(podAntiAffinity, false)
+}
+
+// GetPodAntiAffinityTermsWithPreferred gets required and preferred antiaffinity terms.
+// Preferred terms are included as hard constraints for callers that opt into soft
+// anti-affinity checks (for example NodeFit with includePreferredAntiAffinity).
+func GetPodAntiAffinityTermsWithPreferred(podAntiAffinity *v1.PodAntiAffinity) []v1.PodAffinityTerm {
+	return getPodAntiAffinityTerms(podAntiAffinity, true)
+}
+
+func getPodAntiAffinityTerms(podAntiAffinity *v1.PodAntiAffinity, includePreferred bool) []v1.PodAffinityTerm {
+	if podAntiAffinity == nil {
+		return nil
+	}
+	terms := make([]v1.PodAffinityTerm, 0, len(podAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution)+len(podAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution))
+	terms = append(terms, podAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution...)
+	if includePreferred {
+		for i := range podAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution {
+			terms = append(terms, podAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution[i].PodAffinityTerm)
 		}
 	}
 	return terms

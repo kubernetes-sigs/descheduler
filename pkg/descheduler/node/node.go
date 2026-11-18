@@ -38,6 +38,14 @@ import (
 
 const workersCount = 100
 
+// FitOptions configures optional NodeFit predicates beyond the defaults.
+type FitOptions struct {
+	// IncludePreferredAntiAffinity treats preferredDuringSchedulingIgnoredDuringExecution
+	// inter-pod anti-affinity as a hard fit constraint when deciding whether a pod can land
+	// on a node. Default false preserves historical NodeFit behavior.
+	IncludePreferredAntiAffinity bool
+}
+
 // ReadyNodes returns ready nodes irrespective of whether they are
 // schedulable or not.
 func ReadyNodes(ctx context.Context, client clientset.Interface, nodeLister listersv1.NodeLister, nodeSelector string) ([]*v1.Node, error) {
@@ -144,6 +152,11 @@ func IsReady(node *v1.Node) bool {
 // The checks are ordered from fastest to slowest to reduce unnecessary computation,
 // especially for nodes that are clearly unsuitable early in the evaluation process.
 func NodeFit(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) error {
+	return NodeFitWithOptions(ctx, nodeIndexer, pod, node, FitOptions{})
+}
+
+// NodeFitWithOptions is like NodeFit but honors FitOptions for optional predicates.
+func NodeFitWithOptions(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node, opts FitOptions) error {
 	// Check if the node is marked as unschedulable.
 	if IsNodeUnschedulable(node) {
 		return errors.New("node is not schedulable")
@@ -166,7 +179,7 @@ func NodeFit(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc,
 
 	// Check if the pod violates any inter-pod anti-affinity rules with existing pods on the node.
 	// This involves iterating over all pods assigned to the node and evaluating label selectors.
-	if match, err := podMatchesInterPodAntiAffinity(nodeIndexer, pod, node); err != nil {
+	if match, err := podMatchesInterPodAntiAffinity(nodeIndexer, pod, node, opts.IncludePreferredAntiAffinity); err != nil {
 		return err
 	} else if match {
 		return errors.New("pod matches inter-pod anti-affinity rule of other pod on node")
@@ -182,7 +195,7 @@ func NodeFit(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc,
 	return nil
 }
 
-func podFitsNodes(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node, excludeFilter func(pod *v1.Pod, node *v1.Node) bool) bool {
+func podFitsNodes(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node, excludeFilter func(pod *v1.Pod, node *v1.Node) bool, opts FitOptions) bool {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -192,7 +205,7 @@ func podFitsNodes(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, no
 		if excludeFilter != nil && excludeFilter(pod, node) {
 			return
 		}
-		err := NodeFit(ctx, nodeIndexer, pod, node)
+		err := NodeFitWithOptions(ctx, nodeIndexer, pod, node, opts)
 		if err == nil {
 			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			atomic.AddInt32(&filteredLen, 1)
@@ -211,15 +224,20 @@ func podFitsNodes(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, no
 // PodFitsAnyOtherNode checks if the given pod will fit any of the given nodes, besides the node
 // the pod is already running on. The predicates used to determine if the pod will fit can be found in the NodeFit function.
 func PodFitsAnyOtherNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node) bool {
+	return PodFitsAnyOtherNodeWithOptions(nodeIndexer, pod, nodes, FitOptions{})
+}
+
+// PodFitsAnyOtherNodeWithOptions is like PodFitsAnyOtherNode but honors FitOptions.
+func PodFitsAnyOtherNodeWithOptions(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node, opts FitOptions) bool {
 	return podFitsNodes(nodeIndexer, pod, nodes, func(pod *v1.Pod, node *v1.Node) bool {
 		return pod.Spec.NodeName == node.Name
-	})
+	}, opts)
 }
 
 // PodFitsAnyNode checks if the given pod will fit any of the given nodes. The predicates used
 // to determine if the pod will fit can be found in the NodeFit function.
 func PodFitsAnyNode(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nodes []*v1.Node) bool {
-	return podFitsNodes(nodeIndexer, pod, nodes, nil)
+	return podFitsNodes(nodeIndexer, pod, nodes, nil, FitOptions{})
 }
 
 // PodFitsCurrentNode checks if the given pod will fit onto the given node. The predicates used
@@ -393,7 +411,9 @@ func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) bool {
 // podMatchesInterPodAntiAffinity checks if the pod matches the anti-affinity rule
 // of another pod that is already on the given node.
 // If a match is found, it returns true.
-func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, error) {
+// When includePreferred is true, preferredDuringSchedulingIgnoredDuringExecution terms
+// are evaluated the same way as required terms.
+func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node, includePreferred bool) (bool, error) {
 	if pod.Spec.Affinity == nil || pod.Spec.Affinity.PodAntiAffinity == nil {
 		return false, nil
 	}
@@ -404,7 +424,11 @@ func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFun
 	}
 	assignedPodsInNamespace := podutil.GroupByNamespace(podsOnNode)
 
-	for _, term := range utils.GetPodAntiAffinityTerms(pod.Spec.Affinity.PodAntiAffinity) {
+	terms := utils.GetPodAntiAffinityTerms(pod.Spec.Affinity.PodAntiAffinity)
+	if includePreferred {
+		terms = utils.GetPodAntiAffinityTermsWithPreferred(pod.Spec.Affinity.PodAntiAffinity)
+	}
+	for _, term := range terms {
 		namespaces := utils.GetNamespacesFromPodAffinityTerm(pod, &term)
 		selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
 		if err != nil {

@@ -441,7 +441,8 @@ func (d *DefaultEvictor) PreEvictionFilter(pod *v1.Pod) bool {
 			logger.Error(err, "unable to list ready nodes", "pod", klog.KObj(pod))
 			return false
 		}
-		if !nodeutil.PodFitsAnyOtherNode(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes) {
+		opts := nodeutil.FitOptions{IncludePreferredAntiAffinity: d.args.IncludePreferredAntiAffinity}
+		if !nodeutil.PodFitsAnyOtherNodeWithOptions(d.handle.GetPodsAssignedToNodeFunc(), pod, nodes, opts) {
 			logger.Info("pod does not fit on any other node because of nodeSelector(s), Taint(s), or nodes marked as unschedulable", "pod", klog.KObj(pod))
 			return false
 		}
