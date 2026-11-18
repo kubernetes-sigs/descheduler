@@ -29,3 +29,20 @@ tests:
       - equal:
           path: apiVersion
           value: azmonitoring.coreos.com/v1
+
+  - it: sets honorLabels to true by default
+    template: templates/servicemonitor.yaml
+    asserts:
+      - equal:
+          path: spec.endpoints[0].honorLabels
+          value: true
+
+  - it: allows disabling honorLabels
+    set:
+      serviceMonitor:
+        honorLabels: false
+    template: templates/servicemonitor.yaml
+    asserts:
+      - equal:
+          path: spec.endpoints[0].honorLabels
+          value: false

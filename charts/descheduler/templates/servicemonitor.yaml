@@ -19,7 +19,7 @@ spec:
     matchLabels:
       {{- include "descheduler.selectorLabels" . | nindent 6 }}
   endpoints:
-  - honorLabels: {{ .Values.serviceMonitor.honorLabels | default true }}
+  - honorLabels: {{ dig "honorLabels" true .Values.serviceMonitor }}
     port: http-metrics
     {{- if .Values.serviceMonitor.interval }}
     interval: {{ .Values.serviceMonitor.interval }}
