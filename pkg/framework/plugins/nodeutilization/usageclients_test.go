@@ -22,8 +22,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
+	"github.com/go-logr/logr/funcr"
 	"github.com/prometheus/common/model"
 
 	v1 "k8s.io/api/core/v1"
@@ -32,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/informers"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/klog/v2"
 	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	fakemetricsclient "k8s.io/metrics/pkg/client/clientset/versioned/fake"
 
@@ -146,11 +149,13 @@ func TestActualUsageClient(t *testing.T) {
 type fakePromClient struct {
 	result   interface{}
 	dataType model.ValueType
+	warnings []string
 }
 
 type fakePayload struct {
-	Status string      `json:"status"`
-	Data   queryResult `json:"data"`
+	Status   string      `json:"status"`
+	Data     queryResult `json:"data"`
+	Warnings []string    `json:"warnings,omitempty"`
 }
 
 type queryResult struct {
@@ -169,6 +174,7 @@ func (client *fakePromClient) Do(ctx context.Context, request *http.Request) (*h
 			Type:   client.dataType,
 			Result: client.result,
 		},
+		Warnings: client.warnings,
 	})
 
 	return &http.Response{StatusCode: 200}, jsonData, err
@@ -295,5 +301,49 @@ func TestPrometheusUsageClient(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestNodeUsageFromPrometheusMetricsLogsWarnings(t *testing.T) {
+	pClient := &fakePromClient{
+		dataType: model.ValVector,
+		result: model.Vector{
+			sample("instance:node_cpu:rate:sum", "ip-10-0-51-101.ec2.internal", 0.2),
+		},
+		warnings: []string{"query timed out", "too many samples"},
+	}
+
+	var logged []string
+	logger := funcr.New(func(prefix, args string) {
+		logged = append(logged, args)
+	}, funcr.Options{})
+
+	ctx := klog.NewContext(context.TODO(), logger)
+	if _, err := NodeUsageFromPrometheusMetrics(ctx, pClient, "instance:node_cpu:rate:sum"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var line string
+	for _, l := range logged {
+		if strings.Contains(l, "warnings") {
+			line = l
+			break
+		}
+	}
+	if line == "" {
+		t.Fatalf("expected the prometheus warnings to be logged, got %q", logged)
+	}
+	// The warnings have to be attached as a structured key/value pair. A printf
+	// style call leaves the verb in the message and drops the value.
+	if strings.Contains(line, "%v") {
+		t.Errorf("log message contains an uninterpreted format verb: %q", line)
+	}
+	if !strings.Contains(line, `"warnings"=`) {
+		t.Errorf("expected a structured \"warnings\" key, got %q", line)
+	}
+	for _, w := range pClient.warnings {
+		if !strings.Contains(line, w) {
+			t.Errorf("expected warning %q in the log line, got %q", w, line)
+		}
 	}
 }
