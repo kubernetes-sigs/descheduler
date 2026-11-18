@@ -89,8 +89,9 @@ func TestSetDefaults_HighNodeUtilizationArgs(t *testing.T) {
 			name: "HighNodeUtilizationArgs empty",
 			in:   &HighNodeUtilizationArgs{},
 			want: &HighNodeUtilizationArgs{
-				Thresholds:    nil,
-				NumberOfNodes: 0,
+				Thresholds:        nil,
+				NumberOfNodes:     0,
+				MaxNodesToProcess: 0,
 			},
 		},
 		{
@@ -100,14 +101,16 @@ func TestSetDefaults_HighNodeUtilizationArgs(t *testing.T) {
 					v1.ResourceCPU:    20,
 					v1.ResourceMemory: 120,
 				},
-				NumberOfNodes: 10,
+				NumberOfNodes:     10,
+				MaxNodesToProcess: 10,
 			},
 			want: &HighNodeUtilizationArgs{
 				Thresholds: api.ResourceThresholds{
 					v1.ResourceCPU:    20,
 					v1.ResourceMemory: 120,
 				},
-				NumberOfNodes: 10,
+				NumberOfNodes:     10,
+				MaxNodesToProcess: 10,
 			},
 		},
 	}

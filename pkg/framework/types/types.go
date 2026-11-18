@@ -44,6 +44,8 @@ type Handle interface {
 	// PluginInstanceID returns a unique identifier for this plugin instance.
 	// The ID is unique across all plugin instances in a configuration.
 	PluginInstanceID() string
+	// EvictorPlugin returns the DefaultEvictor plugin instance if available
+	EvictorPlugin() interface{}
 }
 
 // Evictor defines an interface for filtering and evicting pods

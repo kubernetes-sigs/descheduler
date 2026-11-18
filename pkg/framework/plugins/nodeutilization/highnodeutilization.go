@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -213,6 +214,39 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 
 	lowNodes, schedulableNodes := nodeInfos[0], nodeInfos[1]
 
+	// limit the number of nodes processed each execution if `MaxNodesToProcess` is set
+	if h.args.MaxNodesToProcess > 0 {
+		// lowNodes comes out of a map iteration, so it arrives in a random order.
+		// Truncating it as it stands would cap each run to an arbitrary node,
+		// including a node that has nothing left to evict, which spends the whole
+		// budget on a no-op. Consolidation wants the nodes nearest to being empty,
+		// so drop the ones already drained and take the least loaded of the rest.
+		occupied := make([]NodeInfo, 0, len(lowNodes))
+		for _, node := range lowNodes {
+			if len(node.allPods) > 0 {
+				occupied = append(occupied, node)
+			}
+		}
+		slices.SortFunc(occupied, func(a, b NodeInfo) int {
+			if diff := len(a.allPods) - len(b.allPods); diff != 0 {
+				return diff
+			}
+			// Tie-break by name so a given cluster state always yields the same
+			// selection rather than whatever order the map handed back.
+			return strings.Compare(a.node.Name, b.node.Name)
+		})
+		if len(occupied) > h.args.MaxNodesToProcess {
+			occupied = occupied[:h.args.MaxNodesToProcess]
+		}
+		if len(occupied) < len(lowNodes) {
+			logger.V(1).Info("Limiting the number of underutilized nodes to process",
+				"maxNodesToProcess", h.args.MaxNodesToProcess,
+				"nodesToProcess", len(occupied),
+			)
+		}
+		lowNodes = occupied
+	}
+
 	logger.V(1).Info("Criteria for a node below target utilization", h.criteria...)
 	logger.V(1).Info("Number of underutilized nodes", "totalNumber", len(lowNodes))
 
@@ -269,6 +303,7 @@ func (h *HighNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fr
 		continueEvictionCond,
 		h.usageClient,
 		nil,
+		h.handle,
 	)
 
 	return nil

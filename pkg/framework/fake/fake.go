@@ -20,6 +20,7 @@ type HandleImpl struct {
 	GetPodsAssignedToNodeFuncImpl podutil.GetPodsAssignedToNodeFunc
 	SharedInformerFactoryImpl     informers.SharedInformerFactory
 	EvictorFilterImpl             frameworktypes.EvictorPlugin
+	EvictorPluginImpl             interface{}
 	PodEvictorImpl                *evictions.PodEvictor
 	MetricsCollectorImpl          *metricscollector.MetricsCollector
 	PrometheusClientImpl          promapi.Client
@@ -50,6 +51,10 @@ func (hi *HandleImpl) SharedInformerFactory() informers.SharedInformerFactory {
 
 func (hi *HandleImpl) Evictor() frameworktypes.Evictor {
 	return hi
+}
+
+func (hi *HandleImpl) EvictorPlugin() interface{} {
+	return hi.EvictorPluginImpl
 }
 
 func (hi *HandleImpl) Filter(pod *v1.Pod) bool {

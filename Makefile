@@ -17,12 +17,14 @@
 export CONTAINER_ENGINE ?= docker
 
 # VERSION is based on a date stamp plus the last commit
-VERSION?=v$(shell date +%Y%m%d)-$(shell git describe --tags)
+VERSION := v$(shell date +%Y%m%d)-
+
 BRANCH?=$(shell git branch --show-current)
 SHA1?=$(shell git rev-parse HEAD)
 BUILD=$(shell date +%FT%T%z)
 LDFLAG_LOCATION=sigs.k8s.io/descheduler/pkg/version
 ARCHS = amd64 arm arm64
+AWS_ARCHS = amd64
 
 LDFLAGS=-ldflags "-X ${LDFLAG_LOCATION}.version=${VERSION} -X ${LDFLAG_LOCATION}.buildDate=${BUILD} -X ${LDFLAG_LOCATION}.gitbranch=${BRANCH} -X ${LDFLAG_LOCATION}.gitsha1=${SHA1}"
 
@@ -59,31 +61,31 @@ HAS_HELM := $(shell which helm 2> /dev/null)
 all: build
 
 build:
-	CGO_ENABLED=0 go build ${LDFLAGS} -o _output/bin/descheduler sigs.k8s.io/descheduler/cmd/descheduler
+	env -i "PATH=$(PATH)" "HOME=$(HOME)" CGO_ENABLED=0 go build ${LDFLAGS} -o _output/bin/descheduler sigs.k8s.io/descheduler/cmd/descheduler
 
 build.amd64:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ${LDFLAGS} -o _output/bin/descheduler sigs.k8s.io/descheduler/cmd/descheduler
+	env -i "PATH=$(PATH)" "HOME=$(HOME)" CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ${LDFLAGS} -o _output/bin/descheduler sigs.k8s.io/descheduler/cmd/descheduler
 
 build.arm:
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build ${LDFLAGS} -o _output/bin/descheduler sigs.k8s.io/descheduler/cmd/descheduler
+	env -i "PATH=$(PATH)" "HOME=$(HOME)" CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build ${LDFLAGS} -o _output/bin/descheduler sigs.k8s.io/descheduler/cmd/descheduler
 
 build.arm64:
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ${LDFLAGS} -o _output/bin/descheduler sigs.k8s.io/descheduler/cmd/descheduler
+	env -i "PATH=$(PATH)" "HOME=$(HOME)" CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ${LDFLAGS} -o _output/bin/descheduler sigs.k8s.io/descheduler/cmd/descheduler
 
 dev-image: build
 	$(CONTAINER_ENGINE) build -f Dockerfile.dev -t $(IMAGE) .
 
-image:
-	$(CONTAINER_ENGINE) build --build-arg VERSION="$(VERSION)" --build-arg ARCH="amd64" -t $(IMAGE) .
+image: build
+	$(CONTAINER_ENGINE) build -t $(IMAGE) .
 
-image.amd64:
-	$(CONTAINER_ENGINE) build --build-arg VERSION="$(VERSION)" --build-arg ARCH="amd64" -t $(IMAGE)-amd64 .
+image.amd64: build.amd64
+	$(CONTAINER_ENGINE) build -t $(IMAGE)-amd64 .
 
-image.arm:
-	$(CONTAINER_ENGINE) build --build-arg VERSION="$(VERSION)" --build-arg ARCH="arm" -t $(IMAGE)-arm .
+image.arm: build.arm
+	$(CONTAINER_ENGINE) build -t $(IMAGE)-arm .
 
-image.arm64:
-	$(CONTAINER_ENGINE) build --build-arg VERSION="$(VERSION)" --build-arg ARCH="arm64" -t $(IMAGE)-arm64 .
+image.arm64: build.arm64
+	$(CONTAINER_ENGINE) build -t $(IMAGE)-arm64 .
 
 push: image
 	gcloud auth configure-docker
@@ -100,7 +102,60 @@ push-all: image.amd64 image.arm image.arm64
 	for arch in $(ARCHS); do \
 		DOCKER_CLI_EXPERIMENTAL=enabled $(CONTAINER_ENGINE) manifest annotate --arch $${arch} $(IMAGE_GCLOUD) $(IMAGE_GCLOUD)-$${arch} ;\
 	done
-	DOCKER_CLI_EXPERIMENTAL=enabled $(CONTAINER_ENGINE) manifest push $(IMAGE_GCLOUD) ;\
+	DOCKER_CLI_EXPERIMENTAL=enabled $(CONTAINER_ENGINE) manifest push $(IMAGE_GCLOUD) ;
+
+# ECR push targets
+ECR_REGION ?= us-east-1
+ECR_ACCOUNTS_FILE ?= .ecr-accounts
+
+# Get all enabled ECR accounts from config file
+ECR_ACCOUNTS = $(shell grep -v '^\#' $(ECR_ACCOUNTS_FILE) 2>/dev/null | grep -v '^$$' | cut -d= -f1)
+
+# Build + Push combined targets (original behavior)
+push-ecr-amd64-build: image.amd64 push-ecr-amd64-only
+
+push-ecr-arm-build: image.arm push-ecr-arm-only
+
+push-ecr-arm64-build: image.arm64 push-ecr-arm64-only
+
+push-ecr-all-build: image.amd64 image.arm image.arm64 push-ecr-all-only
+
+# Push-only targets (for testing)
+push-ecr-amd64-only:
+	@echo "Pushing amd64 image to ECR accounts..."
+	@for account in $(ECR_ACCOUNTS); do \
+		echo "Pushing to account $$account..."; \
+		./scripts/push-to-ecr.sh $$account $(ECR_REGION) $(VERSION)-amd64; \
+	done
+
+push-ecr-arm-only:
+	@echo "Pushing arm image to ECR accounts..."
+	@for account in $(ECR_ACCOUNTS); do \
+		echo "Pushing to account $$account..."; \
+		./scripts/push-to-ecr.sh $$account $(ECR_REGION) $(VERSION)-arm; \
+	done
+
+push-ecr-arm64-only:
+	@echo "Pushing arm64 image to ECR accounts..."
+	@for account in $(ECR_ACCOUNTS); do \
+		echo "Pushing to account $$account..."; \
+		./scripts/push-to-ecr.sh $$account $(ECR_REGION) $(VERSION)-arm64; \
+	done
+
+push-ecr-all-only:
+	@echo "Pushing all architectures to ECR accounts..."
+	@for account in $(ECR_ACCOUNTS); do \
+		echo "Pushing to account $$account..."; \
+		for arch in $(AWS_ARCHS); do \
+			./scripts/push-to-ecr.sh $$account $(ECR_REGION) $(VERSION)-$$arch; \
+		done \
+	done
+
+# Legacy aliases for convenience
+push-ecr-amd64: push-ecr-amd64-build
+push-ecr-arm: push-ecr-arm-build
+push-ecr-arm64: push-ecr-arm64-build
+push-ecr-all: push-ecr-all-build\
 
 clean:
 	rm -rf _output
