@@ -144,6 +144,12 @@ func IsReady(node *v1.Node) bool {
 // The checks are ordered from fastest to slowest to reduce unnecessary computation,
 // especially for nodes that are clearly unsuitable early in the evaluation process.
 func NodeFit(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) error {
+	return nodeFit(ctx, nodeIndexer, pod, node, []*v1.Node{node})
+}
+
+// nodeFit is NodeFit that can also look at the pods running on the given nodes
+// when checking inter-pod anti-affinity in a topology domain wider than a node.
+func nodeFit(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node, nodes []*v1.Node) error {
 	// Check if the node is marked as unschedulable.
 	if IsNodeUnschedulable(node) {
 		return errors.New("node is not schedulable")
@@ -164,9 +170,9 @@ func NodeFit(ctx context.Context, nodeIndexer podutil.GetPodsAssignedToNodeFunc,
 		return errors.New("pod does not tolerate taints on the node")
 	}
 
-	// Check if the pod violates any inter-pod anti-affinity rules with existing pods on the node.
-	// This involves iterating over all pods assigned to the node and evaluating label selectors.
-	if match, err := podMatchesInterPodAntiAffinity(nodeIndexer, pod, node); err != nil {
+	// Check if the pod violates any inter-pod anti-affinity rules with existing pods in the node's topology domain.
+	// This involves iterating over all pods assigned to the nodes of that domain and evaluating label selectors.
+	if match, err := podMatchesInterPodAntiAffinity(nodeIndexer, pod, node, nodes); err != nil {
 		return err
 	} else if match {
 		return errors.New("pod matches inter-pod anti-affinity rule of other pod on node")
@@ -192,7 +198,7 @@ func podFitsNodes(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, no
 		if excludeFilter != nil && excludeFilter(pod, node) {
 			return
 		}
-		err := NodeFit(ctx, nodeIndexer, pod, node)
+		err := nodeFit(ctx, nodeIndexer, pod, node, nodes)
 		if err == nil {
 			klog.V(4).InfoS("Pod fits on node", "pod", klog.KObj(pod), "node", klog.KObj(node))
 			atomic.AddInt32(&filteredLen, 1)
@@ -391,18 +397,33 @@ func PodMatchNodeSelector(pod *v1.Pod, node *v1.Node) bool {
 }
 
 // podMatchesInterPodAntiAffinity checks if the pod matches the anti-affinity rule
-// of another pod that is already on the given node.
-// If a match is found, it returns true.
-func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node) (bool, error) {
+// of another pod that is already in the topology domain of the given node.
+// The domain is made of the node and of the given nodes that have the same value
+// of the term's topology key. If a match is found, it returns true.
+func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, node *v1.Node, nodes []*v1.Node) (bool, error) {
 	if pod.Spec.Affinity == nil || pod.Spec.Affinity.PodAntiAffinity == nil {
 		return false, nil
 	}
 
-	podsOnNode, err := podutil.ListPodsOnANode(node.Name, nodeIndexer, nil)
-	if err != nil {
-		return false, fmt.Errorf("error listing all pods: %v", err)
+	candidates := []*v1.Node{node}
+	for _, n := range nodes {
+		if n.Name != node.Name {
+			candidates = append(candidates, n)
+		}
 	}
-	assignedPodsInNamespace := podutil.GroupByNamespace(podsOnNode)
+
+	podsInNamespaceByNode := make(map[string]map[string][]*v1.Pod, len(candidates))
+	assignedPods := func(n *v1.Node) (map[string][]*v1.Pod, error) {
+		if podsInNamespace, ok := podsInNamespaceByNode[n.Name]; ok {
+			return podsInNamespace, nil
+		}
+		podsOnNode, err := podutil.ListPodsOnANode(n.Name, nodeIndexer, nil)
+		if err != nil {
+			return nil, fmt.Errorf("error listing all pods: %v", err)
+		}
+		podsInNamespaceByNode[n.Name] = podutil.GroupByNamespace(podsOnNode)
+		return podsInNamespaceByNode[n.Name], nil
+	}
 
 	for _, term := range utils.GetPodAntiAffinityTerms(pod.Spec.Affinity.PodAntiAffinity) {
 		namespaces := utils.GetNamespacesFromPodAffinityTerm(pod, &term)
@@ -412,15 +433,29 @@ func podMatchesInterPodAntiAffinity(nodeIndexer podutil.GetPodsAssignedToNodeFun
 			return false, err
 		}
 
-		for namespace := range namespaces {
-			for _, assignedPod := range assignedPodsInNamespace[namespace] {
-				if assignedPod.Name == pod.Name || !utils.PodMatchesTermsNamespaceAndSelector(assignedPod, namespaces, selector) {
-					klog.V(4).InfoS("Pod doesn't match inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(pod), "assignedPod", klog.KObj(assignedPod))
-					continue
-				}
+		topologyValue, ok := node.Labels[term.TopologyKey]
+		if !ok {
+			continue
+		}
 
-				if _, ok := node.Labels[term.TopologyKey]; ok {
-					klog.V(1).InfoS("Pod matches inter-pod anti-affinity rule of assigned pod on node", "candidatePod", klog.KObj(pod), "assignedPod", klog.KObj(assignedPod))
+		for _, candidate := range candidates {
+			if value, ok := candidate.Labels[term.TopologyKey]; !ok || value != topologyValue {
+				continue
+			}
+
+			assignedPodsInNamespace, err := assignedPods(candidate)
+			if err != nil {
+				return false, err
+			}
+
+			for namespace := range namespaces {
+				for _, assignedPod := range assignedPodsInNamespace[namespace] {
+					if assignedPod.Name == pod.Name || !utils.PodMatchesTermsNamespaceAndSelector(assignedPod, namespaces, selector) {
+						klog.V(4).InfoS("Pod doesn't match inter-pod anti-affinity rule of assigned pod in topology domain", "candidatePod", klog.KObj(pod), "assignedPod", klog.KObj(assignedPod))
+						continue
+					}
+
+					klog.V(1).InfoS("Pod matches inter-pod anti-affinity rule of assigned pod in topology domain", "candidatePod", klog.KObj(pod), "assignedPod", klog.KObj(assignedPod), "node", klog.KObj(candidate))
 					return true, nil
 				}
 			}
