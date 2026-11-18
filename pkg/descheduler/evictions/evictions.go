@@ -58,6 +58,7 @@ var (
 type evictionRequestItem struct {
 	podName, podNamespace, podNodeName string
 	strategyName, profileName          string
+	workloadKind, workloadName         string
 	evictionAssumed                    bool
 	assumedTimestamp                   metav1.Time
 }
@@ -154,7 +155,7 @@ func (erc *evictionRequestsCache) addPod(pod *v1.Pod) {
 	erc.requestsTotal++
 }
 
-func (erc *evictionRequestsCache) assumePod(pod *v1.Pod, profileName, strategyName string) {
+func (erc *evictionRequestsCache) assumePod(pod *v1.Pod, profileName, strategyName, workloadKind, workloadName string) {
 	erc.mu.Lock()
 	defer erc.mu.Unlock()
 	uid := getPodKey(pod)
@@ -172,6 +173,8 @@ func (erc *evictionRequestsCache) assumePod(pod *v1.Pod, profileName, strategyNa
 			podNodeName:      item.podNodeName,
 			strategyName:     strategyName,
 			profileName:      profileName,
+			workloadKind:     workloadKind,
+			workloadName:     workloadName,
 			evictionAssumed:  true,
 			assumedTimestamp: metav1.NewTime(time.Now()),
 		}
@@ -183,6 +186,8 @@ func (erc *evictionRequestsCache) assumePod(pod *v1.Pod, profileName, strategyNa
 		podNodeName:      pod.Spec.NodeName,
 		strategyName:     strategyName,
 		profileName:      profileName,
+		workloadKind:     workloadKind,
+		workloadName:     workloadName,
 		evictionAssumed:  true,
 		assumedTimestamp: metav1.NewTime(time.Now()),
 	}
@@ -259,6 +264,7 @@ type PodEvictor struct {
 	eventRecorder                    events.EventRecorder
 	erCache                          *evictionRequestsCache
 	featureGates                     featuregate.FeatureGate
+	workloadResolver                 WorkloadResolver
 
 	// registeredHandlers contains the registrations of all handlers. It's used to check if all handlers have finished syncing before the scheduling cycles start.
 	registeredHandlers []cache.ResourceEventHandlerRegistration
@@ -276,6 +282,11 @@ func NewPodEvictor(
 		options = NewOptions()
 	}
 
+	workloadResolver := options.workloadResolver
+	if workloadResolver == nil {
+		workloadResolver = defaultWorkloadResolver
+	}
+
 	podEvictor := &PodEvictor{
 		client:                           client,
 		eventRecorder:                    eventRecorder,
@@ -290,15 +301,13 @@ func NewPodEvictor(
 		nodePodCount:                     make(nodePodEvictedCount),
 		namespacePodCount:                make(namespacePodEvictCount),
 		featureGates:                     featureGates,
+		workloadResolver:                 workloadResolver,
 	}
 
 	if featureGates.Enabled(features.EvictionsInBackground) {
 		erCache := newEvictionRequestsCache(assumedEvictionRequestTimeoutSeconds)
-		if podEvictor.metricsEnabled {
-			erCache.onAssumedTimeout = func(item evictionRequestItem) {
-				metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": item.strategyName, "namespace": item.podNamespace, "node": item.podNodeName, "profile": item.profileName}).Inc()
-				metrics.PodsEvictedTotal.With(map[string]string{"result": "error", "strategy": item.strategyName, "namespace": item.podNamespace, "node": item.podNodeName, "profile": item.profileName}).Inc()
-			}
+		erCache.onAssumedTimeout = func(item evictionRequestItem) {
+			podEvictor.observeAssumedEviction(item, "error", "error", "background_eviction_timeout")
 		}
 
 		handlerRegistration, err := podInformer.AddEventHandler(
@@ -342,13 +351,12 @@ func NewPodEvictor(
 					if newPod.Status.Phase == v1.PodSucceeded || newPod.Status.Phase == v1.PodFailed {
 						if item, exists := erCache.getPod(newPod); exists {
 							klog.V(3).InfoS("Pod with eviction in background completed. Removing pod from the cache.", "pod", klog.KObj(newPod))
-							if item.evictionAssumed && podEvictor.metricsEnabled {
-								result := "success"
+							if item.evictionAssumed {
 								if newPod.Status.Phase == v1.PodFailed {
-									result = "error"
+									podEvictor.observeAssumedEviction(item, "error", "error", "background_eviction_failed")
+								} else {
+									podEvictor.observeAssumedEviction(item, "success", "success", "")
 								}
-								metrics.PodsEvicted.With(map[string]string{"result": result, "strategy": item.strategyName, "namespace": item.podNamespace, "node": item.podNodeName, "profile": item.profileName}).Inc()
-								metrics.PodsEvictedTotal.With(map[string]string{"result": result, "strategy": item.strategyName, "namespace": item.podNamespace, "node": item.podNodeName, "profile": item.profileName}).Inc()
 							}
 							erCache.deletePod(newPod)
 						}
@@ -396,9 +404,8 @@ func NewPodEvictor(
 					}
 					if item, exists := erCache.getPod(pod); exists {
 						klog.V(3).InfoS("Pod with eviction in background deleted/evicted. Removing pod from the cache.", "pod", klog.KObj(pod))
-						if item.evictionAssumed && podEvictor.metricsEnabled {
-							metrics.PodsEvicted.With(map[string]string{"result": "success", "strategy": item.strategyName, "namespace": item.podNamespace, "node": item.podNodeName, "profile": item.profileName}).Inc()
-							metrics.PodsEvictedTotal.With(map[string]string{"result": "success", "strategy": item.strategyName, "namespace": item.podNamespace, "node": item.podNodeName, "profile": item.profileName}).Inc()
+						if item.evictionAssumed {
+							podEvictor.observeAssumedEviction(item, "success", "success", "")
 						}
 					}
 					erCache.deletePod(pod)
@@ -498,6 +505,59 @@ type EvictOptions struct {
 	StrategyName string
 }
 
+// observeEviction records the outcome of one eviction attempt on all eviction
+// metrics. legacyResult preserves the historical result values of
+// pods_evicted and pods_evicted_total (which include raw error texts), while
+// result/reason carry the bounded values of pod_evictions_total.
+func (pe *PodEvictor) observeEviction(pod *v1.Pod, opts EvictOptions, legacyResult, result, reason string) {
+	if !pe.metricsEnabled {
+		return
+	}
+	workloadKind, workloadName := pe.workloadResolver(pod)
+	emitEvictionMetrics(pod.Namespace, pod.Spec.NodeName, opts.StrategyName, opts.ProfileName, workloadKind, workloadName, legacyResult, result, reason)
+}
+
+// observeAssumedEviction is the observeEviction counterpart for evictions in
+// background, where only the cached eviction request is available. It reuses
+// the workload resolved when the eviction was assumed, so all samples of one
+// background eviction report the same workload.
+func (pe *PodEvictor) observeAssumedEviction(item evictionRequestItem, legacyResult, result, reason string) {
+	if !pe.metricsEnabled {
+		return
+	}
+	emitEvictionMetrics(item.podNamespace, item.podNodeName, item.strategyName, item.profileName, item.workloadKind, item.workloadName, legacyResult, result, reason)
+}
+
+func emitEvictionMetrics(namespace, node, strategy, profile, workloadKind, workloadName, legacyResult, result, reason string) {
+	legacyLabels := map[string]string{"result": legacyResult, "strategy": strategy, "namespace": namespace, "node": node, "profile": profile}
+	metrics.PodsEvicted.With(legacyLabels).Inc()
+	metrics.PodsEvictedTotal.With(legacyLabels).Inc()
+	workloadKind, workloadName = workloadLabelValues(workloadKind, workloadName)
+	metrics.PodEvictionsTotal.With(map[string]string{
+		"namespace":     namespace,
+		"workload_kind": workloadKind,
+		"workload_name": workloadName,
+		"node":          node,
+		"strategy":      strategy,
+		"profile":       profile,
+		"result":        result,
+		"reason":        reason,
+	}).Inc()
+}
+
+// evictionErrorReason maps an eviction error to a bounded reason label value
+// so that the pod_evictions_total metric never carries arbitrary error text.
+func evictionErrorReason(err error) string {
+	switch {
+	case apierrors.IsTooManyRequests(err):
+		return "too_many_requests"
+	case apierrors.IsNotFound(err):
+		return "not_found"
+	default:
+		return "api_error"
+	}
+}
+
 // EvictPod evicts a pod while exercising eviction limits.
 // Returns true when the pod is evicted on the server side.
 func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptions) error {
@@ -525,10 +585,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 
 	if pe.maxPodsToEvictTotal != nil && pe.totalPodCount+pe.evictionRequestsTotal()+1 > *pe.maxPodsToEvictTotal {
 		err := NewEvictionTotalLimitError()
-		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": err.Error(), "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
-			metrics.PodsEvictedTotal.With(map[string]string{"result": err.Error(), "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
-		}
+		pe.observeEviction(pod, opts, err.Error(), "blocked", "total_limit_reached")
 		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
 		klog.ErrorS(err, "Error evicting pod", "limit", *pe.maxPodsToEvictTotal)
 		if pe.evictionFailureEventNotification {
@@ -540,10 +597,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 	if pod.Spec.NodeName != "" {
 		if pe.maxPodsToEvictPerNode != nil && pe.nodePodCount[pod.Spec.NodeName]+pe.evictionRequestsPerNode(pod.Spec.NodeName)+1 > *pe.maxPodsToEvictPerNode {
 			err := NewEvictionNodeLimitError(pod.Spec.NodeName)
-			if pe.metricsEnabled {
-				metrics.PodsEvicted.With(map[string]string{"result": err.Error(), "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
-				metrics.PodsEvictedTotal.With(map[string]string{"result": err.Error(), "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
-			}
+			pe.observeEviction(pod, opts, err.Error(), "blocked", "node_limit_reached")
 			span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
 			klog.ErrorS(err, "Error evicting pod", "limit", *pe.maxPodsToEvictPerNode, "node", pod.Spec.NodeName)
 			if pe.evictionFailureEventNotification {
@@ -555,10 +609,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 
 	if pe.maxPodsToEvictPerNamespace != nil && pe.namespacePodCount[pod.Namespace]+pe.evictionRequestsPerNamespace(pod.Namespace)+1 > *pe.maxPodsToEvictPerNamespace {
 		err := NewEvictionNamespaceLimitError(pod.Namespace)
-		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": err.Error(), "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
-			metrics.PodsEvictedTotal.With(map[string]string{"result": err.Error(), "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
-		}
+		pe.observeEviction(pod, opts, err.Error(), "blocked", "namespace_limit_reached")
 		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
 		klog.ErrorS(err, "Error evicting pod", "limit", *pe.maxPodsToEvictPerNamespace, "namespace", pod.Namespace, "pod", klog.KObj(pod))
 		if pe.evictionFailureEventNotification {
@@ -572,10 +623,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 		// err is used only for logging purposes
 		span.AddEvent("Eviction Failed", trace.WithAttributes(attribute.String("node", pod.Spec.NodeName), attribute.String("err", err.Error())))
 		klog.ErrorS(err, "Error evicting pod", "pod", klog.KObj(pod), "reason", opts.Reason)
-		if pe.metricsEnabled {
-			metrics.PodsEvicted.With(map[string]string{"result": "error", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
-			metrics.PodsEvictedTotal.With(map[string]string{"result": "error", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
-		}
+		pe.observeEviction(pod, opts, "error", "error", evictionErrorReason(err))
 		if pe.evictionFailureEventNotification {
 			pe.eventRecorder.Eventf(pod, nil, v1.EventTypeWarning, "EvictionFailed", "Descheduled", "pod eviction from %v node by sigs.k8s.io/descheduler failed: %v", pod.Spec.NodeName, err.Error())
 		}
@@ -592,10 +640,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 	pe.namespacePodCount[pod.Namespace]++
 	pe.totalPodCount++
 
-	if pe.metricsEnabled {
-		metrics.PodsEvicted.With(map[string]string{"result": "success", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
-		metrics.PodsEvictedTotal.With(map[string]string{"result": "success", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
-	}
+	pe.observeEviction(pod, opts, "success", "success", "")
 
 	if pe.dryRun {
 		klog.V(1).InfoS("Evicted pod in dry run mode", "pod", klog.KObj(pod), "reason", opts.Reason, "strategy", opts.StrategyName, "node", pod.Spec.NodeName, "profile", opts.ProfileName)
@@ -653,21 +698,22 @@ func (pe *PodEvictor) evictPod(ctx context.Context, pod *v1.Pod, opts EvictOptio
 					return true, nil
 				}
 				klog.V(3).InfoS("Eviction in background assumed", "pod", klog.KObj(pod))
-				pe.erCache.assumePod(pod, opts.ProfileName, opts.StrategyName)
+				var workloadKind, workloadName string
 				if pe.metricsEnabled {
-					metrics.PodsEvicted.With(map[string]string{"result": "background", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
-					metrics.PodsEvictedTotal.With(map[string]string{"result": "background", "strategy": opts.StrategyName, "namespace": pod.Namespace, "node": pod.Spec.NodeName, "profile": opts.ProfileName}).Inc()
+					workloadKind, workloadName = pe.workloadResolver(pod)
+					emitEvictionMetrics(pod.Namespace, pod.Spec.NodeName, opts.StrategyName, opts.ProfileName, workloadKind, workloadName, "background", "background", "")
 				}
+				pe.erCache.assumePod(pod, opts.ProfileName, opts.StrategyName, workloadKind, workloadName)
 				return true, nil
 			}
 		}
 	}
 
 	if apierrors.IsTooManyRequests(err) {
-		return false, fmt.Errorf("error when evicting pod (ignoring) %q: %v", pod.Name, err)
+		return false, fmt.Errorf("error when evicting pod (ignoring) %q: %w", pod.Name, err)
 	}
 	if apierrors.IsNotFound(err) {
-		return false, fmt.Errorf("pod not found when evicting %q: %v", pod.Name, err)
+		return false, fmt.Errorf("pod not found when evicting %q: %w", pod.Name, err)
 	}
 	return false, err
 }

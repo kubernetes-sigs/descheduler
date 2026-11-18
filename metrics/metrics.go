@@ -46,6 +46,14 @@ var (
 			StabilityLevel: metrics.ALPHA,
 		}, []string{"result", "strategy", "profile", "namespace", "node"})
 
+	PodEvictionsTotal = metrics.NewCounterVec(
+		&metrics.CounterOpts{
+			Subsystem:      DeschedulerSubsystem,
+			Name:           "pod_evictions_total",
+			Help:           "Number of pod-level descheduler eviction attempts and results, resolved to the owning workload. The 'result' label is one of success, error, blocked or background.",
+			StabilityLevel: metrics.ALPHA,
+		}, []string{"namespace", "workload_kind", "workload_name", "node", "strategy", "profile", "result", "reason"})
+
 	buildInfo = metrics.NewGauge(
 		&metrics.GaugeOpts{
 			Subsystem:      DeschedulerSubsystem,
@@ -95,6 +103,7 @@ var (
 	metricsList = []metrics.Registerable{
 		PodsEvicted,
 		PodsEvictedTotal,
+		PodEvictionsTotal,
 		buildInfo,
 		DeschedulerLoopDuration,
 		DeschedulerStrategyDuration,

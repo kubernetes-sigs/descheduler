@@ -1141,6 +1141,7 @@ To get best results from HA mode some additional configurations might require:
 | build_info                            | 	gauge       | 	constant 1                                                                       |
 | pods_evicted                          | CounterVec   | total number of pods evicted, is deprecated in version v0.34.0                    |
 | pods_evicted_total                    | CounterVec   | total number of pods evicted                                                      |
+| pod_evictions_total                   | CounterVec   | number of pod eviction attempts by owning workload (result: success, error, blocked, background) |
 | descheduler_loop_duration_seconds     | HistogramVec | time taken to complete a whole descheduling cycle (support _bucket, _sum, _count), is deprecated in version v0.34.0  |
 | loop_duration_seconds                 | HistogramVec | time taken to complete a whole descheduling cycle (support _bucket, _sum, _count) |
 | descheduler_strategy_duration_seconds | HistogramVec | time taken to complete each stragtegy of descheduling operation (support _bucket, _sum, _count), is deprecated in version v0.34.0  |
