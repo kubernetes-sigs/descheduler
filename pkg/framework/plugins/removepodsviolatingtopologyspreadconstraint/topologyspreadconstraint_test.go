@@ -16,6 +16,7 @@ import (
 	utilptr "k8s.io/utils/ptr"
 
 	"sigs.k8s.io/descheduler/pkg/api"
+	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/defaultevictor"
 	frameworktesting "sigs.k8s.io/descheduler/pkg/framework/testing"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -32,6 +33,7 @@ func TestTopologySpreadConstraint(t *testing.T) {
 		namespaces           []string
 		args                 RemovePodsViolatingTopologySpreadConstraintArgs
 		nodeFit              bool
+		dryRun               bool
 	}{
 		{
 			name: "2 domains, sizes [2,1], maxSkew=1, move 0 pods",
@@ -95,6 +97,35 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			expectedEvictedCount: 1,
 			namespaces:           []string{"ns1"},
 			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
+		},
+		{
+			name: "2 domains, sizes [3,1], maxSkew=1, move 1 pod to achieve [2,2] in dry-run",
+			nodes: []*v1.Node{
+				test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" }),
+				test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" }),
+			},
+			pods: createTestPods([]testPodList{
+				{
+					count:       1,
+					node:        "n1",
+					labels:      map[string]string{"foo": "bar"},
+					constraints: getDefaultTopologyConstraints(1),
+				},
+				{
+					count:  2,
+					node:   "n1",
+					labels: map[string]string{"foo": "bar"},
+				},
+				{
+					count:  1,
+					node:   "n2",
+					labels: map[string]string{"foo": "bar"},
+				},
+			}),
+			expectedEvictedCount: 1,
+			namespaces:           []string{"ns1"},
+			args:                 RemovePodsViolatingTopologySpreadConstraintArgs{},
+			dryRun:               true,
 		},
 		{
 			name: "2 domains, sizes [3,1], maxSkew=1, move 1 pod to achieve [2,2] (both constraints)",
@@ -1471,10 +1502,15 @@ func TestTopologySpreadConstraint(t *testing.T) {
 			objs = append(objs, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns1"}})
 			fakeClient := fake.NewSimpleClientset(objs...)
 
+			var evictionOptions *evictions.Options
+			if tc.dryRun {
+				evictionOptions = evictions.NewOptions().WithDryRun(true)
+			}
+
 			handle, podEvictor, err := frameworktesting.InitFrameworkHandle(
 				ctx,
 				fakeClient,
-				nil,
+				evictionOptions,
 				defaultevictor.DefaultEvictorArgs{NodeFit: tc.nodeFit},
 				// workaround to ensure that pods are returned sorted so 'expectedEvictedPods' would work consistently
 				func(pods []*v1.Pod) {

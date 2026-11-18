@@ -46,6 +46,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/nodeutilization"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removeduplicates"
 	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingnodetaints"
+	"sigs.k8s.io/descheduler/pkg/framework/plugins/removepodsviolatingtopologyspreadconstraint"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
 	"sigs.k8s.io/descheduler/pkg/utils"
 	deschedulerversion "sigs.k8s.io/descheduler/pkg/version"
@@ -94,6 +95,7 @@ func initPluginRegistry() {
 	pluginregistry.Register(defaultevictor.PluginName, defaultevictor.New, &defaultevictor.DefaultEvictor{}, &defaultevictor.DefaultEvictorArgs{}, defaultevictor.ValidateDefaultEvictorArgs, defaultevictor.SetDefaults_DefaultEvictorArgs, pluginregistry.PluginRegistry)
 	pluginregistry.Register(removepodsviolatingnodetaints.PluginName, removepodsviolatingnodetaints.New, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaints{}, &removepodsviolatingnodetaints.RemovePodsViolatingNodeTaintsArgs{}, removepodsviolatingnodetaints.ValidateRemovePodsViolatingNodeTaintsArgs, removepodsviolatingnodetaints.SetDefaults_RemovePodsViolatingNodeTaintsArgs, pluginregistry.PluginRegistry)
 	pluginregistry.Register(nodeutilization.LowNodeUtilizationPluginName, nodeutilization.NewLowNodeUtilization, &nodeutilization.LowNodeUtilization{}, &nodeutilization.LowNodeUtilizationArgs{}, nodeutilization.ValidateLowNodeUtilizationArgs, nodeutilization.SetDefaults_LowNodeUtilizationArgs, pluginregistry.PluginRegistry)
+	pluginregistry.Register(removepodsviolatingtopologyspreadconstraint.PluginName, removepodsviolatingtopologyspreadconstraint.New, &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraint{}, &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{}, removepodsviolatingtopologyspreadconstraint.ValidateRemovePodsViolatingTopologySpreadConstraintArgs, removepodsviolatingtopologyspreadconstraint.SetDefaults_RemovePodsViolatingTopologySpreadConstraintArgs, pluginregistry.PluginRegistry)
 }
 
 func removePodsViolatingNodeTaintsPolicy() *api.DeschedulerPolicy {
@@ -152,6 +154,40 @@ func removeDuplicatesPolicy() *api.DeschedulerPolicy {
 					Balance: api.PluginSet{
 						Enabled: []string{
 							"RemoveDuplicates",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func removePodsViolatingTopologySpreadConstraintPolicy() *api.DeschedulerPolicy {
+	return &api.DeschedulerPolicy{
+		Profiles: []api.DeschedulerProfile{
+			{
+				Name: "Profile",
+				PluginConfigs: []api.PluginConfig{
+					{
+						Name: removepodsviolatingtopologyspreadconstraint.PluginName,
+						Args: &removepodsviolatingtopologyspreadconstraint.RemovePodsViolatingTopologySpreadConstraintArgs{
+							Constraints: []v1.UnsatisfiableConstraintAction{v1.DoNotSchedule},
+						},
+					},
+					{
+						Name: defaultevictor.PluginName,
+						Args: &defaultevictor.DefaultEvictorArgs{},
+					},
+				},
+				Plugins: api.Plugins{
+					Filter: api.PluginSet{
+						Enabled: []string{
+							defaultevictor.PluginName,
+						},
+					},
+					Balance: api.PluginSet{
+						Enabled: []string{
+							removepodsviolatingtopologyspreadconstraint.PluginName,
 						},
 					},
 				},
@@ -618,6 +654,70 @@ func TestPodEvictorReset(t *testing.T) {
 				if descheduler.podEvictor.TotalEvicted() != cycle.expectedTotalEvicted || len(evictedPods) != cycle.expectedRealEvictions || len(fakeEvictedPods) != cycle.expectedFakeEvictions {
 					t.Fatalf("Cycle %d: Expected (%v,%v,%v) pods evicted, got (%v,%v,%v) instead", i+1, cycle.expectedTotalEvicted, cycle.expectedRealEvictions, cycle.expectedFakeEvictions, descheduler.podEvictor.TotalEvicted(), len(evictedPods), len(fakeEvictedPods))
 				}
+			}
+		})
+	}
+}
+
+func TestRemovePodsViolatingTopologySpreadConstraintDryRun(t *testing.T) {
+	initPluginRegistry()
+
+	tests := []struct {
+		name                 string
+		dryRun               bool
+		expectedEvictedCount uint
+	}{
+		{
+			name:                 "real mode",
+			dryRun:               false,
+			expectedEvictedCount: 1,
+		},
+		{
+			name:                 "dry-run mode",
+			dryRun:               true,
+			expectedEvictedCount: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			node1 := test.BuildTestNode("n1", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneA" })
+			node2 := test.BuildTestNode("n2", 2000, 3000, 10, func(n *v1.Node) { n.Labels["zone"] = "zoneB" })
+
+			ownerRef := test.GetReplicaSetOwnerRefList()
+			makePod := func(name, nodeName string, withConstraint bool) *v1.Pod {
+				return test.BuildTestPod(name, 100, 0, nodeName, func(p *v1.Pod) {
+					p.Labels = map[string]string{"foo": "bar"}
+					p.ObjectMeta.OwnerReferences = ownerRef
+					if withConstraint {
+						p.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{
+							{
+								MaxSkew:           1,
+								TopologyKey:       "zone",
+								WhenUnsatisfiable: v1.DoNotSchedule,
+								LabelSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"foo": "bar"}},
+							},
+						}
+					}
+				})
+			}
+
+			p1 := makePod("pod-0", node1.Name, true)
+			p2 := makePod("pod-1", node1.Name, false)
+			p3 := makePod("pod-2", node1.Name, false)
+			p4 := makePod("pod-3", node2.Name, false)
+
+			ctxCancel, cancel := context.WithCancel(ctx)
+			defer cancel()
+			_, deschedulerInstance, _, _ := initDescheduler(t, ctxCancel, initFeatureGates(), removePodsViolatingTopologySpreadConstraintPolicy(), nil, tc.dryRun, node1, node2, p1, p2, p3, p4)
+
+			evictedPodNames := runDeschedulerLoopAndGetEvictedPods(ctx, t, deschedulerInstance, tc.dryRun)
+			if deschedulerInstance.podEvictor.TotalEvicted() != tc.expectedEvictedCount {
+				t.Fatalf("Expected %d evicted pods, got %d (evicted names: %v)", tc.expectedEvictedCount, deschedulerInstance.podEvictor.TotalEvicted(), evictedPodNames)
+			}
+			if tc.dryRun && uint(len(evictedPodNames)) != tc.expectedEvictedCount {
+				t.Fatalf("Expected %d dry-run evicted pod names, got %v", tc.expectedEvictedCount, evictedPodNames)
 			}
 		})
 	}
