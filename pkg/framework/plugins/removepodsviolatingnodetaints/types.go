@@ -33,4 +33,5 @@ type RemovePodsViolatingNodeTaintsArgs struct {
 	IncludePreferNoSchedule bool                  `json:"includePreferNoSchedule,omitempty"`
 	ExcludedTaints          []string              `json:"excludedTaints,omitempty"`
 	IncludedTaints          []string              `json:"includedTaints,omitempty"`
+	Cordon                  bool                  `json:"cordon,omitempty"`
 }

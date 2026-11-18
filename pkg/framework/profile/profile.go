@@ -118,6 +118,11 @@ func (hi *handleImpl) Evictor() frameworktypes.Evictor {
 	return hi.evictor
 }
 
+// DryRun returns whether the descheduler is running in dry run mode.
+func (hi *handleImpl) DryRun() bool {
+	return hi.evictor.podEvictor.DryRun()
+}
+
 // PluginInstanceID returns an empty string for the base handle.
 // Plugins should receive a pluginHandle which has a specific instance ID.
 func (hi *handleImpl) PluginInstanceID() string {

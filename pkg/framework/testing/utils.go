@@ -70,6 +70,7 @@ func InitFrameworkHandle(
 		ClientsetImpl:                 client,
 		GetPodsAssignedToNodeFuncImpl: getPodsAssignedToNode,
 		PodEvictorImpl:                podEvictor,
+		DryRunImpl:                    podEvictor.DryRun(),
 		EvictorFilterImpl:             evictorFilter.(frameworktypes.EvictorPlugin),
 		SharedInformerFactoryImpl:     sharedInformerFactory,
 	}, podEvictor, nil

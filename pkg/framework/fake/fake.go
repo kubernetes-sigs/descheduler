@@ -24,6 +24,7 @@ type HandleImpl struct {
 	MetricsCollectorImpl          *metricscollector.MetricsCollector
 	PrometheusClientImpl          promapi.Client
 	PluginInstanceIDImpl          string
+	DryRunImpl                    bool
 }
 
 var _ frameworktypes.Handle = &HandleImpl{}
@@ -66,4 +67,8 @@ func (hi *HandleImpl) Evict(ctx context.Context, pod *v1.Pod, opts evictions.Evi
 
 func (hi *HandleImpl) PluginInstanceID() string {
 	return hi.PluginInstanceIDImpl
+}
+
+func (hi *HandleImpl) DryRun() bool {
+	return hi.DryRunImpl
 }

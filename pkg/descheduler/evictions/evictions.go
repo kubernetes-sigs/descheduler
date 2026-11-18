@@ -264,6 +264,11 @@ type PodEvictor struct {
 	registeredHandlers []cache.ResourceEventHandlerRegistration
 }
 
+// DryRun returns whether the pod evictor is configured to run in dry run mode.
+func (pe *PodEvictor) DryRun() bool {
+	return pe.dryRun
+}
+
 func NewPodEvictor(
 	ctx context.Context,
 	client clientset.Interface,
