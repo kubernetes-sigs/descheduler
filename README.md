@@ -895,6 +895,37 @@ profiles:
           - "RemoveFailedPods"
 ```
 
+**Example: evicting failed system-critical pods**
+
+By default, the `DefaultEvictor`'s `SystemCriticalPods` protection prevents `RemoveFailedPods` from evicting `Failed`-phase pods that carry a system-critical priority class (e.g. a stuck `cert-manager` pod, see [#1775](https://github.com/kubernetes-sigs/descheduler/issues/1775)). To clean these up without exposing *living* system-critical pods to eviction, run `RemoveFailedPods` in a dedicated profile that disables only the `SystemCriticalPods` protection. Because the relaxed protection is scoped to its own profile, system-critical pods remain fully protected in every other profile:
+
+```yaml
+apiVersion: "descheduler/v1alpha2"
+kind: "DeschedulerPolicy"
+profiles:
+  # Dedicated profile: only RemoveFailedPods runs with the SystemCriticalPods protection disabled.
+  - name: RemoveFailedPodsCritical
+    pluginConfig:
+    - name: "DefaultEvictor"
+      args:
+        podProtections:
+          defaultDisabled:
+          - "SystemCriticalPods"
+    - name: "RemoveFailedPods"
+      args:
+        reasons:
+        - "Error"
+        excludeOwnerKinds:
+        - "Job"
+        minPodLifetimeSeconds: 120
+    plugins:
+      deschedule:
+        enabled:
+          - "RemoveFailedPods"
+```
+
+Note that `reasons` values match the failure reason reported in the pod's status — for example, a container that exits non-zero reports `reason: Error` under `status.containerStatuses[].state.terminated`. `PodFailed` is a pod *phase*, not a reason, so listing it as a `reasons` value will never match any pod.
+
 ## Filter Pods
 
 ### Namespace filtering
