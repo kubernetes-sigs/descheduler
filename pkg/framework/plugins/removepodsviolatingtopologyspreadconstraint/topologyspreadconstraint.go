@@ -57,6 +57,8 @@ type topology struct {
 type topologySpreadConstraint struct {
 	MaxSkew            int32
 	TopologyKey        string
+	WhenUnsatisfiable  v1.UnsatisfiableConstraintAction
+	MinDomains         int32
 	Selector           labels.Selector
 	NodeAffinityPolicy v1.NodeInclusionPolicy
 	NodeTaintsPolicy   v1.NodeInclusionPolicy
@@ -224,7 +226,7 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) Balance(ctx context.Contex
 				logger.V(2).Info("Skipping topology constraint because it is already balanced", "constraint", tsc)
 				continue
 			}
-			d.balanceDomains(ctx, podsForEviction, tsc, constraintTopologies, sumPods, nodes)
+			d.balanceDomains(ctx, podsForEviction, tsc, constraintTopologies, sumPods, nodes, namespacedPods[namespace])
 		}
 	}
 
@@ -305,7 +307,7 @@ func topologyIsBalanced(topology map[topologyPair][]*v1.Pod, tsc topologySpreadC
 // Following this, the above topology domains end up "sorted" as:
 // [5, 5, 5, 5, 5, 5]
 // (assuming even distribution by the scheduler of the evicted pods)
-func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(ctx context.Context, podsForEviction map[*v1.Pod]struct{}, tsc topologySpreadConstraint, constraintTopologies map[topologyPair][]*v1.Pod, sumPods float64, nodes []*v1.Node) {
+func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(ctx context.Context, podsForEviction map[*v1.Pod]struct{}, tsc topologySpreadConstraint, constraintTopologies map[topologyPair][]*v1.Pod, sumPods float64, nodes []*v1.Node, namespacePods []*v1.Pod) {
 	idealAvg := sumPods / float64(len(constraintTopologies))
 	isEvictable := d.handle.Evictor().Filter
 	sortedDomains := sortDomains(constraintTopologies, isEvictable)
@@ -376,6 +378,14 @@ func (d *RemovePodsViolatingTopologySpreadConstraint) balanceDomains(ctx context
 
 			if topologyBalanceNodeFit && !node.PodFitsAnyOtherNode(getPodsAssignedToNode, aboveToEvict[k], nodesBelowIdealAvg) {
 				d.logger.V(2).Info("ignoring pod for eviction as it does not fit on any other node", "pod", klog.KObj(aboveToEvict[k]))
+				continue
+			}
+
+			// Evicting the pod is futile when every node that could take it would violate
+			// the pod's other DoNotSchedule topology spread constraints: the scheduler would
+			// reject the move and place the pod right back, resulting in an eviction loop.
+			if topologyBalanceNodeFit && !podFitsAnyNodeWithoutViolatingConstraints(ctx, getPodsAssignedToNode, aboveToEvict[k], nodesBelowIdealAvg, nodes, namespacePods, tsc, d.logger) {
+				d.logger.V(2).Info("ignoring pod for eviction as moving it would violate its other topology spread constraints", "pod", klog.KObj(aboveToEvict[k]))
 				continue
 			}
 
@@ -535,6 +545,8 @@ func newTopologySpreadConstraint(constraint v1.TopologySpreadConstraint, pod *v1
 	tsc := topologySpreadConstraint{
 		MaxSkew:            constraint.MaxSkew,
 		TopologyKey:        constraint.TopologyKey,
+		WhenUnsatisfiable:  constraint.WhenUnsatisfiable,
+		MinDomains:         utilptr.Deref(constraint.MinDomains, 1),
 		Selector:           selector,
 		NodeAffinityPolicy: utilptr.Deref(constraint.NodeAffinityPolicy, v1.NodeInclusionPolicyHonor), // If NodeAffinityPolicy is nil, we treat NodeAffinityPolicy as "Honor".
 		NodeTaintsPolicy:   utilptr.Deref(constraint.NodeTaintsPolicy, v1.NodeInclusionPolicyIgnore),  // If NodeTaintsPolicy is nil, we treat NodeTaintsPolicy as "Ignore".
@@ -549,6 +561,115 @@ func newTopologySpreadConstraint(constraint v1.TopologySpreadConstraint, pod *v1
 	}
 
 	return tsc, nil
+}
+
+// podFitsAnyNodeWithoutViolatingConstraints reports whether the pod could move to at least one of the
+// candidate nodes without violating any of the pod's DoNotSchedule topology spread constraints
+// (other than the constraint currently being balanced). Domain counts are computed as if the
+// pod was already evicted, mirroring what the scheduler evaluates when placing the replacement.
+func podFitsAnyNodeWithoutViolatingConstraints(ctx context.Context, getPodsAssignedToNode podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, candidateNodes, nodes []*v1.Node, namespacePods []*v1.Pod, balanced topologySpreadConstraint, logger klog.Logger) bool {
+	constraints := otherHardTopologyConstraints(pod, balanced, logger)
+	if len(constraints) == 0 {
+		return true
+	}
+
+	counts := make([]map[topologyPair]int, len(constraints))
+	minCounts := make([]int, len(constraints))
+	for i := range constraints {
+		counts[i], minCounts[i] = countPodsPerDomain(ctx, pod, namespacePods, nodes, constraints[i])
+	}
+
+nodes:
+	for _, candidate := range candidateNodes {
+		if candidate.Name == pod.Spec.NodeName {
+			continue
+		}
+		if err := node.NodeFit(ctx, getPodsAssignedToNode, pod, candidate); err != nil {
+			continue
+		}
+		for i := range constraints {
+			value, ok := candidate.Labels[constraints[i].TopologyKey]
+			if !ok {
+				// like the scheduler, a node without the topology label is exempt from the constraint
+				continue
+			}
+			if counts[i][topologyPair{key: constraints[i].TopologyKey, value: value}]+1-minCounts[i] > int(constraints[i].MaxSkew) {
+				logger.V(4).Info("node cannot take pod without violating its topology spread constraint", "pod", klog.KObj(pod), "node", klog.KObj(candidate), "topologyKey", constraints[i].TopologyKey)
+				continue nodes
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// otherHardTopologyConstraints returns the pod's DoNotSchedule topology spread constraints,
+// excluding the constraint that is currently being balanced.
+func otherHardTopologyConstraints(pod *v1.Pod, balanced topologySpreadConstraint, logger klog.Logger) []topologySpreadConstraint {
+	var constraints []topologySpreadConstraint
+	for _, constraint := range pod.Spec.TopologySpreadConstraints {
+		if constraint.WhenUnsatisfiable != v1.DoNotSchedule {
+			continue
+		}
+		// the constraint being balanced is accounted for by the balancing itself;
+		// the API guarantees at most one constraint per (topologyKey, whenUnsatisfiable) pair
+		if balanced.WhenUnsatisfiable == v1.DoNotSchedule && constraint.TopologyKey == balanced.TopologyKey {
+			continue
+		}
+		tsc, err := newTopologySpreadConstraint(constraint, pod)
+		if err != nil {
+			logger.Error(err, "cannot process topology spread constraint", "pod", klog.KObj(pod))
+			continue
+		}
+		constraints = append(constraints, tsc)
+	}
+	return constraints
+}
+
+// countPodsPerDomain counts pods matching the constraint's selector per eligible domain as if
+// the given pod was already evicted, returning the counts and the global minimum across domains.
+// As in the scheduler, when there are fewer eligible domains than minDomains the global minimum is 0.
+func countPodsPerDomain(ctx context.Context, pod *v1.Pod, namespacePods []*v1.Pod, nodes []*v1.Node, tsc topologySpreadConstraint) (map[topologyPair]int, int) {
+	eligibleNodes := filterEligibleNodes(ctx, nodes, tsc)
+	nodeMap := make(map[string]*v1.Node, len(eligibleNodes))
+	counts := make(map[topologyPair]int)
+	for _, n := range eligibleNodes {
+		nodeMap[n.Name] = n
+		if value, ok := n.Labels[tsc.TopologyKey]; ok {
+			pair := topologyPair{key: tsc.TopologyKey, value: value}
+			if _, ok := counts[pair]; !ok {
+				counts[pair] = 0
+			}
+		}
+	}
+	for _, p := range namespacePods {
+		// skip the pod being moved and pods that are being deleted
+		if (p.Name == pod.Name && p.Namespace == pod.Namespace) || utils.IsPodTerminating(p) {
+			continue
+		}
+		if !tsc.Selector.Matches(labels.Set(p.Labels)) {
+			continue
+		}
+		n, ok := nodeMap[p.Spec.NodeName]
+		if !ok {
+			continue
+		}
+		value, ok := n.Labels[tsc.TopologyKey]
+		if !ok {
+			continue
+		}
+		counts[topologyPair{key: tsc.TopologyKey, value: value}]++
+	}
+	minCount := math.MaxInt32
+	for _, count := range counts {
+		if count < minCount {
+			minCount = count
+		}
+	}
+	if int32(len(counts)) < tsc.MinDomains || minCount == math.MaxInt32 {
+		minCount = 0
+	}
+	return counts, minCount
 }
 
 // Scheduler: https://github.com/kubernetes/kubernetes/blob/release-1.28/pkg/scheduler/framework/plugins/podtopologyspread/common.go#L136

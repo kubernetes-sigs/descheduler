@@ -698,6 +698,8 @@ The `topologyBalanceNodeFit` arg is used when balancing topology domains while t
 topologyBalanceNodeFit: false
 ```
 
+When `topologyBalanceNodeFit` is enabled, pods are only selected for eviction if they can move to a node below the ideal average without violating any of their other `DoNotSchedule` topology spread constraints. This prevents eviction loops when a pod's constraints cannot be satisfied at the same time (e.g. a hard zone spread combined with hostname spreading on zone-skewed node counts).
+
 Strategy parameter `labelSelector` is not utilized when balancing topology domains and is only applied during eviction to determine if the pod can be evicted.
 
 [Supported Constraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/#spread-constraint-definition) fields:
