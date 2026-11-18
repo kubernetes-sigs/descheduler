@@ -532,23 +532,38 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		return err
 	}
 
+	return runDeschedulingLoop(ctx, rs.DeschedulingInterval, runLoop)
+}
+
+// runDeschedulingLoop calls runLoop every interval until ctx is done. With a zero
+// interval runLoop is called once and its error is returned, whether it failed or not.
+func runDeschedulingLoop(ctx context.Context, interval time.Duration, runLoop func(context.Context) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var loopErr error
 	wait.NonSlidingUntil(func() {
 		// A next context is created here intentionally to avoid nesting the spans via context.
 		sCtx, sSpan := tracing.Tracer().Start(ctx, "NonSlidingUntil")
 		defer sSpan.End()
 
-		if err := runLoop(sCtx); err != nil {
+		err := runLoop(sCtx)
+		if err != nil {
 			sSpan.AddEvent("Descheduling loop failed", trace.WithAttributes(attribute.String("err", err.Error())))
-			klog.Error(err)
+		}
+		// If there was no interval specified, send a signal to the stopChannel to end the wait.Until loop after 1 iteration.
+		// The error is returned to the caller, which reports it.
+		if interval.Seconds() == 0 {
+			loopErr = err
+			cancel()
 			return
 		}
-		// If there was no interval specified, send a signal to the stopChannel to end the wait.Until loop after 1 iteration
-		if rs.DeschedulingInterval.Seconds() == 0 {
-			cancel()
+		if err != nil {
+			klog.Error(err)
 		}
-	}, rs.DeschedulingInterval, ctx.Done())
+	}, interval, ctx.Done())
 
-	return nil
+	return loopErr
 }
 
 func GetPluginConfig(pluginName string, pluginConfigs []api.PluginConfig) (*api.PluginConfig, int) {

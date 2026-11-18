@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -2040,6 +2041,67 @@ func TestPluginInformerRegistration(t *testing.T) {
 				t.Fatal("Unexpected plugin initialization callback")
 			}
 			t.Logf("Plugin initialization callback not invoked as expected")
+		})
+	}
+}
+
+func TestRunDeschedulingLoop(t *testing.T) {
+	errLoop := errors.New("descheduling loop failed")
+
+	tests := []struct {
+		name      string
+		interval  time.Duration
+		loopErr   error
+		wantErr   error
+		wantCalls int32
+	}{
+		{
+			name:      "no interval, the loop succeeds",
+			wantCalls: 1,
+		},
+		{
+			name:      "no interval, the loop fails",
+			loopErr:   errLoop,
+			wantErr:   errLoop,
+			wantCalls: 1,
+		},
+		{
+			name:      "interval, the loop fails and is retried until the context is canceled",
+			interval:  10 * time.Millisecond,
+			loopErr:   errLoop,
+			wantCalls: 3,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var calls atomic.Int32
+			runLoop := func(context.Context) error {
+				if calls.Add(1) == tc.wantCalls && tc.interval > 0 {
+					cancel()
+				}
+				return tc.loopErr
+			}
+
+			errChan := make(chan error, 1)
+			go func() {
+				errChan <- runDeschedulingLoop(ctx, tc.interval, runLoop)
+			}()
+
+			select {
+			case err := <-errChan:
+				if !errors.Is(err, tc.wantErr) {
+					t.Errorf("expected error %v, got %v", tc.wantErr, err)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatalf("the loop did not return, runLoop was called %d times", calls.Load())
+			}
+			if got := calls.Load(); got != tc.wantCalls {
+				t.Errorf("expected runLoop to be called %d times, got %d", tc.wantCalls, got)
+			}
 		})
 	}
 }
