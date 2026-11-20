@@ -70,7 +70,7 @@ func (mc *MetricsCollector) Run(ctx context.Context) {
 // reach value even when weightedAverage is repeated many times in a row.
 // The difference between the limit and computed average stops within 5 units.
 // Nevertheless, the value is expected to change in time. So the weighted
-// average nevers gets a chance to converge. Which makes the computed
+// average never gets a chance to converge. Which makes the computed
 // error negligible.
 // The speed of convergence depends on how often the metrics collector
 // syncs with the current value. Currently, the interval is set to 5s.

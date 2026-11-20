@@ -87,7 +87,7 @@ func (a ActionImpl) GetExtensionPoint() string {
 }
 
 func (a ActionImpl) DeepCopy() Action {
-	// The handle is expected to be accessed only throuh interface methods
+	// The handle is expected to be accessed only through interface methods
 	// Thus, no deep copy needed.
 	ret := a
 	return ret

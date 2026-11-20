@@ -103,7 +103,7 @@ type NodeInfo struct {
 // evicting pods or not.
 type continueEvictionCond func(NodeInfo, api.ReferencedResourceList) bool
 
-// getNodeUsageSnapshot separates the snapshot into easily accesible data
+// getNodeUsageSnapshot separates the snapshot into easily accessible data
 // chunks so the node usage can be processed separately. returns a map of
 // nodes, a map of their usage and a map of their pods. maps are indexed
 // by node name.
