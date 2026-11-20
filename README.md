@@ -1106,7 +1106,7 @@ best effort pods are evicted before burstable and guaranteed pods.
   subresource is still respected.
 * Pods with the `descheduler.alpha.kubernetes.io/prefer-no-eviction` annotation voice their preference not to be evicted.
   Each plugin decides whether the annotation gets respected or not. When the `DefaultEvictor` plugin sets `noEvictionPolicy`
-  to `Mandatory` all such pods are excluded from eviction. Needs to be used with caution as some plugins may enfore
+  to `Mandatory` all such pods are excluded from eviction. Needs to be used with caution as some plugins may enforce
   various policies that are expected to be always met.
 * Pods with a non-nil DeletionTimestamp are not evicted by default.
 
