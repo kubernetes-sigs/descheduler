@@ -278,7 +278,7 @@ func fitsRequest(nodeIndexer podutil.GetPodsAssignedToNodeFunc, pod *v1.Pod, nod
 	return true, nil
 }
 
-// nodeAvailableResources returns resources mapped to the quanitity available on the node.
+// nodeAvailableResources returns resources mapped to the quantity available on the node.
 func nodeAvailableResources(nodeIndexer podutil.GetPodsAssignedToNodeFunc, node *v1.Node, resourceNames []v1.ResourceName, podUtilization podutil.PodUtilizationFnc) (api.ReferencedResourceList, error) {
 	podsOnNode, err := podutil.ListPodsOnANode(node.Name, nodeIndexer, nil)
 	if err != nil {

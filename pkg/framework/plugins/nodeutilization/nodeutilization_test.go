@@ -263,7 +263,7 @@ func TestClassificationUsingDeviationThresholds(t *testing.T) {
 
 	// Create a fake usage per server per resource. We are aiming to
 	// have the average of these resources in 50%. When applying the
-	// thresholds we should obtain the low threhold at 45% and the high
+	// thresholds we should obtain the low threshold at 45% and the high
 	// threshold at 55%.
 	nodesUsage := map[string]v1.ResourceList{
 		"node1": {
