@@ -27,9 +27,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
+	core "k8s.io/client-go/testing"
 
 	"sigs.k8s.io/descheduler/test"
 )
@@ -236,6 +238,117 @@ func TestKubeClientSandboxEventHandlers(t *testing.T) {
 		t.Fatalf("Secret should exist in real client but got error: %v", err)
 	}
 	t.Log("Sanity check passed: Secret exists in real client")
+}
+
+// delayedWatch forwards the events of the wrapped watch only after the delay,
+// simulating a fake informer that is slow to receive the objects the event
+// handlers add to the fake tracker.
+func delayedWatch(inner watch.Interface, delay time.Duration) watch.Interface {
+	ch := make(chan watch.Event)
+	proxy := watch.NewProxyWatcher(ch)
+	go func() {
+		defer close(ch)
+		defer inner.Stop()
+		select {
+		case <-time.After(delay):
+		case <-proxy.StopChan():
+			return
+		}
+		for event := range inner.ResultChan() {
+			select {
+			case ch <- event:
+			case <-proxy.StopChan():
+				return
+			}
+		}
+	}()
+	return proxy
+}
+
+// setupTestSandboxWithDelayedPodWatch creates a kubeClientSandbox whose fake pod informer
+// receives its watch events only after the delay, and starts and syncs both factories.
+func setupTestSandboxWithDelayedPodWatch(ctx context.Context, t *testing.T, delay time.Duration, initialObjects ...runtime.Object) *kubeClientSandbox {
+	realClient := fakeclientset.NewSimpleClientset(initialObjects...)
+	realFactory := informers.NewSharedInformerFactoryWithOptions(realClient, 0)
+	_ = realFactory.Core().V1().Pods().Informer()
+	_ = realFactory.Core().V1().Nodes().Informer()
+
+	sandbox, err := newKubeClientSandbox(
+		realClient, realFactory,
+		v1.SchemeGroupVersion.WithResource("pods"),
+		v1.SchemeGroupVersion.WithResource("nodes"),
+	)
+	if err != nil {
+		t.Fatalf("Failed to create kubeClientSandbox: %v", err)
+	}
+
+	tracker := sandbox.fakeKubeClient.Tracker()
+	sandbox.fakeKubeClient.PrependWatchReactor("pods", func(action core.Action) (bool, watch.Interface, error) {
+		var opts metav1.ListOptions
+		if watchAction, ok := action.(core.WatchActionImpl); ok {
+			opts = watchAction.ListOptions
+		}
+		inner, err := tracker.Watch(action.GetResource(), action.GetNamespace(), opts)
+		if err != nil {
+			return false, nil, err
+		}
+		return true, delayedWatch(inner, delay), nil
+	})
+
+	sandbox.fakeSharedInformerFactory().Start(ctx.Done())
+	sandbox.fakeSharedInformerFactory().WaitForCacheSync(ctx.Done())
+	realFactory.Start(ctx.Done())
+	realFactory.WaitForCacheSync(ctx.Done())
+
+	return sandbox
+}
+
+func TestKubeClientSandboxWaitForInitialSync(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	node2 := test.BuildTestNode("n2", 2000, 3000, 10, nil)
+	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, test.SetRSOwnerRef)
+	p2 := test.BuildTestPod("p2", 100, 0, node1.Name, test.SetRSOwnerRef)
+	p3 := test.BuildTestPod("p3", 100, 0, node2.Name, test.SetRSOwnerRef)
+	p4 := test.BuildTestPod("p4", 100, 0, node2.Name, test.SetRSOwnerRef)
+	objects := []runtime.Object{node1, node2, p1, p2, p3, p4}
+
+	sandbox := setupTestSandboxWithDelayedPodWatch(ctx, t, 300*time.Millisecond, objects...)
+
+	if err := sandbox.waitForInitialSync(ctx); err != nil {
+		t.Fatalf("waitForInitialSync failed: %v", err)
+	}
+
+	for _, obj := range objects {
+		exists, err := sandbox.hasRuntimeObjectInIndexer(obj)
+		if err != nil {
+			t.Fatalf("Failed to check the fake indexer: %v", err)
+		}
+		if !exists {
+			metaObj, _ := meta.Accessor(obj)
+			t.Errorf("Object %s/%s is not in the fake indexer", metaObj.GetNamespace(), metaObj.GetName())
+		}
+	}
+}
+
+func TestKubeClientSandboxWaitForInitialSyncTimeout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	node1 := test.BuildTestNode("n1", 2000, 3000, 10, nil)
+	p1 := test.BuildTestPod("p1", 100, 0, node1.Name, test.SetRSOwnerRef)
+
+	sandbox := setupTestSandboxWithDelayedPodWatch(ctx, t, time.Hour, node1, p1)
+
+	waitCtx, waitCancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer waitCancel()
+	if err := sandbox.waitForInitialSync(waitCtx); err == nil {
+		t.Fatal("Expected waitForInitialSync to fail while the pod is missing from the fake indexer")
+	} else {
+		t.Logf("waitForInitialSync failed as expected: %v", err)
+	}
 }
 
 func TestKubeClientSandboxReset(t *testing.T) {
