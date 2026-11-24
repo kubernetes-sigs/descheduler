@@ -39,6 +39,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// initialSyncTimeout bounds waitForInitialSync. The real informers are synced by then, so only
+// the in-memory propagation into the fake indexers is left to wait for.
+const initialSyncTimeout = time.Minute
+
 // evictedPodInfo stores identifying information about a pod that was evicted during dry-run mode
 type evictedPodInfo struct {
 	Namespace string
@@ -93,6 +97,8 @@ type kubeClientSandbox struct {
 	resourceToInformer     map[schema.GroupVersionResource]informers.GenericInformer
 	evictedPodsCache       *evictedPodsCache
 	podEvictionReactionFnc func(*fakeclientset.Clientset, *evictedPodsCache) func(action core.Action) (bool, runtime.Object, error)
+	// registeredHandlers contains the registrations of the handlers mirroring the real informers into the fake client.
+	registeredHandlers []cache.ResourceEventHandlerRegistration
 }
 
 func newDefaultKubeClientSandbox(client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory) (*kubeClientSandbox, error) {
@@ -145,7 +151,7 @@ func (sandbox *kubeClientSandbox) registerEventHandlers() error {
 			return fmt.Errorf("error getting resource %s for fake factory: %w", resource, err)
 		}
 
-		_, err = informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		handlerRegistration, err := informer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				runtimeObj, ok := obj.(runtime.Object)
 				if !ok {
@@ -197,7 +203,48 @@ func (sandbox *kubeClientSandbox) registerEventHandlers() error {
 		if err != nil {
 			return fmt.Errorf("error adding event handler for resource %s: %w", resource, err)
 		}
+		sandbox.registeredHandlers = append(sandbox.registeredHandlers, handlerRegistration)
 	}
+	return nil
+}
+
+// waitForInitialSync waits until the fake indexers hold every object the real informers hold.
+// Syncing both informer factories is not enough: an object listed by a real informer reaches
+// the fake indexer only after its event handler added it to the fake tracker and the fake
+// informer received it through its watch, both asynchronously.
+// Both factories have to be started before calling it.
+func (sandbox *kubeClientSandbox) waitForInitialSync(ctx context.Context) error {
+	var notSynced string
+	err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, initialSyncTimeout, true, func(ctx context.Context) (bool, error) {
+		for _, handlerRegistration := range sandbox.registeredHandlers {
+			if !handlerRegistration.HasSynced() {
+				notSynced = "event handlers"
+				return false, nil
+			}
+		}
+		for resource, informer := range sandbox.resourceToInformer {
+			for _, obj := range informer.Informer().GetIndexer().List() {
+				metaObj, err := meta.Accessor(obj)
+				if err != nil {
+					return false, fmt.Errorf("failed to get object metadata: %w", err)
+				}
+				exists, err := sandbox.hasObjectInIndexer(resource, metaObj.GetNamespace(), metaObj.GetName(), string(metaObj.GetUID()))
+				if err != nil {
+					return false, err
+				}
+				if !exists {
+					notSynced = fmt.Sprintf("%s %s", resource.Resource, cache.MetaObjectToName(metaObj).String())
+					klog.V(4).InfoS("Object not yet in fake indexer, waiting", "resource", resource.Resource, "namespace", metaObj.GetNamespace(), "name", metaObj.GetName())
+					return false, nil
+				}
+			}
+		}
+		return true, nil
+	})
+	if err != nil {
+		return fmt.Errorf("%s not synced: %w", notSynced, err)
+	}
+	klog.V(3).InfoS("Fake indexers synced with the real informers")
 	return nil
 }
 

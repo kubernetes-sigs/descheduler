@@ -439,8 +439,8 @@ func bootstrapDescheduler(
 	// and other parts that require to start before a first descheduling cycle is run
 	deschedulerInitFnc := func(ctx context.Context) error {
 		// In dry run mode, start and sync the fake shared informer factory so it can mirror
-		// events from the real factory. Reliable propagation depends on both factories being
-		// fully synced (see WaitForCacheSync calls below), not solely on startup order.
+		// events from the real factory. The objects reach the fake indexers asynchronously,
+		// so after both factories synced, wait for the fake indexers to catch up (see below).
 		if rs.DryRun {
 			descheduler.kubeClientSandbox.fakeSharedInformerFactory().Start(ctx.Done())
 			descheduler.kubeClientSandbox.fakeSharedInformerFactory().WaitForCacheSync(ctx.Done())
@@ -453,6 +453,12 @@ func bootstrapDescheduler(
 		sharedInformerFactory.WaitForCacheSync(ctx.Done())
 		if descheduler.secretBasedPromClientCtrl != nil {
 			namespacedSharedInformerFactory.WaitForCacheSync(ctx.Done())
+		}
+
+		if rs.DryRun {
+			if err := descheduler.kubeClientSandbox.waitForInitialSync(ctx); err != nil {
+				return fmt.Errorf("dry run: fake cache did not sync with the real one: %w", err)
+			}
 		}
 
 		descheduler.podEvictor.WaitForEventHandlersSync(ctx)

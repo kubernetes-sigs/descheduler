@@ -15,7 +15,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -28,7 +27,6 @@ import (
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/rest"
 	core "k8s.io/client-go/testing"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/component-base/featuregate"
 	"k8s.io/klog/v2"
 	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
@@ -230,36 +228,6 @@ func initDescheduler(t *testing.T, ctx context.Context, featureGates featuregate
 	if err != nil {
 		eventBroadcaster.Shutdown()
 		t.Fatalf("Failed to bootstrap a descheduler: %v", err)
-	}
-
-	if dryRun {
-		if err := wait.PollUntilContextTimeout(ctx, 100*time.Millisecond, 5*time.Second, true, func(ctx context.Context) (bool, error) {
-			for _, obj := range objects {
-				// Only check for nodes and pods - secrets are handled by namespacedSharedInformerFactory
-				switch obj.(type) {
-				case *v1.Node, *v1.Pod:
-				default:
-					continue
-				}
-				exists, err := descheduler.kubeClientSandbox.hasRuntimeObjectInIndexer(obj)
-				if err != nil {
-					return false, err
-				}
-				metaObj, err := meta.Accessor(obj)
-				if err != nil {
-					return false, fmt.Errorf("failed to get object metadata: %w", err)
-				}
-				key := cache.MetaObjectToName(metaObj).String()
-				if !exists {
-					klog.Infof("Object %q has not propagated to the indexer", key)
-					return false, nil
-				}
-				klog.Infof("Object %q has propagated to the indexer", key)
-			}
-			return true, nil
-		}); err != nil {
-			t.Fatalf("objects did not propagate to the indexer: %v", err)
-		}
 	}
 
 	return rs, descheduler, runFnc, client
