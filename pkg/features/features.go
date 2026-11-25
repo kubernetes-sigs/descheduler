@@ -25,6 +25,13 @@ const (
 	// Enable evictions in background so users can create their own eviction policies
 	// as an alternative to immediate evictions.
 	EvictionsInBackground featuregate.Feature = "EvictionsInBackground"
+
+	// owner: @danielb891
+	// alpha: v1.38
+	//
+	// Cache only the pods assigned to the nodes matching the policy's nodeSelector
+	// instead of every pod in the cluster.
+	NodeScopedPodInformer featuregate.Feature = "NodeScopedPodInformer"
 )
 
 func init() {
@@ -39,6 +46,7 @@ func init() {
 // when adding or removing one entry.
 var defaultDeschedulerFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
 	EvictionsInBackground: {Default: false, PreRelease: featuregate.Alpha},
+	NodeScopedPodInformer: {Default: false, PreRelease: featuregate.Alpha},
 }
 
 // DefaultMutableFeatureGate is a mutable version of DefaultFeatureGate.
