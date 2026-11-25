@@ -30,6 +30,7 @@ descheduler [flags]
                                                  EvictionsInBackground=true|false (ALPHA - default=false)
                                                  LoggingAlphaOptions=true|false (ALPHA - default=false)
                                                  LoggingBetaOptions=true|false (BETA - default=true)
+                                                 NodeScopedPodInformer=true|false (ALPHA - default=false)
   -h, --help                                     help for descheduler
       --http2-max-streams-per-connection int     The limit that the server gives to clients for the maximum number of streams in an HTTP/2 connection. Zero means to use golang's default.
       --kubeconfig string                        File with kube configuration. Deprecated, use client-connection-kubeconfig instead.

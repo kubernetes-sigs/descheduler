@@ -37,6 +37,7 @@ import (
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/events"
 	componentbaseconfig "k8s.io/component-base/config"
 	"k8s.io/klog/v2"
@@ -50,6 +51,7 @@ import (
 	"sigs.k8s.io/descheduler/pkg/descheduler/metricscollector"
 	nodeutil "sigs.k8s.io/descheduler/pkg/descheduler/node"
 	podutil "sigs.k8s.io/descheduler/pkg/descheduler/pod"
+	"sigs.k8s.io/descheduler/pkg/features"
 	"sigs.k8s.io/descheduler/pkg/framework/pluginregistry"
 	frameworkprofile "sigs.k8s.io/descheduler/pkg/framework/profile"
 	frameworktypes "sigs.k8s.io/descheduler/pkg/framework/types"
@@ -94,6 +96,34 @@ func nodeSelectorFromPolicy(deschedulerPolicy *api.DeschedulerPolicy) (labels.Se
 		nodeSelector = sel
 	}
 	return nodeSelector, nil
+}
+
+// registerNodeScopedPodInformer makes the factory's pod informer cache only the
+// pods assigned to the nodes matching the policy's nodeSelector. It has to run
+// before anything else asks the factory for the pod informer.
+func registerNodeScopedPodInformer(client clientset.Interface, sharedInformerFactory informers.SharedInformerFactory, deschedulerPolicy *api.DeschedulerPolicy) error {
+	nodeSelector, err := nodeSelectorFromPolicy(deschedulerPolicy)
+	if err != nil {
+		return err
+	}
+	nodeInformer := sharedInformerFactory.Core().V1().Nodes()
+	nodeNames := func() ([]string, error) {
+		nodes, err := nodeInformer.Lister().List(nodeSelector)
+		if err != nil {
+			return nil, err
+		}
+		names := make([]string, 0, len(nodes))
+		for _, node := range nodes {
+			names = append(names, node.Name)
+		}
+		return names, nil
+	}
+	lw := podutil.NewNodeScopedListerWatcher(client, nodeNames, nodeInformer.Informer().HasSynced)
+	sharedInformerFactory.InformerFor(&v1.Pod{}, func(_ clientset.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+		return podutil.NewNodeScopedPodInformer(lw, resyncPeriod)
+	})
+	klog.V(2).InfoS("Caching only the pods assigned to the selected nodes", "nodeSelector", nodeSelector.String())
+	return nil
 }
 
 func addNodeSelectorIndexer(sharedInformerFactory informers.SharedInformerFactory, nodeSelector labels.Selector) error {
@@ -510,6 +540,12 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	defer span.End()
 
 	sharedInformerFactory := informers.NewSharedInformerFactoryWithOptions(rs.Client, 0, informers.WithTransform(trimManagedFields))
+
+	if deschedulerPolicy.NodeSelector != nil && rs.DefaultFeatureGates != nil && rs.DefaultFeatureGates.Enabled(features.NodeScopedPodInformer) {
+		if err := registerNodeScopedPodInformer(rs.Client, sharedInformerFactory, deschedulerPolicy); err != nil {
+			return err
+		}
+	}
 
 	var eventClient clientset.Interface
 	if rs.DryRun {
