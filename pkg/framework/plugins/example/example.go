@@ -125,7 +125,7 @@ func (d *Example) Deschedule(ctx context.Context, nodes []*v1.Node) *fwtypes.Sta
 		return &fwtypes.Status{Err: err}
 	}
 
-	// here we create an auxiliar filter to remove all pods that don't
+	// here we create an auxiliary filter to remove all pods that don't
 	// match the provided regex or are still too young to be evicted.
 	// This filter will be used when we list all pods on a node. This
 	// filter here could have been part of the podFilter but we are

@@ -162,7 +162,7 @@ func (l *LowNodeUtilization) Balance(ctx context.Context, nodes []*v1.Node) *fra
 		}
 	}
 
-	// starts by taking a snapshot ofthe nodes usage. we will use this
+	// starts by taking a snapshot of the nodes usage. we will use this
 	// snapshot to assess the nodes usage and classify them as
 	// underutilized or overutilized.
 	nodesMap, nodesUsageMap, podListMap := getNodeUsageSnapshot(nodes, l.usageClient)
